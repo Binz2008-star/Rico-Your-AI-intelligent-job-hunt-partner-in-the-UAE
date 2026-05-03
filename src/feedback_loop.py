@@ -295,12 +295,6 @@ class FeedbackLoopOrchestrator:
         jobs = jobs_loader()
         apps = apps_loader()
 
-        if not jobs or not apps:
-            raise ValueError(
-                f"Insufficient data for learning cycle: "
-                f"{len(jobs)} jobs, {len(apps)} applications"
-            )
-
         learn_result = self._engine.learn_from_outcomes(apps, jobs)
 
         if "error" in learn_result:
