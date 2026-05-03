@@ -3,9 +3,11 @@ from src.scoring import score_job
 from src.message_generator import generate_message
 from src.filter import filter_new_jobs
 from src.notifier import send_email, format_jobs_email
+from src.telegram_bot import send_telegram_message, format_telegram_jobs
 
 
-def main():
+def run_pipeline():
+    """Execute the complete job hunting pipeline: fetch, filter, score, notify."""
     jobs = get_jobs()
     jobs = filter_new_jobs(jobs)
     print(f"Found {len(jobs)} new jobs after filtering")
@@ -35,6 +37,17 @@ def main():
         send_email(email_subject, email_content)
     except Exception as e:
         print(f"Failed to send email notification: {e}")
+
+    # Send Telegram notification
+    try:
+        telegram_content = format_telegram_jobs(matches)
+        send_telegram_message(telegram_content)
+    except Exception as e:
+        print(f"Failed to send Telegram notification: {e}")
+
+
+def main():
+    run_pipeline()
 
 
 if __name__ == "__main__":
