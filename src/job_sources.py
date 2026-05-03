@@ -4,7 +4,7 @@ from jobspy import scrape_jobs
 def get_jobs():
     jobs_df = scrape_jobs(
         site_name=["indeed", "linkedin", "google"],
-        search_term="Executive Assistant OR Operations Manager OR Chief of Staff",
+        search_term="Executive Assistant to CEO OR Founder Office Manager OR Chief of Staff OR Executive Operations Manager OR Operations Manager OR Compliance Operations Manager OR VIP Relationship Manager OR Private Office Executive Assistant",
         location="UAE",
         results_wanted=30,
         hours_old=24,
