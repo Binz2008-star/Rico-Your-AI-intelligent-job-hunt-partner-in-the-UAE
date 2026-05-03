@@ -21,3 +21,7 @@ __pycache__/
 dashboard.html
 test_results.json
 data/*.json
+
+# Gmail credentials
+credentials.json
+token.json
