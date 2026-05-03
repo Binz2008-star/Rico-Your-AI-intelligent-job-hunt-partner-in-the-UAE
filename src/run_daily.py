@@ -201,6 +201,20 @@ def _run_feedback_loop(
     return result
 
 
+def _sync_gmail() -> None:
+    try:
+        from src.gmail_importer import run_import
+        report = run_import(dry_run=False)
+        logger.info(
+            f"gmail_sync_complete "
+            f"classified={report.emails_classified} "
+            f"updated={report.updates_applied} "
+            f"queued={report.queued_for_review}"
+        )
+    except Exception:
+        logger.exception("gmail_sync_failed")
+
+
 def _regenerate_dashboard(
     orchestrator: Optional[FeedbackLoopOrchestrator],
 ) -> None:
@@ -222,6 +236,7 @@ def run_pipeline() -> None:
     _persist_history(all_scored)
     _notify(matches)
     _apply_assistant(matches)
+    _sync_gmail()
     _run_feedback_loop(orchestrator)
     _regenerate_dashboard(orchestrator)
 
