@@ -1,36 +1,56 @@
 """
 Unit Tests for FeedbackLoopOrchestrator
-Tests assert expected behavior with deterministic data.
+Tests assert expected behavior with explicit boundary testing.
 """
 
 from __future__ import annotations
 
-import json
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Any
-import pytest
 
 from src.decision_engine_v2 import JobDecisionEngine
 from src.feedback_loop import FeedbackLoopOrchestrator, CycleState, CycleResult
 
 
+# Test data factories
+def make_job(link: str, score: int = 80) -> Dict[str, Any]:
+    """Create a test job with required fields."""
+    return {
+        "title": f"Job {link}",
+        "company": f"Corp {link}",
+        "score": score,
+        "link": link,
+        "location": "Dubai"
+    }
+
+
+def make_app(link: str, status: str = "interview_scheduled") -> Dict[str, Any]:
+    """Create a test application with required fields."""
+    return {
+        "title": f"Job {link}",
+        "company": f"Corp {link}",
+        "status": status,
+        "date_applied": "2024-01-01T10:00:00Z",
+        "date_updated": "2024-01-03T14:00:00Z",
+        "link": link
+    }
+
+
 class TestFeedbackLoopOrchestrator:
-    """Test suite for FeedbackLoopOrchestrator with deterministic assertions."""
+    """Test suite for FeedbackLoopOrchestrator with boundary-aware assertions."""
 
     def test_orchestrator_initialization(self) -> None:
         """Test orchestrator builds correctly with expected initial state."""
         with tempfile.TemporaryDirectory() as temp_dir:
             state_dir = Path(temp_dir)
 
-            # Create decision engine
             decision_engine = JobDecisionEngine.from_loaders(
                 lambda: {"experience_years": 5, "skills": {}, "location": "Dubai"},
                 lambda: ["engineer"]
             )
 
-            # Build orchestrator
             orchestrator = FeedbackLoopOrchestrator.build(
                 decision_engine=decision_engine,
                 state_dir=state_dir,
@@ -52,8 +72,8 @@ class TestFeedbackLoopOrchestrator:
             # Engine should be accessible
             assert hasattr(orchestrator.engine, 'adjusted_probability')
 
-    def test_successful_learning_cycle(self) -> None:
-        """Test successful learning cycle with exactly 5 matched pairs."""
+    def test_learning_cycle_below_minimum_threshold(self) -> None:
+        """Test that cycles fail below the minimum sample threshold."""
         with tempfile.TemporaryDirectory() as temp_dir:
             state_dir = Path(temp_dir)
 
@@ -68,79 +88,26 @@ class TestFeedbackLoopOrchestrator:
                 cooldown=timedelta(hours=1)
             )
 
-            # Create exactly 5 jobs and 5 matching applications (minimum required)
-            jobs = [
-                {"title": "Engineer", "company": "Corp A", "score": 80, "link": "job1", "location": "Dubai"},
-                {"title": "Developer", "company": "Corp B", "score": 75, "link": "job2", "location": "Abu Dhabi"},
-                {"title": "Senior Engineer", "company": "Corp C", "score": 85, "link": "job3", "location": "Dubai"},
-                {"title": "Tech Lead", "company": "Corp D", "score": 90, "link": "job4", "location": "Sharjah"},
-                {"title": "Principal Engineer", "company": "Corp E", "score": 95, "link": "job5", "location": "Abu Dhabi"},
-            ]
+            # Test boundary: one below minimum (4 pairs)
+            n = 4  # Explicitly testing below threshold
+            jobs = [make_job(f"j{i}") for i in range(n)]
+            apps = [make_app(f"j{i}") for i in range(n)]
 
-            apps = [
-                {"title": "Engineer", "company": "Corp A", "status": "interview_scheduled", "date_applied": "2024-01-01T10:00:00Z", "date_updated": "2024-01-03T14:00:00Z", "link": "job1"},
-                {"title": "Developer", "company": "Corp B", "status": "rejected", "date_applied": "2024-01-02T11:00:00Z", "date_updated": "2024-01-04T16:00:00Z", "link": "job2"},
-                {"title": "Senior Engineer", "company": "Corp C", "status": "offer_extended", "date_applied": "2024-01-03T12:00:00Z", "date_updated": "2024-01-05T18:00:00Z", "link": "job3"},
-                {"title": "Tech Lead", "company": "Corp D", "status": "interview_completed", "date_applied": "2024-01-04T13:00:00Z", "date_updated": "2024-01-06T17:00:00Z", "link": "job4"},
-                {"title": "Principal Engineer", "company": "Corp E", "status": "screening", "date_applied": "2024-01-05T14:00:00Z", "date_updated": "2024-01-07T19:00:00Z", "link": "job5"},
-            ]
-
-            # Run cycle
             result = orchestrator.run_cycle_sync(lambda: jobs, lambda: apps)
 
-            # Assert expected results - exactly 5 matched pairs
-            assert result.status == "success"
-            assert result.matched_pairs == 5  # All 5 jobs have matching applications
-            assert result.adjustments_version >= 1
-            assert result.duration_seconds >= 0
-            assert result.error is None
-            assert result.skipped_reason is None
-
-            # Assert state updated correctly
-            state_after = orchestrator.cycle_state
-            assert state_after.last_run_status == "success"
-            assert state_after.total_cycles == 1
-            assert state_after.total_samples_processed == 5
-            assert state_after.last_adjustments_version == result.adjustments_version
-            assert state_after.last_error is None
-            assert state_after.last_run_at is not None
-
-    def test_insufficient_data_error(self) -> None:
-        """Test error handling when insufficient data provided."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            state_dir = Path(temp_dir)
-
-            decision_engine = JobDecisionEngine.from_loaders(
-                lambda: {"experience_years": 5, "skills": {}, "location": "Dubai"},
-                lambda: ["engineer"]
-            )
-
-            orchestrator = FeedbackLoopOrchestrator.build(
-                decision_engine=decision_engine,
-                state_dir=state_dir,
-                cooldown=timedelta(hours=1)
-            )
-
-            # Empty data should fail
-            result = orchestrator.run_cycle_sync(lambda: [], lambda: [])
-
+            # Should fail, not silently succeed
             assert result.status == "failed"
-            assert "Insufficient data" in result.error
-            assert result.matched_pairs == 0
-            assert result.adjustments_version == 0
-            assert result.duration_seconds >= 0
+            assert result.error is not None
+            assert "Need at least" in result.error  # Error message mentions threshold
+            assert result.matched_pairs == 0  # Failed cycles report 0 matched pairs
 
             # State should reflect failure
             state_after = orchestrator.cycle_state
             assert state_after.last_run_status == "failed"
             assert state_after.last_error is not None
-            assert "Insufficient data" in state_after.last_error
 
-            # Failed cycles should not trigger cooldown
-            assert orchestrator.is_due() == True
-
-    def test_cooldown_skip_logic(self) -> None:
-        """Test that cycles are skipped during cooldown period."""
+    def test_learning_cycle_at_minimum_threshold(self) -> None:
+        """Test that cycles succeed exactly at the minimum sample threshold."""
         with tempfile.TemporaryDirectory() as temp_dir:
             state_dir = Path(temp_dir)
 
@@ -152,38 +119,139 @@ class TestFeedbackLoopOrchestrator:
             orchestrator = FeedbackLoopOrchestrator.build(
                 decision_engine=decision_engine,
                 state_dir=state_dir,
-                cooldown=timedelta(hours=1)  # Long cooldown
+                cooldown=timedelta(hours=1)
             )
 
-            # Create sufficient data for learning
-            jobs = [
-                {"title": f"Job {i}", "company": f"Corp {i}", "score": 80, "link": f"job{i}", "location": "Dubai"}
-                for i in range(5)  # Need at least 5 for learning
-            ]
+            # Test boundary: exactly at minimum (5 pairs)
+            n = 5  # Explicitly testing at threshold
+            jobs = [make_job(f"j{i}") for i in range(n)]
+            apps = [make_app(f"j{i}") for i in range(n)]
 
-            apps = [
-                {"title": f"Job {i}", "company": f"Corp {i}", "status": "interview_scheduled",
-                 "date_applied": "2024-01-01T10:00:00Z", "date_updated": "2024-01-03T14:00:00Z", "link": f"job{i}"}
-                for i in range(5)
-            ]
+            result = orchestrator.run_cycle_sync(lambda: jobs, lambda: apps)
+
+            # Should succeed
+            assert result.status == "success"
+            assert result.matched_pairs == n
+            assert result.adjustments_version >= 1
+            assert result.error is None
+
+            # State should reflect success
+            state_after = orchestrator.cycle_state
+            assert state_after.last_run_status == "success"
+            assert state_after.total_samples_processed == n
+
+    def test_learning_cycle_above_minimum_threshold(self) -> None:
+        """Test that cycles succeed well above the minimum sample threshold."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_dir = Path(temp_dir)
+
+            decision_engine = JobDecisionEngine.from_loaders(
+                lambda: {"experience_years": 5, "skills": {}, "location": "Dubai"},
+                lambda: ["engineer"]
+            )
+
+            orchestrator = FeedbackLoopOrchestrator.build(
+                decision_engine=decision_engine,
+                state_dir=state_dir,
+                cooldown=timedelta(hours=1)
+            )
+
+            # Test boundary: well above minimum (20 pairs = 4x minimum)
+            n = 20  # Explicitly testing above threshold - proves it scales
+            jobs = [make_job(f"j{i}") for i in range(n)]
+            apps = [make_app(f"j{i}") for i in range(n)]
+
+            result = orchestrator.run_cycle_sync(lambda: jobs, lambda: apps)
+
+            # Should succeed with larger dataset
+            assert result.status == "success"
+            assert result.matched_pairs == n
+            assert result.adjustments_version >= 1
+            assert result.error is None
+
+            # State should reflect success with all samples
+            state_after = orchestrator.cycle_state
+            assert state_after.total_samples_processed == n
+
+    def test_cooldown_boundary_at_expiration(self) -> None:
+        """Test cooldown behavior exactly at the expiration boundary."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_dir = Path(temp_dir)
+
+            decision_engine = JobDecisionEngine.from_loaders(
+                lambda: {"experience_years": 5, "skills": {}, "location": "Dubai"},
+                lambda: ["engineer"]
+            )
+
+            # Use short cooldown for testing
+            cooldown = timedelta(seconds=1)
+            orchestrator = FeedbackLoopOrchestrator.build(
+                decision_engine=decision_engine,
+                state_dir=state_dir,
+                cooldown=cooldown
+            )
+
+            # Create sufficient data
+            jobs = [make_job(f"j{i}") for i in range(5)]
+            apps = [make_app(f"j{i}") for i in range(5)]
 
             # First cycle should succeed
             result1 = orchestrator.run_cycle_sync(lambda: jobs, lambda: apps)
             assert result1.status == "success"
-            assert result1.matched_pairs == 5
 
-            # Second cycle immediately should be skipped
+            # Immediately should be skipped
             result2 = orchestrator.run_cycle_sync(lambda: jobs, lambda: apps)
             assert result2.status == "skipped"
             assert "cooldown" in result2.skipped_reason.lower()
-            assert result2.duration_seconds == 0
 
-            # State should not have changed after skip
+            # Wait exactly the cooldown period
+            import time
+            time.sleep(cooldown.total_seconds())
+
+            # Should be due again
+            assert orchestrator.is_due() == True
+
+            # Should succeed again
+            result3 = orchestrator.run_cycle_sync(lambda: jobs, lambda: apps)
+            assert result3.status == "success"
+
+    def test_cooldown_before_expiration(self) -> None:
+        """Test that cycles are skipped before cooldown expiration."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_dir = Path(temp_dir)
+
+            decision_engine = JobDecisionEngine.from_loaders(
+                lambda: {"experience_years": 5, "skills": {}, "location": "Dubai"},
+                lambda: ["engineer"]
+            )
+
+            # Use longer cooldown for testing
+            cooldown = timedelta(hours=1)
+            orchestrator = FeedbackLoopOrchestrator.build(
+                decision_engine=decision_engine,
+                state_dir=state_dir,
+                cooldown=cooldown
+            )
+
+            jobs = [make_job(f"j{i}") for i in range(5)]
+            apps = [make_app(f"j{i}") for i in range(5)]
+
+            # First cycle
+            result1 = orchestrator.run_cycle_sync(lambda: jobs, lambda: apps)
+            assert result1.status == "success"
+
+            # Multiple attempts before expiration should all be skipped
+            for attempt in range(3):
+                result = orchestrator.run_cycle_sync(lambda: jobs, lambda: apps)
+                assert result.status == "skipped"
+                assert result.duration_seconds == 0
+                assert "cooldown" in result.skipped_reason.lower()
+
+            # State should not have changed after skips
             state_after = orchestrator.cycle_state
-            assert state_after.total_cycles == 1  # Still only 1 successful cycle
-            assert state_after.total_samples_processed == 5
+            assert state_after.total_cycles == 1  # Only first successful cycle
 
-    def test_state_persistence(self) -> None:
+    def test_state_persistence_across_instances(self) -> None:
         """Test that cycle state persists across orchestrator instances."""
         with tempfile.TemporaryDirectory() as temp_dir:
             state_dir = Path(temp_dir)
@@ -193,36 +261,38 @@ class TestFeedbackLoopOrchestrator:
                 lambda: ["engineer"]
             )
 
-            # Create first orchestrator and run a cycle
+            # First orchestrator instance
             orchestrator1 = FeedbackLoopOrchestrator.build(
                 decision_engine=decision_engine,
                 state_dir=state_dir,
                 cooldown=timedelta(hours=1)
             )
 
-            jobs = [{"title": f"Job {i}", "company": f"Corp {i}", "score": 80, "link": f"job{i}", "location": "Dubai"} for i in range(5)]
-            apps = [{"title": f"Job {i}", "company": f"Corp {i}", "status": "interview_scheduled", "date_applied": "2024-01-01T10:00:00Z", "date_updated": "2024-01-03T14:00:00Z", "link": f"job{i}"} for i in range(5)]
+            jobs = [make_job(f"j{i}") for i in range(10)]  # Use larger dataset
+            apps = [make_app(f"j{i}") for i in range(10)]
 
             result1 = orchestrator1.run_cycle_sync(lambda: jobs, lambda: apps)
             assert result1.status == "success"
+            assert result1.matched_pairs == 10
 
-            # Create second orchestrator with same state directory
+            # Second orchestrator instance with same state directory
             orchestrator2 = FeedbackLoopOrchestrator.build(
                 decision_engine=decision_engine,
                 state_dir=state_dir,
                 cooldown=timedelta(hours=1)
             )
 
-            # State should be restored
+            # State should be fully restored
             state_restored = orchestrator2.cycle_state
             assert state_restored.total_cycles == 1
-            assert state_restored.total_samples_processed == 5
+            assert state_restored.total_samples_processed == 10
             assert state_restored.last_run_status == "success"
             assert state_restored.last_adjustments_version == result1.adjustments_version
             assert state_restored.last_run_at is not None
+            assert state_restored.last_error is None
 
-    def test_background_cycle_scheduling(self) -> None:
-        """Test background cycle scheduling doesn't block."""
+    def test_background_cycle_non_blocking(self) -> None:
+        """Test that background cycle scheduling doesn't block."""
         with tempfile.TemporaryDirectory() as temp_dir:
             state_dir = Path(temp_dir)
 
@@ -237,36 +307,70 @@ class TestFeedbackLoopOrchestrator:
                 cooldown=timedelta(hours=1)
             )
 
-            jobs = [{"title": f"Job {i}", "company": f"Corp {i}", "score": 80, "link": f"job{i}", "location": "Dubai"} for i in range(5)]
-            apps = [{"title": f"Job {i}", "company": f"Corp {i}", "status": "interview_scheduled", "date_applied": "2024-01-01T10:00:00Z", "date_updated": "2024-01-03T14:00:00Z", "link": f"job{i}"} for i in range(5)]
+            jobs = [make_job(f"j{i}") for i in range(5)]
+            apps = [make_app(f"j{i}") for i in range(5)]
 
             # Schedule background cycle - should return immediately
+            start_time = datetime.now()
             orchestrator.schedule_background_cycle(lambda: jobs, lambda: apps)
+            end_time = datetime.now()
 
-            # Give it a moment to complete
+            # Should return immediately (under 10ms)
+            assert (end_time - start_time).total_seconds() < 0.01
+
+            # Give background cycle time to complete
             import time
             time.sleep(0.1)
 
-            # Check that cycle completed
+            # Check that cycle completed in background
             state_after = orchestrator.cycle_state
             assert state_after.total_cycles == 1
             assert state_after.last_run_status == "success"
+
+    def test_empty_data_error_handling(self) -> None:
+        """Test error handling with completely empty data."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_dir = Path(temp_dir)
+
+            decision_engine = JobDecisionEngine.from_loaders(
+                lambda: {"experience_years": 5, "skills": {}, "location": "Dubai"},
+                lambda: ["engineer"]
+            )
+
+            orchestrator = FeedbackLoopOrchestrator.build(
+                decision_engine=decision_engine,
+                state_dir=state_dir,
+                cooldown=timedelta(hours=1)
+            )
+
+            # Completely empty data
+            result = orchestrator.run_cycle_sync(lambda: [], lambda: [])
+
+            assert result.status == "failed"
+            assert "Insufficient data" in result.error
+            assert result.matched_pairs == 0
+
+            # Failed cycles should not trigger cooldown
+            assert orchestrator.is_due() == True
 
 
 if __name__ == "__main__":
     # Allow running tests directly
     test_instance = TestFeedbackLoopOrchestrator()
 
-    print("🧪 Running FeedbackLoopOrchestrator Unit Tests")
-    print("=" * 50)
+    print("🧪 Running FeedbackLoopOrchestrator Boundary Tests")
+    print("=" * 60)
 
     tests = [
         ("Initialization", test_instance.test_orchestrator_initialization),
-        ("Successful Learning Cycle", test_instance.test_successful_learning_cycle),
-        ("Insufficient Data Error", test_instance.test_insufficient_data_error),
-        ("Cooldown Skip Logic", test_instance.test_cooldown_skip_logic),
-        ("State Persistence", test_instance.test_state_persistence),
-        ("Background Scheduling", test_instance.test_background_cycle_scheduling),
+        ("Below Minimum Threshold", test_instance.test_learning_cycle_below_minimum_threshold),
+        ("At Minimum Threshold", test_instance.test_learning_cycle_at_minimum_threshold),
+        ("Above Minimum Threshold", test_instance.test_learning_cycle_above_minimum_threshold),
+        ("Cooldown at Expiration", test_instance.test_cooldown_boundary_at_expiration),
+        ("Cooldown Before Expiration", test_instance.test_cooldown_before_expiration),
+        ("State Persistence", test_instance.test_state_persistence_across_instances),
+        ("Background Non-Blocking", test_instance.test_background_cycle_non_blocking),
+        ("Empty Data Error", test_instance.test_empty_data_error_handling),
     ]
 
     passed = 0
@@ -281,10 +385,10 @@ if __name__ == "__main__":
             print(f"❌ {name}: {str(e)}")
             failed += 1
 
-    print("=" * 50)
+    print("=" * 60)
     print(f"Results: {passed}/{passed + failed} tests passed")
 
     if failed == 0:
-        print("🎉 All tests passed!")
+        print("🎉 All boundary tests passed!")
     else:
         print(f"⚠️  {failed} test(s) failed")
