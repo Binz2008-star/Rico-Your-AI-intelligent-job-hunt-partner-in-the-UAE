@@ -14,3 +14,10 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+.env
+__pycache__/
+*.pyc
+dashboard.html
+test_results.json
+data/*.json

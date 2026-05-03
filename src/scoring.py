@@ -1,11 +1,11 @@
 import re
-from src.profile import get_candidate_profile, get_skill_weights, get_negative_keywords, get_seniority_keywords, calculate_experience_match
+from src.profile import get_candidate_profile, get_skill_weights, get_negative_keywords, get_seniority_keywords, calculate_experience_match, get_location_preferences, get_salary_preferences, get_target_roles, get_profile_match_explanation
 
 
 def score_job(job):
     """
-    CV-aware job scoring system that matches candidate profile with job requirements.
-    Uses weighted scoring based on skills, experience, and preferences.
+    Roben Edwan's CV-aware job scoring system.
+    Optimized for executive operations and founder office roles in UAE.
     """
     score = 0
     score_details = []
@@ -19,15 +19,26 @@ def score_job(job):
     skill_weights = get_skill_weights()
     negative_keywords = get_negative_keywords()
     seniority_keywords = get_seniority_keywords()
+    location_preferences = get_location_preferences()
+    salary_preferences = get_salary_preferences()
+    target_roles = [role.lower() for role in get_target_roles()]
 
-    # 1. Negative keyword penalties
+    # 1. Target role matching (highest priority)
+    for role in target_roles:
+        if role in title:
+            role_bonus = 25
+            score += role_bonus
+            score_details.append(f"Target role: {role} (+{role_bonus})")
+            break
+
+    # 2. Heavy negative keyword penalties
     negative_matches = [kw for kw in negative_keywords if kw in job_text]
     if negative_matches:
-        penalty = len(negative_matches) * 20
+        penalty = len(negative_matches) * 25  # Heavier penalties
         score -= penalty
         score_details.append(f"Negative keywords: {negative_matches} (-{penalty})")
 
-    # 2. Skill-based scoring with weights
+    # 3. Skill-based scoring with Roben's weights
     matched_skills = []
     for skill_category, skill_data in profile["skills"].items():
         keywords = skill_data["keywords"]
@@ -53,38 +64,56 @@ def score_job(job):
     if matched_skills:
         score_details.extend(matched_skills)
 
-    # 3. Seniority bonus
+    # 4. Seniority bonus
     seniority_matches = [kw for kw in seniority_keywords if kw in title]
     if seniority_matches:
-        seniority_bonus = len(seniority_matches) * 5
+        seniority_bonus = len(seniority_matches) * 8
         score += seniority_bonus
         score_details.append(f"Seniority: {seniority_matches} (+{seniority_bonus})")
 
-    # 4. UAE location bonus
-    uae_keywords = ["uae", "dubai", "abu dhabi", "sharjah", "ajman", "rak", "fujairah", "umm al quwain"]
+    # 5. Location-based scoring (UAE preference)
     location = str(job.get("location", "")).lower()
-    if any(uae_kw in location or uae_kw in job_text for uae_kw in uae_keywords):
-        uae_bonus = 10
-        score += uae_bonus
-        score_details.append(f"UAE location (+{uae_bonus})")
+    location_bonus = 0
+    for loc, bonus in location_preferences.items():
+        if loc in location or loc in job_text:
+            location_bonus = bonus
+            score_details.append(f"Location: {loc} (+{bonus})")
+            break
 
-    # 5. Title-specific scoring
-    if "executive" in title and ("assistant" in title or "support" in title):
-        exec_bonus = 15
+    if location_bonus:
+        score += location_bonus
+
+    # 6. Salary preference bonus
+    salary_keywords = salary_preferences["preferred_keywords"]
+    salary_matches = [kw for kw in salary_keywords if kw in job_text]
+    if salary_matches:
+        salary_bonus = 10
+        score += salary_bonus
+        score_details.append(f"Salary preference: {salary_matches} (+{salary_bonus})")
+
+    # 7. Specific role bonuses
+    if "executive assistant to ceo" in title:
+        exec_bonus = 20
         score += exec_bonus
-        score_details.append(f"Executive assistant role (+{exec_bonus})")
+        score_details.append(f"Executive Assistant to CEO (+{exec_bonus})")
 
     if "chief of staff" in title:
-        cos_bonus = 20
+        cos_bonus = 18
         score += cos_bonus
-        score_details.append(f"Chief of Staff role (+{cos_bonus})")
+        score_details.append(f"Chief of Staff (+{cos_bonus})")
 
-    # 6. Minimum score threshold
+    if "founder office" in title:
+        founder_bonus = 15
+        score += founder_bonus
+        score_details.append(f"Founder Office (+{founder_bonus})")
+
+    # 8. Minimum score threshold
     if score < 0:
         score = 0
 
-    # Store scoring details for debugging
+    # Store scoring details and profile explanation
     job["score_details"] = score_details
+    job["profile_explanation"] = get_profile_match_explanation(job, score_details)
 
     return score
 
@@ -94,3 +123,8 @@ def get_score_explanation(job):
     if "score_details" in job:
         return " | ".join(job["score_details"])
     return "No scoring details available"
+
+
+def get_profile_explanation(job):
+    """Return profile-specific explanation for why job matches Roben."""
+    return job.get("profile_explanation", "Relevant executive operations experience")
