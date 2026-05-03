@@ -8,6 +8,8 @@ Automated job hunting system that finds, filters, scores, and notifies you about
 - **Intelligent Scoring**: Filters jobs based on relevance (score ≥ 40)
 - **Deduplication**: Tracks seen jobs to avoid duplicates across runs
 - **Email Notifications**: Sends daily reports with high-quality matches
+- **Telegram Notifications**: Real-time job alerts via Telegram bot
+- **Automated Scheduler**: Runs twice daily (8:00 AM and 6:00 PM) without manual intervention
 - **Custom Search**: Configurable search terms, locations, and filters
 
 ## Architecture
@@ -19,7 +21,9 @@ Filter (remove duplicates)
     ↓
 Scoring (filter good ones)
     ↓
-Email Notification (send report)
+Email + Telegram Notification (send report)
+    ↓
+Scheduler (automated runs)
 ```
 
 ## Setup
@@ -29,6 +33,7 @@ Email Notification (send report)
 - Python 3.10+
 - Gmail account with 2FA enabled
 - Gmail App Password
+- Telegram account (for bot notifications)
 
 ### Installation
 
@@ -48,6 +53,9 @@ pip install -r requirements.txt
 EMAIL_USER=your_email@gmail.com
 EMAIL_PASS=your_app_password
 EMAIL_TO=your_email@gmail.com
+
+TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_CHAT_ID=your_chat_id
 ```
 
 ### Generate Gmail App Password
@@ -57,17 +65,41 @@ EMAIL_TO=your_email@gmail.com
 3. Generate a new app password for "Mail"
 4. Use the 16-character password in `.env`
 
+### Setup Telegram Bot
+
+1. Open Telegram and search for @BotFather
+2. Send `/newbot` and follow the instructions
+3. Copy the bot token (looks like `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
+4. Add the token to `.env` as `TELEGRAM_BOT_TOKEN`
+5. To get your chat ID:
+   - Send a message to your bot in Telegram
+   - Visit: `https://api.telegram.org/bot<TOKEN>/getUpdates`
+   - Find your `chat_id` in the response
+   - Add it to `.env` as `TELEGRAM_CHAT_ID`
+
 ## Usage
 
-Run the daily job scraper:
+### Manual Run
+
+Run the job scraper manually:
 ```bash
 python -m src.run_daily
 ```
+
+### Automated Scheduler
+
+Run the automated scheduler (runs twice daily at 8:00 AM and 6:00 PM):
+```bash
+python -m src.scheduler
+```
+
+The scheduler will keep running and execute the job pipeline at the scheduled times.
 
 ### Output
 
 - Console: Shows job matches with scores
 - Email: Daily report with top 10 high-quality jobs
+- Telegram: Real-time job alerts with rich formatting
 - Data: `data/seen_jobs.json` tracks seen jobs
 
 ## Configuration
@@ -89,8 +121,10 @@ job-automation-system-1/
 │   ├── scoring.py          # Job scoring algorithm
 │   ├── filter.py           # Deduplication system
 │   ├── notifier.py         # Email notifications
+│   ├── telegram_bot.py     # Telegram bot integration
 │   ├── message_generator.py # Cover message templates
-│   └── run_daily.py        # Main pipeline
+│   ├── run_daily.py        # Main pipeline
+│   └── scheduler.py        # Automated scheduler
 ├── data/
 │   └── seen_jobs.json      # Seen jobs database
 ├── .env                    # Environment variables
@@ -102,7 +136,7 @@ job-automation-system-1/
 ✅ Phase 1: Job Fetching & Scoring
 ✅ Phase 2: Deduplication & Memory
 ✅ Phase 3: Email Notifications
-⏳ Phase 4: Automation (scheduled runs, Telegram integration)
+✅ Phase 4: Automation (scheduled runs, Telegram integration)
 
 ## License
 
