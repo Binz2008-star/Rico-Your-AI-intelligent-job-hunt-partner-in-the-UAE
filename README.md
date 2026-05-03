@@ -5,7 +5,9 @@ Automated job hunting system that finds, filters, scores, and notifies you about
 ## Features
 
 - **Multi-source Job Fetching**: Scrapes jobs from Indeed, LinkedIn, and Google
-- **Intelligent Scoring**: Filters jobs based on relevance (score ≥ 40)
+- **CV-aware Intelligent Scoring**: AI-powered scoring based on candidate profile, skills, and experience
+- **Weighted Skill Matching**: Prioritizes executive support, operations, compliance, and UAE experience
+- **Smart Filtering**: Penalizes irrelevant roles and junior positions
 - **Deduplication**: Tracks seen jobs to avoid duplicates across runs
 - **Email Notifications**: Sends daily reports with high-quality matches
 - **Telegram Notifications**: Real-time job alerts via Telegram bot
@@ -118,7 +120,8 @@ Edit `src/scoring.py` to adjust scoring criteria.
 job-automation-system-1/
 ├── src/
 │   ├── job_sources.py      # Job fetching logic
-│   ├── scoring.py          # Job scoring algorithm
+│   ├── scoring.py          # CV-aware intelligent scoring algorithm
+│   ├── profile.py          # Candidate profile and skill weights
 │   ├── filter.py           # Deduplication system
 │   ├── notifier.py         # Email notifications
 │   ├── telegram_bot.py     # Telegram bot integration
@@ -137,6 +140,24 @@ job-automation-system-1/
 ✅ Phase 2: Deduplication & Memory
 ✅ Phase 3: Email Notifications
 ✅ Phase 4: Automation (scheduled runs, Telegram integration)
+✅ Phase 5: Intelligence (CV-aware scoring, weighted matching)
+
+## Intelligent Scoring System
+
+The system now uses a sophisticated CV-aware scoring algorithm that:
+
+- **Analyzes Candidate Profile**: Weights skills based on experience and relevance
+- **Executive Support Priority**: Highest weight (10) for executive assistant, chief of staff roles
+- **Operations Focus**: Strong weight (8) for operations management positions
+- **UAE Experience Bonus**: Additional points for local market knowledge
+- **Smart Penalties**: Automatically filters junior, entry-level, and irrelevant roles
+- **Multi-keyword Matching**: Boosts scores when multiple relevant keywords appear
+
+**Example Scoring Results:**
+- Executive Assistant to CEO: 91 points (perfect match)
+- Chief of Staff: 48 points (good match)
+- Operations Manager: 49 points (relevant experience)
+- Junior Developer: 0 points (penalized as irrelevant)
 
 ## License
 
