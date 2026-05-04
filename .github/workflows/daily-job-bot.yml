@@ -22,6 +22,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Write Gmail OAuth files
+        run: |
+          printf '%s' '${{ secrets.GMAIL_CREDENTIALS_JSON }}' > credentials.json
+          printf '%s' '${{ secrets.GMAIL_TOKEN_JSON }}' > token.json
+
       - name: Run daily pipeline
         env:
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
