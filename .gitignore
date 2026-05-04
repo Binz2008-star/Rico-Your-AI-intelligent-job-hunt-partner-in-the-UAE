@@ -26,3 +26,4 @@ data/*.json
 credentials.json
 token.json
 data/gmail_review_queue.json
+.env
