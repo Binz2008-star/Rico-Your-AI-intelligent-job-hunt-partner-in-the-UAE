@@ -6,6 +6,9 @@ on:
     - cron: "0 14 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   run-daily:
     runs-on: ubuntu-latest
@@ -43,3 +46,17 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python -m src.follow_up
+
+      - name: Deploy dashboard to GitHub Pages
+        run: |
+          if [ ! -f dashboard.html ]; then
+            echo "dashboard.html not found; skipping dashboard deploy"
+            exit 0
+          fi
+          mkdir -p docs
+          cp dashboard.html docs/index.html
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+          git add docs/index.html
+          git diff --staged --quiet || git commit -m "Update dashboard [skip ci]"
+          git push
