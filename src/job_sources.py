@@ -1,4 +1,4 @@
-from python_jobspy import scrape_jobs
+from jobspy import scrape_jobs
 import logging
 import time
 
