@@ -32,6 +32,7 @@ logger = logging.getLogger("run_daily")
 
 from src.job_sources import get_jobs
 from src.scoring import score_job, get_profile_explanation
+from src.llm_scorer import score_jobs_llm
 from src.message_generator import generate_message
 from src.filter import filter_new_jobs
 from src.notifier import send_email, format_jobs_email
@@ -100,15 +101,18 @@ def _fetch_and_score() -> Tuple[
     jobs = filter_new_jobs(jobs)
     logger.info(f"jobs_fetched count={len(jobs)}")
 
+    # LLM scoring with keyword fallback
+    jobs = score_jobs_llm(jobs)
+
     all_scored: List[Tuple[Dict[str, Any], int]] = []
     for job in jobs:
-        score = score_job(job)
+        score = job["score"]
         all_scored.append((job, score))
         if is_db_available():
             save_job(job, score)
 
     matches = sorted(
-        [(j, s) for j, s in all_scored if s >= 65],
+        [(j, s) for j, s in all_scored if s >= 45],
         key=lambda x: x[1],
         reverse=True,
     )
