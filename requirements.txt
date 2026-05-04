@@ -2,3 +2,4 @@ requests
 python-dotenv
 schedule
 psycopg2-binary
+python-jobspy
