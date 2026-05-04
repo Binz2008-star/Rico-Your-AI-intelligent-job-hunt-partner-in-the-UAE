@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Job Search Command Center</title>
+<style>
+:root {
+  --bg:#0f172a; --panel:#111827; --card:#1f2937; --muted:#9ca3af;
+  --text:#f9fafb; --line:#374151; --accent:#38bdf8; --good:#22c55e;
+  --mid:#f59e0b; --low:#64748b; --danger:#ef4444;
+}
+* { box-sizing:border-box; }
+body { margin:0; font-family:Inter, Arial, sans-serif; background:linear-gradient(135deg,#020617,#111827); color:var(--text); }
+.container { max-width:1400px; margin:0 auto; padding:32px; }
+.header { display:flex; justify-content:space-between; gap:20px; align-items:flex-start; margin-bottom:28px; }
+h1 { margin:0; font-size:34px; letter-spacing:-0.04em; }
+.subtitle { color:var(--muted); margin-top:8px; line-height:1.5; }
+.badge { border:1px solid var(--line); padding:10px 14px; border-radius:999px; color:#d1d5db; background:rgba(255,255,255,0.04); white-space:nowrap; }
+.source-badge { background:rgba(34,197,94,.16); color:#86efac; border-color:#22c55e; }
+.grid { display:grid; gap:16px; }
+.stats { grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); margin-bottom:16px; }
+.three { grid-template-columns:repeat(3,1fr); }
+.two { grid-template-columns:1fr 1fr; margin-bottom:16px; }
+.card { background:rgba(31,41,55,0.78); border:1px solid var(--line); border-radius:20px; padding:20px; box-shadow:0 20px 45px rgba(0,0,0,.22); }
+.card:hover { transform:translateY(-2px); box-shadow:0 25px 50px rgba(0,0,0,.3); transition:all 0.3s ease; }
+.stat-label { color:var(--muted); font-size:13px; text-transform:uppercase; letter-spacing:.08em; }
+.stat-value { font-size:32px; font-weight:800; margin-top:8px; }
+.stat-sub { color:var(--muted); font-size:13px; margin-top:6px; min-height:18px; }
+h2 { margin:0 0 16px; font-size:18px; }
+.bar-row { margin:14px 0; }
+.bar-head { display:flex; justify-content:space-between; gap:16px; font-size:14px; margin-bottom:7px; }
+.bar-bg { height:9px; background:#0b1220; border-radius:999px; overflow:hidden; }
+.bar-fill { height:100%; background:linear-gradient(90deg,var(--accent),var(--good)); border-radius:999px; transition:width 0.3s ease; }
+.pipeline { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
+.step { border:1px solid var(--line); border-radius:16px; padding:14px; background:#111827; transition:all 0.3s ease; }
+.step:hover { background:#1f2937; transform:translateY(-1px); }
+.step strong { display:block; margin-bottom:6px; }
+.step span { color:var(--muted); font-size:13px; }
+table { width:100%; border-collapse:collapse; }
+th, td { padding:13px 10px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top; }
+th { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
+a { color:#e0f2fe; text-decoration:none; transition:color 0.2s ease; }
+a:hover { color:#38bdf8; }
+.muted { color:var(--muted); font-size:13px; margin-top:4px; }
+.score { font-weight:800; font-size:18px; }
+.explanation { font-size:12px; color:var(--muted); max-width:300px; }
+.pill { display:inline-block; padding:5px 10px; border-radius:999px; font-size:12px; font-weight:700; }
+.very-high { background:rgba(16,185,129,.16); color:#10b981; }
+.high { background:rgba(34,197,94,.16); color:#86efac; }
+.high-quality { background:rgba(34,197,94,.16); color:#86efac; }
+.medium { background:rgba(245,158,11,.16); color:#fcd34d; }
+.low { background:rgba(100,116,139,.20); color:#cbd5e1; }
+.footer { color:var(--muted); font-size:13px; margin-top:18px; }
+.refresh-btn { background:var(--accent); color:white; border:none; padding:8px 16px; border-radius:8px; cursor:pointer; font-weight:600; }
+.refresh-btn:hover { background:#0ea5e9; }
+@media (max-width:900px) { .stats,.two,.three,.pipeline { grid-template-columns:1fr; } .header { flex-direction:column; } .container { padding:20px; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div>
+      <h1>Job Search Command Center</h1>
+      <div class="subtitle">Live dashboard for pipeline output, match quality, applications, and best opportunities.</div>
+    </div>
+    <div>
+      <div class="badge source-badge">🗄️ Database</div>
+      <div class="badge">Generated 2026-05-04 02:51</div>
+    </div>
+  </div>
+
+  <div class="grid stats">
+    
+        <div class="card stat-card">
+            <div class="stat-label">Jobs tracked</div>
+            <div class="stat-value" style="">50</div>
+            <div class="stat-sub">50 found in last 7 days</div>
+        </div>
+        
+    
+        <div class="card stat-card">
+            <div class="stat-label">Very High Quality</div>
+            <div class="stat-value" style="color: #10b981;">15</div>
+            <div class="stat-sub">30.0% of tracked jobs</div>
+        </div>
+        
+    
+        <div class="card stat-card">
+            <div class="stat-label">High Quality</div>
+            <div class="stat-value" style="color: #22c55e;">35</div>
+            <div class="stat-sub">70.0% of tracked jobs</div>
+        </div>
+        
+    
+        <div class="card stat-card">
+            <div class="stat-label">Average Score</div>
+            <div class="stat-value" style="">76.0</div>
+            <div class="stat-sub">Best score: 100</div>
+        </div>
+        
+    
+        <div class="card stat-card">
+            <div class="stat-label">Applications</div>
+            <div class="stat-value" style="">0</div>
+            <div class="stat-sub">0 pending · 0 interviews · 0 offers</div>
+        </div>
+        
+    
+        <div class="card stat-card">
+            <div class="stat-label">Success Rate</div>
+            <div class="stat-value" style="">0.0%</div>
+            <div class="stat-sub">0/0 interviews</div>
+        </div>
+        
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h2>Platform Flow</h2>
+    <div class="pipeline">
+      <div class="step"><strong>1. Fetch</strong><span>Indeed, LinkedIn, Google</span></div>
+      <div class="step"><strong>2. Filter</strong><span>Deduplication + seen jobs</span></div>
+      <div class="step"><strong>3. Score</strong><span>CV-aware match score</span></div>
+      <div class="step"><strong>4. Notify</strong><span>Email + Telegram</span></div>
+      <div class="step"><strong>5. Apply</strong><span>Track applications</span></div>
+      <div class="step"><strong>6. Learn</strong><span>Feedback loop intelligence</span></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h2>🧠 Response Intelligence</h2>
+    
+    <div class="grid two" style="margin-bottom:16px;">
+      <div>
+        <div class="bar-row">
+          <div class="bar-head"><span>Last Feedback Cycle</span><strong style="color: var(--danger);">Failed</strong></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-head"><span>Total Cycles</span><strong>0</strong></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-head"><span>Samples Processed</span><strong>0</strong></div>
+        </div>
+      </div>
+      <div>
+        <div class="bar-row">
+          <div class="bar-head"><span>Adjustments Version</span><strong>0</strong></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-head"><span>Success Rate</span><strong>0.0%</strong></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-head"><span>Last Run</span><strong>2026-05-04</strong></div>
+        </div>
+      </div>
+    </div>
+    <div class="muted" style="color:var(--danger);">⚠️ Last error: Learning failed: Need at least 5 matched outcomes; got 0</div><div class="muted">Feedback loop ready - needs 5+ matched outcomes to start learning</div>
+  </div>
+
+  <div class="grid two">
+    <div class="card">
+      <h2>Top Companies</h2>
+      
+        <div class="bar-row">
+            <div class="bar-head"><span>Etihad</span><strong>9</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:100%; background:linear-gradient(90deg,var(--accent),var(--good))"></div></div>
+        </div>
+        
+        <div class="bar-row">
+            <div class="bar-head"><span>TALENTMATE</span><strong>6</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:66%; background:linear-gradient(90deg,var(--accent),var(--good))"></div></div>
+        </div>
+        
+        <div class="bar-row">
+            <div class="bar-head"><span>Surbana Jurong Private Limited</span><strong>4</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:44%; background:linear-gradient(90deg,var(--accent),var(--good))"></div></div>
+        </div>
+        
+        <div class="bar-row">
+            <div class="bar-head"><span>Amazon.com</span><strong>3</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:33%; background:linear-gradient(90deg,var(--accent),var(--good))"></div></div>
+        </div>
+        
+        <div class="bar-row">
+            <div class="bar-head"><span>Legend Holding Group</span><strong>2</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:22%; background:linear-gradient(90deg,var(--accent),var(--good))"></div></div>
+        </div>
+        
+        <div class="bar-row">
+            <div class="bar-head"><span>First Option Contracting LLC</span><strong>2</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:22%; background:linear-gradient(90deg,var(--accent),var(--good))"></div></div>
+        </div>
+        
+        <div class="bar-row">
+            <div class="bar-head"><span>Bestfolio Consulting - Middle East</span><strong>2</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:22%; background:linear-gradient(90deg,var(--accent),var(--good))"></div></div>
+        </div>
+        
+        <div class="bar-row">
+            <div class="bar-head"><span>Net2Source (N2S)</span><strong>1</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:11%; background:linear-gradient(90deg,var(--accent),var(--good))"></div></div>
+        </div>
+        
+        <div class="bar-row">
+            <div class="bar-head"><span>Enside Elevation</span><strong>1</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:11%; background:linear-gradient(90deg,var(--accent),var(--good))"></div></div>
+        </div>
+        
+        <div class="bar-row">
+            <div class="bar-head"><span>Lucky Engineering Services</span><strong>1</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:11%; background:linear-gradient(90deg,var(--accent),var(--good))"></div></div>
+        </div>
+        
+    </div>
+    <div class="card">
+      <h2>Top Locations</h2>
+      
+        <div class="bar-row">
+            <div class="bar-head"><span>Abu Dhabi, Abu Dhabi Emirate, United Arab Emirates</span><strong>18</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:100%; background:linear-gradient(90deg,var(--accent),var(--good))"></div></div>
+        </div>
+        
+        <div class="bar-row">
+            <div class="bar-head"><span>Dubai, DU, AE</span><strong>16</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:88%; background:linear-gradient(90deg,var(--accent),var(--good))"></div></div>
+        </div>
+        
+        <div class="bar-row">
+            <div class="bar-head"><span>Abu Dhabi, AZ, AE</span><strong>7</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:38%; background:linear-gradient(90deg,var(--accent),var(--good))"></div></div>
+        </div>
+        
+        <div class="bar-row">
+            <div class="bar-head"><span>Dubai, Dubai, United Arab Emirates</span><strong>4</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:22%; background:linear-gradient(90deg,var(--accent),var(--good))"></div></div>
+        </div>
+        
+        <div class="bar-row">
+            <div class="bar-head"><span>Sharjah, SH, AE</span><strong>1</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:5%; background:linear-gradient(90deg,var(--accent),var(--good))"></div></div>
+        </div>
+        
+        <div class="bar-row">
+            <div class="bar-head"><span>Dubai, United Arab Emirates</span><strong>1</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:5%; background:linear-gradient(90deg,var(--accent),var(--good))"></div></div>
+        </div>
+        
+        <div class="bar-row">
+            <div class="bar-head"><span>Dubai, UAE</span><strong>1</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:5%; background:linear-gradient(90deg,var(--accent),var(--good))"></div></div>
+        </div>
+        
+        <div class="bar-row">
+            <div class="bar-head"><span>Abu Dhabi Emirate, United Arab Emirates</span><strong>1</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:5%; background:linear-gradient(90deg,var(--accent),var(--good))"></div></div>
+        </div>
+        
+        <div class="bar-row">
+            <div class="bar-head"><span>Unknown</span><strong>1</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:5%; background:linear-gradient(90deg,var(--accent),var(--good))"></div></div>
+        </div>
+        
+    </div>
+  </div>
+
+  <div class="grid three">
+    <div class="card">
+      <h2>Score Quality</h2>
+      
+        <div class="bar-row">
+            <div class="bar-head"><span>Very High</span><strong>15</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:100%; background:linear-gradient(90deg,#10b981,#22c55e)"></div></div>
+        </div>
+        
+        <div class="bar-row">
+            <div class="bar-head"><span>High</span><strong>13</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:86%; background:linear-gradient(90deg,#10b981,#22c55e)"></div></div>
+        </div>
+        
+        <div class="bar-row">
+            <div class="bar-head"><span>High quality</span><strong>7</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:46%; background:linear-gradient(90deg,#10b981,#22c55e)"></div></div>
+        </div>
+        
+        <div class="bar-row">
+            <div class="bar-head"><span>Medium</span><strong>15</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:100%; background:linear-gradient(90deg,var(--accent),var(--good))"></div></div>
+        </div>
+        
+        <div class="bar-row">
+            <div class="bar-head"><span>Low</span><strong>0</strong></div>
+            <div class="bar-bg"><div class="bar-fill" style="width:0%; background:linear-gradient(90deg,var(--accent),var(--good))"></div></div>
+        </div>
+        
+    </div>
+    <div class="card">
+      <h2>Application Status</h2>
+      <div class="muted">No applications tracked yet.</div>
+    </div>
+    <div class="card">
+      <h2>Quick Stats</h2>
+      <div class="bar-row">
+        <div class="bar-head"><span>Jobs/Day (7d avg)</span><strong>7.1</strong></div>
+        <div class="bar-bg"><div class="bar-fill" style="width:71.42857142857143%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-head"><span>Apply Rate</span><strong>0.0%</strong></div>
+        <div class="bar-bg"><div class="bar-fill" style="width:0.0%"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h2>Top Jobs by Score (🗄️ Database)</h2>
+    <table>
+      <thead><tr><th>Role</th><th>Location</th><th>Quality</th><th>Score</th><th>Why it matches</th></tr></thead>
+      <tbody>
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=fe847149984dfb98" target="_blank">Operations Executive, (UAE National), Amazon Now, UFG</a><div class="muted">Amazon.com</div></td>
+        <td>Dubai, DU, AE</td>
+        <td><span class="pill very-high">Very High</span></td>
+        <td class="score">100 ⭐⭐⭐⭐⭐</td>
+        <td class='explanation'>Operations management experience match | UAE market experience required...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=752b93e0f5d92434" target="_blank">Operations Executive, (UAE National), Amazon Now, UFG</a><div class="muted">Amazon.com</div></td>
+        <td>Abu Dhabi, AZ, AE</td>
+        <td><span class="pill very-high">Very High</span></td>
+        <td class="score">100 ⭐⭐⭐⭐⭐</td>
+        <td class='explanation'>Operations management experience match | UAE market experience required...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=2e77734ee8e49879" target="_blank">Senior Program Manager – Operations, Partnerships &amp; Revenue (Legend World Rent A Car)</a><div class="muted">Legend Holding Group</div></td>
+        <td>Dubai, DU, AE</td>
+        <td><span class="pill very-high">Very High</span></td>
+        <td class="score">100 ⭐⭐⭐⭐⭐</td>
+        <td class='explanation'>Operations management experience match | UAE market experience required...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://www.linkedin.com/jobs/view/4409556343" target="_blank">Quality and Compliance Manager</a><div class="muted">Net2Source (N2S)</div></td>
+        <td>Dubai, Dubai, United Arab Emirates</td>
+        <td><span class="pill very-high">Very High</span></td>
+        <td class="score">100 ⭐⭐⭐⭐⭐</td>
+        <td class='explanation'>Direct match for target role: Compliance Manager | HSE/Compliance background match...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=99aa46d7b7bb98ea" target="_blank">Interior Project Manger</a><div class="muted">Enside Elevation</div></td>
+        <td>Dubai, DU, AE</td>
+        <td><span class="pill very-high">Very High</span></td>
+        <td class="score">100 ⭐⭐⭐⭐⭐</td>
+        <td class='explanation'>HSE/Compliance background match | UAE market experience required...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=a95ab530b494a57a" target="_blank">Senior Quantity Surveyor</a><div class="muted">Lucky Engineering Services</div></td>
+        <td>Sharjah, SH, AE</td>
+        <td><span class="pill very-high">Very High</span></td>
+        <td class="score">100 ⭐⭐⭐⭐⭐</td>
+        <td class='explanation'>HSE/Compliance background match | UAE market experience required...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=73788dc538d95cc4" target="_blank">Assistant Safety Manager</a><div class="muted">First Option Contracting LLC</div></td>
+        <td>Dubai, DU, AE</td>
+        <td><span class="pill very-high">Very High</span></td>
+        <td class="score">99 ⭐⭐⭐⭐⭐</td>
+        <td class='explanation'>UAE market experience required...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=f2ea501f07f61e92" target="_blank">nspectors – Civil &amp; MEP (Construction Supervision)</a><div class="muted">Surbana Jurong Private Limited</div></td>
+        <td>Dubai, DU, AE</td>
+        <td><span class="pill very-high">Very High</span></td>
+        <td class="score">89 ⭐⭐⭐⭐⭐</td>
+        <td class='explanation'>UAE market experience required...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=3571dc1abf4e3759" target="_blank">Quantity Surveyor</a><div class="muted">Surbana Jurong Private Limited</div></td>
+        <td>Dubai, DU, AE</td>
+        <td><span class="pill very-high">Very High</span></td>
+        <td class="score">89 ⭐⭐⭐⭐⭐</td>
+        <td class='explanation'>UAE market experience required...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=579236c0511d2528" target="_blank">Joinery Production Manager</a><div class="muted">Polished Interiors Design</div></td>
+        <td>Abu Dhabi, AZ, AE</td>
+        <td><span class="pill very-high">Very High</span></td>
+        <td class="score">89 ⭐⭐⭐⭐⭐</td>
+        <td class='explanation'>HSE/Compliance background match | Operations management experience match | UAE market experience req...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=7599a783bd2a741b" target="_blank">Manager- Catering and Accommodation</a><div class="muted">ALFARAH CONTRACTING &amp; GENERAL TRANSPORT COMPANY- L.L.C-O.P.C</div></td>
+        <td>Abu Dhabi, AZ, AE</td>
+        <td><span class="pill very-high">Very High</span></td>
+        <td class="score">88 ⭐⭐⭐⭐⭐</td>
+        <td class='explanation'>UAE market experience required...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://www.linkedin.com/jobs/view/4409573638" target="_blank">Operations Manager (Wellness Studio)</a><div class="muted">Alliance Recruitment Agency</div></td>
+        <td>Dubai, United Arab Emirates</td>
+        <td><span class="pill very-high">Very High</span></td>
+        <td class="score">87 ⭐⭐⭐⭐⭐</td>
+        <td class='explanation'>Direct match for target role: Operations Manager | Operations management experience match...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=c9de303bf968a53c" target="_blank">Senior HR Officer</a><div class="muted">Safe Care Dental Clinic</div></td>
+        <td>Abu Dhabi, AZ, AE</td>
+        <td><span class="pill very-high">Very High</span></td>
+        <td class="score">86 ⭐⭐⭐⭐⭐</td>
+        <td class='explanation'>HSE/Compliance background match | Operations management experience match | UAE market experience req...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=ebe01f196618c836" target="_blank">Project Engineer</a><div class="muted">Al Shafar National Contracting Co. LLC</div></td>
+        <td>Dubai, DU, AE</td>
+        <td><span class="pill very-high">Very High</span></td>
+        <td class="score">86 ⭐⭐⭐⭐⭐</td>
+        <td class='explanation'>HSE/Compliance background match | Operations management experience match | UAE market experience req...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=b9638e487a4fad86" target="_blank">Resident Engineer / Assistant Resident Engineer</a><div class="muted">Surbana Jurong Private Limited</div></td>
+        <td>Dubai, DU, AE</td>
+        <td><span class="pill very-high">Very High</span></td>
+        <td class="score">85 ⭐⭐⭐⭐⭐</td>
+        <td class='explanation'>UAE market experience required...</td>
+    </tr>
+    </tbody>
+    </table>
+  </div>
+
+  
+        <div class="card">
+          <h2>Recent Jobs</h2>
+          <table>
+            <thead><tr><th>Role</th><th>Location</th><th>Quality</th><th>Score</th></tr></thead>
+            <tbody>
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=b9638e487a4fad86" target="_blank">Resident Engineer / Assistant Resident Engineer</a><div class="muted">Surbana Jurong Private Limited</div></td>
+        <td>Dubai, DU, AE</td>
+        <td><span class="pill very-high">Very High</span></td>
+        <td class="score">85 </td>
+        <td class='explanation'>UAE market experience required...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=f2ea501f07f61e92" target="_blank">nspectors – Civil &amp; MEP (Construction Supervision)</a><div class="muted">Surbana Jurong Private Limited</div></td>
+        <td>Dubai, DU, AE</td>
+        <td><span class="pill very-high">Very High</span></td>
+        <td class="score">89 </td>
+        <td class='explanation'>UAE market experience required...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=3571dc1abf4e3759" target="_blank">Quantity Surveyor</a><div class="muted">Surbana Jurong Private Limited</div></td>
+        <td>Dubai, DU, AE</td>
+        <td><span class="pill very-high">Very High</span></td>
+        <td class="score">89 </td>
+        <td class='explanation'>UAE market experience required...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=602b04b0d302e865" target="_blank">Site Engineer</a><div class="muted">First Option Contracting LLC</div></td>
+        <td>Dubai, DU, AE</td>
+        <td><span class="pill high">High</span></td>
+        <td class="score">76 </td>
+        <td class='explanation'>UAE market experience required...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=c226044f64996be5" target="_blank">Operations Manager</a><div class="muted">FREE EAGLE CONTRACTING AND GENERAL TRANSPORT</div></td>
+        <td>Abu Dhabi, AZ, AE</td>
+        <td><span class="pill high">High</span></td>
+        <td class="score">79 </td>
+        <td class='explanation'>Direct match for target role: Operations Manager | Operations management expertise match | UAE marke...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=73788dc538d95cc4" target="_blank">Assistant Safety Manager</a><div class="muted">First Option Contracting LLC</div></td>
+        <td>Dubai, DU, AE</td>
+        <td><span class="pill very-high">Very High</span></td>
+        <td class="score">99 </td>
+        <td class='explanation'>UAE market experience required...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=7599a783bd2a741b" target="_blank">Manager- Catering and Accommodation</a><div class="muted">ALFARAH CONTRACTING &amp; GENERAL TRANSPORT COMPANY- L.L.C-O.P.C</div></td>
+        <td>Abu Dhabi, AZ, AE</td>
+        <td><span class="pill very-high">Very High</span></td>
+        <td class="score">88 </td>
+        <td class='explanation'>UAE market experience required...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=d50428c55b44f7a7" target="_blank">HSE Engineer</a><div class="muted">Surbana Jurong Private Limited</div></td>
+        <td>Dubai, DU, AE</td>
+        <td><span class="pill high-quality">High quality</span></td>
+        <td class="score">66 </td>
+        <td class='explanation'>UAE market experience required...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=ece4707f09ac8422" target="_blank">Project Manager</a><div class="muted">STRABAG</div></td>
+        <td>Abu Dhabi, AZ, AE</td>
+        <td><span class="pill high">High</span></td>
+        <td class="score">82 </td>
+        <td class='explanation'>UAE market experience required...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://ae.indeed.com/viewjob?jk=d70e123078a78081" target="_blank">Senior Associate - ESG Compliance</a><div class="muted">EGA</div></td>
+        <td>Abu Dhabi, AZ, AE</td>
+        <td><span class="pill high-quality">High quality</span></td>
+        <td class="score">65 </td>
+        <td class='explanation'>Compliance and governance experience | UAE market experience required...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://www.linkedin.com/jobs/view/4377901594" target="_blank">General Manager, Digital Brand (MENA)</a><div class="muted">Circles</div></td>
+        <td>Unknown</td>
+        <td><span class="pill medium">Medium</span></td>
+        <td class="score">58 </td>
+        <td class='explanation'>Direct match for target role: General Manager | Operations management experience match...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://www.linkedin.com/jobs/view/4409836446" target="_blank">Ground Operations Duty Manager</a><div class="muted">Etihad</div></td>
+        <td>Abu Dhabi, Abu Dhabi Emirate, United Arab Emirates</td>
+        <td><span class="pill medium">Medium</span></td>
+        <td class="score">64 </td>
+        <td class='explanation'>Operations management experience match...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://www.linkedin.com/jobs/view/4407266992" target="_blank">IT Manager</a><div class="muted">Rixos Hotels Gulf</div></td>
+        <td>Abu Dhabi, Abu Dhabi Emirate, United Arab Emirates</td>
+        <td><span class="pill medium">Medium</span></td>
+        <td class="score">58 </td>
+        <td class='explanation'>Relevant environmental operations experience...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://www.linkedin.com/jobs/view/4409829623" target="_blank">Senior Program Manager</a><div class="muted">CNTXT AI</div></td>
+        <td>Abu Dhabi, Abu Dhabi Emirate, United Arab Emirates</td>
+        <td><span class="pill high-quality">High quality</span></td>
+        <td class="score">66 </td>
+        <td class='explanation'>Relevant environmental operations experience...</td>
+    </tr>
+    
+    <tr>
+        <td><a href="https://www.linkedin.com/jobs/view/4409573638" target="_blank">Operations Manager (Wellness Studio)</a><div class="muted">Alliance Recruitment Agency</div></td>
+        <td>Dubai, United Arab Emirates</td>
+        <td><span class="pill very-high">Very High</span></td>
+        <td class="score">87 </td>
+        <td class='explanation'>Direct match for target role: Operations Manager | Operations management experience match...</td>
+    </tr>
+    </tbody>
+          </table>
+        </div>
+        
+
+  <div class="footer">
+    Data source: Database.
+    🗄️ Database backend active.
+    <button class="refresh-btn" onclick="location.reload()">🔄 Refresh</button>
+  </div>
+</div>
+</body>
+</html>
