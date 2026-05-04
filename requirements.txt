@@ -3,3 +3,7 @@ python-dotenv
 schedule
 psycopg2-binary
 python-jobspy
+google-api-python-client
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
