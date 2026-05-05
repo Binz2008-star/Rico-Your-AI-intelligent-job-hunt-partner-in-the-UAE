@@ -102,6 +102,7 @@ def _fetch_and_score() -> Tuple[
     logger.info(f"jobs_fetched count={len(jobs)}")
 
     # LLM scoring with keyword fallback
+    logger.info(f"scoring_starting jobs_count={len(jobs)}")
     jobs = score_jobs_llm(jobs)
 
     all_scored: List[Tuple[Dict[str, Any], int]] = []
@@ -117,6 +118,7 @@ def _fetch_and_score() -> Tuple[
         reverse=True,
     )
     logger.info(f"scoring_complete total={len(all_scored)} high_quality={len(matches)}")
+    print(f"Scoring complete: {len(all_scored)} jobs scored, {len(matches)} high quality matches")
 
     # Agent decision making
     from src.job_agent import decide_jobs
@@ -143,11 +145,16 @@ def _fetch_and_score() -> Tuple[
     # Combine apply and watch jobs
     final_matches = apply_jobs + watch_jobs
 
-    # Filter out already applied jobs
+    # Filter out already applied jobs with better logging
     from src.applications import is_applied
     filtered_matches = []
+    applied_count = 0
+
     for job, score in final_matches:
-        if not is_applied(job):
+        if is_applied(job):
+            applied_count += 1
+            logger.info(f"filtering_applied job={job.get('title', 'unknown')} company={job.get('company', 'unknown')}")
+        else:
             filtered_matches.append((job, score))
 
     # Force minimum output: ensure at least 5 jobs
@@ -157,7 +164,8 @@ def _fetch_and_score() -> Tuple[
             if not is_applied(job) and len(filtered_matches) < 5:
                 filtered_matches.append((job, score))
 
-    print(f"Final output: telegram_jobs={len(filtered_matches)} (filtered from {len(final_matches)})")
+    logger.info(f"job_filtering_complete applied_filtered={applied_count} final_jobs={len(filtered_matches)}")
+    print(f"Final output: telegram_jobs={len(filtered_matches)} (filtered from {len(final_matches)}, removed {applied_count} applied)")
 
     return all_scored, filtered_matches
 
