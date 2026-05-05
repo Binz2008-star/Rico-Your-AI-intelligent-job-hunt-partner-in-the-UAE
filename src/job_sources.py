@@ -7,23 +7,9 @@ logger = logging.getLogger(__name__)
 _QUERIES = [
     "ESG Manager",
     "HSE Manager",
-    "Environmental Compliance Manager",
-    "Sustainability Manager",
-    "Operations Manager Environmental",
     "Environmental Manager",
-    "Health and Safety Manager",
-    "EHS Manager",
-    "ESG Specialist",
-    "HSE Specialist",
-    "Environmental Specialist",
-    "Sustainability Specialist",
-    "Compliance Manager",
-    "Environmental Compliance Specialist",
-    "Health Safety Environment Manager",
-    "ESG Analyst",
-    "HSE Officer",
-    "Environmental Officer",
-    "Sustainability Officer",
+    "Sustainability Manager",
+    "QHSE Manager",
 ]
 
 def get_jobs():
