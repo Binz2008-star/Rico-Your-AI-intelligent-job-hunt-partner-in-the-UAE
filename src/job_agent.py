@@ -169,7 +169,8 @@ def _factor_score(job: Dict[str, Any]) -> Tuple[int, Dict[str, Any], List[str]]:
     # Initialize LinkedIn data if not already loaded
     _init_linkedin_data()
 
-    disq = [d for d in DISQUALIFIERS if d in text]
+    # Check disqualifiers only in title, not full description
+    disq = [d for d in DISQUALIFIERS if d in title]
     if disq:
         final -= 20
         reasons.append(f"disqualifier detected: {', '.join(disq)} -20")
