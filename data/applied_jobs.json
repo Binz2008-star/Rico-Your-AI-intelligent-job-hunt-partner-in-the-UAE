@@ -8,7 +8,7 @@
     "score": 0.5,
     "status": "interview_scheduled",
     "date_applied": "2026-05-03T17:56:14.424989",
-    "date_updated": "2026-05-05T04:48:35.365248",
+    "date_updated": "2026-05-05T05:57:34.488985",
     "notes": "Auto-imported from Gmail: Your Application Status \u2013 Interview Round",
     "interview_date": null,
     "rejection_reason": null
@@ -106,7 +106,7 @@
     "score": 90,
     "status": "applied",
     "date_applied": "2026-05-04T05:56:52.301768",
-    "date_updated": "2026-05-05T04:48:31.437116",
+    "date_updated": "2026-05-05T05:57:29.710713",
     "notes": "Auto-imported from Gmail: Thank you for Applying to Amazon!",
     "interview_date": null,
     "rejection_reason": null
@@ -3958,5 +3958,41 @@
     "date_applied": "3/25/26, 9:00 AM",
     "notes": "Imported from LinkedIn export (file 2)",
     "source": "linkedin_import"
+  },
+  {
+    "title": "Senior Manager - Governance",
+    "company": "Masdar",
+    "link": "https://masdar.ae/careers",
+    "status": "applied",
+    "date_applied": "2026-05-05",
+    "notes": "Confirmation received from Masdar",
+    "source": "gmail"
+  },
+  {
+    "title": "Environmental Manager",
+    "company": "AECOM",
+    "link": "https://aecom.com/careers",
+    "status": "applied",
+    "date_applied": "2026-05-05",
+    "notes": "Thank you email received from AECOM",
+    "source": "gmail"
+  },
+  {
+    "title": "Senior Project Engineer",
+    "company": "KBR",
+    "link": "https://kbr.com/careers",
+    "status": "applied",
+    "date_applied": "2026-05-05",
+    "notes": "Application confirmed by KBR",
+    "source": "gmail"
+  },
+  {
+    "title": "Interface Manager",
+    "company": "Worley",
+    "link": "https://worley.com/careers",
+    "status": "applied",
+    "date_applied": "2026-05-05",
+    "notes": "Application confirmed by Worley",
+    "source": "gmail"
   }
 ]
