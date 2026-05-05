@@ -143,14 +143,23 @@ def _fetch_and_score() -> Tuple[
     # Combine apply and watch jobs
     final_matches = apply_jobs + watch_jobs
 
+    # Filter out already applied jobs
+    from src.applications import is_applied
+    filtered_matches = []
+    for job, score in final_matches:
+        if not is_applied(job):
+            filtered_matches.append((job, score))
+
     # Force minimum output: ensure at least 5 jobs
-    if len(final_matches) < 5:
-        # fallback: take top scored jobs
-        final_matches = matches[:5]
+    if len(filtered_matches) < 5:
+        # fallback: take top scored jobs (excluding already applied)
+        for job, score in matches:
+            if not is_applied(job) and len(filtered_matches) < 5:
+                filtered_matches.append((job, score))
 
-    print(f"Final output: telegram_jobs={len(final_matches)}")
+    print(f"Final output: telegram_jobs={len(filtered_matches)} (filtered from {len(final_matches)})")
 
-    return all_scored, final_matches
+    return all_scored, filtered_matches
 
 
 def _persist_history(all_scored: List[Tuple[Dict[str, Any], int]]) -> None:

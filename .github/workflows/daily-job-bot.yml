@@ -2,8 +2,7 @@ name: Daily Job Bot
 
 on:
   schedule:
-    - cron: "0 4 * * *"
-    - cron: "0 14 * * *"
+    - cron: "0 10 * * *"
   workflow_dispatch:
 
 permissions:

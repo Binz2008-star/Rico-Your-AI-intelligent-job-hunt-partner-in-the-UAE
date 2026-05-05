@@ -10,6 +10,20 @@ _QUERIES = [
     "Environmental Compliance Manager",
     "Sustainability Manager",
     "Operations Manager Environmental",
+    "Environmental Manager",
+    "Health and Safety Manager",
+    "EHS Manager",
+    "ESG Specialist",
+    "HSE Specialist",
+    "Environmental Specialist",
+    "Sustainability Specialist",
+    "Compliance Manager",
+    "Environmental Compliance Specialist",
+    "Health Safety Environment Manager",
+    "ESG Analyst",
+    "HSE Officer",
+    "Environmental Officer",
+    "Sustainability Officer",
 ]
 
 def get_jobs():
