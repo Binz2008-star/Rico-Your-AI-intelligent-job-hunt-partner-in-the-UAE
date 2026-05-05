@@ -23,8 +23,11 @@ _IDEAL = (
 )
 _BAD = (
     "junior entry level intern software developer programmer "
-    "quantity surveyor civil engineer site engineer MEP "
-    "call center sales receptionist driver cleaner UAE national only"
+    "quantity surveyor civil engineer site engineer MEP inspector "
+    "cad supervisor architectural engineer construction manager foreman "
+    "sales account manager sales engineer transport planning landscaping "
+    "call center receptionist driver cleaner UAE national only "
+    "swimming pool aluminum facade joinery"
 )
 
 
