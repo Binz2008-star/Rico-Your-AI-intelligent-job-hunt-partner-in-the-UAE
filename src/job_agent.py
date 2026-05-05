@@ -65,7 +65,15 @@ BLACKLISTED_COMPANIES = {
 
 TITLE_DOMAIN = ["hse", "ehs", "qhse", "hsse", "esg", "sustainability", "environment", "environmental", "compliance"]
 SENIORITY = ["manager", "senior", "lead", "head", "director", "regional"]
-DISQUALIFIERS = ["intern", "junior", "nurse", "driver"]
+DISQUALIFIERS = [
+    "intern", "junior", "trainee", "fresh graduate", "graduate programme",
+    "nurse", "driver", "cleaner", "receptionist", "secretary",
+    "quantity surveyor", "site engineer", "civil engineer", "mep",
+    "cad supervisor", "cad manager", "architectural engineer",
+    "landscape", "landscaping", "swimming pool", "facade", "aluminum",
+    "sales account", "sales engineer", "transport planner",
+    "foreman", "superintendent", "uae national only", "nationals only",
+]
 LOCATIONS = ["uae", "dubai", "abu dhabi", "sharjah", "ajman", "ras al khaimah"]
 
 
@@ -237,6 +245,12 @@ def _fallback_decision(job: Dict[str, Any]) -> Tuple[str, str, float, int, Dict[
     final, factors, reasons = _factor_score(job)
     threshold = factors["dynamic_apply_threshold"]
 
+    # Strict title filter - must have at least one TITLE_DOMAIN keyword before any apply decision
+    title = _txt(job.get("title"))
+    title_hits = factors["title_hits"]
+    if not title_hits and not any(k in title for k in ["operations", "compliance", "qaqc", "qhse"]):
+        return "skip", "title does not match ESG/HSE domain (no target keywords)", 0.9, 0, factors
+
     # Only skip for true hard disqualifiers
     if factors["disqualifiers"]:
         return "skip", "hard disqualifier", 0.9, 0, factors
@@ -277,8 +291,9 @@ Return JSON only with keys: decision, reasoning, confidence.
 Allowed decision values: apply, watch, skip.
 
 Rules:
-- Skip ONLY for hard disqualifiers: intern, junior, nurse, driver
-- Apply if final_score >= 60
+- Skip for hard disqualifiers: intern, junior, nurse, driver
+- Skip if title does NOT contain any ESG/HSE keywords (hse, ehs, qhse, hsse, esg, sustainability, environment, environmental, compliance, operations, qaqc)
+- Apply if final_score >= 60 AND title matches ESG/HSE domain
 - Watch if final_score >= 40
 - Always produce candidates (rank, don't filter) - prefer watch over skip
 
