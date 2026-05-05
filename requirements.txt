@@ -3,7 +3,6 @@ python-dotenv
 schedule
 psycopg2-binary
 python-jobspy
-sentence-transformers
 google-api-python-client
 google-auth
 google-auth-oauthlib
