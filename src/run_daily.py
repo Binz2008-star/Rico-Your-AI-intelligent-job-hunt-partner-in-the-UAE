@@ -185,6 +185,18 @@ def _apply_assistant(matches: List[Tuple[Dict[str, Any], int]]) -> None:
         logger.info("apply_assistant_skipped no_matches")
         return
     try:
+        # Log apply decisions even when automated application is disabled
+        from src.applications import mark_applied, is_applied
+
+        apply_decisions = [job for job, score in matches if score >= 75]
+        logger.info(f"apply_assistant_logging apply_decisions={len(apply_decisions)}")
+
+        for job in apply_decisions:
+            if not is_applied(job):
+                # Mark as "decision_made" status to track AI decisions without actual application
+                mark_applied(job, status="decision_made")
+                logger.info(f"apply_decision_logged title={job.get('title', 'unknown')} company={job.get('company', 'unknown')}")
+
         # # run_apply_assistant(matches)  # disabled - requires interactive input
         logger.info(f"apply_assistant_done candidates={len(matches)}")
     except Exception:
