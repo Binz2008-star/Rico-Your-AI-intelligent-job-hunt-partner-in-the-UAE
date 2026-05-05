@@ -163,8 +163,8 @@ def _factor_score(job: Dict[str, Any]) -> Tuple[int, Dict[str, Any], List[str]]:
     text = _job_text(job)
     base = int(float(job.get("score", 0)))
     reasons: List[str] = [f"base score {base}"]
-    # Boost semantic score weight
-    final = int(base * 1.3)
+    # Reduce semantic amplification
+    final = int(base * 1.15)
 
     # Initialize LinkedIn data if not already loaded
     _init_linkedin_data()
@@ -204,6 +204,8 @@ def _factor_score(job: Dict[str, Any]) -> Tuple[int, Dict[str, Any], List[str]]:
         reasons.append(f"UAE location fit: {loc_hits[0]} +6")
 
     company_delta, company_reason = _company_delta(str(job.get("company", "")))
+    # Reduce boost stacking - cap company boost to 10
+    company_delta = min(company_delta, 10)
     final += company_delta
     reasons.append(company_reason)
 
@@ -211,12 +213,13 @@ def _factor_score(job: Dict[str, Any]) -> Tuple[int, Dict[str, Any], List[str]]:
     if _linkedin_skill_matcher:
         matching_skills = _linkedin_skill_matcher.get_matching_skills(text)
         if matching_skills:
-            # Boost LinkedIn signal from +10 to +20
-            skill_boost = min(len(matching_skills) * 4, 20)
+            # Reduce boost stacking - cap skill boost to 10
+            skill_boost = min(len(matching_skills) * 4, 10)
             final += skill_boost
             reasons.append(f"LinkedIn skills match: {', '.join(matching_skills[:3])} +{skill_boost}")
 
-    final = max(0, min(100, final))
+    # Normalize final score to max 100
+    final = min(final, 100)
     factors = {
         "base_score": base,
         "title_hits": title_hits,
@@ -239,9 +242,9 @@ def _fallback_decision(job: Dict[str, Any]) -> Tuple[str, str, float, int, Dict[
         return "skip", "hard disqualifier", 0.9, 0, factors
 
     # Always produce candidates - rank instead of filter
-    if final >= 60:
+    if final >= 75:
         decision = "apply"
-    elif final >= 40:
+    elif final >= 55:
         decision = "watch"
     else:
         decision = "watch"  # NOT skip - always produce candidates

@@ -133,8 +133,12 @@ def _fetch_and_score() -> Tuple[
     print(f"Agent decisions: apply={len(apply_decisions)} watch={len(watch_decisions)} skip={len(skip_decisions)}")
 
     # Use Agent decisions as final output
-    apply_jobs = [(d.job, d.job["score"]) for d in apply_decisions]
-    watch_jobs = [(d.job, d.job["score"]) for d in watch_decisions]
+    apply_jobs = [(d.job, d.final_score) for d in apply_decisions]
+    watch_jobs = [(d.job, d.final_score) for d in watch_decisions]
+
+    # NEW: limit applies to top 4 by score (STRICT cap)
+    apply_jobs = sorted(apply_jobs, key=lambda x: x[1], reverse=True)
+    apply_jobs = apply_jobs[:4]
 
     # Combine apply and watch jobs
     final_matches = apply_jobs + watch_jobs
