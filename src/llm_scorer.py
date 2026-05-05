@@ -1,110 +1,172 @@
 """
 src/llm_scorer.py
-Semantic job scoring using HuggingFace sentence-transformers embeddings.
+Semantic job scoring using local sentence-transformers embeddings.
 Model: sentence-transformers/all-MiniLM-L6-v2
-Falls back to keyword scoring if HF unavailable.
+Falls back to keyword scoring if model unavailable.
 """
 from __future__ import annotations
-import hashlib, json, logging, math, os, time
+import hashlib
+import json
+import logging
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-import requests
 
-logger     = logging.getLogger(__name__)
-BASE_DIR   = Path(__file__).resolve().parent.parent
+logger = logging.getLogger(__name__)
+BASE_DIR = Path(__file__).resolve().parent.parent
 CACHE_FILE = BASE_DIR / "data" / "llm_score_cache.json"
-_HF_URL    = "https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/feature-extraction"
-_TIMEOUT   = 20
 
-_IDEAL = (
-    "ESG Manager environmental compliance ISO 14001 sustainability UAE "
-    "HSE Manager health safety environment regulatory operations senior "
-    "environmental services waste management Abu Dhabi Dubai compliance"
-)
-_BAD = (
-    "junior entry level intern software developer programmer "
-    "quantity surveyor civil engineer site engineer MEP "
-    "call center sales receptionist driver cleaner UAE national only"
-)
+# Candidate profile for semantic matching
+_PROFILE_TEXT = """
+ESG Manager Environmental Manager Sustainability HSE Compliance ISO 14001
+waste management environmental operations UAE regulations health safety
+environmental senior operations manager regulatory compliance
+"""
+
+# Global model instance (lazy loaded)
+_model = None
+_profile_embedding = None
+
+
+def _get_model():
+    """Lazy load sentence-transformers model."""
+    global _model, _profile_embedding
+    if _model is None:
+        try:
+            from sentence_transformers import SentenceTransformer
+            logger.info("Loading sentence-transformers model...")
+            _model = SentenceTransformer("all-MiniLM-L6-v2")
+            _profile_embedding = _model.encode(_PROFILE_TEXT, convert_to_tensor=True)
+            logger.info("Model loaded successfully")
+        except ImportError:
+            logger.warning("sentence-transformers not installed, using keyword fallback")
+            return None, None
+        except Exception as e:
+            logger.warning(f"Failed to load model: {e}, using keyword fallback")
+            return None, None
+    return _model, _profile_embedding
 
 
 def _fp(job):
-    k = "|".join([str(job.get("title","")).lower(), str(job.get("company","")).lower(), str(job.get("link","")).strip()])
+    """Generate fingerprint for caching."""
+    k = "|".join([
+        str(job.get("title", "")).lower(),
+        str(job.get("company", "")).lower(),
+        str(job.get("link", "")).strip()
+    ])
     return hashlib.md5(k.encode()).hexdigest()
 
+
 def _load_cache():
+    """Load score cache from disk."""
     try:
-        if CACHE_FILE.exists(): return json.loads(CACHE_FILE.read_text())
-    except: pass
+        if CACHE_FILE.exists():
+            return json.loads(CACHE_FILE.read_text())
+    except Exception:
+        pass
     return {}
 
-def _save_cache(c):
+
+def _save_cache(cache):
+    """Save score cache to disk."""
     try:
         CACHE_FILE.parent.mkdir(exist_ok=True)
-        CACHE_FILE.write_text(json.dumps(c, indent=2))
-    except: pass
+        CACHE_FILE.write_text(json.dumps(cache, indent=2))
+    except Exception:
+        pass
 
-def _embed(texts):
-    h = {"Content-Type": "application/json"}
-    t = os.getenv("HF_TOKEN","")
-    t = t.strip()
-    if t: h["Authorization"] = f"Bearer {t}"
-    for attempt in range(3):
-        try:
-            r = requests.post(_HF_URL, json={"inputs": texts, "options": {"wait_for_model": True}}, headers=h, timeout=_TIMEOUT)
-            if r.status_code == 503:
-                time.sleep(min(float(r.json().get("estimated_time",15)), 30)); continue
-            if r.status_code == 429:
-                logger.warning("hf_rate_limited"); return None
-            r.raise_for_status()
-            return r.json()
-        except requests.exceptions.Timeout:
-            if attempt == 2: return None
-            time.sleep(5)
-        except Exception as e:
-            logger.warning(f"hf_embed_failed error={e}"); return None
-    return None
 
-def _cos(a, b):
-    dot = sum(x*y for x,y in zip(a,b))
-    return dot / (math.sqrt(sum(x*x for x in a)) * math.sqrt(sum(x*x for x in b)) + 1e-9)
+def _score_semantic(job):
+    """Score job using semantic embeddings."""
+    model, profile_embedding = _get_model()
+    if model is None:
+        return None
 
-def _score_hf(job):
-    txt = f"{job.get('title','')} {job.get('company','')} {job.get('location','')} {str(job.get('description',''))[:200]}"
-    vecs = _embed([txt, _IDEAL, _BAD])
-    if not vecs or len(vecs) < 3: return None
-    good = _cos(vecs[0], vecs[1])
-    bad  = _cos(vecs[0], vecs[2])
-    kw_score = __import__("src.scoring", fromlist=["score_job"]).score_job(job)
-    embed_score = max(0, min(100, round(good * 120 - bad * 60)))
-    score = round(kw_score * 0.5 + embed_score * 0.5)
-    loc = (str(job.get("location","")) + str(job.get("company",""))).lower()
-    if any(x in loc for x in ["uae","dubai","abu dhabi","ajman","sharjah"]):
-        score = min(100, score + 10)
-    logger.debug(f"hf_embed title={job.get('title')!r} good={good:.3f} bad={bad:.3f} score={score}")
-    return score
+    try:
+        # Create job text for embedding
+        job_text = f"{job.get('title', '')} {job.get('description', '')[:500]}"
+
+        # Get embedding
+        job_embedding = model.encode(job_text, convert_to_tensor=True)
+
+        # Calculate cosine similarity
+        from sentence_transformers import util
+        similarity = util.cos_sim(profile_embedding, job_embedding)[0]
+
+        # Convert to 0-100 score with scaling
+        score = max(0, min(100, int(float(similarity) * 100)))
+
+        # Location boost
+        loc = (str(job.get("location", "")) + str(job.get("company", ""))).lower()
+        if any(x in loc for x in ["uae", "dubai", "abu dhabi", "ajman", "sharjah"]):
+            score = min(100, score + 10)
+
+        logger.debug(f"semantic_embed title={job.get('title')!r} similarity={float(similarity):.3f} score={score}")
+        return score
+
+    except Exception as e:
+        logger.warning(f"semantic_score_failed error={e}")
+        return None
+
 
 def _kw(job):
+    """Fallback keyword scoring."""
     try:
         from src.scoring import score_job
         return int(score_job(job))
-    except: return 0
+    except Exception:
+        return 0
+
 
 def score_jobs_llm(jobs, use_cache=True):
-    if not jobs: return jobs
+    """
+    Score jobs using semantic embeddings with keyword fallback.
+
+    Args:
+        jobs: List of job dictionaries
+        use_cache: Whether to use score cache
+
+    Returns:
+        List of jobs with 'score' field added
+    """
+    if not jobs:
+        return jobs
+
     cache = _load_cache() if use_cache else {}
-    hits = hf = kw = 0
+    hits = semantic = kw = 0
+
     for job in jobs:
         fp = _fp(job)
+
+        # Check cache
         if use_cache and fp in cache:
-            job["score"] = cache[fp]; job["score_source"] = "cache"; hits += 1; continue
-        s = _score_hf(job)
+            job["score"] = cache[fp]
+            job["score_source"] = "cache"
+            hits += 1
+            continue
+
+        # Try semantic scoring
+        s = _score_semantic(job)
         if s is None:
-            s = _kw(job); job["score_source"] = "keyword"; kw += 1
+            # Fallback to keyword scoring
+            s = _kw(job)
+            job["score_source"] = "keyword"
+            kw += 1
         else:
-            job["score_source"] = "hf_embed"; hf += 1
-        job["score"] = s; cache[fp] = s
-        time.sleep(0.2)
+            job["score_source"] = "semantic"
+            semantic += 1
+
+        job["score"] = s
+        cache[fp] = s
+
+        # Small delay to avoid overwhelming resources
+        time.sleep(0.05)
+
+    # Save cache
     _save_cache(cache)
-    logger.info(f"scoring_complete total={len(jobs)} cache={hits} hf={hf} keyword={kw}")
+
+    logger.info(
+        f"scoring_complete total={len(jobs)} cache={hits} semantic={semantic} keyword={kw}"
+    )
+
     return jobs

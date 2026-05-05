@@ -1,4 +1,4 @@
-"""
+﻿"""
 src/gmail_importer.py
 Gmail job application response importer.
 
@@ -8,10 +8,10 @@ or queues for manual review (medium confidence).
 
 Setup (one-time):
     1. Go to https://console.cloud.google.com
-    2. Create project → Enable Gmail API
-    3. Credentials → OAuth 2.0 Client ID → Desktop App → Download JSON
+    2. Create project â†’ Enable Gmail API
+    3. Credentials â†’ OAuth 2.0 Client ID â†’ Desktop App â†’ Download JSON
     4. Save as credentials.json in project root
-    5. First run opens browser for authorization → token.json saved automatically
+    5. First run opens browser for authorization â†’ token.json saved automatically
 
 Usage:
     python -m src.gmail_importer --dry-run     # preview, no writes
@@ -54,7 +54,7 @@ DEFAULT_LOOKBACK_DAYS = 30
 
 
 # ---------------------------------------------------------------------------
-# Classification rules — deterministic, no LLM
+# Classification rules â€” deterministic, no LLM
 # ---------------------------------------------------------------------------
 
 _INTERVIEW: List[str] = [
@@ -114,7 +114,7 @@ _JOB_SIGNAL: List[str] = [
     "cv", "resume", "candidate",
 ]
 
-# Gmail search query — broad first pass before keyword classification
+# Gmail search query â€” broad first pass before keyword classification
 _GMAIL_QUERY = (
     'is:inbox ("application" OR "interview" OR "unfortunately" OR '
     '"recruiter" OR "offer" OR "shortlisted" OR "position")'
@@ -186,7 +186,7 @@ def _get_gmail_service():
         from googleapiclient.discovery import build
     except ImportError:
         logger.error(
-            "gmail_deps_missing — install with: "
+            "gmail_deps_missing â€” install with: "
             "pip install google-auth google-auth-oauthlib google-api-python-client"
         )
         raise
@@ -202,7 +202,7 @@ def _get_gmail_service():
             if not CREDS_FILE.exists():
                 raise FileNotFoundError(
                     f"credentials.json not found at {CREDS_FILE}. "
-                    "Download from Google Cloud Console → APIs & Services → Credentials."
+                    "Download from Google Cloud Console â†’ APIs & Services â†’ Credentials."
                 )
             flow = InstalledAppFlow.from_client_secrets_file(str(CREDS_FILE), SCOPES)
             creds = flow.run_local_server(port=0)
@@ -283,20 +283,20 @@ def _extract_header(headers: List[Dict[str, str]], name: str) -> str:
 
 
 def _extract_links(text: str) -> List[str]:
-    """Extract URLs from email body — used for link-based matching."""
+    """Extract URLs from email body â€” used for link-based matching."""
     return re.findall(r'https?://[^\s<>"]+', text)
 
 
 def _extract_company_hint(sender: str, subject: str) -> str:
     """
-    Best-effort company name extraction.
-    1. Sender display name before <email>
-    2. Sender domain (strip common email providers)
+    Enhanced company name extraction for Gmail responses.
     """
     _GENERIC_DOMAINS = {
         "gmail.com", "yahoo.com", "hotmail.com", "outlook.com",
         "greenhouse.io", "lever.co", "workday.com", "smartrecruiters.com",
         "successfactors.com", "taleo.net", "icims.com", "bamboohr.com",
+        "mail.amazon.jobs",  # ATS platform
+        "workable.co",  # ATS platform
     }
 
     # Try display name: "Acme Corp <hr@acme.com>"
@@ -313,9 +313,14 @@ def _extract_company_hint(sender: str, subject: str) -> str:
     if domain_match:
         domain = domain_match.group(1).lower().strip()
         if domain not in _GENERIC_DOMAINS:
-            # "careers.acme.com" → "acme"
+            # "careers.acme.com" â†’ "acme"
             parts = domain.replace(".com", "").replace(".io", "").replace(".co", "").split(".")
             return parts[-1].title()
+
+    # Try subject line for company names (common in Gmail responses)
+    subject_companies = re.findall(r'\b(Amazon|Google|Microsoft|Apple|Meta|Netflix|Adobe|Oracle|SAP|IBM|Intel|Cisco|HP|Dell|Accenture|Deloitte|PwC|KPMG|EY|McKinsey|BCG|Bain|Parsons|Strabag|Al Jomaih|EGA|Larsen|Toubro|Penta|Talents Tide|Confidential|LOBA|KAYALI)\b', subject, flags=re.I)
+    if subject_companies:
+        return subject_companies[0]  # Return first company found in subject
 
     return ""
 
@@ -393,27 +398,32 @@ def _match_email_to_application(
     by_link    = index["by_link"]
     by_company = index["by_company"]
 
-    # 1. Exact link match in email body (highest confidence)
-    for link in email.links_found:
-        # Normalize LinkedIn URLs (strip tracking params)
-        clean = re.sub(r'\?.*$', '', link)
-        if clean in by_link:
-            return by_link[clean], 0.95, f"exact_link_match:{clean}"
-        # Try prefix match for job IDs
-        for stored_link, app in by_link.items():
-            if _link_similarity(clean, stored_link) >= 0.90:
-                return app, 0.88, f"link_similarity:{stored_link}"
-
-    # 2. Company name match
+    # 1. Company name match (highest priority for Gmail responses)
     hint = email.company_hint.lower().strip()
     if hint and len(hint) > 2:
-        # Exact company match
+        # Normalize company names for better matching
+        normalized_hint = hint.replace(" corporation", "").replace(" corp", "").replace(" inc", "").replace(" limited", "").strip()
+
+        # Check each application for company match
+        for app in applications:
+            app_company = (app.get("company") or "").lower().strip()
+            app_company_normalized = app_company.replace(" corporation", "").replace(" corp", "").replace(" inc", "").replace(" limited", "").strip()
+
+            # Exact match after normalization
+            if normalized_hint == app_company_normalized:
+                return app, 0.90, f"company_exact_normalized:{hint}"
+
+            # Partial match (Parsons Corporation vs Parsons)
+            if normalized_hint in app_company or app_company in normalized_hint:
+                return app, 0.85, f"company_partial:{hint}"
+
+        # Fallback to original logic if no direct match found
         if hint in by_company:
             candidates = by_company[hint]
             # If only one application at this company, high confidence
             if len(candidates) == 1:
                 return candidates[0], 0.82, f"company_exact:{hint}"
-            # Multiple at same company — try title disambiguation
+            # Multiple at same company â€” try title disambiguation
             for c in candidates:
                 title = (c.get("title") or "").lower()
                 subj  = email.subject.lower()
@@ -421,13 +431,24 @@ def _match_email_to_application(
                     return c, 0.85, f"company+title:{hint}"
             # Return most recent if ambiguous
             recent = max(candidates, key=lambda x: x.get("date_applied", ""))
-            return recent, 0.65, f"company_ambiguous:{hint}"
+            return recent, 0.75, f"company_ambiguous:{hint}"
 
         # Partial company match
         for company_key, candidates in by_company.items():
             if hint in company_key or company_key in hint:
                 if len(candidates) == 1:
-                    return candidates[0], 0.72, f"company_partial:{company_key}"
+                    return candidates[0], 0.78, f"company_partial:{company_key}"
+
+    # 2. Exact link match in email body (lower priority)
+    for link in email.links_found:
+        # Normalize LinkedIn URLs (strip tracking params)
+        clean = re.sub(r'\?.*$', '', link)
+        if clean in by_link:
+            return by_link[clean], 0.82, f"exact_link_match:{clean}"
+        # Try prefix match for job IDs
+        for stored_link, app in by_link.items():
+            if _link_similarity(clean, stored_link) >= 0.90:
+                return app, 0.75, f"link_similarity:{stored_link}"
 
     # 3. Subject-line token match against job titles
     subj_tokens = set(re.findall(r'\b\w{4,}\b', email.subject.lower()))
@@ -449,7 +470,7 @@ def _match_email_to_application(
 
 
 def _link_similarity(a: str, b: str) -> float:
-    """Simple URL similarity — ratio of shared path segments."""
+    """Simple URL similarity â€” ratio of shared path segments."""
     a_parts = set(a.rstrip("/").split("/"))
     b_parts = set(b.rstrip("/").split("/"))
     if not a_parts or not b_parts:
@@ -467,17 +488,16 @@ def _update_application(
     email: ClassifiedEmail,
     dry_run: bool,
 ) -> bool:
-    """Update application status. No-ops in dry_run mode."""
+    """Update application status. No-ops in dry run mode."""
     if dry_run:
         return True
 
     try:
         from src.applications import update_application_status
         update_application_status(
-            link=app.get("link", ""),
+            job=app,  # Pass the entire job dict
             status=new_status,
             notes=f"Auto-imported from Gmail: {email.subject[:80]}",
-            date_updated=datetime.now().isoformat(),
         )
         logger.info(
             f"application_updated "
@@ -534,7 +554,7 @@ def run_import(dry_run: bool, lookback_days: int = DEFAULT_LOOKBACK_DAYS) -> Imp
     from src.applications import get_applied_jobs
     applications = get_applied_jobs()
     if not applications:
-        logger.warning("no_applications_tracked — nothing to match against")
+        logger.warning("no_applications_tracked â€” nothing to match against")
 
     index = _build_application_index(applications)
 
@@ -603,7 +623,12 @@ def run_import(dry_run: bool, lookback_days: int = DEFAULT_LOOKBACK_DAYS) -> Imp
         )
 
         # Determine action
-        overall_conf = cls_conf * match_conf if matched_app else 0.0
+        # If match is very confident (>=0.85), use match_conf directly
+        # This ensures acknowledgment emails (cls=0.40) still update applications
+        if matched_app and match_conf >= 0.85:
+            overall_conf = match_conf
+        else:
+            overall_conf = cls_conf * match_conf if matched_app else 0.0
 
         if overall_conf >= HIGH_CONFIDENCE and matched_app:
             action = "update"
@@ -629,7 +654,7 @@ def run_import(dry_run: bool, lookback_days: int = DEFAULT_LOOKBACK_DAYS) -> Imp
             if _update_application(matched_app, status, email, dry_run):
                 report.updates_applied += 1
             else:
-                # Failed update → queue instead
+                # Failed update â†’ queue instead
                 _append_review_queue(match_result)
                 report.queued_for_review += 1
 
@@ -656,15 +681,15 @@ def run_import(dry_run: bool, lookback_days: int = DEFAULT_LOOKBACK_DAYS) -> Imp
 # ---------------------------------------------------------------------------
 
 def _print_report(report: ImportReport) -> None:
-    mode = "DRY RUN — no writes" if report.dry_run else "APPLY MODE"
+    mode = "DRY RUN â€” no writes" if report.dry_run else "APPLY MODE"
     print(f"\nGmail Import Report [{mode}]")
-    print(f"{'─' * 60}")
+    print(f"{'â”€' * 60}")
     print(f"  Emails fetched:       {report.emails_fetched}")
     print(f"  Classified:           {report.emails_classified}")
     print(f"  Skipped (no signal):  {report.emails_skipped}")
     print(f"  Updates {'(preview)' if report.dry_run else 'applied'}:   {report.updates_applied}")
     print(f"  Queued for review:    {report.queued_for_review}")
-    print(f"{'─' * 60}")
+    print(f"{'â”€' * 60}")
 
     if report.matches:
         print(f"\nMatches:")
@@ -677,7 +702,7 @@ def _print_report(report: ImportReport) -> None:
                 f"  [{m.action.upper():6}] {m.email.status:<22} "
                 f"cls={m.email.classification_confidence:.2f}  "
                 f"match={m.match_confidence:.2f}  "
-                f"→ {app_str}"
+                f"â†’ {app_str}"
             )
             print(f"           Subject: {m.email.subject[:70]}")
 
@@ -701,7 +726,7 @@ def main() -> int:
         epilog=__doc__,
     )
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--dry-run", action="store_true", help="Preview only — no writes")
+    mode.add_argument("--dry-run", action="store_true", help="Preview only â€” no writes")
     mode.add_argument("--apply",   action="store_true", help="Write updates and queue")
     parser.add_argument(
         "--days", type=int, default=DEFAULT_LOOKBACK_DAYS,
@@ -715,7 +740,7 @@ def main() -> int:
         _print_report(report)
         return 0
     except FileNotFoundError as exc:
-        print(f"\n✗ Setup required: {exc}\n")
+        print(f"\nâœ— Setup required: {exc}\n")
         return 1
     except Exception:
         logger.exception("gmail_import_failed")
@@ -724,3 +749,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+

@@ -117,7 +117,36 @@ def _fetch_and_score() -> Tuple[
         reverse=True,
     )
     logger.info(f"scoring_complete total={len(all_scored)} high_quality={len(matches)}")
-    return all_scored, matches
+
+    # Agent decision making
+    from src.job_agent import decide_jobs
+    agent_jobs = []
+    for job, score in matches:
+        job["score"] = score
+        agent_jobs.append(job)
+
+    decisions = decide_jobs(agent_jobs, generate_letters=False)
+    apply_decisions = [d for d in decisions if d.decision == "apply"]
+    watch_decisions = [d for d in decisions if d.decision == "watch"]
+    skip_decisions = [d for d in decisions if d.decision == "skip"]
+
+    print(f"Agent decisions: apply={len(apply_decisions)} watch={len(watch_decisions)} skip={len(skip_decisions)}")
+
+    # Use Agent decisions as final output
+    apply_jobs = [(d.job, d.job["score"]) for d in apply_decisions]
+    watch_jobs = [(d.job, d.job["score"]) for d in watch_decisions]
+
+    # Combine apply and watch jobs
+    final_matches = apply_jobs + watch_jobs
+
+    # Force minimum output: ensure at least 5 jobs
+    if len(final_matches) < 5:
+        # fallback: take top scored jobs
+        final_matches = matches[:5]
+
+    print(f"Final output: telegram_jobs={len(final_matches)}")
+
+    return all_scored, final_matches
 
 
 def _persist_history(all_scored: List[Tuple[Dict[str, Any], int]]) -> None:
