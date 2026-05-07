@@ -347,8 +347,14 @@ class NaukriGulfApplyEngine:
             user_data_dir=str(NG_PROFILE_DIR),
             headless=NG_HEADLESS,     # configurable: headless for CI, visible for local
             slow_mo=NG_SLOW_MO,
-            args=["--no-sandbox",
-                  "--disable-blink-features=AutomationControlled"],
+            ignore_https_errors=True,  # Handle GitHub runner network issues
+            args=[
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-http2",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-features=IsolateOrigins,site-per-process",
+            ],
             no_viewport=False,
             viewport={"width": 1280, "height": 800},
         )
@@ -460,20 +466,24 @@ class NaukriGulfApplyEngine:
 
     def _check_session(self) -> bool:
         """
-        Multi-signal session check.
+        Multi-signal session check optimized for GitHub runners.
         Signals checked (in order):
-          1. URL contains 'login' → definitely expired
-          2. Login indicator selector present
-          3. 'Applied Jobs' page accessible (strong confirmation)
+          1. Try direct search page load (bypasses homepage blocks)
+          2. URL contains 'login' → definitely expired
+          3. Login indicator selector present
+          4. 'Applied Jobs' page accessible (strong confirmation)
         On repeated failures, backs up and clears the profile dir.
         """
         assert self._page
         try:
+            # Try direct search page first - bypasses potential homepage blocks
+            search_url = "https://www.naukrigulf.com/jobs-in-uae?keyword=HSE%20Manager&location=UAE"
             self._page.goto(
-                "https://www.naukrigulf.com/",
+                search_url,
                 wait_until="domcontentloaded",
-                timeout=20_000,
+                timeout=30_000,
             )
+            logger.info("ng_search_probe_loaded url=%s", search_url)
             _page_wait(self._page, 1500, 3000)
 
             url = self._page.url.lower()
