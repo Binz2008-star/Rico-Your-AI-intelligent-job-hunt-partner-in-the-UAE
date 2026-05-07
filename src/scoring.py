@@ -1,4 +1,5 @@
 import re
+import os
 from src.profile import get_candidate_profile, get_skill_weights, get_negative_keywords, get_seniority_keywords, calculate_experience_match, get_location_preferences, get_salary_preferences, get_target_roles, get_profile_match_explanation
 
 
@@ -14,6 +15,19 @@ def score_job(job):
     title = str(job.get("title", "")).lower()
     description = str(job.get("description", "")).lower()
     job_text = f"{title} {description}"
+
+    # 0. Hard exclusion keywords - immediate disqualification
+    exclude_keywords_str = os.getenv("EXCLUDE_KEYWORDS", "")
+    exclude_keywords = [kw.strip().lower() for kw in exclude_keywords_str.split(",") if kw.strip()]
+    if exclude_keywords:
+        exclude_matches = [kw for kw in exclude_keywords if kw in title]
+        if exclude_matches:
+            # Hard penalty - make score very low
+            score = -50
+            score_details.append(f"Excluded: {exclude_matches} (-50)")
+            job["score"] = score
+            job["score_details"] = score_details
+            return score
 
     profile = get_candidate_profile()
     skill_weights = get_skill_weights()
