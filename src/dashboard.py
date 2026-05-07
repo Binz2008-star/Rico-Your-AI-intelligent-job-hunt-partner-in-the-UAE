@@ -27,6 +27,7 @@ from src.decision_engine import JobDecisionEngine
 from src.profile import get_candidate_profile, get_target_roles
 from src.feedback_loop import FeedbackLoopOrchestrator
 from src.response_intelligence import ResponseType
+from src.pdf_manager import PDFManager, initialize_pdf_system
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -386,6 +387,10 @@ def build_dashboard(orchestrator: FeedbackLoopOrchestrator = None) -> str:
 
     feedback_data = load_feedback_loop_data(orchestrator)
 
+    # Initialize PDF system
+    pdf_manager = initialize_pdf_system()
+    cv_pdf = pdf_manager.get_cv_pdf()
+
     now = datetime.now()
     week_ago = now - timedelta(days=7)
 
@@ -544,6 +549,65 @@ a:hover {{ color:#38bdf8; }}
   <div class="card" style="margin-bottom:16px;">
     <h2>🧠 Response Intelligence</h2>
     {_feedback_panel(feedback_data)}
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h2>📄 Document Viewer</h2>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+      <div>
+        <h3 style="margin: 0 0 12px 0; font-size: 16px; color: var(--muted);">CV/Resume</h3>
+        {f'''
+        <a href="static/pdf_viewer_advanced.html?file={cv_pdf['file_path']}&name={cv_pdf['title'].replace(' ', '%20')}"
+           target="_blank"
+           style="display: inline-block; background: var(--accent); color: white; padding: 12px 20px;
+                  border-radius: 8px; text-decoration: none; font-weight: 600; margin-bottom: 8px;">
+          📄 View {cv_pdf['title']}
+        </a>
+        <div class="muted" style="font-size: 13px; margin-top: 8px;">
+          Size: {cv_pdf.get('file_size', 0) / 1024:.1f} KB •
+          Modified: {cv_pdf.get('modified_at', 'Unknown')[:10]} •
+          PDF.js v5.7.284
+        </div>
+        ''' if cv_pdf else '''
+        <div style="color: var(--muted); padding: 12px; background: var(--panel); border-radius: 8px;">
+          No CV document found. Place your CV at data/cv.pdf to enable PDF viewing.
+        </div>
+        '''}
+      </div>
+      <div>
+        <h3 style="margin: 0 0 12px 0; font-size: 16px; color: var(--muted);">Quick Access</h3>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          {f'''
+          <button onclick="window.open('static/pdf_viewer_advanced.html?file={cv_pdf['file_path']}&name={cv_pdf['title'].replace(' ', '%20')}', '_blank')"
+                  style="background: var(--good); color: white; border: none; padding: 10px 16px;
+                         border-radius: 6px; cursor: pointer; font-weight: 600;">
+            👁️ Quick View {cv_pdf['title']}
+          </button>
+          <div class="muted" style="font-size: 13px;">
+            Advanced viewer with zoom, navigation, and download
+          </div>
+          ''' if cv_pdf else '''
+          <div style="color: var(--muted); font-size: 13px;">
+            Upload your CV to enable document viewing features
+          </div>
+          '''}
+        </div>
+      </div>
+    </div>
+    {f'''
+    <div style="margin-top: 16px; padding: 12px; background: rgba(34, 197, 94, 0.1); border: 1px solid var(--good); border-radius: 8px;">
+      <h4 style="margin: 0 0 8px 0; color: var(--good); font-size: 14px;">📋 {cv_pdf['title']} Details</h4>
+      <p style="margin: 4px 0; font-size: 13px; color: var(--muted);">
+        <strong>Description:</strong> {cv_pdf.get('description', 'No description available')}
+      </p>
+      <p style="margin: 4px 0; font-size: 13px; color: var(--muted);">
+        <strong>Tags:</strong> {', '.join(cv_pdf.get('tags', []))}
+      </p>
+      <p style="margin: 4px 0; font-size: 13px; color: var(--muted);">
+        <strong>Registered:</strong> {cv_pdf.get('registered_at', 'Unknown')[:10]}
+      </p>
+    </div>
+    ''' if cv_pdf else ''}
   </div>
 
   <div class="grid two">

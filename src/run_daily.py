@@ -220,6 +220,35 @@ def _apply_assistant(matches: List[Tuple[Dict[str, Any], int]]) -> None:
         logger.exception("apply_assistant_error")
 
 
+def _auto_apply_linkedin(matches: List[Tuple[Dict[str, Any], int]]) -> None:
+    """Auto-apply to LinkedIn jobs via Easy Apply (DISABLED - use NaukriGulf instead)."""
+    if not matches:
+        logger.info("auto_apply_linkedin_disabled no_matches")
+        return
+
+    logger.info("auto_apply_linkedin_disabled use_naukrigulf_instead")
+
+
+def _auto_apply_naukrigulf(matches: List[Tuple[Dict[str, Any], int]]) -> None:
+    """Auto-apply to NaukriGulf jobs via persistent browser automation."""
+    try:
+        from src.naukrigulf_apply import run_naukrigulf_apply, NGApplyStatus
+
+        logger.info("naukrigulf_apply_starting direct_search")
+        # Use direct search mode (jobs=None) to let NaukriGulf engine find jobs
+        results = run_naukrigulf_apply(jobs=None, max_applies=2)
+
+        success_count = sum(1 for r in results if r.status == NGApplyStatus.SUCCESS)
+        dry_count     = sum(1 for r in results if r.status == NGApplyStatus.DRY_RUN)
+        logger.info(
+            f"naukrigulf_apply_complete success={success_count} "
+            f"dry_run={dry_count} total={len(results)}"
+        )
+
+    except Exception:
+        logger.exception("naukrigulf_apply_error")
+
+
 def _run_feedback_loop(
     orchestrator: Optional[FeedbackLoopOrchestrator],
 ) -> Optional[CycleResult]:
@@ -302,6 +331,7 @@ def run_pipeline() -> None:
     _persist_history(all_scored)
     _notify(matches)
     _apply_assistant(matches)
+    _auto_apply_naukrigulf(matches)
     _sync_gmail()
     _run_feedback_loop(orchestrator)
     _regenerate_dashboard(orchestrator)

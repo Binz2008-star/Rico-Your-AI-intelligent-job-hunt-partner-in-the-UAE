@@ -76,12 +76,28 @@ def init_db():
                 )
             """)
 
+            # Create auto_apply_attempts table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS auto_apply_attempts (
+                    id SERIAL PRIMARY KEY,
+                    job_id VARCHAR(500) UNIQUE NOT NULL,
+                    title VARCHAR(500),
+                    company VARCHAR(500),
+                    status VARCHAR(50) NOT NULL,
+                    error TEXT,
+                    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """)
+
             # Create indexes for better performance
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_link ON jobs(link)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_score ON jobs(score DESC)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_date_found ON jobs(date_found DESC)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_applications_status ON applications(status)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_applications_job_link ON applications(job_link)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_auto_apply_job_id ON auto_apply_attempts(job_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_auto_apply_status ON auto_apply_attempts(status)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_auto_apply_timestamp ON auto_apply_attempts(timestamp DESC)")
 
         print("✅ Database initialized successfully")
         return True
@@ -289,7 +305,7 @@ def get_application_stats() -> Dict[str, Any]:
 
 def is_db_available() -> bool:
     """Check if database is available."""
-    return DB_ENABLED and get_db_connection() is not None
+    return DB_ENABLED
 
 
 def main():

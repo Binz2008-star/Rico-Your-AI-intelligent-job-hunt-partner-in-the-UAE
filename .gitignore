@@ -15,15 +15,29 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-.env
-__pycache__/
-*.pyc
+# Browser profiles and runtime data
+data/ng_profile/
+data/linkedin_tmp/
+playwright/
+
+# Screenshots and debug images
+data/*.png
+
+# Runtime data files
+*.log
+*.db
+*.sqlite
+*.sqlite3
 dashboard.html
-test_results.json
-data/*.json
+
+# Cache directories
+.cache/
 
 # Gmail OAuth credentials
 credentials.json
 token.json
 data/gmail_review_queue.json
-.env
+
+# Data files (except CV)
+data/*.json
+!data/cv.pdf
