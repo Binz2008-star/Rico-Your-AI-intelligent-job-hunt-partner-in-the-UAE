@@ -480,11 +480,11 @@ class NaukriGulfApplyEngine:
             search_url = "https://www.naukrigulf.com/jobs-in-uae?keyword=HSE%20Manager&location=UAE"
             self._page.goto(
                 search_url,
-                wait_until="domcontentloaded",
-                timeout=30_000,
+                wait_until="commit",  # Lighter wait mode for GitHub runners
+                timeout=60_000,        # Increased timeout for network issues
             )
             logger.info("ng_search_probe_loaded url=%s", search_url)
-            _page_wait(self._page, 1500, 3000)
+            self._page.wait_for_timeout(5000)  # Manual wait after commit
 
             url = self._page.url.lower()
 
@@ -518,9 +518,16 @@ class NaukriGulfApplyEngine:
             return alive
 
         except Exception as exc:
-            logger.warning("session_check_failed error=%s", exc)
-            self._record_session_failure()
-            return False
+            # Check if this is a network/timeout issue vs session issue
+            error_str = str(exc).lower()
+            if "timeout" in error_str or "network" in error_str or "connection" in error_str:
+                logger.warning("ng_network_blocked_or_timeout error=%s", exc)
+                # Don't record as session failure - this is a network issue
+                return False
+            else:
+                logger.warning("session_check_failed error=%s", exc)
+                self._record_session_failure()
+                return False
 
     def _record_session_failure(self) -> None:
         """Track consecutive failures and recover profile if threshold exceeded."""
