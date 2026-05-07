@@ -72,6 +72,7 @@ def _env_int(k: str, d: int) -> int:
 
 NG_ENABLED        = _env_bool("NG_ENABLED", False)
 NG_DRY_RUN        = _env_bool("NG_DRY_RUN", False)
+NG_HEADLESS       = _env_bool("NG_HEADLESS", False)
 NG_MAX_PER_RUN    = _env_int("NG_MAX_PER_RUN", 3)
 NG_COOLDOWN       = _env_int("NG_COOLDOWN_SECONDS", 120)
 NG_DAILY_LIMIT    = _env_int("NG_DAILY_LIMIT", 15)
@@ -344,7 +345,7 @@ class NaukriGulfApplyEngine:
         self._pw  = sync_playwright().start()
         self._ctx = self._pw.chromium.launch_persistent_context(
             user_data_dir=str(NG_PROFILE_DIR),
-            headless=False,          # always visible — less detection, handles prompts
+            headless=NG_HEADLESS,     # configurable: headless for CI, visible for local
             slow_mo=NG_SLOW_MO,
             args=["--no-sandbox",
                   "--disable-blink-features=AutomationControlled"],
