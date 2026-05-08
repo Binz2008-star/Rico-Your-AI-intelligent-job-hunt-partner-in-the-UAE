@@ -281,6 +281,58 @@ def _is_too_old(job: Dict[str, Any]) -> bool:
         return False
 
 
+def _valid_ng_job_link(url: str) -> bool:
+    """Filter out company/category pages, only keep actual job detail URLs."""
+    if not url:
+        return False
+
+    u = url.lower()
+
+    bad_patterns = [
+        "/jobs-cid-",
+        "-jobs-cid-",
+        "/companies/",
+        "/company/",
+        "/employer/",
+        "/recruiter/",
+        "/jobs-by-",
+    ]
+
+    if any(p in u for p in bad_patterns):
+        return False
+
+    # Must look like an actual job detail URL
+    return "naukrigulf.com/" in u and "-jobs-in-" in u
+
+
+def _valid_job_title(title: str) -> bool:
+    """Filter out non-job titles like company names and require HSE/Compliance keywords."""
+    if not title:
+        return False
+
+    t = title.strip().lower()
+
+    bad_title_terms = [
+        "llc", "l.l.c", "company", "healthcare", "hospital",
+        "natural resources", "facility management",
+    ]
+
+    if any(x in t for x in bad_title_terms):
+        return False
+
+    # Must contain at least one target keyword
+    target_keywords = [
+        "hse", "ehs", "qhse", "hsse", "safety",
+        "environment", "environmental", "compliance",
+        "risk", "operations", "operational", "project director"
+    ]
+
+    if not any(kw in t for kw in target_keywords):
+        return False
+
+    return len(t.split()) >= 2
+
+
 # ── LLM screening ─────────────────────────────────────────────────────────────
 
 def _llm_answers(questions: List[str], job: Dict[str, Any]) -> Dict[str, str]:
@@ -708,9 +760,16 @@ class NaukriGulfApplyEngine:
         cards = []
 
         for container in containers:
+            # Extract all links and filter by text content instead
             inner_links = container.query_selector_all("a[href]")
-            if inner_links:
-                cards.extend(inner_links)
+            for link in inner_links:
+                href = link.get_attribute("href") or ""
+                text = link.inner_text().strip().lower()
+                # Filter: must have reasonable length and not be generic navigation
+                if href and len(text) > 5 and len(text) < 100:
+                    # Exclude obvious non-job links
+                    if not any(x in text for x in ["register", "login", "sign in", "company", "careers"]):
+                        cards.append(link)
 
         logger.info("ng_cards_found role=%s count=%d (dynamic descent)", role, len(cards))
 
@@ -799,6 +858,15 @@ class NaukriGulfApplyEngine:
                     )
                     continue
 
+                # Apply strict filters for job links and titles
+                if not _valid_ng_job_link(link):
+                    logger.info("ng_skip_non_job_link title=%s link=%s", title[:60], link[:80])
+                    continue
+
+                if not _valid_job_title(title):
+                    logger.info("ng_skip_non_job_title title=%s link=%s", title[:60], link[:80])
+                    continue
+
                 # Strong production filtering - combined allow-list and block-list
                 BAD_LINK_PATTERNS = {
                     "/register", "/cid-", "careers-cid"
@@ -835,7 +903,8 @@ class NaukriGulfApplyEngine:
                 LOW_LEVEL = any(k in title_l for k in BAD_SENIORITY)
                 BAD_LINK = any(k in link_l for k in BAD_LINK_PATTERNS)
 
-                if not GOOD or BAD or LOW_LEVEL or BAD_LINK:
+                # Temporarily disable allow-list to see what jobs are being extracted
+                if BAD or LOW_LEVEL or BAD_LINK:
                     filter_reason = []
                     if not GOOD: filter_reason.append("no_target_keyword")
                     if BAD: filter_reason.append("excluded_term")

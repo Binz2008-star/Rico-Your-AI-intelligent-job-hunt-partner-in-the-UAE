@@ -80,9 +80,12 @@ INDEED_DAILY_LIMIT    = _env_int("INDEED_DAILY_LIMIT", 15)
 INDEED_COOLDOWN       = _env_int("INDEED_COOLDOWN_SECONDS", 120)
 INDEED_SLOW_MO        = _env_int("INDEED_SLOW_MO", 800)
 INDEED_MAX_AGE_DAYS   = _env_int("INDEED_MAX_JOB_AGE_DAYS", 14)
-INDEED_SCORE_THRESHOLD= _env_int("INDEED_SCORE_THRESHOLD", 0)
-INDEED_PROFILE_DIR    = BASE_DIR / os.getenv("NG_PROFILE_DIR", "data/ng_profile")
-CV_PATH               = BASE_DIR / os.getenv("CV_PATH", "data/cv.pdf")
+INDEED_SCORE_THRESHOLD      = _env_int("INDEED_SCORE_THRESHOLD", 0)
+INDEED_STREET_ADDRESS       = os.getenv("INDEED_STREET_ADDRESS", "")
+INDEED_RELEVANT_JOB_TITLE   = os.getenv("INDEED_RELEVANT_JOB_TITLE", "")
+INDEED_RELEVANT_COMPANY     = os.getenv("INDEED_RELEVANT_COMPANY", "")
+INDEED_PROFILE_DIR          = BASE_DIR / os.getenv("NG_PROFILE_DIR", "data/ng_profile")
+CV_PATH                 = BASE_DIR / os.getenv("CV_PATH", "data/cv.pdf")
 
 
 # ── Target roles ──────────────────────────────────────────────────────────────
@@ -119,28 +122,47 @@ class _S:
     )
     CARD_LINK    = "a.jcs-JobTitle, h2 a"
 
-    # Job detail page
+    # Job detail page — ae.indeed.com uses "Apply with Indeed" for Easy Apply
     APPLY_BTN    = (
+        "button[aria-label='Apply with Indeed'], "
+        "button:has-text('Apply with Indeed'), "
+        "[class*='indeed-apply-st'] button, "
         "#indeedApplyButton, "
         ".ia-IndeedApplyButton, "
         "button[aria-label*='Apply now'], "
-        "button:has-text('Apply now'), "
-        "a:has-text('Apply now')"
+        "button:has-text('Apply now')"
     )
     # Easy Apply iframe widget
     APPLY_IFRAME = "iframe[title*='Apply'], .ia-BasePage-iframe, iframe[src*='apply.indeed']"
 
     # Inside the apply iframe — multi-step wizard
-    FIELD_NAME   = "[name='applicant.name'], #applicant\\.name, input[autocomplete='name']"
-    FIELD_EMAIL  = "[name='applicant.emailAddress'], #applicant\\.emailAddress, input[type='email']"
-    FIELD_PHONE  = "[name='applicant.phoneNumber'], #applicant\\.phoneNumber, input[type='tel']"
-    FILE_INPUT   = "input[type='file']"
-    CONTINUE_BTN = (
-        "[data-testid='continue-button'], "
-        "button:has-text('Continue'), "
-        "button:has-text('Next'), "
-        "button[type='submit']"
+    FIELD_NAME    = "[name='applicant.name'], #applicant\\.name, input[autocomplete='name']"
+    FIELD_EMAIL   = "[name='applicant.emailAddress'], #applicant\\.emailAddress, input[type='email']"
+    FIELD_PHONE   = "[name='applicant.phoneNumber'], #applicant\\.phoneNumber, input[type='tel']"
+    FIELD_ADDRESS = (
+        "input[aria-label*='Street address' i], "
+        "input[aria-label*='street' i], "
+        "input[id*='streetAddress' i], "
+        "input[id*='street_address' i], "
+        "input[name*='streetAddress' i], "
+        "input[name*='street_address' i], "
+        "input[placeholder*='Street address' i], "
+        "input[placeholder*='street' i]"
     )
+    FIELD_JOB_TITLE = (
+        "input[aria-label*='Job title' i], "
+        "input[id*='jobTitle' i], "
+        "input[name*='jobTitle' i], "
+        "input[placeholder*='Job title' i]"
+    )
+    FIELD_COMPANY = (
+        "input[aria-label*='Company' i], "
+        "input[id*='company' i], "
+        "input[name*='company' i], "
+        "input[placeholder*='Company' i]"
+    )
+    FILE_INPUT    = "input[type='file']"
+    CONTINUE_BTN  = "[data-testid='continue-button'], button:has-text('Continue'), button:has-text('Next')"
     SUBMIT_BTN   = (
         "[data-testid='submit-application-button'], "
         "button:has-text('Submit your application'), "
@@ -148,25 +170,29 @@ class _S:
     )
     SUCCESS      = (
         "[data-testid='application-submitted'], "
+        "h1:has-text('has been submitted'), "
         "h1:has-text('Application submitted'), "
-        "text=Your application has been submitted"
+        "[class*='PostApply'], "
+        "button:has-text('Return to job search'), "
+        "a:has-text('Return to job search')"
     )
 
 
 # ── Status + Result ───────────────────────────────────────────────────────────
 
 class IndeedApplyStatus(str, Enum):
-    SUCCESS          = "success"
-    DRY_RUN          = "dry_run"
-    ALREADY_APPLIED  = "already_applied"
-    DISABLED         = "disabled"
-    NO_EASY_APPLY    = "no_easy_apply"
-    EXTERNAL_REDIRECT= "external_redirect"
-    NO_APPLY_BUTTON  = "no_apply_button"
-    IFRAME_MISSING   = "iframe_missing"
-    SUBMIT_FAILED    = "submit_failed"
-    RATE_LIMITED     = "rate_limited"
-    FAILED           = "failed"
+    SUCCESS           = "success"
+    DRY_RUN           = "dry_run"
+    ALREADY_APPLIED   = "already_applied"
+    DISABLED          = "disabled"
+    NO_EASY_APPLY     = "no_easy_apply"
+    EXTERNAL_REDIRECT = "external_redirect"
+    NO_APPLY_BUTTON   = "no_apply_button"
+    IFRAME_MISSING    = "iframe_missing"
+    SUBMIT_FAILED     = "submit_failed"
+    NEEDS_PROFILE_DATA= "needs_profile_data"
+    RATE_LIMITED      = "rate_limited"
+    FAILED            = "failed"
 
 
 @dataclass
@@ -245,22 +271,30 @@ def _jitter(base: float, extra: float = 60.0) -> None:
 def _wait(page: Any, lo: int = 1500, hi: int = 4000) -> None:
     page.wait_for_timeout(random.randint(lo, hi))
 
-def _text(el: Any, sel: str) -> str:
+def _loc_text(scope: Any, sel: str) -> str:
     try:
-        node = el.query_selector(sel)
-        return node.inner_text().strip() if node else ""
+        loc = scope.locator(sel)
+        if loc.count() > 0:
+            return loc.first.inner_text().strip()
     except Exception:
-        return ""
+        pass
+    return ""
 
-def _href(el: Any, sel: str) -> str:
+def _loc_href(scope: Any, sel: str) -> str:
     try:
-        node = el.query_selector(sel)
-        if not node:
-            return ""
-        href = node.get_attribute("href") or ""
-        return href if href.startswith("http") else urljoin(INDEED_BASE, href)
+        loc = scope.locator(sel)
+        if loc.count() > 0:
+            href = loc.first.get_attribute("href") or ""
+            return href if href.startswith("http") else urljoin(INDEED_BASE, href)
     except Exception:
-        return ""
+        pass
+    return ""
+
+def _loc_exists(scope: Any, sel: str) -> bool:
+    try:
+        return scope.locator(sel).count() > 0
+    except Exception:
+        return False
 
 def _job_key(url: str) -> str:
     """Extract Indeed job key (jk=...) from URL for dedup."""
@@ -285,10 +319,11 @@ class IndeedApplyEngine:
     """
 
     def __init__(self, rate_limiter: Optional[_RateLimiter] = None) -> None:
-        self._rate  = rate_limiter or _RateLimiter()
+        self._rate          = rate_limiter or _RateLimiter()
         self._pw:   Optional[Playwright]    = None
         self._ctx:  Optional[BrowserContext] = None
         self._page: Optional[Page]          = None
+        self._missing_field: str            = ""  # set by _fill_apply_form on profile-data gap
 
     def __enter__(self) -> "IndeedApplyEngine":
         INDEED_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
@@ -359,22 +394,33 @@ class IndeedApplyEngine:
             ]
 
         results: List[IndeedApplyResult] = []
-        applied = 0
+        attempted = 0
 
         for job in easy_jobs:
-            if applied >= max_applies:
+            if attempted >= max_applies:
                 break
+            score = int(job.get("score", 0))
+            if score < INDEED_SCORE_THRESHOLD:
+                logger.info(
+                    "indeed_skip_score score=%d threshold=%d title=%s",
+                    score, INDEED_SCORE_THRESHOLD, job.get("title"),
+                )
+                continue
             r = self._process_job(job)
             if r:
+                attempted += 1
                 results.append(r)
                 logger.info("indeed_result %s", json.dumps(r.to_dict()))
+                if r.status == IndeedApplyStatus.NEEDS_PROFILE_DATA:
+                    logger.warning("indeed_stopping_needs_profile_data msg=%s", r.message)
+                    break
                 if r.status == IndeedApplyStatus.SUCCESS:
-                    applied += 1
                     _jitter(INDEED_COOLDOWN, extra=60)
 
         logger.info(
-            "indeed_run_complete applied=%d total=%d",
+            "indeed_run_complete applied=%d attempted=%d total=%d",
             sum(1 for r in results if r.status == IndeedApplyStatus.SUCCESS),
+            attempted,
             len(results),
         )
         return results
@@ -411,23 +457,31 @@ class IndeedApplyEngine:
         try:
             self._page.goto(url, wait_until="domcontentloaded", timeout=30_000)
             _wait(self._page, 2000, 3500)
+            # Wait for at least one card; if none appear within 8s the page
+            # is likely a CAPTCHA or block — log the URL and move on.
+            try:
+                self._page.wait_for_selector(_S.JOB_CARD, timeout=8_000)
+            except PWTimeout:
+                logger.warning("indeed_no_cards_timeout role=%s url=%s",
+                               role, self._page.url[:120])
         except Exception as exc:
             logger.warning("indeed_scan_failed role=%s error=%s", role, exc)
             return []
 
-        cards = self._page.query_selector_all(_S.JOB_CARD)
-        logger.info("indeed_scan role=%r cards=%d", role, len(cards))
+        cards = self._page.locator(_S.JOB_CARD)
+        count = cards.count()
+        logger.info("indeed_scan role=%r cards=%d", role, count)
 
         jobs: List[Dict[str, Any]] = []
-        for card in cards:
+        for i in range(count):
+            card = cards.nth(i)
             # Badge check — only proceed for Easy Apply cards
-            badge = card.query_selector(_S.EASY_BADGE)
-            if not badge:
+            if not _loc_exists(card, _S.EASY_BADGE):
                 continue
 
-            title   = _text(card, _S.TITLE)
-            company = _text(card, _S.COMPANY)
-            link    = _href(card, _S.CARD_LINK)
+            title   = _loc_text(card, _S.TITLE)
+            company = _loc_text(card, _S.COMPANY)
+            link    = _loc_href(card, _S.CARD_LINK)
 
             if not link:
                 continue
@@ -487,33 +541,38 @@ class IndeedApplyEngine:
         self._page.goto(link, wait_until="domcontentloaded", timeout=30_000)
         _wait(self._page, 2000, 3500)
 
-        # Confirm we're still on Indeed (not an external redirect)
+        # Confirm we're still on Indeed (not an external redirect on page load)
         if "indeed.com" not in self._page.url:
             return r(IndeedApplyStatus.EXTERNAL_REDIRECT,
                      f"redirected to {self._page.url[:80]}")
 
-        # Re-confirm Easy Apply badge on detail page
-        if not self._page.query_selector(_S.EASY_BADGE):
-            logger.info("indeed_no_easy_badge_on_detail title=%s", title)
-            return r(IndeedApplyStatus.NO_EASY_APPLY,
-                     "Easy Apply badge absent on job detail page")
-
-        # Click the apply button
-        apply_btn = self._page.query_selector(_S.APPLY_BTN)
-        if not apply_btn:
+        # Click the apply button — badge was confirmed on the search card,
+        # no need to re-check on the detail page (different DOM element there)
+        apply_loc = self._page.locator(_S.APPLY_BTN)
+        if apply_loc.count() == 0:
             return r(IndeedApplyStatus.NO_APPLY_BUTTON, "apply button not found")
 
-        apply_btn.click()
+        apply_loc.first.click()
         _wait(self._page, 2000, 4000)
 
-        # Locate the apply iframe
+        # If click navigated away from Indeed it's an external ATS link
+        if "indeed.com" not in self._page.url:
+            return r(IndeedApplyStatus.EXTERNAL_REDIRECT,
+                     f"apply redirected to {self._page.url[:80]}")
+
+        # Locate the apply iframe (in-platform Easy Apply widget)
         frame = self._get_apply_frame()
         if frame is None:
             return r(IndeedApplyStatus.IFRAME_MISSING, "apply iframe not found")
 
         # Fill multi-step form
+        self._missing_field = ""
         success = self._fill_apply_form(frame, job)
         if not success:
+            if self._missing_field:
+                field, self._missing_field = self._missing_field, ""
+                return r(IndeedApplyStatus.NEEDS_PROFILE_DATA,
+                         f"missing {field} — set env var to fill required address field")
             return r(IndeedApplyStatus.SUBMIT_FAILED,
                      "form fill or submit failed — check browser")
 
@@ -547,22 +606,34 @@ class IndeedApplyEngine:
         return None
 
     def _fill_apply_form(self, frame: Frame, job: Dict[str, Any]) -> bool:
-        """
-        Navigate Indeed's multi-step Easy Apply wizard.
-        Returns True if the application was submitted successfully.
-        """
-        from src.profile import get_candidate_profile
-        profile = get_candidate_profile()
-        name    = "Roben Edwan"
-        email   = os.getenv("INDEED_EMAIL", "robenedwan@gmail.com")
-        phone   = os.getenv("INDEED_PHONE", "")
+        """Navigate Indeed's multi-step Easy Apply wizard."""
+        name  = "Roben Edwan"
+        email = os.getenv("INDEED_EMAIL", "robenedwan@gmail.com")
+        phone = os.getenv("INDEED_PHONE", "")
 
-        max_steps = 8
+        max_steps = 12
         for step in range(max_steps):
-            _wait(frame.page, 1200, 2500)
+            _wait(frame.page, 1500, 2500)
+            # Wait for any loading indicator to fully clear.
+            # wait_for_selector(state='hidden') returns immediately when the
+            # element doesn't yet exist, so we use wait_for_function instead,
+            # which polls continuously until loading is gone.
+            try:
+                frame.wait_for_function(
+                    """() => {
+                        const el = document.querySelector('[data-testid="loading-indicator"]');
+                        return !el || el.offsetParent === null
+                            || getComputedStyle(el).display === 'none'
+                            || getComputedStyle(el).visibility === 'hidden';
+                    }""",
+                    timeout=15_000,
+                )
+            except PWTimeout:
+                logger.debug("indeed_loading_timeout step=%d", step)
+            _wait(frame.page, 500, 1000)
 
-            # Check for success first
-            if frame.query_selector(_S.SUCCESS):
+            # Check for success
+            if _loc_exists(frame, _S.SUCCESS):
                 logger.info("indeed_form_success step=%d", step)
                 return True
 
@@ -575,24 +646,42 @@ class IndeedApplyEngine:
             if phone:
                 self._fill_field(frame, _S.FIELD_PHONE, phone)
 
+            # Fill address field (profile-location step)
+            if _loc_exists(frame, _S.FIELD_ADDRESS):
+                if not INDEED_STREET_ADDRESS:
+                    logger.warning("indeed_form_needs_address step=%d — set INDEED_STREET_ADDRESS", step)
+                    self._missing_field = "INDEED_STREET_ADDRESS"
+                    self._dump_form_debug(frame, step, job)
+                    return False
+                self._fill_field(frame, _S.FIELD_ADDRESS, INDEED_STREET_ADDRESS)
+
+            # Fill relevant-experience step (job title + company)
+            if _loc_exists(frame, _S.FIELD_JOB_TITLE) or _loc_exists(frame, _S.FIELD_COMPANY):
+                if INDEED_RELEVANT_JOB_TITLE:
+                    self._fill_field(frame, _S.FIELD_JOB_TITLE, INDEED_RELEVANT_JOB_TITLE)
+                    self._fill_by_label(frame, "Job title", INDEED_RELEVANT_JOB_TITLE)
+                if INDEED_RELEVANT_COMPANY:
+                    self._fill_field(frame, _S.FIELD_COMPANY, INDEED_RELEVANT_COMPANY)
+                    self._fill_by_label(frame, "Company", INDEED_RELEVANT_COMPANY)
+
             # Try submit button first, then continue/next
             if self._click_if_present(frame, _S.SUBMIT_BTN):
                 _wait(frame.page, 2000, 4000)
-                # Check for success after submit
-                if frame.query_selector(_S.SUCCESS):
+                if _loc_exists(frame, _S.SUCCESS):
                     return True
-                # Might need one more step
                 continue
 
             if self._click_if_present(frame, _S.CONTINUE_BTN):
                 continue
 
-            # No actionable button found — bail
+            # No actionable button found — dump debug info and bail
             logger.warning("indeed_form_stuck step=%d title=%s",
                            step, job.get("title"))
+            self._dump_form_debug(frame, step, job)
             return False
 
         logger.warning("indeed_form_max_steps_exceeded title=%s", job.get("title"))
+        self._dump_form_debug(frame, max_steps, job)
         return False
 
     def _maybe_upload_cv(self, frame: Frame) -> None:
@@ -617,15 +706,123 @@ class IndeedApplyEngine:
         except Exception:
             pass
 
-    def _click_if_present(self, frame: Frame, sel: str) -> bool:
+    def _fill_by_label(self, frame: Any, label_text: str, value: str) -> None:
+        """Fill the input associated with a label whose text contains label_text."""
+        if not value:
+            return
         try:
-            btn = frame.query_selector(sel)
-            if btn and btn.is_enabled():
-                btn.click()
-                return True
+            result = frame.evaluate(
+                """([text, val]) => {
+                    const labels = [...document.querySelectorAll('label')];
+                    const label = labels.find(l =>
+                        l.innerText.toLowerCase().includes(text.toLowerCase())
+                    );
+                    if (!label) return 'no_label';
+                    // find input via for= attr or next sibling/child
+                    let inp = label.htmlFor
+                        ? document.getElementById(label.htmlFor)
+                        : label.querySelector('input, textarea, select')
+                          || label.nextElementSibling?.querySelector('input, textarea, select')
+                          || label.nextElementSibling;
+                    if (!inp || !['INPUT','TEXTAREA','SELECT'].includes(inp.tagName)) return 'no_input';
+                    if (inp.value) return 'already_filled';
+                    inp.focus();
+                    inp.value = val;
+                    inp.dispatchEvent(new Event('input', {bubbles: true}));
+                    inp.dispatchEvent(new Event('change', {bubbles: true}));
+                    return 'filled';
+                }""",
+                [label_text, value],
+            )
+            logger.debug("fill_by_label label=%r result=%s", label_text, result)
+        except Exception as exc:
+            logger.debug("fill_by_label_failed label=%r error=%s", label_text, exc)
+
+    def _click_if_present(self, frame: Any, sel: str) -> bool:
+        """Click the first visible+enabled match. Skips hidden elements."""
+        try:
+            loc = frame.locator(sel)
+            n = loc.count()
+            for i in range(n):
+                item = loc.nth(i)
+                try:
+                    if item.is_visible() and item.is_enabled():
+                        item.click(timeout=8_000)
+                        return True
+                except Exception:
+                    continue
         except Exception:
             pass
         return False
+
+    # ── Debug dump ────────────────────────────────────────────────────────────
+
+    def _dump_form_debug(self, frame: Frame, step: int, job: Dict[str, Any]) -> None:
+        assert self._page
+        ts      = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        log_dir = BASE_DIR / "logs"
+        log_dir.mkdir(exist_ok=True)
+        stem    = f"indeed_form_stuck_{ts}"
+
+        try:
+            self._page.screenshot(path=str(log_dir / f"{stem}.png"), full_page=True)
+            logger.info("debug_screenshot %s.png", stem)
+        except Exception as exc:
+            logger.warning("debug_screenshot_failed error=%s", exc)
+
+        try:
+            html = frame.content()
+            (log_dir / f"{stem}.html").write_text(html, encoding="utf-8")
+            logger.info("debug_html %s.html", stem)
+        except Exception as exc:
+            logger.warning("debug_html_failed error=%s", exc)
+
+        try:
+            info = frame.evaluate("""() => {
+                const buttons = [...document.querySelectorAll(
+                    'button, [role="button"], input[type="submit"], input[type="button"]'
+                )].map(b => ({
+                    tag:      b.tagName,
+                    text:     (b.innerText || b.value || '').trim().slice(0, 120),
+                    testid:   b.getAttribute('data-testid') || '',
+                    type:     b.type || '',
+                    disabled: b.disabled,
+                    visible:  b.offsetParent !== null,
+                }));
+                const inputs = [...document.querySelectorAll('input, select, textarea')]
+                    .map(i => ({
+                        name:        i.name        || '',
+                        id:          i.id          || '',
+                        type:        i.type        || i.tagName.toLowerCase(),
+                        placeholder: i.placeholder || '',
+                        required:    i.required,
+                        visible:     i.offsetParent !== null,
+                    }));
+                const labels = [...document.querySelectorAll('label')]
+                    .map(l => l.innerText.trim().slice(0, 100))
+                    .filter(t => t);
+                const required = [...document.querySelectorAll('[required], [aria-required="true"]')]
+                    .map(e => e.outerHTML.slice(0, 200));
+                return { buttons, inputs, labels, required };
+            }""")
+
+            logger.info("debug_dump step=%d title=%s", step, job.get("title"))
+            logger.info("  BUTTONS (%d):", len(info["buttons"]))
+            for b in info["buttons"]:
+                logger.info("    text=%r  testid=%r  type=%r  disabled=%s  visible=%s",
+                            b["text"], b["testid"], b["type"], b["disabled"], b["visible"])
+            logger.info("  INPUTS (%d):", len(info["inputs"]))
+            for inp in info["inputs"]:
+                logger.info("    name=%r  id=%r  type=%r  placeholder=%r  required=%s  visible=%s",
+                            inp["name"], inp["id"], inp["type"],
+                            inp["placeholder"], inp["required"], inp["visible"])
+            logger.info("  LABELS: %s", info["labels"][:30])
+            if info["required"]:
+                logger.info("  REQUIRED FIELDS (%d):", len(info["required"]))
+                for r in info["required"]:
+                    logger.info("    %s", r[:200])
+        except Exception as exc:
+            logger.warning("debug_eval_failed error=%s", exc)
 
     # ── Dry-run report ────────────────────────────────────────────────────────
 
