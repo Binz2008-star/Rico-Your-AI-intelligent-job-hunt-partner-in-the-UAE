@@ -1,10 +1,10 @@
-name: Job Automation Pipeline
+name: Daily Job Bot
 
 on:
   schedule:
-    - cron: "0 6 * * *"   # 6:00 AM UTC daily
-    - cron: "0 15 * * *"  # 3:00 PM UTC daily
-  workflow_dispatch:       # manual trigger
+    - cron: '0 6 * * *'   # 6:00 AM UTC
+    - cron: '0 15 * * *'  # 3:00 PM UTC
+  workflow_dispatch:
 
 jobs:
   # ── Job 1: Intelligence — GitHub-hosted ───────────────────────────────────
@@ -28,43 +28,39 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Write Gmail credentials
-        env:
-          GMAIL_SERVICE_ACCOUNT: ${{ secrets.GMAIL_SERVICE_ACCOUNT }}
-          GMAIL_TOKEN:           ${{ secrets.GMAIL_TOKEN }}
+      - name: Write Gmail OAuth files
         run: |
           mkdir -p data
-          echo "$GMAIL_SERVICE_ACCOUNT" | base64 -d > data/service_account.json 2>/dev/null || echo "$GMAIL_SERVICE_ACCOUNT" > data/service_account.json
-          echo "$GMAIL_TOKEN"           | base64 -d > data/token.json            2>/dev/null || echo "$GMAIL_TOKEN"           > data/token.json
+          printf '%s' '${{ secrets.GMAIL_CREDENTIALS_JSON }}' > data/gmail_credentials.json
+          printf '%s' '${{ secrets.GMAIL_TOKEN_JSON }}'       > data/gmail_token.json
 
       - name: Run intelligence pipeline
         env:
-          DATABASE_URL:        ${{ secrets.DATABASE_URL }}
-          HF_TOKEN:            ${{ secrets.HF_TOKEN }}
-          TELEGRAM_BOT_TOKEN:  ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID:    ${{ secrets.TELEGRAM_CHAT_ID }}
-          EMAIL_USER:          ${{ secrets.EMAIL_USER }}
-          EMAIL_PASS:          ${{ secrets.EMAIL_PASS }}
-          ANTHROPIC_API_KEY:   ${{ secrets.ANTHROPIC_API_KEY }}
-          # Auto-apply disabled on GitHub-hosted (network blocked by NaukriGulf)
-          NG_ENABLED:          "false"
-          AUTO_APPLY_ENABLED:  "false"
+          DATABASE_URL:           ${{ secrets.DATABASE_URL }}
+          HF_TOKEN:               ${{ secrets.HF_TOKEN }}
+          TELEGRAM_BOT_TOKEN:     ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:       ${{ secrets.TELEGRAM_CHAT_ID }}
+          EMAIL_USER:             ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS:             ${{ secrets.EMAIL_PASS }}
+          EMAIL_TO:               ${{ secrets.EMAIL_TO }}
+          EXCLUDE_KEYWORDS:       ${{ secrets.EXCLUDE_KEYWORDS }}
+          NG_ENABLED:             "false"
+          AUTO_APPLY_ENABLED:     "false"
         run: python -m src.run_daily
 
-      - name: Run follow-up
+      - name: Run follow-up reminders
         env:
-          DATABASE_URL:        ${{ secrets.DATABASE_URL }}
-          HF_TOKEN:            ${{ secrets.HF_TOKEN }}
-          TELEGRAM_BOT_TOKEN:  ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID:    ${{ secrets.TELEGRAM_CHAT_ID }}
-          ANTHROPIC_API_KEY:   ${{ secrets.ANTHROPIC_API_KEY }}
+          DATABASE_URL:       ${{ secrets.DATABASE_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          HF_TOKEN:           ${{ secrets.HF_TOKEN }}
         run: python -m src.follow_up
 
       - name: Deploy dashboard to GitHub Pages
         if: always()
         run: |
           if [ ! -f dashboard.html ]; then
-            echo "dashboard.html not found; skipping deploy"
+            echo "dashboard.html not found — skipping deploy"
             exit 0
           fi
           mkdir -p docs
@@ -76,12 +72,14 @@ jobs:
           git push
 
   # ── Job 2: Apply — self-hosted runner ─────────────────────────────────────
+  # Secrets cannot be used in job-level `if` in GitHub Actions.
+  # Job always triggers; continue-on-error prevents workflow failure if
+  # self-hosted runner is offline or session is missing.
   apply:
     name: NaukriGulf Apply
     runs-on: self-hosted
     needs: intelligence
     timeout-minutes: 30
-    # Only runs when self-hosted runner is online; skips gracefully if not.
     continue-on-error: true
 
     steps:
@@ -89,12 +87,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
+          python-version: '3.11'
           cache: pip
 
-      - name: Install dependencies
+      - name: Install dependencies + Playwright
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
@@ -103,8 +101,6 @@ jobs:
       - name: Verify NaukriGulf session
         id: session_check
         continue-on-error: true
-        env:
-          NG_PROFILE_DIR: data/ng_profile
         run: |
           python -c "
           from pathlib import Path
@@ -119,22 +115,22 @@ jobs:
       - name: Run NaukriGulf apply
         if: steps.session_check.outcome == 'success'
         env:
-          DATABASE_URL:       ${{ secrets.DATABASE_URL }}
-          HF_TOKEN:           ${{ secrets.HF_TOKEN }}
+          DATABASE_URL:        ${{ secrets.DATABASE_URL }}
+          HF_TOKEN:            ${{ secrets.HF_TOKEN }}
           TELEGRAM_BOT_TOKEN:  ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
-          ANTHROPIC_API_KEY:   ${{ secrets.ANTHROPIC_API_KEY }}
-          # NaukriGulf config
-          NG_ENABLED:                "true"
-          NG_DRY_RUN:                "false"
-          NG_MAX_PER_RUN:            "1"
-          NG_DAILY_LIMIT:            "2"
-          NG_SCORE_THRESHOLD:        "85"
-          NG_COOLDOWN_SECONDS:       "180"
-          NG_SLOW_MO:                "800"
-          NG_PROFILE_DIR:            "data/ng_profile"
-          CV_PATH:                   "data/cv.pdf"
-          NG_EXCLUDE_KEYWORDS:       ${{ secrets.NG_EXCLUDE_KEYWORDS }}
+          TELEGRAM_CHAT_ID:    ${{ secrets.TELEGRAM_CHAT_ID }}
+          EXCLUDE_KEYWORDS:    ${{ secrets.EXCLUDE_KEYWORDS }}
+          NG_ENABLED:          "true"
+          NG_DRY_RUN:          "false"
+          NG_HEADLESS:         "false"
+          NG_MAX_PER_RUN:      "1"
+          NG_DAILY_LIMIT:      "2"
+          NG_SCORE_THRESHOLD:  "85"
+          NG_COOLDOWN_SECONDS: "180"
+          NG_SLOW_MO:          "800"
+          NG_PROFILE_DIR:      "data/ng_profile"
+          CV_PATH:             "data/cv.pdf"
+          NG_EXCLUDE_KEYWORDS: ${{ secrets.NG_EXCLUDE_KEYWORDS }}
         run: |
           python -c "
           import logging, json
@@ -169,7 +165,7 @@ jobs:
               requests.post(
                   f'https://api.telegram.org/bot{token}/sendMessage',
                   json={'chat_id': chat_id,
-                        'text': '⚠️ NaukriGulf session missing — log in manually on self-hosted runner and re-run.'},
+                        'text': '⚠️ NaukriGulf: session missing on self-hosted runner — log in manually then re-run.'},
                   timeout=10,
               )
           "
