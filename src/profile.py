@@ -1,65 +1,125 @@
 """
 Roben Edwan's Candidate Profile System
-Optimized for executive operations and founder office roles in UAE.
+Optimized for HSE / QHSE / EHS / ESG / Compliance roles in UAE.
 """
 
 CANDIDATE_PROFILE = {
-    "name": "Roben Edwan - Executive Operations Professional",
+    "name": "Roben Edwan - HSE & Compliance Professional",
     "experience_years": 8,
     "location": "UAE",
     "target_roles": [
-        "Executive Assistant to CEO",
-        "Founder Office Manager",
-        "Chief of Staff",
-        "Executive Operations Manager",
-        "Operations Manager",
-        "Compliance Operations Manager",
-        "VIP Relationship Manager",
-        "Private Office Executive Assistant"
+        "HSE Manager",
+        "QHSE Manager",
+        "EHS Manager",
+        "HSE Officer",
+        "Safety Manager",
+        "Environmental Manager",
+        "Compliance Manager",
+        "ESG Manager",
+        "Health Safety Environment Manager",
+        "Quality Health Safety Environment Manager",
+        "HSE Advisor",
+        "HSE Coordinator",
+        "HSE Supervisor"
     ],
     "skills": {
-        "executive_support": {
-            "keywords": ["executive assistant to ceo", "ceo support", "executive support", "founder office", "private office", "chief of staff"],
-            "weight": 15,
+        "hse_core": {
+            "keywords": [
+                "hse", "health safety environment", "health and safety",
+                "safety management", "occupational health", "workplace safety",
+                "incident management", "accident investigation", "risk assessment",
+                "hazard identification", "safety procedures", "safety protocols"
+            ],
+            "weight": 18,
             "experience_years": 5
         },
-        "executive_operations": {
-            "keywords": ["executive operations", "operations management", "founder-led operations", "business operations", "operational excellence"],
-            "weight": 12,
-            "experience_years": 6
+        "environmental": {
+            "keywords": [
+                "environmental management", "environmental impact", "environmental compliance",
+                "sustainability", "waste management", "pollution control",
+                "environmental monitoring", "environmental regulations", "green building",
+                "carbon footprint", "ems", "environmental management system"
+            ],
+            "weight": 14,
+            "experience_years": 4
         },
         "compliance_governance": {
-            "keywords": ["compliance", "governance", "audit", "risk management", "municipality approvals", "regulatory"],
-            "weight": 10,
-            "experience_years": 3
-        },
-        "stakeholder_coordination": {
-            "keywords": ["stakeholder coordination", "vip clients", "relationship management", "board support", "investor relations"],
-            "weight": 11,
+            "keywords": [
+                "compliance", "governance", "audit", "regulatory compliance",
+                "iso standards", "iso 9001", "iso 14001", "iso 45001",
+                "internal audit", "external audit", "policy compliance",
+                "legal compliance", "quality management", "quality assurance"
+            ],
+            "weight": 15,
             "experience_years": 4
+        },
+        "risk_management": {
+            "keywords": [
+                "risk management", "risk assessment", "risk mitigation",
+                "operational risk", "safety risk", "environmental risk",
+                "hira", "job hazard analysis", "risk register",
+                "risk control measures", "incident prevention"
+            ],
+            "weight": 12,
+            "experience_years": 3
         },
         "uae_experience": {
             "keywords": ["uae", "dubai", "abu dhabi", "middle east", "gcc", "local market"],
-            "weight": 13,
+            "weight": 10,
             "experience_years": 4
         },
-        "financial_operations": {
-            "keywords": ["p&l", "financial operations", "budget management", "financial reporting", "cost control"],
-            "weight": 8,
-            "experience_years": 3
+        "leadership": {
+            "keywords": [
+                "team management", "team leadership", "supervision",
+                "stakeholder management", "training", "hse training",
+                "safety culture", "leadership", "management"
+            ],
+            "weight": 11,
+            "experience_years": 5
         }
     },
-    "negative_keywords": [
-        "junior", "entry level", "intern", "trainee", "fresh graduate",
-        "software engineer", "developer", "programmer", "it support", "technical support",
-        "sales executive", "call center", "telesales", "business development",
+    "hard_reject_keywords": [
+        # Medical/Healthcare
+        "doctor", "nurse", "physician", "surgeon", "medical",
+        "healthcare", "hospital", "clinic", "pharmacy", "pharmacist",
+        "cardiology", "obstetrics", "gynecology", "pediatrics", "endocrinology",
+
+        # Technical/Engineering (non-HSE)
+        "software engineer", "developer", "programmer", "it support",
+        "technical support", "network engineer", "system administrator",
+        "data scientist", "machine learning", "ai engineer",
+
+        # Sales/Marketing
+        "sales executive", "sales manager", "business development",
+        "business development manager", "marketing", "digital marketing",
+        "telesales", "call center", "customer service",
+
+        # Administrative/Clerical
         "receptionist", "front desk", "admin assistant", "office assistant",
-        "driver", "warehouse", "technician", "maintenance", "cleaner",
-        "teacher", "nurse", "doctor", "healthcare", "medical"
+        "secretary", "data entry", "office clerk",
+
+        # Construction (non-HSE roles)
+        "architect", "civil engineer", "structural engineer",
+        "electrical engineer", "mechanical engineer",
+        "site engineer", "project engineer", "quantity surveyor",
+        "fit-out", "interior designer", "ff&e designer",
+
+        # Logistics/Operations (non-HSE)
+        "driver", "delivery driver", "truck driver",
+        "warehouse", "warehouse manager", "logistics coordinator",
+        "supply chain", "procurement", "purchasing",
+
+        # Hospitality/Retail
+        "waiter", "waitress", "bartender", "chef", "cook",
+        "retail", "store manager", "sales associate",
+
+        # Low-level roles
+        "junior", "entry level", "internship", "trainee", "fresh graduate",
+        "assistant", "coordinator", "administrator", "clerk"
     ],
     "seniority_keywords": [
         "senior", "lead", "head", "manager", "director", "vp", "vice president",
-        "executive", "chief", "c-level", "strategic", "leadership"
+        "chief", "c-level", "strategic", "leadership"
     ],
     "location_preferences": {
         "dubai": 25,
@@ -96,9 +156,9 @@ def get_skill_weights():
     return {skill: data["weight"] for skill, data in profile["skills"].items()}
 
 
-def get_negative_keywords():
-    """Return keywords that should result in heavy penalties."""
-    return get_candidate_profile()["negative_keywords"]
+def get_hard_reject_keywords():
+    """Return keywords that should result in immediate disqualification."""
+    return get_candidate_profile()["hard_reject_keywords"]
 
 
 def get_seniority_keywords():
@@ -146,22 +206,28 @@ def get_profile_match_explanation(job, score_details):
             break
 
     # Check for key skill matches
-    if "executive" in title and "assistant" in title:
-        explanations.append("Strong executive support alignment")
+    if "hse" in title and "manager" in title:
+        explanations.append("Strong HSE management alignment")
 
-    if "ceo" in title or "chief of staff" in title:
-        explanations.append("Senior executive leadership role")
+    if "qhse" in title:
+        explanations.append("Quality HSE specialization")
 
-    if "operations" in title and "manager" in title:
-        explanations.append("Operations management expertise match")
+    if "safety" in title and "manager" in title:
+        explanations.append("Safety management expertise match")
+
+    if "environmental" in title:
+        explanations.append("Environmental management experience")
 
     if "compliance" in title:
         explanations.append("Compliance and governance experience")
+
+    if "esg" in title:
+        explanations.append("ESG and sustainability focus")
 
     if "uae" in description or "dubai" in description:
         explanations.append("UAE market experience required")
 
     if not explanations:
-        explanations.append("Relevant executive operations experience")
+        explanations.append("Relevant HSE/Compliance experience")
 
     return " | ".join(explanations[:3])  # Limit to top 3 reasons
