@@ -1,5 +1,10 @@
 name: Daily Job Bot
 
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
 on:
   schedule:
     - cron: '0 6 * * *'   # 6:00 AM UTC
