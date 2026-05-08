@@ -8,3 +8,10 @@ google-auth
 google-auth-oauthlib
 google-auth-httplib2
 playwright
+fastapi
+uvicorn[standard]
+python-jose[cryptography]
+passlib[bcrypt]
+alembic
+python-multipart
+filelock
