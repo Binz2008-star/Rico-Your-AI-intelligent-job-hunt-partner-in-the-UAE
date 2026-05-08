@@ -108,6 +108,21 @@ def score_jobs_llm(jobs, use_cache=True):
             job["score_source"] = "hf_embed"; hf += 1
         job["score"] = s; cache[fp] = s
         time.sleep(0.2)
+
+    # Post-score exclusion enforcement - override any scores for excluded jobs
+    exclude_keywords_str = os.getenv("EXCLUDE_KEYWORDS", "")
+    exclude_keywords = [kw.strip().lower() for kw in exclude_keywords_str.split(",") if kw.strip()]
+    if exclude_keywords:
+        for job in jobs:
+            job_text = f"{job.get('title','')} {job.get('company','')} {job.get('description','')}".lower()
+            if any(kw in job_text for kw in exclude_keywords):
+                job["score"] = 0
+                job["profile_explanation"] = "Excluded by keyword filter"
+                if job.get("score_source") != "cache":
+                    # Update cache with excluded score
+                    fp = _fp(job)
+                    cache[fp] = 0
+
     _save_cache(cache)
     logger.info(f"scoring_complete total={len(jobs)} cache={hits} hf={hf} keyword={kw}")
     return jobs

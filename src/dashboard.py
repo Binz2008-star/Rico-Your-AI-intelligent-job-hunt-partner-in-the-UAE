@@ -429,7 +429,7 @@ def _recent_section(recent_applications: List[Dict[str, Any]], recent_jobs: List
         <div class="card">
           <h2>Recent Jobs</h2>
           <table>
-            <thead><tr><th>Role</th><th>Location</th><th>Quality</th><th>Score</th><th>Action</th></tr></thead>
+            <thead><tr><th>Role</th><th>Location</th><th>Quality</th><th>Score</th><th>Why it matches</th><th>Action</th></tr></thead>
             <tbody>{''.join(_job_row(job) for job in recent_jobs)}</tbody>
           </table>
         </div>
@@ -440,7 +440,7 @@ def _recent_section(recent_applications: List[Dict[str, Any]], recent_jobs: List
         <div class="card">
           <h2>Recent Jobs</h2>
           <table>
-            <thead><tr><th>Role</th><th>Location</th><th>Quality</th><th>Score</th><th>Action</th></tr></thead>
+            <thead><tr><th>Role</th><th>Location</th><th>Quality</th><th>Score</th><th>Why it matches</th><th>Action</th></tr></thead>
             <tbody>{''.join(_job_row(job) for job in recent_jobs)}</tbody>
           </table>
         </div>
