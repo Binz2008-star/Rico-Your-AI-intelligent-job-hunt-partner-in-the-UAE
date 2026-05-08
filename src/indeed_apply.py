@@ -479,7 +479,18 @@ class IndeedApplyEngine:
                 continue
             r = self._process_job(job)
             if r:
-                attempted += 1
+                # Only count as attempt for statuses that actually try the apply flow
+                if r.status in {
+                    IndeedApplyStatus.SUCCESS,
+                    IndeedApplyStatus.AUTH_REQUIRED,
+                    IndeedApplyStatus.NEEDS_PROFILE_DATA,
+                    IndeedApplyStatus.SUBMIT_FAILED,
+                    IndeedApplyStatus.FAILED,
+                    IndeedApplyStatus.NO_APPLY_BUTTON,
+                    IndeedApplyStatus.IFRAME_MISSING,
+                    IndeedApplyStatus.EXTERNAL_REDIRECT,
+                }:
+                    attempted += 1
                 results.append(r)
                 logger.info("indeed_result %s", json.dumps(r.to_dict()))
                 if r.status == IndeedApplyStatus.AUTH_REQUIRED:
