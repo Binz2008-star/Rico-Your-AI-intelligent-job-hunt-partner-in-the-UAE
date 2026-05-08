@@ -177,7 +177,7 @@ jobs:
   indeed-apply:
     name: Indeed Apply
     runs-on: self-hosted
-    needs: intelligence
+    needs: [intelligence, apply]
     timeout-minutes: 30
     continue-on-error: true
 
