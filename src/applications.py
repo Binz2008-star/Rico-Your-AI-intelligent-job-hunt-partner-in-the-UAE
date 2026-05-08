@@ -33,13 +33,13 @@ def mark_applied(job: Dict[str, Any], status: str = "applied") -> bool:
     """Mark a job as applied with status."""
     applied_jobs = load_applied_jobs()
     job_id = get_job_id(job)
-    
+
     # Check if already applied
     for applied_job in applied_jobs:
         if applied_job.get('job_id') == job_id:
             print(f"Job already marked as applied: {job.get('title', '')}")
             return False
-    
+
     # Add new applied job
     applied_job_entry = {
         "job_id": job_id,
@@ -55,23 +55,66 @@ def mark_applied(job: Dict[str, Any], status: str = "applied") -> bool:
         "interview_date": None,
         "rejection_reason": None
     }
-    
+
     applied_jobs.append(applied_job_entry)
     save_applied_jobs(applied_jobs)
-    
+
     print(f"✅ Marked as applied: {job.get('title', '')} - {job.get('company', '')}")
     return True
 
 
+def _normalize_string(s: str) -> str:
+    """Normalize string for comparison (lowercase, trim, remove extra spaces)."""
+    return ' '.join(s.lower().strip().split())
+
+
+def _extract_indeed_job_key(link: str) -> Optional[str]:
+    """Extract Indeed job key (jk=...) from URL."""
+    if "jk=" in link:
+        return link.split("jk=")[1].split("&")[0]
+    return None
+
+
 def is_applied(job: Dict[str, Any]) -> bool:
-    """Check if a job has already been applied to."""
+    """Check if a job has already been applied to.
+
+    Checks for duplicates using:
+    - Exact link match
+    - Indeed jk= job key match
+    - Normalized title + normalized company match
+    """
     job_id = get_job_id(job)
     applied_jobs = load_applied_jobs()
-    
+
+    job_link = job.get('link', '')
+    job_title_normalized = _normalize_string(job.get('title', ''))
+    job_company_normalized = _normalize_string(job.get('company', ''))
+    job_jk = _extract_indeed_job_key(job_link)
+
     for applied_job in applied_jobs:
+        # Check exact job_id match
         if applied_job.get('job_id') == job_id:
             return True
-    
+
+        # Check exact link match
+        applied_link = applied_job.get('link', '')
+        if applied_link and applied_link == job_link:
+            return True
+
+        # Check Indeed jk= key match
+        if job_jk:
+            applied_jk = _extract_indeed_job_key(applied_link)
+            if applied_jk and applied_jk == job_jk:
+                return True
+
+        # Check normalized title + company match
+        applied_title = _normalize_string(applied_job.get('title', ''))
+        applied_company = _normalize_string(applied_job.get('company', ''))
+        if applied_title and applied_company:
+            if (applied_title == job_title_normalized and
+                applied_company == job_company_normalized):
+                return True
+
     return False
 
 
@@ -79,25 +122,25 @@ def update_application_status(job: Dict[str, Any], status: str, notes: str = "")
     """Update application status (applied/interview/rejected)."""
     applied_jobs = load_applied_jobs()
     job_id = get_job_id(job)
-    
+
     for applied_job in applied_jobs:
         if applied_job.get('job_id') == job_id:
             applied_job['status'] = status
             applied_job['date_updated'] = datetime.now().isoformat()
-            
+
             if notes:
                 applied_job['notes'] = notes
-            
+
             if status == "interview" and not applied_job.get('interview_date'):
                 applied_job['interview_date'] = datetime.now().isoformat()
-            
+
             if status == "rejected" and notes:
                 applied_job['rejection_reason'] = notes
-            
+
             save_applied_jobs(applied_jobs)
             print(f"✅ Updated status to {status}: {job.get('title', '')}")
             return True
-    
+
     print(f"❌ Applied job not found: {job.get('title', '')}")
     return False
 
@@ -110,7 +153,7 @@ def get_applied_jobs() -> List[Dict[str, Any]]:
 def get_application_stats() -> Dict[str, Any]:
     """Get application statistics."""
     applied_jobs = load_applied_jobs()
-    
+
     if not applied_jobs:
         return {
             "total_applied": 0,
@@ -120,25 +163,25 @@ def get_application_stats() -> Dict[str, Any]:
             "pending": 0,
             "success_rate": 0.0
         }
-    
+
     status_counts = {}
     interviews = 0
     rejections = 0
     pending = 0
-    
+
     for job in applied_jobs:
         status = job.get('status', 'applied')
         status_counts[status] = status_counts.get(status, 0) + 1
-        
+
         if status == "interview":
             interviews += 1
         elif status == "rejected":
             rejections += 1
         elif status == "applied":
             pending += 1
-    
+
     success_rate = (interviews / len(applied_jobs)) * 100 if applied_jobs else 0.0
-    
+
     return {
         "total_applied": len(applied_jobs),
         "status_breakdown": status_counts,
@@ -152,11 +195,11 @@ def get_application_stats() -> Dict[str, Any]:
 def filter_unapplied_jobs(jobs_with_scores: List[tuple]) -> List[tuple]:
     """Filter out jobs that have already been applied to."""
     unapplied = []
-    
+
     for job, score in jobs_with_scores:
         if not is_applied(job):
             unapplied.append((job, score))
-    
+
     return unapplied
 
 
@@ -164,24 +207,24 @@ def mark_job_interactive(job: Dict[str, Any]) -> None:
     """Interactive function to mark a job as applied."""
     title = job.get('title', 'N/A')
     company = job.get('company', 'N/A')
-    
+
     print(f"\n📝 Mark Job as Applied")
     print(f"Title: {title}")
     print(f"Company: {company}")
-    
+
     status_options = ["applied", "interview", "rejected"]
     print(f"Status options: {', '.join(status_options)}")
-    
+
     status = input("Enter status (default: applied): ").strip().lower()
     if not status:
         status = "applied"
-    
+
     if status not in status_options:
         print("❌ Invalid status. Using 'applied'.")
         status = "applied"
-    
+
     notes = input("Add notes (optional): ").strip()
-    
+
     if mark_applied(job, status):
         if notes:
             update_application_status(job, status, notes)
@@ -193,7 +236,7 @@ def mark_job_interactive(job: Dict[str, Any]) -> None:
 def main():
     """Test application tracking functions."""
     print("🧪 Testing Application Tracking")
-    
+
     # Test with sample job
     sample_job = {
         'title': 'Executive Assistant to CEO',
@@ -202,20 +245,20 @@ def main():
         'link': 'https://example.com/job1',
         'score': 75
     }
-    
+
     # Test marking as applied
     print("\n1. Testing mark_applied():")
     mark_applied(sample_job)
-    
+
     # Test checking if applied
     print("\n2. Testing is_applied():")
     print(f"Is applied: {is_applied(sample_job)}")
-    
+
     # Test getting stats
     print("\n3. Testing get_application_stats():")
     stats = get_application_stats()
     print(f"Stats: {stats}")
-    
+
     # Test filtering unapplied jobs
     print("\n4. Testing filter_unapplied_jobs():")
     jobs_with_scores = [
@@ -228,7 +271,7 @@ def main():
             'score': 68
         }, 68)
     ]
-    
+
     unapplied = filter_unapplied_jobs(jobs_with_scores)
     print(f"Unapplied jobs: {len(unapplied)}")
 

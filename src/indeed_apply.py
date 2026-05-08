@@ -86,6 +86,7 @@ INDEED_RELEVANT_JOB_TITLE   = os.getenv("INDEED_RELEVANT_JOB_TITLE", "")
 INDEED_RELEVANT_COMPANY     = os.getenv("INDEED_RELEVANT_COMPANY", "")
 INDEED_PROFILE_DIR          = BASE_DIR / os.getenv("NG_PROFILE_DIR", "data/ng_profile")
 CV_PATH                 = BASE_DIR / os.getenv("CV_PATH", "data/cv.pdf")
+INDEED_SKIP_COMPANIES    = os.getenv("INDEED_SKIP_COMPANIES", "").lower()
 
 
 # ── Target roles ──────────────────────────────────────────────────────────────
@@ -98,6 +99,32 @@ TARGET_ROLES: List[str] = [
     "Compliance Manager",
     "Safety Manager",
 ]
+
+
+# ── Title pre-filter ─────────────────────────────────────────────────────────────
+
+KEEP_TITLE_KEYWORDS = [
+    "hse", "qhse", "ehs", "hsse", "safety",
+    "environmental", "environment", "esg", "sustainability"
+]
+
+REJECT_TITLE_KEYWORDS = [
+    "project manager", "construction manager", "civil engineer",
+    "site engineer", "quantity surveyor", "document controller",
+    "coating technician", "automotive workshop", "cad supervisor",
+    "f&b", "plumbing engineer", "electrical engineer",
+    "architect", "draftsman", "sales", "healthcare",
+    "nurse", "doctor", "intern", "uae national",
+    "project engineer", "executive - ehs", "assistant manager",
+    "hse officer"
+]
+
+def _title_allowed(title: str) -> bool:
+    """Check if title passes keyword filters."""
+    t = title.lower()
+    if any(bad in t for bad in REJECT_TITLE_KEYWORDS):
+        return False
+    return any(good in t for good in KEEP_TITLE_KEYWORDS)
 
 
 # ── Selectors ─────────────────────────────────────────────────────────────────
@@ -193,6 +220,8 @@ class IndeedApplyStatus(str, Enum):
     NEEDS_PROFILE_DATA= "needs_profile_data"
     RATE_LIMITED      = "rate_limited"
     FAILED            = "failed"
+    AUTH_REQUIRED     = "auth_required"
+    SKIPPED_COMPANY   = "skipped_company"
 
 
 @dataclass
@@ -296,6 +325,37 @@ def _loc_exists(scope: Any, sel: str) -> bool:
     except Exception:
         return False
 
+def _detect_auth_required(scope: Any) -> bool:
+    """Detect if current page/frame requires auth or Google SSO."""
+    try:
+        # Check URL
+        url = scope.url.lower() if hasattr(scope, 'url') else ""
+        auth_url_patterns = [
+            "secure.indeed.com/auth",
+            "/auth?",
+            "/account/login",
+            "accounts.google.com",
+        ]
+        if any(pattern in url for pattern in auth_url_patterns):
+            return True
+
+        # Check page text
+        if _loc_exists(scope, "body"):
+            page_text = scope.inner_text("body").lower()
+            auth_text_patterns = [
+                "continue with google",
+                "create an account or sign in",
+                "email address",
+                "(not you?)",
+                "sign in",
+                "google",
+            ]
+            if any(pattern in page_text for pattern in auth_text_patterns):
+                return True
+    except Exception:
+        pass
+    return False
+
 def _job_key(url: str) -> str:
     """Extract Indeed job key (jk=...) from URL for dedup."""
     if "jk=" in url:
@@ -378,11 +438,22 @@ class IndeedApplyEngine:
                 message="Set INDEED_ENABLED=true to enable live applies",
             )]
 
-        easy_jobs = self._scan_all_roles()
+        easy_jobs, raw_badge_count, title_filtered_count = self._scan_all_roles()
         logger.info("indeed_easy_apply_found count=%d", len(easy_jobs))
 
         if dry_run:
-            self._print_dry_run_report(easy_jobs)
+            # Filter out already-applied jobs before displaying
+            skipped_applied = 0
+            eligible_jobs = []
+            for job in easy_jobs:
+                if is_applied(job):
+                    skipped_applied += 1
+                    logger.info("indeed_skip_applied title=%s company=%s",
+                               job.get('title', '')[:60], job.get('company', '')[:40])
+                else:
+                    eligible_jobs.append(job)
+
+            self._print_dry_run_report(eligible_jobs, raw_badge_count, title_filtered_count, skipped_applied)
             return [
                 IndeedApplyResult(
                     job_id=j["link"], title=j["title"], company=j["company"],
@@ -411,6 +482,9 @@ class IndeedApplyEngine:
                 attempted += 1
                 results.append(r)
                 logger.info("indeed_result %s", json.dumps(r.to_dict()))
+                if r.status == IndeedApplyStatus.AUTH_REQUIRED:
+                    logger.warning("indeed_stopping_auth_required msg=%s", r.message)
+                    break
                 if r.status == IndeedApplyStatus.NEEDS_PROFILE_DATA:
                     logger.warning("indeed_stopping_needs_profile_data msg=%s", r.message)
                     break
@@ -427,17 +501,22 @@ class IndeedApplyEngine:
 
     # ── Phase 1: scan search pages for Easy Apply cards ───────────────────────
 
-    def _scan_all_roles(self) -> List[Dict[str, Any]]:
+    def _scan_all_roles(self) -> tuple[List[Dict[str, Any]], int, int]:
         seen: set[str] = set()
         jobs: List[Dict[str, Any]] = []
+        total_raw_badge = 0
+        total_title_filtered = 0
         for role in TARGET_ROLES:
-            for job in self._scan_role(role):
+            role_jobs, raw_badge, title_filtered = self._scan_role(role)
+            total_raw_badge += raw_badge
+            total_title_filtered += title_filtered
+            for job in role_jobs:
                 key = _job_key(job["link"])
                 if key and key not in seen:
                     seen.add(key)
                     jobs.append(job)
             _wait(self._page, 800, 1500)
-        return self._score_jobs(jobs)
+        return self._score_jobs(jobs), total_raw_badge, total_title_filtered
 
     def _score_jobs(self, jobs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if not jobs:
@@ -451,7 +530,7 @@ class IndeedApplyEngine:
                 job.setdefault("score", 0)
         return sorted(jobs, key=lambda j: int(j.get("score", 0)), reverse=True)
 
-    def _scan_role(self, role: str) -> List[Dict[str, Any]]:
+    def _scan_role(self, role: str) -> tuple[List[Dict[str, Any]], int, int]:
         assert self._page
         url = _S.SEARCH_URL.format(query=quote_plus(role))
         try:
@@ -466,24 +545,33 @@ class IndeedApplyEngine:
                                role, self._page.url[:120])
         except Exception as exc:
             logger.warning("indeed_scan_failed role=%s error=%s", role, exc)
-            return []
+            return [], 0, 0
 
         cards = self._page.locator(_S.JOB_CARD)
         count = cards.count()
         logger.info("indeed_scan role=%r cards=%d", role, count)
 
         jobs: List[Dict[str, Any]] = []
+        raw_badge_count = 0
+        title_filtered_count = 0
         for i in range(count):
             card = cards.nth(i)
             # Badge check — only proceed for Easy Apply cards
             if not _loc_exists(card, _S.EASY_BADGE):
                 continue
 
+            raw_badge_count += 1
             title   = _loc_text(card, _S.TITLE)
             company = _loc_text(card, _S.COMPANY)
             link    = _loc_href(card, _S.CARD_LINK)
 
             if not link:
+                continue
+
+            # Title pre-filter - check BEFORE logging or appending
+            if not _title_allowed(title):
+                logger.info("indeed_skip_title title=%s company=%s", title[:80], company[:50])
+                title_filtered_count += 1
                 continue
 
             logger.info(
@@ -499,8 +587,9 @@ class IndeedApplyEngine:
                 "score":    0,
             })
 
-        logger.info("indeed_scan_easy role=%r found=%d", role, len(jobs))
-        return jobs
+        logger.info("indeed_scan_easy role=%r raw_badge=%d title_filtered=%d found=%d",
+                   role, raw_badge_count, title_filtered_count, len(jobs))
+        return jobs, raw_badge_count, title_filtered_count
 
     # ── Phase 2: filter ───────────────────────────────────────────────────────
 
@@ -538,6 +627,14 @@ class IndeedApplyEngine:
                 status=s, message=m, easy_apply=True,
             )
 
+        # Check if company is in skip list
+        if INDEED_SKIP_COMPANIES:
+            company_lower = company.lower()
+            skip_terms = [term.strip() for term in INDEED_SKIP_COMPANIES.split(",")]
+            if any(term in company_lower for term in skip_terms):
+                logger.info("indeed_skip_company company=%s skip_list=%s", company, INDEED_SKIP_COMPANIES)
+                return r(IndeedApplyStatus.SKIPPED_COMPANY, f"company skipped: {company}")
+
         self._page.goto(link, wait_until="domcontentloaded", timeout=30_000)
         _wait(self._page, 2000, 3500)
 
@@ -555,6 +652,11 @@ class IndeedApplyEngine:
         apply_loc.first.click()
         _wait(self._page, 2000, 4000)
 
+        # Check for auth interruption after clicking Apply
+        if _detect_auth_required(self._page):
+            return r(IndeedApplyStatus.AUTH_REQUIRED,
+                     "auth required / Google SSO detected — skipped")
+
         # If click navigated away from Indeed it's an external ATS link
         if "indeed.com" not in self._page.url:
             return r(IndeedApplyStatus.EXTERNAL_REDIRECT,
@@ -569,6 +671,9 @@ class IndeedApplyEngine:
         self._missing_field = ""
         success = self._fill_apply_form(frame, job)
         if not success:
+            if self._missing_field == "AUTH_REQUIRED":
+                return r(IndeedApplyStatus.AUTH_REQUIRED,
+                         "auth required / Google SSO detected — skipped")
             if self._missing_field:
                 field, self._missing_field = self._missing_field, ""
                 return r(IndeedApplyStatus.NEEDS_PROFILE_DATA,
@@ -631,6 +736,12 @@ class IndeedApplyEngine:
             except PWTimeout:
                 logger.debug("indeed_loading_timeout step=%d", step)
             _wait(frame.page, 500, 1000)
+
+            # Check for auth interruption at each step
+            if _detect_auth_required(frame) or _detect_auth_required(frame.page):
+                logger.warning("indeed_auth_detected step=%d", step)
+                self._missing_field = "AUTH_REQUIRED"
+                return False
 
             # Check for success
             if _loc_exists(frame, _S.SUCCESS):
@@ -826,7 +937,8 @@ class IndeedApplyEngine:
 
     # ── Dry-run report ────────────────────────────────────────────────────────
 
-    def _print_dry_run_report(self, jobs: List[Dict[str, Any]]) -> None:
+    def _print_dry_run_report(self, jobs: List[Dict[str, Any]], raw_badge_count: int, title_filtered_count: int, skipped_applied: int) -> None:
+        threshold = INDEED_SCORE_THRESHOLD
         print(f"\n{'='*72}")
         print(f"  Indeed Easy Apply — DRY RUN  ({len(jobs)} badge-confirmed, scored)")
         print(f"{'='*72}")
@@ -835,15 +947,22 @@ class IndeedApplyEngine:
         if not jobs:
             print("  No 'Easily apply' jobs found for target roles.")
         for i, j in enumerate(jobs, 1):
-            score = j.get("score", 0)
-            flag  = " *" if score >= 60 else ""
+            score = int(j.get("score", 0))
+            flag  = " *" if score >= threshold else ""
             print(
                 f"  {i:>3}  {score:>5}  {j['title'][:48]:<48}  {j['company'][:30]}{flag}"
             )
             print(f"         {j['link'][:72]}")
         print(f"{'='*72}")
-        passing = sum(1 for j in jobs if j.get("score", 0) >= 60)
-        print(f"  * = score ≥ 60  ({passing} jobs would proceed to apply)\n")
+        passing = sum(1 for j in jobs if int(j.get("score", 0)) >= threshold)
+        score_filtered = len(jobs) - passing
+        print(f"\n  Filter Summary:")
+        print(f"    Raw badge count:          {raw_badge_count}")
+        print(f"    Title filtered:           {title_filtered_count}")
+        print(f"    Skipped (already applied): {skipped_applied}")
+        print(f"    Score filtered (<{threshold}):     {score_filtered}")
+        print(f"    Final eligible count:     {passing}")
+        print(f"\n  * = score ≥ {threshold}  ({passing} jobs would proceed to apply)\n")
 
 
 # ── Pipeline entry point ──────────────────────────────────────────────────────
