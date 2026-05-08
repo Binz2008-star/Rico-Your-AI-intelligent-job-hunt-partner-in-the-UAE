@@ -6,6 +6,9 @@ on:
     - cron: '0 15 * * *'  # 3:00 PM UTC
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   # ── Job 1: Intelligence — GitHub-hosted ───────────────────────────────────
   intelligence:
