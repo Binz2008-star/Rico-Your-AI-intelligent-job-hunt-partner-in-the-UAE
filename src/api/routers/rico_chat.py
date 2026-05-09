@@ -12,6 +12,8 @@ Routes (all public — no JWT required, consistent with Rico's original design):
 from __future__ import annotations
 
 import logging
+import os
+import re
 from typing import Any, Dict
 
 from fastapi import APIRouter, File, Request, UploadFile
@@ -22,6 +24,17 @@ import src.services.chat_service as chat_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/rico", tags=["rico"])
+
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _safe_filename(name: str | None) -> str:
+    """Strip path traversal and HTML tags from an uploaded filename."""
+    if not name:
+        return "upload"
+    name = os.path.basename(name)         # strip directory components
+    name = _HTML_TAG_RE.sub("", name)     # strip <tags>
+    return name.strip() or "upload"
 
 
 class RicoChatRequest(BaseModel):
@@ -37,10 +50,11 @@ def rico_chat(payload: RicoChatRequest) -> Dict[str, Any]:
 @router.post("/upload-cv")
 async def rico_upload_cv(user_id: str, file: UploadFile = File(...)) -> Dict[str, Any]:
     data = await file.read()
-    parsed = chat_service.parse_cv(data, filename=file.filename or "cv.pdf")
+    safe_name = _safe_filename(file.filename)
+    parsed = chat_service.parse_cv(data, filename=safe_name)
     return {
         "user_id": user_id,
-        "filename": file.filename,
+        "filename": safe_name,
         "parsed": parsed,
     }
 

@@ -9,12 +9,15 @@ JSON files so Rico can behave like a real agent immediately.
 from __future__ import annotations
 
 import json
+import logging
 import math
 import re
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 from src.rico_agent import RicoAgentSettings, RicoProfile
 
@@ -123,7 +126,12 @@ class RicoMemoryStore:
         path = self._chat_path(user_id)
         if not path.exists():
             return []
-        return json.loads(path.read_text(encoding="utf-8"))
+        try:
+            content = path.read_text(encoding="utf-8").strip()
+            return json.loads(content) if content else []
+        except (json.JSONDecodeError, OSError):
+            logger.warning("rico_memory: corrupt/empty chat history for user=%s — resetting", user_id)
+            return []
 
     def record_learning_signal(self, user_id: str, job_id: str, action: str) -> None:
         signals = self.load_learning_signals(user_id)
@@ -149,7 +157,12 @@ class RicoMemoryStore:
         path = self._signals_path(user_id)
         if not path.exists():
             return []
-        return json.loads(path.read_text(encoding="utf-8"))
+        try:
+            content = path.read_text(encoding="utf-8").strip()
+            return json.loads(content) if content else []
+        except (json.JSONDecodeError, OSError):
+            logger.warning("rico_memory: corrupt/empty signals for user=%s — resetting", user_id)
+            return []
 
     def load_memories(self, user_id: str) -> List[Dict[str, Any]]:
         path = self._memories_path(user_id)
