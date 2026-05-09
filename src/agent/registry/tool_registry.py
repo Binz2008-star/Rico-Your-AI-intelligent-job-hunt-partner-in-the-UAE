@@ -71,15 +71,23 @@ from src.agent.tools.pipeline_tools import (  # noqa: E402
     trigger_pipeline,
 )
 from src.agent.tools.stats_tools import get_application_stats  # noqa: E402
+from src.agent.tools.messaging_tools import (  # noqa: E402
+    draft_message,
+    explain_match,
+    set_reminder,
+)
 
-_register("search_jobs",          search_jobs,          "Search jobs by score/source/page")
-_register("get_ranked_jobs",      get_ranked_jobs,      "Return top-scored jobs for the dashboard")
-_register("apply_job",            apply_job,            "Trigger automated application for one job")
-_register("skip_job",             skip_job,             "Mark a job as skipped")
-_register("save_job",             save_job,             "Save a job for later review")
-_register("block_company",        block_company,        "Block all future results from a company")
-_register("get_pipeline_status",  get_pipeline_status,  "Return the latest pipeline run state")
-_register("trigger_pipeline",     trigger_pipeline,     "Start the daily pipeline manually")
+_register("search_jobs",           search_jobs,           "Search jobs by score/source/page")
+_register("get_ranked_jobs",       get_ranked_jobs,       "Return top-scored jobs for the dashboard")
+_register("apply_job",             apply_job,             "Trigger automated application for one job")
+_register("skip_job",              skip_job,              "Mark a job as skipped")
+_register("save_job",              save_job,              "Save a job for later review")
+_register("block_company",         block_company,         "Block all future results from a company")
+_register("get_pipeline_status",   get_pipeline_status,   "Return the latest pipeline run state")
+_register("trigger_pipeline",      trigger_pipeline,      "Start the daily pipeline manually")
 _register("get_application_stats", get_application_stats, "Return aggregate application statistics")
+_register("draft_message",         draft_message,         "Generate a tailored application message for a job")
+_register("explain_match",         explain_match,         "Explain why Rico recommended this job")
+_register("set_reminder",          set_reminder,          "Set a 2-day reminder for a job")
 
 logger.debug("tool_registry_loaded tools=%d names=%s", len(_REGISTRY), sorted(_REGISTRY))
