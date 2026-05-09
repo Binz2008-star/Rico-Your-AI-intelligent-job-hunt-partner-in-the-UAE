@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from typing import Any, Dict
 
 from fastapi import FastAPI, Request
@@ -37,11 +38,25 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ── Lifespan ─────────────────────────────────────────────────────────────────
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        from src.rico_db import RicoDB
+        RicoDB().init()
+        logger.info("rico_db_init OK")
+    except Exception:
+        logger.warning("rico_db_init skipped (DB unavailable or tables already exist)")
+    yield
+
+
 # ── App ───────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title="Job Automation Platform",
     version="1.0.0",
+    lifespan=lifespan,
     description=(
         "REST API for the autonomous job search pipeline. "
         "All mutating endpoints require JWT authentication (httpOnly cookie)."

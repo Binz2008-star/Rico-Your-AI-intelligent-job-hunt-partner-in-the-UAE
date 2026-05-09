@@ -11,12 +11,15 @@ Routes (all public — no JWT required, consistent with Rico's original design):
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict
 
 from fastapi import APIRouter, File, Request, UploadFile
 from pydantic import BaseModel
 
 import src.services.chat_service as chat_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/rico", tags=["rico"])
 
@@ -44,8 +47,16 @@ async def rico_upload_cv(user_id: str, file: UploadFile = File(...)) -> Dict[str
 
 @router.post("/webhooks/telegram")
 async def rico_telegram_webhook(request: Request) -> Dict[str, Any]:
-    update = await request.json()
-    return chat_service.handle_telegram_update(update)
+    try:
+        update = await request.json()
+    except Exception:
+        return {"ok": True}  # always ack — bad JSON should not trigger Telegram retries
+    try:
+        return chat_service.handle_telegram_update(update)
+    except Exception as exc:
+        # Log but always return 200 so Telegram does not retry the delivery.
+        logger.warning("telegram_webhook_error: %s", exc)
+        return {"ok": True}
 
 
 @router.post("/webhooks/jotform")
