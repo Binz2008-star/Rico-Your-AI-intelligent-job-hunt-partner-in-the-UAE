@@ -398,9 +398,14 @@ class TestJotformWebhookRobustness:
         from src.services.chat_service import _has_user_data
         assert _has_user_data({"email": "a@b.com"}) is True
 
-    def test_has_user_data_true_via_pretty_key(self):
+    def test_has_user_data_false_for_name_only_via_pretty_key(self):
+        # full_name alone is not a stable user_id — email or telegram required
         from src.services.chat_service import _has_user_data
-        assert _has_user_data({"pretty": {"full_name": "Robin"}}) is True
+        assert _has_user_data({"pretty": {"full_name": "Robin"}}) is False
+
+    def test_has_user_data_true_for_email_via_pretty_key(self):
+        from src.services.chat_service import _has_user_data
+        assert _has_user_data({"pretty": {"email": "r@x.com"}}) is True
 
     def test_service_short_circuits_empty_payload(self):
         from src.services.chat_service import handle_jotform_submission
