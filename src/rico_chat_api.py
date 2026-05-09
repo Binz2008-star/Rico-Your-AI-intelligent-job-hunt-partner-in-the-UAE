@@ -14,6 +14,13 @@ from typing import Any, Dict, List
 from src.rico_agent import RicoAgent
 from src.rico_memory import RicoMemoryStore
 from src.rico_repo_adapter import RicoSystem
+from src.repositories.onboarding_repo import (
+    get_onboarding_state,
+    is_onboarding_complete,
+    mark_onboarding_complete,
+    set_onboarding_status,
+)
+from src.models.onboarding import ONBOARDING_IN_PROGRESS
 
 
 CV_FILE_RE = re.compile(r"\b[\w .()_-]+\.(?:pdf|docx?|txt)\b", re.IGNORECASE)
@@ -103,36 +110,73 @@ class RicoChatAPI:
         self.memory.append_chat_message(user_id, "assistant", json.dumps(response))
         return response
 
+    _WHATS_NEXT_PHRASES = frozenset([
+        "what's next", "whats next", "what next", "what now",
+        "what can you do", "what can i do", "help", "options", "menu",
+        "show options", "show menu", "next steps",
+    ])
+
+    _JOB_SEARCH_OPTIONS = {
+        "type": "options",
+        "message": "Here is what I can help you with:",
+        "options": [
+            {"action": "find_jobs",          "label": "Find matching UAE jobs"},
+            {"action": "apply",              "label": "Prepare a job application"},
+            {"action": "interview_prep",     "label": "Prepare for an interview"},
+            {"action": "update_profile",     "label": "Update my profile"},
+            {"action": "track_applications", "label": "Track my applications"},
+        ],
+    }
+
     def process_message(self, user_id: str, message: str) -> Dict[str, Any]:
         """Main Rico chat entrypoint."""
         self.memory.append_chat_message(user_id, "user", message)
 
-        profile = self.memory.load_profile(user_id)
+        # ── Load server-side onboarding state first ───────────────────────────
+        # This is the authoritative source. A completed user must never be sent
+        # back through onboarding even if their local profile JSON is missing.
+        completed = is_onboarding_complete(user_id)
 
-        # CV uploads override first-time onboarding and the manual profile wizard.
+        if completed:
+            return self._handle_active_user(user_id, message)
+
+        # ── CV uploads override onboarding entirely ───────────────────────────
         if self._looks_like_cv_upload(message):
+            mark_onboarding_complete(user_id)
             return self._cv_first_profile_response(user_id, message)
 
-        # First-time onboarding shortcut.
+        # ── First-time onboarding ─────────────────────────────────────────────
+        profile = self.memory.load_profile(user_id)
         if profile is None:
-            profile = self.memory.upsert_profile_from_dict(
-                user_id=user_id,
-                updates={
-                    "name": user_id,
-                },
-            )
+            self.memory.upsert_profile_from_dict(user_id=user_id, updates={"name": user_id})
+            set_onboarding_status(user_id, ONBOARDING_IN_PROGRESS)
             response = {
                 "type": "onboarding",
                 "message": (
-                    "Welcome to Rico AI. Upload your CV or tell me your target role, UAE city preferences, "
-                    "and salary expectations. If you upload a CV, I will pre-fill the profile and only ask "
-                    "for anything missing or unclear."
+                    "Welcome to Rico AI. Upload your CV or tell me your target role, UAE city "
+                    "preferences, and salary expectations. If you upload a CV, I will pre-fill "
+                    "the profile and only ask for anything missing or unclear."
                 ),
             }
             self.memory.append_chat_message(user_id, "assistant", response["message"])
             return response
 
+        # ── Profile exists but onboarding not yet marked complete in DB ───────
+        # The user responded after the welcome — treat as completed from now on.
+        mark_onboarding_complete(user_id)
+        return self._handle_active_user(user_id, message)
+
+    def _handle_active_user(self, user_id: str, message: str) -> Dict[str, Any]:
+        """Handle messages from users who have completed onboarding."""
+        profile = self.memory.load_profile(user_id)
         lower = message.lower()
+
+        # "what's next?" → always return job-search options, never onboarding
+        if any(phrase in lower for phrase in self._WHATS_NEXT_PHRASES):
+            self.memory.append_chat_message(
+                user_id, "assistant", json.dumps(self._JOB_SEARCH_OPTIONS)
+            )
+            return self._JOB_SEARCH_OPTIONS
 
         if any(phrase in lower for phrase in ["skip this question", "skip", "don't know", "do not know"]):
             response = {
@@ -147,6 +191,9 @@ class RicoChatAPI:
             return response
 
         if any(phrase in lower for phrase in ["extract", "from the cv", "take it from", "use my cv", "use the cv"]):
+            return self._cv_first_profile_response(user_id, message)
+
+        if self._looks_like_cv_upload(message):
             return self._cv_first_profile_response(user_id, message)
 
         if "change salary" in lower or "salary" in lower:
@@ -216,7 +263,6 @@ class RicoChatAPI:
                 "prepare cover letters, and help with interview preparation."
             ),
         }
-
         self.memory.append_chat_message(user_id, "assistant", response["message"])
         return response
 
