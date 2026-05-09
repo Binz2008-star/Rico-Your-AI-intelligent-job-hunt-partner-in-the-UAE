@@ -114,10 +114,19 @@ def root() -> Dict[str, str]:
 @app.get("/health")
 def health() -> Dict[str, Any]:
     from src.db import is_db_available
+    from src.rico_env import get_rico_env_report
+    rico = get_rico_env_report()
     return {
         "status": "healthy",
         "db": "connected" if is_db_available() else "json_fallback",
         "version": "1.0.0",
+        "rico": {
+            "ready_for_api":      rico.ready_for_api,
+            "ready_for_db":       rico.ready_for_db,
+            "ready_for_telegram": rico.ready_for_telegram,
+            "ready_for_openai":   rico.ready_for_openai,
+            "ready_for_jotform":  rico.ready_for_jotform,
+        },
         "endpoints": {
             "auth":         "/api/v1/auth/login",
             "jobs":         "/api/v1/jobs",
@@ -125,6 +134,7 @@ def health() -> Dict[str, Any]:
             "stats":        "/api/v1/stats",
             "settings":     "/api/v1/settings",
             "pipeline":     "/api/v1/pipeline/status",
+            "rico_chat":    "/api/v1/rico/chat",
             "docs":         "/api/docs",
         },
     }
