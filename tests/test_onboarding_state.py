@@ -25,6 +25,7 @@ from src.models.onboarding import (
     ONBOARDING_PENDING,
     OnboardingState,
 )
+from src.rico_agent import RicoProfile
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -129,8 +130,9 @@ class TestOnboardingRepo:
 class TestFirstTimeOnboarding:
     def test_new_user_gets_onboarding_welcome(self):
         api = _make_api()
-        api.memory.load_profile.return_value = None   # no profile yet
         with patch("src.rico_chat_api.is_onboarding_complete", return_value=False), \
+             patch("src.rico_chat_api.get_profile", return_value=None), \
+             patch("src.rico_chat_api.upsert_profile", return_value=MagicMock()), \
              patch("src.rico_chat_api.set_onboarding_status") as mock_set, \
              patch("src.rico_chat_api.mark_onboarding_complete"):
             response = api.process_message("new-user", "hello")
@@ -151,14 +153,15 @@ class TestFirstTimeOnboarding:
         """After the welcome, any message from user with existing profile → complete."""
         api = _make_api()
         with patch("src.rico_chat_api.is_onboarding_complete", return_value=False), \
+             patch("src.rico_chat_api.get_profile", return_value=RicoProfile(user_id="u1")), \
              patch("src.rico_chat_api.mark_onboarding_complete") as mock_complete:
             api.process_message("u1", "find me jobs")
         mock_complete.assert_called_once_with("u1")
 
     def test_cv_upload_marks_complete_and_skips_onboarding(self):
         api = _make_api()
-        api.memory.load_profile.return_value = None
         with patch("src.rico_chat_api.is_onboarding_complete", return_value=False), \
+             patch("src.rico_chat_api.upsert_profile", return_value=RicoProfile(user_id="cv-user")), \
              patch("src.rico_chat_api.mark_onboarding_complete") as mock_complete:
             response = api.process_message("cv-user", "my cv is Roben_Edwan_CV.pdf")
         assert response["type"] == "cv_first_profile"
@@ -213,9 +216,9 @@ class TestGracefulDegradation:
     def test_db_down_new_user_still_gets_onboarding(self):
         """When DB is unavailable, fall back to profile existence check."""
         api = _make_api()
-        api.memory.load_profile.return_value = None
-        # is_onboarding_complete returns False when DB is down (None state)
         with patch("src.rico_chat_api.is_onboarding_complete", return_value=False), \
+             patch("src.rico_chat_api.get_profile", return_value=None), \
+             patch("src.rico_chat_api.upsert_profile", return_value=MagicMock()), \
              patch("src.rico_chat_api.set_onboarding_status"), \
              patch("src.rico_chat_api.mark_onboarding_complete"):
             response = api.process_message("offline-user", "hi")
@@ -224,8 +227,8 @@ class TestGracefulDegradation:
     def test_db_down_existing_profile_user_gets_active_response(self):
         """User with existing profile gets active response even if DB is down."""
         api = _make_api()
-        # is_onboarding_complete returns False (DB down), but profile exists
         with patch("src.rico_chat_api.is_onboarding_complete", return_value=False), \
+             patch("src.rico_chat_api.get_profile", return_value=RicoProfile(user_id="existing-user")), \
              patch("src.rico_chat_api.set_onboarding_status"), \
              patch("src.rico_chat_api.mark_onboarding_complete"):
             response = api.process_message("existing-user", "find jobs")
