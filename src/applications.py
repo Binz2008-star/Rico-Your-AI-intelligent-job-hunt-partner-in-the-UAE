@@ -340,26 +340,26 @@ def filter_unapplied_jobs(
 
 
 def mark_job_interactive(job: Dict[str, Any]) -> None:
-    """Interactive helper to mark a job as applied (CLI use only)."""
+    """CLI-only helper. Raises RuntimeError in non-interactive (cloud/CI) environments."""
+    import sys
+    if not sys.stdin.isatty():
+        raise RuntimeError(
+            "mark_job_interactive() requires an interactive terminal. "
+            "Use mark_applied() directly in automated contexts."
+        )
     title = job.get("title", "N/A")
     company = job.get("company", "N/A")
-
-    print("\n📝 Mark Job as Applied")
-    print(f"Title: {title}")
-    print(f"Company: {company}")
+    print(f"\nMark Job as Applied: {title} @ {company}")
     print(f"Status options: {', '.join(sorted(VALID_STATUSES))}")
-
     status = input("Enter status (default: applied): ").strip().lower() or "applied"
     if status not in VALID_STATUSES:
-        print("❌ Invalid status. Using 'applied'.")
+        print("Invalid status. Using 'applied'.")
         status = "applied"
-
     notes = input("Add notes (optional): ").strip()
-
     if mark_applied(job, status, notes):
-        print(f"✅ Job marked as {status}")
+        print(f"Job marked as {status}")
     else:
-        print("❌ Failed to mark job as applied")
+        print("Failed to mark job as applied")
 
 
 def main() -> None:

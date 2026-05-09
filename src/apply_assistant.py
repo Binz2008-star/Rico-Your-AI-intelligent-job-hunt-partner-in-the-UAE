@@ -1,196 +1,169 @@
-import webbrowser
+"""
+src/apply_assistant.py
+Human-in-the-loop apply assistant — LOCAL INTERACTIVE MODE ONLY.
+
+All functions in this module are no-ops unless RICO_INTERACTIVE_APPLY=1 is set.
+In cloud/CI/Docker/cron environments this variable must not be set.
+"""
+from __future__ import annotations
+
+import logging
+import os
 import time
-from src.message_generator import generate_message
-from src.applications import is_applied, mark_applied, filter_unapplied_jobs, get_application_stats
+import webbrowser
+from typing import Any, Dict, List, Tuple
+
+logger = logging.getLogger(__name__)
+
+RICO_INTERACTIVE_APPLY = os.getenv("RICO_INTERACTIVE_APPLY", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
-def open_job_links(top_jobs):
-    """Open top job links in browser and display application messages."""
+def open_job_links(top_jobs: List[Tuple[Dict[str, Any], int]]) -> None:
+    """Open top job links in browser and collect apply confirmations (local only)."""
+    if not RICO_INTERACTIVE_APPLY:
+        logger.info("open_job_links_skipped interactive_mode_disabled")
+        return
     if not top_jobs:
         print("No jobs to apply for.")
         return
 
-    # Filter out already applied jobs
-    unapplied_jobs = filter_unapplied_jobs(top_jobs)
+    from src.message_generator import generate_message
+    from src.applications import is_applied, mark_applied, filter_unapplied_jobs, get_application_stats
 
+    unapplied_jobs = filter_unapplied_jobs(top_jobs)
     if not unapplied_jobs:
-        print("All top jobs have already been applied to.")
         stats = get_application_stats()
-        print(f"📊 Application Stats: {stats['total_applied']} applied, {stats['interviews_scheduled']} interviews")
+        print(f"All top jobs already applied. Stats: {stats['total_applied']} applied.")
         return
 
-    print(f"\n🚀 APPLY ASSISTANT - Top {len(unapplied_jobs)} Unapplied Jobs")
+    print(f"\n APPLY ASSISTANT - Top {len(unapplied_jobs)} Unapplied Jobs")
     print("=" * 60)
 
     for i, (job, score) in enumerate(unapplied_jobs[:5], 1):
-        title = job.get('title', 'N/A')
-        company = job.get('company', 'N/A')
-        location = job.get('location', 'N/A')
-        link = job.get('link', '')
-        score = job.get('score', score)
+        title = job.get("title", "N/A")
+        company = job.get("company", "N/A")
+        location = job.get("location", "N/A")
+        link = job.get("link", "")
+        score = job.get("score", score)
 
-        print(f"\n📌 JOB #{i}")
-        print(f"Title: {title}")
-        print(f"Company: {company}")
-        print(f"Location: {location}")
-        print(f"Score: {score}")
-        print(f"Link: {link}")
-
-        # Generate application message
+        print(f"\n JOB #{i}: {title} @ {company} ({location}) — score {score}")
         app_message = generate_message(job)
-        print(f"\n📝 APPLICATION MESSAGE:")
-        print("-" * 40)
-        print(app_message)
-        print("-" * 40)
+        print(f"\nApplication message:\n{'-'*40}\n{app_message}\n{'-'*40}")
 
-        # Open in browser
-        if link and link.startswith('http'):
+        if link and link.startswith("http"):
             try:
-                print(f"\n🌐 Opening job application in browser...")
+                print(f"\nOpening in browser: {link}")
                 webbrowser.open(link)
-                time.sleep(2)  # Brief pause between openings
-            except Exception as e:
-                print(f"⚠️ Could not open link: {e}")
+                time.sleep(2)
+            except Exception as exc:
+                logger.warning("webbrowser_open_failed: %s", exc)
         else:
-            print("⚠️ No valid link available")
+            print(" No valid link")
 
-        # Ask if user applied
-        if i < len(unapplied_jobs[:5]):  # Don't wait after last job
-            response = input(f"\n✅ Did you apply to this job? (y/n): ").lower().strip()
-            if response in ['y', 'yes']:
+        if i < len(unapplied_jobs[:5]):
+            response = input("\n Did you apply? (y/n): ").lower().strip()
+            if response in ("y", "yes"):
                 mark_applied(job)
-                print("✅ Job marked as applied")
+                print(" Marked as applied")
             else:
-                print("⏭️ Job not marked as applied")
+                print(" Skipped")
 
-    print(f"\n✅ Apply assistant completed!")
-    print("💡 Tips:")
-    print("   - Review each application carefully before submitting")
-    print("   - Customize the message as needed")
-    print("   - Check for additional requirements in the job description")
     stats = get_application_stats()
-    print(f"\n📊 Application Stats: {stats['total_applied']} applied, {stats['interviews_scheduled']} interviews")
+    print(f"\nDone. Stats: {stats['total_applied']} applied, {stats['interviews_scheduled']} interviews")
 
 
-def get_confidence_level(score):
-    """Calculate confidence level based on job score."""
+def get_confidence_level(score: int) -> Tuple[str, str]:
     if score >= 85:
-        return "Very High", "⭐⭐⭐⭐⭐"
-    elif score >= 75:
-        return "High", "⭐⭐⭐⭐"
-    elif score >= 65:
-        return "Medium", "⭐⭐⭐"
-    elif score >= 50:
-        return "Low", "⭐⭐"
-    else:
-        return "Very Low", "⭐"
+        return "Very High", "*****"
+    if score >= 75:
+        return "High", "****"
+    if score >= 65:
+        return "Medium", "***"
+    if score >= 50:
+        return "Low", "**"
+    return "Very Low", "*"
 
 
-def show_top_jobs_with_confidence(matches):
-    """Show top 3 BEST jobs with confidence levels and explanations."""
+def show_top_jobs_with_confidence(matches: List[Tuple[Dict[str, Any], int]]) -> List[Tuple[Dict[str, Any], int]]:
+    """Interactively present top 3 jobs and return the ones user confirms. Local only."""
+    if not RICO_INTERACTIVE_APPLY:
+        logger.info("show_top_jobs_skipped interactive_mode_disabled")
+        return []
     if not matches:
         print("No jobs to display.")
         return []
 
-    # Sort by score and take top 3
     top_jobs = sorted(matches, key=lambda x: x[1], reverse=True)[:3]
-
-    print(f"\n🎯 TOP 3 BEST JOBS")
+    print(f"\n TOP 3 BEST JOBS")
     print("=" * 60)
 
-    selected_jobs = []
-
+    selected = []
     for i, (job, score) in enumerate(top_jobs, 1):
-        title = job.get('title', 'N/A')
-        company = job.get('company', 'N/A')
-        location = job.get('location', 'N/A')
-        link = job.get('link', '')
-
         confidence, stars = get_confidence_level(score)
-        explanation = job.get('profile_explanation', 'Relevant executive operations experience')
+        print(f"\n JOB #{i} — {confidence} {stars}")
+        print(f"Title:   {job.get('title', 'N/A')}")
+        print(f"Company: {job.get('company', 'N/A')}")
+        print(f"Score:   {score}")
+        print(f"Why:     {job.get('profile_explanation', 'Relevant experience')}")
+        print(f"Link:    {job.get('link', '')}")
 
-        print(f"\n📌 JOB #{i} - {confidence} Confidence {stars}")
-        print(f"Title: {title}")
-        print(f"Company: {company}")
-        print(f"Location: {location}")
-        print(f"Score: {score}")
-        print(f"Why it matches: {explanation}")
-        print(f"Link: {link}")
-
-        # Ask user if they want to apply
-        response = input(f"\n🤔 Apply to this job? (y/n): ").lower().strip()
-        if response in ['y', 'yes']:
-            selected_jobs.append((job, score))
-            print("✅ Added to application list")
+        response = input("\n Apply to this job? (y/n): ").lower().strip()
+        if response in ("y", "yes"):
+            selected.append((job, score))
+            print(" Added to application list")
         else:
-            print("⏭️ Skipped")
+            print(" Skipped")
 
-    return selected_jobs
+    return selected
 
 
-def run_apply_assistant(matches):
-    """Run apply assistant with top scored jobs."""
+def run_apply_assistant(matches: List[Tuple[Dict[str, Any], int]]) -> None:
+    """Run the interactive apply assistant. No-op unless RICO_INTERACTIVE_APPLY=1."""
+    if not RICO_INTERACTIVE_APPLY:
+        logger.info("run_apply_assistant_skipped interactive_mode_disabled")
+        return
     if not matches:
-        print("No high-quality matches to apply for.")
+        print("No high-quality matches.")
         return
 
-    # Show top 3 jobs with confidence levels
+    from src.applications import filter_unapplied_jobs, mark_applied, get_application_stats
+    from src.message_generator import generate_message
+
     selected_jobs = show_top_jobs_with_confidence(matches)
-
     if not selected_jobs:
-        print("No jobs selected for application.")
+        print("No jobs selected.")
         return
 
-    print(f"\n🚀 APPLY ASSISTANT - {len(selected_jobs)} Selected Jobs")
-    print("=" * 60)
-
-    # Filter out already applied jobs
     unapplied_jobs = filter_unapplied_jobs(selected_jobs)
-
     if not unapplied_jobs:
-        print("All selected jobs have already been applied to.")
         stats = get_application_stats()
-        print(f"📊 Application Stats: {stats['total_applied']} applied, {stats['interviews_scheduled']} interviews")
+        print(f"All selected jobs already applied. Stats: {stats['total_applied']} applied.")
         return
+
+    print(f"\n APPLYING TO {len(unapplied_jobs)} SELECTED JOBS")
+    print("=" * 60)
 
     for i, (job, score) in enumerate(unapplied_jobs, 1):
-        title = job.get('title', 'N/A')
-        company = job.get('company', 'N/A')
-        location = job.get('location', 'N/A')
-        link = job.get('link', '')
+        link = job.get("link", "")
+        print(f"\n APPLICATION #{i}: {job.get('title','N/A')} @ {job.get('company','N/A')} — score {score}")
 
-        print(f"\n📌 APPLICATION #{i}")
-        print(f"Title: {title}")
-        print(f"Company: {company}")
-        print(f"Score: {score}")
-
-        # Generate application message
         app_message = generate_message(job)
-        print(f"\n📝 APPLICATION MESSAGE:")
-        print("-" * 40)
-        print(app_message)
-        print("-" * 40)
+        print(f"\nMessage:\n{'-'*40}\n{app_message}\n{'-'*40}")
 
-        # Open in browser
-        if link and link.startswith('http'):
+        if link and link.startswith("http"):
             try:
-                print(f"\n🌐 Opening job application in browser...")
                 webbrowser.open(link)
                 time.sleep(2)
-            except Exception as e:
-                print(f"⚠️ Could not open link: {e}")
-        else:
-            print("⚠️ No valid link available")
+            except Exception as exc:
+                logger.warning("webbrowser_open_failed: %s", exc)
 
-        # Ask if user applied
         if i < len(unapplied_jobs):
-            response = input(f"\n✅ Did you apply to this job? (y/n): ").lower().strip()
-            if response in ['y', 'yes']:
+            response = input("\n Did you apply? (y/n): ").lower().strip()
+            if response in ("y", "yes"):
                 mark_applied(job)
-                print("✅ Job marked as applied")
+                print(" Marked as applied")
             else:
-                print("⏭️ Job not marked as applied")
+                print(" Skipped")
 
-    print(f"\n✅ Apply assistant completed!")
     stats = get_application_stats()
-    print(f"\n📊 Application Stats: {stats['total_applied']} applied, {stats['interviews_scheduled']} interviews")
+    print(f"\nDone. Stats: {stats['total_applied']} applied, {stats['interviews_scheduled']} interviews")
