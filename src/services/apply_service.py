@@ -66,11 +66,11 @@ def _apply_indeed(job: Dict[str, Any]) -> Dict[str, str]:
         from src.indeed_apply import IndeedApplyEngine
 
         with IndeedApplyEngine() as engine:
-            result = engine.apply(job)
+            result = engine.apply_one(job)
         return {
-            "status": result.get("status", "unknown"),
-            "message": result.get("message", ""),
-            "job_id": result.get("job_id", ""),
+            "status": result.status.value,
+            "message": result.message,
+            "job_id": result.job_id,
         }
     except Exception as exc:
         logger.exception("indeed_apply_failed")

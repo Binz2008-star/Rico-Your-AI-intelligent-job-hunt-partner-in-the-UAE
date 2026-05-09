@@ -510,6 +510,24 @@ class IndeedApplyEngine:
         )
         return results
 
+    def apply_one(self, job: Dict[str, Any]) -> "IndeedApplyResult":
+        """Apply to a single pre-fetched job dict.
+
+        Unlike run(), this does not scan Indeed — it applies directly to the
+        job passed in (which has already been discovered by the pipeline).
+        Returns ALREADY_APPLIED when _process_job returns None.
+        """
+        result = self._process_job(job)
+        if result is None:
+            return IndeedApplyResult(
+                job_id=job.get("link", ""),
+                title=job.get("title", ""),
+                company=job.get("company", ""),
+                status=IndeedApplyStatus.ALREADY_APPLIED,
+                message="job already applied",
+            )
+        return result
+
     # ── Phase 1: scan search pages for Easy Apply cards ───────────────────────
 
     def _scan_all_roles(self) -> tuple[List[Dict[str, Any]], int, int]:

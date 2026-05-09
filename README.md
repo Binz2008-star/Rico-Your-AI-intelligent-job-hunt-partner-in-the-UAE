@@ -1,199 +1,373 @@
-# Job Automation System
+# Rico AI — AI-Native UAE Career Companion
 
-Automated ESG/HSE job hunting system that finds, filters, scores, and tracks job applications with intelligent feedback loops.
+Rico AI is evolving this repository from a job automation pipeline into an **AI-native UAE career companion**.
 
-## Features
+Rico is designed to feel like:
 
-- **ESG/HSE Focused**: Specialized job scraping for Environmental, Social, and Governance roles
-- **Indeed Integration**: Scrapes high-quality ESG/HSE positions from Indeed with UAE focus
-- **CV-aware Intelligent Scoring**: AI-powered scoring based on candidate profile, skills, and experience
-- **Engineering Role Filtering**: Automatically filters out engineering positions with negative keywords
-- **Gmail Sync**: Automatic email monitoring for application responses and interview scheduling
-- **Telegram Notifications**: Real-time job alerts and application status updates
-- **GitHub Actions**: Fully automated deployment running twice daily (8:00 AM and 6:00 PM UTC)
-- **Follow-up Reminders**: Automatic 14-day follow-up notifications for applications without responses
-- **Dashboard**: Live web dashboard with application tracking and analytics
-- **Feedback Loop**: Machine learning from application outcomes to improve scoring accuracy
+```text
+career friend + hiring partner + AI operator
+```
+
+not like:
+
+```text
+job board + long form + generic chatbot
+```
+
+Rico learns from the user through chat and actions, scans UAE jobs in the background, scores matches, explains the best opportunities, helps with applications, tracks progress, and reminds the user what to do next.
+
+---
+
+## Public Quick Start
+
+Primary public onboarding form:
+
+**Rico AI Quick Start**  
+https://form.jotform.com/261278237812056
+
+Users should start with only:
+
+- first name
+- Telegram username
+- dream job
+- preferred UAE city
+- anything Rico should avoid
+- optional CV
+- consent
+
+Everything else should be learned progressively through chat, CV parsing, job actions, and outcomes.
+
+---
+
+## Existing System Foundation
+
+The original repository already includes a UAE-focused job automation system with:
+
+- job fetching
+- filtering
+- scoring
+- Telegram notifications
+- application tracking
+- Gmail sync
+- database fallback
+- dashboard generation
+- follow-up reminders
+- feedback loop
+
+Rico AI now sits on top of that system as the agent-first product layer.
+
+---
+
+## Rico Product Promise
+
+Rico helps the user feel:
+
+> I am not doing this job search alone anymore.
+
+Rico should:
+
+- understand the user's career goal
+- remember preferences
+- learn from chat and behavior
+- scan UAE jobs in the background
+- show only strong matches
+- explain why a job fits
+- help draft honest applications
+- prepare interview notes
+- track application progress
+- send useful Telegram alerts
+- stay safe and permission-based
+
+---
 
 ## Architecture
 
+```text
+Rico Quick Start Form
+        ↓
+Jotform Webhook
+        ↓
+FastAPI Rico Server
+        ↓
+Rico Safety + NLU + Memory
+        ↓
+OpenAI Tool-Calling Agent
+        ↓
+Rico Tool Registry
+        ↓
+Existing Job Automation System
+        ↓
+Neon Database + Telegram + Dashboard
 ```
-JobSpy (fetch ESG/HSE jobs from Indeed)
-    ↓
-Filter (remove duplicates + engineering roles)
-    ↓
-Scoring (CV-aware intelligent scoring)
-    ↓
-Applications Tracking (database + Gmail sync)
-    ↓
-Telegram Notifications (real-time updates)
-    ↓
-GitHub Actions (automated deployment)
-    ↓
-Dashboard (live web interface)
-    ↓
-Follow-up Reminders (14-day notifications)
-    ↓
-Feedback Loop (machine learning)
+
+Legacy pipeline remains available:
+
+```text
+JobSpy
+  ↓
+Filter
+  ↓
+Scoring
+  ↓
+Applications Tracking
+  ↓
+Telegram Notifications
+  ↓
+Dashboard
+  ↓
+Follow-up Reminders
+  ↓
+Feedback Loop
 ```
+
+---
+
+## Rico Modules
+
+```text
+src/rico_agent.py              # Agent orchestration and profile model
+src/rico_repo_adapter.py       # Bridge to existing job automation system
+src/rico_chat_api.py           # Chat-first controller
+src/rico_memory.py             # Lightweight JSON memory fallback
+src/rico_db.py                 # Neon/PostgreSQL Rico tables
+src/rico_nlu.py                # English/Arabic/mixed language understanding
+src/rico_safety.py             # Guardrails and high-impact action checks
+src/rico_identity.py           # Canonical Rico identity and system prompt
+src/rico_quality.py            # Recommendation and response quality checks
+src/rico_env.py                # Environment readiness validation
+src/rico_server.py             # FastAPI server and webhook routes
+src/rico_jotform_webhook.py    # Jotform onboarding handler
+src/rico_telegram_webhook.py   # Telegram webhook handler
+src/rico_telegram_ui.py        # Telegram buttons and job card helpers
+src/rico_openai_agent.py       # OpenAI reasoning/tool-calling layer
+src/rico_tool_registry.py      # Tools exposed to Rico's AI agent
+src/cv_parser.py               # CV parsing and profile extraction
+```
+
+---
+
+## Environment Variables
+
+```env
+DATABASE_URL=postgresql://user:password@host:port/database
+OPENAI_API_KEY=your_openai_key
+RICO_OPENAI_MODEL=gpt-4.1-mini
+
+TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_CHAT_ID=your_default_chat_id
+
+JOTFORM_API_KEY=your_jotform_key
+JOTFORM_FORM_ID=261278237812056
+JOTFORM_WEBHOOK_SECRET=your_webhook_secret
+
+EMAIL_USER=your_email@gmail.com
+EMAIL_PASS=your_app_password
+EMAIL_TO=your_email@gmail.com
+
+RICO_ENABLE_AUTO_APPLY=false
+RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true
+RICO_ENABLE_TELEGRAM=true
+RICO_ENABLE_LEARNING=true
+RICO_MATCH_STRICTNESS=balanced
+RICO_DEFAULT_LANGUAGE=mixed
+
+REDIS_URL=redis://localhost:6379
+```
+
+Never commit API keys or secrets to GitHub.
+
+---
 
 ## Setup
 
 ### Prerequisites
 
 - Python 3.11+
-- Gmail account with 2FA enabled
-- Gmail App Password
-- Telegram account (for bot notifications)
-- PostgreSQL database (optional, Neon recommended)
+- Neon/PostgreSQL database
+- Telegram bot
+- OpenAI API key
+- Jotform form/webhook
+- Gmail app password, if using Gmail sync
 
-### Installation
+### Install
 
-1. Clone the repository:
 ```bash
 git clone https://github.com/Binz2008-star/job-automation-system-1.git
 cd job-automation-system-1
-```
-
-2. Install dependencies:
-```bash
 pip install -r requirements.txt
 ```
 
-3. Configure environment variables in `.env`:
-```env
-EMAIL_USER=your_email@gmail.com
-EMAIL_PASS=your_app_password
-EMAIL_TO=your_email@gmail.com
+---
 
-TELEGRAM_BOT_TOKEN=your_bot_token
-TELEGRAM_CHAT_ID=your_chat_id
+## Run Rico API Server
 
-DATABASE_URL=postgresql://user:password@host:port/database
+```bash
+uvicorn src.rico_server:app --host 0.0.0.0 --port 8000
 ```
 
-### Generate Gmail App Password
+Health check:
 
-1. Enable 2FA on your Google account
-2. Go to https://myaccount.google.com/apppasswords
-3. Generate a new app password for "Mail"
-4. Use the 16-character password in `.env`
+```bash
+curl http://localhost:8000/health
+```
 
-### Setup Telegram Bot
+Chat endpoint:
 
-1. Open Telegram and search for @BotFather
-2. Send `/newbot` and follow the instructions
-3. Copy the bot token (looks like `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
-4. Add the token to `.env` as `TELEGRAM_BOT_TOKEN`
-5. To get your chat ID:
-   - Send a message to your bot in Telegram
-   - Visit: `https://api.telegram.org/bot<TOKEN>/getUpdates`
-   - Find your `chat_id` in the response
-   - Add it to `.env` as `TELEGRAM_CHAT_ID`
+```bash
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"demo","message":"Find HSE Manager jobs in Dubai"}'
+```
 
-## Usage
+---
 
-### Manual Run
+## Webhooks
 
-Run the job scraper manually:
+### Jotform
+
+```http
+POST /api/webhooks/jotform
+```
+
+Use this endpoint for the Rico AI Quick Start form:
+
+```env
+JOTFORM_FORM_ID=261278237812056
+```
+
+### Telegram
+
+```http
+POST /api/telegram/webhook
+```
+
+Rico uses Telegram as the main habit loop for:
+
+- job alerts
+- match explanations
+- save/ignore/apply actions
+- reminders
+- interview preparation
+
+---
+
+## Run Legacy Daily Pipeline
+
+The existing automation system still works independently:
+
 ```bash
 python -m src.run_daily
 ```
 
-### Automated Deployment
+This remains useful for scheduled job discovery, scoring, reports, Gmail sync, dashboard generation, and follow-up reminders.
 
-The system runs automatically via GitHub Actions:
-- **Schedule**: Twice daily at 8:00 AM and 6:00 PM UTC
-- **Dashboard**: https://binz2008-star.github.io/job-automation-system-1/
-- **Monitoring**: Gmail sync and Telegram notifications
-- **Follow-ups**: Automatic 14-day reminders
+---
 
-### Development
+## Smoke Test
 
-For local development:
 ```bash
-# Health check
-python -m src.health_check
-
-# Test Gmail sync
-python -m src.gmail_importer --dry-run
-
-# Test follow-up reminders
-python -m src.follow_up
+python scripts/test_rico_startup.py
 ```
 
-### Output
+This checks:
 
-- Console: Shows job matches with scores
-- Email: Daily report with top 10 high-quality jobs
-- Telegram: Real-time job alerts with rich formatting
-- Data: `data/seen_jobs.json` tracks seen jobs
+- Rico env readiness
+- identity
+- NLU
+- safety
+- quality gate
+- chat flow
 
-## Configuration
+without requiring every external service to be live.
 
-Edit `src/job_sources.py` to customize:
-- Search terms
-- Location
-- Number of results
-- Job age filter
+---
 
-Edit `src/scoring.py` to adjust scoring criteria.
+## Safety Rules
 
-## Project Structure
+Rico must never:
 
+- fake experience
+- forge documents
+- lie on behalf of the user
+- share private data without permission
+- send applications without approval
+- spam recruiters
+- discriminate using protected traits
+
+Rico must always:
+
+- stay honest
+- protect user data
+- ask before high-impact actions
+- keep the user in control
+- allow preferences to change anytime
+
+---
+
+## Product Standards
+
+Rico should be:
+
+- chat-first
+- Telegram-first
+- low-friction
+- emotionally supportive
+- background-working
+- intelligent
+- safe
+- habit-forming
+
+Every recommendation should include:
+
+- match score
+- simple explanation
+- next action
+- user control
+
+---
+
+## Important Project Docs
+
+```text
+RICO_PRODUCT_MANIFESTO.md       # Product identity and philosophy
+RICO_HARDENING_CHECKLIST.md     # Production and safety checklist
+RICO_CLOUD_SETUP.md             # Cloud deployment and integration guide
+ARCHITECTURE_RICO_AI.md         # Production architecture blueprint
 ```
-job-automation-system-1/
-├── src/
-│   ├── job_sources.py      # Job fetching logic
-│   ├── scoring.py          # CV-aware intelligent scoring algorithm
-│   ├── profile.py          # Candidate profile and skill weights
-│   ├── filter.py           # Deduplication system
-│   ├── notifier.py         # Email notifications
-│   ├── telegram_bot.py     # Telegram bot integration
-│   ├── message_generator.py # Cover message templates
-│   ├── run_daily.py        # Main pipeline
-│   └── scheduler.py        # Automated scheduler
-├── data/
-│   └── seen_jobs.json      # Seen jobs database
-├── .env                    # Environment variables
-└── requirements.txt        # Python dependencies
-```
+
+---
 
 ## Current Status
 
-✅ **Production Ready**: Fully automated ESG/HSE job hunting system
-✅ **GitHub Actions**: Automated deployment (8:00 AM & 6:00 PM UTC)
-✅ **Gmail Integration**: Real-time email monitoring and response tracking
-✅ **Telegram Notifications**: Instant job alerts and application updates
-✅ **Live Dashboard**: Web interface with application analytics
-✅ **Follow-up System**: Automatic 14-day reminders
-✅ **Feedback Loop**: Machine learning from application outcomes
-✅ **Engineering Filter**: Automatic filtering of irrelevant engineering roles
+Rico currently has:
 
-### Recent Performance
-- **Jobs Found**: 16 ESG/HSE positions daily
-- **High Quality**: 10+ relevant matches (62.5% success rate)
-- **Applications Tracked**: 13 active applications
-- **Response Rate**: 100% (5 companies confirmed receipt)
-- **Gmail Sync**: 19 messages processed, 14 classified
-- **Dashboard**: Live at https://binz2008-star.github.io/job-automation-system-1/
+- Quick Start onboarding form
+- FastAPI server scaffold
+- Jotform webhook route
+- Telegram webhook route
+- CV parser
+- Neon DB layer
+- memory fallback
+- multilingual NLU
+- safety layer
+- quality layer
+- OpenAI agent scaffold
+- tool registry
+- existing pipeline adapter
 
-## Intelligent Scoring System
+Still required for full production:
 
-The system now uses a sophisticated CV-aware scoring algorithm that:
+- live cloud deployment
+- webhook verification
+- Telegram inline callback execution
+- Redis workers
+- WebSocket streaming
+- frontend chat UI
+- auth and rate limiting
+- secure CV storage
+- full OpenAI tool execution loop
 
-- **Analyzes Candidate Profile**: Weights skills based on experience and relevance
-- **Executive Support Priority**: Highest weight (10) for executive assistant, chief of staff roles
-- **Operations Focus**: Strong weight (8) for operations management positions
-- **UAE Experience Bonus**: Additional points for local market knowledge
-- **Smart Penalties**: Automatically filters junior, entry-level, and irrelevant roles
-- **Multi-keyword Matching**: Boosts scores when multiple relevant keywords appear
-
-**Example Scoring Results:**
-- Executive Assistant to CEO: 91 points (perfect match)
-- Chief of Staff: 48 points (good match)
-- Operations Manager: 49 points (relevant experience)
-- Junior Developer: 0 points (penalized as irrelevant)
+---
 
 ## License
 

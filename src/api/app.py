@@ -16,14 +16,20 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from typing import Any, Dict
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from src.api.auth import router as auth_router
+from src.api.rate_limit import limiter, rate_limit_exceeded_handler
+from src.api.routers.agent import router as agent_router
 from src.api.routers.applications import router as applications_router
+from src.api.routers.rico_chat import router as rico_chat_router
 from src.api.routers.jobs import router as jobs_router
 from src.api.routers.pipeline import router as pipeline_router
 from src.api.routers.settings import router as settings_router
@@ -35,11 +41,25 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ── Lifespan ─────────────────────────────────────────────────────────────────
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        from src.rico_db import RicoDB
+        RicoDB().init()
+        logger.info("rico_db_init OK")
+    except Exception:
+        logger.warning("rico_db_init skipped (DB unavailable or tables already exist)")
+    yield
+
+
 # ── App ───────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title="Job Automation Platform",
     version="1.0.0",
+    lifespan=lifespan,
     description=(
         "REST API for the autonomous job search pipeline. "
         "All mutating endpoints require JWT authentication (httpOnly cookie)."
@@ -48,6 +68,10 @@ app = FastAPI(
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 
@@ -65,6 +89,8 @@ app.add_middleware(
 # ── Routers ───────────────────────────────────────────────────────────────────
 
 app.include_router(auth_router)
+app.include_router(agent_router)
+app.include_router(rico_chat_router)
 app.include_router(jobs_router)
 app.include_router(applications_router)
 app.include_router(stats_router)
@@ -95,10 +121,19 @@ def root() -> Dict[str, str]:
 @app.get("/health")
 def health() -> Dict[str, Any]:
     from src.db import is_db_available
+    from src.rico_env import get_rico_env_report
+    rico = get_rico_env_report()
     return {
         "status": "healthy",
         "db": "connected" if is_db_available() else "json_fallback",
         "version": "1.0.0",
+        "rico": {
+            "ready_for_api":      rico.ready_for_api,
+            "ready_for_db":       rico.ready_for_db,
+            "ready_for_telegram": rico.ready_for_telegram,
+            "ready_for_openai":   rico.ready_for_openai,
+            "ready_for_jotform":  rico.ready_for_jotform,
+        },
         "endpoints": {
             "auth":         "/api/v1/auth/login",
             "jobs":         "/api/v1/jobs",
@@ -106,6 +141,7 @@ def health() -> Dict[str, Any]:
             "stats":        "/api/v1/stats",
             "settings":     "/api/v1/settings",
             "pipeline":     "/api/v1/pipeline/status",
+            "rico_chat":    "/api/v1/rico/chat",
             "docs":         "/api/docs",
         },
     }
