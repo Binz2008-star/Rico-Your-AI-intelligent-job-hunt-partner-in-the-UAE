@@ -8,3 +8,9 @@ google-auth
 google-auth-oauthlib
 google-auth-httplib2
 playwright
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+PyMuPDF
+python-docx
