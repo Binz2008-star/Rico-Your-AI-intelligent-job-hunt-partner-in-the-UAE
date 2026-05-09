@@ -56,12 +56,7 @@ class RicoProfile:
 
 
 class RicoAgent:
-    """High-level autonomous career-agent facade.
-
-    This class intentionally wraps the existing pipeline. Existing modules such
-    as job_sources, scoring, telegram_bot, follow_up, and application tracking
-    can be called from here while the product remains chat-first.
-    """
+    """High-level autonomous career-agent facade."""
 
     def __init__(self, profile_store=None, job_searcher=None, scorer=None, notifier=None, tracker=None):
         self.profile_store = profile_store
@@ -71,7 +66,6 @@ class RicoAgent:
         self.tracker = tracker
 
     def onboard_user(self, profile: RicoProfile, cv_file_url: Optional[str] = None) -> Dict[str, Any]:
-        """Create Rico memory and trigger the first job-search process."""
         if self.profile_store:
             self.profile_store.save_profile(profile)
 
@@ -91,7 +85,6 @@ class RicoAgent:
         }
 
     def recommend_jobs(self, profile: RicoProfile, jobs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Score, filter, and explain jobs for a user."""
         recommendations: List[Dict[str, Any]] = []
         for job in jobs:
             score_result = self._score_job(profile, job)
@@ -101,6 +94,7 @@ class RicoAgent:
                 "job": job,
                 "score": score_result["score"],
                 "explanation": score_result["explanation"],
+                "reasoning": score_result.get("reasoning", {}),
                 "actions": [
                     "Apply Now",
                     "Save",
@@ -115,7 +109,6 @@ class RicoAgent:
         return sorted(recommendations, key=lambda item: item["score"], reverse=True)
 
     def handle_user_action(self, profile: RicoProfile, job_id: str, action: str) -> Dict[str, Any]:
-        """Process chat/button actions and update Rico memory."""
         normalized_action = action.strip().lower().replace(" ", "_")
 
         if self.tracker:
@@ -131,6 +124,75 @@ class RicoAgent:
             "action": normalized_action,
         }
 
+    def build_reasoning_context(self, profile: RicoProfile, query: str = "job preferences") -> Dict[str, Any]:
+        if not self.profile_store:
+            return {
+                "memories": [],
+                "summary": "No memory store connected.",
+            }
+
+        memories = self.profile_store.search_memories(profile.user_id, query=query, limit=8)
+        summary = self.profile_store.summarize_recent_memory(profile.user_id, limit=8)
+
+        return {
+            "memories": memories,
+            "summary": summary,
+        }
+
+    def reason_next_action(
+        self,
+        profile: RicoProfile,
+        event_type: str,
+        payload: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        payload = payload or {}
+        context = self.build_reasoning_context(profile, query=event_type)
+
+        action = "observe"
+        confidence = 0.55
+        reason = "Monitoring the situation."
+        memory_updates: List[str] = []
+
+        if event_type == "job_saved":
+            action = "follow_up_later"
+            confidence = 0.7
+            reason = "User saved a job, indicating medium-term interest."
+            memory_updates.append("Saved jobs increase preference confidence.")
+
+        elif event_type == "job_applied":
+            action = "prepare_followup"
+            confidence = 0.85
+            reason = "Application submitted. Rico should track next steps and interview readiness."
+            memory_updates.append("Application behavior reinforces role preference.")
+
+        elif event_type == "job_rejected":
+            action = "adapt_recommendations"
+            confidence = 0.82
+            reason = "Rejected jobs should reduce similar ranking weight."
+            memory_updates.append("Negative outcome signal recorded.")
+
+        elif event_type == "interview_detected":
+            action = "prepare_interview"
+            confidence = 0.9
+            reason = "Interview event detected. Rico should assist with preparation and reminders."
+            memory_updates.append("Interview success path activated.")
+
+        elif event_type == "user_message":
+            action = "respond"
+            confidence = 0.75
+            reason = "User initiated direct conversation."
+            memory_updates.append("Conversation memory updated.")
+
+        return {
+            "event_type": event_type,
+            "action": action,
+            "confidence": confidence,
+            "reason": reason,
+            "memory_context": context,
+            "memory_updates": memory_updates,
+            "requires_confirmation": action in {"prepare_followup", "adapt_recommendations"},
+        }
+
     def _score_job(self, profile: RicoProfile, job: Dict[str, Any]) -> Dict[str, Any]:
         title = str(job.get("title", "")).lower()
         description = str(job.get("description", "")).lower()
@@ -139,6 +201,8 @@ class RicoAgent:
 
         score = 0
         reasons: List[str] = []
+        memory_boost = 0
+        memory_hits: List[str] = []
 
         for role in profile.target_roles:
             if role.lower() in combined:
@@ -170,10 +234,39 @@ class RicoAgent:
                 score = min(score, 20)
                 reasons.append(f"Deal-breaker risk: {deal_breaker}")
 
-        score = max(0, min(100, score))
-        explanation = "This job is relevant because " + "; ".join(reasons[:5]) if reasons else "This job has limited visible alignment with your profile."
+        if self.profile_store:
+            memories = self.profile_store.search_memories(profile.user_id, query=combined, limit=5)
+            for memory in memories:
+                memory_type = memory.get("memory_type")
+                confidence = float(memory.get("confidence", 0.5))
+                content = memory.get("content", "")
 
-        return {"score": score, "reasons": reasons, "explanation": explanation}
+                if memory_type in {"preference", "behavior", "outcome"}:
+                    boost = int(10 * confidence)
+                    score += boost
+                    memory_boost += boost
+                    memory_hits.append(content)
+
+        score = max(0, min(100, score))
+
+        explanation = (
+            "This job is relevant because " + "; ".join(reasons[:5])
+            if reasons
+            else "This job has limited visible alignment with your profile."
+        )
+
+        if memory_hits:
+            explanation += " Rico also remembered: " + "; ".join(memory_hits[:2])
+
+        return {
+            "score": score,
+            "reasons": reasons,
+            "explanation": explanation,
+            "reasoning": {
+                "memory_boost": memory_boost,
+                "memory_hits": memory_hits,
+            },
+        }
 
     def _should_reject(self, profile: RicoProfile, job: Dict[str, Any], score_result: Dict[str, Any]) -> bool:
         if not profile.settings.can_reject_unsuitable_jobs:
