@@ -23,9 +23,9 @@ Interactive code is unreachable from this module.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
-import uuid
 from typing import Any, Dict, Optional
 
 from src.agent.orchestrator.intent_detector import ACTION_TO_TOOL, VALID_ACTION_TYPES
@@ -88,7 +88,11 @@ class AgentRuntime:
             RuntimeResult — always returned, never raises.
         """
         wall_start = time.monotonic()
-        action_id = uuid.uuid4().hex[:12]
+
+        # Stable idempotency key: same user + action + job within the TTL window
+        # is treated as a duplicate regardless of which surface triggered it.
+        _idem_raw = f"{user_id}:{action}:{job_key}"
+        action_id = hashlib.md5(_idem_raw.encode(), usedforsecurity=False).hexdigest()[:16]
 
         # 1. Validate action
         if action not in VALID_ACTION_TYPES:
@@ -105,9 +109,6 @@ class AgentRuntime:
 
         # 3. Idempotency guard for state-changing actions
         if action in _IDEMPOTENT and is_duplicate(action_id):
-            # action_id is fresh uuid so this won't fire in normal use;
-            # the guard is here for the orchestrator-style action_id deduplication
-            # (callers may pass a stable action_id via metadata in future).
             logger.info("runtime_duplicate_skipped action=%s user=%s", action, user_id)
             return RuntimeResult(
                 ok=False,
