@@ -15,11 +15,11 @@ from src.rico_agent import RicoAgent
 from src.rico_memory import RicoMemoryStore
 from src.rico_repo_adapter import RicoSystem
 from src.repositories.onboarding_repo import (
-    get_onboarding_state,
     is_onboarding_complete,
     mark_onboarding_complete,
     set_onboarding_status,
 )
+from src.repositories.profile_repo import get_profile, upsert_profile
 from src.models.onboarding import ONBOARDING_IN_PROGRESS
 
 
@@ -78,7 +78,7 @@ class RicoChatAPI:
             "manual_profile_wizard_disabled": True,
         }
         updates.update(self._extract_inline_contact_updates(message))
-        profile = self.memory.upsert_profile_from_dict(user_id=user_id, updates=updates)
+        profile = upsert_profile(user_id=user_id, updates=updates)
 
         missing = [
             label
@@ -146,9 +146,9 @@ class RicoChatAPI:
             return self._cv_first_profile_response(user_id, message)
 
         # ── First-time onboarding ─────────────────────────────────────────────
-        profile = self.memory.load_profile(user_id)
+        profile = get_profile(user_id)
         if profile is None:
-            self.memory.upsert_profile_from_dict(user_id=user_id, updates={"name": user_id})
+            upsert_profile(user_id=user_id, updates={"name": user_id})
             set_onboarding_status(user_id, ONBOARDING_IN_PROGRESS)
             response = {
                 "type": "onboarding",
@@ -162,13 +162,12 @@ class RicoChatAPI:
             return response
 
         # ── Profile exists but onboarding not yet marked complete in DB ───────
-        # The user responded after the welcome — treat as completed from now on.
         mark_onboarding_complete(user_id)
         return self._handle_active_user(user_id, message)
 
     def _handle_active_user(self, user_id: str, message: str) -> Dict[str, Any]:
         """Handle messages from users who have completed onboarding."""
-        profile = self.memory.load_profile(user_id)
+        profile = get_profile(user_id)
         lower = message.lower()
 
         # "what's next?" → always return job-search options, never onboarding
