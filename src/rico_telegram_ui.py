@@ -16,8 +16,7 @@ from typing import Any, Dict, List, Optional
 
 from filelock import FileLock, Timeout as FileLockTimeout
 
-from src.applications import get_job_id, mark_applied, update_application_status
-from src.message_generator import generate_message
+from src.applications import get_job_id
 
 logger = logging.getLogger(__name__)
 
@@ -237,38 +236,17 @@ def callback_ack_message(action: str) -> str:
 
 
 def handle_job_action(action: str, job: Dict[str, Any], user_id: str = "") -> Dict[str, Any]:
-    """Execute a job action and return a reply dict."""
+    """
+    Dispatch a job action through the agent runtime.
+    Telegram is the UI layer; all business logic lives in the runtime.
+    """
+    from src.agent.runtime import agent_runtime
     job_key = get_job_id(job)
-    record_callback_action(action, job_key, user_id=user_id, metadata={"job": job})
-
-    if action == "apply":
-        mark_applied(job, status="applied", notes="Marked from Telegram callback")
-        return {"ok": True, "reply": "Marked as applied. Rico will track this job."}
-
-    if action == "save":
-        mark_applied(job, status="saved", notes="Saved from Telegram callback")
-        return {"ok": True, "reply": "Saved. Rico will keep this job in your tracker."}
-
-    if action == "skip":
-        return {"ok": True, "reply": "Skipped. Rico will use this as feedback."}
-
-    if action == "not_relevant":
-        return {"ok": True, "reply": "Marked not relevant. Rico will reduce similar matches."}
-
-    if action == "why":
-        reason = (
-            job.get("profile_explanation")
-            or job.get("match_reason")
-            or "It matched your current profile and search preferences."
-        )
-        return {"ok": True, "reply": str(reason)}
-
-    if action == "draft":
-        return {"ok": True, "reply": generate_message(job)}
-
-    if action == "remind":
-        reminder_date = (datetime.now() + timedelta(days=2)).date().isoformat()
-        update_application_status(job, "saved", notes=f"Telegram reminder requested for {reminder_date}")
-        return {"ok": True, "reply": f"Reminder noted for {reminder_date}."}
-
-    return {"ok": False, "reply": "Unsupported action."}
+    result = agent_runtime.handle_action(
+        user_id=user_id,
+        action=action,
+        job_key=job_key,
+        job=job,
+        source="telegram",
+    )
+    return {"ok": result.ok, "reply": result.message}

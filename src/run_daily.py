@@ -348,27 +348,48 @@ def _regenerate_dashboard(
         logger.exception("dashboard_generation_failed")
 
 
-def run_pipeline() -> None:
+def run_pipeline() -> int:
+    """
+    Execute the full pipeline.
+
+    Returns 0 on success; 1 if fetch/scoring fundamentally failed (nothing to
+    notify about).  All other subsystems are independently guarded and never
+    propagate exceptions back here.
+    """
     started = datetime.now()
     logger.info(f"pipeline_start at={started.isoformat()}")
 
     _init_db()
     orchestrator = _build_orchestrator()
-    all_scored, matches = _fetch_and_score()
+
+    try:
+        all_scored, matches = _fetch_and_score()
+    except Exception:
+        logger.exception("pipeline_fetch_score_failed pipeline_aborted")
+        elapsed = (datetime.now() - started).total_seconds()
+        logger.info(f"pipeline_aborted duration_s={elapsed:.1f}")
+        return 1
+
     _persist_history(all_scored)
     _notify(matches)
     _apply_assistant(matches)
     _auto_apply_naukrigulf(matches)
     _sync_gmail()
-    _run_feedback_loop(orchestrator)
+
+    try:
+        _run_feedback_loop(orchestrator)
+    except Exception:
+        logger.exception("feedback_loop_unhandled_error non_fatal")
+
     _regenerate_dashboard(orchestrator)
 
     elapsed = (datetime.now() - started).total_seconds()
     logger.info(f"pipeline_complete duration_s={elapsed:.1f}")
+    return 0
 
 
 def main() -> None:
-    run_pipeline()
+    sys.exit(run_pipeline())
 
 
 if __name__ == "__main__":

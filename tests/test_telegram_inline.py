@@ -204,6 +204,7 @@ class TestHandleCallbackOnly:
     def test_valid_apply_callback_returns_ok(self, tmp_path):
         import src.rico_telegram_ui as ui
         from src.applications import get_job_id
+        from src.agent.runtime import agent_runtime
         original_cache = ui.TELEGRAM_JOB_CACHE_FILE
         original_cache_lock = ui.TELEGRAM_JOB_CACHE_LOCK
         original_log = ui.TELEGRAM_ACTIONS_FILE
@@ -216,12 +217,14 @@ class TestHandleCallbackOnly:
             ui.cache_job(_SAMPLE_JOB)
             job_key = get_job_id(_SAMPLE_JOB)
             update = _make_callback_update("apply", job_key)
-            with patch("src.rico_telegram_ui.mark_applied") as mock_apply:
+            with patch.object(agent_runtime, "handle_action",
+                              return_value=MagicMock(ok=True, message="Apply noted.")) as mock_runtime:
                 result = ui.handle_callback_only(update)
             assert result["ok"] is True
             assert result["callback_id"] == "cb-001"
             assert result["action"] == "apply"
-            mock_apply.assert_called_once()
+            mock_runtime.assert_called_once()
+            assert mock_runtime.call_args.kwargs["action"] == "apply"
         finally:
             ui.TELEGRAM_JOB_CACHE_FILE = original_cache
             ui.TELEGRAM_JOB_CACHE_LOCK = original_cache_lock
@@ -249,15 +252,15 @@ class TestHandleCallbackOnly:
     @pytest.mark.parametrize("action", ["apply", "save", "skip", "why", "draft", "remind", "not_relevant"])
     def test_all_supported_actions_return_ok(self, action, tmp_path):
         import src.rico_telegram_ui as ui
+        from src.agent.runtime import agent_runtime
         original_log = ui.TELEGRAM_ACTIONS_FILE
         original_log_lock = ui.TELEGRAM_ACTIONS_LOCK
         ui.TELEGRAM_ACTIONS_FILE = tmp_path / f"actions_{action}.json"
         ui.TELEGRAM_ACTIONS_LOCK = str(ui.TELEGRAM_ACTIONS_FILE) + ".lock"
         try:
             update = _make_callback_update(action, "test-key-001")
-            with patch("src.rico_telegram_ui.mark_applied"), \
-                 patch("src.rico_telegram_ui.update_application_status"), \
-                 patch("src.rico_telegram_ui.generate_message", return_value="draft text"):
+            with patch.object(agent_runtime, "handle_action",
+                              return_value=MagicMock(ok=True, message="Action done.")):
                 result = ui.handle_callback_only(update)
             assert result["ok"] is True, f"action={action} returned ok=False"
         finally:
@@ -319,8 +322,9 @@ class TestWebhookCallbackFlow:
 
         update = _make_callback_update("save", get_job_id(_SAMPLE_JOB), "cb-e2e")
 
-        with patch("src.rico_telegram_ui.record_callback_action", return_value=True), \
-             patch("src.rico_telegram_ui.mark_applied"), \
+        from src.agent.runtime import agent_runtime
+        with patch.object(agent_runtime, "handle_action",
+                          return_value=MagicMock(ok=True, message="Saved.")), \
              patch("src.rico_telegram_webhook.answer_callback_query", return_value=True) as mock_ack:
             result = process_telegram_update(update)
 

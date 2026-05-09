@@ -64,9 +64,13 @@ def detect(message: str) -> Tuple[str, Optional[str]]:
 ACTION_TO_TOOL: dict[str, str] = {
     "apply":            "apply_job",
     "skip":             "skip_job",
+    "not_relevant":     "skip_job",       # semantic alias; same side effect
     "save":             "save_job",
     "block":            "block_company",
     "trigger_pipeline": "trigger_pipeline",
+    "draft":            "draft_message",
+    "why":              "explain_match",
+    "remind":           "set_reminder",
 }
 
 VALID_ACTION_TYPES = frozenset(ACTION_TO_TOOL)
