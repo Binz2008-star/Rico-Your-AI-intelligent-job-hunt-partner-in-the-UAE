@@ -96,7 +96,7 @@ class TestVerifyCredentials:
         from src.api.auth import verify_credentials
         with patch("src.repositories.users_repo.get_user_by_email", return_value=_DB_USER), \
              patch("src.repositories.users_repo.update_last_login"), \
-             patch("src.api.auth._PWD_CTX.verify", return_value=True):
+             patch("src.api.auth._verify_password", return_value=True):
             result = verify_credentials("alice@rico.ai", "correctpass")
         assert result is not None
         assert result["email"] == "alice@rico.ai"
@@ -106,7 +106,7 @@ class TestVerifyCredentials:
         from src.api.auth import verify_credentials
         with patch("src.repositories.users_repo.get_user_by_email", return_value=_DB_USER), \
              patch("src.repositories.users_repo.update_last_login"), \
-             patch("src.api.auth._PWD_CTX.verify", return_value=False):
+             patch("src.api.auth._verify_password", return_value=False):
             result = verify_credentials("alice@rico.ai", "wrongpass")
         assert result is None
 
@@ -188,7 +188,7 @@ class TestJWTRoleClaim:
 class TestRequireAdmin:
     def test_admin_can_reach_register(self, admin_client):
         with patch("src.repositories.users_repo.get_user_by_email", return_value=None), \
-             patch("src.api.auth._PWD_CTX.hash", return_value="$2b$12$fakehash"), \
+             patch("src.api.auth._hash_password", return_value="$2b$12$fakehash"), \
              patch("src.repositories.users_repo.create_user", return_value=User(
                  id=99, email="new@rico.ai", password_hash="$2b$12$fakehash",
                  role="user", is_active=True,
@@ -224,7 +224,7 @@ class TestRegisterEndpoint:
             last_login_at=None,
         )
         with patch("src.repositories.users_repo.get_user_by_email", return_value=None), \
-             patch("src.api.auth._PWD_CTX.hash", return_value="$2b$12$fakehash"), \
+             patch("src.api.auth._hash_password", return_value="$2b$12$fakehash"), \
              patch("src.repositories.users_repo.create_user", return_value=created):
             r = admin_client.post("/api/v1/auth/register",
                                   json={"email": "newuser@rico.ai", "password": "SecurePass1"})
@@ -242,7 +242,7 @@ class TestRegisterEndpoint:
 
     def test_register_db_unavailable_returns_503(self, admin_client):
         with patch("src.repositories.users_repo.get_user_by_email", return_value=None), \
-             patch("src.api.auth._PWD_CTX.hash", return_value="$2b$12$fakehash"), \
+             patch("src.api.auth._hash_password", return_value="$2b$12$fakehash"), \
              patch("src.repositories.users_repo.create_user", return_value=None):
             r = admin_client.post("/api/v1/auth/register",
                                   json={"email": "dbdown@rico.ai", "password": "SecurePass1"})
@@ -261,7 +261,7 @@ class TestRegisterEndpoint:
             last_login_at=None,
         )
         with patch("src.repositories.users_repo.get_user_by_email", return_value=None), \
-             patch("src.api.auth._PWD_CTX.hash", return_value="$2b$12$fakehash"), \
+             patch("src.api.auth._hash_password", return_value="$2b$12$fakehash"), \
              patch("src.repositories.users_repo.create_user", return_value=created):
             r = admin_client.post("/api/v1/auth/register",
                                   json={"email": "newadmin@rico.ai",

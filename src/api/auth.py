@@ -4,7 +4,7 @@ JWT authentication: login / logout endpoints + token utilities.
 
 Config (env vars):
   ADMIN_EMAIL           — login email (default: admin@localhost)
-  ADMIN_PASSWORD_HASH   — bcrypt hash: passlib.hash.bcrypt.hash("your-password")
+  ADMIN_PASSWORD_HASH   — bcrypt hash: bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
   ADMIN_PASSWORD        — plaintext fallback when hash is absent (dev only)
   JWT_SECRET            — HS256 signing secret (32+ bytes recommended)
   JWT_TTL_HOURS         — token lifetime in hours (default: 24)
@@ -20,18 +20,30 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
+import bcrypt as _bcrypt
 from fastapi import APIRouter, HTTPException, Request, Response
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from src.api.rate_limit import LIMIT_LOGIN, limiter
 from src.schemas.auth import LoginRequest, LoginResponse, RegisterRequest, RegisterResponse
 
 logger = logging.getLogger(__name__)
 
-_PWD_CTX = CryptContext(schemes=["bcrypt"], deprecated="auto")
 _ALGORITHM = "HS256"
 _COOKIE_NAME = "access_token"
+
+
+def _hash_password(plain: str) -> str:
+    return _bcrypt.hashpw(plain.encode(), _bcrypt.gensalt(12)).decode()
+
+
+def _verify_password(plain: str, hashed: str) -> bool:
+    if not hashed:
+        return False
+    try:
+        return _bcrypt.checkpw(plain.encode(), hashed.encode())
+    except Exception:
+        return False
 
 
 # ── Config helpers ────────────────────────────────────────────────────────────
@@ -77,7 +89,7 @@ def verify_credentials(email: str, password: str) -> Optional[Dict[str, Any]]:
         from src.repositories.users_repo import get_user_by_email
         user = get_user_by_email(email)
         if user is not None:
-            if _PWD_CTX.verify(password, user.password_hash):
+            if _verify_password(password, user.password_hash):
                 from src.repositories.users_repo import update_last_login
                 update_last_login(user.id)
                 return {"email": user.email, "role": user.role}
@@ -92,7 +104,7 @@ def verify_credentials(email: str, password: str) -> Optional[Dict[str, Any]]:
 
     password_hash = os.getenv("ADMIN_PASSWORD_HASH", "").strip()
     if password_hash:
-        if _PWD_CTX.verify(password, password_hash):
+        if _verify_password(password, password_hash):
             return {"email": email, "role": "admin"}
         return None
 
@@ -176,7 +188,7 @@ def register(request: Request, req: RegisterRequest, response: Response) -> Regi
     if get_user_by_email(req.email):
         raise HTTPException(status_code=409, detail="Email already registered")
 
-    password_hash = _PWD_CTX.hash(req.password)
+    password_hash = _hash_password(req.password)
     user = create_user(req.email.strip().lower(), password_hash, role=req.role)
     if user is None:
         raise HTTPException(
