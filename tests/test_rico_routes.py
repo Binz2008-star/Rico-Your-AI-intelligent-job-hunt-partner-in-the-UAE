@@ -219,7 +219,156 @@ class TestChatService:
 
     def test_handle_jotform_submission_delegates(self):
         from src.services.chat_service import handle_jotform_submission
-        payload = {"pretty": {}}
+        # Must include user data so the service doesn't short-circuit before delegating.
+        payload = {"pretty": {"email": "test@example.com", "full_name": "Test User"}}
         with patch("src.rico_jotform_webhook.handle_jotform_submission", return_value=_JOTFORM_RESPONSE):
             result = handle_jotform_submission(payload)
         assert result == _JOTFORM_RESPONSE
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Regression: Jotform webhook robustness
+# Covers the production 500 caused by empty/minimal Agent test payloads and
+# raw Jotform field labels not matching the snake_case keys Rico expects.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestJotformWebhookRobustness:
+    """Regression suite for Jotform 500 bug (rico-job-automation-api)."""
+
+    # ── HTTP endpoint (via TestClient) ────────────────────────────────────────
+
+    def test_agent_test_payload_returns_200(self, client):
+        """Minimal Jotform Agent 'Send API Request' test payload must not 500."""
+        r = client.post(
+            "/api/v1/rico/webhooks/jotform",
+            json={"formID": "261277622782059", "consent": "yes"},
+        )
+        assert r.status_code == 200, f"Got {r.status_code}: {r.text}"
+
+    def test_agent_test_payload_returns_accepted(self, client):
+        r = client.post(
+            "/api/v1/rico/webhooks/jotform",
+            json={"formID": "261277622782059", "consent": "yes"},
+        )
+        body = r.json()
+        assert body["status"] == "accepted"
+        assert "message" in body
+
+    def test_empty_payload_returns_200(self, client):
+        r = client.post("/api/v1/rico/webhooks/jotform", json={})
+        assert r.status_code == 200
+
+    def test_empty_payload_returns_accepted(self, client):
+        r = client.post("/api/v1/rico/webhooks/jotform", json={})
+        body = r.json()
+        assert body["status"] == "accepted"
+
+    def test_raw_jotform_field_names_reach_rico_handler(self, client):
+        """Raw Jotform labels ('Full Name', 'Email') must be normalised and delegated."""
+        payload = {
+            "Full Name": "Robin Edwan",
+            "Email": "robin@example.com",
+            "Telegram Username": "@robin",
+            "Target Job Titles": "HSE Manager",
+        }
+        with patch("src.rico_jotform_webhook.handle_jotform_submission", return_value=_JOTFORM_RESPONSE):
+            r = client.post("/api/v1/rico/webhooks/jotform", json=payload)
+        assert r.status_code == 200
+        assert r.json()["status"] == "ok"
+
+    def test_pretty_key_payload_reaches_rico_handler(self, client):
+        """Payload already using 'pretty' dict must be passed through unchanged."""
+        payload = {
+            "pretty": {
+                "full_name": "Robin Edwan",
+                "email": "robin@example.com",
+            }
+        }
+        with patch("src.rico_jotform_webhook.handle_jotform_submission", return_value=_JOTFORM_RESPONSE):
+            r = client.post("/api/v1/rico/webhooks/jotform", json=payload)
+        assert r.status_code == 200
+        assert r.json()["status"] == "ok"
+
+    def test_db_error_returns_200_not_500(self, client):
+        """Even when the DB write fails, the router must return 200."""
+        payload = {"pretty": {"email": "x@example.com"}}
+        with patch(
+            "src.rico_jotform_webhook.handle_jotform_submission",
+            side_effect=RuntimeError("RicoDB unavailable: DATABASE_URL or psycopg2 missing"),
+        ):
+            r = client.post("/api/v1/rico/webhooks/jotform", json=payload)
+        assert r.status_code == 200
+        body = r.json()
+        assert body["status"] == "accepted"
+
+    def test_invalid_json_returns_200(self, client):
+        r = client.post(
+            "/api/v1/rico/webhooks/jotform",
+            content=b"{not valid json",
+            headers={"Content-Type": "application/json"},
+        )
+        assert r.status_code == 200
+        assert r.json()["status"] == "accepted"
+
+    # ── Service-layer unit tests (no HTTP) ────────────────────────────────────
+
+    def test_normalize_strips_non_profile_keys(self):
+        from src.services.chat_service import _normalize_jotform_payload
+        out = _normalize_jotform_payload({"formID": "123", "consent": "yes"})
+        assert "formID" in out
+        assert "consent" in out
+
+    def test_normalize_maps_full_name(self):
+        from src.services.chat_service import _normalize_jotform_payload
+        out = _normalize_jotform_payload({"Full Name": "Robin"})
+        assert out.get("full_name") == "Robin"
+        assert "Full Name" not in out
+
+    def test_normalize_maps_email(self):
+        from src.services.chat_service import _normalize_jotform_payload
+        out = _normalize_jotform_payload({"Email": "a@b.com"})
+        assert out.get("email") == "a@b.com"
+
+    def test_normalize_maps_target_job_titles(self):
+        from src.services.chat_service import _normalize_jotform_payload
+        out = _normalize_jotform_payload({"Target Job Titles": "HSE Manager"})
+        assert out.get("target_roles") == "HSE Manager"
+
+    def test_normalize_passthrough_on_pretty_key(self):
+        from src.services.chat_service import _normalize_jotform_payload
+        payload = {"pretty": {"email": "x@y.com"}}
+        assert _normalize_jotform_payload(payload) is payload
+
+    def test_has_user_data_false_for_agent_test_payload(self):
+        from src.services.chat_service import _has_user_data
+        assert _has_user_data({"formID": "261277622782059", "consent": "yes"}) is False
+
+    def test_has_user_data_true_for_email(self):
+        from src.services.chat_service import _has_user_data
+        assert _has_user_data({"email": "a@b.com"}) is True
+
+    def test_has_user_data_true_via_pretty_key(self):
+        from src.services.chat_service import _has_user_data
+        assert _has_user_data({"pretty": {"full_name": "Robin"}}) is True
+
+    def test_service_short_circuits_empty_payload(self):
+        from src.services.chat_service import handle_jotform_submission
+        result = handle_jotform_submission({})
+        assert result["status"] == "accepted"
+        assert "no profile fields" in result["message"]
+
+    def test_service_short_circuits_agent_test_payload(self):
+        from src.services.chat_service import handle_jotform_submission
+        result = handle_jotform_submission({"formID": "261277622782059", "consent": "yes"})
+        assert result["status"] == "accepted"
+
+    def test_service_returns_accepted_on_db_error(self):
+        from src.services.chat_service import handle_jotform_submission
+        payload = {"pretty": {"email": "x@example.com"}}
+        with patch(
+            "src.rico_jotform_webhook.handle_jotform_submission",
+            side_effect=RuntimeError("DB down"),
+        ):
+            result = handle_jotform_submission(payload)
+        assert result["status"] == "accepted"
+        assert "pending" in result["message"]

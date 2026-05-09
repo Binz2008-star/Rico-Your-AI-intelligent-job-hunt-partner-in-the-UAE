@@ -61,5 +61,15 @@ async def rico_telegram_webhook(request: Request) -> Dict[str, Any]:
 
 @router.post("/webhooks/jotform")
 async def rico_jotform_webhook(request: Request) -> Dict[str, Any]:
-    payload = await request.json()
-    return chat_service.handle_jotform_submission(payload)
+    try:
+        payload = await request.json()
+    except Exception:
+        logger.warning("jotform_webhook: invalid JSON body")
+        return {"status": "accepted", "message": "Webhook received"}
+    try:
+        return chat_service.handle_jotform_submission(payload)
+    except Exception as exc:
+        # Belt-and-suspenders: service layer already guards, but log anything
+        # that escapes and still return 200 so Jotform doesn't retry.
+        logger.warning("jotform_webhook_error: %s: %s", type(exc).__name__, exc)
+        return {"status": "accepted", "message": "Webhook received, processing error logged"}
