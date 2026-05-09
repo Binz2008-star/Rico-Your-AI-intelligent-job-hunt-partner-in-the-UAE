@@ -39,7 +39,8 @@ def list_jobs(
 
 
 def _list_from_json(offset: int, limit: int, min_score: int) -> Dict[str, Any]:
-    all_jobs = get_applied_jobs()
+    from src.job_history import load_job_history
+    all_jobs = load_job_history()
     filtered = [j for j in all_jobs if isinstance(j, dict) and j.get("score", 0) >= min_score]
     filtered.sort(key=lambda j: j.get("score", 0), reverse=True)
     total = len(filtered)

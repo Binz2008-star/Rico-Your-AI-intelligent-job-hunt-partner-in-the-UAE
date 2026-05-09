@@ -11,6 +11,7 @@ All executed actions are logged to the audit repository.
 """
 from __future__ import annotations
 
+import inspect
 import logging
 import time
 from datetime import datetime, timezone
@@ -97,7 +98,16 @@ def _execute_action(action: AgentAction, user_email: str) -> ToolExecutionResult
         "action_execute type=%r tool=%r job_title=%r user=%r action_id=%s",
         action.type, tool_name, job.get("title", ""), user_email, action.action_id,
     )
-    result = tool_def.fn(job)
+    # Detect whether the tool expects a job argument.  No-arg tools (e.g.
+    # trigger_pipeline) should be called without arguments even on the action
+    # path, which passes a job dict for job-oriented tools.
+    _sig = inspect.signature(tool_def.fn)
+    _needs_job = any(
+        p.default is inspect.Parameter.empty
+        and p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        for p in _sig.parameters.values()
+    )
+    result = tool_def.fn(job) if _needs_job else tool_def.fn()
 
     # 5. Audit log
     _audit(action, user_email, result, int((time.monotonic() - start) * 1000))

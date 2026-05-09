@@ -22,8 +22,11 @@ from typing import Any, Dict
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from src.api.auth import router as auth_router
+from src.api.rate_limit import limiter, rate_limit_exceeded_handler
 from src.api.routers.agent import router as agent_router
 from src.api.routers.applications import router as applications_router
 from src.api.routers.rico_chat import router as rico_chat_router
@@ -65,6 +68,10 @@ app = FastAPI(
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 
@@ -114,10 +121,19 @@ def root() -> Dict[str, str]:
 @app.get("/health")
 def health() -> Dict[str, Any]:
     from src.db import is_db_available
+    from src.rico_env import get_rico_env_report
+    rico = get_rico_env_report()
     return {
         "status": "healthy",
         "db": "connected" if is_db_available() else "json_fallback",
         "version": "1.0.0",
+        "rico": {
+            "ready_for_api":      rico.ready_for_api,
+            "ready_for_db":       rico.ready_for_db,
+            "ready_for_telegram": rico.ready_for_telegram,
+            "ready_for_openai":   rico.ready_for_openai,
+            "ready_for_jotform":  rico.ready_for_jotform,
+        },
         "endpoints": {
             "auth":         "/api/v1/auth/login",
             "jobs":         "/api/v1/jobs",
@@ -125,6 +141,7 @@ def health() -> Dict[str, Any]:
             "stats":        "/api/v1/stats",
             "settings":     "/api/v1/settings",
             "pipeline":     "/api/v1/pipeline/status",
+            "rico_chat":    "/api/v1/rico/chat",
             "docs":         "/api/docs",
         },
     }

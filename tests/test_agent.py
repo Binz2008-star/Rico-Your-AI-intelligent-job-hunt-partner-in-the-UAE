@@ -510,3 +510,164 @@ class TestAgentSchemas:
         from src.schemas.agent import ActionStyle, AgentAction
         a = AgentAction(type="apply", label="Apply", style=ActionStyle.PRIMARY)
         assert a.style == "primary"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 7. Codex review fixes
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestOrchestratorNoArgTools:
+    """Orchestrator must call no-argument tools without passing the job dict."""
+
+    def test_trigger_pipeline_action_succeeds(self, client):
+        """trigger_pipeline via action path must not crash with TypeError (too many args)."""
+        with patch("src.services.pipeline_service.trigger", return_value=None):
+            r = client.post("/api/v1/agent/chat", json={
+                "message": "run now",
+                "action": {"type": "trigger_pipeline", "label": "Trigger"},
+            })
+        assert r.status_code == 200
+        body = r.json()
+        assert body["success"] is True
+
+    def test_trigger_pipeline_action_already_running_returns_failure(self, client):
+        """Already-running pipeline should return success=False, not a server crash."""
+        with patch("src.services.pipeline_service.trigger", side_effect=RuntimeError("already running")):
+            r = client.post("/api/v1/agent/chat", json={
+                "message": "run now",
+                "action": {"type": "trigger_pipeline", "label": "Trigger"},
+            })
+        assert r.status_code == 200
+        body = r.json()
+        assert body["success"] is False
+
+    def test_orchestrator_calls_no_arg_tool_without_job(self):
+        """Unit-level: _execute_action must not pass job to a zero-arg tool."""
+        from src.agent.orchestrator.orchestrator import _execute_action
+        from src.schemas.agent import AgentAction
+
+        action = AgentAction(type="trigger_pipeline", label="Trigger")
+        with patch("src.services.pipeline_service.trigger", return_value=None) as mock_trigger:
+            result = _execute_action(action, user_email="test@example.com")
+        assert result.success is True
+        # trigger() itself takes no args — confirm it was called with no positional args
+        mock_trigger.assert_called_once_with()
+
+
+class TestApplyServiceIndeedMethod:
+    """apply_service must call IndeedApplyEngine.apply_one(), not .apply()."""
+
+    def test_indeed_apply_calls_apply_one(self):
+        from src.services import apply_service
+
+        mock_result = MagicMock()
+        mock_result.status.value = "success"
+        mock_result.message = "Applied via Easy Apply"
+        mock_result.job_id = "jk=abc123"
+
+        mock_engine = MagicMock()
+        mock_engine.apply_one.return_value = mock_result
+        mock_engine.__enter__ = MagicMock(return_value=mock_engine)
+        mock_engine.__exit__ = MagicMock(return_value=False)
+
+        with patch("src.indeed_apply.IndeedApplyEngine", return_value=mock_engine):
+            result = apply_service._apply_indeed({
+                "link": "https://indeed.com/viewjob?jk=abc123",
+                "title": "HSE Manager",
+                "company": "ACME",
+            })
+
+        mock_engine.apply_one.assert_called_once()
+        assert result["status"] == "success"
+        assert result["job_id"] == "jk=abc123"
+
+    def test_indeed_apply_does_not_call_apply(self):
+        """Confirm the old broken .apply() method is never called."""
+        from src.services import apply_service
+
+        mock_result = MagicMock()
+        mock_result.status.value = "success"
+        mock_result.message = ""
+        mock_result.job_id = ""
+
+        mock_engine = MagicMock()
+        mock_engine.apply_one.return_value = mock_result
+        mock_engine.__enter__ = MagicMock(return_value=mock_engine)
+        mock_engine.__exit__ = MagicMock(return_value=False)
+
+        with patch("src.indeed_apply.IndeedApplyEngine", return_value=mock_engine):
+            apply_service._apply_indeed({"link": "https://indeed.com/viewjob?jk=xyz", "title": "T", "company": "C"})
+
+        mock_engine.apply.assert_not_called()
+
+    def test_indeed_apply_engine_error_returns_error_status(self):
+        from src.services import apply_service
+
+        mock_engine = MagicMock()
+        mock_engine.apply_one.side_effect = RuntimeError("browser crashed")
+        mock_engine.__enter__ = MagicMock(return_value=mock_engine)
+        mock_engine.__exit__ = MagicMock(return_value=False)
+
+        with patch("src.indeed_apply.IndeedApplyEngine", return_value=mock_engine):
+            result = apply_service._apply_indeed({"link": "https://indeed.com/viewjob?jk=xyz"})
+
+        assert result["status"] == "error"
+        assert "browser crashed" in result["message"]
+
+
+class TestJobsServiceJSONFallback:
+    """JSON fallback for list_jobs must read job_history.json, not applied_jobs.json."""
+
+    def test_list_from_json_reads_job_history(self):
+        from src.services.jobs_service import _list_from_json
+
+        mock_jobs = [
+            {"title": "HSE Manager", "score": 80, "link": "https://x.com/1", "company": "A"},
+            {"title": "QHSE Manager", "score": 70, "link": "https://x.com/2", "company": "B"},
+        ]
+
+        with patch("src.job_history.load_job_history", return_value=mock_jobs) as mock_hist:
+            result = _list_from_json(0, 20, 0)
+
+        mock_hist.assert_called_once()
+        assert result["total"] == 2
+        assert len(result["jobs"]) == 2
+
+    def test_list_from_json_does_not_read_applied_jobs(self):
+        from src.services.jobs_service import _list_from_json
+
+        with patch("src.job_history.load_job_history", return_value=[]) as mock_hist, \
+             patch("src.applications.load_applied_jobs") as mock_applied:
+            _list_from_json(0, 20, 0)
+
+        mock_hist.assert_called_once()
+        mock_applied.assert_not_called()
+
+    def test_list_from_json_filters_by_min_score(self):
+        from src.services.jobs_service import _list_from_json
+
+        mock_jobs = [
+            {"title": "Good Job", "score": 80, "link": "https://x.com/1"},
+            {"title": "Low Score", "score": 20, "link": "https://x.com/2"},
+        ]
+
+        with patch("src.job_history.load_job_history", return_value=mock_jobs):
+            result = _list_from_json(0, 20, 60)
+
+        assert result["total"] == 1
+        assert result["jobs"][0]["title"] == "Good Job"
+
+    def test_list_from_json_sorts_by_score_descending(self):
+        from src.services.jobs_service import _list_from_json
+
+        mock_jobs = [
+            {"title": "Low", "score": 50, "link": "https://x.com/1"},
+            {"title": "High", "score": 90, "link": "https://x.com/2"},
+            {"title": "Mid", "score": 70, "link": "https://x.com/3"},
+        ]
+
+        with patch("src.job_history.load_job_history", return_value=mock_jobs):
+            result = _list_from_json(0, 20, 0)
+
+        scores = [j["score"] for j in result["jobs"]]
+        assert scores == sorted(scores, reverse=True)
