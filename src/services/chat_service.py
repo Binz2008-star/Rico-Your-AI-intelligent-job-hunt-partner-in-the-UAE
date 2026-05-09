@@ -72,14 +72,13 @@ def _normalize_jotform_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _has_user_data(payload: Dict[str, Any]) -> bool:
-    """Return True if at least one identifiable user field is present."""
+    """Return True only if a stable unique identifier (email or telegram_username) is present.
+
+    full_name / name are not unique and cannot serve as a user_id, so payloads
+    containing only a name are treated as test/agent probes and short-circuited.
+    """
     answers = payload.get("pretty", payload)
-    return bool(
-        answers.get("email")
-        or answers.get("telegram_username")
-        or answers.get("full_name")
-        or answers.get("name")
-    )
+    return bool(answers.get("email") or answers.get("telegram_username"))
 
 
 # ── Public service functions ──────────────────────────────────────────────────

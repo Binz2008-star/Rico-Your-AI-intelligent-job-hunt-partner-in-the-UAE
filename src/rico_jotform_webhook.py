@@ -2,17 +2,42 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+import logging
+import os
+from typing import Any, Dict, Optional
 
 from src.rico_db import RicoDB
+
+logger = logging.getLogger(__name__)
+
+
+def _active_form_ids() -> frozenset:
+    """Return accepted Jotform form IDs from JOTFORM_FORM_ID env var.
+
+    Supports comma-separated values for multi-form setups.
+    Returns an empty frozenset when the var is unset — disables validation.
+    """
+    raw = os.getenv("JOTFORM_FORM_ID", "").strip()
+    if not raw:
+        return frozenset()
+    return frozenset(part.strip() for part in raw.split(",") if part.strip())
+
+
+def _resolve_user_id(answers: Dict[str, Any]) -> Optional[str]:
+    """Derive a stable, unique user_id. Email preferred; telegram_username is fallback.
+
+    full_name is intentionally excluded — it is not unique and cannot be a user_id.
+    """
+    return answers.get("email") or answers.get("telegram_username") or None
 
 
 def map_jotform_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     answers = payload.get("pretty", payload)
+    user_id = _resolve_user_id(answers)
 
     return {
         "user": {
-            "external_user_id": answers.get("email") or answers.get("telegram_username") or answers.get("full_name"),
+            "external_user_id": user_id,
             "name": answers.get("full_name") or answers.get("name"),
             "email": answers.get("email"),
             "phone": answers.get("phone"),
@@ -35,18 +60,78 @@ def map_jotform_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
             "communication_style": answers.get("communication_style"),
         },
         "cv_file_url": answers.get("cv_upload"),
+        "consent": bool(answers.get("consent")),
+        "form_id": payload.get("formID") or payload.get("form_id") or payload.get("formId"),
+        "submission_id": payload.get("submissionID") or payload.get("submission_id", "?"),
     }
 
 
 def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
-    db = RicoDB()
+    form_id = (
+        payload.get("formID") or payload.get("form_id") or payload.get("formId")
+    )
+    submission_id = payload.get("submissionID") or payload.get("submission_id", "?")
+
+    # ── Form ID validation ─────────────────────────────────────────────────────
+    active_ids = _active_form_ids()
+    if active_ids and form_id not in active_ids:
+        logger.warning(
+            "jotform_webhook: rejected unknown form_id=%s submission=%s",
+            form_id, submission_id,
+        )
+        return {"status": "rejected", "reason": "unknown_form_id"}
+
     mapped = map_jotform_payload(payload)
+    user_id = mapped["user"].get("external_user_id")
 
-    user = db.upsert_user(mapped["user"])
-    db.upsert_profile(user["id"], mapped["profile"], cv_file_url=mapped.get("cv_file_url"))
-    db.upsert_settings(user["id"], mapped["settings"])
+    # No stable user_id — cannot create a meaningful DB record.
+    if not user_id:
+        logger.info(
+            "jotform_webhook: no stable user_id in submission=%s — skipping DB write",
+            submission_id,
+        )
+        return {"status": "accepted", "message": "No identifiable user field provided"}
 
-    return {
-        "status": "ok",
-        "user_id": str(user["id"]),
-    }
+    logger.info(
+        "jotform_webhook: processing form_id=%s submission=%s user_id=%s consent=%s",
+        mapped.get("form_id"), mapped.get("submission_id"), user_id, mapped.get("consent"),
+    )
+
+    # ── DB writes — profile/settings failures are isolated ────────────────────
+    db = RicoDB()
+    user = db.upsert_user(mapped["user"])   # raises on failure — caught by chat_service
+    db_user_id = str(user["id"])
+
+    try:
+        db.upsert_profile(db_user_id, mapped["profile"], cv_file_url=mapped.get("cv_file_url"))
+    except Exception as exc:
+        logger.error(
+            "jotform_webhook: upsert_profile failed db_user_id=%s: %s", db_user_id, exc
+        )
+
+    try:
+        db.upsert_settings(db_user_id, mapped["settings"])
+    except Exception as exc:
+        logger.error(
+            "jotform_webhook: upsert_settings failed db_user_id=%s: %s", db_user_id, exc
+        )
+
+    # ── Consent → mark onboarding complete ────────────────────────────────────
+    if mapped.get("consent"):
+        try:
+            from src.repositories.onboarding_repo import mark_onboarding_complete
+            mark_onboarding_complete(user_id)
+            logger.info(
+                "jotform_webhook: onboarding marked complete user_id=%s", user_id
+            )
+        except Exception as exc:
+            logger.warning(
+                "jotform_webhook: mark_onboarding_complete failed user_id=%s: %s",
+                user_id, exc,
+            )
+
+    logger.info(
+        "jotform_webhook: ok form_id=%s submission=%s db_user_id=%s",
+        mapped.get("form_id"), mapped.get("submission_id"), db_user_id,
+    )
+    return {"status": "ok", "user_id": db_user_id}
