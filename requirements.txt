@@ -14,3 +14,4 @@ python-multipart
 pydantic
 PyMuPDF
 python-docx
+filelock
