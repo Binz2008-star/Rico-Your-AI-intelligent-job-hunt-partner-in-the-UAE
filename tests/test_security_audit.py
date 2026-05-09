@@ -349,12 +349,12 @@ class TestRateLimiting:
             pytest.xfail("No rate limiting on /login endpoint — brute-force vector open")
 
     def test_jotform_webhook_flood_does_not_crash(self, client):
-        """100 rapid webhook calls must all return 200."""
+        """100 rapid webhook calls must not crash (200 or 429 from rate limiting, never 500)."""
         results = []
         for i in range(100):
             r = client.post("/api/v1/rico/webhooks/jotform", json={"formID": str(i)})
             results.append(r.status_code)
-        assert all(s == 200 for s in results), f"Some calls failed: {set(results)}"
+        assert all(s in (200, 429) for s in results), f"Unexpected status: {set(results)}"
 
     def test_chat_endpoint_flood(self, client):
         """50 rapid chat calls must not cause 500."""
@@ -466,7 +466,7 @@ class TestConcurrency:
             t.join(timeout=10)
 
         assert not errors, f"Concurrent webhook errors: {errors}"
-        assert all(s == 200 for s in results), f"Non-200 in concurrent test: {set(results)}"
+        assert all(s in (200, 429) for s in results), f"Unexpected status in concurrent test: {set(results)}"
 
     def test_concurrent_chat_same_user_no_crash(self, client):
         """10 simultaneous chats from same user_id — no crash."""

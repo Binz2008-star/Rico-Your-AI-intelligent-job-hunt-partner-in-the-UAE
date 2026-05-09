@@ -22,8 +22,11 @@ from typing import Any, Dict
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from src.api.auth import router as auth_router
+from src.api.rate_limit import limiter, rate_limit_exceeded_handler
 from src.api.routers.agent import router as agent_router
 from src.api.routers.applications import router as applications_router
 from src.api.routers.rico_chat import router as rico_chat_router
@@ -65,6 +68,10 @@ app = FastAPI(
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 

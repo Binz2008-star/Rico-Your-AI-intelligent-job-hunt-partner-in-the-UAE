@@ -10,6 +10,8 @@ google-auth-httplib2
 playwright
 fastapi
 uvicorn[standard]
+slowapi>=0.1.9
+limits>=3.6.0
 python-multipart
 pydantic
 PyMuPDF

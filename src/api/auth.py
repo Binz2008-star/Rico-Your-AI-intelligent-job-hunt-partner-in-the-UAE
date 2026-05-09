@@ -24,6 +24,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
+from src.api.rate_limit import LIMIT_LOGIN, limiter
 from src.schemas.auth import LoginRequest, LoginResponse
 
 logger = logging.getLogger(__name__)
@@ -99,7 +100,8 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=LoginResponse)
-def login(req: LoginRequest, response: Response) -> LoginResponse:
+@limiter.limit(LIMIT_LOGIN)
+def login(request: Request, req: LoginRequest, response: Response) -> LoginResponse:
     if not verify_credentials(req.email, req.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
