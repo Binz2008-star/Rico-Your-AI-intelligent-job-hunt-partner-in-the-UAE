@@ -25,6 +25,7 @@ from fastapi.responses import JSONResponse
 from src.api.auth import router as auth_router
 from src.api.routers.agent import router as agent_router
 from src.api.routers.applications import router as applications_router
+from src.api.routers.rico_chat import router as rico_chat_router
 from src.api.routers.jobs import router as jobs_router
 from src.api.routers.pipeline import router as pipeline_router
 from src.api.routers.settings import router as settings_router
@@ -67,6 +68,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(agent_router)
+app.include_router(rico_chat_router)
 app.include_router(jobs_router)
 app.include_router(applications_router)
 app.include_router(stats_router)
