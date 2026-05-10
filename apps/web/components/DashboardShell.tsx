@@ -6,6 +6,7 @@ import { logout } from "@/lib/api";
 
 const NAV = [
   { href: "/dashboard",      label: "Dashboard" },
+  { href: "/chat",           label: "Chat" },
   { href: "/profile",        label: "Profile" },
   { href: "/saved-searches", label: "Saved Searches" },
 ];
