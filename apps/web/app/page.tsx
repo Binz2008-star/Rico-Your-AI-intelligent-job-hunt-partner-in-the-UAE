@@ -1,205 +1,41 @@
-"use client";
-
-import { useEffect, useMemo, useRef, useState } from "react";
-
-type Message = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  createdAt: string;
-};
-
-const API_URL = process.env.NEXT_PUBLIC_RICO_API || "http://localhost:8000";
-
-function uuid() {
-  return Math.random().toString(36).slice(2);
-}
+import Link from "next/link";
 
 export default function HomePage() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: uuid(),
-      role: "assistant",
-      content:
-        "I’m Rico. I can track jobs, remember preferences, detect opportunities, and help manage your applications.",
-      createdAt: new Date().toISOString(),
-    },
-  ]);
-
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const bottomRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
-
-  async function sendMessage() {
-    const trimmed = input.trim();
-    if (!trimmed || loading) return;
-
-    const userMessage: Message = {
-      id: uuid(),
-      role: "user",
-      content: trimmed,
-      createdAt: new Date().toISOString(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
-    setLoading(true);
-
-    try {
-      const response = await fetch(`${API_URL}/chat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          user_id: "web-user",
-          message: trimmed,
-        }),
-      });
-
-      const data = await response.json();
-
-      const assistantMessage: Message = {
-        id: uuid(),
-        role: "assistant",
-        content:
-          data.reply ||
-          data.message ||
-          "Rico processed your request.",
-        createdAt: new Date().toISOString(),
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (error) {
-      const assistantMessage: Message = {
-        id: uuid(),
-        role: "assistant",
-        content:
-          "Rico could not reach the backend API. Start the FastAPI server and verify NEXT_PUBLIC_RICO_API.",
-        createdAt: new Date().toISOString(),
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const canSend = useMemo(() => input.trim().length > 0 && !loading, [input, loading]);
-
   return (
-    <main style={{ minHeight: "100vh", background: "#0b1020", color: "#f5f7fb" }}>
-      <div
-        style={{
-          maxWidth: 900,
-          margin: "0 auto",
-          padding: "32px 16px",
-          display: "flex",
-          flexDirection: "column",
-          minHeight: "100vh",
-        }}
-      >
-        <header style={{ marginBottom: 24 }}>
-          <h1 style={{ margin: 0, fontSize: 36 }}>Rico AI</h1>
-          <p style={{ opacity: 0.8 }}>
-            Persistent autonomous career assistant
-          </p>
-        </header>
+    <main className="flex min-h-screen flex-col items-center justify-center bg-zinc-950 px-4 text-center">
+      <div className="max-w-2xl">
+        <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-xs text-indigo-400">
+          Now in early access
+        </div>
 
-        <section
-          style={{
-            flex: 1,
-            overflowY: "auto",
-            border: "1px solid rgba(255,255,255,0.08)",
-            borderRadius: 16,
-            padding: 16,
-            background: "rgba(255,255,255,0.03)",
-          }}
-        >
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              style={{
-                display: "flex",
-                justifyContent:
-                  message.role === "user" ? "flex-end" : "flex-start",
-                marginBottom: 16,
-              }}
-            >
-              <div
-                style={{
-                  maxWidth: "80%",
-                  padding: "14px 16px",
-                  borderRadius: 14,
-                  background:
-                    message.role === "user"
-                      ? "#4f46e5"
-                      : "rgba(255,255,255,0.08)",
-                  lineHeight: 1.5,
-                  whiteSpace: "pre-wrap",
-                }}
-              >
-                {message.content}
-              </div>
-            </div>
-          ))}
+        <h1 className="mb-4 text-4xl font-bold tracking-tight text-white sm:text-5xl md:text-6xl">
+          Your autonomous AI job hunter.
+        </h1>
 
-          {loading && (
-            <div style={{ opacity: 0.7, padding: 8 }}>
-              Rico is thinking…
-            </div>
-          )}
+        <p className="mb-8 text-lg leading-relaxed text-zinc-400">
+          Rico AI finds matching jobs, explains why they fit, tracks
+          applications, and helps you apply faster.
+        </p>
 
-          <div ref={bottomRef} />
-        </section>
-
-        <footer
-          style={{
-            marginTop: 16,
-            display: "flex",
-            gap: 12,
-          }}
-        >
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask Rico about jobs, applications, interviews, or strategy…"
-            rows={3}
-            style={{
-              flex: 1,
-              borderRadius: 12,
-              padding: 14,
-              border: "1px solid rgba(255,255,255,0.1)",
-              background: "rgba(255,255,255,0.05)",
-              color: "white",
-              resize: "none",
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-              }
-            }}
-          />
-
-          <button
-            onClick={sendMessage}
-            disabled={!canSend}
-            style={{
-              minWidth: 120,
-              borderRadius: 12,
-              border: "none",
-              cursor: canSend ? "pointer" : "not-allowed",
-              opacity: canSend ? 1 : 0.5,
-            }}
+        <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+          <Link
+            href="/login"
+            className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-indigo-500"
           >
-            Send
-          </button>
-        </footer>
+            Sign in
+          </Link>
+          <Link
+            href="/dashboard"
+            className="rounded-lg border border-zinc-700 px-6 py-3 text-sm font-medium text-zinc-300 transition-colors hover:border-zinc-500 hover:text-white"
+          >
+            View dashboard
+          </Link>
+        </div>
+
+        <p className="mt-12 text-xs text-zinc-600">
+          Powered by Rico AI — backend at{" "}
+          <span className="text-zinc-500">rico-job-automation-api.onrender.com</span>
+        </p>
       </div>
     </main>
   );
