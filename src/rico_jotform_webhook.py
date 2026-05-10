@@ -11,6 +11,32 @@ from src.rico_db import RicoDB
 logger = logging.getLogger(__name__)
 
 
+def _is_production() -> bool:
+    """Check if we're running in production environment."""
+    return os.getenv("ENVIRONMENT", "development").lower() == "production"
+
+
+def _validate_webhook_secret() -> bool:
+    """Validate that JOTFORM_WEBHOOK_SECRET is set in production.
+
+    Returns:
+        bool: True if secret is valid, False otherwise.
+        In production, fails closed (returns False) when secret is missing.
+        In development, allows missing secret (returns True).
+    """
+    if not _is_production():
+        # Development mode: allow missing webhook secret
+        return True
+
+    # Production mode: require webhook secret
+    webhook_secret = os.getenv("JOTFORM_WEBHOOK_SECRET")
+    if not webhook_secret:
+        logger.warning("jotform_webhook: production mode missing JOTFORM_WEBHOOK_SECRET")
+        return False
+
+    return True
+
+
 def _active_form_ids() -> frozenset:
     """Return accepted Jotform form IDs from JOTFORM_FORM_ID env var.
 
@@ -71,6 +97,14 @@ def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
         payload.get("formID") or payload.get("form_id") or payload.get("formId")
     )
     submission_id = payload.get("submissionID") or payload.get("submission_id", "?")
+
+    # ── Webhook secret validation (security) ────────────────────────────────────
+    if not _validate_webhook_secret():
+        logger.warning(
+            "jotform_webhook: rejected missing webhook secret in production form_id=%s submission=%s",
+            form_id, submission_id,
+        )
+        return {"status": "rejected", "reason": "missing_webhook_secret"}
 
     # ── Form ID validation ─────────────────────────────────────────────────────
     active_ids = _active_form_ids()
