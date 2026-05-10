@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { resetPassword } from "@/lib/api";
@@ -10,25 +10,36 @@ function ResetPasswordForm() {
   const searchParams = useSearchParams();
   const token        = searchParams.get("token") ?? "";
 
-  const [password,  setPassword]  = useState("");
-  const [confirm,   setConfirm]   = useState("");
-  const [error,     setError]     = useState("");
-  const [loading,   setLoading]   = useState(false);
-  const [success,   setSuccess]   = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirm,  setConfirm]  = useState("");
+  const [error,    setError]    = useState("");
+  const [loading,  setLoading]  = useState(false);
+  const [success,  setSuccess]  = useState(false);
+
+  const tooShort   = password.length > 0 && password.length < 8;
+  const mismatch   = confirm.length > 0 && password !== confirm;
+  const isValid    = !!token && password.length >= 8 && password === confirm;
+
+  const inlineMsg  = tooShort
+    ? "Password must be at least 8 characters"
+    : mismatch
+    ? "Passwords do not match"
+    : "";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!isValid) return;
     setError("");
-    if (password !== confirm) {
-      setError("Passwords do not match");
-      return;
-    }
     setLoading(true);
     try {
       await resetPassword(token, password);
       setSuccess(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Reset failed. The link may have expired.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Reset failed. The link may have expired."
+      );
     } finally {
       setLoading(false);
     }
@@ -37,8 +48,9 @@ function ResetPasswordForm() {
   if (!token) {
     return (
       <div className="flex flex-col gap-4 text-center">
-        <p className="text-sm text-red-400">
-          Missing reset token. Please use the link from your reset email.
+        <p className="text-sm text-red-400">Reset token missing.</p>
+        <p className="text-xs text-zinc-500">
+          Use the link from your reset email or request a new one.
         </p>
         <Link
           href="/forgot-password"
@@ -76,9 +88,6 @@ function ResetPasswordForm() {
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          required
-          minLength={8}
-          maxLength={128}
           autoComplete="new-password"
           placeholder="Minimum 8 characters"
           className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -93,22 +102,33 @@ function ResetPasswordForm() {
           type="password"
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
-          required
           autoComplete="new-password"
           placeholder="Repeat new password"
           className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         />
       </div>
 
+      {/* Real-time inline validation — shown as user types, not on submit */}
+      {inlineMsg && (
+        <p className="text-xs text-amber-400">{inlineMsg}</p>
+      )}
+
+      {/* Server/submit errors */}
       {error && <p className="text-sm text-red-400">{error}</p>}
 
       <button
         type="submit"
-        disabled={loading || !password || !confirm}
+        disabled={loading || !isValid}
         className="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {loading ? "Updating…" : "Set new password"}
       </button>
+
+      {!isValid && !inlineMsg && password.length === 0 && (
+        <p className="text-center text-xs text-zinc-600">
+          Enter and confirm your new password above.
+        </p>
+      )}
     </form>
   );
 }
@@ -125,7 +145,11 @@ export default function ResetPasswordPage() {
         </div>
 
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-6">
-          <Suspense fallback={<p className="text-sm text-zinc-500 text-center">Loading…</p>}>
+          <Suspense
+            fallback={
+              <p className="text-center text-sm text-zinc-500">Loading…</p>
+            }
+          >
             <ResetPasswordForm />
           </Suspense>
         </div>
