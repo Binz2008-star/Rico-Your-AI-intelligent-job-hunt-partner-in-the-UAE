@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -147,5 +147,47 @@ def update_last_login(user_id: int) -> None:
         conn.commit()
     except Exception:
         logger.exception("users_repo_update_last_login_failed user_id=%s", user_id)
+    finally:
+        conn.close()
+
+
+def list_active_users() -> List[User]:
+    """Return all active users.  Falls back to [] when DB is unavailable.
+
+    This is the source-of-truth for the multi-user daily scheduler.
+    Phase-1 scheduler support: returns [] when DB is unavailable.
+    """
+    from src.db import get_db_connection, is_db_available
+    if not is_db_available():
+        return []
+    conn = get_db_connection()
+    if not conn:
+        return []
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, email, password_hash, role, is_active, created_at, last_login_at
+                FROM users
+                WHERE is_active = TRUE
+                ORDER BY id
+                """,
+            )
+            rows = cur.fetchall()
+        return [
+            User(
+                id=row[0],
+                email=row[1],
+                password_hash=row[2],
+                role=row[3],
+                is_active=row[4],
+                created_at=row[5],
+                last_login_at=row[6],
+            )
+            for row in rows
+        ]
+    except Exception:
+        logger.exception("users_repo_list_active_failed")
+        return []
     finally:
         conn.close()
