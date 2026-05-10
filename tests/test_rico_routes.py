@@ -18,13 +18,26 @@ os.environ.setdefault("ADMIN_EMAIL", "rico-test@example.com")
 os.environ.setdefault("ADMIN_PASSWORD", "ricopass123")
 os.environ.setdefault("JWT_SECRET", "ricosecret" + "x" * 21)
 
-# ── Shared test client ────────────────────────────────────────────────────────
+# ── Shared test clients ───────────────────────────────────────────────────────
 
 @pytest.fixture(scope="module")
 def client():
+    """Unauthenticated client — used for webhook and upload tests."""
     from fastapi.testclient import TestClient
     from src.api.app import app
     return TestClient(app, raise_server_exceptions=False)
+
+
+@pytest.fixture(scope="module")
+def auth_client():
+    """Authenticated client with a valid JWT cookie — required for /chat."""
+    from fastapi.testclient import TestClient
+    from src.api.app import app
+    from src.api.auth import create_access_token
+    token = create_access_token({"sub": "alice@rico.ai", "role": "user"})
+    tc = TestClient(app, raise_server_exceptions=False)
+    tc.cookies.set("access_token", token)
+    return tc
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -48,46 +61,56 @@ _JOTFORM_RESPONSE = {"status": "ok", "user_id": "42"}
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestRicoChatRouteExists:
-    def test_chat_route_returns_200(self, client):
+    def test_chat_route_returns_200(self, auth_client):
         with patch("src.services.chat_service.send_message", return_value=_CHAT_RESPONSE):
-            r = client.post(
-                "/api/v1/rico/chat",
-                json={"user_id": "user-1", "message": "Hello"},
-            )
+            r = auth_client.post("/api/v1/rico/chat", json={"message": "Hello"})
         assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
 
-    def test_chat_route_not_404(self, client):
+    def test_chat_route_not_404(self, auth_client):
         with patch("src.services.chat_service.send_message", return_value=_CHAT_RESPONSE):
-            r = client.post(
-                "/api/v1/rico/chat",
-                json={"user_id": "user-1", "message": "Hello"},
-            )
+            r = auth_client.post("/api/v1/rico/chat", json={"message": "Hello"})
         assert r.status_code != 404, "Rico chat route is not mounted"
 
-    def test_chat_response_body_passes_through(self, client):
+    def test_chat_response_body_passes_through(self, auth_client):
         with patch("src.services.chat_service.send_message", return_value=_CHAT_RESPONSE):
-            r = client.post(
-                "/api/v1/rico/chat",
-                json={"user_id": "user-2", "message": "Find me jobs"},
-            )
+            r = auth_client.post("/api/v1/rico/chat", json={"message": "Find me jobs"})
         assert r.status_code == 200
         assert r.json()["message"] == "Hello from Rico"
 
-    def test_chat_missing_user_id_returns_422(self, client):
+    def test_unauthenticated_chat_returns_401(self, client):
+        """Web chat must reject unauthenticated requests."""
         r = client.post("/api/v1/rico/chat", json={"message": "Hello"})
+        assert r.status_code == 401, f"Expected 401, got {r.status_code}: {r.text}"
+
+    def test_request_body_user_id_is_ignored_for_authenticated_users(self, auth_client):
+        """user_id in body must never override the identity from the JWT."""
+        captured = {}
+
+        def spy(user_id, message):
+            captured["user_id"] = user_id
+            return _CHAT_RESPONSE
+
+        with patch("src.services.chat_service.send_message", side_effect=spy):
+            r = auth_client.post(
+                "/api/v1/rico/chat",
+                # Send a body user_id for a different user — must be ignored.
+                json={"user_id": "bob@evil.com", "message": "Hello"},
+            )
+        assert r.status_code == 200
+        assert captured["user_id"] == "alice@rico.ai"
+        assert captured["user_id"] != "bob@evil.com"
+
+    def test_chat_missing_message_returns_422(self, auth_client):
+        r = auth_client.post("/api/v1/rico/chat", json={})
         assert r.status_code == 422
 
-    def test_chat_missing_message_returns_422(self, client):
-        r = client.post("/api/v1/rico/chat", json={"user_id": "user-1"})
+    def test_chat_message_over_4096_chars_returns_422(self, auth_client):
+        r = auth_client.post("/api/v1/rico/chat", json={"message": "A" * 4097})
         assert r.status_code == 422
 
-    def test_chat_message_over_4096_chars_returns_422(self, client):
-        r = client.post("/api/v1/rico/chat", json={"user_id": "user-1", "message": "A" * 4097})
-        assert r.status_code == 422
-
-    def test_chat_message_exactly_4096_chars_allowed(self, client):
+    def test_chat_message_exactly_4096_chars_allowed(self, auth_client):
         with patch("src.services.chat_service.send_message", return_value=_CHAT_RESPONSE):
-            r = client.post("/api/v1/rico/chat", json={"user_id": "user-1", "message": "A" * 4096})
+            r = auth_client.post("/api/v1/rico/chat", json={"message": "A" * 4096})
         assert r.status_code == 200
 
 
@@ -428,3 +451,137 @@ class TestJotformWebhookRobustness:
             result = handle_jotform_submission(payload)
         assert result["status"] == "accepted"
         assert "pending" in result["message"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GET /api/v1/me, GET/POST /api/v1/rico/profile, GET/POST saved-searches
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_EMPTY_PROFILE   = {"profile_exists": False, "email": "alice@rico.ai"}
+_FULL_PROFILE    = {
+    "profile_exists": True,
+    "user_id": "alice@rico.ai",
+    "name": "Alice",
+    "email": "alice@rico.ai",
+    "target_roles": ["HSE Manager"],
+    "skills": ["ISO 45001"],
+    "years_experience": 5,
+}
+_SAVED_SEARCHES  = [{"id": 1, "query": "HSE Dubai", "filters": {}, "created_at": "2026-05-10T00:00:00"}]
+
+
+class TestMeRoute:
+    def test_unauthenticated_returns_401(self, client):
+        r = client.get("/api/v1/me")
+        assert r.status_code == 401
+
+    def test_authenticated_returns_200(self, auth_client):
+        r = auth_client.get("/api/v1/me")
+        assert r.status_code == 200
+
+    def test_authenticated_returns_email(self, auth_client):
+        r = auth_client.get("/api/v1/me")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["email"] == "alice@rico.ai"
+        assert body["authenticated"] is True
+
+    def test_authenticated_returns_role(self, auth_client):
+        r = auth_client.get("/api/v1/me")
+        assert "role" in r.json()
+
+
+class TestRicoProfileRoute:
+    def test_unauthenticated_returns_401(self, client):
+        r = client.get("/api/v1/rico/profile")
+        assert r.status_code == 401
+
+    def test_authenticated_empty_profile_returns_200(self, auth_client):
+        with patch("src.repositories.profile_repo.get_profile", return_value=None):
+            r = auth_client.get("/api/v1/rico/profile")
+        assert r.status_code == 200
+        assert r.json()["profile_exists"] is False
+
+    def test_authenticated_empty_profile_has_email(self, auth_client):
+        with patch("src.repositories.profile_repo.get_profile", return_value=None):
+            r = auth_client.get("/api/v1/rico/profile")
+        assert r.json()["email"] == "alice@rico.ai"
+
+    def test_authenticated_full_profile_returns_200(self, auth_client):
+        from src.rico_agent import RicoProfile
+        profile = RicoProfile(user_id="alice@rico.ai", name="Alice",
+                               email="alice@rico.ai", target_roles=["HSE Manager"])
+        with patch("src.repositories.profile_repo.get_profile", return_value=profile):
+            r = auth_client.get("/api/v1/rico/profile")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["profile_exists"] is True
+        assert body["name"] == "Alice"
+        assert "HSE Manager" in body["target_roles"]
+
+    def test_user_id_from_jwt_not_body(self, auth_client):
+        """Route must derive user_id from JWT, not from any request body field."""
+        captured = {}
+        from src.rico_agent import RicoProfile
+
+        def spy(user_id):
+            captured["user_id"] = user_id
+            return RicoProfile(user_id=user_id)
+
+        with patch("src.repositories.profile_repo.get_profile", side_effect=spy):
+            auth_client.get("/api/v1/rico/profile")
+        assert captured["user_id"] == "alice@rico.ai"
+
+
+class TestRicoSavedSearchesRoute:
+    def test_get_unauthenticated_returns_401(self, client):
+        r = client.get("/api/v1/rico/settings/saved-searches")
+        assert r.status_code == 401
+
+    def test_post_unauthenticated_returns_401(self, client):
+        r = client.post("/api/v1/rico/settings/saved-searches",
+                        json={"query": "HSE Dubai"})
+        assert r.status_code == 401
+
+    def test_get_authenticated_returns_200(self, auth_client):
+        with patch("src.repositories.profile_repo.list_saved_searches", return_value=[]):
+            r = auth_client.get("/api/v1/rico/settings/saved-searches")
+        assert r.status_code == 200
+
+    def test_get_returns_empty_list_when_no_searches(self, auth_client):
+        with patch("src.repositories.profile_repo.list_saved_searches", return_value=[]):
+            r = auth_client.get("/api/v1/rico/settings/saved-searches")
+        body = r.json()
+        assert body["searches"] == []
+        assert body["total"] == 0
+
+    def test_get_returns_searches(self, auth_client):
+        rows = [{"id": 1, "query": "HSE Dubai", "filters": {}, "created_at": None}]
+        with patch("src.repositories.profile_repo.list_saved_searches", return_value=rows):
+            r = auth_client.get("/api/v1/rico/settings/saved-searches")
+        body = r.json()
+        assert body["total"] == 1
+        assert body["searches"][0]["query"] == "HSE Dubai"
+
+    def test_post_authenticated_returns_201(self, auth_client):
+        with patch("src.repositories.profile_repo.save_search") as mock_save:
+            r = auth_client.post("/api/v1/rico/settings/saved-searches",
+                                 json={"query": "HSE Manager Dubai"})
+        assert r.status_code == 201
+        assert r.json()["status"] == "saved"
+
+    def test_post_uses_jwt_identity_not_body(self, auth_client):
+        captured = {}
+
+        def spy(user_id, query, filters):
+            captured["user_id"] = user_id
+
+        with patch("src.repositories.profile_repo.save_search", side_effect=spy):
+            auth_client.post("/api/v1/rico/settings/saved-searches",
+                             json={"query": "test", "user_id": "injected@evil.com"})
+        assert captured.get("user_id") == "alice@rico.ai"
+
+    def test_post_empty_query_returns_422(self, auth_client):
+        r = auth_client.post("/api/v1/rico/settings/saved-searches",
+                             json={"query": ""})
+        assert r.status_code == 422

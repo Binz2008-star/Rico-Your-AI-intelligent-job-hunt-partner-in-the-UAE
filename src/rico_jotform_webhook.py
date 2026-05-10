@@ -2,18 +2,55 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from src.rico_db import RicoDB
 
 logger = logging.getLogger(__name__)
 
+_SEEN_SUBMISSIONS_FILE = (
+    Path(__file__).resolve().parent.parent / "data" / "rico" / "_seen_submissions.json"
+)
+
+
+def _load_seen_submissions() -> set:
+    try:
+        if _SEEN_SUBMISSIONS_FILE.exists():
+            return set(json.loads(_SEEN_SUBMISSIONS_FILE.read_text(encoding="utf-8")))
+    except Exception:
+        pass
+    return set()
+
+
+def _mark_submission_seen(submission_id: str) -> None:
+    if not submission_id or submission_id == "?":
+        return
+    seen = _load_seen_submissions()
+    seen.add(submission_id)
+    _SEEN_SUBMISSIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _SEEN_SUBMISSIONS_FILE.write_text(
+        json.dumps(sorted(seen)[-10_000:], ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def _is_duplicate_submission(submission_id: str) -> bool:
+    if not submission_id or submission_id == "?":
+        return False
+    return submission_id in _load_seen_submissions()
+
 
 def _is_production() -> bool:
-    """Check if we're running in production environment."""
-    return os.getenv("ENVIRONMENT", "development").lower() == "production"
+    """True if any of RICO_ENV / ENV / ENVIRONMENT marks production."""
+    for var in ("RICO_ENV", "ENV", "ENVIRONMENT"):
+        value = os.getenv(var, "").strip().lower()
+        if value in ("production", "prod"):
+            return True
+    return False
 
 
 def _validate_webhook_secret() -> bool:
@@ -41,7 +78,9 @@ def _active_form_ids() -> frozenset:
     """Return accepted Jotform form IDs from JOTFORM_FORM_ID env var.
 
     Supports comma-separated values for multi-form setups.
-    Returns an empty frozenset when the var is unset — disables validation.
+    Returns an empty frozenset when the var is unset — disables validation (dev only).
+    In production (RICO_ENV=production) an empty frozenset causes fail-closed behaviour
+    handled by handle_jotform_submission.
     """
     raw = os.getenv("JOTFORM_FORM_ID", "").strip()
     if not raw:
@@ -98,7 +137,7 @@ def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
     )
     submission_id = payload.get("submissionID") or payload.get("submission_id", "?")
 
-    # ── Webhook secret validation (security) ────────────────────────────────────
+    # ── Webhook secret validation (security — fail closed in production) ─────
     if not _validate_webhook_secret():
         logger.warning(
             "jotform_webhook: rejected missing webhook secret in production form_id=%s submission=%s",
@@ -106,8 +145,21 @@ def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
         )
         return {"status": "rejected", "reason": "missing_webhook_secret"}
 
+    # ── Idempotency — reject replayed submissions ────────────────────────────
+    if _is_duplicate_submission(submission_id):
+        logger.info(
+            "jotform_webhook: duplicate submission_id=%s — skipping", submission_id
+        )
+        return {"status": "accepted", "message": "Duplicate submission ignored"}
+
     # ── Form ID validation ─────────────────────────────────────────────────────
     active_ids = _active_form_ids()
+    if not active_ids and _is_production():
+        logger.error(
+            "jotform_webhook: JOTFORM_FORM_ID not configured in production — rejecting submission=%s",
+            submission_id,
+        )
+        return {"status": "rejected", "reason": "form_id_not_configured"}
     if active_ids and form_id not in active_ids:
         logger.warning(
             "jotform_webhook: rejected unknown form_id=%s submission=%s",
@@ -164,6 +216,7 @@ def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
                 user_id, exc,
             )
 
+    _mark_submission_seen(submission_id)
     logger.info(
         "jotform_webhook: ok form_id=%s submission=%s db_user_id=%s",
         mapped.get("form_id"), mapped.get("submission_id"), db_user_id,

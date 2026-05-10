@@ -1,206 +1,121 @@
-"use client";
+import Link from "next/link";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+const features = [
+  {
+    title: "Finds matching jobs daily",
+    desc: "Rico scans job boards and surfaces roles that match your skills, salary range, location, and seniority — no manual searching.",
+  },
+  {
+    title: "Scores and explains every match",
+    desc: "Each job gets a fit score with reasons: title match, salary fit, skill overlap. You see why it ranked, not just that it did.",
+  },
+  {
+    title: "Tracks your full pipeline",
+    desc: "Applications, follow-ups, and outcomes in one place. Rico keeps your job search organised so nothing falls through the cracks.",
+  },
+];
 
-type Message = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  createdAt: string;
-};
-
-const API_URL = process.env.NEXT_PUBLIC_RICO_API || "http://localhost:8000";
-
-function uuid() {
-  return Math.random().toString(36).slice(2);
-}
+const trust = [
+  "UAE-focused search",
+  "Profile-aware matching",
+  "Human-approved applications",
+];
 
 export default function HomePage() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: uuid(),
-      role: "assistant",
-      content:
-        "I’m Rico. I can track jobs, remember preferences, detect opportunities, and help manage your applications.",
-      createdAt: new Date().toISOString(),
-    },
-  ]);
-
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const bottomRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
-
-  async function sendMessage() {
-    const trimmed = input.trim();
-    if (!trimmed || loading) return;
-
-    const userMessage: Message = {
-      id: uuid(),
-      role: "user",
-      content: trimmed,
-      createdAt: new Date().toISOString(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
-    setLoading(true);
-
-    try {
-      const response = await fetch(`${API_URL}/chat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          user_id: "web-user",
-          message: trimmed,
-        }),
-      });
-
-      const data = await response.json();
-
-      const assistantMessage: Message = {
-        id: uuid(),
-        role: "assistant",
-        content:
-          data.reply ||
-          data.message ||
-          "Rico processed your request.",
-        createdAt: new Date().toISOString(),
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (error) {
-      const assistantMessage: Message = {
-        id: uuid(),
-        role: "assistant",
-        content:
-          "Rico could not reach the backend API. Start the FastAPI server and verify NEXT_PUBLIC_RICO_API.",
-        createdAt: new Date().toISOString(),
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const canSend = useMemo(() => input.trim().length > 0 && !loading, [input, loading]);
-
   return (
-    <main style={{ minHeight: "100vh", background: "#0b1020", color: "#f5f7fb" }}>
-      <div
-        style={{
-          maxWidth: 900,
-          margin: "0 auto",
-          padding: "32px 16px",
-          display: "flex",
-          flexDirection: "column",
-          minHeight: "100vh",
-        }}
-      >
-        <header style={{ marginBottom: 24 }}>
-          <h1 style={{ margin: 0, fontSize: 36 }}>Rico AI</h1>
-          <p style={{ opacity: 0.8 }}>
-            Persistent autonomous career assistant
-          </p>
-        </header>
-
-        <section
-          style={{
-            flex: 1,
-            overflowY: "auto",
-            border: "1px solid rgba(255,255,255,0.08)",
-            borderRadius: 16,
-            padding: 16,
-            background: "rgba(255,255,255,0.03)",
-          }}
+    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      {/* Nav */}
+      <nav className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
+        <span className="text-sm font-bold tracking-wide text-white">Rico AI</span>
+        <Link
+          href="/login"
+          className="text-sm text-zinc-400 transition-colors hover:text-white"
         >
-          {messages.map((message) => (
+          Sign in →
+        </Link>
+      </nav>
+
+      {/* Hero */}
+      <section className="mx-auto max-w-4xl px-6 pb-20 pt-16 text-center">
+        <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-xs text-indigo-400">
+          Now in early access
+        </div>
+
+        <h1 className="mb-6 text-4xl font-bold leading-[1.1] tracking-tight text-white sm:text-5xl md:text-6xl lg:text-7xl">
+          The AI that hunts jobs
+          <br />
+          <span className="text-indigo-400">while you live your life.</span>
+        </h1>
+
+        <p className="mx-auto mb-10 max-w-2xl text-lg leading-relaxed text-zinc-400">
+          Rico is an autonomous AI job-search agent. It finds roles that fit
+          your profile, scores them, and helps you apply — so you can focus
+          on the right opportunities.
+        </p>
+
+        <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <Link
+            href="/login"
+            className="w-full rounded-lg bg-indigo-600 px-8 py-3 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 sm:w-auto"
+          >
+            Start setup
+          </Link>
+          <Link
+            href="/dashboard"
+            className="w-full rounded-lg border border-zinc-700 px-8 py-3 text-sm font-semibold text-zinc-300 transition-colors hover:border-zinc-500 hover:text-white sm:w-auto"
+          >
+            View dashboard
+          </Link>
+        </div>
+      </section>
+
+      {/* Feature grid */}
+      <section className="mx-auto max-w-5xl px-6 pb-10">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {features.map((f) => (
             <div
-              key={message.id}
-              style={{
-                display: "flex",
-                justifyContent:
-                  message.role === "user" ? "flex-end" : "flex-start",
-                marginBottom: 16,
-              }}
+              key={f.title}
+              className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-6"
             >
-              <div
-                style={{
-                  maxWidth: "80%",
-                  padding: "14px 16px",
-                  borderRadius: 14,
-                  background:
-                    message.role === "user"
-                      ? "#4f46e5"
-                      : "rgba(255,255,255,0.08)",
-                  lineHeight: 1.5,
-                  whiteSpace: "pre-wrap",
-                }}
-              >
-                {message.content}
-              </div>
+              <h3 className="mb-2 text-sm font-semibold text-white">{f.title}</h3>
+              <p className="text-sm leading-relaxed text-zinc-400">{f.desc}</p>
             </div>
           ))}
+        </div>
+      </section>
 
-          {loading && (
-            <div style={{ opacity: 0.7, padding: 8 }}>
-              Rico is thinking…
-            </div>
-          )}
+      {/* Trust row */}
+      <section className="mx-auto max-w-5xl px-6 pb-24">
+        <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 pt-6">
+          {trust.map((item) => (
+            <span key={item} className="flex items-center gap-2 text-xs text-zinc-500">
+              <span className="h-1 w-1 rounded-full bg-indigo-500" />
+              {item}
+            </span>
+          ))}
+        </div>
+      </section>
 
-          <div ref={bottomRef} />
-        </section>
-
-        <footer
-          style={{
-            marginTop: 16,
-            display: "flex",
-            gap: 12,
-          }}
+      {/* Bottom CTA band */}
+      <section className="border-t border-zinc-800 bg-zinc-900/30 px-6 py-16 text-center">
+        <h2 className="mb-3 text-2xl font-bold text-white sm:text-3xl">
+          Ready to let Rico work for you?
+        </h2>
+        <p className="mb-8 text-zinc-400">
+          Set up your profile once. Rico handles the rest.
+        </p>
+        <Link
+          href="/login"
+          className="inline-block rounded-lg bg-indigo-600 px-8 py-3 text-sm font-semibold text-white transition-colors hover:bg-indigo-500"
         >
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask Rico about jobs, applications, interviews, or strategy…"
-            rows={3}
-            style={{
-              flex: 1,
-              borderRadius: 12,
-              padding: 14,
-              border: "1px solid rgba(255,255,255,0.1)",
-              background: "rgba(255,255,255,0.05)",
-              color: "white",
-              resize: "none",
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-              }
-            }}
-          />
+          Start your job search
+        </Link>
+      </section>
 
-          <button
-            onClick={sendMessage}
-            disabled={!canSend}
-            style={{
-              minWidth: 120,
-              borderRadius: 12,
-              border: "none",
-              cursor: canSend ? "pointer" : "not-allowed",
-              opacity: canSend ? 1 : 0.5,
-            }}
-          >
-            Send
-          </button>
-        </footer>
-      </div>
-    </main>
+      {/* Footer */}
+      <footer className="border-t border-zinc-800 px-6 py-6 text-center">
+        <p className="text-xs text-zinc-600">© 2026 Rico AI — built for job seekers</p>
+      </footer>
+    </div>
   );
 }

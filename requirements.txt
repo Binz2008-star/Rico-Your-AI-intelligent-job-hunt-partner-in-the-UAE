@@ -22,3 +22,5 @@ rq
 python-jose[cryptography]
 passlib[bcrypt]
 alembic
+httpx
+openai>=1.0.0
