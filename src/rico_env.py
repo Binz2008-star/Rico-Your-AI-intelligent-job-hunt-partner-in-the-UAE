@@ -30,6 +30,7 @@ class RicoEnvReport:
     ready_for_telegram: bool
     ready_for_openai: bool
     ready_for_jotform: bool
+    ai_provider: str
     checks: List[EnvCheck]
 
     def to_dict(self) -> Dict[str, object]:
@@ -39,6 +40,7 @@ class RicoEnvReport:
             "ready_for_telegram": self.ready_for_telegram,
             "ready_for_openai": self.ready_for_openai,
             "ready_for_jotform": self.ready_for_jotform,
+            "ai_provider": self.ai_provider,
             "checks": [asdict(check) for check in self.checks],
         }
 
@@ -84,12 +86,15 @@ def get_rico_env_report() -> RicoEnvReport:
         for name, required, purpose in ENV_SPECS
     ]
     present = {check.name: check.present for check in checks}
+    provider = get_ai_provider()
+    openai_key_present = present.get("OPENAI_API_KEY", False) or bool(os.getenv("OPEN_AI_API"))
     return RicoEnvReport(
         ready_for_api=True,
         ready_for_db=present.get("DATABASE_URL", False),
         ready_for_telegram=present.get("TELEGRAM_BOT_TOKEN", False),
-        ready_for_openai=present.get("OPENAI_API_KEY", False) or bool(os.getenv("OPEN_AI_API")),
+        ready_for_openai=provider == "openai" and openai_key_present,
         ready_for_jotform=(present.get("JOTFORM_FORM_ID", False) and present.get("JOTFORM_WEBHOOK_SECRET", False)),
+        ai_provider=provider,
         checks=checks,
     )
 
