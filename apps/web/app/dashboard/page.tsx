@@ -71,9 +71,7 @@ export default async function DashboardPage() {
             <ProfileSummaryCard />
             <StatusCard title="CV status" badge="placeholder">
               <p className="text-sm text-zinc-500">
-                Expose{" "}
-                <code className="text-zinc-400">POST /api/v1/rico/upload-cv</code>{" "}
-                to show CV status here.
+                Upload a CV to enable profile-based job matching.
               </p>
             </StatusCard>
           </div>
@@ -86,11 +84,15 @@ export default async function DashboardPage() {
           </h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <StatusCard title="Job matches" badge="placeholder">
-              <p className="text-sm text-zinc-500">Connect endpoint</p>
+              <p className="text-sm text-zinc-500">
+                Job matching runs automatically once your profile is complete.
+              </p>
             </StatusCard>
             <SavedSearchesList />
             <StatusCard title="Applications" badge="placeholder">
-              <p className="text-sm text-zinc-500">Connect endpoint</p>
+              <p className="text-sm text-zinc-500">
+                Applications will be tracked here once job matching is active.
+              </p>
             </StatusCard>
           </div>
         </section>
