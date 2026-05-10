@@ -130,6 +130,24 @@ def rico_openai_smoke(request: Request) -> Dict[str, Any]:
     leaks the API key or full profile data — only the structured error.
     """
     get_current_user(request)  # raises 401 if unauthenticated
+    from src.rico_env import get_ai_provider
+
+    provider = get_ai_provider()
+
+    if provider == "none":
+        # Free mode - don't call OpenAI
+        return {
+            "success": False,
+            "provider": "none",
+            "openai_available": False,
+            "response": "OpenAI provider disabled. Set RICO_AI_PROVIDER=openai when API credits are available.",
+            "error": "OpenAIProviderDisabled",
+            "error_detail": None,
+            "model": None,
+            "fallback_model": None,
+        }
+
+    # OpenAI mode - use existing behavior
     from src.rico_openai_runtime import call_openai_minimal
 
     result = call_openai_minimal("Say OK", smoke=True)

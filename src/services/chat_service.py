@@ -85,6 +85,21 @@ def _has_user_data(payload: Dict[str, Any]) -> bool:
 
 def send_message(user_id: str, message: str) -> Dict[str, Any]:
     """Route a chat message through RicoChatAPI and return the response dict."""
+    from src.rico_env import get_ai_provider
+
+    provider = get_ai_provider()
+
+    if provider == "none":
+        # Free mode - no OpenAI calls
+        return {
+            "response": "I can help you set up your job-search profile for free mode. Tell me your target role, preferred UAE city, salary range, and key skills. OpenAI-powered reasoning is paused until API credits are available.",
+            "response_source": "free_mode",
+            "provider": "none",
+            "openai_available": False,
+            "user_id": user_id,
+        }
+
+    # OpenAI mode - use existing behavior
     from src.rico_chat_api import RicoChatAPI
     return RicoChatAPI().process_message(user_id=user_id, message=message)
 

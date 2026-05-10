@@ -272,7 +272,8 @@ class TestChatService:
     def test_send_message_delegates_to_rico_chat_api(self):
         from src.services.chat_service import send_message
         mock_api = type("API", (), {"process_message": lambda self, user_id, message: _CHAT_RESPONSE})()
-        with patch("src.rico_chat_api.RicoChatAPI", return_value=mock_api):
+        with patch("src.rico_env.get_ai_provider", return_value="openai"), \
+             patch("src.rico_chat_api.RicoChatAPI", return_value=mock_api):
             result = send_message("u1", "hi")
         assert result == _CHAT_RESPONSE
 

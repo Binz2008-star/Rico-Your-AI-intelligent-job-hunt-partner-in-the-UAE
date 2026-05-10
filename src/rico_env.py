@@ -7,9 +7,12 @@ status for cloud deployment.
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, asdict
 from typing import Dict, List
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -45,6 +48,7 @@ ENV_SPECS = [
     ("TELEGRAM_BOT_TOKEN", False, "Telegram bot messages and webhook replies"),
     ("TELEGRAM_CHAT_ID", False, "Legacy/default Telegram notification target"),
     ("OPENAI_API_KEY", False, "AI tool-calling, message generation, and advanced reasoning"),
+    ("RICO_AI_PROVIDER", False, "AI provider: none|openai (default: none)"),
     ("JOTFORM_API_KEY", False, "Jotform onboarding CV/file retrieval"),
     ("JOTFORM_FORM_ID", False, "Rico onboarding form ID"),
     ("JOTFORM_WEBHOOK_SECRET", False, "Webhook verification when enabled"),
@@ -59,6 +63,19 @@ def env_bool(name: str, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def get_ai_provider() -> str:
+    """Get the AI provider from environment.
+
+    Returns:
+        str: "none" or "openai". Defaults to "none" if not set or invalid.
+    """
+    provider = os.getenv("RICO_AI_PROVIDER", "none").strip().lower()
+    if provider not in {"none", "openai"}:
+        logger.warning(f"Invalid RICO_AI_PROVIDER value: {provider}. Using 'none'.")
+        return "none"
+    return provider
 
 
 def get_rico_env_report() -> RicoEnvReport:
