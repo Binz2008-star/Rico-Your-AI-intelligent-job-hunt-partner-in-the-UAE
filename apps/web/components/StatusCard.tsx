@@ -16,7 +16,7 @@ const BADGE_LABELS: Record<NonNullable<StatusCardProps["badge"]>, string> = {
   live:        "Live",
   pending:     "Pending",
   error:       "Error",
-  placeholder: "Connect endpoint",
+  placeholder: "Not connected",
 };
 
 export function StatusCard({ title, badge, value, children }: StatusCardProps) {
