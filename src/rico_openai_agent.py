@@ -25,7 +25,10 @@ class RicoOpenAIAgent:
     """Rico reasoning layer using OpenAI Responses API when configured."""
 
     def __init__(self, tools: Optional[Dict[str, Callable[..., Dict[str, Any]]]] = None) -> None:
-        self.api_key = os.getenv("OPENAI_API_KEY")
+        # Canonical name is OPENAI_API_KEY. OPEN_AI_API is read as a temporary
+        # fallback so existing Render deployments keep working until the env
+        # var is renamed.
+        self.api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPEN_AI_API")
         self.model = os.getenv("RICO_OPENAI_MODEL", "gpt-4.1-mini")
         self.tools = tools or {}
         self.safety = RicoSafetyGuard()

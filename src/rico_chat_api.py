@@ -11,8 +11,11 @@ import json
 import re
 from typing import Any, Dict, List
 
+from dataclasses import asdict, is_dataclass
+
 from src.rico_agent import RicoAgent
 from src.rico_memory import RicoMemoryStore
+from src.rico_openai_agent import RicoOpenAIAgent
 from src.rico_repo_adapter import RicoSystem
 from src.repositories.onboarding_repo import (
     is_onboarding_complete,
@@ -35,6 +38,28 @@ class RicoChatAPI:
         self.memory = RicoMemoryStore()
         self.agent = RicoAgent(profile_store=self.memory)
         self.system = RicoSystem()
+        self.openai_agent = RicoOpenAIAgent()
+
+    @staticmethod
+    def _build_openai_context(profile: Any) -> Dict[str, Any]:
+        """Convert a loaded profile into a JSON-serialisable context dict for the LLM.
+
+        Drops empty/None fields so the prompt stays focused on what is actually
+        known about the user. Returns ``{"profile_exists": False}`` when the
+        user has no saved profile yet.
+        """
+        if profile is None:
+            return {"profile_exists": False}
+        if is_dataclass(profile):
+            raw = asdict(profile)
+        elif isinstance(profile, dict):
+            raw = dict(profile)
+        else:
+            raw = {k: getattr(profile, k) for k in dir(profile) if not k.startswith("_")}
+        return {
+            "profile_exists": True,
+            **{k: v for k, v in raw.items() if v not in (None, "", [], {})},
+        }
 
     def _looks_like_cv_upload(self, message: str) -> bool:
         lower = message.lower()
@@ -255,14 +280,13 @@ class RicoChatAPI:
             self.memory.append_chat_message(user_id, "assistant", response["message"])
             return response
 
-        response = {
-            "type": "assistant",
-            "message": (
-                "I understand. I can search UAE jobs, explain matches, track applications, "
-                "prepare cover letters, and help with interview preparation."
-            ),
-        }
-        self.memory.append_chat_message(user_id, "assistant", response["message"])
+        # Open-ended message — delegate to the OpenAI reasoning layer with the
+        # user's profile as context. RicoOpenAIAgent.respond() already handles
+        # the missing-key path with a safe templated fallback, so this is a
+        # no-op upgrade when OPENAI_API_KEY is not configured.
+        user_context = self._build_openai_context(profile)
+        response = self.openai_agent.respond(message, user_context=user_context)
+        self.memory.append_chat_message(user_id, "assistant", response.get("message", ""))
         return response
 
 

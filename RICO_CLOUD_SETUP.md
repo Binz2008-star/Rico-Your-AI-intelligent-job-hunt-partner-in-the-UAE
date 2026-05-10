@@ -77,9 +77,9 @@ RICO_ENABLE_LEARNING=true
 RICO_ENABLE_TELEGRAM=true
 RICO_ENABLE_GMAIL_SYNC=true
 
-# Jotform
+# Jotform (active onboarding form)
 JOTFORM_API_KEY=
-JOTFORM_FORM_ID=261277705943060
+JOTFORM_FORM_ID=261277622782059
 JOTFORM_WEBHOOK_SECRET=
 
 # Frontend
@@ -88,6 +88,21 @@ NEXT_PUBLIC_API_URL=
 # Redis / queues
 REDIS_URL=
 ```
+
+---
+
+# Env contract — which key powers which subsystem
+
+| Env var | Canonical name | Used by | Purpose |
+|---|---|---|---|
+| `OPENAI_API_KEY` | ✅ | `src/rico_openai_agent.py` | Conversational reply for open-ended chat messages. When unset, Rico falls back to a safe templated reply. |
+| `OPEN_AI_API` | ⚠️ legacy fallback | `src/rico_openai_agent.py` | Read only if `OPENAI_API_KEY` is missing. Standardize on `OPENAI_API_KEY` in production. |
+| `RICO_OPENAI_MODEL` | ✅ optional | `src/rico_openai_agent.py` | Override the OpenAI model. Default: `gpt-4.1-mini`. |
+| `HF_TOKEN` | ✅ | `src/llm_scorer.py`, `src/job_agent.py` | Embedding-based job scoring and HF text generation. NOT used in the chat reply path. |
+| `JOTFORM_FORM_ID` | ✅ | `src/api/routers/rico_chat.py` | Active onboarding form ID (comma-separated list supported). |
+| `JOTFORM_WEBHOOK_SECRET` | ✅ | `src/api/routers/rico_chat.py` | Fail-closed webhook verification. When set, missing/wrong secret returns 403. |
+| `JOTFORM_API_KEY` | optional | declared in `src/rico_env.py` | Reserved for CV/file retrieval from Jotform submissions. |
+| `JOTFORM_RICO_FORM_ID` | ❌ unused | nothing | Declared in some `.env` files but no code reads it. Use `JOTFORM_FORM_ID` only. |
 
 ---
 
