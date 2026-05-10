@@ -7,9 +7,12 @@ status for cloud deployment.
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, asdict
 from typing import Dict, List
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -27,6 +30,7 @@ class RicoEnvReport:
     ready_for_telegram: bool
     ready_for_openai: bool
     ready_for_jotform: bool
+    ai_provider: str
     checks: List[EnvCheck]
 
     def to_dict(self) -> Dict[str, object]:
@@ -36,6 +40,7 @@ class RicoEnvReport:
             "ready_for_telegram": self.ready_for_telegram,
             "ready_for_openai": self.ready_for_openai,
             "ready_for_jotform": self.ready_for_jotform,
+            "ai_provider": self.ai_provider,
             "checks": [asdict(check) for check in self.checks],
         }
 
@@ -45,6 +50,7 @@ ENV_SPECS = [
     ("TELEGRAM_BOT_TOKEN", False, "Telegram bot messages and webhook replies"),
     ("TELEGRAM_CHAT_ID", False, "Legacy/default Telegram notification target"),
     ("OPENAI_API_KEY", False, "AI tool-calling, message generation, and advanced reasoning"),
+    ("RICO_AI_PROVIDER", False, "AI provider: none|openai (default: none)"),
     ("JOTFORM_API_KEY", False, "Jotform onboarding CV/file retrieval"),
     ("JOTFORM_FORM_ID", False, "Rico onboarding form ID"),
     ("JOTFORM_WEBHOOK_SECRET", False, "Webhook verification when enabled"),
@@ -61,18 +67,34 @@ def env_bool(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def get_ai_provider() -> str:
+    """Get the AI provider from environment.
+
+    Returns:
+        str: "none" or "openai". Defaults to "none" if not set or invalid.
+    """
+    provider = os.getenv("RICO_AI_PROVIDER", "none").strip().lower()
+    if provider not in {"none", "openai"}:
+        logger.warning(f"Invalid RICO_AI_PROVIDER value: {provider}. Using 'none'.")
+        return "none"
+    return provider
+
+
 def get_rico_env_report() -> RicoEnvReport:
     checks = [
         EnvCheck(name=name, required=required, present=bool(os.getenv(name)), purpose=purpose)
         for name, required, purpose in ENV_SPECS
     ]
     present = {check.name: check.present for check in checks}
+    provider = get_ai_provider()
+    openai_key_present = present.get("OPENAI_API_KEY", False) or bool(os.getenv("OPEN_AI_API"))
     return RicoEnvReport(
         ready_for_api=True,
         ready_for_db=present.get("DATABASE_URL", False),
         ready_for_telegram=present.get("TELEGRAM_BOT_TOKEN", False),
-        ready_for_openai=present.get("OPENAI_API_KEY", False) or bool(os.getenv("OPEN_AI_API")),
+        ready_for_openai=provider == "openai" and openai_key_present,
         ready_for_jotform=(present.get("JOTFORM_FORM_ID", False) and present.get("JOTFORM_WEBHOOK_SECRET", False)),
+        ai_provider=provider,
         checks=checks,
     )
 
