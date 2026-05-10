@@ -72,7 +72,7 @@ def get_rico_env_report() -> RicoEnvReport:
         ready_for_db=present.get("DATABASE_URL", False),
         ready_for_telegram=present.get("TELEGRAM_BOT_TOKEN", False),
         ready_for_openai=present.get("OPENAI_API_KEY", False) or bool(os.getenv("OPEN_AI_API")),
-        ready_for_jotform=present.get("JOTFORM_API_KEY", False) or present.get("JOTFORM_FORM_ID", False),
+        ready_for_jotform=(present.get("JOTFORM_FORM_ID", False) and present.get("JOTFORM_WEBHOOK_SECRET", False)),
         checks=checks,
     )
 

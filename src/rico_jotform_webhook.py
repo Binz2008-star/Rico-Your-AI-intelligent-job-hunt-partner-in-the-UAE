@@ -45,7 +45,33 @@ def _is_duplicate_submission(submission_id: str) -> bool:
 
 
 def _is_production() -> bool:
-    return os.getenv("RICO_ENV", os.getenv("ENV", "")).lower() in ("production", "prod")
+    """True if any of RICO_ENV / ENV / ENVIRONMENT marks production."""
+    for var in ("RICO_ENV", "ENV", "ENVIRONMENT"):
+        value = os.getenv(var, "").strip().lower()
+        if value in ("production", "prod"):
+            return True
+    return False
+
+
+def _validate_webhook_secret() -> bool:
+    """Validate that JOTFORM_WEBHOOK_SECRET is set in production.
+
+    Returns:
+        bool: True if secret is valid, False otherwise.
+        In production, fails closed (returns False) when secret is missing.
+        In development, allows missing secret (returns True).
+    """
+    if not _is_production():
+        # Development mode: allow missing webhook secret
+        return True
+
+    # Production mode: require webhook secret
+    webhook_secret = os.getenv("JOTFORM_WEBHOOK_SECRET")
+    if not webhook_secret:
+        logger.warning("jotform_webhook: production mode missing JOTFORM_WEBHOOK_SECRET")
+        return False
+
+    return True
 
 
 def _active_form_ids() -> frozenset:
@@ -111,7 +137,15 @@ def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
     )
     submission_id = payload.get("submissionID") or payload.get("submission_id", "?")
 
-    # ── Idempotency — reject replayed submissions ──────────────────────────────
+    # ── Webhook secret validation (security — fail closed in production) ─────
+    if not _validate_webhook_secret():
+        logger.warning(
+            "jotform_webhook: rejected missing webhook secret in production form_id=%s submission=%s",
+            form_id, submission_id,
+        )
+        return {"status": "rejected", "reason": "missing_webhook_secret"}
+
+    # ── Idempotency — reject replayed submissions ────────────────────────────
     if _is_duplicate_submission(submission_id):
         logger.info(
             "jotform_webhook: duplicate submission_id=%s — skipping", submission_id
