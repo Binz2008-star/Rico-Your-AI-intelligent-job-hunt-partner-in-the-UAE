@@ -2,6 +2,13 @@ const RICO_API =
   process.env.NEXT_PUBLIC_RICO_API ??
   "https://rico-job-automation-api.onrender.com";
 
+export class AuthError extends Error {
+  constructor() {
+    super("Unauthorized");
+    this.name = "AuthError";
+  }
+}
+
 // ── Health ────────────────────────────────────────────────────────────────────
 
 export interface RicoStatus {
@@ -150,6 +157,7 @@ export async function sendChat(
     credentials: "include",
     body: JSON.stringify({ message }),
   });
+  if (res.status === 401) throw new AuthError();
   if (!res.ok) throw new Error(`Chat failed: ${res.status}`);
   return res.json() as Promise<{ reply?: string; message?: string }>;
 }
