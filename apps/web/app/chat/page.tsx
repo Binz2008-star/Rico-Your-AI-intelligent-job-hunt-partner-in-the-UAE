@@ -86,9 +86,15 @@ export default function ChatPage() {
         res.data?.content ??
         "";
       const provider = res.provider ?? res.response_source ?? "unknown";
-      const freeMode = provider === "fallback" || provider === "none" || res.openai_available === false;
+      const isRateLimited = res.response_source === "rate_limited" || res.provider_state === "rate_limited";
+      const freeMode = isRateLimited || provider === "fallback" || provider === "none" || res.openai_available === false;
       const hfMode = provider === "huggingface" || provider === "hf";
-      if (!reply) {
+      if (isRateLimited) {
+        setMessages((prev) => [
+          ...prev,
+          { id: nextId(), role: "rico", text: "Rico's AI provider is rate-limited right now — this is temporary. Please try again in a minute.", freeMode: true },
+        ]);
+      } else if (!reply) {
         setMessages((prev) => [
           ...prev,
           { id: nextId(), role: "rico", text: "Rico returned an empty response. Please try again." },

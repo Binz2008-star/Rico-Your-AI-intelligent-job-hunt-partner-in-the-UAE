@@ -185,6 +185,7 @@ export interface ChatApiResponse {
   answer?: string;
   response_source?: string;
   provider?: string;
+  provider_state?: string;
   openai_available?: boolean;
   hf_available?: boolean;
   data?: {
