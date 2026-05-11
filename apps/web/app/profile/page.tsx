@@ -16,10 +16,10 @@ function Tag({ label }: { label: string }) {
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <>
+    <div>
       <dt className="text-[#5a5a7a]">{label}</dt>
       <dd>{children}</dd>
-    </>
+    </div>
   );
 }
 
