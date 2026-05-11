@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 
 function Tag({ label }: { label: string }) {
   return (
-    <span className="rounded-md bg-zinc-800 px-2 py-0.5 text-xs text-zinc-300">
+    <span className="rounded-md bg-[rgba(255,255,255,0.06)] px-2 py-0.5 text-xs text-[#8080a0]">
       {label}
     </span>
   );
@@ -17,7 +17,7 @@ function Tag({ label }: { label: string }) {
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <>
-      <dt className="text-zinc-500">{label}</dt>
+      <dt className="text-[#5a5a7a]">{label}</dt>
       <dd>{children}</dd>
     </>
   );
@@ -25,11 +25,11 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 function ChatCTA({ message }: { message: string }) {
   return (
-    <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/5 px-4 py-3">
-      <p className="mb-2 text-sm text-zinc-400">{message}</p>
+    <div className="rounded-lg border border-[rgba(91,79,255,0.18)] bg-[rgba(91,79,255,0.05)] px-4 py-3">
+      <p className="mb-2 text-sm text-[#5a5a7a]">{message}</p>
       <Link
         href="/chat"
-        className="inline-block rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-indigo-500"
+        className="inline-block rounded-lg bg-[#5b4fff] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4a3fe0]"
       >
         Open Rico chat →
       </Link>
@@ -41,7 +41,7 @@ function ChatEditCTA({ prompt }: { prompt: string }) {
   return (
     <Link
       href={`/chat?prompt=${encodeURIComponent(prompt)}`}
-      className="ml-2 text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors underline underline-offset-2"
+      className="ml-2 text-[11px] text-[#a78bfa] hover:text-[#c4b5fd] transition-colors underline underline-offset-2"
     >
       Edit
     </Link>
@@ -63,26 +63,26 @@ function ProfileDetail({ profile }: { profile: ProfileResponse }) {
       <StatusCard title="Identity" badge="live">
         <dl className="grid grid-cols-1 gap-y-3 text-sm sm:grid-cols-2 sm:gap-x-6">
           <Row label="Name">
-            <span className="text-zinc-200">{profile.name ?? "—"}</span>
+            <span className="text-[#eeeef5]">{profile.name ?? "—"}</span>
             <ChatEditCTA prompt="Update my name" />
           </Row>
           <Row label="Email">
-            <span className="text-zinc-200">{profile.email ?? "—"}</span>
+            <span className="text-[#eeeef5]">{profile.email ?? "—"}</span>
           </Row>
           <Row label="Phone">
-            <span className="text-zinc-200">{profile.phone ?? "—"}</span>
+            <span className="text-[#eeeef5]">{profile.phone ?? "—"}</span>
             <ChatEditCTA prompt="Update my phone number" />
           </Row>
           <Row label="Telegram">
-            <span className="text-zinc-200">{profile.telegram_username ?? "—"}</span>
+            <span className="text-[#eeeef5]">{profile.telegram_username ?? "—"}</span>
             <ChatEditCTA prompt="Update my Telegram username" />
           </Row>
           <Row label="Visa">
-            <span className="text-zinc-200">{profile.visa_status ?? "—"}</span>
+            <span className="text-[#eeeef5]">{profile.visa_status ?? "—"}</span>
             <ChatEditCTA prompt="Update my visa status" />
           </Row>
           <Row label="Notice">
-            <span className="text-zinc-200">{profile.notice_period ?? "—"}</span>
+            <span className="text-[#eeeef5]">{profile.notice_period ?? "—"}</span>
             <ChatEditCTA prompt="Update my notice period" />
           </Row>
         </dl>
@@ -98,7 +98,7 @@ function ProfileDetail({ profile }: { profile: ProfileResponse }) {
                   {profile.target_roles!.map((r) => <Tag key={r} label={r} />)}
                 </div>
               ) : (
-                <span className="text-zinc-200">—</span>
+                <span className="text-[#eeeef5]">—</span>
               )}
               <ChatEditCTA prompt="Update my target roles" />
             </Row>
@@ -108,24 +108,24 @@ function ProfileDetail({ profile }: { profile: ProfileResponse }) {
                   {profile.preferred_cities!.map((c) => <Tag key={c} label={c} />)}
                 </div>
               ) : (
-                <span className="text-zinc-200">—</span>
+                <span className="text-[#eeeef5]">—</span>
               )}
               <ChatEditCTA prompt="Update my preferred cities" />
             </Row>
             <Row label="Salary target">
-              <span className="text-zinc-200">
+              <span className="text-[#eeeef5]">
                 {profile.salary_expectation_aed != null ? `AED ${profile.salary_expectation_aed.toLocaleString()}` : "—"}
               </span>
               <ChatEditCTA prompt="Update my salary target" />
             </Row>
             <Row label="Minimum salary">
-              <span className="text-zinc-200">
+              <span className="text-[#eeeef5]">
                 {profile.minimum_salary_aed != null ? `AED ${profile.minimum_salary_aed.toLocaleString()}` : "—"}
               </span>
               <ChatEditCTA prompt="Update my minimum salary" />
             </Row>
             <Row label="Experience">
-              <span className="text-zinc-200">
+              <span className="text-[#eeeef5]">
                 {profile.years_experience != null ? `${profile.years_experience} yrs` : "—"}
               </span>
               <ChatEditCTA prompt="Update my years of experience" />
@@ -168,18 +168,18 @@ export default function ProfilePage() {
       <div className="max-w-2xl">
         {loading && (
           <StatusCard title="Profile" badge="pending">
-            <p className="text-sm text-zinc-500">Loading…</p>
+            <p className="text-sm text-[#5a5a7a]">Loading…</p>
           </StatusCard>
         )}
 
         {!loading && error && (
           <StatusCard title="Profile" badge="error">
-            <p className="mb-3 text-sm text-zinc-400">
+            <p className="mb-3 text-sm text-[#5a5a7a]">
               Could not load your profile. Make sure you are signed in.
             </p>
             <Link
               href="/login"
-              className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors underline underline-offset-2"
+              className="text-xs text-[#a78bfa] hover:text-[#c4b5fd] transition-colors underline underline-offset-2"
             >
               Go to sign in
             </Link>
@@ -189,24 +189,24 @@ export default function ProfilePage() {
         {!loading && !error && profile && !profile.profile_exists && (
           <div className="flex flex-col gap-4">
             <StatusCard title="Profile" badge="pending">
-              <p className="mb-1 text-sm text-zinc-300">No profile set up yet.</p>
-              <p className="mb-4 text-sm text-zinc-500">
+              <p className="mb-1 text-sm text-[#eeeef5]">No profile set up yet.</p>
+              <p className="mb-4 text-sm text-[#5a5a7a]">
                 Rico builds your profile through a short conversation. Tell it your
                 target role, experience, location, and salary range to get started.
               </p>
               <Link
                 href="/chat"
-                className="inline-block rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-500"
+                className="inline-block rounded-lg bg-[#5b4fff] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#4a3fe0]"
               >
                 Start setup with Rico →
               </Link>
             </StatusCard>
 
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
-              <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
+            <div className="rounded-xl border border-[rgba(255,255,255,0.06)] bg-[#13132a]/60 p-5">
+              <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-[#5a5a7a]">
                 What Rico will set up
               </h3>
-              <ul className="flex flex-col gap-2 text-sm text-zinc-400">
+              <ul className="flex flex-col gap-2 text-sm text-[#8080a0]">
                 {[
                   "Target roles and preferred job titles",
                   "Preferred cities and remote preferences",
@@ -215,7 +215,7 @@ export default function ProfilePage() {
                   "Visa status and notice period",
                 ].map((item) => (
                   <li key={item} className="flex items-start gap-2">
-                    <span className="mt-0.5 text-indigo-500">·</span>
+                    <span className="mt-0.5 text-[#a78bfa]">·</span>
                     {item}
                   </li>
                 ))}

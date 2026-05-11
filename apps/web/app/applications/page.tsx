@@ -76,7 +76,7 @@ export default function ApplicationsPage() {
     <DashboardShell>
       <div className="px-8 py-6 border-b border-white/5 bg-[rgba(7,7,18,0.7)] backdrop-blur-md sticky top-0 z-10">
         <h1 className="font-['Cabinet_Grotesk',sans-serif] font-900 text-[22px] tracking-tight">Applications</h1>
-        <p className="text-[13px] text-white/35 mt-0.5">
+        <p className="text-[13px] text-[#5a5a7a] mt-0.5">
           {loading ? "Loading…" : `${apps.length} tracked across all stages`}
         </p>
       </div>
@@ -86,28 +86,28 @@ export default function ApplicationsPage() {
         {!loading && !error && (
           <div className="grid grid-cols-5 gap-3">
             {STATUS_OPTIONS.map((s) => (
-              <div key={s} className="bg-[#0e0e20] border border-white/6 rounded-xl p-4 text-center">
-                <p className="font-['Cabinet_Grotesk',sans-serif] font-900 text-[28px] tracking-tight text-white/80">
+              <div key={s} className="bg-[#13132a]/80 border border-[rgba(255,255,255,0.06)] rounded-xl p-4 text-center">
+                <p className="font-['Cabinet_Grotesk',sans-serif] font-900 text-[28px] tracking-tight text-[#eeeef5]">
                   {grouped[s].length}
                 </p>
-                <p className="text-[10px] text-white/30 mt-1 uppercase tracking-wider">{statLabels[s]}</p>
+                <p className="text-[10px] text-[#5a5a7a] mt-1 uppercase tracking-wider">{statLabels[s]}</p>
               </div>
             ))}
           </div>
         )}
 
         {/* table */}
-        <div className="bg-[#0e0e20] border border-white/6 rounded-2xl overflow-hidden">
+        <div className="bg-[#13132a]/80 border border-[rgba(255,255,255,0.06)] rounded-2xl overflow-hidden">
           {loading ? (
             <div className="flex flex-col">
               {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="h-16 border-b border-white/5 bg-white/2 animate-pulse" />
+                <div key={i} className="h-16 border-b border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.015)] animate-pulse" />
               ))}
             </div>
           ) : error === "auth" ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
               <span className="text-4xl opacity-25">🔒</span>
-              <p className="text-[14px] text-white/30">Session expired</p>
+              <p className="text-[14px] text-[#5a5a7a]">Session expired</p>
               <a
                 href="/login"
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[rgba(91,79,255,0.15)] text-[#a78bfa] border border-[rgba(91,79,255,0.25)] text-[13px] font-semibold hover:bg-[rgba(91,79,255,0.25)] transition-all"
@@ -118,21 +118,21 @@ export default function ApplicationsPage() {
           ) : error === "other" ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
               <span className="text-4xl opacity-25">⚠️</span>
-              <p className="text-[14px] text-white/30">Could not load applications</p>
-              <p className="text-[12px] text-white/20">The backend may be unavailable. Please try again.</p>
+              <p className="text-[14px] text-[#5a5a7a]">Could not load applications</p>
+              <p className="text-[12px] text-[#5a5a7a]">The backend may be unavailable. Please try again.</p>
             </div>
           ) : apps.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
               <span className="text-4xl opacity-25">📄</span>
-              <p className="text-[14px] text-white/30">No applications tracked yet</p>
-              <p className="text-[12px] text-white/20">Apply to jobs from the Jobs page and they&apos;ll appear here</p>
+              <p className="text-[14px] text-[#5a5a7a]">No applications tracked yet</p>
+              <p className="text-[12px] text-[#5a5a7a]">Apply to jobs from the Jobs page and they&apos;ll appear here</p>
             </div>
           ) : (
             <>
               {/* header row */}
               <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr_1fr] gap-4 px-5 py-3 border-b border-white/5">
                 {["Role", "Company", "Applied", "Status", "Action"].map((h) => (
-                  <span key={h} className="text-[10px] uppercase tracking-wider text-white/25 font-semibold">
+                  <span key={h} className="text-[10px] uppercase tracking-wider text-[#5a5a7a] font-semibold">
                     {h}
                   </span>
                 ))}
@@ -140,25 +140,25 @@ export default function ApplicationsPage() {
               {apps.map((app, i) => (
                 <div
                   key={app.application_id}
-                  className={`grid grid-cols-[2fr_1.5fr_1fr_1fr_1fr] gap-4 px-5 py-4 items-center transition-colors hover:bg-white/2 ${i < apps.length - 1 ? "border-b border-white/5" : ""
+                  className={`grid grid-cols-[2fr_1.5fr_1fr_1fr_1fr] gap-4 px-5 py-4 items-center transition-colors hover:bg-[rgba(255,255,255,0.015)] ${i < apps.length - 1 ? "border-b border-[rgba(255,255,255,0.04)]" : ""
                     }`}
                 >
                   <div className="min-w-0">
-                    <p className="text-[13px] font-medium text-white/80 truncate">{app.title}</p>
+                    <p className="text-[13px] font-medium text-[#eeeef5] truncate">{app.title}</p>
                     {app.apply_url && app.apply_url !== "#" && (
-                      <a href={app.apply_url} target="_blank" rel="noreferrer" className="text-[11px] text-[#a78bfa] hover:text-white">
+                      <a href={app.apply_url} target="_blank" rel="noreferrer" className="text-[11px] text-[#a78bfa] hover:text-[#eeeef5]">
                         View listing ↗
                       </a>
                     )}
                   </div>
-                  <p className="text-[13px] text-white/45 truncate">{app.company}</p>
-                  <p className="text-[12px] text-white/30">{fmtDate(app.applied_at)}</p>
+                  <p className="text-[13px] text-[#8080a0] truncate">{app.company}</p>
+                  <p className="text-[12px] text-[#5a5a7a]">{fmtDate(app.applied_at)}</p>
                   <StatusBadge status={app.status} />
                   <select
                     value={app.status}
                     onChange={(e) => changeStatus(app, e.target.value as ApplicationStatus)}
                     disabled={updating === app.application_id}
-                    className="bg-[#14142a] border border-white/8 rounded-lg px-2 py-1.5 text-[11px] text-white/60 outline-none focus:border-[rgba(91,79,255,0.4)] cursor-pointer disabled:opacity-40"
+                    className="bg-[#0d0d1f] border border-[rgba(255,255,255,0.08)] rounded-lg px-2 py-1.5 text-[11px] text-[#8080a0] outline-none focus:border-[rgba(91,79,255,0.4)] cursor-pointer disabled:opacity-40"
                   >
                     {STATUS_OPTIONS.map((s) => (
                       <option key={s} value={s}>{statLabels[s]}</option>
