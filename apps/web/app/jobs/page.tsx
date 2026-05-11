@@ -92,7 +92,7 @@ export default function JobsPage() {
     <DashboardShell>
       <header className="px-8 py-6 border-b border-white/5 bg-[rgba(7,7,18,0.7)] backdrop-blur-md sticky top-0 z-10 flex items-center justify-between">
         <div>
-          <h1 className="font-['Cabinet_Grotesk',sans-serif] font-900 text-[22px] tracking-tight">
+          <h1 className="font-['Cabinet_Grotesk',sans-serif] font-black text-[22px] tracking-tight">
             Job Matches
           </h1>
           <p className="text-[13px] text-[#5a5a7a] mt-0.5">

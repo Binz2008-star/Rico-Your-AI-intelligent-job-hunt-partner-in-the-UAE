@@ -20,7 +20,9 @@ const STATUS_OPTIONS: ApplicationStatus[] = [
 
 function fmtDate(iso?: string) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
 export default function ApplicationsPage() {
@@ -75,7 +77,7 @@ export default function ApplicationsPage() {
   return (
     <DashboardShell>
       <div className="px-8 py-6 border-b border-white/5 bg-[rgba(7,7,18,0.7)] backdrop-blur-md sticky top-0 z-10">
-        <h1 className="font-['Cabinet_Grotesk',sans-serif] font-900 text-[22px] tracking-tight">Applications</h1>
+        <h1 className="font-['Cabinet_Grotesk',sans-serif] font-black text-[22px] tracking-tight">Applications</h1>
         <p className="text-[13px] text-[#5a5a7a] mt-0.5">
           {loading ? "Loading…" : `${apps.length} tracked across all stages`}
         </p>
@@ -84,10 +86,10 @@ export default function ApplicationsPage() {
       <div className="p-8 flex flex-col gap-6">
         {/* summary strip */}
         {!loading && !error && (
-          <div className="grid grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {STATUS_OPTIONS.map((s) => (
               <div key={s} className="bg-[#13132a]/80 border border-[rgba(255,255,255,0.06)] rounded-xl p-4 text-center">
-                <p className="font-['Cabinet_Grotesk',sans-serif] font-900 text-[28px] tracking-tight text-[#eeeef5]">
+                <p className="font-['Cabinet_Grotesk',sans-serif] font-black text-[28px] tracking-tight text-[#eeeef5]">
                   {grouped[s].length}
                 </p>
                 <p className="text-[10px] text-[#5a5a7a] mt-1 uppercase tracking-wider">{statLabels[s]}</p>
@@ -128,46 +130,48 @@ export default function ApplicationsPage() {
               <p className="text-[12px] text-[#5a5a7a]">Apply to jobs from the Jobs page and they&apos;ll appear here</p>
             </div>
           ) : (
-            <>
-              {/* header row */}
-              <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr_1fr] gap-4 px-5 py-3 border-b border-white/5">
-                {["Role", "Company", "Applied", "Status", "Action"].map((h) => (
-                  <span key={h} className="text-[10px] uppercase tracking-wider text-[#5a5a7a] font-semibold">
-                    {h}
-                  </span>
+            <div className="overflow-x-auto">
+              <div className="min-w-[760px]">
+                {/* header row */}
+                <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr_1fr] gap-4 px-5 py-3 border-b border-white/5">
+                  {["Role", "Company", "Applied", "Status", "Action"].map((h) => (
+                    <span key={h} className="text-[10px] uppercase tracking-wider text-[#5a5a7a] font-semibold">
+                      {h}
+                    </span>
+                  ))}
+                </div>
+                {apps.map((app, i) => (
+                  <div
+                    key={app.application_id}
+                    className={`grid grid-cols-[2fr_1.5fr_1fr_1fr_1fr] gap-4 px-5 py-4 items-center transition-colors hover:bg-[rgba(255,255,255,0.015)] ${i < apps.length - 1 ? "border-b border-[rgba(255,255,255,0.04)]" : ""
+                      }`}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-medium text-[#eeeef5] truncate">{app.title}</p>
+                      {app.apply_url && app.apply_url !== "#" && (
+                        <a href={app.apply_url} target="_blank" rel="noreferrer" className="text-[11px] text-[#a78bfa] hover:text-[#eeeef5]">
+                          View listing ↗
+                        </a>
+                      )}
+                    </div>
+                    <p className="text-[13px] text-[#8080a0] truncate">{app.company}</p>
+                    <p className="text-[12px] text-[#5a5a7a]">{fmtDate(app.applied_at)}</p>
+                    <StatusBadge status={app.status} />
+                    <select
+                      value={app.status}
+                      onChange={(e) => changeStatus(app, e.target.value as ApplicationStatus)}
+                      disabled={updating === app.application_id}
+                      aria-label={`Change status for ${app.title}`}
+                      className="bg-[#0d0d1f] border border-[rgba(255,255,255,0.08)] rounded-lg px-2 py-1.5 text-[11px] text-[#8080a0] outline-none focus:border-[rgba(91,79,255,0.4)] cursor-pointer disabled:opacity-40"
+                    >
+                      {STATUS_OPTIONS.map((s) => (
+                        <option key={s} value={s}>{statLabels[s]}</option>
+                      ))}
+                    </select>
+                  </div>
                 ))}
               </div>
-              {apps.map((app, i) => (
-                <div
-                  key={app.application_id}
-                  className={`grid grid-cols-[2fr_1.5fr_1fr_1fr_1fr] gap-4 px-5 py-4 items-center transition-colors hover:bg-[rgba(255,255,255,0.015)] ${i < apps.length - 1 ? "border-b border-[rgba(255,255,255,0.04)]" : ""
-                    }`}
-                >
-                  <div className="min-w-0">
-                    <p className="text-[13px] font-medium text-[#eeeef5] truncate">{app.title}</p>
-                    {app.apply_url && app.apply_url !== "#" && (
-                      <a href={app.apply_url} target="_blank" rel="noreferrer" className="text-[11px] text-[#a78bfa] hover:text-[#eeeef5]">
-                        View listing ↗
-                      </a>
-                    )}
-                  </div>
-                  <p className="text-[13px] text-[#8080a0] truncate">{app.company}</p>
-                  <p className="text-[12px] text-[#5a5a7a]">{fmtDate(app.applied_at)}</p>
-                  <StatusBadge status={app.status} />
-                  <select
-                    value={app.status}
-                    onChange={(e) => changeStatus(app, e.target.value as ApplicationStatus)}
-                    disabled={updating === app.application_id}
-                    aria-label={`Change status for ${app.title}`}
-                    className="bg-[#0d0d1f] border border-[rgba(255,255,255,0.08)] rounded-lg px-2 py-1.5 text-[11px] text-[#8080a0] outline-none focus:border-[rgba(91,79,255,0.4)] cursor-pointer disabled:opacity-40"
-                  >
-                    {STATUS_OPTIONS.map((s) => (
-                      <option key={s} value={s}>{statLabels[s]}</option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-            </>
+            </div>
           )}
         </div>
       </div>

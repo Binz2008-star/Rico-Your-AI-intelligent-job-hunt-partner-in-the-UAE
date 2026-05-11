@@ -56,7 +56,7 @@ export function DashboardShell({
             <div className="w-8 h-8 rounded-[9px] bg-gradient-to-br from-[#5b4fff] to-[#8b5cf6] flex items-center justify-center text-sm font-black shadow-[0_4px_16px_rgba(91,79,255,0.3)]">
               R
             </div>
-            <span className="font-['Cabinet_Grotesk',sans-serif] font-900 text-lg">Rico AI</span>
+            <span className="font-['Cabinet_Grotesk',sans-serif] font-black text-lg">Rico AI</span>
           </Link>
           <p className="mt-1 text-[11px] text-[#5a5a7a] pl-[42px]">Autonomous job hunter</p>
         </div>
