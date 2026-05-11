@@ -4,10 +4,12 @@ tests/test_rico_chat_response_source.py
 Verifies that /api/v1/rico/chat responses carry the diagnostic metadata
 needed to tell, from the wire alone, which code path produced the reply.
 
-Three sources only:
-  * keyword  — deterministic regex-driven branches
-  * openai   — successful RicoOpenAIAgent.respond() call against the API
-  * fallback — agent reachable but no key, OpenAI exception, or safety refusal
+Sources:
+  * keyword      — deterministic regex-driven branches
+  * openai       — successful RicoOpenAIAgent.respond() call against the API
+  * huggingface  — HF fallback response
+  * rate_limited — OpenAI provider returned 429
+  * fallback     — agent reachable but no key, OpenAI exception, or safety refusal
 
 No secrets, no profile contents, no user message bytes are ever asserted
 on the response — only flat sanitised metadata fields.
@@ -147,7 +149,36 @@ def test_greeting_falls_through_to_openai_path(chat_api, monkeypatch):
     _assert_metadata(resp, source="openai", openai_available=True, profile_present=True)
 
 
-# ── 5. Metadata never leaks the OpenAI key or full profile contents ───────────
+# ── 5. OpenAI 429 → response_source = "rate_limited" ─────────────────────────
+
+
+def test_openai_rate_limit_reports_rate_limited_source(chat_api, monkeypatch):
+    """A mocked OpenAI 429 response must not be collapsed into generic fallback."""
+    profile = {"user_id": "erin@rico.ai", "target_roles": ["Operations Manager"]}
+    _stub_active_user(monkeypatch, profile)
+
+    chat_api.openai_agent = MagicMock()
+    chat_api.openai_agent.available = True
+    chat_api.openai_agent.hf_available = False
+    chat_api.openai_agent.model = "gpt-4.1-mini"
+    chat_api.openai_agent.respond.return_value = {
+        "type": "openai_rate_limited",
+        "message": "Rico's AI provider is currently rate-limited.",
+        "provider": "openai",
+        "provider_state": "rate_limited",
+        "response_source": "rate_limited",
+    }
+
+    resp = chat_api._handle_active_user("erin@rico.ai", "hi")
+
+    chat_api.openai_agent.respond.assert_called_once()
+    _assert_metadata(resp, source="rate_limited", openai_available=True, profile_present=True, hf_available=False)
+    assert resp["type"] == "openai_rate_limited"
+    assert resp["provider"] == "openai"
+    assert resp["provider_state"] == "rate_limited"
+
+
+# ── 6. Metadata never leaks the OpenAI key or full profile contents ───────────
 
 
 def test_metadata_does_not_leak_secrets_or_profile(chat_api, monkeypatch):
