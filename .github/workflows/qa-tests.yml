@@ -25,4 +25,5 @@ jobs:
 
       - name: Run targeted QA tests
         run: |
-          pytest tests/unit/test_filter.py tests/unit/test_telegram_bot.py -q
+          cd $GITHUB_WORKSPACE
+          PYTHONPATH=$GITHUB_WORKSPACE pytest tests/unit/test_filter.py tests/unit/test_telegram_bot.py -v
