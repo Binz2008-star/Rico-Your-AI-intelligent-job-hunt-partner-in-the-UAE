@@ -245,17 +245,16 @@ class TestUserApplicationsIsolation:
 
         assert result == legacy_apps
 
-    def test_db_unavailable_falls_back_to_legacy(self):
-        """When Rico DB is unavailable, user-scoped calls must fall back to global JSON."""
+    def test_db_unavailable_raises_503(self):
+        """When Rico DB is unavailable, user-scoped calls must raise HTTP 503 (no JSON fallback)."""
+        from fastapi import HTTPException
         from src.repositories import applications_repo
 
-        legacy_apps = [{"job_id": "fallback1", "title": "Fallback Job"}]
+        with patch("src.repositories.applications_repo._db", return_value=None):
+            with pytest.raises(HTTPException) as exc_info:
+                applications_repo.get_all(user_id="any@rico.ai")
 
-        with patch("src.repositories.applications_repo._db", return_value=None), \
-             patch("src.repositories.applications_repo._get_applied", return_value=legacy_apps):
-            result = applications_repo.get_all(user_id="any@rico.ai")
-
-        assert result == legacy_apps
+        assert exc_info.value.status_code == 503
 
 
 # ── Settings isolation ─────────────────────────────────────────────────────────
@@ -267,7 +266,7 @@ class TestUserSettingsIsolation:
 
         conn = MagicMock()
         cur = MagicMock()
-        cur.fetchone.return_value = (["hse"], [], 60, 5, "")
+        cur.fetchone.return_value = (["hse"], [], 60, 5, "", 75, 50)
         conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
         conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
 
