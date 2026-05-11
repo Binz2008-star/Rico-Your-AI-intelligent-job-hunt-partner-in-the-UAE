@@ -6,9 +6,11 @@
 
 export class ApiError extends Error {
   statusCode: number;
-  constructor(message: string, statusCode: number) {
+  data?: unknown;
+  constructor(message: string, statusCode: number, data?: unknown) {
     super(message);
     this.statusCode = statusCode;
+    this.data = data;
     this.name = "ApiError";
   }
 }
@@ -49,52 +51,36 @@ function buildUrl(path: string, params?: Record<string, unknown>): string {
   return `${url}?${qs.toString()}`;
 }
 
-function handleError(path: string, res: Response): never {
-  throw new ApiError(`${res.status} ${path}`, res.status);
+async function handleError(path: string, res: Response): Promise<never> {
+  const body = (await res.json().catch(() => ({}))) as { detail?: string };
+  throw new ApiError(body.detail ?? `${res.status} ${path}`, res.status, body);
+}
+
+async function request<T>(
+  path: string,
+  method: string,
+  data?: unknown,
+  config?: { params?: Record<string, unknown> }
+): Promise<{ data: T }> {
+  const isForm = data instanceof FormData;
+  const res = await fetch(buildUrl(path, config?.params), {
+    method,
+    headers: isForm ? undefined : { "Content-Type": "application/json" },
+    credentials: "include",
+    body: isForm ? data : data ? JSON.stringify(data) : undefined,
+  });
+  if (!res.ok) return handleError(path, res);
+  if (res.status === 204) return { data: {} as T };
+  return { data: (await res.json()) as T };
 }
 
 const client = {
-  async get<T>(path: string, config?: { params?: Record<string, unknown> }) {
-    const res = await fetch(buildUrl(path, config?.params), {
-      credentials: "include",
-    });
-    if (!res.ok) handleError(path, res);
-    return { data: (await res.json()) as T };
-  },
-
-  async post<T>(path: string, data?: unknown) {
-    const isForm = data instanceof FormData;
-    const res = await fetch(buildUrl(path), {
-      method: "POST",
-      headers: isForm ? undefined : { "Content-Type": "application/json" },
-      credentials: "include",
-      body: isForm ? data : JSON.stringify(data),
-    });
-    if (!res.ok) handleError(path, res);
-    return { data: (await res.json()) as T };
-  },
-
-  async patch<T>(path: string, data?: unknown) {
-    const res = await fetch(buildUrl(path), {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) handleError(path, res);
-    return { data: (await res.json()) as T };
-  },
-
-  async put<T>(path: string, data?: unknown) {
-    const res = await fetch(buildUrl(path), {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) handleError(path, res);
-    return { data: (await res.json()) as T };
-  },
+  get: <T>(path: string, config?: { params?: Record<string, unknown> }) =>
+    request<T>(path, "GET", undefined, config),
+  post: <T>(path: string, data?: unknown) => request<T>(path, "POST", data),
+  patch: <T>(path: string, data?: unknown) => request<T>(path, "PATCH", data),
+  put: <T>(path: string, data?: unknown) => request<T>(path, "PUT", data),
+  del: <T>(path: string) => request<T>(path, "DELETE"),
 };
 
 export default client;

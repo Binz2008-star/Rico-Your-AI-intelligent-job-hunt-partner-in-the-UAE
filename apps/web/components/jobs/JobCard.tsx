@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
 import { cn } from "@/lib/utils";
 import type { Job } from "@/types";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 interface JobCardProps {
   job: Job;
@@ -13,17 +13,7 @@ interface JobCardProps {
   className?: string;
 }
 
-/** Two-letter abbreviation for company logo placeholder */
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
-}
-
-const logoColors = [
+const LOGO_COLORS = [
   "from-blue-500/20 to-blue-400/10 text-blue-300",
   "from-emerald-500/20 to-emerald-400/10 text-emerald-300",
   "from-amber-500/20 to-amber-400/10 text-amber-300",
@@ -31,24 +21,28 @@ const logoColors = [
   "from-rose-500/20 to-rose-400/10 text-rose-300",
 ];
 
-function pickColor(name: string) {
-  let h = 0;
-  for (const c of name) h = (h * 31 + c.charCodeAt(0)) & 0xffffffff;
-  return logoColors[Math.abs(h) % logoColors.length];
-}
-
 export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps) {
-  const [loading, setLoading] = useState<string | null>(null);
-  const [done, setDone] = useState<string | null>(null);
+  const [localAction, setLocalAction] = useState<string | null>(null);
+  const [isDone, setIsDone] = useState(false);
 
-  const handle = async (action: string) => {
-    if (!onAction || loading || isSubmitting) return;
-    setLoading(action);
+  const config = useMemo(() => {
+    const name = job.company ?? "Unknown";
+    const init = name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return { initials: init, colorClass: LOGO_COLORS[Math.abs(hash) % LOGO_COLORS.length] };
+  }, [job.company]);
+
+  const handleActionClick = async (action: string) => {
+    if (!onAction || localAction || isSubmitting) return;
+    setLocalAction(action);
     try {
       await onAction(job.job_id, action);
-      setDone(action);
+      setIsDone(true);
     } finally {
-      setLoading(null);
+      setLocalAction(null);
     }
   };
 
@@ -64,7 +58,7 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
       className={cn(
         "group bg-[#0e0e20] border border-white/6 rounded-2xl p-5",
         "hover:border-[rgba(91,79,255,0.3)] hover:bg-[#14142a] transition-all duration-200",
-        done && "opacity-60",
+        isDone && "opacity-60 grayscale-[0.5]",
         className
       )}
     >
@@ -74,10 +68,10 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
           className={cn(
             "w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center",
             "bg-gradient-to-br font-['Cabinet_Grotesk',sans-serif] font-black text-xs",
-            pickColor(company)
+            config.colorClass
           )}
         >
-          {initials(company)}
+          {config.initials}
         </div>
 
         <div className="flex-1 min-w-0">
@@ -117,13 +111,13 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
       </div>
 
       {/* actions */}
-      {onAction && !done && (
+      {!isDone ? (
         <div className="flex gap-2 mt-4 pt-3 border-t border-white/6">
           <Button
             variant="teal"
             size="sm"
-            loading={loading === "apply"}
-            onClick={() => handle("apply")}
+            loading={localAction === "apply" || isSubmitting}
+            onClick={() => handleActionClick("apply")}
             className="flex-1"
           >
             Apply
@@ -131,25 +125,23 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
           <Button
             variant="ghost"
             size="sm"
-            loading={loading === "save"}
-            onClick={() => handle("save")}
+            loading={localAction === "save"}
+            onClick={() => handleActionClick("save")}
           >
             Save
           </Button>
           <Button
             variant="outline"
             size="sm"
-            loading={loading === "ignore"}
-            onClick={() => handle("ignore")}
+            loading={localAction === "ignore"}
+            onClick={() => handleActionClick("ignore")}
           >
             Ignore
           </Button>
         </div>
-      )}
-
-      {done && (
-        <p className="text-[12px] text-white/30 mt-3 pt-3 border-t border-white/6 capitalize">
-          Marked as <span className="text-white/60 font-medium">{done}</span>
+      ) : (
+        <p className="mt-4 pt-3 border-t border-white/6 text-[11px] text-white/30 uppercase tracking-widest font-bold">
+          Action Completed
         </p>
       )}
     </div>

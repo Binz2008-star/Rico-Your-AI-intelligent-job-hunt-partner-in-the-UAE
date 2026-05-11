@@ -5,7 +5,7 @@ import { ApiError } from "@/lib/client";
 import { getApplications, getApplicationStats } from "@/services/applications";
 import { getJobs } from "@/services/jobs";
 import { getSettings } from "@/services/settings";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 interface Stats {
   jobsTotal: number;
@@ -23,64 +23,55 @@ export function DashboardStats() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<"auth" | "other" | null>(null);
 
-  useEffect(() => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
 
-    Promise.all([
-      getJobs(1, 1).catch(() => null),
-      getApplications(undefined, 1, 1).catch(() => null),
-      getApplicationStats().catch(() => null),
-      getSettings().catch(() => null),
-    ])
-      .then(([jobsRes, appsRes, statsRes, settingsRes]) => {
-        if (!jobsRes && !appsRes && !statsRes && !settingsRes) {
-          setError("other");
-          return;
-        }
-        setStats({
-          jobsTotal: jobsRes?.total ?? 0,
-          appsTotal: appsRes?.total ?? 0,
-          applied: statsRes?.applied ?? 0,
-          interview: statsRes?.interview_scheduled ?? 0,
-          offer: statsRes?.offer_extended ?? 0,
-          rejected: statsRes?.rejected ?? 0,
-          minScore: settingsRes?.min_score ?? 0,
-          maxDaily: settingsRes?.max_daily_applies ?? 0,
-        });
-      })
-      .catch((err) => {
-        const is401 = err instanceof ApiError && err.statusCode === 401;
-        setError(is401 ? "auth" : "other");
-      })
-      .finally(() => setLoading(false));
+    try {
+      const [jobsResult, appsResult, statsResult, settingsResult] = await Promise.allSettled([
+        getJobs(1, 1),
+        getApplications(undefined, 1, 1),
+        getApplicationStats(),
+        getSettings(),
+      ]);
+
+      const jobsRes = jobsResult.status === "fulfilled" ? jobsResult.value : null;
+      const appsRes = appsResult.status === "fulfilled" ? appsResult.value : null;
+      const statsRes = statsResult.status === "fulfilled" ? statsResult.value : null;
+      const settingsRes = settingsResult.status === "fulfilled" ? settingsResult.value : null;
+
+      if (!jobsRes && !appsRes) {
+        setError("other");
+        return;
+      }
+
+      setStats({
+        jobsTotal: jobsRes?.total ?? 0,
+        appsTotal: appsRes?.total ?? 0,
+        applied: statsRes?.applied ?? 0,
+        interview: statsRes?.interview_scheduled ?? 0,
+        offer: statsRes?.offer_extended ?? 0,
+        rejected: statsRes?.rejected ?? 0,
+        minScore: settingsRes?.min_score ?? 0,
+        maxDaily: settingsRes?.max_daily_applies ?? 0,
+      });
+    } catch (err) {
+      const is401 = err instanceof ApiError && err.statusCode === 401;
+      setError(is401 ? "auth" : "other");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  if (loading) {
-    return (
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="h-24 rounded-xl bg-zinc-900/60 border border-zinc-800 animate-pulse" />
-        ))}
-      </div>
-    );
-  }
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-  if (error === "auth") {
-    return (
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-        <p className="text-sm text-zinc-400">Session expired — please log in again.</p>
-      </div>
-    );
-  }
+  if (loading) return <StatsSkeleton />;
 
-  if (error === "other") {
-    return (
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-        <p className="text-sm text-zinc-400">Could not load dashboard stats. The backend may be unavailable.</p>
-      </div>
-    );
-  }
+  if (error === "auth") return <ErrorMessage message="Session expired — please log in again." icon="🔒" />;
+
+  if (error === "other") return <ErrorMessage message="Could not load dashboard stats. The backend may be unavailable." icon="⚠️" />;
 
   if (!stats) return null;
 
@@ -99,10 +90,27 @@ export function DashboardStats() {
         </p>
       </StatusCard>
       <StatusCard title="Daily limit" badge={stats.maxDaily > 0 ? "live" : "placeholder"} value={`${stats.maxDaily}`} href="/settings">
-        <p className="text-sm text-zinc-500">
-          Max {stats.maxDaily} auto-applies per day
-        </p>
+        <p className="text-sm text-zinc-500">Max {stats.maxDaily} auto-applies per day</p>
       </StatusCard>
+    </div>
+  );
+}
+
+function StatsSkeleton() {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} className="h-24 rounded-xl bg-zinc-900/60 border border-zinc-800 animate-pulse" />
+      ))}
+    </div>
+  );
+}
+
+function ErrorMessage({ message, icon }: { message: string; icon: string }) {
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 text-center">
+      <span className="text-2xl block mb-2">{icon}</span>
+      <p className="text-sm text-zinc-400 font-medium">{message}</p>
     </div>
   );
 }
