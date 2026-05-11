@@ -84,18 +84,18 @@ export default function SettingsPage() {
     <DashboardShell>
       <div className="px-8 py-6 border-b border-white/5 bg-[rgba(7,7,18,0.7)] backdrop-blur-md sticky top-0 z-10">
         <h1 className="font-['Cabinet_Grotesk',sans-serif] font-900 text-[22px] tracking-tight">Settings</h1>
-        <p className="text-[13px] text-white/35 mt-0.5">System configuration and job matching preferences</p>
+        <p className="text-[13px] text-[#5a5a7a] mt-0.5">System configuration and job matching preferences</p>
       </div>
 
       <div className="p-8 max-w-2xl flex flex-col gap-6">
 
         {/* Backend status */}
-        <div className="bg-[#0e0e20] border border-white/6 rounded-2xl p-6">
+        <div className="bg-[#13132a]/80 border border-[rgba(255,255,255,0.06)] rounded-2xl p-6">
           <h2 className="font-['Cabinet_Grotesk',sans-serif] font-700 text-[15px] mb-4">Backend Status</h2>
           {loadingHealth ? (
             <div className="flex flex-col gap-2">
               {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="h-10 rounded-lg bg-white/3 animate-pulse" />
+                <div key={i} className="h-10 rounded-lg bg-[rgba(255,255,255,0.03)] animate-pulse" />
               ))}
             </div>
           ) : health ? (
@@ -114,18 +114,18 @@ export default function SettingsPage() {
         </div>
 
         {/* Job matching preferences */}
-        <div className="bg-[#0e0e20] border border-white/6 rounded-2xl p-6">
+        <div className="bg-[#13132a]/80 border border-[rgba(255,255,255,0.06)] rounded-2xl p-6">
           <h2 className="font-['Cabinet_Grotesk',sans-serif] font-700 text-[15px] mb-4">Job Matching</h2>
           {loadingSettings ? (
             <div className="flex flex-col gap-3">
               {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-10 rounded-lg bg-white/3 animate-pulse" />
+                <div key={i} className="h-10 rounded-lg bg-[rgba(255,255,255,0.03)] animate-pulse" />
               ))}
             </div>
           ) : error === "auth" ? (
             <div className="flex flex-col items-center justify-center py-10 gap-3 text-center">
               <span className="text-4xl opacity-25">🔒</span>
-              <p className="text-[14px] text-white/30">Session expired</p>
+              <p className="text-[14px] text-[#5a5a7a]">Session expired</p>
               <a
                 href="/login"
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[rgba(91,79,255,0.15)] text-[#a78bfa] border border-[rgba(91,79,255,0.25)] text-[13px] font-semibold hover:bg-[rgba(91,79,255,0.25)] transition-all"
@@ -136,65 +136,65 @@ export default function SettingsPage() {
           ) : error === "other" ? (
             <div className="flex flex-col items-center justify-center py-10 gap-3 text-center">
               <span className="text-4xl opacity-25">⚠️</span>
-              <p className="text-[14px] text-white/30">Could not load settings</p>
-              <p className="text-[12px] text-white/20">The backend may be unavailable.</p>
+              <p className="text-[14px] text-[#5a5a7a]">Could not load settings</p>
+              <p className="text-[12px] text-[#5a5a7a]">The backend may be unavailable.</p>
             </div>
           ) : settings ? (
             <div className="flex flex-col gap-4">
               <div className="grid grid-cols-2 gap-4">
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-[11px] text-white/30 uppercase tracking-wider font-semibold">Min score</span>
+                  <span className="text-[11px] text-[#5a5a7a] uppercase tracking-wider font-semibold">Min score</span>
                   <input
                     type="number"
                     min={0}
                     max={100}
                     value={settings.min_score}
                     onChange={(e) => setSettings({ ...settings, min_score: Number(e.target.value) })}
-                    className="bg-[#14142a] border border-white/8 rounded-lg px-3 py-2 text-[13px] text-white/70 outline-none focus:border-[rgba(91,79,255,0.4)]"
+                    className="bg-[#0d0d1f] border border-[rgba(255,255,255,0.08)] rounded-lg px-3 py-2 text-[13px] text-[#8080a0] outline-none focus:border-[rgba(91,79,255,0.4)]"
                   />
                 </label>
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-[11px] text-white/30 uppercase tracking-wider font-semibold">Max daily applies</span>
+                  <span className="text-[11px] text-[#5a5a7a] uppercase tracking-wider font-semibold">Max daily applies</span>
                   <input
                     type="number"
                     min={1}
                     max={50}
                     value={settings.max_daily_applies}
                     onChange={(e) => setSettings({ ...settings, max_daily_applies: Number(e.target.value) })}
-                    className="bg-[#14142a] border border-white/8 rounded-lg px-3 py-2 text-[13px] text-white/70 outline-none focus:border-[rgba(91,79,255,0.4)]"
+                    className="bg-[#0d0d1f] border border-[rgba(255,255,255,0.08)] rounded-lg px-3 py-2 text-[13px] text-[#8080a0] outline-none focus:border-[rgba(91,79,255,0.4)]"
                   />
                 </label>
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-[11px] text-white/30 uppercase tracking-wider font-semibold">Apply threshold</span>
+                  <span className="text-[11px] text-[#5a5a7a] uppercase tracking-wider font-semibold">Apply threshold</span>
                   <input
                     type="number"
                     min={0}
                     max={100}
                     value={settings.score_threshold_apply}
                     onChange={(e) => setSettings({ ...settings, score_threshold_apply: Number(e.target.value) })}
-                    className="bg-[#14142a] border border-white/8 rounded-lg px-3 py-2 text-[13px] text-white/70 outline-none focus:border-[rgba(91,79,255,0.4)]"
+                    className="bg-[#0d0d1f] border border-[rgba(255,255,255,0.08)] rounded-lg px-3 py-2 text-[13px] text-[#8080a0] outline-none focus:border-[rgba(91,79,255,0.4)]"
                   />
                 </label>
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-[11px] text-white/30 uppercase tracking-wider font-semibold">Watch threshold</span>
+                  <span className="text-[11px] text-[#5a5a7a] uppercase tracking-wider font-semibold">Watch threshold</span>
                   <input
                     type="number"
                     min={0}
                     max={100}
                     value={settings.score_threshold_watch}
                     onChange={(e) => setSettings({ ...settings, score_threshold_watch: Number(e.target.value) })}
-                    className="bg-[#14142a] border border-white/8 rounded-lg px-3 py-2 text-[13px] text-white/70 outline-none focus:border-[rgba(91,79,255,0.4)]"
+                    className="bg-[#0d0d1f] border border-[rgba(255,255,255,0.08)] rounded-lg px-3 py-2 text-[13px] text-[#8080a0] outline-none focus:border-[rgba(91,79,255,0.4)]"
                   />
                 </label>
               </div>
               <label className="flex flex-col gap-1.5">
-                <span className="text-[11px] text-white/30 uppercase tracking-wider font-semibold">Telegram chat ID</span>
+                <span className="text-[11px] text-[#5a5a7a] uppercase tracking-wider font-semibold">Telegram chat ID</span>
                 <input
                   type="text"
                   value={settings.telegram_chat_id}
                   onChange={(e) => setSettings({ ...settings, telegram_chat_id: e.target.value })}
                   placeholder="Optional — for job alerts"
-                  className="bg-[#14142a] border border-white/8 rounded-lg px-3 py-2 text-[13px] text-white/70 outline-none focus:border-[rgba(91,79,255,0.4)] placeholder:text-white/20"
+                  className="bg-[#0d0d1f] border border-[rgba(255,255,255,0.08)] rounded-lg px-3 py-2 text-[13px] text-[#8080a0] outline-none focus:border-[rgba(91,79,255,0.4)] placeholder:text-[#5a5a7a]"
                 />
               </label>
               <button
@@ -209,7 +209,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Frontend config */}
-        <div className="bg-[#0e0e20] border border-white/6 rounded-2xl p-6">
+        <div className="bg-[#13132a]/80 border border-[rgba(255,255,255,0.06)] rounded-2xl p-6">
           <h2 className="font-['Cabinet_Grotesk',sans-serif] font-700 text-[15px] mb-4">Frontend Config</h2>
           <Row label="Mock mode" value={isMock ? "ENABLED — using dev fixtures" : "OFF — hitting real backend"} ok={!isMock} />
         </div>
