@@ -46,18 +46,11 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
     }
   };
 
-  const title = job.title ?? "Untitled role";
-  const company = job.company ?? "Unknown company";
-  const location = job.location ?? "Remote / unspecified";
-  const reason = job.reason ?? "";
-  const salary = job.salary_range ?? job.salary ?? "";
-  const tags = Array.isArray(job.tags) ? job.tags : [];
-
   return (
     <div
       className={cn(
-        "group bg-[#0e0e20] border border-white/6 rounded-2xl p-5",
-        "hover:border-[rgba(91,79,255,0.3)] hover:bg-[#14142a] transition-all duration-200",
+        "group bg-[#0e0e20] border border-white/5 rounded-2xl p-5",
+        "hover:border-[rgba(91,79,255,0.25)] hover:bg-[#14142a] hover:shadow-[0_8px_30px_rgba(0,0,0,0.12)] transition-all duration-300",
         isDone && "opacity-60 grayscale-[0.5]",
         className
       )}
@@ -67,7 +60,7 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
         <div
           className={cn(
             "w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center",
-            "bg-gradient-to-br font-['Cabinet_Grotesk',sans-serif] font-black text-xs",
+            "bg-gradient-to-br font-bold text-xs",
             config.colorClass
           )}
         >
@@ -75,11 +68,11 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
         </div>
 
         <div className="flex-1 min-w-0">
-          <p className="font-['Cabinet_Grotesk',sans-serif] font-700 text-[15px] leading-snug tracking-tight truncate text-white">
-            {title}
+          <p className="font-['Cabinet_Grotesk',sans-serif] font-700 text-[15px] text-[#eeeef5] truncate">
+            {job.title ?? "Untitled Role"}
           </p>
-          <p className="text-[13px] text-white/50 mt-0.5">
-            {company} · {location}
+          <p className="text-[13px] text-[#8080a0] mt-0.5 truncate">
+            {job.company ?? "Unknown"} · {job.location ?? "Remote"}
           </p>
         </div>
 
@@ -87,24 +80,21 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
       </div>
 
       {/* reason */}
-      {reason && (
-        <p className="mt-3 text-[12px] text-white/40 leading-relaxed bg-black/20 rounded-lg px-3 py-2 border border-white/4">
-          {reason}
+      {job.reason && (
+        <p className="mt-3 text-[12px] text-[#5a5a7a] leading-relaxed bg-white/5 rounded-lg px-3 py-2 border border-white/5">
+          {job.reason}
         </p>
       )}
 
       {/* tags + salary */}
       <div className="flex gap-1.5 mt-3 flex-wrap items-center">
-        {salary && (
-          <span className="text-[11px] px-2.5 py-1 rounded-md bg-[rgba(91,79,255,0.1)] text-[#a78bfa] border border-[rgba(91,79,255,0.18)] font-medium">
-            {salary}
+        {(job.salary_range || job.salary) && (
+          <span className="text-[11px] px-2.5 py-1 rounded-md bg-[#5b4fff1a] text-[#a78bfa] border border-[#5b4fff2e] font-medium">
+            {job.salary_range || job.salary}
           </span>
         )}
-        {tags.map((tag) => (
-          <span
-            key={tag}
-            className="text-[11px] px-2.5 py-1 rounded-md bg-white/4 text-white/40 border border-white/6"
-          >
+        {Array.isArray(job.tags) && job.tags.map((tag) => (
+          <span key={tag} className="text-[11px] px-2.5 py-1 rounded-md bg-white/5 text-[#5a5a7a] border border-white/5">
             {tag}
           </span>
         ))}
@@ -112,7 +102,7 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
 
       {/* actions */}
       {!isDone ? (
-        <div className="flex gap-2 mt-4 pt-3 border-t border-white/6">
+        <div className="flex gap-2 mt-4 pt-3 border-t border-white/5">
           <Button
             variant="teal"
             size="sm"
@@ -140,9 +130,10 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
           </Button>
         </div>
       ) : (
-        <p className="mt-4 pt-3 border-t border-white/6 text-[11px] text-white/30 uppercase tracking-widest font-bold">
-          Action Completed
-        </p>
+        <div className="mt-4 pt-3 border-t border-white/5 flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <p className="text-[11px] text-[#5a5a7a] uppercase tracking-widest font-bold">Action Completed</p>
+        </div>
       )}
     </div>
   );
