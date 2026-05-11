@@ -397,3 +397,66 @@ class TestSendJobCardWithButtons:
              }):
             result = send_job_card_with_buttons(_SAMPLE_JOB)
         assert result is False
+
+
+# ── Telegram webhook idempotency ──────────────────────────────────────────────
+
+class TestTelegramIdempotency:
+    """process_telegram_update must skip duplicate update_ids."""
+
+    def _message_update(self, update_id: str | None = "upd-1") -> dict:
+        p: dict = {
+            "message": {
+                "chat": {"id": "chat-42"},
+                "from": {"id": "chat-42"},
+                "text": "Hello Rico",
+            }
+        }
+        if update_id is not None:
+            p["update_id"] = update_id
+        return p
+
+    def _run(self, update: dict, is_proc: bool):
+        from src.rico_telegram_webhook import process_telegram_update
+        with patch("src.rico_telegram_webhook.is_processed", return_value=is_proc) as mock_is, \
+             patch("src.rico_telegram_webhook.mark_processed") as mock_mark, \
+             patch("src.rico_telegram_webhook.chat_api") as mock_api:
+            mock_api.process_message.return_value = {"message": "hi"}
+            result = process_telegram_update(update)
+        return result, mock_is, mock_mark, mock_api
+
+    def test_duplicate_update_id_skipped(self):
+        result, _, mock_mark, mock_api = self._run(self._message_update("upd-1"), is_proc=True)
+        assert result == {"ok": True, "duplicate": True}
+        mock_api.process_message.assert_not_called()
+        mock_mark.assert_not_called()
+
+    def test_first_update_processed_normally(self):
+        result, mock_is, mock_mark, mock_api = self._run(self._message_update("upd-2"), is_proc=False)
+        mock_is.assert_called_once_with("telegram", "upd-2")
+        mock_api.process_message.assert_called_once()
+        mock_mark.assert_called_once_with("telegram", "upd-2")
+        assert "duplicate" not in result
+
+    def test_missing_update_id_bypasses_guard(self):
+        result, mock_is, mock_mark, _ = self._run(self._message_update(update_id=None), is_proc=False)
+        mock_is.assert_not_called()
+        mock_mark.assert_not_called()
+
+    def test_callback_query_path_also_marked(self):
+        update = {
+            "update_id": "upd-3",
+            "callback_query": {"id": "cb-1", "data": "apply:job-1"},
+        }
+        from src.rico_telegram_webhook import process_telegram_update
+        with patch("src.rico_telegram_webhook.is_processed", return_value=False), \
+             patch("src.rico_telegram_webhook.mark_processed") as mock_mark, \
+             patch("src.rico_telegram_webhook.handle_callback_only",
+                   return_value={"callback_id": "cb-1", "reply": "ok"}), \
+             patch("src.rico_telegram_webhook.answer_callback_query"):
+            process_telegram_update(update)
+        mock_mark.assert_called_once_with("telegram", "upd-3")
+
+    def test_is_processed_called_with_correct_source(self):
+        _, mock_is, _, _ = self._run(self._message_update("upd-5"), is_proc=False)
+        mock_is.assert_called_once_with("telegram", "upd-5")
