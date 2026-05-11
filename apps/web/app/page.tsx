@@ -539,9 +539,14 @@ export default function HomePage() {
             </p>
           </Reveal>
           <Reveal>
-            <a href="https://form.jotform.com/261278237812056" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-[#5b4fff] text-white px-10 py-4 rounded-lg text-[16px] font-semibold no-underline transition-all hover:bg-[#4b3ff0] font-['Space_Grotesk',sans-serif] shadow-[0_4px_20px_rgba(91,79,255,0.3)]">
-              Launch Rico →
-            </a>
+            <div className="flex flex-col items-center gap-4">
+              <Link href="/login" className="inline-flex items-center gap-2 bg-[#5b4fff] text-white px-10 py-4 rounded-lg text-[16px] font-semibold no-underline transition-all hover:bg-[#4b3ff0] font-['Space_Grotesk',sans-serif] shadow-[0_4px_20px_rgba(91,79,255,0.3)]">
+                Launch Rico →
+              </Link>
+              <a href="https://form.jotform.com/261278237812056" target="_blank" rel="noopener noreferrer" className="text-[13px] text-[#5a5a7a] no-underline hover:text-[#eeeef5] transition-colors font-['Space_Grotesk',sans-serif]">
+                New user? Request access via Quick Start form →
+              </a>
+            </div>
           </Reveal>
         </div>
       </section>
