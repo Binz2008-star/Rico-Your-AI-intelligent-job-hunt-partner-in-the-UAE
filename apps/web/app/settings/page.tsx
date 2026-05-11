@@ -243,33 +243,54 @@ export default function SettingsPage() {
               ))}
             </div>
           ) : health ? (
-            <>
-              <Row label="Service" value={health.service ?? "—"} />
-              <Row label="Status" value={health.status} ok={health.status === "ok"} />
-              <Row label="Environment" value={health.environment ?? "—"} />
-              <Row label="Database" value={health.database ?? health.db ?? "—"} ok={(health.database ?? health.db) === "connected"} />
-              <Row
-                label="AI Provider"
-                value={health.ai_provider ?? health.rico?.ai_provider ?? "unknown"}
-                ok={Boolean((health.ready_for_hf ?? health.rico?.ready_for_hf) || (health.openai ?? health.rico?.ready_for_openai))}
-              />
-              <Row
-                label="Hugging Face"
-                value={(health.ready_for_hf ?? health.rico?.ready_for_hf) ? "Configured" : "Not configured"}
-                ok={Boolean(health.ready_for_hf ?? health.rico?.ready_for_hf)}
-              />
-              <Row
-                label="OpenAI"
-                value={(health.openai ?? health.rico?.ready_for_openai) ? "Configured" : "Not active"}
-                ok={Boolean(health.openai ?? health.rico?.ready_for_openai)}
-              />
-              <Row
-                label="Telegram"
-                value={(health.telegram ?? health.rico?.ready_for_telegram) ? "Connected" : "Not configured"}
-                ok={Boolean(health.telegram ?? health.rico?.ready_for_telegram)}
-              />
-              <Row label="Version" value={`v${health.version}`} />
-            </>
+            (() => {
+              const rico = health.rico;
+              const readyForHf = health.ready_for_hf ?? rico?.ready_for_hf ?? false;
+              const readyForOpenAI =
+                health.ready_for_openai ?? rico?.ready_for_openai ?? health.openai ?? false;
+              const readyForJotform =
+                health.ready_for_jotform ?? rico?.ready_for_jotform ?? false;
+              const readyForTelegram =
+                health.telegram ?? rico?.ready_for_telegram ?? false;
+              const aiProvider = health.ai_provider ?? rico?.ai_provider ?? "unknown";
+              const dbStatus =
+                health.database ?? health.db ?? (rico?.ready_for_db ? "connected" : "unknown");
+
+              return (
+                <>
+                  <Row label="Service" value={health.service ?? "—"} />
+                  <Row label="Status" value={health.status} ok={health.status === "ok" || health.status === "healthy"} />
+                  <Row label="Environment" value={health.environment ?? "—"} />
+                  <Row label="Database" value={dbStatus} ok={dbStatus === "connected"} />
+                  <Row
+                    label="AI Provider"
+                    value={aiProvider}
+                    ok={readyForHf || readyForOpenAI}
+                  />
+                  <Row
+                    label="Hugging Face"
+                    value={readyForHf ? "Configured" : "Not configured"}
+                    ok={readyForHf}
+                  />
+                  <Row
+                    label="OpenAI"
+                    value={readyForOpenAI ? "Active" : "Not active"}
+                    ok={readyForOpenAI}
+                  />
+                  <Row
+                    label="Jotform"
+                    value={readyForJotform ? "Configured" : "Not configured"}
+                    ok={readyForJotform}
+                  />
+                  <Row
+                    label="Telegram"
+                    value={readyForTelegram ? "Connected" : "Not configured"}
+                    ok={readyForTelegram}
+                  />
+                  <Row label="Version" value={`v${health.version ?? "0"}`} />
+                </>
+              );
+            })()
           ) : (
             <p className="text-[13px] text-[#ff5e5b]">Could not reach backend</p>
           )}
