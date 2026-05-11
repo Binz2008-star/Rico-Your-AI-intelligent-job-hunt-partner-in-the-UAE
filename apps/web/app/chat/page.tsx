@@ -61,28 +61,28 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
   const scoreLabel = score >= 0.8 ? "Strong match" : score >= 0.6 ? "Good match" : "Possible match";
   const confidence = match.confidence || "medium";
 
-  // Confidence badge styling with restrained colors and clear labels
+  // Confidence badge styling with clear accessibility (colored text + border on dark background)
   const getConfidenceBadge = () => {
     const config = {
       high: {
         label: "High confidence fit",
-        bgColor: "bg-[#5dcaa515]",
+        bgColor: "bg-transparent",
         textColor: "text-[#5dcaa5]",
-        borderColor: "border-[#5dcaa530]",
+        borderColor: "border-[#5dcaa5]",
         icon: "✓"
       },
       medium: {
         label: "Medium confidence fit",
-        bgColor: "bg-[#facc1515]",
+        bgColor: "bg-transparent",
         textColor: "text-[#facc15]",
-        borderColor: "border-[#facc1530]",
+        borderColor: "border-[#facc15]",
         icon: "○"
       },
       low: {
         label: "Needs careful review",
-        bgColor: "bg-[#f8717115]",
+        bgColor: "bg-transparent",
         textColor: "text-[#f87171]",
-        borderColor: "border-[#f8717130]",
+        borderColor: "border-[#f87171]",
         icon: "!"
       }
     };
@@ -111,7 +111,7 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
             </span>
           )}
           {/* Confidence badge with icon and label for accessibility */}
-          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 ${confidenceBadge.bgColor} ${confidenceBadge.textColor} ${confidenceBadge.borderColor} border`}>
+          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 ${confidenceBadge.bgColor} ${confidenceBadge.textColor} border ${confidenceBadge.borderColor}`}>
             <span aria-hidden="true">{confidenceBadge.icon}</span>
             <span>{confidenceBadge.label}</span>
           </span>
