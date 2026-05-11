@@ -223,14 +223,21 @@ class TestSettingsRouteIsolation:
 
     def test_two_users_get_different_settings(self):
         """Settings read for alice must not leak bob's data."""
-        from src.api.app import app
+        _base = {
+            "include_keywords": [],
+            "exclude_keywords": [],
+            "max_daily_applies": 5,
+            "telegram_chat_id": "",
+            "score_threshold_apply": 70,
+            "score_threshold_watch": 50,
+        }
 
         def _settings_side_effect(user_id: str):
             if user_id == "alice@rico.ai":
-                return {"min_score": 70}
+                return {**_base, "min_score": 70}
             if user_id == "bob@rico.ai":
-                return {"min_score": 40}
-            return {"min_score": 50}
+                return {**_base, "min_score": 40}
+            return {**_base, "min_score": 50}
 
         tc_alice = _client_with_token("alice@rico.ai")
         tc_bob = _client_with_token("bob@rico.ai")
