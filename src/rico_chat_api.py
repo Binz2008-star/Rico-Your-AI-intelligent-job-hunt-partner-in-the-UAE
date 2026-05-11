@@ -42,12 +42,6 @@ class RicoChatAPI:
 
     @staticmethod
     def _build_openai_context(profile: Any) -> Dict[str, Any]:
-        """Convert a loaded profile into a JSON-serialisable context dict for the LLM.
-
-        Drops empty/None fields so the prompt stays focused on what is actually
-        known about the user. Returns ``{"profile_exists": False}`` when the
-        user has no saved profile yet.
-        """
         if profile is None:
             return {"profile_exists": False}
         if is_dataclass(profile):
@@ -61,26 +55,21 @@ class RicoChatAPI:
             **{k: v for k, v in raw.items() if v not in (None, "", [], {})},
         }
 
-    # Stable enum of where a chat reply originated. The frontend never sees
-    # secrets — only this label, the model name, and presence booleans.
     SOURCE_KEYWORD = "keyword"
     SOURCE_OPENAI = "openai"
     SOURCE_HF = "huggingface"
     SOURCE_FALLBACK = "fallback"
+    SOURCE_RATE_LIMITED = "rate_limited"
 
     @staticmethod
     def _source_for_openai_response(response: Dict[str, Any]) -> str:
-        """Map a RicoOpenAIAgent response to the correct source label.
-
-        openai_response → ``openai``
-        hf_response     → ``huggingface``
-        everything else → ``fallback``
-        """
         rtype = response.get("type")
         if rtype == "openai_response":
             return RicoChatAPI.SOURCE_OPENAI
         if rtype == "hf_response":
             return RicoChatAPI.SOURCE_HF
+        if rtype == "openai_rate_limited" or response.get("provider_state") == "rate_limited":
+            return RicoChatAPI.SOURCE_RATE_LIMITED
         return RicoChatAPI.SOURCE_FALLBACK
 
     def _finalize(
@@ -90,24 +79,11 @@ class RicoChatAPI:
         *,
         profile: Any = None,
     ) -> Dict[str, Any]:
-        """Return a copy of ``response`` with safe diagnostic metadata attached.
-
-        Adds:
-          * ``response_source``  — keyword | openai | huggingface | fallback
-          * ``provider``         — openai | huggingface | fallback
-          * ``openai_available`` — whether OPENAI_API_KEY (or legacy OPEN_AI_API) is set
-          * ``hf_available``     — whether HF_API_KEY / HF_TOKEN / HUGGINGFACE_API_KEY is set
-          * ``openai_model``     — model name only, never the key
-          * ``profile_context_present`` — whether a loaded profile was available
-
-        Never returns the API key, the user's profile contents, or the user's
-        message. The new dict is fresh so class-level constants like
-        ``_JOB_SEARCH_OPTIONS`` are not mutated.
-        """
         return {
             **response,
-            "response_source": source,
+            "response_source": response.get("response_source", source),
             "provider": response.get("provider", source),
+            "provider_state": response.get("provider_state"),
             "openai_available": self.openai_agent.available,
             "hf_available": self.openai_agent.hf_available,
             "openai_model": self.openai_agent.model,
@@ -141,12 +117,6 @@ class RicoChatAPI:
         return updates
 
     def _cv_first_profile_response(self, user_id: str, message: str) -> Dict[str, Any]:
-        """Switch profile setup into CV-first mode instead of long manual forms.
-
-        The actual file bytes are normally handled by the upload/webhook layer.
-        This guard prevents Rico from continuing the manual wizard after a CV
-        filename or CV-upload event reaches chat.
-        """
         filename_match = CV_FILE_RE.search(message)
         filename = filename_match.group(0).strip() if filename_match else "uploaded CV"
         updates = {
@@ -207,18 +177,12 @@ class RicoChatAPI:
     }
 
     def process_message(self, user_id: str, message: str) -> Dict[str, Any]:
-        """Main Rico chat entrypoint."""
         self.memory.append_chat_message(user_id, "user", message)
-
-        # ── Load server-side onboarding state first ───────────────────────────
-        # This is the authoritative source. A completed user must never be sent
-        # back through onboarding even if their local profile JSON is missing.
         completed = is_onboarding_complete(user_id)
 
         if completed:
             return self._handle_active_user(user_id, message)
 
-        # ── CV uploads override onboarding entirely ───────────────────────────
         if self._looks_like_cv_upload(message):
             mark_onboarding_complete(user_id)
             return self._finalize(
@@ -227,7 +191,6 @@ class RicoChatAPI:
                 profile=None,
             )
 
-        # ── First-time onboarding ─────────────────────────────────────────────
         profile = get_profile(user_id)
         if profile is None:
             upsert_profile(user_id=user_id, updates={"name": user_id})
@@ -243,16 +206,13 @@ class RicoChatAPI:
             self.memory.append_chat_message(user_id, "assistant", response["message"])
             return self._finalize(response, self.SOURCE_KEYWORD, profile=None)
 
-        # ── Profile exists but onboarding not yet marked complete in DB ───────
         mark_onboarding_complete(user_id)
         return self._handle_active_user(user_id, message)
 
     def _handle_active_user(self, user_id: str, message: str) -> Dict[str, Any]:
-        """Handle messages from users who have completed onboarding."""
         profile = get_profile(user_id)
         lower = message.lower()
 
-        # "what's next?" → always return job-search options, never onboarding
         if any(phrase in lower for phrase in self._WHATS_NEXT_PHRASES):
             self.memory.append_chat_message(
                 user_id, "assistant", json.dumps(self._JOB_SEARCH_OPTIONS)
@@ -345,10 +305,6 @@ class RicoChatAPI:
             self.memory.append_chat_message(user_id, "assistant", response["message"])
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
-        # Open-ended message — delegate to the OpenAI reasoning layer with the
-        # user's profile as context. RicoOpenAIAgent.respond() already handles
-        # the missing-key path with a safe templated fallback, so this is a
-        # no-op upgrade when OPENAI_API_KEY is not configured.
         user_context = self._build_openai_context(profile)
         response = self.openai_agent.respond(message, user_context=user_context)
         self.memory.append_chat_message(user_id, "assistant", response.get("message", ""))
