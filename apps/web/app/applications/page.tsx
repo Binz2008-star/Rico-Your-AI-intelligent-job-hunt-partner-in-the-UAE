@@ -12,10 +12,12 @@ import { useEffect, useState } from "react";
 
 const STATUS_OPTIONS: ApplicationStatus[] = [
   "applied",
-  "interview_scheduled",
-  "offer_extended",
+  "interview",
+  "offer",
   "rejected",
   "saved",
+  "opened",
+  "decision_made",
 ];
 
 function fmtDate(iso?: string) {
@@ -68,10 +70,12 @@ export default function ApplicationsPage() {
 
   const statLabels: Record<ApplicationStatus, string> = {
     applied: "Applied",
-    interview_scheduled: "Interview",
-    offer_extended: "Offer",
+    interview: "Interview",
+    offer: "Offer",
     rejected: "Rejected",
     saved: "Saved",
+    opened: "Opened",
+    decision_made: "Decision",
   };
 
   return (
@@ -86,7 +90,7 @@ export default function ApplicationsPage() {
       <div className="p-8 flex flex-col gap-6">
         {/* summary strip */}
         {!loading && !error && (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
             {STATUS_OPTIONS.map((s) => (
               <div key={s} className="bg-[#13132a]/80 border border-[rgba(255,255,255,0.06)] rounded-xl p-4 text-center">
                 <p className="font-['Cabinet_Grotesk',sans-serif] font-black text-[28px] tracking-tight text-[#eeeef5]">
