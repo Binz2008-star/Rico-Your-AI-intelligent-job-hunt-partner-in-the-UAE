@@ -1,57 +1,63 @@
 "use client";
 
-import { sendChat } from "@/lib/api";
+import { submitOnboarding, type OnboardingPayload } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 
 // ── Step definitions ──────────────────────────────────────────────────────────
 
 interface Step {
-  id: string;
+  id: keyof OnboardingPayload;
   question: string;
   placeholder: string;
   hint: string;
-  buildMessage: (answer: string) => string;
   optional?: boolean;
+  parse: (raw: string) => OnboardingPayload[keyof OnboardingPayload];
 }
 
 const STEPS: Step[] = [
   {
-    id: "role",
+    id: "target_roles",
     question: "What roles are you targeting?",
     placeholder: "e.g. Product Manager, Operations Director",
-    hint: "List one or more job titles. Rico uses these to score and filter every job it finds.",
-    buildMessage: (a) => `My target job roles are: ${a}`,
+    hint: "List one or more job titles, separated by commas. Rico uses these to score and filter every job it finds.",
+    parse: (raw) => raw.split(",").map((s) => s.trim()).filter(Boolean),
   },
   {
-    id: "location",
+    id: "preferred_cities",
     question: "Where do you want to work?",
     placeholder: "e.g. Dubai, Abu Dhabi, Remote",
     hint: "One or more cities, or 'Remote' if location-flexible.",
-    buildMessage: (a) => `My preferred work locations are: ${a}`,
+    parse: (raw) => raw.split(",").map((s) => s.trim()).filter(Boolean),
   },
   {
-    id: "salary",
-    question: "What is your salary expectation?",
-    placeholder: "e.g. AED 25,000 per month",
-    hint: "Monthly figure in AED. Used to filter out roles below your floor.",
-    buildMessage: (a) => `My salary expectation is ${a}`,
+    id: "salary_expectation_aed",
+    question: "What is your monthly salary expectation?",
+    placeholder: "e.g. 25000",
+    hint: "Monthly figure in AED (numbers only). Used to filter out roles below your floor.",
     optional: true,
+    parse: (raw) => {
+      const n = parseFloat(raw.replace(/[^0-9.]/g, ""));
+      return isNaN(n) ? undefined : n;
+    },
   },
   {
-    id: "experience",
-    question: "How many years of experience do you have?",
-    placeholder: "e.g. 8 years in operations and supply chain",
-    hint: "Include your current or most recent role if relevant.",
-    buildMessage: (a) => `My experience: ${a}`,
+    id: "years_experience",
+    question: "How many years of total experience do you have?",
+    placeholder: "e.g. 8",
+    hint: "Enter a number. Include your current role.",
+    parse: (raw) => {
+      const n = parseFloat(raw.replace(/[^0-9.]/g, ""));
+      return isNaN(n) ? undefined : n;
+    },
   },
   {
     id: "skills",
     question: "What are your key skills?",
     placeholder: "e.g. P&L management, ISO compliance, stakeholder management",
-    hint: "Skills most relevant to the roles you are targeting.",
-    buildMessage: (a) => `My key skills are: ${a}`,
+    hint: "Skills most relevant to the roles you are targeting, separated by commas.",
+    parse: (raw) => raw.split(",").map((s) => s.trim()).filter(Boolean),
   },
 ];
 
@@ -69,7 +75,7 @@ function ProgressBar({ current, total }: { current: number; total: number }) {
   );
 }
 
-// ── Individual step ───────────────────────────────────────────────────────────
+// ── Step card ─────────────────────────────────────────────────────────────────
 
 function StepCard({
   step,
@@ -80,31 +86,15 @@ function StepCard({
   step: Step;
   stepIndex: number;
   total: number;
-  onNext: (answer: string) => Promise<void>;
+  onNext: (value: OnboardingPayload[keyof OnboardingPayload]) => void;
 }) {
   const [value, setValue] = useState("");
-  const [sending, setSending] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
-
-  const submit = useCallback(
-    async (answer: string) => {
-      setSending(true);
-      setErrorMsg("");
-      try {
-        await onNext(answer);
-      } catch (err) {
-        setSending(false);
-        setErrorMsg(err instanceof Error ? err.message : "Something went wrong. Try again.");
-      }
-    },
-    [onNext]
-  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = value.trim();
     if (!trimmed && !step.optional) return;
-    submit(trimmed || "skipped");
+    onNext(trimmed ? step.parse(trimmed) : undefined);
   };
 
   return (
@@ -128,31 +118,23 @@ function StepCard({
             onChange={(e) => setValue(e.target.value)}
             placeholder={step.placeholder}
             autoFocus
-            disabled={sending}
-            className="w-full rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#0d0d1f] px-3 py-2.5 text-sm text-[#eeeef5] placeholder-[#5a5a7a] focus:border-[rgba(91,79,255,0.5)] focus:outline-none focus:ring-1 focus:ring-[rgba(91,79,255,0.3)] transition-colors disabled:opacity-50"
+            className="w-full rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#0d0d1f] px-3 py-2.5 text-sm text-[#eeeef5] placeholder-[#5a5a7a] focus:border-[rgba(91,79,255,0.5)] focus:outline-none focus:ring-1 focus:ring-[rgba(91,79,255,0.3)] transition-colors"
           />
-
-          {errorMsg && (
-            <p className="rounded-lg border border-[rgba(255,94,91,0.3)] bg-[rgba(255,94,91,0.08)] px-3 py-2 text-sm text-[#ff5e5b]">
-              {errorMsg}
-            </p>
-          )}
 
           <div className="flex items-center gap-3">
             <button
               type="submit"
-              disabled={sending || (!value.trim() && !step.optional)}
+              disabled={!value.trim() && !step.optional}
               className="rounded-lg bg-[#5b4fff] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#4a3fdf] disabled:cursor-not-allowed disabled:opacity-40 shadow-[0_4px_15px_rgba(91,79,255,0.2)]"
             >
-              {sending ? "Saving…" : "Continue →"}
+              Continue →
             </button>
 
             {step.optional && (
               <button
                 type="button"
-                onClick={() => submit("skipped")}
-                disabled={sending}
-                className="text-sm text-[#5a5a7a] hover:text-[#8080a0] transition-colors disabled:opacity-40"
+                onClick={() => onNext(undefined)}
+                className="text-sm text-[#5a5a7a] hover:text-[#8080a0] transition-colors"
               >
                 Skip for now
               </button>
@@ -164,11 +146,20 @@ function StepCard({
   );
 }
 
+// ── Submitting screen ─────────────────────────────────────────────────────────
+
+function SubmittingCard() {
+  return (
+    <div className="w-full max-w-lg rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#13132a]/80 p-8 backdrop-blur-xl text-center">
+      <div className="mb-4 mx-auto w-10 h-10 rounded-full border-2 border-[#5b4fff] border-t-transparent animate-spin" />
+      <p className="text-sm text-[#5a5a7a]">Saving your profile…</p>
+    </div>
+  );
+}
+
 // ── Completion screen ─────────────────────────────────────────────────────────
 
-function CompletionCard() {
-  const router = useRouter();
-
+function CompletionCard({ onGo }: { onGo: () => void }) {
   return (
     <div className="w-full max-w-lg text-center">
       <div className="mb-6 mx-auto w-14 h-14 rounded-full bg-[rgba(0,201,167,0.12)] border border-[rgba(0,201,167,0.2)] flex items-center justify-center">
@@ -176,16 +167,14 @@ function CompletionCard() {
           <polyline points="20 6 9 17 4 12" />
         </svg>
       </div>
-
       <h2 className="mb-2 font-['Cabinet_Grotesk',sans-serif] font-bold text-[24px] text-[#eeeef5] tracking-tight">
         Profile saved
       </h2>
       <p className="mb-8 text-[14px] text-[#5a5a7a] leading-relaxed max-w-sm mx-auto">
         Rico now has enough context to start hunting. Your first batch of scored jobs will appear on the dashboard shortly.
       </p>
-
       <button
-        onClick={() => router.push("/dashboard")}
+        onClick={onGo}
         className="inline-flex items-center gap-2 rounded-lg bg-[#5b4fff] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#4a3fdf] shadow-[0_4px_15px_rgba(91,79,255,0.2)]"
       >
         Go to dashboard →
@@ -194,46 +183,70 @@ function CompletionCard() {
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── Error screen ──────────────────────────────────────────────────────────────
+
+function ErrorCard({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="w-full max-w-lg rounded-2xl border border-[rgba(255,94,91,0.3)] bg-[rgba(255,94,91,0.05)] p-6 text-center">
+      <p className="mb-4 text-sm text-[#ff5e5b]">{message}</p>
+      <button
+        onClick={onRetry}
+        className="rounded-lg bg-[#5b4fff] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#4a3fdf]"
+      >
+        Try again
+      </button>
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+type PageState = "collecting" | "submitting" | "done" | "error";
 
 export default function OnboardingPage() {
+  const router = useRouter();
   const [stepIndex, setStepIndex] = useState(0);
-  const [done, setDone] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
+  const [answers, setAnswers] = useState<OnboardingPayload>({});
+  const [pageState, setPageState] = useState<PageState>("collecting");
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const handleNext = useCallback(async (answer: string) => {
-    const step = STEPS[stepIndex];
+  const doSubmit = useCallback(async (finalAnswers: OnboardingPayload) => {
+    setPageState("submitting");
+    try {
+      await submitOnboarding(finalAnswers);
+      setPageState("done");
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Could not save your profile. Please try again.");
+      setPageState("error");
+    }
+  }, []);
 
-    if (answer !== "skipped") {
-      abortRef.current?.abort();
-      const ctrl = new AbortController();
-      abortRef.current = ctrl;
-
-      const timeoutId = setTimeout(() => ctrl.abort(), 30_000);
-      try {
-        await sendChat(step.buildMessage(answer), ctrl.signal);
-      } finally {
-        clearTimeout(timeoutId);
+  const handleStepNext = useCallback(
+    (value: OnboardingPayload[keyof OnboardingPayload]) => {
+      const step = STEPS[stepIndex];
+      const updated: OnboardingPayload = { ...answers };
+      if (value !== undefined) {
+        (updated as Record<string, unknown>)[step.id] = value;
       }
-    }
+      setAnswers(updated);
 
-    if (stepIndex + 1 >= STEPS.length) {
-      setDone(true);
-    } else {
-      setStepIndex((i) => i + 1);
-    }
-  }, [stepIndex]);
+      if (stepIndex + 1 >= STEPS.length) {
+        doSubmit(updated);
+      } else {
+        setStepIndex((i) => i + 1);
+      }
+    },
+    [stepIndex, answers, doSubmit]
+  );
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-[#06060f] px-4 relative overflow-hidden">
-      {/* Ambient glow */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute -top-[200px] -left-[100px] w-[600px] h-[600px] rounded-full bg-[rgba(91,79,255,0.06)] blur-[140px]" />
         <div className="absolute bottom-0 -right-[100px] w-[400px] h-[400px] rounded-full bg-[rgba(0,201,167,0.04)] blur-[140px]" />
       </div>
 
       <div className="relative z-10 flex flex-col items-center w-full">
-        {/* Brand header */}
         <Link href="/" className="mb-10 inline-flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-[9px] bg-gradient-to-br from-[#5b4fff] to-[#8b5cf6] flex items-center justify-center text-sm font-black text-white shadow-[0_4px_16px_rgba(91,79,255,0.3)]">
             R
@@ -241,36 +254,43 @@ export default function OnboardingPage() {
           <span className="font-['Cabinet_Grotesk',sans-serif] font-black text-lg text-white tracking-tight">Rico AI</span>
         </Link>
 
-        {!done && (
-          <div className="mb-6 text-center">
-            <h1 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[28px] text-[#eeeef5] tracking-tight mb-1">
-              Let&apos;s set up your profile
-            </h1>
-            <p className="text-[14px] text-[#5a5a7a]">
-              5 quick questions so Rico knows what to hunt for.
+        {pageState === "collecting" && (
+          <>
+            <div className="mb-6 text-center">
+              <h1 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[28px] text-[#eeeef5] tracking-tight mb-1">
+                Let&apos;s set up your profile
+              </h1>
+              <p className="text-[14px] text-[#5a5a7a]">5 quick questions so Rico knows what to hunt for.</p>
+            </div>
+
+            <StepCard
+              key={stepIndex}
+              step={STEPS[stepIndex]}
+              stepIndex={stepIndex}
+              total={STEPS.length}
+              onNext={handleStepNext}
+            />
+
+            <p className="mt-6 text-[12px] text-[#5a5a7a]">
+              Already set up?{" "}
+              <Link href="/dashboard?skip=1" className="text-[#a78bfa] hover:text-[#c4b5fd] transition-colors">
+                Go to dashboard →
+              </Link>
             </p>
-          </div>
+          </>
         )}
 
-        {done ? (
-          <CompletionCard />
-        ) : (
-          <StepCard
-            key={stepIndex}
-            step={STEPS[stepIndex]}
-            stepIndex={stepIndex}
-            total={STEPS.length}
-            onNext={handleNext}
+        {pageState === "submitting" && <SubmittingCard />}
+
+        {pageState === "done" && (
+          <CompletionCard onGo={() => router.push("/dashboard?skip=1")} />
+        )}
+
+        {pageState === "error" && (
+          <ErrorCard
+            message={errorMsg}
+            onRetry={() => { setPageState("collecting"); setErrorMsg(""); }}
           />
-        )}
-
-        {!done && (
-          <p className="mt-6 text-[12px] text-[#5a5a7a]">
-            Already set up?{" "}
-            <Link href="/dashboard" className="text-[#a78bfa] hover:text-[#c4b5fd] transition-colors">
-              Go to dashboard →
-            </Link>
-          </p>
         )}
       </div>
     </main>

@@ -196,6 +196,30 @@ export interface ChatApiResponse {
   };
 }
 
+// ── Onboarding ────────────────────────────────────────────────────────────────
+
+export interface OnboardingPayload {
+  target_roles?: string[];
+  preferred_cities?: string[];
+  salary_expectation_aed?: number;
+  years_experience?: number;
+  current_role?: string;
+  skills?: string[];
+}
+
+export async function submitOnboarding(
+  payload: OnboardingPayload
+): Promise<{ status: string; updated_fields: string[] }> {
+  const res = await fetch(`${PROXY}/api/v1/onboarding/submit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Onboarding submit failed: ${res.status}`);
+  return res.json() as Promise<{ status: string; updated_fields: string[] }>;
+}
+
 // No user_id field — identity comes exclusively from the session cookie.
 export async function sendChat(
   message: string,
