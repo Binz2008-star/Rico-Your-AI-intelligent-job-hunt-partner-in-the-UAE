@@ -32,6 +32,24 @@ def get_current_user(request: Request) -> Dict[str, Any]:
     }
 
 
+def get_current_user_id(request: Request) -> str:
+    """
+    Return the JWT ``sub`` claim as a bare string (the canonical user_id).
+
+    This is the single enforcement point for JWT-derived user isolation.
+    All SaaS-path routes that perform per-user data access MUST declare this
+    as a dependency instead of extracting user_id ad-hoc.
+
+    Raises HTTP 401 if the token is missing, invalid, or has an empty sub.
+    Usage: route(user_id: str = Depends(get_current_user_id))
+    """
+    user = get_current_user(request)
+    user_id = user.get("email", "").strip()
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Token missing user identity (sub)")
+    return user_id
+
+
 def require_admin(request: Request) -> Dict[str, Any]:
     """
     Validate the JWT cookie AND require role=admin. Raises 401/403 otherwise.

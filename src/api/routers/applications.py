@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from src.api.deps import get_current_user
+from src.api.deps import get_current_user_id
 from src.applications import VALID_STATUSES
 from src.repositories.applications_repo import find_by_job_id, get_all, get_stats, update_status
 from src.schemas.applications import (
@@ -26,7 +26,7 @@ def list_applications(
     status: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
-    user: dict = Depends(get_current_user),
+    user_id: str = Depends(get_current_user_id),
 ) -> Dict[str, Any]:
     if status and status not in VALID_STATUSES:
         raise HTTPException(
@@ -34,7 +34,7 @@ def list_applications(
             detail=f"Invalid status. Valid values: {sorted(VALID_STATUSES)}",
         )
 
-    all_apps: List[Dict[str, Any]] = get_all(user_id=user["email"])
+    all_apps: List[Dict[str, Any]] = get_all(user_id=user_id)
     if status:
         all_apps = [a for a in all_apps if a.get("status") == status]
 
@@ -53,7 +53,7 @@ def list_applications(
 def update_application(
     job_id: str,
     req: StatusUpdateRequest,
-    user: dict = Depends(get_current_user),
+    user_id: str = Depends(get_current_user_id),
 ) -> StatusUpdateResponse:
     if req.status not in VALID_STATUSES:
         raise HTTPException(
@@ -61,11 +61,11 @@ def update_application(
             detail=f"Invalid status {req.status!r}. Valid: {sorted(VALID_STATUSES)}",
         )
 
-    target = find_by_job_id(job_id, user_id=user["email"])
+    target = find_by_job_id(job_id, user_id=user_id)
     if not target:
         raise HTTPException(status_code=404, detail=f"Application {job_id!r} not found")
 
-    ok = update_status(target, req.status, req.notes or "", user_id=user["email"])
+    ok = update_status(target, req.status, req.notes or "", user_id=user_id)
     if not ok:
         raise HTTPException(status_code=500, detail="Failed to update application status")
 
@@ -73,5 +73,5 @@ def update_application(
 
 
 @router.get("/stats")
-def application_stats(user: dict = Depends(get_current_user)) -> Dict[str, Any]:
-    return get_stats(user_id=user["email"])
+def application_stats(user_id: str = Depends(get_current_user_id)) -> Dict[str, Any]:
+    return get_stats(user_id=user_id)

@@ -1,13 +1,20 @@
 """
 src/repositories/applications_repo.py
-User-scoped adapter over Rico DB (primary) with fallback to global JSON store.
-All SaaS-path callers must supply ``user_id`` so data is isolated per user.
-Legacy pipeline callers omit ``user_id`` to keep the old single-user JSON path.
+User-scoped adapter over Rico DB (primary path) with legacy JSON store fallback
+for callers that omit user_id (automated pipeline only).
+
+SaaS-path contract:
+  - Callers MUST supply user_id (derived from JWT via get_current_user_id dep).
+  - DB unavailability raises HTTP 503 — no silent fallback to global JSON.
+  - User not found in DB raises HTTP 404.
+  - Legacy pipeline callers may omit user_id to keep the old single-user JSON path.
 """
 from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List, Optional
+
+from fastapi import HTTPException
 
 from src.applications import (
     get_applied_jobs as _get_applied,
@@ -42,49 +49,37 @@ def _resolve_db_user_id(db: Any, user_id: str) -> Optional[str]:
 
 
 def get_all(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Load tracked applications.  When ``user_id`` is given, Rico DB is used."""
+    """Load tracked applications.  When ``user_id`` is given, Rico DB is used (SaaS path)."""
     if not user_id:
         logger.warning("LEGACY_FALLBACK_NO_USER_ID: get_all")
         return _get_applied()
 
     db = _db()
     if not db:
-        logger.warning("LEGACY_FALLBACK_DB_UNAVAILABLE: get_all user_id=%s", user_id)
-        return _get_applied()
+        raise HTTPException(status_code=503, detail="Database unavailable")
 
     db_user_id = _resolve_db_user_id(db, user_id)
     if not db_user_id:
-        logger.warning("LEGACY_FALLBACK_USER_NOT_FOUND: get_all user_id=%s", user_id)
-        return _get_applied()
+        raise HTTPException(status_code=404, detail=f"User {user_id!r} not found")
 
-    try:
-        return db.get_recommendations(db_user_id, limit=200)
-    except Exception:
-        logger.exception("LEGACY_FALLBACK_DB_ERROR: get_all user_id=%s", user_id)
-        return _get_applied()
+    return db.get_recommendations(db_user_id, limit=200)
 
 
 def get_stats(user_id: Optional[str] = None) -> Dict[str, Any]:
-    """Aggregate statistics.  When ``user_id`` is given, Rico DB is used."""
+    """Aggregate statistics.  When ``user_id`` is given, Rico DB is used (SaaS path)."""
     if not user_id:
         logger.warning("LEGACY_FALLBACK_NO_USER_ID: get_stats")
         return _get_stats()
 
     db = _db()
     if not db:
-        logger.warning("LEGACY_FALLBACK_DB_UNAVAILABLE: get_stats user_id=%s", user_id)
-        return _get_stats()
+        raise HTTPException(status_code=503, detail="Database unavailable")
 
     db_user_id = _resolve_db_user_id(db, user_id)
     if not db_user_id:
-        logger.warning("LEGACY_FALLBACK_USER_NOT_FOUND: get_stats user_id=%s", user_id)
-        return _get_stats()
+        raise HTTPException(status_code=404, detail=f"User {user_id!r} not found")
 
-    try:
-        return db.get_recommendation_stats(db_user_id)
-    except Exception:
-        logger.exception("LEGACY_FALLBACK_DB_ERROR: get_stats user_id=%s", user_id)
-        return _get_stats()
+    return db.get_recommendation_stats(db_user_id)
 
 
 def find_by_job_id(job_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
@@ -98,55 +93,34 @@ def find_by_job_id(job_id: str, user_id: Optional[str] = None) -> Optional[Dict[
 
     db = _db()
     if not db:
-        logger.warning("LEGACY_FALLBACK_DB_UNAVAILABLE: find_by_job_id user_id=%s", user_id)
-        return next(
-            (a for a in _get_applied() if isinstance(a, dict) and a.get("job_id") == job_id),
-            None,
-        )
+        raise HTTPException(status_code=503, detail="Database unavailable")
 
     db_user_id = _resolve_db_user_id(db, user_id)
     if not db_user_id:
-        logger.warning("LEGACY_FALLBACK_USER_NOT_FOUND: find_by_job_id user_id=%s", user_id)
-        return next(
-            (a for a in _get_applied() if isinstance(a, dict) and a.get("job_id") == job_id),
-            None,
-        )
+        raise HTTPException(status_code=404, detail=f"User {user_id!r} not found")
 
-    try:
-        apps = db.get_recommendations(db_user_id, limit=200)
-        return next(
-            (a for a in apps if isinstance(a, dict) and a.get("job_id") == job_id),
-            None,
-        )
-    except Exception:
-        logger.exception("LEGACY_FALLBACK_DB_ERROR: find_by_job_id user_id=%s", user_id)
-        return next(
-            (a for a in _get_applied() if isinstance(a, dict) and a.get("job_id") == job_id),
-            None,
-        )
+    apps = db.get_recommendations(db_user_id, limit=200)
+    return next(
+        (a for a in apps if isinstance(a, dict) and a.get("job_id") == job_id),
+        None,
+    )
 
 
 def update_status(
     job: Dict[str, Any], status: str, notes: str = "", user_id: Optional[str] = None
 ) -> bool:
-    """Update application status.  When ``user_id`` is given, Rico DB is used."""
+    """Update application status.  When ``user_id`` is given, Rico DB is used (SaaS path)."""
     if not user_id:
         logger.warning("LEGACY_FALLBACK_NO_USER_ID: update_status")
         return _update_status(job, status, notes)
 
     db = _db()
     if not db:
-        logger.warning("LEGACY_FALLBACK_DB_UNAVAILABLE: update_status user_id=%s", user_id)
-        return _update_status(job, status, notes)
+        raise HTTPException(status_code=503, detail="Database unavailable")
 
     db_user_id = _resolve_db_user_id(db, user_id)
     if not db_user_id:
-        logger.warning("LEGACY_FALLBACK_USER_NOT_FOUND: update_status user_id=%s", user_id)
-        return _update_status(job, status, notes)
+        raise HTTPException(status_code=404, detail=f"User {user_id!r} not found")
 
-    try:
-        job_key = job.get("job_id", "")
-        return db.update_recommendation_status(db_user_id, job_key, status, notes)
-    except Exception:
-        logger.exception("LEGACY_FALLBACK_DB_ERROR: update_status user_id=%s", user_id)
-        return _update_status(job, status, notes)
+    job_key = job.get("job_id", "")
+    return db.update_recommendation_status(db_user_id, job_key, status, notes)
