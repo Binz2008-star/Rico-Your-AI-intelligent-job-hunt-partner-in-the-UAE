@@ -202,7 +202,8 @@ class RicoOpenAIAgent:
         return {
             "type": "fallback_response",
             "message": (
-                "Free mode is active. Rico can help set up your profile and guide your job search using free AI/fallback."
+                "Free mode is active. Rico can help set up your profile and guide your job search using free AI/fallback tools. "
+                "OpenAI advanced reasoning will activate after credits are available."
             ),
             "provider": "fallback",
         }

@@ -98,8 +98,8 @@ def get_ai_provider() -> str:
     """
     provider = os.getenv("RICO_AI_PROVIDER", "").strip().lower()
     if provider:
-        if provider in {"none", "openai", "huggingface"}:
-            return provider
+        if provider in {"none", "openai", "huggingface", "hf"}:
+            return "huggingface" if provider == "hf" else provider
         logger.warning(f"Invalid RICO_AI_PROVIDER value: {provider}. Using auto-detect.")
 
     # Auto-detect: HF is the safe default free path
