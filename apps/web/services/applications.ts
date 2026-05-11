@@ -26,7 +26,7 @@ const MOCK_APPS: Application[] = [
     title: "HSSE Manager-CCGT",
     company: "Al Jomaih Energy",
     location: "Abu Dhabi, UAE",
-    status: "interview_scheduled",
+    status: "interview",
     applied_at: "2026-04-15T08:00:00Z",
     apply_url: "#",
   },

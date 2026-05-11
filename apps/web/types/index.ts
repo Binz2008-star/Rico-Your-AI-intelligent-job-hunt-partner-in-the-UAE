@@ -128,10 +128,12 @@ export interface CVUploadResponse {
 // ── Applications ──────────────────────────────────────────────────────────────
 export type ApplicationStatus =
   | "applied"
-  | "interview_scheduled"
-  | "offer_extended"
+  | "interview"
   | "rejected"
-  | "saved";
+  | "saved"
+  | "opened"
+  | "offer"
+  | "decision_made";
 
 export interface Application {
   application_id: string;
