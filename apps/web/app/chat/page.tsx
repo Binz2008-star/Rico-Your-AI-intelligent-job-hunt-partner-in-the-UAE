@@ -61,23 +61,61 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
   const scoreLabel = score >= 0.8 ? "Strong match" : score >= 0.6 ? "Good match" : "Possible match";
   const confidence = match.confidence || "medium";
 
+  // Confidence badge styling with restrained colors and clear labels
+  const getConfidenceBadge = () => {
+    const config = {
+      high: {
+        label: "High confidence fit",
+        bgColor: "bg-[#5dcaa515]",
+        textColor: "text-[#5dcaa5]",
+        borderColor: "border-[#5dcaa530]",
+        icon: "✓"
+      },
+      medium: {
+        label: "Medium confidence fit",
+        bgColor: "bg-[#facc1515]",
+        textColor: "text-[#facc15]",
+        borderColor: "border-[#facc1530]",
+        icon: "○"
+      },
+      low: {
+        label: "Needs careful review",
+        bgColor: "bg-[#f8717115]",
+        textColor: "text-[#f87171]",
+        borderColor: "border-[#f8717130]",
+        icon: "!"
+      }
+    };
+    return config[confidence as keyof typeof config] || config.medium;
+  };
+
+  const confidenceBadge = getConfidenceBadge();
+
   return (
     <div className="rounded-xl border border-white/8 bg-[#0f0f24] p-3 mb-2">
+      {/* Top row: title, company, score, confidence */}
       <div className="flex items-start justify-between gap-2 mb-2">
-        <div>
+        <div className="flex-1 min-w-0">
           <div className="text-[13px] font-semibold text-white">{match.title}</div>
           <div className="text-[11px] text-[#8080a0]">{match.company}{match.location ? ` · ${match.location}` : ""}</div>
         </div>
-        {score > 0 && (
-          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${score >= 0.8
-            ? "bg-[#5dcaa522] text-[#5dcaa5]"
-            : score >= 0.6
-              ? "bg-[#facc1522] text-[#facc15]"
-              : "bg-[#a78bfa22] text-[#a78bfa]"
-            }`}>
-            {scoreLabel}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {score > 0 && (
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${score >= 0.8
+              ? "bg-[#5dcaa522] text-[#5dcaa5]"
+              : score >= 0.6
+                ? "bg-[#facc1522] text-[#facc15]"
+                : "bg-[#a78bfa22] text-[#a78bfa]"
+              }`}>
+              {scoreLabel}
+            </span>
+          )}
+          {/* Confidence badge with icon and label for accessibility */}
+          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 ${confidenceBadge.bgColor} ${confidenceBadge.textColor} ${confidenceBadge.borderColor} border`}>
+            <span aria-hidden="true">{confidenceBadge.icon}</span>
+            <span>{confidenceBadge.label}</span>
           </span>
-        )}
+        </div>
       </div>
 
       {/* Why this fits */}
