@@ -1,18 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getHealth } from "@/services/health";
 import { ToastContainer } from "@/components/ui/Toast";
+import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
-import type { HealthResponse } from "@/types";
+import { ApiError } from "@/lib/client";
+import { getHealth } from "@/services/health";
+import { getSettings, updateSettings } from "@/services/settings";
+import type { HealthResponse, SettingsResponse } from "@/types";
+import { useEffect, useState } from "react";
 
 function Row({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
   return (
     <div className="flex items-center justify-between py-3 border-b border-white/5 last:border-0">
       <span className="text-[13px] text-white/45">{label}</span>
-      <span className={`text-[13px] font-medium flex items-center gap-1.5 ${
-        ok === true ? "text-[#00c9a7]" : ok === false ? "text-[#ff5e5b]" : "text-white/70"
-      }`}>
+      <span className={`text-[13px] font-medium flex items-center gap-1.5 ${ok === true ? "text-[#00c9a7]" : ok === false ? "text-[#ff5e5b]" : "text-white/70"
+        }`}>
         {ok === true && <span className="w-1.5 h-1.5 rounded-full bg-[#00c9a7]" />}
         {ok === false && <span className="w-1.5 h-1.5 rounded-full bg-[#ff5e5b]" />}
         {value}
@@ -22,25 +24,66 @@ function Row({ label, value, ok }: { label: string; value: string; ok?: boolean 
 }
 
 export default function SettingsPage() {
+  const { user } = useAuth();
   const { toasts, toast } = useToast();
   const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [settings, setSettings] = useState<SettingsResponse | null>(null);
+  const [loadingHealth, setLoadingHealth] = useState(true);
+  const [loadingSettings, setLoadingSettings] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<"auth" | "other" | null>(null);
 
   useEffect(() => {
     getHealth()
       .then(setHealth)
       .catch(() => toast("Backend unreachable", "error"))
-      .finally(() => setLoading(false));
-  }, []);
+      .finally(() => setLoadingHealth(false));
+  }, [toast]);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  useEffect(() => {
+    if (!user) return;
+    setLoadingSettings(true);
+    setError(null);
+    getSettings()
+      .then(setSettings)
+      .catch((err) => {
+        const is401 = err instanceof ApiError && err.statusCode === 401;
+        setError(is401 ? "auth" : "other");
+        toast(is401 ? "Session expired" : "Could not load settings", "error");
+      })
+      .finally(() => setLoadingSettings(false));
+  }, [user, toast]);
+
+  const handleSave = async () => {
+    if (!settings) return;
+    setSaving(true);
+    try {
+      const updated = await updateSettings({
+        min_score: settings.min_score,
+        max_daily_applies: settings.max_daily_applies,
+        score_threshold_apply: settings.score_threshold_apply,
+        score_threshold_watch: settings.score_threshold_watch,
+        telegram_chat_id: settings.telegram_chat_id,
+        include_keywords: settings.include_keywords,
+        exclude_keywords: settings.exclude_keywords,
+      });
+      setSettings(updated);
+      toast("Settings saved", "success");
+    } catch (err) {
+      const is401 = err instanceof ApiError && err.statusCode === 401;
+      toast(is401 ? "Session expired — please log in again" : "Save failed", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const isMock = process.env.NEXT_PUBLIC_USE_MOCK === "true";
 
   return (
     <>
       <div className="px-8 py-6 border-b border-white/5 bg-[rgba(7,7,18,0.7)] backdrop-blur-md sticky top-0 z-10">
         <h1 className="font-['Cabinet_Grotesk',sans-serif] font-900 text-[22px] tracking-tight">Settings</h1>
-        <p className="text-[13px] text-white/35 mt-0.5">System configuration and status</p>
+        <p className="text-[13px] text-white/35 mt-0.5">System configuration and job matching preferences</p>
       </div>
 
       <div className="p-8 max-w-2xl flex flex-col gap-6">
@@ -48,7 +91,7 @@ export default function SettingsPage() {
         {/* Backend status */}
         <div className="bg-[#0e0e20] border border-white/6 rounded-2xl p-6">
           <h2 className="font-['Cabinet_Grotesk',sans-serif] font-700 text-[15px] mb-4">Backend Status</h2>
-          {loading ? (
+          {loadingHealth ? (
             <div className="flex flex-col gap-2">
               {Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="h-10 rounded-lg bg-white/3 animate-pulse" />
@@ -65,43 +108,109 @@ export default function SettingsPage() {
               <Row label="Version" value={`v${health.version}`} />
             </>
           ) : (
-            <p className="text-[13px] text-[#ff5e5b]">Could not reach backend at {apiUrl}</p>
+            <p className="text-[13px] text-[#ff5e5b]">Could not reach backend</p>
           )}
+        </div>
+
+        {/* Job matching preferences */}
+        <div className="bg-[#0e0e20] border border-white/6 rounded-2xl p-6">
+          <h2 className="font-['Cabinet_Grotesk',sans-serif] font-700 text-[15px] mb-4">Job Matching</h2>
+          {loadingSettings ? (
+            <div className="flex flex-col gap-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-10 rounded-lg bg-white/3 animate-pulse" />
+              ))}
+            </div>
+          ) : error === "auth" ? (
+            <div className="flex flex-col items-center justify-center py-10 gap-3 text-center">
+              <span className="text-4xl opacity-25">🔒</span>
+              <p className="text-[14px] text-white/30">Session expired</p>
+              <a
+                href="/login"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[rgba(91,79,255,0.15)] text-[#a78bfa] border border-[rgba(91,79,255,0.25)] text-[13px] font-semibold hover:bg-[rgba(91,79,255,0.25)] transition-all"
+              >
+                Log in again
+              </a>
+            </div>
+          ) : error === "other" ? (
+            <div className="flex flex-col items-center justify-center py-10 gap-3 text-center">
+              <span className="text-4xl opacity-25">⚠️</span>
+              <p className="text-[14px] text-white/30">Could not load settings</p>
+              <p className="text-[12px] text-white/20">The backend may be unavailable.</p>
+            </div>
+          ) : settings ? (
+            <div className="flex flex-col gap-4">
+              <div className="grid grid-cols-2 gap-4">
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[11px] text-white/30 uppercase tracking-wider font-semibold">Min score</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={settings.min_score}
+                    onChange={(e) => setSettings({ ...settings, min_score: Number(e.target.value) })}
+                    className="bg-[#14142a] border border-white/8 rounded-lg px-3 py-2 text-[13px] text-white/70 outline-none focus:border-[rgba(91,79,255,0.4)]"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[11px] text-white/30 uppercase tracking-wider font-semibold">Max daily applies</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={settings.max_daily_applies}
+                    onChange={(e) => setSettings({ ...settings, max_daily_applies: Number(e.target.value) })}
+                    className="bg-[#14142a] border border-white/8 rounded-lg px-3 py-2 text-[13px] text-white/70 outline-none focus:border-[rgba(91,79,255,0.4)]"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[11px] text-white/30 uppercase tracking-wider font-semibold">Apply threshold</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={settings.score_threshold_apply}
+                    onChange={(e) => setSettings({ ...settings, score_threshold_apply: Number(e.target.value) })}
+                    className="bg-[#14142a] border border-white/8 rounded-lg px-3 py-2 text-[13px] text-white/70 outline-none focus:border-[rgba(91,79,255,0.4)]"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[11px] text-white/30 uppercase tracking-wider font-semibold">Watch threshold</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={settings.score_threshold_watch}
+                    onChange={(e) => setSettings({ ...settings, score_threshold_watch: Number(e.target.value) })}
+                    className="bg-[#14142a] border border-white/8 rounded-lg px-3 py-2 text-[13px] text-white/70 outline-none focus:border-[rgba(91,79,255,0.4)]"
+                  />
+                </label>
+              </div>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[11px] text-white/30 uppercase tracking-wider font-semibold">Telegram chat ID</span>
+                <input
+                  type="text"
+                  value={settings.telegram_chat_id}
+                  onChange={(e) => setSettings({ ...settings, telegram_chat_id: e.target.value })}
+                  placeholder="Optional — for job alerts"
+                  className="bg-[#14142a] border border-white/8 rounded-lg px-3 py-2 text-[13px] text-white/70 outline-none focus:border-[rgba(91,79,255,0.4)] placeholder:text-white/20"
+                />
+              </label>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="self-start px-4 py-2 rounded-lg bg-[rgba(91,79,255,0.15)] text-[#a78bfa] border border-[rgba(91,79,255,0.25)] text-[13px] font-semibold hover:bg-[rgba(91,79,255,0.25)] transition-all disabled:opacity-40"
+              >
+                {saving ? "Saving…" : "Save settings"}
+              </button>
+            </div>
+          ) : null}
         </div>
 
         {/* Frontend config */}
         <div className="bg-[#0e0e20] border border-white/6 rounded-2xl p-6">
           <h2 className="font-['Cabinet_Grotesk',sans-serif] font-700 text-[15px] mb-4">Frontend Config</h2>
-          <Row label="API URL" value={apiUrl} />
           <Row label="Mock mode" value={isMock ? "ENABLED — using dev fixtures" : "OFF — hitting real backend"} ok={!isMock} />
-          <Row label="Jotform onboarding form" value="261278237812056" />
-
-          <div className="mt-4 pt-4 border-t border-white/5">
-            <p className="text-[11px] text-white/25 mb-3 uppercase tracking-wider font-semibold">Required env variables</p>
-            {[
-              "NEXT_PUBLIC_API_URL",
-              "NEXT_PUBLIC_USE_MOCK",
-            ].map((v) => (
-              <p key={v} className="font-mono text-[12px] text-white/40 py-1">{v}</p>
-            ))}
-          </div>
-        </div>
-
-        {/* Onboarding */}
-        <div className="bg-[#0e0e20] border border-white/6 rounded-2xl p-6">
-          <h2 className="font-['Cabinet_Grotesk',sans-serif] font-700 text-[15px] mb-2">Onboarding</h2>
-          <p className="text-[13px] text-white/35 mb-4">
-            New users onboard via Jotform Quick Start, which fires a webhook to{" "}
-            <code className="text-white/50 text-[12px]">POST /api/webhooks/jotform</code>
-          </p>
-          <a
-            href="https://form.jotform.com/261278237812056"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 text-[13px] text-[#a78bfa] hover:text-white transition-colors"
-          >
-            Open Quick Start form ↗
-          </a>
         </div>
 
       </div>

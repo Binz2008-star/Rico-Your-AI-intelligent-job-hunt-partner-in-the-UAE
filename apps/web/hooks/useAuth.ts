@@ -31,13 +31,15 @@ export function useAuth() {
             name: me.email.split("@")[0],
             email: me.email,
           });
+        } else {
+          router.push("/login");
         }
       })
       .catch(() => {
-        /* not authenticated — leave user as null */
+        router.push("/login");
       })
       .finally(() => setReady(true));
-  }, []);
+  }, [router]);
 
   const logout = useCallback(async () => {
     await clearAuth();

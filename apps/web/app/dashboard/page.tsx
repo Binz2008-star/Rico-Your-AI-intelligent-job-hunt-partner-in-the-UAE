@@ -1,7 +1,8 @@
 import { DashboardShell } from "@/components/DashboardShell";
-import { StatusCard } from "@/components/StatusCard";
+import { DashboardStats } from "@/components/DashboardStats";
 import { ProfileSummaryCard } from "@/components/ProfileSummaryCard";
 import { SavedSearchesList } from "@/components/SavedSearchesList";
+import { StatusCard } from "@/components/StatusCard";
 import { fetchHealth, type HealthResponse } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -77,23 +78,21 @@ export default async function DashboardPage() {
           </div>
         </section>
 
+        {/* Live — dashboard stats from /api/v1/jobs, /api/v1/applications, /api/v1/settings */}
+        <section>
+          <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Overview
+          </h2>
+          <DashboardStats />
+        </section>
+
         {/* Live — saved searches from /api/v1/rico/settings/saved-searches */}
         <section>
           <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
             Job search
           </h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <StatusCard title="Job matches" badge="placeholder">
-              <p className="text-sm text-zinc-500">
-                Job matching runs automatically once your profile is complete.
-              </p>
-            </StatusCard>
             <SavedSearchesList />
-            <StatusCard title="Applications" badge="placeholder">
-              <p className="text-sm text-zinc-500">
-                Applications will be tracked here once job matching is active.
-              </p>
-            </StatusCard>
           </div>
         </section>
       </div>
