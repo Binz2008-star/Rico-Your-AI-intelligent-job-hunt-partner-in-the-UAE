@@ -290,3 +290,128 @@ class TestHasUserData:
         from src.services.chat_service import _has_user_data
         assert _has_user_data({"pretty": {"email": "a@b.com"}}) is True
         assert _has_user_data({"pretty": {"full_name": "X"}}) is False
+
+
+# ── Idempotency guard ─────────────────────────────────────────────────────────
+
+class TestIdempotency:
+    """Verify that duplicate Jotform submissions are detected and skipped."""
+
+    _BASE_PAYLOAD = {
+        "formID": "form-abc",
+        "submissionID": "sub-001",
+        "email": "u@x.com",
+        "consent": True,
+    }
+
+    def _run(self, is_proc_return: bool, payload: dict | None = None):
+        from src.rico_jotform_webhook import handle_jotform_submission
+        db = _mock_db()
+        p = payload if payload is not None else dict(self._BASE_PAYLOAD)
+        env = {k: v for k, v in os.environ.items() if k != "JOTFORM_FORM_ID"}
+        with patch("src.rico_jotform_webhook.RicoDB", return_value=db), \
+             patch.dict(os.environ, env, clear=True), \
+             patch("src.repositories.onboarding_repo.mark_onboarding_complete"), \
+             patch("src.rico_jotform_webhook.is_processed", return_value=is_proc_return) as mock_is, \
+             patch("src.rico_jotform_webhook.mark_processed") as mock_mark:
+            result = handle_jotform_submission(p)
+        return result, db, mock_is, mock_mark
+
+    def test_first_submission_processed_normally(self):
+        result, db, mock_is, mock_mark = self._run(is_proc_return=False)
+        assert result["status"] == "ok"
+        assert "duplicate" not in result
+        db.upsert_user.assert_called_once()
+        mock_mark.assert_called_once_with("jotform", "sub-001")
+
+    def test_duplicate_submission_skipped(self):
+        result, db, mock_is, mock_mark = self._run(is_proc_return=True)
+        assert result["status"] == "ok"
+        assert result.get("duplicate") is True
+        assert result["submission_id"] == "sub-001"
+        db.upsert_user.assert_not_called()
+        mock_mark.assert_not_called()
+
+    def test_mark_processed_not_called_on_duplicate(self):
+        """mark_processed must not be called a second time for a duplicate."""
+        _, _, _, mock_mark = self._run(is_proc_return=True)
+        mock_mark.assert_not_called()
+
+    def test_missing_submission_id_bypasses_guard(self):
+        """Payloads without a submission_id skip the idempotency check entirely."""
+        payload = {"email": "u@x.com", "consent": True}  # no submissionID
+        result, db, mock_is, mock_mark = self._run(is_proc_return=False, payload=payload)
+        assert result["status"] == "ok"
+        mock_is.assert_not_called()
+        mock_mark.assert_not_called()
+
+    def test_unknown_submission_id_bypasses_guard(self):
+        """submissionID='?' (sentinel for missing) must bypass the guard."""
+        payload = dict(self._BASE_PAYLOAD)
+        payload["submissionID"] = "?"
+        result, db, mock_is, mock_mark = self._run(is_proc_return=False, payload=payload)
+        assert result["status"] == "ok"
+        mock_is.assert_not_called()
+        mock_mark.assert_not_called()
+
+    def test_db_unavailable_during_idempotency_check_falls_through(self):
+        """When is_processed raises or DB unavailable, submission is allowed through."""
+        from src.rico_jotform_webhook import handle_jotform_submission
+        db = _mock_db()
+        env = {k: v for k, v in os.environ.items() if k != "JOTFORM_FORM_ID"}
+        with patch("src.rico_jotform_webhook.RicoDB", return_value=db), \
+             patch.dict(os.environ, env, clear=True), \
+             patch("src.repositories.onboarding_repo.mark_onboarding_complete"), \
+             patch("src.rico_jotform_webhook.is_processed", side_effect=Exception("DB down")), \
+             patch("src.rico_jotform_webhook.mark_processed"):
+            with pytest.raises(Exception, match="DB down"):
+                handle_jotform_submission(dict(self._BASE_PAYLOAD))
+
+    def test_is_processed_called_with_correct_source_and_event_id(self):
+        _, _, mock_is, _ = self._run(is_proc_return=False)
+        mock_is.assert_called_once_with("jotform", "sub-001")
+
+
+# ── webhook_events_repo unit tests ────────────────────────────────────────────
+
+class TestWebhookEventsRepo:
+    def test_is_processed_returns_false_when_db_unavailable(self):
+        from src.repositories.webhook_events_repo import is_processed
+        with patch("src.repositories.webhook_events_repo._get_conn", return_value=None):
+            assert is_processed("jotform", "sub-x") is False
+
+    def test_is_processed_returns_false_when_row_absent(self):
+        from src.repositories.webhook_events_repo import is_processed
+        conn = MagicMock()
+        cur = MagicMock()
+        cur.fetchone.return_value = None
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        with patch("src.repositories.webhook_events_repo._get_conn", return_value=conn):
+            assert is_processed("jotform", "sub-x") is False
+
+    def test_is_processed_returns_true_when_row_present(self):
+        from src.repositories.webhook_events_repo import is_processed
+        conn = MagicMock()
+        cur = MagicMock()
+        cur.fetchone.return_value = (1,)
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        with patch("src.repositories.webhook_events_repo._get_conn", return_value=conn):
+            assert is_processed("jotform", "sub-x") is True
+
+    def test_mark_processed_inserts_row(self):
+        from src.repositories.webhook_events_repo import mark_processed
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        with patch("src.repositories.webhook_events_repo._get_conn", return_value=conn):
+            mark_processed("jotform", "sub-y")
+        cur.execute.assert_called()
+        assert conn.commit.call_count >= 1  # _ensure_table + INSERT each commit
+
+    def test_mark_processed_noop_when_db_unavailable(self):
+        from src.repositories.webhook_events_repo import mark_processed
+        with patch("src.repositories.webhook_events_repo._get_conn", return_value=None):
+            mark_processed("jotform", "sub-z")  # must not raise

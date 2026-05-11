@@ -6,7 +6,10 @@ import logging
 import os
 from typing import Any, Dict, Optional
 
+from src.repositories.webhook_events_repo import is_processed, mark_processed
 from src.rico_db import RicoDB
+
+_JOTFORM_SOURCE = "jotform"
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +84,18 @@ def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
         )
         return {"status": "rejected", "reason": "unknown_form_id"}
 
+    # ── Idempotency guard ──────────────────────────────────────────────────────
+    # submission_id is the stable Jotform event ID.  Skip processing if we
+    # have already handled this submission.  A missing/unknown submission_id
+    # ('?') bypasses the guard to avoid blocking malformed payloads.
+    if submission_id and submission_id != "?":
+        if is_processed(_JOTFORM_SOURCE, submission_id):
+            logger.info(
+                "jotform_webhook: duplicate submission_id=%s — skipping",
+                submission_id,
+            )
+            return {"status": "ok", "duplicate": True, "submission_id": submission_id}
+
     mapped = map_jotform_payload(payload)
     user_id = mapped["user"].get("external_user_id")
 
@@ -129,6 +144,10 @@ def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
                 "jotform_webhook: mark_onboarding_complete failed user_id=%s: %s",
                 user_id, exc,
             )
+
+    # ── Mark submission processed (after all writes succeed) ─────────────────
+    if submission_id and submission_id != "?":
+        mark_processed(_JOTFORM_SOURCE, submission_id)
 
     logger.info(
         "jotform_webhook: ok form_id=%s submission=%s db_user_id=%s",
