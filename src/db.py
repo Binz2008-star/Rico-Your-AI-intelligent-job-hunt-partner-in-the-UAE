@@ -106,6 +106,16 @@ def init_db():
                 )
             """)
 
+            # Ensure new columns exist in legacy tables (idempotent migration)
+            cursor.execute("""
+                ALTER TABLE settings
+                ADD COLUMN IF NOT EXISTS score_threshold_apply INTEGER DEFAULT 75
+            """)
+            cursor.execute("""
+                ALTER TABLE settings
+                ADD COLUMN IF NOT EXISTS score_threshold_watch INTEGER DEFAULT 50
+            """)
+
             # Create indexes for better performance
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_link ON jobs(link)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_score ON jobs(score DESC)")
