@@ -25,7 +25,8 @@ def read(user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         with conn.cursor() as cur:
             cur.execute(
                 """SELECT include_keywords, exclude_keywords, min_score,
-                          max_daily_applies, telegram_chat_id
+                          max_daily_applies, telegram_chat_id,
+                          score_threshold_apply, score_threshold_watch
                    FROM settings WHERE user_id = %s""",
                 (user_id or "default",),
             )
@@ -38,6 +39,8 @@ def read(user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
             "min_score": row[2],
             "max_daily_applies": row[3],
             "telegram_chat_id": row[4] or "",
+            "score_threshold_apply": row[5] if row[5] is not None else 75,
+            "score_threshold_watch": row[6] if row[6] is not None else 50,
         }
     except Exception:
         logger.exception("settings_repo_read_failed")
@@ -57,16 +60,19 @@ def upsert(data: Dict[str, Any], user_id: Optional[str] = None) -> None:
                 """
                 INSERT INTO settings (
                     user_id, include_keywords, exclude_keywords,
-                    min_score, max_daily_applies, telegram_chat_id, updated_at
+                    min_score, max_daily_applies, telegram_chat_id,
+                    score_threshold_apply, score_threshold_watch, updated_at
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
                 ON CONFLICT (user_id) DO UPDATE SET
-                    include_keywords  = COALESCE(EXCLUDED.include_keywords,  settings.include_keywords),
-                    exclude_keywords  = COALESCE(EXCLUDED.exclude_keywords,  settings.exclude_keywords),
-                    min_score         = COALESCE(EXCLUDED.min_score,         settings.min_score),
-                    max_daily_applies = COALESCE(EXCLUDED.max_daily_applies, settings.max_daily_applies),
-                    telegram_chat_id  = COALESCE(EXCLUDED.telegram_chat_id,  settings.telegram_chat_id),
-                    updated_at        = NOW()
+                    include_keywords       = COALESCE(EXCLUDED.include_keywords,       settings.include_keywords),
+                    exclude_keywords       = COALESCE(EXCLUDED.exclude_keywords,       settings.exclude_keywords),
+                    min_score              = COALESCE(EXCLUDED.min_score,              settings.min_score),
+                    max_daily_applies      = COALESCE(EXCLUDED.max_daily_applies,      settings.max_daily_applies),
+                    telegram_chat_id       = COALESCE(EXCLUDED.telegram_chat_id,       settings.telegram_chat_id),
+                    score_threshold_apply  = COALESCE(EXCLUDED.score_threshold_apply,  settings.score_threshold_apply),
+                    score_threshold_watch  = COALESCE(EXCLUDED.score_threshold_watch,  settings.score_threshold_watch),
+                    updated_at             = NOW()
                 """,
                 (
                     user_id or "default",
@@ -75,6 +81,8 @@ def upsert(data: Dict[str, Any], user_id: Optional[str] = None) -> None:
                     data.get("min_score"),
                     data.get("max_daily_applies"),
                     data.get("telegram_chat_id"),
+                    data.get("score_threshold_apply"),
+                    data.get("score_threshold_watch"),
                 ),
             )
     except Exception:

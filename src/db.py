@@ -91,6 +91,21 @@ def init_db():
                 )
             """)
 
+            # Create settings table (used by /api/v1/settings)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS settings (
+                    user_id TEXT PRIMARY KEY,
+                    include_keywords TEXT[],
+                    exclude_keywords TEXT[],
+                    min_score INTEGER DEFAULT 50,
+                    max_daily_applies INTEGER DEFAULT 10,
+                    telegram_chat_id TEXT,
+                    score_threshold_apply INTEGER DEFAULT 75,
+                    score_threshold_watch INTEGER DEFAULT 50,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # Create indexes for better performance
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_link ON jobs(link)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_score ON jobs(score DESC)")
