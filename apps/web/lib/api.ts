@@ -196,6 +196,63 @@ export interface ChatApiResponse {
   };
 }
 
+// ── CV upload ─────────────────────────────────────────────────────────────────
+
+export interface ParsedCV {
+  text: string;
+  skills: string[];
+  emails: string[];
+  phones: string[];
+  years_experience_hint: number | null;
+  certifications: string[];
+  languages: string[];
+}
+
+export interface UploadCVResponse {
+  user_id: string;
+  filename: string;
+  parsed: ParsedCV;
+}
+
+export async function uploadCV(file: File): Promise<UploadCVResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${PROXY}/api/v1/rico/upload-cv`, {
+    method: "POST",
+    credentials: "include",
+    body: form,
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(err.detail ?? `Upload failed: ${res.status}`);
+  }
+  return res.json() as Promise<UploadCVResponse>;
+}
+
+// ── Onboarding ────────────────────────────────────────────────────────────────
+
+export interface OnboardingPayload {
+  target_roles?: string[];
+  preferred_cities?: string[];
+  salary_expectation_aed?: number;
+  years_experience?: number;
+  current_role?: string;
+  skills?: string[];
+}
+
+export async function submitOnboarding(
+  payload: OnboardingPayload
+): Promise<{ status: string; updated_fields: string[] }> {
+  const res = await fetch(`${PROXY}/api/v1/onboarding/submit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Onboarding submit failed: ${res.status}`);
+  return res.json() as Promise<{ status: string; updated_fields: string[] }>;
+}
+
 // No user_id field — identity comes exclusively from the session cookie.
 export async function sendChat(
   message: string,

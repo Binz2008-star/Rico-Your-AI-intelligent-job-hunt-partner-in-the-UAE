@@ -32,6 +32,7 @@ from src.api.routers.agent import router as agent_router
 from src.api.routers.applications import router as applications_router
 from src.api.routers.rico_chat import router as rico_chat_router
 from src.api.routers.jobs import router as jobs_router
+from src.api.routers.onboarding import router as onboarding_router
 from src.api.routers.pipeline import router as pipeline_router
 from src.api.routers.settings import router as settings_router
 from src.api.routers.stats import router as stats_router
@@ -143,6 +144,7 @@ app.include_router(jobs_router)
 app.include_router(applications_router)
 app.include_router(stats_router)
 app.include_router(settings_router)
+app.include_router(onboarding_router)
 app.include_router(pipeline_router)
 
 # ── Global error handler ─────────────────────────────────────────────────────
@@ -157,7 +159,7 @@ async def unhandled_exception(request: Request, exc: Exception) -> JSONResponse:
 
 # ── Health + root ─────────────────────────────────────────────────────────────
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def root() -> Dict[str, str]:
     return {
         "service": "Job Automation Platform",
