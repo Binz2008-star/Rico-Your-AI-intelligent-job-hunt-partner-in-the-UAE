@@ -118,47 +118,56 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
         </div>
       </div>
 
-      {/* Why this fits */}
+      {/* Why this fits - max 4 items for scan speed */}
       {match.match_reasons && match.match_reasons.length > 0 && (
         <div className="mb-2">
           <p className="text-[10px] font-semibold text-[#5dcaa5] mb-1">Why this fits:</p>
           <ul className="text-[10px] text-[#8080a0] list-disc list-inside space-y-0.5">
-            {match.match_reasons.map((reason, idx) => (
+            {match.match_reasons.slice(0, 4).map((reason, idx) => (
               <li key={idx}>{reason}</li>
             ))}
+            {match.match_reasons.length > 4 && (
+              <li className="text-[9px] text-[#5a5a7a] italic">+{match.match_reasons.length - 4} more reasons</li>
+            )}
           </ul>
         </div>
       )}
 
-      {/* Concerns */}
+      {/* Concerns - max 3 items to prevent overwhelming */}
       {match.match_concerns && match.match_concerns.length > 0 && (
         <div className="mb-2">
           <p className="text-[10px] font-semibold text-[#facc15] mb-1">Concerns:</p>
           <ul className="text-[10px] text-[#8080a0] list-disc list-inside space-y-0.5">
-            {match.match_concerns.map((concern, idx) => (
+            {match.match_concerns.slice(0, 3).map((concern, idx) => (
               <li key={idx}>{concern}</li>
             ))}
+            {match.match_concerns.length > 3 && (
+              <li className="text-[9px] text-[#5a5a7a] italic">+{match.match_concerns.length - 3} more concerns</li>
+            )}
           </ul>
         </div>
       )}
 
-      {/* Missing facts */}
+      {/* Missing facts - max 3 items for cognitive load */}
       {match.missing_facts && match.missing_facts.length > 0 && (
         <div className="mb-2">
           <p className="text-[10px] font-semibold text-[#a78bfa] mb-1">Missing information:</p>
           <ul className="text-[10px] text-[#8080a0] list-disc list-inside space-y-0.5">
-            {match.missing_facts.map((fact, idx) => (
+            {match.missing_facts.slice(0, 3).map((fact, idx) => (
               <li key={idx}>{fact}</li>
             ))}
+            {match.missing_facts.length > 3 && (
+              <li className="text-[9px] text-[#5a5a7a] italic">+{match.missing_facts.length - 3} more missing</li>
+            )}
           </ul>
         </div>
       )}
 
-      {/* Recommended action */}
+      {/* Recommended action - max 2 lines for instant clarity */}
       {match.recommended_action && (
         <div className="mb-2 p-2 bg-white/5 rounded-lg border-l-2 border-[#5b4fff]">
           <p className="text-[10px] font-semibold text-[#a78bfa] mb-0.5">Safest next step:</p>
-          <p className="text-[10px] text-[#eeeef5] leading-relaxed">{match.recommended_action}</p>
+          <p className="text-[10px] text-[#eeeef5] leading-relaxed line-clamp-2">{match.recommended_action}</p>
         </div>
       )}
 
