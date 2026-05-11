@@ -29,6 +29,7 @@ class RicoEnvReport:
     ready_for_db: bool
     ready_for_telegram: bool
     ready_for_openai: bool
+    ready_for_deepseek: bool
     ready_for_jotform: bool
     ready_for_hf: bool
     ai_provider: str
@@ -40,6 +41,7 @@ class RicoEnvReport:
             "ready_for_db": self.ready_for_db,
             "ready_for_telegram": self.ready_for_telegram,
             "ready_for_openai": self.ready_for_openai,
+            "ready_for_deepseek": self.ready_for_deepseek,
             "ready_for_jotform": self.ready_for_jotform,
             "ready_for_hf": self.ready_for_hf,
             "ai_provider": self.ai_provider,
@@ -51,11 +53,17 @@ ENV_SPECS = [
     ("DATABASE_URL", True, "Neon/PostgreSQL persistence for Rico memory and profiles"),
     ("TELEGRAM_BOT_TOKEN", False, "Telegram bot messages and webhook replies"),
     ("TELEGRAM_CHAT_ID", False, "Legacy/default Telegram notification target"),
-    ("OPENAI_API_KEY", False, "AI tool-calling, message generation, and advanced reasoning"),
+    ("OPENAI_API_KEY", False, "OpenAI message generation and advanced reasoning"),
+    ("OPEN_AI_API", False, "Legacy OpenAI key alias"),
+    ("OPENAI_MODEL", False, "OpenAI primary model"),
+    ("OPENAI_FALLBACK_MODEL", False, "OpenAI fallback model"),
+    ("DEEPSEEK_API_KEY", False, "DeepSeek OpenAI-compatible chat completions"),
+    ("DEEPSEEK_MODEL", False, "DeepSeek model override"),
     ("HF_API_KEY", False, "Hugging Face free inference API key for fallback chat responses"),
-    ("HF_TOKEN", False, "Legacy Hugging Face token — also checked for HF fallback"),
+    ("HF_API_TOKEN", False, "Hugging Face token alias"),
+    ("HF_TOKEN", False, "Legacy Hugging Face token alias"),
     ("HUGGINGFACE_API_KEY", False, "Alternative Hugging Face key alias"),
-    ("RICO_AI_PROVIDER", False, "AI provider: none|openai|huggingface (default: auto)"),
+    ("RICO_AI_PROVIDER", False, "AI provider: none|deepseek|openai|huggingface|hf (default: auto)"),
     ("JOTFORM_API_KEY", False, "Jotform onboarding CV/file retrieval"),
     ("JOTFORM_FORM_ID", False, "Rico onboarding form ID"),
     ("JOTFORM_RICO_FORM_ID", False, "Rico onboarding form ID alias"),
@@ -76,7 +84,10 @@ def env_bool(name: str, default: bool = False) -> bool:
 def _hf_key_present() -> bool:
     """True when any HF key alias is set."""
     return bool(
-        os.getenv("HF_API_KEY") or os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_API_KEY")
+        os.getenv("HF_API_KEY")
+        or os.getenv("HF_API_TOKEN")
+        or os.getenv("HF_TOKEN")
+        or os.getenv("HUGGINGFACE_API_KEY")
     )
 
 
@@ -85,28 +96,36 @@ def _openai_key_present() -> bool:
     return bool(os.getenv("OPENAI_API_KEY") or os.getenv("OPEN_AI_API"))
 
 
+def _deepseek_key_present() -> bool:
+    """True when DeepSeek is configured."""
+    return bool(os.getenv("DEEPSEEK_API_KEY"))
+
+
 def get_ai_provider() -> str:
     """Get the AI provider from environment with safe auto-detection.
 
-    Explicit RICO_AI_PROVIDER always wins.
-    When not set:
-      - If OpenAI is explicitly chosen and key present → "openai"
-      - If HF key present → "huggingface" (default free path)
-      - Else → "none"
+    Explicit RICO_AI_PROVIDER always wins when valid.
+    Supported values: none, deepseek, openai, huggingface, hf.
 
-    OpenAI is NEVER auto-enabled to avoid billing surprises.
+    Auto-detect priority when unset:
+      1. DeepSeek if DEEPSEEK_API_KEY is present.
+      2. Hugging Face if any HF key alias is present.
+      3. none.
+
+    OpenAI is never auto-enabled to avoid billing surprises.
     """
     provider = os.getenv("RICO_AI_PROVIDER", "").strip().lower()
     if provider:
-        if provider in {"none", "openai", "huggingface", "hf"}:
-            return "huggingface" if provider == "hf" else provider
-        logger.warning(f"Invalid RICO_AI_PROVIDER value: {provider}. Using auto-detect.")
+        aliases = {"hf": "huggingface"}
+        provider = aliases.get(provider, provider)
+        if provider in {"none", "deepseek", "openai", "huggingface"}:
+            return provider
+        logger.warning("Invalid RICO_AI_PROVIDER value: %s. Using auto-detect.", provider)
 
-    # Auto-detect: HF is the safe default free path
+    if _deepseek_key_present():
+        return "deepseek"
     if _hf_key_present():
         return "huggingface"
-    if _openai_key_present() and provider == "openai":
-        return "openai"
     return "none"
 
 
@@ -118,15 +137,13 @@ def get_rico_env_report() -> RicoEnvReport:
     present = {check.name: check.present for check in checks}
     provider = get_ai_provider()
     openai_key_present = _openai_key_present()
+    deepseek_key_present = _deepseek_key_present()
     hf_key_present = _hf_key_present()
 
-    # OpenAI is only "ready" when explicitly enabled AND key present
     ready_for_openai = provider == "openai" and openai_key_present
+    ready_for_deepseek = provider == "deepseek" and deepseek_key_present
+    ready_for_hf = provider == "huggingface" and hf_key_present
 
-    # HF is ready when any HF key is present
-    ready_for_hf = hf_key_present
-
-    # Jotform is ready when form ID is present (webhook secret is production-only)
     jotform_form_id_present = bool(
         present.get("JOTFORM_FORM_ID", False)
         or present.get("JOTFORM_RICO_FORM_ID", False)
@@ -138,6 +155,7 @@ def get_rico_env_report() -> RicoEnvReport:
         ready_for_db=present.get("DATABASE_URL", False),
         ready_for_telegram=present.get("TELEGRAM_BOT_TOKEN", False),
         ready_for_openai=ready_for_openai,
+        ready_for_deepseek=ready_for_deepseek,
         ready_for_jotform=ready_for_jotform,
         ready_for_hf=ready_for_hf,
         ai_provider=provider,
