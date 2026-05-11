@@ -29,10 +29,29 @@ class TestFreeProviderMode:
         with patch.dict(os.environ, {"RICO_AI_PROVIDER": "openai"}):
             assert get_ai_provider() == "openai"
 
+    def test_get_ai_provider_huggingface(self):
+        """Test that provider='huggingface' is respected."""
+        with patch.dict(os.environ, {"RICO_AI_PROVIDER": "huggingface"}):
+            assert get_ai_provider() == "huggingface"
+
     def test_get_ai_provider_invalid(self):
-        """Test that invalid provider defaults to 'none'."""
-        with patch.dict(os.environ, {"RICO_AI_PROVIDER": "invalid"}):
+        """Test that invalid provider defaults to auto-detect (none when no keys)."""
+        with patch.dict(os.environ, {"RICO_AI_PROVIDER": "invalid"}, clear=True):
             assert get_ai_provider() == "none"
+
+    def test_get_ai_provider_auto_detects_hf(self):
+        """Test that HF key auto-detects huggingface provider."""
+        with patch.dict(os.environ, {"HF_TOKEN": "hf_test_token"}, clear=True):
+            assert get_ai_provider() == "huggingface"
+
+    def test_get_ai_provider_hf_priority_over_openai(self):
+        """Test that HF is preferred when both keys are present and no explicit provider."""
+        with patch.dict(
+            os.environ,
+            {"HF_TOKEN": "hf_test", "OPENAI_API_KEY": "sk-test"},
+            clear=True,
+        ):
+            assert get_ai_provider() == "huggingface"
 
     def test_get_ai_provider_case_insensitive(self):
         """Test that provider is case insensitive."""
@@ -115,6 +134,21 @@ class TestFreeProviderMode:
         assert result["success"] is True
         assert result["model"] == "gpt-4o-mini"
         assert result["response"] == "OK"
+
+    def test_openai_smoke_provider_huggingface(self):
+        """Test that smoke endpoint returns HF status when provider=huggingface."""
+        mock_request = Mock(spec=Request)
+
+        with patch.dict(os.environ, {"HF_TOKEN": "hf_test_token"}), \
+             patch('src.rico_env.get_ai_provider', return_value="huggingface"), \
+             patch('src.api.routers.rico_chat.get_current_user', return_value={"email": "test@example.com"}):
+            result = rico_openai_smoke(mock_request)
+
+        assert result["success"] is False
+        assert result["provider"] == "huggingface"
+        assert result["openai_available"] is False
+        assert result["hf_available"] is True
+        assert result["error"] == "OpenAIProviderDisabled"
 
 
 if __name__ == "__main__":
