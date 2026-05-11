@@ -158,6 +158,7 @@ export default function ApplicationsPage() {
                     value={app.status}
                     onChange={(e) => changeStatus(app, e.target.value as ApplicationStatus)}
                     disabled={updating === app.application_id}
+                    aria-label={`Change status for ${app.title}`}
                     className="bg-[#0d0d1f] border border-[rgba(255,255,255,0.08)] rounded-lg px-2 py-1.5 text-[11px] text-[#8080a0] outline-none focus:border-[rgba(91,79,255,0.4)] cursor-pointer disabled:opacity-40"
                   >
                     {STATUS_OPTIONS.map((s) => (
