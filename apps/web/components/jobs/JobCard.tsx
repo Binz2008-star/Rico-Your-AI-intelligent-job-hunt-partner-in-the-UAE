@@ -9,6 +9,7 @@ import { useState } from "react";
 interface JobCardProps {
   job: Job;
   onAction?: (jobId: string, action: string) => Promise<void>;
+  isSubmitting?: boolean;
   className?: string;
 }
 
@@ -36,12 +37,12 @@ function pickColor(name: string) {
   return logoColors[Math.abs(h) % logoColors.length];
 }
 
-export function JobCard({ job, onAction, className }: JobCardProps) {
+export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps) {
   const [loading, setLoading] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
   const handle = async (action: string) => {
-    if (!onAction || loading) return;
+    if (!onAction || loading || isSubmitting) return;
     setLoading(action);
     try {
       await onAction(job.job_id, action);
