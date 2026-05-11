@@ -4,8 +4,29 @@ import { ProfileSummaryCard } from "@/components/ProfileSummaryCard";
 import { SavedSearchesList } from "@/components/SavedSearchesList";
 import { StatusCard } from "@/components/StatusCard";
 import { fetchHealth, type HealthResponse } from "@/lib/api";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
+
+const RICO_API =
+  process.env.NEXT_PUBLIC_RICO_API ?? "https://rico-job-automation-api.onrender.com";
+
+async function checkProfileExists(): Promise<boolean | null> {
+  try {
+    const cookieStore = await cookies();
+    const cookieHeader = cookieStore.getAll().map((c) => `${c.name}=${c.value}`).join("; ");
+    const res = await fetch(`${RICO_API}/api/v1/rico/profile`, {
+      headers: { Cookie: cookieHeader },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { profile_exists?: boolean };
+    return data.profile_exists ?? false;
+  } catch {
+    return null;
+  }
+}
 
 async function SystemStatus() {
   let health: HealthResponse | null = null;
@@ -51,7 +72,19 @@ async function SystemStatus() {
   );
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ skip?: string }>;
+}) {
+  const params = await searchParams;
+  if (!params.skip) {
+    const profileExists = await checkProfileExists();
+    if (profileExists === false) {
+      redirect("/onboarding");
+    }
+  }
+
   return (
     <DashboardShell title="Dashboard">
       <div className="flex flex-col gap-10">
