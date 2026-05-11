@@ -87,6 +87,15 @@ async def lifespan(app: FastAPI):
         logger.info("rico_db_init OK")
     except Exception:
         logger.warning("rico_db_init skipped (DB unavailable or tables already exist)")
+
+    # Run settings migration to ensure threshold columns exist
+    try:
+        from src.db import init_db
+        init_db()
+        logger.info("settings_migration OK")
+    except Exception as exc:
+        logger.warning("settings_migration failed: %s", exc)
+
     _check_critical_tables()
     yield
 
