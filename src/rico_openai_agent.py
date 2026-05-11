@@ -106,8 +106,7 @@ class RicoOpenAIAgent:
             "type": "openai_error_fallback",
             "message": result.get(
                 "text",
-                "Free mode is active. Rico can help set up your profile and guide your job search using free AI/fallback tools. "
-                "OpenAI advanced reasoning will activate after credits are available.",
+                "Free mode is active. Rico can help set up your profile and guide your job search using free AI/fallback.",
             ),
             "error": result.get("error"),
             "error_detail": result.get("error_detail"),
