@@ -24,7 +24,7 @@ import bcrypt as _bcrypt
 from fastapi import APIRouter, HTTPException, Request, Response
 from jose import JWTError, jwt
 
-from src.api.rate_limit import LIMIT_LOGIN, limiter
+from src.api.rate_limit import LIMIT_LOGIN, LIMIT_REGISTER, limiter
 from src.schemas.auth import (
     ForgotPasswordRequest,
     ForgotPasswordResponse,
@@ -281,27 +281,37 @@ def reset_password(req: ResetPasswordRequest) -> ResetPasswordResponse:
 
 
 @router.post("/register", response_model=RegisterResponse, status_code=201)
+@limiter.limit(LIMIT_REGISTER)
 def register(request: Request, req: RegisterRequest, response: Response) -> RegisterResponse:
     """
-    Create a new user account. Admin-only.
+    Self-signup: create a new user account (public, no auth required).
 
-    Requires a valid JWT with role=admin. Password is hashed before storage.
-    Returns 409 if the email is already registered.
+    Role is always forced to "user" — admin accounts must be created via DB.
+    Rate-limited to 3/minute per IP. Returns 409 if email already registered.
     """
-    from src.api.deps import require_admin
-    require_admin(request)
-
     from src.repositories.users_repo import create_user, get_user_by_email
-    if get_user_by_email(req.email):
+
+    email = req.email.strip().lower()
+    if get_user_by_email(email):
         raise HTTPException(status_code=409, detail="Email already registered")
 
     password_hash = _hash_password(req.password)
-    user = create_user(req.email.strip().lower(), password_hash, role=req.role)
+    user = create_user(email, password_hash, role="user")  # always user, never admin
     if user is None:
         raise HTTPException(
             status_code=503,
-            detail="User registration unavailable — database not connected",
+            detail="Registration unavailable — please try again shortly",
         )
 
-    logger.info("register_success email=%r role=%s", user.email, user.role)
+    token = create_access_token({"sub": user.email, "role": user.role})
+    _secure = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+    response.set_cookie(
+        key=_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        samesite="none" if _secure else "lax",
+        secure=_secure,
+        max_age=_ttl_hours() * 3600,
+    )
+    logger.info("register_success email=%r", user.email)
     return RegisterResponse(email=user.email, role=user.role, created=True)

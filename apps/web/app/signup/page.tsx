@@ -1,26 +1,35 @@
 "use client";
 
-import { login } from "@/lib/api";
+import { register } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export default function LoginPage() {
+export default function SignupPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (password !== confirm) {
+      setError("Passwords do not match");
+      return;
+    }
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters");
+      return;
+    }
     setLoading(true);
     try {
-      await login(email, password);
-      router.push("/dashboard");
+      await register(email, password);
+      router.push("/chat");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
       setLoading(false);
     }
@@ -43,7 +52,7 @@ export default function LoginPage() {
             </div>
             <span className="font-['Cabinet_Grotesk',sans-serif] font-black text-xl text-white tracking-tight">Rico AI</span>
           </Link>
-          <p className="mt-3 text-sm text-[#5a5a7a]">Sign in to your autonomous job agent</p>
+          <p className="mt-3 text-sm text-[#5a5a7a]">Create your free account</p>
         </div>
 
         <form
@@ -67,27 +76,36 @@ export default function LoginPage() {
             />
           </div>
 
-          {/* Password + forgot link */}
+          {/* Password */}
           <div>
-            <div className="mb-1.5 flex items-center justify-between">
-              <label htmlFor="password" className="text-xs font-semibold uppercase tracking-wider text-[#5a5a7a]">
-                Password
-              </label>
-              <Link
-                href="/forgot-password"
-                className="text-xs text-[#a78bfa] hover:text-[#c4b5fd] transition-colors"
-              >
-                Forgot password?
-              </Link>
-            </div>
+            <label htmlFor="password" className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[#5a5a7a]">
+              Password
+            </label>
             <input
               id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              autoComplete="current-password"
-              placeholder="••••••••"
+              autoComplete="new-password"
+              placeholder="Min. 8 characters"
+              className="w-full rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#0d0d1f] px-3 py-2.5 text-sm text-[#eeeef5] placeholder-[#5a5a7a] focus:border-[rgba(91,79,255,0.5)] focus:outline-none focus:ring-1 focus:ring-[rgba(91,79,255,0.3)] transition-colors"
+            />
+          </div>
+
+          {/* Confirm password */}
+          <div>
+            <label htmlFor="confirm" className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[#5a5a7a]">
+              Confirm password
+            </label>
+            <input
+              id="confirm"
+              type="password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              required
+              autoComplete="new-password"
+              placeholder="Re-enter password"
               className="w-full rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#0d0d1f] px-3 py-2.5 text-sm text-[#eeeef5] placeholder-[#5a5a7a] focus:border-[rgba(91,79,255,0.5)] focus:outline-none focus:ring-1 focus:ring-[rgba(91,79,255,0.3)] transition-colors"
             />
           </div>
@@ -105,14 +123,14 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full rounded-lg bg-[#5b4fff] py-3 text-sm font-semibold text-white transition-colors hover:bg-[#4a3fdf] disabled:cursor-not-allowed disabled:opacity-50 shadow-[0_4px_15px_rgba(91,79,255,0.2)]"
           >
-            {loading ? "Signing in…" : "Sign in"}
+            {loading ? "Creating account…" : "Create account & start chatting"}
           </button>
         </form>
 
         <p className="mt-5 text-center text-xs text-[#5a5a7a]">
-          No account yet?{" "}
-          <Link href="/signup" className="text-[#a78bfa] hover:text-[#c4b5fd] transition-colors">
-            Create one free →
+          Already have an account?{" "}
+          <Link href="/login" className="text-[#a78bfa] hover:text-[#c4b5fd] transition-colors">
+            Sign in →
           </Link>
         </p>
       </div>

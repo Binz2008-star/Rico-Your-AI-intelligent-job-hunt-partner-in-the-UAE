@@ -284,7 +284,7 @@ export default function ChatPage() {
         </Link>
         <div className="flex items-center gap-3">
           <Link href="/login" className="text-[13px] text-[#5a5a7a] hover:text-white transition-colors">Sign in</Link>
-          <Link href="/dashboard" className="text-[12px] px-3 py-1.5 rounded-lg border border-white/10 text-[#a78bfa] hover:border-[#5b4fff]/50 transition-colors">Dashboard</Link>
+          <Link href="/signup" className="text-[12px] px-3 py-1.5 rounded-lg bg-[#5b4fff] text-white hover:bg-[#4a3fdf] transition-colors font-medium">Sign up free</Link>
         </div>
       </header>
 

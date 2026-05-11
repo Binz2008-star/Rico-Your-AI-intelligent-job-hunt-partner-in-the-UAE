@@ -283,6 +283,22 @@ export async function submitOnboarding(
   return res.json() as Promise<{ status: string; updated_fields: string[] }>;
 }
 
+// ── Auth: register ────────────────────────────────────────────────────────────
+
+export async function register(email: string, password: string): Promise<{ email: string; role: string }> {
+  const res = await fetch(`${PROXY}/api/v1/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(err.detail ?? `Registration failed: ${res.status}`);
+  }
+  return res.json() as Promise<{ email: string; role: string }>;
+}
+
 // Public chat — no auth required. Uses session_id stored in localStorage.
 export async function sendChatPublic(
   message: string,
