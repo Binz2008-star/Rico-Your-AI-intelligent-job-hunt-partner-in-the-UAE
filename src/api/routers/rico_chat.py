@@ -21,6 +21,8 @@ import re
 import secrets
 from typing import Any, Dict
 
+from dataclasses import asdict
+
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 
