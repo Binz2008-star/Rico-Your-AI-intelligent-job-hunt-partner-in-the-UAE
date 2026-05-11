@@ -4,6 +4,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
+import { ApiError } from "@/lib/client";
 import { getApplications, updateApplicationStatus } from "@/services/applications";
 import type { Application, ApplicationStatus } from "@/types";
 import { useEffect, useState } from "react";
@@ -26,15 +27,22 @@ export default function ApplicationsPage() {
   const { toasts, toast } = useToast();
   const [apps, setApps] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<"auth" | "other" | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
+    setLoading(true);
+    setError(null);
     getApplications()
       .then((r) => setApps(r.applications))
-      .catch(() => toast("Could not load applications", "error"))
+      .catch((err) => {
+        const is401 = err instanceof ApiError && err.statusCode === 401;
+        setError(is401 ? "auth" : "other");
+        toast(is401 ? "Session expired — please log in again" : "Could not load applications", "error");
+      })
       .finally(() => setLoading(false));
-  }, [user]);
+  }, [user, toast]);
 
   const changeStatus = async (app: Application, status: ApplicationStatus) => {
     if (!user || updating) return;
@@ -74,7 +82,7 @@ export default function ApplicationsPage() {
 
       <div className="p-8 flex flex-col gap-6">
         {/* summary strip */}
-        {!loading && (
+        {!loading && !error && (
           <div className="grid grid-cols-5 gap-3">
             {STATUS_OPTIONS.map((s) => (
               <div key={s} className="bg-[#0e0e20] border border-white/6 rounded-xl p-4 text-center">
@@ -95,11 +103,28 @@ export default function ApplicationsPage() {
                 <div key={i} className="h-16 border-b border-white/5 bg-white/2 animate-pulse" />
               ))}
             </div>
+          ) : error === "auth" ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
+              <span className="text-4xl opacity-25">🔒</span>
+              <p className="text-[14px] text-white/30">Session expired</p>
+              <a
+                href="/login"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[rgba(91,79,255,0.15)] text-[#a78bfa] border border-[rgba(91,79,255,0.25)] text-[13px] font-semibold hover:bg-[rgba(91,79,255,0.25)] transition-all"
+              >
+                Log in again
+              </a>
+            </div>
+          ) : error === "other" ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
+              <span className="text-4xl opacity-25">⚠️</span>
+              <p className="text-[14px] text-white/30">Could not load applications</p>
+              <p className="text-[12px] text-white/20">The backend may be unavailable. Please try again.</p>
+            </div>
           ) : apps.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
               <span className="text-4xl opacity-25">📄</span>
               <p className="text-[14px] text-white/30">No applications tracked yet</p>
-              <p className="text-[12px] text-white/20">Apply to jobs from the Jobs page and they'll appear here</p>
+              <p className="text-[12px] text-white/20">Apply to jobs from the Jobs page and they&apos;ll appear here</p>
             </div>
           ) : (
             <>

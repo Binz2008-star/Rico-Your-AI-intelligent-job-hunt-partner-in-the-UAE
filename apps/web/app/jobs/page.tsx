@@ -4,6 +4,7 @@ import { JobCard } from "@/components/jobs/JobCard";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
+import { ApiError } from "@/lib/client";
 import { applyJob, getJobs } from "@/services/jobs";
 import type { Job } from "@/types";
 import { useEffect, useState } from "react";
@@ -15,15 +16,22 @@ export default function JobsPage() {
   const { toasts, toast } = useToast();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<"auth" | "other" | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
 
   useEffect(() => {
     if (!user) return;
+    setLoading(true);
+    setError(null);
     getJobs()
       .then((r) => setJobs(r.jobs))
-      .catch(() => toast("Could not load jobs", "error"))
+      .catch((err) => {
+        const is401 = err instanceof ApiError && err.statusCode === 401;
+        setError(is401 ? "auth" : "other");
+        toast(is401 ? "Session expired — please log in again" : "Could not load jobs", "error");
+      })
       .finally(() => setLoading(false));
-  }, [user]);
+  }, [user, toast]);
 
   const filtered = jobs.filter((j) =>
     filter === "high" ? j.score >= 85 : filter === "mid" ? j.score >= 65 && j.score < 85 : true
@@ -57,8 +65,8 @@ export default function JobsPage() {
               key={f}
               onClick={() => setFilter(f)}
               className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all ${filter === f
-                  ? "bg-[rgba(91,79,255,0.15)] text-[#a78bfa] border border-[rgba(91,79,255,0.25)]"
-                  : "text-white/35 hover:text-white/60 hover:bg-white/5"
+                ? "bg-[rgba(91,79,255,0.15)] text-[#a78bfa] border border-[rgba(91,79,255,0.25)]"
+                : "text-white/35 hover:text-white/60 hover:bg-white/5"
                 }`}
             >
               {f === "all" ? "All" : f === "high" ? "85%+ match" : "65–84%"}
@@ -74,6 +82,29 @@ export default function JobsPage() {
               <div key={i} className="h-52 rounded-2xl bg-white/3 animate-pulse" />
             ))}
           </div>
+        ) : error === "auth" ? (
+          <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+            <span className="text-5xl opacity-25">🔒</span>
+            <p className="font-['Cabinet_Grotesk',sans-serif] font-700 text-[18px] text-white/30">
+              Session expired
+            </p>
+            <a
+              href="/login"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[rgba(91,79,255,0.15)] text-[#a78bfa] border border-[rgba(91,79,255,0.25)] text-[13px] font-semibold hover:bg-[rgba(91,79,255,0.25)] transition-all"
+            >
+              Log in again
+            </a>
+          </div>
+        ) : error === "other" ? (
+          <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+            <span className="text-5xl opacity-25">⚠️</span>
+            <p className="font-['Cabinet_Grotesk',sans-serif] font-700 text-[18px] text-white/30">
+              Could not load jobs
+            </p>
+            <p className="text-[13px] text-white/20 max-w-xs">
+              The backend may be unavailable. Please try again in a moment.
+            </p>
+          </div>
         ) : filtered.length > 0 ? (
           <div className="grid grid-cols-2 gap-4">
             {filtered.map((job) => (
@@ -87,7 +118,7 @@ export default function JobsPage() {
               No matches in this range
             </p>
             <p className="text-[13px] text-white/20 max-w-xs">
-              Try "All" filter, or Rico will surface more matches in the next scan
+              Try &quot;All&quot; filter, or Rico will surface more matches in the next scan
             </p>
           </div>
         )}

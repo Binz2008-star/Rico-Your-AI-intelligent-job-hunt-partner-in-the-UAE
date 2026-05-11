@@ -4,6 +4,15 @@
  * Uses /proxy so session cookies are first-party (same-origin).
  */
 
+export class ApiError extends Error {
+  statusCode: number;
+  constructor(message: string, statusCode: number) {
+    super(message);
+    this.statusCode = statusCode;
+    this.name = "ApiError";
+  }
+}
+
 const PROXY = "/proxy";
 
 // Remap generated service paths to actual backend paths.
@@ -31,12 +40,16 @@ function buildUrl(path: string, params?: Record<string, unknown>): string {
   return `${url}?${qs.toString()}`;
 }
 
+function handleError(path: string, res: Response): never {
+  throw new ApiError(`${res.status} ${path}`, res.status);
+}
+
 const client = {
   async get<T>(path: string, config?: { params?: Record<string, unknown> }) {
     const res = await fetch(buildUrl(path, config?.params), {
       credentials: "include",
     });
-    if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
+    if (!res.ok) handleError(path, res);
     return { data: (await res.json()) as T };
   },
 
@@ -48,7 +61,7 @@ const client = {
       credentials: "include",
       body: isForm ? data : JSON.stringify(data),
     });
-    if (!res.ok) throw new Error(`POST ${path} failed: ${res.status}`);
+    if (!res.ok) handleError(path, res);
     return { data: (await res.json()) as T };
   },
 
@@ -59,7 +72,7 @@ const client = {
       credentials: "include",
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error(`PATCH ${path} failed: ${res.status}`);
+    if (!res.ok) handleError(path, res);
     return { data: (await res.json()) as T };
   },
 
@@ -70,7 +83,7 @@ const client = {
       credentials: "include",
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error(`PUT ${path} failed: ${res.status}`);
+    if (!res.ok) handleError(path, res);
     return { data: (await res.json()) as T };
   },
 };
