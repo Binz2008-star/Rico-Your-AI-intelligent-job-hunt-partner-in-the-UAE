@@ -154,17 +154,18 @@ export default function ChatPage() {
           {isEmpty && (
             <div className="flex flex-1 flex-col justify-between gap-6">
               {/* Greeting */}
-              <div className="flex flex-col items-center gap-3 pt-2 text-center">
-                <div className="rounded-full border border-[rgba(91,79,255,0.25)] bg-[rgba(91,79,255,0.08)] px-3 py-1 text-xs text-[#a78bfa]">
-                  Rico AI
+              <div className="flex flex-col items-center gap-4 pt-4 text-center">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#5b4fff] to-[#8b5cf6] flex items-center justify-center text-xl font-black text-white shadow-[0_4px_16px_rgba(91,79,255,0.3)]">
+                  R
                 </div>
-                <p className="text-sm font-medium text-[#eeeef5]">
-                  Hello. I&apos;m Rico, your AI job-search assistant.
-                </p>
-                <p className="max-w-sm text-sm text-[#5a5a7a]">
-                  Tell me your target role, preferred location, salary expectations, and key
-                  skills. I&apos;ll build your search profile from our conversation.
-                </p>
+                <div>
+                  <p className="font-['Cabinet_Grotesk',sans-serif] font-700 text-[18px] text-[#eeeef5]">
+                    Hello. I&apos;m Rico.
+                  </p>
+                  <p className="max-w-sm text-[13px] text-[#5a5a7a] mt-1.5 leading-relaxed">
+                    Your AI job-search assistant for the UAE. Tell me your target role, preferred location, salary expectations, and key skills — I&apos;ll build your profile from our conversation.
+                  </p>
+                </div>
               </div>
 
               <div className="flex flex-col gap-4">
@@ -206,8 +207,13 @@ export default function ChatPage() {
             {messages.map((m) => (
               <div
                 key={m.id}
-                className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+                className={`flex items-end gap-2 ${m.role === "user" ? "justify-end" : "justify-start"}`}
               >
+                {m.role === "rico" && (
+                  <div className="w-6 h-6 rounded-md bg-gradient-to-br from-[#5b4fff] to-[#8b5cf6] flex items-center justify-center text-[10px] font-black text-white shrink-0 mb-1">
+                    R
+                  </div>
+                )}
                 <div
                   className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${m.role === "user"
                     ? "rounded-br-sm bg-[#5b4fff] text-white"
@@ -221,6 +227,11 @@ export default function ChatPage() {
                     </p>
                   )}
                 </div>
+                {m.role === "user" && (
+                  <div className="w-6 h-6 rounded-full bg-[rgba(255,255,255,0.08)] flex items-center justify-center text-[10px] font-medium text-[#8080a0] shrink-0 mb-1">
+                    You
+                  </div>
+                )}
               </div>
             ))}
 
@@ -245,9 +256,17 @@ export default function ChatPage() {
           <button
             onClick={handleSend}
             disabled={thinking || !input.trim()}
-            className="shrink-0 rounded-xl bg-[#5b4fff] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#4a3fe0] disabled:cursor-not-allowed disabled:opacity-40"
+            className="shrink-0 rounded-xl bg-[#5b4fff] px-4 py-3 text-white transition-colors hover:bg-[#4a3fe0] disabled:cursor-not-allowed disabled:opacity-40 flex items-center justify-center"
+            aria-label={thinking ? "Sending…" : "Send message"}
           >
-            {thinking ? "…" : "Send"}
+            {thinking ? (
+              <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 2L11 13" />
+                <path d="M22 2l-7 20-4-9-9-4 20-7z" />
+              </svg>
+            )}
           </button>
         </div>
 

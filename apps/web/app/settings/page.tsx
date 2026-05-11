@@ -13,8 +13,8 @@ import { useEffect, useState } from "react";
 function Row({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
   return (
     <div className="flex items-center justify-between py-3 border-b border-white/5 last:border-0">
-      <span className="text-[13px] text-white/45">{label}</span>
-      <span className={`text-[13px] font-medium flex items-center gap-1.5 ${ok === true ? "text-[#00c9a7]" : ok === false ? "text-[#ff5e5b]" : "text-white/70"
+      <span className="text-[13px] text-[#5a5a7a]">{label}</span>
+      <span className={`text-[13px] font-medium flex items-center gap-1.5 ${ok === true ? "text-[#00c9a7]" : ok === false ? "text-[#ff5e5b]" : "text-[#8080a0]"
         }`}>
         {ok === true && <span className="w-1.5 h-1.5 rounded-full bg-[#00c9a7]" />}
         {ok === false && <span className="w-1.5 h-1.5 rounded-full bg-[#ff5e5b]" />}
