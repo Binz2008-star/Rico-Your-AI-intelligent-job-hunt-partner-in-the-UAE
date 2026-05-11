@@ -1,25 +1,32 @@
 "use client";
 
+import { logout } from "@/lib/api";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { logout } from "@/lib/api";
 
 const NAV = [
-  { href: "/dashboard",      label: "Dashboard" },
-  { href: "/chat",           label: "Chat" },
-  { href: "/profile",        label: "Profile" },
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/jobs", label: "Jobs" },
+  { href: "/applications", label: "Applications" },
+  { href: "/settings", label: "Settings" },
+  { href: "/chat", label: "Chat" },
+  { href: "/profile", label: "Profile" },
   { href: "/saved-searches", label: "Saved Searches" },
 ];
+
+function isActive(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export function DashboardShell({
   children,
   title,
 }: {
   children: React.ReactNode;
-  title: string;
+  title?: string;
 }) {
   const pathname = usePathname();
-  const router   = useRouter();
+  const router = useRouter();
 
   async function handleLogout() {
     await logout();
@@ -39,16 +46,15 @@ export function DashboardShell({
 
         <nav className="flex flex-1 flex-col gap-1">
           {NAV.map(({ href, label }) => {
-            const active = pathname === href;
+            const active = isActive(pathname, href);
             return (
               <Link
                 key={href}
                 href={href}
-                className={`rounded-lg px-3 py-2 text-sm transition-colors ${
-                  active
+                className={`rounded-lg px-3 py-2 text-sm transition-colors ${active
                     ? "bg-zinc-800 text-white font-medium"
                     : "text-zinc-400 hover:bg-zinc-800/60 hover:text-white"
-                }`}
+                  }`}
               >
                 {label}
               </Link>
@@ -76,9 +82,8 @@ export function DashboardShell({
               <Link
                 key={href}
                 href={href}
-                className={`shrink-0 rounded-md px-2.5 py-2 text-xs transition-colors ${
-                  pathname === href ? "bg-zinc-800 text-white" : "text-zinc-400 hover:text-white"
-                }`}
+                className={`shrink-0 rounded-md px-2.5 py-2 text-xs transition-colors ${isActive(pathname, href) ? "bg-zinc-800 text-white" : "text-zinc-400 hover:text-white"
+                  }`}
               >
                 {label}
               </Link>
@@ -87,7 +92,7 @@ export function DashboardShell({
         </header>
 
         <main className="flex-1 px-6 py-8 md:px-8 md:py-10">
-          <h1 className="mb-6 text-xl font-semibold text-white">{title}</h1>
+          {title && <h1 className="mb-6 text-xl font-semibold text-white">{title}</h1>}
           {children}
         </main>
       </div>

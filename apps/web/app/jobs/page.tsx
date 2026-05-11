@@ -1,5 +1,6 @@
 "use client";
 
+import { DashboardShell } from "@/components/DashboardShell";
 import { JobCard } from "@/components/jobs/JobCard";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -48,7 +49,7 @@ export default function JobsPage() {
   };
 
   return (
-    <>
+    <DashboardShell>
       <div className="px-8 py-6 border-b border-white/5 bg-[rgba(7,7,18,0.7)] backdrop-blur-md sticky top-0 z-10 flex items-center justify-between">
         <div>
           <h1 className="font-['Cabinet_Grotesk',sans-serif] font-900 text-[22px] tracking-tight">
@@ -124,6 +125,6 @@ export default function JobsPage() {
         )}
       </div>
       <ToastContainer toasts={toasts} />
-    </>
+    </DashboardShell>
   );
 }

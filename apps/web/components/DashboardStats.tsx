@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getJobs } from "@/services/jobs";
-import { getApplications, getApplicationStats } from "@/services/applications";
-import { getSettings } from "@/services/settings";
-import { ApiError } from "@/lib/client";
 import { StatusCard } from "@/components/StatusCard";
+import { ApiError } from "@/lib/client";
+import { getApplications, getApplicationStats } from "@/services/applications";
+import { getJobs } from "@/services/jobs";
+import { getSettings } from "@/services/settings";
+import { useEffect, useState } from "react";
 
 interface Stats {
   jobsTotal: number;
@@ -86,19 +86,19 @@ export function DashboardStats() {
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <StatusCard title="Job matches" badge="live" value={String(stats.jobsTotal)}>
+      <StatusCard title="Job matches" badge="live" value={String(stats.jobsTotal)} href="/jobs">
         <p className="text-sm text-zinc-500">
           {stats.jobsTotal === 0 ? "No matches yet — Rico will scan soon." : "Active job recommendations"}
         </p>
       </StatusCard>
-      <StatusCard title="Applications tracked" badge="live" value={String(stats.appsTotal)}>
+      <StatusCard title="Applications tracked" badge="live" value={String(stats.appsTotal)} href="/applications">
         <p className="text-sm text-zinc-500">
           {stats.applied > 0 && `${stats.applied} applied`}
           {stats.interview > 0 && ` · ${stats.interview} interview`}
           {stats.offer > 0 && ` · ${stats.offer} offer`}
         </p>
       </StatusCard>
-      <StatusCard title="Daily limit" badge={stats.maxDaily > 0 ? "live" : "placeholder"} value={`${stats.maxDaily}`}>
+      <StatusCard title="Daily limit" badge={stats.maxDaily > 0 ? "live" : "placeholder"} value={`${stats.maxDaily}`} href="/settings">
         <p className="text-sm text-zinc-500">
           Max {stats.maxDaily} auto-applies per day
         </p>

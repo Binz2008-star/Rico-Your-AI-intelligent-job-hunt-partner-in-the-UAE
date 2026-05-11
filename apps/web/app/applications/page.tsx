@@ -1,5 +1,6 @@
 "use client";
 
+import { DashboardShell } from "@/components/DashboardShell";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -72,7 +73,7 @@ export default function ApplicationsPage() {
   };
 
   return (
-    <>
+    <DashboardShell>
       <div className="px-8 py-6 border-b border-white/5 bg-[rgba(7,7,18,0.7)] backdrop-blur-md sticky top-0 z-10">
         <h1 className="font-['Cabinet_Grotesk',sans-serif] font-900 text-[22px] tracking-tight">Applications</h1>
         <p className="text-[13px] text-white/35 mt-0.5">
@@ -170,6 +171,6 @@ export default function ApplicationsPage() {
         </div>
       </div>
       <ToastContainer toasts={toasts} />
-    </>
+    </DashboardShell>
   );
 }

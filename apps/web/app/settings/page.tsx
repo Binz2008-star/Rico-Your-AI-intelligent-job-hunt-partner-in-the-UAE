@@ -1,5 +1,6 @@
 "use client";
 
+import { DashboardShell } from "@/components/DashboardShell";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
@@ -80,7 +81,7 @@ export default function SettingsPage() {
   const isMock = process.env.NEXT_PUBLIC_USE_MOCK === "true";
 
   return (
-    <>
+    <DashboardShell>
       <div className="px-8 py-6 border-b border-white/5 bg-[rgba(7,7,18,0.7)] backdrop-blur-md sticky top-0 z-10">
         <h1 className="font-['Cabinet_Grotesk',sans-serif] font-900 text-[22px] tracking-tight">Settings</h1>
         <p className="text-[13px] text-white/35 mt-0.5">System configuration and job matching preferences</p>
@@ -215,6 +216,6 @@ export default function SettingsPage() {
 
       </div>
       <ToastContainer toasts={toasts} />
-    </>
+    </DashboardShell>
   );
 }
