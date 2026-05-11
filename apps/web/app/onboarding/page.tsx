@@ -113,13 +113,17 @@ export default function OnboardingPage() {
     try {
       const res = await uploadCV(file);
       setParsed(res.parsed);
-      // Pre-fill skills from CV extraction
-      if (res.parsed.skills.length > 0) {
-        setFieldValues((prev) => ({
-          ...prev,
-          skills: res.parsed.skills.join(", "),
-        }));
-      }
+      // Pre-fill extracted fields so the user doesn't have to retype them
+      setFieldValues((prev) => {
+        const prefill: Record<string, string> = { ...prev };
+        if (res.parsed.skills.length > 0) {
+          prefill.skills = res.parsed.skills.join(", ");
+        }
+        if (res.parsed.years_experience_hint != null) {
+          prefill.years_experience = String(res.parsed.years_experience_hint);
+        }
+        return prefill;
+      });
       setPageState("form");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Upload failed. Please try again.");
@@ -138,7 +142,11 @@ export default function OnboardingPage() {
     if (f) handleFile(f);
   };
 
+  const REQUIRED_FIELDS: (keyof OnboardingPayload)[] = ["target_roles", "preferred_cities"];
+  const canSubmit = REQUIRED_FIELDS.every((key) => (fieldValues[key] ?? "").trim().length > 0);
+
   const handleSubmit = useCallback(async () => {
+    if (!canSubmit) return;
     setPageState("submitting");
     setErrorMsg("");
 
@@ -162,7 +170,7 @@ export default function OnboardingPage() {
       setErrorMsg(err instanceof Error ? err.message : "Could not save your profile. Please try again.");
       setPageState("form");
     }
-  }, [fieldValues]);
+  }, [fieldValues, canSubmit]);
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-[#06060f] px-4 relative overflow-hidden">
@@ -285,12 +293,18 @@ export default function OnboardingPage() {
                 >
                   Skip for now
                 </button>
-                <button
-                  onClick={handleSubmit}
-                  className="rounded-lg bg-[#5b4fff] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#4a3fdf] shadow-[0_4px_15px_rgba(91,79,255,0.2)]"
-                >
-                  Complete profile →
-                </button>
+                <div className="flex flex-col items-end gap-1">
+                  {!canSubmit && (
+                    <p className="text-[11px] text-[#5a5a7a]">Target roles and preferred cities are required.</p>
+                  )}
+                  <button
+                    onClick={handleSubmit}
+                    disabled={!canSubmit}
+                    className="rounded-lg bg-[#5b4fff] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#4a3fdf] disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_4px_15px_rgba(91,79,255,0.2)]"
+                  >
+                    Complete profile →
+                  </button>
+                </div>
               </div>
             </div>
           </div>
