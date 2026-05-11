@@ -1,10 +1,13 @@
 "use client";
 
 import { StatusCard } from "@/components/StatusCard";
-import { ApiError } from "@/lib/client";
-import { getApplications, getApplicationStats } from "@/services/applications";
-import { getJobs } from "@/services/jobs";
-import { getSettings } from "@/services/settings";
+import {
+  ApiError,
+  getApplications,
+  getApplicationStats,
+  getJobs,
+  getSettings,
+} from "@/lib/api";
 import { useCallback, useEffect, useState } from "react";
 
 interface Stats {
@@ -28,20 +31,27 @@ export function DashboardStats() {
     setError(null);
 
     try {
-      const [jobsResult, appsResult, statsResult, settingsResult] = await Promise.allSettled([
-        getJobs(1, 1),
-        getApplications(undefined, 1, 1),
-        getApplicationStats(),
-        getSettings(),
-      ]);
+      const [jobsResult, appsResult, statsResult, settingsResult] =
+        await Promise.allSettled([
+          getJobs(1, 1),
+          getApplications(undefined, 1, 1),
+          getApplicationStats(),
+          getSettings(),
+        ]);
 
       const jobsRes = jobsResult.status === "fulfilled" ? jobsResult.value : null;
       const appsRes = appsResult.status === "fulfilled" ? appsResult.value : null;
       const statsRes = statsResult.status === "fulfilled" ? statsResult.value : null;
       const settingsRes = settingsResult.status === "fulfilled" ? settingsResult.value : null;
+      const firstApiError = [jobsResult, appsResult, statsResult, settingsResult]
+        .find(
+          (result): result is PromiseRejectedResult =>
+            result.status === "rejected" && result.reason instanceof ApiError
+        )
+        ?.reason;
 
       if (!jobsRes && !appsRes) {
-        setError("other");
+        setError(firstApiError?.statusCode === 401 ? "auth" : "other");
         return;
       }
 
@@ -49,8 +59,8 @@ export function DashboardStats() {
         jobsTotal: jobsRes?.total ?? 0,
         appsTotal: appsRes?.total ?? 0,
         applied: statsRes?.applied ?? 0,
-        interview: statsRes?.interview_scheduled ?? 0,
-        offer: statsRes?.offer_extended ?? 0,
+        interview: statsRes?.interview ?? 0,
+        offer: statsRes?.offer ?? 0,
         rejected: statsRes?.rejected ?? 0,
         minScore: settingsRes?.min_score ?? 0,
         maxDaily: settingsRes?.max_daily_applies ?? 0,

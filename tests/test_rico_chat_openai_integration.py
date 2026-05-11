@@ -25,6 +25,10 @@ os.environ.setdefault("JWT_SECRET", "ricosecret" + "x" * 21)
 _AI_ENV_VARS = [
     "OPENAI_API_KEY",
     "OPEN_AI_API",
+    "DEEPSEEK_API_KEY",
+    "DEEPSEEK_BASE_URL",
+    "DEEPSEEK_MODEL",
+    "DEEPSEEK_FALLBACK_MODEL",
     "HF_API_TOKEN",
     "HF_TOKEN",
     "HF_API_KEY",

@@ -10,6 +10,35 @@ from src.rico_env import get_ai_provider
 from src.services.chat_service import send_message
 from src.api.routers.rico_chat import rico_openai_smoke
 
+_AI_ENV_VARS = [
+    "OPENAI_API_KEY",
+    "OPEN_AI_API",
+    "DEEPSEEK_API_KEY",
+    "DEEPSEEK_BASE_URL",
+    "DEEPSEEK_MODEL",
+    "DEEPSEEK_FALLBACK_MODEL",
+    "HF_API_TOKEN",
+    "HF_TOKEN",
+    "HF_API_KEY",
+    "HUGGINGFACE_API_KEY",
+    "RICO_AI_PROVIDER",
+]
+
+
+@pytest.fixture(autouse=True)
+def clear_ai_env():
+    saved = {name: os.environ.get(name) for name in _AI_ENV_VARS}
+    for name in _AI_ENV_VARS:
+        os.environ.pop(name, None)
+    try:
+        yield
+    finally:
+        for name, value in saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
 
 class TestFreeProviderMode:
     """Test free AI provider mode functionality."""
@@ -34,6 +63,11 @@ class TestFreeProviderMode:
         with patch.dict(os.environ, {"RICO_AI_PROVIDER": "huggingface"}):
             assert get_ai_provider() == "huggingface"
 
+    def test_get_ai_provider_deepseek(self):
+        """Test that provider='deepseek' is respected."""
+        with patch.dict(os.environ, {"RICO_AI_PROVIDER": "deepseek"}):
+            assert get_ai_provider() == "deepseek"
+
     def test_get_ai_provider_invalid(self):
         """Test that invalid provider defaults to auto-detect (none when no keys)."""
         with patch.dict(os.environ, {"RICO_AI_PROVIDER": "invalid"}, clear=True):
@@ -53,12 +87,19 @@ class TestFreeProviderMode:
         ):
             assert get_ai_provider() == "huggingface"
 
+    def test_get_ai_provider_auto_detects_deepseek(self):
+        """Test that a DeepSeek key auto-detects DeepSeek when HF is absent."""
+        with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "dsk-test-token"}, clear=True):
+            assert get_ai_provider() == "deepseek"
+
     def test_get_ai_provider_case_insensitive(self):
         """Test that provider is case insensitive."""
         with patch.dict(os.environ, {"RICO_AI_PROVIDER": "none"}):
             assert get_ai_provider() == "none"
         with patch.dict(os.environ, {"RICO_AI_PROVIDER": "openai"}):
             assert get_ai_provider() == "openai"
+        with patch.dict(os.environ, {"RICO_AI_PROVIDER": "DeepSeek"}):
+            assert get_ai_provider() == "deepseek"
 
     def test_get_ai_provider_hf_alias(self):
         """Test that 'hf' shorthand resolves to 'huggingface'."""
@@ -141,6 +182,32 @@ class TestFreeProviderMode:
         assert result["openai_available"] is False
         assert result["hf_available"] is True
         assert result["error"] == "OpenAIProviderDisabled"
+
+    def test_openai_smoke_provider_deepseek(self):
+        """Test that smoke endpoint calls the shared runtime when provider=deepseek."""
+        mock_request = Mock(spec=Request)
+
+        with patch('src.rico_env.get_ai_provider', return_value="deepseek"), \
+             patch('src.api.routers.rico_chat.get_current_user', return_value={"email": "test@example.com"}), \
+             patch('src.rico_openai_runtime.call_openai_minimal', return_value={
+                 "success": True,
+                 "provider": "deepseek",
+                 "provider_available": True,
+                 "model": "deepseek-v4-flash",
+                 "fallback_model": "deepseek-v4-pro",
+                 "text": "OK",
+                 "error": None,
+                 "error_detail": None,
+                 "openai_available": False,
+                 "deepseek_available": True,
+             }) as mock_call_openai:
+            result = rico_openai_smoke(mock_request)
+
+        mock_call_openai.assert_called_once_with("Say OK", smoke=True, provider="deepseek")
+        assert result["success"] is True
+        assert result["provider"] == "deepseek"
+        assert result["model"] == "deepseek-v4-flash"
+        assert result["deepseek_available"] is True
 
 
 if __name__ == "__main__":

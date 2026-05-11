@@ -5,8 +5,11 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
-import { ApiError } from "@/lib/client";
-import { getApplications, updateApplicationStatus } from "@/services/applications";
+import {
+  ApiError,
+  getApplications,
+  updateApplicationStatus,
+} from "@/lib/api";
 import type { Application, ApplicationStatus } from "@/types";
 import { useEffect, useState } from "react";
 

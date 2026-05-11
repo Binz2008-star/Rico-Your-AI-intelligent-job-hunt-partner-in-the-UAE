@@ -64,6 +64,7 @@ class RicoChatAPI:
 
     SOURCE_KEYWORD = "keyword"
     SOURCE_OPENAI = "openai"
+    SOURCE_DEEPSEEK = "deepseek"
     SOURCE_HF = "huggingface"
     SOURCE_FALLBACK = "fallback"
     SOURCE_RATE_LIMITED = "rate_limited"
@@ -73,11 +74,27 @@ class RicoChatAPI:
         rtype = response.get("type")
         if rtype == "openai_response":
             return RicoChatAPI.SOURCE_OPENAI
+        if rtype == "deepseek_response":
+            return RicoChatAPI.SOURCE_DEEPSEEK
         if rtype == "hf_response":
             return RicoChatAPI.SOURCE_HF
-        if rtype == "openai_rate_limited" or response.get("provider_state") == "rate_limited":
+        if (
+            rtype in {"openai_rate_limited", "deepseek_rate_limited"}
+            or response.get("provider_state") == "rate_limited"
+        ):
             return RicoChatAPI.SOURCE_RATE_LIMITED
         return RicoChatAPI.SOURCE_FALLBACK
+
+    @staticmethod
+    def _bool_attr(agent: Any, name: str, *, fallback: str | None = None) -> bool:
+        value = getattr(agent, name, None)
+        if isinstance(value, bool):
+            return value
+        if fallback:
+            fallback_value = getattr(agent, fallback, None)
+            if isinstance(fallback_value, bool):
+                return fallback_value
+        return False
 
     def _finalize(
         self,
@@ -92,9 +109,12 @@ class RicoChatAPI:
             "response_source": response.get("response_source", source),
             "provider": response.get("provider", source),
             "provider_state": response.get("provider_state"),
-            "openai_available": agent.available,
-            "hf_available": agent.hf_available,
+            "openai_available": self._bool_attr(agent, "openai_available", fallback="available"),
+            "deepseek_available": self._bool_attr(agent, "deepseek_available"),
+            "provider_available": self._bool_attr(agent, "provider_available", fallback="available"),
+            "hf_available": self._bool_attr(agent, "hf_available"),
             "openai_model": agent.model,
+            "ai_model": agent.model,
             "profile_context_present": profile is not None,
         }
 

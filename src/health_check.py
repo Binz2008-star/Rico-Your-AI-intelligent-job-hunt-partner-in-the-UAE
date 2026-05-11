@@ -207,6 +207,8 @@ def _check_feedback_state_file() -> Optional[str]:
 def _check_hf_config() -> Optional[str]:
     from src.rico_env import get_rico_env_report
     report = get_rico_env_report()
+    if report.ready_for_deepseek:
+        return f"DeepSeek configured (provider={report.ai_provider})"
     if report.ready_for_hf:
         return f"HF free mode configured (provider={report.ai_provider})"
     if report.ready_for_openai:

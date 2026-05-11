@@ -9,6 +9,7 @@ export interface RicoStatus {
   ready_for_db?: boolean;
   ready_for_telegram?: boolean;
   ready_for_openai?: boolean;
+  ready_for_deepseek?: boolean;
   ready_for_jotform?: boolean;
   ready_for_hf?: boolean;
   ai_provider?: string;
@@ -26,9 +27,10 @@ export interface HealthResponse {
 
   // AI provider status (top-level)
   ready_for_openai?: boolean;
+  ready_for_deepseek?: boolean;
   ready_for_hf?: boolean;
   ready_for_jotform?: boolean;
-  ai_provider?: "openai" | "huggingface" | "fallback" | "none" | string;
+  ai_provider?: "openai" | "deepseek" | "huggingface" | "fallback" | "none" | string;
 
   // Nested rico status
   rico?: RicoStatus;
@@ -72,19 +74,6 @@ export interface JobActionResponse {
   job_id?: string | null;
 }
 
-// ── Chat ──────────────────────────────────────────────────────────────────────
-// POST /api/chat
-export interface ChatRequest {
-  user_id: string;
-  message: string;
-}
-
-export interface ChatResponse {
-  reply: string;
-  jobs?: Job[];
-  actions?: string[];
-}
-
 /** Client-side only — not sent to API */
 export interface ChatMessage {
   id: string;
@@ -92,37 +81,6 @@ export interface ChatMessage {
   content: string;
   jobs?: Job[];
   timestamp: Date;
-}
-
-// ── Profile ───────────────────────────────────────────────────────────────────
-// GET /api/profile?user_id=
-export interface UserProfile {
-  user_id: string;
-  name: string;
-  email?: string;
-  telegram_username?: string;
-  dream_role?: string;
-  preferred_city?: string;
-  cv_uploaded?: boolean;
-  created_at?: string;
-}
-
-// POST /api/profile
-export interface ProfileUpdateRequest {
-  user_id: string;
-  name?: string;
-  telegram_username?: string;
-  dream_role?: string;
-  preferred_city?: string;
-  avoid_keywords?: string[];
-}
-
-// POST /api/upload-cv  (multipart/form-data)
-export interface CVUploadResponse {
-  success: boolean;
-  message: string;
-  skills_extracted?: string[];
-  experience_years?: number;
 }
 
 // ── Applications ──────────────────────────────────────────────────────────────
@@ -193,8 +151,3 @@ export interface SettingsUpdateRequest {
   score_threshold_watch?: number;
 }
 
-// ── Shared ────────────────────────────────────────────────────────────────────
-export interface ApiError {
-  detail: string;
-  status_code?: number;
-}

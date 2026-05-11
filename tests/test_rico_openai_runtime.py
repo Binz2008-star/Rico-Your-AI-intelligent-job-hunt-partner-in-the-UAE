@@ -36,6 +36,10 @@ os.environ.setdefault("JWT_SECRET", "ricosecret" + "x" * 21)
 _AI_ENV_VARS = [
     "OPENAI_API_KEY",
     "OPEN_AI_API",
+    "DEEPSEEK_API_KEY",
+    "DEEPSEEK_BASE_URL",
+    "DEEPSEEK_MODEL",
+    "DEEPSEEK_FALLBACK_MODEL",
     "HF_API_TOKEN",
     "HF_TOKEN",
     "HF_API_KEY",
@@ -82,12 +86,21 @@ class _FakeOpenAIClient:
         self._output_text = output_text
         self._raise = raise_on_call
         self.responses = self
+        self.chat = SimpleNamespace(completions=self)
         self.calls = []
 
-    def create(self, *, model, input, max_output_tokens):
-        self.calls.append({"model": model, "input": input, "max_output_tokens": max_output_tokens})
+    def create(self, **kwargs):
+        self.calls.append(dict(kwargs))
         if self._raise is not None:
             raise self._raise
+        if "messages" in kwargs:
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(content=self._output_text)
+                    )
+                ]
+            )
         return SimpleNamespace(output_text=self._output_text, output=[])
 
 
@@ -123,6 +136,32 @@ def test_helper_success_returns_structured_payload(monkeypatch):
     user_msg = next(m for m in sent if m["role"] == "user")["content"]
     assert "HSE Manager" in user_msg
     assert "sk-fake-test" not in user_msg
+
+
+def test_helper_deepseek_success_returns_structured_payload(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "dsk-fake-test")
+    client = _FakeOpenAIClient(output_text="Hello from DeepSeek.")
+    _patch_openai(monkeypatch, client)
+
+    from src.rico_openai_runtime import call_openai_minimal
+
+    result = call_openai_minimal(
+        "hi there",
+        profile_context="role: HSE Manager",
+        provider="deepseek",
+    )
+
+    assert result["success"] is True
+    assert result["response_source"] == "deepseek"
+    assert result["provider"] == "deepseek"
+    assert result["deepseek_available"] is True
+    assert result["provider_available"] is True
+    assert result["text"] == "Hello from DeepSeek."
+    sent = client.calls[0]
+    assert sent["model"]
+    assert "messages" in sent
+    user_msg = next(m for m in sent["messages"] if m["role"] == "user")["content"]
+    assert "HSE Manager" in user_msg
 
 
 def test_helper_failure_returns_safe_fallback(monkeypatch):
@@ -216,6 +255,23 @@ def test_helper_no_key_returns_fallback_without_calling_openai(monkeypatch):
     assert result["type"] == "openai_error_fallback"
     assert result["openai_available"] is False
     assert result["error"] == "_FakeOpenAIError"
+
+
+def test_helper_no_deepseek_key_returns_fallback(monkeypatch):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+
+    def _raise_on_init(*a, **kw):
+        raise _FakeOpenAIError("DeepSeek API key not configured", status_code=None, request_id=None)
+
+    import openai
+    monkeypatch.setattr(openai, "OpenAI", _raise_on_init, raising=False)
+
+    from src.rico_openai_runtime import call_openai_minimal
+
+    result = call_openai_minimal("hi", provider="deepseek")
+    assert result["success"] is False
+    assert result["type"] == "deepseek_error_fallback"
+    assert result["deepseek_available"] is False
 
 
 # ── 2. Smoke endpoint integration ────────────────────────────────────────────

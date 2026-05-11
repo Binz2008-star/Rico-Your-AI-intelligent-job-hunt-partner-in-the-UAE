@@ -8,7 +8,7 @@ Routes:
   GET  /api/v1/rico/profile                     user profile           (JWT required)
   GET  /api/v1/rico/settings/saved-searches     list saved searches    (JWT required)
   POST /api/v1/rico/settings/saved-searches     save a search          (JWT required)
-  GET  /api/v1/rico/openai-smoke                OpenAI runtime probe   (JWT required)
+  GET  /api/v1/rico/openai-smoke                AI runtime probe       (JWT required)
   POST /api/v1/rico/upload-cv                   CV file upload + parsing
   POST /api/v1/rico/webhooks/telegram           Telegram bot webhook (called by Telegram)
   POST /api/v1/rico/webhooks/jotform            Jotform onboarding webhook (called by Jotform)
@@ -176,10 +176,10 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> Dict[s
 @router.get("/openai-smoke")
 @limiter.limit(LIMIT_CHAT)
 def rico_openai_smoke(request: Request) -> Dict[str, Any]:
-    """Minimal OpenAI runtime probe.
+    """Minimal premium-provider runtime probe.
 
-    Sends "Say OK" through the same minimal Responses API path used by chat,
-    so a green smoke means the prod OpenAI integration is healthy. Never
+    Sends "Say OK" through the same minimal runtime path used by chat,
+    so a green smoke means the active premium provider integration is healthy. Never
     leaks the API key or full profile data — only the structured error.
     """
     get_current_user(request)  # raises 401 if unauthenticated
@@ -187,30 +187,44 @@ def rico_openai_smoke(request: Request) -> Dict[str, Any]:
 
     provider = get_ai_provider()
 
-    if provider in ("none", "huggingface"):
-        # OpenAI is not the active provider — skip the live API call
+    if provider not in ("openai", "deepseek"):
+        # A premium provider is not the active provider — skip the live API call
         from src.rico_openai_agent import RicoOpenAIAgent
 
         agent = RicoOpenAIAgent()
         return {
             "success": False,
             "provider": provider,
+            "provider_available": agent.provider_available,
             "openai_available": False,
+            "deepseek_available": agent.deepseek_available,
             "hf_available": agent.hf_available,
-            "response": f"OpenAI provider disabled (active provider: {provider}). Set RICO_AI_PROVIDER=openai when API credits are available.",
+            "response": (
+                f"Premium AI provider disabled (active provider: {provider}). "
+                "Set RICO_AI_PROVIDER=openai or RICO_AI_PROVIDER=deepseek to enable advanced reasoning."
+            ),
             "error": "OpenAIProviderDisabled",
             "error_detail": None,
             "model": None,
             "fallback_model": None,
         }
 
-    # OpenAI mode - use existing behavior
+    # OpenAI / DeepSeek mode - use existing minimal provider runtime
     from src.rico_openai_runtime import call_openai_minimal
 
-    result = call_openai_minimal("Say OK", smoke=True)
+    if provider == "openai":
+        result = call_openai_minimal("Say OK", smoke=True)
+    else:
+        result = call_openai_minimal("Say OK", smoke=True, provider=provider)
     return {
         "success": result.get("success", False),
-        "model": result.get("model") or result.get("openai_model"),
+        "provider": provider,
+        "provider_available": result.get("provider_available"),
+        "model": (
+            result.get("model")
+            or result.get("deepseek_model")
+            or result.get("openai_model")
+        ),
         "fallback_model": result.get("fallback_model"),
         "response": result.get("text"),
         "error": result.get("error"),
@@ -218,6 +232,10 @@ def rico_openai_smoke(request: Request) -> Dict[str, Any]:
         "openai_available": result.get(
             "openai_available",
             bool(os.getenv("OPENAI_API_KEY") or os.getenv("OPEN_AI_API")),
+        ),
+        "deepseek_available": result.get(
+            "deepseek_available",
+            bool(os.getenv("DEEPSEEK_API_KEY")),
         ),
     }
 

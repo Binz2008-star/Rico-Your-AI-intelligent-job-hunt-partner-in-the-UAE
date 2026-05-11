@@ -1,8 +1,9 @@
 """Rico AI response layer.
 
 Provider selection (via RICO_AI_PROVIDER env var):
-  hf (default) -- Hugging Face Inference API, zero OpenAI cost.
+  hf (default)  -- Hugging Face Inference API, zero OpenAI cost.
   openai        -- OpenAI API, opt-in only for premium mode.
+  deepseek      -- DeepSeek API via the OpenAI-compatible SDK path.
 
 When RICO_AI_PROVIDER=hf (or unset):
   - HF is called directly for rich replies.
@@ -11,6 +12,10 @@ When RICO_AI_PROVIDER=hf (or unset):
 
 When RICO_AI_PROVIDER=openai:
   - OpenAI is called if OPENAI_API_KEY is present.
+  - HF is the cascade fallback.
+
+When RICO_AI_PROVIDER=deepseek:
+  - DeepSeek is called if DEEPSEEK_API_KEY is present.
   - HF is the cascade fallback.
   - Templated fallback if both fail.
 """
@@ -23,8 +28,11 @@ import os
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
+from src.rico_env import get_ai_provider
 from src.rico_identity import get_rico_system_prompt
 from src.rico_openai_runtime import (
+    DEEPSEEK_FALLBACK_MODEL,
+    DEEPSEEK_PRIMARY_MODEL,
     OPENAI_FALLBACK_MODEL,
     OPENAI_PRIMARY_MODEL,
     call_openai_minimal,
@@ -47,14 +55,24 @@ class RicoOpenAIAgent:
         # Canonical name is OPENAI_API_KEY. OPEN_AI_API is read as a temporary
         # fallback so existing Render deployments keep working until the env
         # var is renamed.
-        self.api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPEN_AI_API")
-        self.model = os.getenv("RICO_OPENAI_MODEL", "gpt-4.1-mini")
+        self.openai_api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPEN_AI_API")
+        self.api_key = self.openai_api_key  # backward-compatible alias used by older tests/callers
+        self.deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
+        self.model = self._resolve_model()
         self.tools = tools or {}
         self.safety = RicoSafetyGuard()
 
     @property
     def available(self) -> bool:
-        return bool(self.api_key)
+        return self.openai_available or self.deepseek_available
+
+    @property
+    def openai_available(self) -> bool:
+        return bool(self.openai_api_key or getattr(self, "api_key", None))
+
+    @property
+    def deepseek_available(self) -> bool:
+        return bool(self.deepseek_api_key)
 
     @property
     def hf_available(self) -> bool:
@@ -67,10 +85,31 @@ class RicoOpenAIAgent:
     @property
     def _use_openai(self) -> bool:
         """True only when operator explicitly opts in via RICO_AI_PROVIDER=openai."""
-        return (
-            os.getenv("RICO_AI_PROVIDER", "hf").strip().lower() == "openai"
-            and bool(self.api_key)
-        )
+        return get_ai_provider() == "openai" and self.openai_available
+
+    @property
+    def _use_deepseek(self) -> bool:
+        """True only when operator opts in to DeepSeek and the key is present."""
+        return get_ai_provider() == "deepseek" and self.deepseek_available
+
+    @property
+    def provider_available(self) -> bool:
+        provider = get_ai_provider()
+        if provider == "openai":
+            return self.openai_available
+        if provider == "deepseek":
+            return self.deepseek_available
+        if provider == "huggingface":
+            return self.hf_available
+        return False
+
+    def _resolve_model(self) -> str:
+        provider = get_ai_provider()
+        if provider == "deepseek":
+            return os.getenv("RICO_DEEPSEEK_MODEL") or os.getenv("DEEPSEEK_MODEL") or DEEPSEEK_PRIMARY_MODEL
+        if provider == "huggingface":
+            return os.getenv("HF_TEXT_MODEL", "HuggingFaceH4/zephyr-7b-beta")
+        return os.getenv("RICO_OPENAI_MODEL") or os.getenv("OPENAI_MODEL") or OPENAI_PRIMARY_MODEL
 
     def respond(self, user_message: str, user_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         safety = self.safety.check_message(user_message)
@@ -82,29 +121,34 @@ class RicoOpenAIAgent:
             }
 
         # Default path: HF is the primary provider (zero OpenAI cost)
-        if not self._use_openai:
+        if not self._use_openai and not self._use_deepseek:
             if self.hf_available:
                 hf_result = self._call_hf_free(user_message, user_context)
                 if hf_result:
                     return hf_result
             return self._fallback_response()
 
-        # Premium path: RICO_AI_PROVIDER=openai explicitly set
+        # Premium path: RICO_AI_PROVIDER=openai|deepseek explicitly set
+        provider = "deepseek" if self._use_deepseek else "openai"
         profile_context = (
             json.dumps(user_context, ensure_ascii=False)
             if user_context else None
         )
-        result = call_openai_minimal(user_message, profile_context=profile_context)
+        result = call_openai_minimal(
+            user_message,
+            profile_context=profile_context,
+            provider=provider,
+        )
 
         if result.get("success"):
             return {
-                "type": "openai_response",
+                "type": f"{provider}_response",
                 "message": result["text"],
                 "model": result.get("model") or self.model,
-                "provider": "openai",
+                "provider": provider,
             }
 
-        # OpenAI failed — cascade to HF
+        # Premium provider failed — cascade to HF
         if self.hf_available:
             hf_result = self._call_hf_free(user_message, user_context)
             if hf_result:
@@ -112,23 +156,29 @@ class RicoOpenAIAgent:
 
         if result.get("is_rate_limited"):
             return {
-                "type": "openai_rate_limited",
+                "type": f"{provider}_rate_limited",
                 "message": result.get("text"),
-                "provider": "openai",
+                "provider": provider,
                 "provider_state": "rate_limited",
                 "response_source": "rate_limited",
             }
 
+        model_key = "deepseek_model" if provider == "deepseek" else "openai_model"
+        fallback_model = (
+            result.get("fallback_model")
+            or (DEEPSEEK_FALLBACK_MODEL if provider == "deepseek" else OPENAI_FALLBACK_MODEL)
+        )
+
         return {
-            "type": "openai_error_fallback",
+            "type": f"{provider}_error_fallback",
             "message": result.get(
                 "text",
                 "Free mode is active. Rico can help set up your profile and guide your job search.",
             ),
             "error": result.get("error"),
             "error_detail": result.get("error_detail"),
-            "openai_model": result.get("openai_model") or OPENAI_PRIMARY_MODEL,
-            "fallback_model": result.get("fallback_model") or OPENAI_FALLBACK_MODEL,
+            model_key: result.get(model_key) or self.model,
+            "fallback_model": fallback_model,
             "provider": "fallback",
         }
 

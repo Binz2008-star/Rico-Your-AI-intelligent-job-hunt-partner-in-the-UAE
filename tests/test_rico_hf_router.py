@@ -19,6 +19,10 @@ import pytest
 _AI_ENV_VARS = [
     "OPENAI_API_KEY",
     "OPEN_AI_API",
+    "DEEPSEEK_API_KEY",
+    "DEEPSEEK_BASE_URL",
+    "DEEPSEEK_MODEL",
+    "DEEPSEEK_FALLBACK_MODEL",
     "HF_API_TOKEN",
     "HF_TOKEN",
     "HF_API_KEY",
@@ -224,6 +228,12 @@ class TestRicoAgentHFPrimary:
             from src.rico_openai_agent import RicoOpenAIAgent
             agent = RicoOpenAIAgent()
             assert agent._use_openai is True
+
+    def test_deepseek_used_only_when_explicitly_set(self):
+        with patch.dict(os.environ, {"RICO_AI_PROVIDER": "deepseek", "DEEPSEEK_API_KEY": "dsk-fake"}):
+            from src.rico_openai_agent import RicoOpenAIAgent
+            agent = RicoOpenAIAgent()
+            assert agent._use_deepseek is True
 
     def test_respond_returns_fallback_without_hf_or_openai(self):
         env_clean = {

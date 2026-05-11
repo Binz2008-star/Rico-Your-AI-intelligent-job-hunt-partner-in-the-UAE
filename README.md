@@ -152,6 +152,9 @@ src/cv_parser.py               # CV parsing and profile extraction
 DATABASE_URL=postgresql://user:password@host:port/database
 OPENAI_API_KEY=your_openai_key
 RICO_OPENAI_MODEL=gpt-4.1-mini
+DEEPSEEK_API_KEY=your_deepseek_key
+DEEPSEEK_MODEL=deepseek-v4-flash
+RICO_AI_PROVIDER=deepseek
 
 TELEGRAM_BOT_TOKEN=your_bot_token
 TELEGRAM_CHAT_ID=your_default_chat_id
@@ -164,14 +167,13 @@ EMAIL_USER=your_email@gmail.com
 EMAIL_PASS=your_app_password
 EMAIL_TO=your_email@gmail.com
 
+REDIS_URL=redis://localhost:6379
 RICO_ENABLE_AUTO_APPLY=false
 RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true
 RICO_ENABLE_TELEGRAM=true
 RICO_ENABLE_LEARNING=true
 RICO_MATCH_STRICTNESS=balanced
 RICO_DEFAULT_LANGUAGE=mixed
-
-REDIS_URL=redis://localhost:6379
 ```
 
 Never commit API keys or secrets to GitHub.

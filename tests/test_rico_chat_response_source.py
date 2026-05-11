@@ -31,6 +31,10 @@ os.environ.setdefault("JWT_SECRET", "ricosecret" + "x" * 21)
 _AI_ENV_VARS = [
     "OPENAI_API_KEY",
     "OPEN_AI_API",
+    "DEEPSEEK_API_KEY",
+    "DEEPSEEK_BASE_URL",
+    "DEEPSEEK_MODEL",
+    "DEEPSEEK_FALLBACK_MODEL",
     "HF_API_TOKEN",
     "HF_TOKEN",
     "HF_API_KEY",
@@ -124,6 +128,31 @@ def test_openai_branch_reports_openai_source(chat_api, monkeypatch):
 
     _assert_metadata(resp, source="openai", openai_available=True, profile_present=True)
     assert chat_api.openai_agent.respond.called
+
+
+def test_deepseek_branch_reports_deepseek_source(chat_api, monkeypatch):
+    """A DeepSeek-backed reply must report response_source=deepseek."""
+    profile = {"user_id": "deepseek@rico.ai", "target_roles": ["Operations Manager"]}
+    _stub_active_user(monkeypatch, profile)
+
+    chat_api.openai_agent = MagicMock()
+    chat_api.openai_agent.available = True
+    chat_api.openai_agent.openai_available = False
+    chat_api.openai_agent.deepseek_available = True
+    chat_api.openai_agent.provider_available = True
+    chat_api.openai_agent.model = "deepseek-v4-flash"
+    chat_api.openai_agent.respond.return_value = {
+        "type": "deepseek_response",
+        "message": "DeepSeek-powered reply.",
+        "model": "deepseek-v4-flash",
+        "provider": "deepseek",
+    }
+
+    resp = chat_api._handle_active_user("deepseek@rico.ai", "what should I do next?")
+
+    _assert_metadata(resp, source="deepseek", openai_available=False, profile_present=True)
+    assert resp["provider"] == "deepseek"
+    assert resp["deepseek_available"] is True
 
 
 # ── 3. Missing key → response_source = "fallback" ─────────────────────────────

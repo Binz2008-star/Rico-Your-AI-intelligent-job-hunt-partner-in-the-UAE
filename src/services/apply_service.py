@@ -105,4 +105,11 @@ def _apply_indeed(job: Dict[str, Any]) -> Dict[str, str]:
             "job_id": result.job_id,
         }
     except Exception as exc:
-        return _clean_apply_error(exc)
+        error = _clean_apply_error(exc)
+        if error.get("status") == "error":
+            error = {
+                **error,
+                "message": str(exc) or error["message"],
+                "method": "indeed",
+            }
+        return error

@@ -1,3 +1,18 @@
+import type {
+  Application,
+  ApplicationActionRequest,
+  ApplicationActionResponse,
+  ApplicationStatus,
+  ApplicationsResponse,
+  HealthResponse as ClientHealthResponse,
+  Job,
+  JobActionRequest,
+  JobActionResponse,
+  JobListResponse,
+  SettingsResponse,
+  SettingsUpdateRequest,
+} from "@/types";
+
 // Absolute backend URL — used only for server-side (SSR) fetches such as fetchHealth().
 const RICO_API =
   process.env.NEXT_PUBLIC_RICO_API ??
@@ -7,6 +22,66 @@ const RICO_API =
 // sent as a first-party (same-origin) cookie, bypassing Chrome's cross-site
 // cookie blocking. Next.js rewrites /proxy/* → RICO_API/* server-side.
 const PROXY = "/proxy";
+const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
+
+export class ApiError extends Error {
+  statusCode: number;
+  data?: unknown;
+
+  constructor(message: string, statusCode: number, data?: unknown) {
+    super(message);
+    this.statusCode = statusCode;
+    this.data = data;
+    this.name = "ApiError";
+  }
+}
+
+function buildProxyUrl(path: string, params?: Record<string, unknown>): string {
+  const url = `${PROXY}${path}`;
+  if (!params) return url;
+
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value != null) qs.append(key, String(value));
+  });
+
+  const query = qs.toString();
+  return query ? `${url}?${query}` : url;
+}
+
+async function requestJson<T>(
+  path: string,
+  init: RequestInit = {},
+  params?: Record<string, unknown>
+): Promise<T> {
+  const headers = new Headers(init.headers);
+  const isForm = init.body instanceof FormData;
+  const hasBody = init.body !== undefined && init.body !== null;
+
+  if (!isForm && hasBody && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const res = await fetch(buildProxyUrl(path, params), {
+    ...init,
+    headers,
+    credentials: init.credentials ?? "include",
+  });
+
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as {
+      detail?: unknown;
+      message?: string;
+    };
+    const fallback = `${res.status} ${path}`;
+    const message =
+      extractDetail(body.detail, body.message ?? fallback) ?? fallback;
+    throw new ApiError(message, res.status, body);
+  }
+
+  if (res.status === 204) return {} as T;
+  return (await res.json()) as T;
+}
 
 // ── Health ────────────────────────────────────────────────────────────────────
 
@@ -15,6 +90,7 @@ export interface RicoStatus {
   ready_for_db: boolean;
   ready_for_telegram: boolean;
   ready_for_openai: boolean;
+  ready_for_deepseek: boolean;
   ready_for_jotform: boolean;
   ready_for_hf: boolean;
   ai_provider: string;
@@ -24,6 +100,11 @@ export interface HealthResponse {
   status: string;
   db: string;
   version: string;
+  ready_for_openai?: boolean;
+  ready_for_deepseek?: boolean;
+  ready_for_hf?: boolean;
+  ready_for_jotform?: boolean;
+  ai_provider?: string;
   rico: RicoStatus;
 }
 
@@ -32,6 +113,11 @@ export async function fetchHealth(): Promise<HealthResponse> {
   const res = await fetch(`${RICO_API}/health`);
   if (!res.ok) throw new Error(`Health check failed: ${res.status}`);
   return res.json() as Promise<HealthResponse>;
+}
+
+// Client-side health check via the same-origin proxy.
+export async function getHealth(): Promise<ClientHealthResponse> {
+  return requestJson<ClientHealthResponse>("/health", { method: "GET" });
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -147,6 +233,328 @@ export async function createSavedSearch(
   return res.json() as Promise<{ status: string; query: string }>;
 }
 
+// ── Jobs ──────────────────────────────────────────────────────────────────────
+
+const MOCK_JOBS: Job[] = [
+  {
+    job_id: "mock_001",
+    title: "Senior Manager - [Your Field]",
+    company: "Example Corp",
+    location: "Dubai, UAE",
+    salary_range: "AED 25-35k/mo",
+    score: 94,
+    reason: "Profile keyword match + seniority level + location",
+    tags: ["Senior", "Management", "UAE"],
+    posted_at: new Date().toISOString(),
+    apply_url: "#",
+  },
+  {
+    job_id: "mock_002",
+    title: "Department Lead - Operations",
+    company: "Regional Holdings",
+    location: "Abu Dhabi, UAE",
+    salary_range: "AED 20-28k/mo",
+    score: 87,
+    reason: "Role title + experience range + salary band alignment",
+    tags: ["Operations", "Leadership", "Full-time"],
+    posted_at: new Date().toISOString(),
+    apply_url: "#",
+  },
+  {
+    job_id: "mock_003",
+    title: "Specialist - Compliance & Governance",
+    company: "Acme Group",
+    location: "Dubai, UAE",
+    salary_range: "AED 18-24k/mo",
+    score: 79,
+    reason: "Compliance keywords + UAE market match",
+    tags: ["Compliance", "Governance", "Mid-level"],
+    posted_at: new Date().toISOString(),
+    apply_url: "#",
+  },
+];
+
+function normalizeJob(raw: unknown): Job {
+  const item = raw as Record<string, unknown>;
+  return {
+    job_id: String(item.job_id ?? item.id ?? item._id ?? ""),
+    title: String(item.title ?? "Untitled role"),
+    company: String(item.company ?? "Unknown company"),
+    location: String(item.location ?? "Remote / unspecified"),
+    salary_range: String(item.salary_range ?? item.salary ?? ""),
+    score: typeof item.score === "number" ? item.score : 0,
+    reason: String(item.reason ?? item.match_reason ?? ""),
+    tags: Array.isArray(item.tags) ? (item.tags as string[]) : [],
+    posted_at: String(item.posted_at ?? item.date_found ?? ""),
+    apply_url: String(item.apply_url ?? item.link ?? ""),
+  };
+}
+
+export async function getJobs(
+  page = 1,
+  limit = 20,
+  minScore = 0,
+  source?: string
+): Promise<JobListResponse> {
+  if (USE_MOCK) {
+    return {
+      jobs: MOCK_JOBS,
+      total: MOCK_JOBS.length,
+      page: 1,
+      limit: 20,
+      pages: 1,
+    };
+  }
+
+  const data = await requestJson<JobListResponse>(
+    "/api/v1/jobs",
+    { method: "GET" },
+    { page, limit, min_score: minScore, source }
+  );
+  const rawJobs = Array.isArray(data?.jobs) ? (data.jobs as unknown[]) : [];
+  const jobs = rawJobs.map(normalizeJob);
+
+  return {
+    jobs,
+    total: typeof data.total === "number" ? data.total : jobs.length,
+    page: typeof data.page === "number" ? data.page : page,
+    limit: typeof data.limit === "number" ? data.limit : limit,
+    pages: typeof data.pages === "number" ? data.pages : 1,
+  };
+}
+
+export async function getJobById(jobId: string): Promise<Job> {
+  if (USE_MOCK) {
+    const job = MOCK_JOBS.find((item) => item.job_id === jobId);
+    if (!job) throw new Error("Job not found");
+    return job;
+  }
+
+  const data = await requestJson<Job>(`/api/v1/jobs/${jobId}`, { method: "GET" });
+  return normalizeJob(data);
+}
+
+export async function applyJob(
+  jobId: string,
+  payload: JobActionRequest
+): Promise<JobActionResponse> {
+  if (USE_MOCK) {
+    return { status: "applied", message: "Application submitted", job_id: jobId };
+  }
+
+  return requestJson<JobActionResponse>(`/api/v1/jobs/${jobId}/apply`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function skipJob(
+  jobId: string,
+  payload: JobActionRequest
+): Promise<JobActionResponse> {
+  if (USE_MOCK) {
+    return { status: "skipped", message: "Job skipped", job_id: jobId };
+  }
+
+  return requestJson<JobActionResponse>(`/api/v1/jobs/${jobId}/skip`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function blockJob(
+  jobId: string,
+  payload: JobActionRequest
+): Promise<JobActionResponse> {
+  if (USE_MOCK) {
+    return { status: "blocked", message: "Company blocked", job_id: jobId };
+  }
+
+  return requestJson<JobActionResponse>(`/api/v1/jobs/${jobId}/block`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+// ── Applications ──────────────────────────────────────────────────────────────
+
+const APPLICATION_STATUS_ALIASES: Record<string, ApplicationStatus> = {
+  interview_scheduled: "interview",
+  offer_extended: "offer",
+};
+
+const MOCK_APPLICATIONS: Application[] = [
+  {
+    application_id: "app_001",
+    job_id: "job_001",
+    title: "Senior Manager - Operations",
+    company: "Acme Corporation",
+    location: "Dubai, UAE",
+    status: "applied",
+    applied_at: "2026-04-20T09:00:00Z",
+    apply_url: "#",
+  },
+  {
+    application_id: "app_002",
+    job_id: "job_002",
+    title: "Team Lead - Projects",
+    company: "Global Industries",
+    location: "Abu Dhabi, UAE",
+    status: "interview",
+    applied_at: "2026-04-15T08:00:00Z",
+    apply_url: "#",
+  },
+  {
+    application_id: "app_003",
+    job_id: "job_003",
+    title: "Specialist - Compliance",
+    company: "Regional Group",
+    location: "Dubai, UAE",
+    status: "applied",
+    applied_at: "2026-04-18T11:00:00Z",
+    apply_url: "#",
+  },
+  {
+    application_id: "app_004",
+    job_id: "job_004",
+    title: "Manager - Quality Assurance",
+    company: "Horizon Enterprises",
+    location: "Abu Dhabi, UAE",
+    status: "rejected",
+    applied_at: "2026-04-10T10:00:00Z",
+    apply_url: "#",
+  },
+];
+
+function normalizeApplicationStatus(raw: string): ApplicationStatus {
+  return APPLICATION_STATUS_ALIASES[raw] ?? (raw as ApplicationStatus);
+}
+
+function normalizeApplication(raw: unknown): Application {
+  const item = raw as Record<string, unknown>;
+  const applicationId = String(item.application_id ?? item.job_id ?? item.id ?? "");
+  const jobId = String(item.job_id ?? item.id ?? applicationId);
+
+  return {
+    application_id: applicationId,
+    job_id: jobId,
+    title: String(item.title ?? "Untitled role"),
+    company: String(item.company ?? "Unknown company"),
+    location: String(item.location ?? "Remote / unspecified"),
+    status: normalizeApplicationStatus(String(item.status ?? "applied")),
+    applied_at: String(item.applied_at ?? item.date_applied ?? ""),
+    updated_at: String(item.updated_at ?? item.date_updated ?? ""),
+    notes: String(item.notes ?? ""),
+    apply_url: String(item.apply_url ?? item.link ?? ""),
+  };
+}
+
+export async function getApplications(
+  status?: string,
+  page = 1,
+  limit = 50
+): Promise<ApplicationsResponse> {
+  if (USE_MOCK) {
+    return {
+      applications: MOCK_APPLICATIONS,
+      total: MOCK_APPLICATIONS.length,
+      page: 1,
+      limit: 50,
+      pages: 1,
+    };
+  }
+
+  const data = await requestJson<ApplicationsResponse>(
+    "/api/v1/applications",
+    { method: "GET" },
+    { status, page, limit }
+  );
+  const rawApplications = Array.isArray(data?.applications)
+    ? (data.applications as unknown[])
+    : [];
+  const applications = rawApplications.map(normalizeApplication);
+
+  return {
+    applications,
+    total: typeof data.total === "number" ? data.total : applications.length,
+    page: typeof data.page === "number" ? data.page : page,
+    limit: typeof data.limit === "number" ? data.limit : limit,
+    pages: typeof data.pages === "number" ? data.pages : 1,
+  };
+}
+
+export async function updateApplicationStatus(
+  jobId: string,
+  payload: ApplicationActionRequest
+): Promise<ApplicationActionResponse> {
+  if (USE_MOCK) {
+    return {
+      status: payload.status,
+      job_id: jobId,
+      message: "Status updated",
+    };
+  }
+
+  return requestJson<ApplicationActionResponse>(`/api/v1/applications/${jobId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getApplicationStats(): Promise<Record<string, number>> {
+  if (USE_MOCK) {
+    return {
+      applied: 2,
+      interview: 1,
+      offer: 0,
+      rejected: 1,
+      saved: 0,
+    };
+  }
+
+  const data = await requestJson<Record<string, number>>("/api/v1/applications/stats", {
+    method: "GET",
+  });
+  const normalized: Record<string, number> = {};
+
+  for (const [key, value] of Object.entries(data)) {
+    const normalizedKey = APPLICATION_STATUS_ALIASES[key] ?? key;
+    normalized[normalizedKey] = (normalized[normalizedKey] ?? 0) + value;
+  }
+
+  return normalized;
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+const MOCK_SETTINGS: SettingsResponse = {
+  include_keywords: ["Environmental", "HSE", "ESG", "Sustainability"],
+  exclude_keywords: ["Sales", "Marketing", "Retail"],
+  min_score: 65,
+  max_daily_applies: 5,
+  telegram_chat_id: "",
+  score_threshold_apply: 80,
+  score_threshold_watch: 60,
+};
+
+export async function getSettings(): Promise<SettingsResponse> {
+  if (USE_MOCK) return MOCK_SETTINGS;
+  return requestJson<SettingsResponse>("/api/v1/settings", { method: "GET" });
+}
+
+export async function updateSettings(
+  payload: SettingsUpdateRequest
+): Promise<SettingsResponse> {
+  if (USE_MOCK) {
+    return { ...MOCK_SETTINGS, ...payload };
+  }
+
+  return requestJson<SettingsResponse>("/api/v1/settings", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
 // ── Password reset ────────────────────────────────────────────────────────────
 
 export async function forgotPassword(email: string): Promise<{ message: string }> {
@@ -204,8 +612,11 @@ export interface ChatApiResponse {
   response_source?: string;
   provider?: string;
   provider_state?: string;
+  provider_available?: boolean;
   openai_available?: boolean;
+  deepseek_available?: boolean;
   hf_available?: boolean;
+  ai_model?: string;
   data?: {
     response?: string;
     reply?: string;

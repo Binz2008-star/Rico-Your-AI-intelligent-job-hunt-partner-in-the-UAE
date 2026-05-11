@@ -5,8 +5,7 @@ import { JobCard } from "@/components/jobs/JobCard";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
-import { ApiError } from "@/lib/client";
-import { applyJob, getJobs } from "@/services/jobs";
+import { ApiError, applyJob, getJobs } from "@/lib/api";
 import type { Job } from "@/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 

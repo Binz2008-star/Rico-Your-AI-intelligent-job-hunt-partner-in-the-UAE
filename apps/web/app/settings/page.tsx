@@ -5,9 +5,7 @@ import { StatusCard } from "@/components/StatusCard";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
-import { ApiError } from "@/lib/client";
-import { getHealth } from "@/services/health";
-import { getSettings, updateSettings } from "@/services/settings";
+import { ApiError, getHealth, getSettings, updateSettings } from "@/lib/api";
 import type { HealthResponse, SettingsResponse } from "@/types";
 import { useEffect, useState } from "react";
 
@@ -248,6 +246,8 @@ export default function SettingsPage() {
               const readyForHf = health.ready_for_hf ?? rico?.ready_for_hf ?? false;
               const readyForOpenAI =
                 health.ready_for_openai ?? rico?.ready_for_openai ?? health.openai ?? false;
+              const readyForDeepSeek =
+                health.ready_for_deepseek ?? rico?.ready_for_deepseek ?? false;
               const readyForJotform =
                 health.ready_for_jotform ?? rico?.ready_for_jotform ?? false;
               const readyForTelegram =
@@ -265,12 +265,17 @@ export default function SettingsPage() {
                   <Row
                     label="AI Provider"
                     value={aiProvider}
-                    ok={readyForHf || readyForOpenAI}
+                    ok={readyForHf || readyForOpenAI || readyForDeepSeek}
                   />
                   <Row
                     label="Hugging Face"
                     value={readyForHf ? "Configured" : "Not configured"}
                     ok={readyForHf}
+                  />
+                  <Row
+                    label="DeepSeek"
+                    value={readyForDeepSeek ? "Active" : "Not active"}
+                    ok={readyForDeepSeek}
                   />
                   <Row
                     label="OpenAI"

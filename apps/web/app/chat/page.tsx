@@ -166,8 +166,20 @@ export default function ChatPage() {
         "";
       const provider = res.provider ?? res.response_source ?? "unknown";
       const isRateLimited = res.response_source === "rate_limited" || res.provider_state === "rate_limited";
-      const freeMode = isRateLimited || provider === "fallback" || provider === "none" || res.openai_available === false;
       const hfMode = provider === "huggingface" || provider === "hf";
+      const deepseekMode = provider === "deepseek";
+      const providerAvailable =
+        res.provider_available ??
+        (provider === "openai"
+          ? (res.openai_available ?? true)
+          : deepseekMode
+            ? (res.deepseek_available ?? true)
+            : hfMode);
+      const freeMode =
+        isRateLimited ||
+        provider === "fallback" ||
+        provider === "none" ||
+        (!hfMode && !deepseekMode && providerAvailable === false);
 
       if (isRateLimited) {
         setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: "Rico's AI is rate-limited right now — please try again in a minute.", freeMode: true }]);
@@ -228,7 +240,7 @@ export default function ChatPage() {
         p.phones?.length ? `Phone: ${p.phones[0]}` : "",
         p.years_experience_hint ? `Experience: ~${p.years_experience_hint} years` : "",
       ].filter(Boolean).join(" · ");
-      const text = `CV received: **${file.name}**. I extracted your details and pre-filled your profile.${summary ? `\n\n${summary}` : ""}\n\nTell me your target roles and I'll start finding matches.`;
+      const text = `CV received: ${file.name}. I extracted your details and pre-filled your profile.${summary ? `\n\n${summary}` : ""}\n\nTell me your target roles and I'll start finding matches.`;
       setMessages((prev) => [...prev, { id: nextId(), role: "rico", text }]);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Upload failed";
@@ -336,7 +348,7 @@ export default function ChatPage() {
                 : "rounded-2xl rounded-tl-none bg-[#13132a] border border-white/5 px-4 py-3 text-[14px] text-[#eeeef5] leading-relaxed backdrop-blur-md"
                 }`}>
                 {/* Message text */}
-                {m.text && <p className="whitespace-pre-wrap">{m.text}</p>}
+                {m.text && <div className="whitespace-pre-wrap">{m.text}</div>}
 
                 {/* Job match cards */}
                 {m.matches && m.matches.length > 0 && (
