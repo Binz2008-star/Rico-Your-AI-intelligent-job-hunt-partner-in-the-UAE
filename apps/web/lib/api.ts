@@ -214,6 +214,15 @@ export interface UploadCVResponse {
   parsed: ParsedCV;
 }
 
+function extractDetail(detail: unknown, fallback: string): string {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail) && detail.length > 0) {
+    const first = detail[0] as { msg?: string; message?: string };
+    return first.msg ?? first.message ?? fallback;
+  }
+  return fallback;
+}
+
 export async function uploadCV(file: File): Promise<UploadCVResponse> {
   const form = new FormData();
   form.append("file", file);
@@ -223,8 +232,8 @@ export async function uploadCV(file: File): Promise<UploadCVResponse> {
     body: form,
   });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { detail?: string };
-    throw new Error(err.detail ?? `Upload failed: ${res.status}`);
+    const body = (await res.json().catch(() => ({}))) as { detail?: unknown };
+    throw new Error(extractDetail(body.detail, `Upload failed: ${res.status}`));
   }
   return res.json() as Promise<UploadCVResponse>;
 }
@@ -249,7 +258,10 @@ export async function submitOnboarding(
     credentials: "include",
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error(`Onboarding submit failed: ${res.status}`);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { detail?: unknown };
+    throw new Error(extractDetail(body.detail, `Onboarding submit failed: ${res.status}`));
+  }
   return res.json() as Promise<{ status: string; updated_fields: string[] }>;
 }
 

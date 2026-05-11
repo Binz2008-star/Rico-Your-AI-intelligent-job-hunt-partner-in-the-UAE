@@ -22,13 +22,12 @@ import secrets
 from typing import Any, Dict
 
 from dataclasses import asdict
-from typing import Any
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 
 import src.services.chat_service as chat_service
-from src.api.deps import get_current_user
+from src.api.deps import get_current_user, get_current_user_id
 from src.api.rate_limit import LIMIT_CHAT, LIMIT_UPLOAD, LIMIT_WEBHOOK, limiter
 
 logger = logging.getLogger(__name__)
@@ -171,9 +170,11 @@ def rico_openai_smoke(request: Request) -> Dict[str, Any]:
 
 @router.post("/upload-cv")
 @limiter.limit(LIMIT_UPLOAD)
-async def rico_upload_cv(request: Request, file: UploadFile = File(...)) -> Dict[str, Any]:
-    user = get_current_user(request)   # raises 401 if unauthenticated
-    user_id: str = user["email"]       # trust the JWT, never the request body or query params
+async def rico_upload_cv(
+    request: Request,
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user_id),
+) -> Dict[str, Any]:
     data = await file.read()
     if len(data) > _MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="File exceeds 10 MB limit")
