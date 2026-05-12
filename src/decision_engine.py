@@ -12,15 +12,19 @@ Design principles:
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from statistics import mean, median
 from typing import Any, Callable, Dict, List, Optional, Tuple, Protocol
 
 logger = logging.getLogger(__name__)
+
+# Timezone-aware UTC constant
+_UTC = timezone.utc
 
 # ---------------------------------------------------------------------------
 # Configuration - all thresholds in one place
@@ -34,11 +38,11 @@ class EngineConfig:
     low_score: int = 40
 
     # Probability model multipliers (applied as log-odds adjustments)
-    role_match_boost: float = 0.20
-    exp_match_boost: float = 0.12
-    preferred_location_boost: float = 0.06
-    large_corp_boost: float = 0.10
-    mid_company_boost: float = 0.05
+    role_match_boost: float = 0.18
+    exp_match_boost: float = 0.10
+    preferred_location_boost: float = 0.05
+    large_corp_boost: float = 0.08
+    mid_company_boost: float = 0.04
     startup_penalty: float = -0.08
 
     # Market health weights
@@ -49,10 +53,12 @@ class EngineConfig:
     # Application strategy
     optimal_apply_pct: float = 0.30   # fraction of high-quality jobs to target
     max_daily_applications: int = 5
+    min_daily_applications: int = 1
 
     # Seniority keywords
     senior_keywords: Tuple[str, ...] = ("senior", "executive", "lead", "principal", "head", "chief")
     management_keywords: Tuple[str, ...] = ("manager", "supervisor", "director")
+    junior_keywords: Tuple[str, ...] = ("junior", "entry", "associate", "trainee")
 
     # Regional preference keywords
     preferred_location_keywords: Tuple[str, ...] = ("dubai", "abu dhabi", "uae", "sharjah", "ajman")
@@ -64,6 +70,43 @@ class EngineConfig:
     )
     mid_company_keywords: Tuple[str, ...] = ("group", "holding", "international", "global")
     startup_keywords: Tuple[str, ...] = ("startup", "ventures", "labs")
+
+    # UAE city weights for location bonuses
+    uae_city_weights: Dict[str, float] = field(default_factory=lambda: {
+        "dubai": 1.0, "abu dhabi": 0.9, "sharjah": 0.7,
+        "ajman": 0.6, "ras al khaimah": 0.5, "fujairah": 0.5
+    })
+
+    # Preferred industries (UAE market)
+    preferred_industries: Tuple[str, ...] = ("ai", "software", "technology", "fintech", "trading")
+    industry_boost: float = 0.05
+
+    # Trading/AI specializations
+    trading_keywords: Tuple[str, ...] = ("trading", "quant", "algo", "order management", "exchange")
+    ai_keywords: Tuple[str, ...] = ("ai", "ml", "llm", "data scientist", "machine learning")
+    specialization_boost: float = 0.08
+
+    def __post_init__(self) -> None:
+        """Validate configuration values."""
+        # Validate boost ranges
+        boosts = [
+            self.role_match_boost, self.exp_match_boost, self.preferred_location_boost,
+            self.large_corp_boost, self.mid_company_boost, self.industry_boost,
+            self.specialization_boost
+        ]
+        total_positive = sum(b for b in boosts if b > 0)
+        if total_positive > 0.6:
+            raise ValueError(f"Total positive boosts exceed 0.6: {total_positive}")
+
+        # Validate weights sum to 1.0
+        weight_sum = self.availability_weight + self.quality_weight + self.competition_weight
+        if not 0.99 <= weight_sum <= 1.01:
+            raise ValueError(f"Market health weights must sum to 1.0, got {weight_sum}")
+
+        # Validate score thresholds are monotonic
+        thresholds = [self.very_high_score, self.high_score, self.medium_score, self.low_score]
+        if thresholds != sorted(thresholds, reverse=True):
+            raise ValueError("Score thresholds must be descending: very_high > high > medium > low")
 
 
 DEFAULT_CONFIG = EngineConfig()
@@ -123,7 +166,7 @@ class ApplicationsLoader(Protocol):
 class JobDecisionEngine:
     """
     Decision engine for job search optimization with clean architecture.
-    
+
     All external I/O is injected via protocols so the engine is fully
     unit-testable without database or filesystem dependencies.
     """
@@ -138,6 +181,11 @@ class JobDecisionEngine:
         self._target_roles = [r.lower() for r in target_roles]
         self._config = config
         self._level = self._determine_candidate_level()
+        # Cache metrics (not using @lru_cache on instance method to avoid memory leak)
+        self._cache: Dict[str, Tuple[float, str, str, Dict[str, float]]] = {}
+        self._cache_hits = 0
+        self._cache_misses = 0
+        self._total_calculations = 0
 
     # ------------------------------------------------------------------
     # Factory - keeps I/O out of __init__ while keeping call site clean
@@ -152,7 +200,7 @@ class JobDecisionEngine:
     ) -> "JobDecisionEngine":
         """
         Preferred constructor for production use.
-        
+
         Example:
             engine = JobDecisionEngine.from_loaders(
                 get_candidate_profile,
@@ -171,20 +219,57 @@ class JobDecisionEngine:
     # Public API - all pure functions, no I/O
     # ------------------------------------------------------------------
 
+    @property
+    def cache_stats(self) -> Dict[str, int]:
+        """Return cache performance metrics."""
+        return {
+            "total_calculations": self._total_calculations,
+            "cache_hits": self._cache_hits,
+            "cache_misses": self._cache_misses,
+            "cache_size": len(self._cache),
+        }
+
     def calculate_success_probability(self, job: Dict[str, Any]) -> ProbabilityResult:
         """
         Calculate application success probability using multiplicative
         log-odds compounding rather than additive bonus stacking.
-        
-        The base probability comes from the job's match score.
-        Each factor adjusts the log-odds independently, so factors
-        compound without the ceiling-collision problem of additive models.
+
+        Uses manual caching with SHA-256 to avoid memory leaks from @lru_cache
+        on instance methods. Cache evicts oldest entries when size exceeds 256.
         """
         cfg = self._config
+        self._total_calculations += 1
+
         score = float(job.get("score") or 0)
         title = (job.get("title") or "").lower()
         company = (job.get("company") or "").lower()
         location = (job.get("location") or "").lower()
+
+        # Generate cache key using SHA-256 (more secure than MD5)
+        job_id = job.get("link") or job.get("id") or f"{title}:{company}"
+        cache_key = hashlib.sha256(job_id.encode()).hexdigest()
+
+        # Check cache
+        if cache_key in self._cache:
+            self._cache_hits += 1
+            cached_prob, cached_confidence, cached_rec, cached_factors = self._cache[cache_key]
+            logger.debug(
+                "success_probability_cache_hit",
+                extra={
+                    "job_id": job.get("link", ""),
+                    "cache_key": cache_key[:16],
+                    "probability": cached_prob,
+                },
+            )
+            return ProbabilityResult(
+                probability=cached_prob,
+                confidence=cached_confidence,
+                recommendation=cached_rec,
+                factors=cached_factors,
+            )
+
+        # Cache miss - calculate
+        self._cache_misses += 1
 
         # Base: score → probability (score is already 0-100)
         base_prob = score / 100.0
@@ -192,32 +277,31 @@ class JobDecisionEngine:
 
         factors: Dict[str, float] = {}
 
-        # Role match
-        role_delta = 0.0
-        if any(r in title for r in self._target_roles):
-            role_delta = cfg.role_match_boost
+        # Role and seniority match (combined to avoid double-counting)
+        role_delta, seniority_delta = self._role_seniority_match(title)
         factors["role_match"] = role_delta
-        log_odds += _to_log_odds_delta(role_delta)
-
-        # Experience level match
-        exp_delta = 0.0
-        is_senior_role = any(kw in title for kw in cfg.senior_keywords)
-        if is_senior_role and self._level in ("Executive", "Senior"):
-            exp_delta = cfg.exp_match_boost
-        factors["experience_match"] = exp_delta
-        log_odds += _to_log_odds_delta(exp_delta)
+        factors["seniority_match"] = seniority_delta
+        log_odds += _to_log_odds_delta(role_delta + seniority_delta)
 
         # Company size
         company_delta = self._company_size_delta(company)
         factors["company_factor"] = company_delta
         log_odds += _to_log_odds_delta(company_delta)
 
-        # Location preference
-        loc_delta = 0.0
-        if any(kw in location for kw in cfg.preferred_location_keywords):
-            loc_delta = cfg.preferred_location_boost
+        # Location bonus with city-specific weights
+        loc_delta = self._location_bonus(location)
         factors["location_bonus"] = loc_delta
         log_odds += _to_log_odds_delta(loc_delta)
+
+        # Industry bonus
+        industry_delta = self._industry_bonus(title)
+        factors["industry_bonus"] = industry_delta
+        log_odds += _to_log_odds_delta(industry_delta)
+
+        # Specialization bonus (trading/AI)
+        spec_delta = self._specialization_bonus(title)
+        factors["specialization_bonus"] = spec_delta
+        log_odds += _to_log_odds_delta(spec_delta)
 
         # Recover probability, cap at 95%
         probability = min(_from_log_odds(log_odds) * 100.0, 95.0)
@@ -228,13 +312,33 @@ class JobDecisionEngine:
 
         confidence, recommendation = _classify_probability(probability)
 
+        # Store in cache
+        self._cache[cache_key] = (
+            round(probability, 1),
+            confidence,
+            recommendation,
+            factors,
+        )
+
+        # Cache eviction if size exceeds 256
+        if len(self._cache) >= 256:
+            keys_to_remove = list(self._cache.keys())[:32]
+            for key in keys_to_remove:
+                del self._cache[key]
+            logger.debug(
+                "cache_eviction",
+                extra={"evicted_count": len(keys_to_remove), "cache_size": len(self._cache)},
+            )
+
         logger.debug(
             "success_probability_calculated",
             extra={
                 "job_id": job.get("link", ""),
+                "cache_key": cache_key[:16],
                 "score": score,
                 "probability": probability,
                 "confidence": confidence,
+                "cache_hit": False,
             },
         )
 
@@ -252,7 +356,7 @@ class JobDecisionEngine:
     ) -> MarketTrends:
         """
         Analyze job market trends.
-        
+
         Both `jobs` and `applications` are passed in — no I/O here.
         """
         if not jobs:
@@ -267,7 +371,7 @@ class JobDecisionEngine:
                 recommendations=[],
             )
 
-        now = datetime.now()
+        now = datetime.now(_UTC)
         cutoff = now - timedelta(days=30)
         older_cutoff = now - timedelta(days=60)
 
@@ -327,7 +431,7 @@ class JobDecisionEngine:
     ) -> ApplicationStrategy:
         """
         Generate a prioritized application strategy.
-        
+
         All data is passed in — callers must resolve I/O before calling.
         """
         cfg = self._config
@@ -393,6 +497,33 @@ class JobDecisionEngine:
             return "Mid"
         return "Junior"
 
+    def _role_seniority_match(self, title: str) -> Tuple[float, float]:
+        """
+        Calculate role and seniority match contributions.
+
+        Returns:
+            Tuple of (role_delta, seniority_delta)
+        """
+        cfg = self._config
+
+        # Role match
+        role_match = any(r in title for r in self._target_roles)
+        role_delta = cfg.role_match_boost if role_match else 0.0
+
+        # Seniority match (capped at one category)
+        seniority_delta = 0.0
+        if any(kw in title for kw in cfg.senior_keywords):
+            if self._level in ("Executive", "Senior"):
+                seniority_delta = cfg.exp_match_boost * 1.2  # Senior roles get bonus
+        elif any(kw in title for kw in cfg.management_keywords):
+            if self._level in ("Executive", "Senior", "Mid"):
+                seniority_delta = cfg.exp_match_boost * 0.8
+        elif any(kw in title for kw in cfg.junior_keywords):
+            if self._level == "Junior":
+                seniority_delta = cfg.exp_match_boost
+
+        return role_delta, seniority_delta
+
     def _company_size_delta(self, company_lower: str) -> float:
         cfg = self._config
         if any(name in company_lower for name in cfg.large_corp_names):
@@ -401,6 +532,46 @@ class JobDecisionEngine:
             return cfg.mid_company_boost
         if any(kw in company_lower for kw in cfg.startup_keywords):
             return cfg.startup_penalty
+        return 0.0
+
+    def _location_bonus(self, location: str) -> float:
+        """Calculate location bonus with city-specific weights."""
+        cfg = self._config
+        if not location:
+            return 0.0
+
+        location_lower = location.lower()
+
+        # Check for any preferred location keyword
+        for keyword in cfg.preferred_location_keywords:
+            if keyword in location_lower:
+                # Get weight if specific city match
+                for city, weight in cfg.uae_city_weights.items():
+                    if city in location_lower:
+                        return cfg.preferred_location_boost * weight
+                return cfg.preferred_location_boost
+
+        return 0.0
+
+    def _industry_bonus(self, title: str) -> float:
+        """Check if job is in preferred industry."""
+        cfg = self._config
+        title_lower = title.lower()
+
+        for industry in cfg.preferred_industries:
+            if industry in title_lower:
+                return cfg.industry_boost
+        return 0.0
+
+    def _specialization_bonus(self, title: str) -> float:
+        """Check for trading/AI specializations."""
+        cfg = self._config
+        title_lower = title.lower()
+
+        if any(kw in title_lower for kw in cfg.trading_keywords):
+            return cfg.specialization_boost
+        if any(kw in title_lower for kw in cfg.ai_keywords):
+            return cfg.specialization_boost * 0.8
         return 0.0
 
     def _role_patterns(self, jobs: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -502,28 +673,60 @@ class JobDecisionEngine:
         high_quality_count: int,
         optimal_rate: float,
     ) -> Tuple[str, List[str]]:
-        if success_rate >= 30:
-            focus = "Selective — you're converting well; protect quality"
+        """
+        Determine strategic focus based on success rate and market conditions.
+
+        Returns:
+            Tuple of (strategic_focus, action_items)
+        """
+        cfg = self._config
+
+        # Convert success_rate from decimal to percentage for easier reading
+        success_pct = success_rate * 100
+
+        if success_pct >= 30:
+            focus = "Selective Targeting — you're converting well; protect quality"
             actions = [
-                f"Apply to ≤ {int(optimal_rate)} roles/day, all score ≥ {self._config.high_score}",
-                "Invest more time per application (research, tailored cover notes)",
+                f"Apply to ≤ {max(1, int(optimal_rate))} roles/day, all score ≥ {cfg.high_score}",
+                "Invest more time per application (research, tailored cover letters)",
                 "Track which companies are moving fastest to offer",
+                f"Prioritize roles with success probability > 70%",
+                "Request referrals from your network at target companies",
             ]
-        elif success_rate >= 10:
-            focus = "Balanced — good volume, moderate conversion"
+        elif success_pct >= 15:
+            focus = "Balanced Approach — good volume, moderate conversion"
             actions = [
-                f"Target {int(optimal_rate)}–{int(optimal_rate) + 2} applications/day",
+                f"Target {int(optimal_rate)}–{min(int(optimal_rate) + 2, cfg.max_daily_applications)} applications/day",
                 f"Prioritise top {int(optimal_rate)} jobs by priority_score",
                 "Follow up on pending applications older than 10 days",
+                "A/B test two CV versions across 10 applications each",
+                "Track rejection reasons to identify patterns",
+            ]
+        elif success_pct >= 5:
+            focus = "Volume Focus — broaden pipeline, test messaging"
+            actions = [
+                f"Increase daily application target to {min(int(optimal_rate * 1.3), cfg.max_daily_applications)}",
+                "A/B test two cover note styles across 10 applications each",
+                f"Lower score threshold to {cfg.medium_score} temporarily",
+                "Review rejection patterns for signal",
+                "Expand target roles to include adjacent positions",
             ]
         else:
-            focus = "Volume — broaden pipeline, test messaging"
+            focus = "Pipeline Expansion — need more volume and strategy adjustment"
             actions = [
-                "Increase daily application target by 30 %",
-                "A/B test two cover note styles across 10 applications each",
-                f"Lower score threshold to {self._config.low_score} temporarily",
-                "Review rejection patterns for signal",
+                f"Target {cfg.max_daily_applications} applications/day (max capacity)",
+                f"Lower score threshold to {cfg.low_score} to build pipeline",
+                "Review CV and LinkedIn profile for alignment",
+                "Consider adding 1-2 adjacent roles to target list",
+                "Request mock interviews for feedback",
+                "Network more aggressively — aim for 5 recruiter connections/week",
             ]
+
+        # Add market-specific actions
+        if high_quality_count < 5:
+            actions.append("Few high-quality matches — consider expanding location to Abu Dhabi")
+            actions.append("Broaden role keywords (e.g., 'lead' instead of 'manager')")
+
         return focus, actions
 
 
@@ -539,7 +742,7 @@ def generate_decision_insights(
 ) -> Dict[str, Any]:
     """
     Generate a complete decision insight bundle for dashboard consumption.
-    
+
     Returns a dict ready to serialize to JSON or embed in the HTML template.
     Callers own I/O; this function is pure given its inputs.
     """
@@ -560,7 +763,7 @@ def generate_decision_insights(
         })
 
     return {
-        "generated_at": datetime.now().isoformat(),
+        "generated_at": datetime.now(_UTC).isoformat(),
         "market_analysis": {
             "market_health": trends.market_health,
             "score_trend": trends.market_overview.get("score_trend"),
@@ -585,6 +788,7 @@ def generate_decision_insights(
                 f"Targeted {len(engine._target_roles)} role focus",
             ],
         },
+        "cache_stats": engine.cache_stats,
     }
 
 
@@ -615,13 +819,16 @@ def _to_log_odds_delta(delta: float) -> float:
 
 
 def _classify_probability(probability: float) -> Tuple[str, str]:
+    """Classify probability into confidence level and recommendation."""
     if probability >= 80:
         return "Very High", "Apply immediately — excellent match"
     if probability >= 65:
         return "High", "Strong candidate — apply with confidence"
     if probability >= 50:
         return "Medium", "Good fit — consider applying"
-    return "Low", "Consider other opportunities first"
+    if probability >= 35:
+        return "Low", "Apply if you have spare capacity"
+    return "Very Low", "Consider other opportunities first"
 
 
 def _score_trend(recent: List[float], historical: List[float]) -> str:
@@ -667,11 +874,23 @@ def _is_between(date_str: Optional[str], start: datetime, end: datetime) -> bool
 
 
 def _parse_date(date_str: Optional[str]) -> Optional[datetime]:
-    """Parse date string with specific exception handling."""
+    """Parse date string with specific exception handling. Returns timezone-aware datetime."""
     if not date_str:
         return None
     try:
-        return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        if isinstance(date_str, datetime):
+            # Ensure timezone-aware
+            if date_str.tzinfo is None:
+                return date_str.replace(tzinfo=_UTC)
+            return date_str
+        # Handle common formats
+        if 'Z' in date_str:
+            date_str = date_str.replace('Z', '+00:00')
+        dt = datetime.fromisoformat(date_str)
+        # Ensure timezone-aware
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=_UTC)
+        return dt
     except (ValueError, AttributeError, TypeError) as e:
         logger.debug("date_parse_failed", extra={"raw": date_str, "error": str(e)})
         return None

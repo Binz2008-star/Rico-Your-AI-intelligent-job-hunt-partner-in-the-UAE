@@ -34,7 +34,7 @@ from datetime import datetime, timezone
 from typing import Any
 from functools import wraps
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field, validator
 
 from src.api.deps import get_current_user, get_current_user_id
@@ -434,7 +434,7 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> Public
 @limiter.limit(LIMIT_CHAT)
 def rico_chat_history(
     request: Request,
-    limit: int = Field(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=200),
     before: str | None = None,
 ) -> dict[str, Any]:
     """Get conversation history with pagination."""
@@ -552,6 +552,30 @@ def rico_openai_smoke(request: Request) -> dict[str, Any]:
             "deepseek_available",
             bool(os.getenv("DEEPSEEK_API_KEY")),
         ),
+    }
+
+
+# ============================================================================
+# AI Provider Health Endpoint
+# ============================================================================
+
+@router.get("/health/ai-provider")
+def rico_ai_provider_health(request: Request) -> dict[str, Any]:
+    """Health check endpoint exposing current AI provider availability and state."""
+    from src.rico_openai_agent import RicoOpenAIAgent
+    from src.rico_env import get_ai_provider
+
+    provider = get_ai_provider()
+    agent = RicoOpenAIAgent()
+
+    return {
+        "active_provider": provider,
+        "provider_available": agent.provider_available,
+        "openai_available": agent.openai_available,
+        "deepseek_available": agent.deepseek_available,
+        "hf_available": agent.hf_available,
+        "provider_state": "available" if agent.provider_available else "unavailable",
+        "timestamp": datetime.now(_UTC).isoformat(),
     }
 
 
