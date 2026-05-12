@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 CV_FILE_RE = re.compile(r"\b[\w .()_-]+\.(?:pdf|docx?|txt)\b", re.IGNORECASE)
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PHONE_RE = re.compile(r"(?:\+?\d[\d\s().-]{7,}\d)")
-BARE_ROLE_RE = re.compile(r"^[A-Za-z][A-Za-z\s/&+-]{2,80}$")
+BARE_ROLE_RE = re.compile(r"^[A-Za-z][A-Za-z\s/&+-]{2,80}$", re.IGNORECASE)
 
 ONBOARDING_FIELD_LABELS = {
     "email": "email address",
@@ -890,8 +890,13 @@ class RicoChatAPI:
         if profile is None:
             return blocked
 
-        # Check for years_experience
-        if self._profile_value(profile, "years_experience") or self._profile_value(profile, "cv_status") == "parsed":
+        has_cv = bool(
+            self._profile_value(profile, "cv_filename")
+            or self._profile_value(profile, "cv_status") == "parsed"
+        )
+
+        # Check for years_experience (explicit value or any CV upload)
+        if self._profile_value(profile, "years_experience") or has_cv:
             blocked.append("experience")
 
         # Check for preferred_cities
@@ -899,7 +904,8 @@ class RicoChatAPI:
             blocked.append("location")
 
         # Check for skills or industries
-        if self._profile_value(profile, "skills") or self._profile_value(profile, "industries"):
+        skills = self._profile_value(profile, "skills")
+        if (skills and len(skills) > 0) or self._profile_value(profile, "industries"):
             blocked.append("industry")
 
         return blocked
@@ -920,17 +926,20 @@ class RicoChatAPI:
             should_skip = False
             for blocked in blocked_questions:
                 if blocked == "experience" and any(pattern in lower_line for pattern in [
-                    "experience level", "years experience", "entry/mid/senior", "experience?"
+                    "experience level", "years experience", "years of experience",
+                    "how many years", "how much experience", "entry/mid/senior",
+                    "experience?", "your experience"
                 ]):
                     should_skip = True
                     break
                 elif blocked == "location" and any(pattern in lower_line for pattern in [
-                    "location", "city", "where", "uae city"
+                    "location", "city", "where", "uae city", "preferred city",
+                    "which city", "where are you", "where do you want"
                 ]):
                     should_skip = True
                     break
                 elif blocked == "industry" and any(pattern in lower_line for pattern in [
-                    "industry", "sector", "field"
+                    "industry", "sector", "field", "which industry", "what industry"
                 ]):
                     should_skip = True
                     break
