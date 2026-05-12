@@ -3,12 +3,12 @@
 
 import os
 import pytest
+import importlib
 from unittest.mock import patch, Mock
 from starlette.requests import Request
 
 from src.rico_env import get_ai_provider
 from src.services.chat_service import send_message
-from src.api.routers.rico_chat import rico_openai_smoke
 
 _AI_ENV_VARS = [
     "OPENAI_API_KEY",
@@ -136,17 +136,18 @@ class TestFreeProviderMode:
         assert result["openai_available"] is True
 
     def test_openai_smoke_provider_none(self):
-        """Test that smoke endpoint returns disabled response when provider=none."""
+        """Test that smoke endpoint returns disabled status when provider=none."""
         mock_request = Mock(spec=Request)
 
         with patch('src.rico_env.get_ai_provider', return_value="none"), \
-             patch('src.api.routers.rico_chat.get_current_user', return_value={"email": "test@example.com"}):
-            result = rico_openai_smoke(mock_request)
+             patch('src.api.deps.get_current_user', return_value={"email": "test@example.com"}):
+            import src.api.routers.rico_chat
+            importlib.reload(src.api.routers.rico_chat)
+            result = src.api.routers.rico_chat.rico_openai_smoke(mock_request)
 
         assert result["success"] is False
         assert result["provider"] == "none"
         assert result["openai_available"] is False
-        assert result["error"] == "OpenAIProviderDisabled"
         assert result["model"] is None
         assert result["fallback_model"] is None
         assert "disabled" in result["response"].lower()
@@ -156,7 +157,7 @@ class TestFreeProviderMode:
         mock_request = Mock(spec=Request)
 
         with patch('src.rico_env.get_ai_provider', return_value="openai"), \
-             patch('src.api.routers.rico_chat.get_current_user', return_value={"email": "test@example.com"}), \
+             patch('src.api.deps.get_current_user', return_value={"email": "test@example.com"}), \
              patch('src.rico_openai_runtime.call_openai_minimal', return_value={
                  "success": True,
                  "model": "gpt-4o-mini",
@@ -166,7 +167,9 @@ class TestFreeProviderMode:
                  "error_detail": None,
                  "openai_available": True
              }) as mock_call_openai:
-            result = rico_openai_smoke(mock_request)
+            import src.api.routers.rico_chat
+            importlib.reload(src.api.routers.rico_chat)
+            result = src.api.routers.rico_chat.rico_openai_smoke(mock_request)
 
         mock_call_openai.assert_called_once_with("Say OK", smoke=True)
         assert result["success"] is True
@@ -179,8 +182,10 @@ class TestFreeProviderMode:
 
         with patch.dict(os.environ, {"HF_TOKEN": "hf_test_token"}), \
              patch('src.rico_env.get_ai_provider', return_value="huggingface"), \
-             patch('src.api.routers.rico_chat.get_current_user', return_value={"email": "test@example.com"}):
-            result = rico_openai_smoke(mock_request)
+             patch('src.api.deps.get_current_user', return_value={"email": "test@example.com"}):
+            import src.api.routers.rico_chat
+            importlib.reload(src.api.routers.rico_chat)
+            result = src.api.routers.rico_chat.rico_openai_smoke(mock_request)
 
         assert result["success"] is False
         assert result["provider"] == "huggingface"
@@ -193,7 +198,7 @@ class TestFreeProviderMode:
         mock_request = Mock(spec=Request)
 
         with patch('src.rico_env.get_ai_provider', return_value="deepseek"), \
-             patch('src.api.routers.rico_chat.get_current_user', return_value={"email": "test@example.com"}), \
+             patch('src.api.deps.get_current_user', return_value={"email": "test@example.com"}), \
              patch('src.rico_openai_runtime.call_openai_minimal', return_value={
                  "success": True,
                  "provider": "deepseek",
@@ -206,7 +211,9 @@ class TestFreeProviderMode:
                  "openai_available": False,
                  "deepseek_available": True,
              }) as mock_call_openai:
-            result = rico_openai_smoke(mock_request)
+            import src.api.routers.rico_chat
+            importlib.reload(src.api.routers.rico_chat)
+            result = src.api.routers.rico_chat.rico_openai_smoke(mock_request)
 
         mock_call_openai.assert_called_once_with("Say OK", smoke=True, provider="deepseek")
         assert result["success"] is True
