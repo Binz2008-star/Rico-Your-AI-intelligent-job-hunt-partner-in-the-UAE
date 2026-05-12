@@ -11,7 +11,7 @@ import json
 import logging
 import re
 from dataclasses import asdict, is_dataclass
-from typing import Any
+from typing import Any, NamedTuple
 
 # Standard library imports first
 # Third-party imports (none currently)
@@ -37,11 +37,30 @@ from src.repositories.profile_repo import get_profile, upsert_profile
 
 logger = logging.getLogger(__name__)
 
-
+# Constants
 CV_FILE_RE = re.compile(r"\b[\w .()_-]+\.(?:pdf|docx?|txt)\b", re.IGNORECASE)
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PHONE_RE = re.compile(r"(?:\+?\d[\d\s().-]{7,}\d)")
 BARE_ROLE_RE = re.compile(r"^[A-Za-z][A-Za-z\s/&+-]{2,80}$")
+
+ONBOARDING_FIELD_LABELS = {
+    "email": "email address",
+    "phone": "phone number",
+    "preferred_city": "preferred UAE city",
+    "target_roles": "target role",
+    "salary_expectation_aed": "salary expectation",
+    "deal_breakers": "roles or companies to avoid",
+}
+
+# OpenAI context limits
+MAX_CONTEXT_MESSAGES = 10
+MAX_PROFILE_TOKENS = 200  # Conservative estimate for profile summary
+
+
+class HandlerResult(NamedTuple):
+    """Result type for handler functions."""
+    response: dict[str, Any]
+    should_save: bool = True
 
 
 def profile_to_dict(profile: Any) -> dict[str, Any]:
@@ -84,9 +103,17 @@ class RicoChatAPI:
             raw = dict(profile)
         else:
             raw = {k: getattr(profile, k) for k in dir(profile) if not k.startswith("_")}
+
+        # Optimize profile to avoid large dumps - only include essential fields
+        essential_fields = {
+            "email", "phone", "skills", "years_experience",
+            "preferred_cities", "target_roles", "industries",
+            "salary_expectation_aed", "deal_breakers"
+        }
+
         return {
             "profile_exists": True,
-            **{k: v for k, v in raw.items() if v not in (None, "", [], {})},
+            **{k: v for k, v in raw.items() if k in essential_fields and v not in (None, "", [], {})},
         }
 
     @staticmethod
@@ -258,7 +285,7 @@ class RicoChatAPI:
         profile = upsert_profile(user_id=user_id, updates=updates)
 
         missing = [
-            label
+            ONBOARDING_FIELD_LABELS.get(key, key)
             for key, label in [
                 ("email", "email address"),
                 ("phone", "phone number"),
@@ -310,7 +337,7 @@ class RicoChatAPI:
         try:
             normalized_role = normalize_role(role)
         except Exception as e:
-            logger.warning(f"Role normalization failed for '{role}': {e}")
+            logger.warning("Role normalization failed", extra={"user_id": user_id, "role": role, "error": str(e)})
             normalized_role = role
 
         target_roles = self._as_list(self._profile_value(profile, "target_roles"))
@@ -394,7 +421,7 @@ class RicoChatAPI:
                 ]
             }
         except Exception as e:
-            logger.warning(f"Role intelligence enrichment failed: {e}")
+            logger.warning("Role intelligence enrichment failed", extra={"user_id": user_id, "role": normalized_role, "error": str(e)})
             return None
 
     def _build_role_search_message(
@@ -617,6 +644,16 @@ class RicoChatAPI:
         self._append_chat(user_id, "assistant", ai_response.get("message", ""))
         return self._finalize(ai_response, self._source_for_openai_response(ai_response), profile=profile)
 
+    def _get_recent_messages(self, user_id: str, limit: int = MAX_CONTEXT_MESSAGES) -> list[dict[str, str]]:
+        """Get recent messages for context, respecting token limits."""
+        try:
+            # Get messages from memory store
+            messages = self.memory.get_recent_messages(user_id, limit=limit)
+            return messages[-limit:] if len(messages) > limit else messages
+        except Exception as e:
+            logger.warning("Failed to get recent messages", extra={"user_id": user_id, "error": str(e)})
+            return []
+
     def _get_blocked_questions(self, profile: Any) -> list[str]:
         """Return list of question types that should not be asked based on profile data."""
         blocked = []
@@ -683,7 +720,7 @@ class RicoChatAPI:
             try:
                 ctx["profile"] = asdict(profile) if is_dataclass(profile) else dict(profile)
             except Exception as e:
-                logger.warning(f"Failed to build router context: {e}")
+                logger.warning("Failed to build router context", extra={"user_id": user_id, "error": str(e)})
         return ctx
 
 
