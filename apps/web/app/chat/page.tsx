@@ -133,16 +133,16 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
         </section>
       )}
 
-      {/* Concerns - max 3 items to prevent overwhelming */}
+      {/* Worth checking - max 3 items to prevent overwhelming */}
       {match.match_concerns && match.match_concerns.length > 0 && (
-        <section className="mb-2" aria-label="Concerns about this job match">
-          <p className="text-[10px] font-semibold text-[#facc15] mb-1">Concerns:</p>
+        <section className="mb-2" aria-label="Items worth checking about this job match">
+          <p className="text-[10px] font-semibold text-[#facc15] mb-1">Worth checking:</p>
           <ul className="text-[10px] text-[#8080a0] list-disc list-inside space-y-0.5">
             {match.match_concerns.slice(0, 3).map((concern, idx) => (
               <li key={idx}>{concern}</li>
             ))}
             {match.match_concerns.length > 3 && (
-              <li className="text-[9px] text-[#5a5a7a] italic">+{match.match_concerns.length - 3} more concerns</li>
+              <li className="text-[9px] text-[#5a5a7a] italic">+{match.match_concerns.length - 3} more</li>
             )}
           </ul>
         </section>
@@ -150,14 +150,14 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
 
       {/* Missing facts - max 3 items for cognitive load */}
       {match.missing_facts && match.missing_facts.length > 0 && (
-        <section className="mb-2" aria-label="Missing information from job posting">
-          <p className="text-[10px] font-semibold text-[#a78bfa] mb-1">Missing information:</p>
+        <section className="mb-2" aria-label="Missing facts from job posting">
+          <p className="text-[10px] font-semibold text-[#a78bfa] mb-1">Missing facts:</p>
           <ul className="text-[10px] text-[#8080a0] list-disc list-inside space-y-0.5">
             {match.missing_facts.slice(0, 3).map((fact, idx) => (
               <li key={idx}>{fact}</li>
             ))}
             {match.missing_facts.length > 3 && (
-              <li className="text-[9px] text-[#5a5a7a] italic">+{match.missing_facts.length - 3} more missing</li>
+              <li className="text-[9px] text-[#5a5a7a] italic">+{match.missing_facts.length - 3} more</li>
             )}
           </ul>
         </section>
@@ -166,7 +166,7 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
       {/* Recommended action - max 2 lines for instant clarity */}
       {match.recommended_action && (
         <section className="mb-2 p-2 bg-white/5 rounded-lg border-l-2 border-[#5b4fff]" aria-label="Recommended next step">
-          <p className="text-[10px] font-semibold text-[#a78bfa] mb-0.5">Safest next step:</p>
+          <p className="text-[10px] font-semibold text-[#a78bfa] mb-0.5">Recommended next step:</p>
           <p className="text-[10px] text-[#eeeef5] leading-relaxed line-clamp-2">{match.recommended_action}</p>
         </section>
       )}
