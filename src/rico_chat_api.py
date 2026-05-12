@@ -349,7 +349,18 @@ class RicoChatAPI:
             profile = upsert_profile(user_id=user_id, updates={"target_roles": target_roles})
 
         workflow_result = self.system.run_for_profile(profile)
-        top_matches = workflow_result.get("matches", [])[:5]
+        all_matches = workflow_result.get("matches", [])
+
+        # Filter out already-applied jobs
+        try:
+            from src.applications import is_applied_batch, get_job_id
+            if all_matches:
+                applied_map = is_applied_batch(all_matches)
+                all_matches = [m for m in all_matches if not applied_map.get(get_job_id(m), False)]
+        except Exception as e:
+            logger.debug("Applied-job filter unavailable: %s", e)
+
+        top_matches = all_matches[:5]
         formatted = [self._format_match(m, profile) for m in top_matches]
 
         skills = self._as_list(self._profile_value(profile, "skills"))[:8]
@@ -628,7 +639,15 @@ class RicoChatAPI:
             context = self._build_router_context(user_id, profile)
             routed = _route(message, user_id=user_id, context=context)
             workflow_result = self.system.run_for_profile(profile)
-            top_matches = workflow_result.get("matches", [])[:5]
+            all_explicit = workflow_result.get("matches", [])
+            try:
+                from src.applications import is_applied_batch, get_job_id
+                if all_explicit:
+                    app_map = is_applied_batch(all_explicit)
+                    all_explicit = [m for m in all_explicit if not app_map.get(get_job_id(m), False)]
+            except Exception:
+                pass
+            top_matches = all_explicit[:5]
             formatted = [self._format_match(m, profile) for m in top_matches]
             response = {
                 "type": "job_matches",
