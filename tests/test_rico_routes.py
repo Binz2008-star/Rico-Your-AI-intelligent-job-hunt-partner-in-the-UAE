@@ -213,6 +213,119 @@ class TestRicoCVUploadRouteExists:
         assert ">" not in r.json()["filename"]
 
 
+class TestRicoCVUploadSecurity:
+    """Security tests for CV upload with validated public session IDs."""
+
+    def test_public_web_session_cv_upload_persists_profile(self, client):
+        """Guest users with valid public:web-* session IDs should have CV data persisted."""
+        public_session_id = "public:web-abc123xyz789"
+        with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED), \
+             patch("src.repositories.profile_repo.upsert_profile") as mock_upsert, \
+             patch("src.repositories.profile_repo.get_profile", return_value=None), \
+             patch("src.repositories.onboarding_repo.mark_onboarding_complete") as mock_mark:
+            r = client.post(
+                f"/api/v1/rico/upload-cv?user_id={public_session_id}",
+                files={"file": ("cv.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
+            )
+        assert r.status_code == 200
+        mock_upsert.assert_called_once()
+        # Verify the public session ID was used for persistence
+        call_kwargs = mock_upsert.call_args[1]
+        assert call_kwargs["user_id"] == public_session_id
+        mock_mark.assert_called_once_with(public_session_id)
+
+    def test_guest_invalid_user_id_is_rejected(self, client):
+        """Guest users with invalid user_id format should be rejected with 401."""
+        invalid_ids = [
+            "admin@example.com",
+            "user-123",
+            "public:invalid",
+            "public:web-",
+            "../../etc/passwd",
+            "authenticated-user-id",
+        ]
+        for invalid_id in invalid_ids:
+            r = client.post(
+                f"/api/v1/rico/upload-cv?user_id={invalid_id}",
+                files={"file": ("cv.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
+            )
+            assert r.status_code == 401, f"Expected 401 for user_id={invalid_id}, got {r.status_code}"
+
+    def test_guest_cannot_write_arbitrary_user_id_email(self, client):
+        """Guest users cannot use arbitrary email addresses as user_id."""
+        arbitrary_ids = [
+            "alice@example.com",
+            "admin@rico.ai",
+            "test@test.com",
+        ]
+        for arbitrary_id in arbitrary_ids:
+            r = client.post(
+                f"/api/v1/rico/upload-cv?user_id={arbitrary_id}",
+                files={"file": ("cv.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
+            )
+            assert r.status_code == 401, f"Expected 401 for user_id={arbitrary_id}, got {r.status_code}"
+
+    def test_authenticated_upload_ignores_supplied_public_user_id(self, auth_client):
+        """Authenticated uploads must ignore supplied public user_id and use auth identity."""
+        from src.api.rate_limit import limiter
+        try:
+            limiter._storage.reset()
+        except Exception:
+            pass
+
+        public_session_id = "public:web-abc123"
+        with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED), \
+             patch("src.repositories.profile_repo.upsert_profile") as mock_upsert, \
+             patch("src.repositories.profile_repo.get_profile", return_value=None), \
+             patch("src.repositories.onboarding_repo.mark_onboarding_complete"):
+            r = auth_client.post(
+                f"/api/v1/rico/upload-cv?user_id={public_session_id}",
+                files={"file": ("cv.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
+            )
+        assert r.status_code == 200
+        # Verify the authenticated user ID was used, not the supplied public ID
+        call_kwargs = mock_upsert.call_args[1]
+        assert call_kwargs["user_id"] == "alice@rico.ai"
+        assert call_kwargs["user_id"] != public_session_id
+
+    def test_public_chat_after_upload_loads_persisted_cv_profile(self, client):
+        """Public chat should load persisted CV profile from previous upload."""
+        from src.api.rate_limit import limiter
+        try:
+            limiter._storage.reset()
+        except Exception:
+            pass
+
+        public_session_id = "public:web-xyz789abc"
+        mock_profile = type("Profile", (), {
+            "skills": ["hse", "iso45001"],
+            "years_experience": 5,
+            "cv_filename": "cv.pdf",
+        })()
+
+        with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED), \
+             patch("src.repositories.profile_repo.upsert_profile"), \
+             patch("src.repositories.onboarding_repo.mark_onboarding_complete"), \
+             patch("src.repositories.profile_repo.get_profile", return_value=mock_profile):
+            # First, upload CV
+            r = client.post(
+                f"/api/v1/rico/upload-cv?user_id={public_session_id}",
+                files={"file": ("cv.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
+            )
+            assert r.status_code == 200
+
+        # Then verify chat can load the persisted profile
+        with patch("src.services.chat_service.send_message", return_value=_CHAT_RESPONSE) as mock_send:
+            r = client.post(
+                "/api/v1/rico/chat/public",
+                json={"message": "Find jobs", "session_id": public_session_id.replace("public:", "")},
+            )
+        assert r.status_code == 200
+        # Verify the chat service received the correct user_id
+        call_kwargs = mock_send.call_args[1]
+        assert call_kwargs["user_id"] == public_session_id
+
+
 class TestRicoTelegramWebhookRouteExists:
     def test_telegram_webhook_route_returns_200(self, client):
         update = {
