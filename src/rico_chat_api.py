@@ -17,7 +17,7 @@ from src.rico_agent import RicoAgent
 from src.rico_memory import RicoMemoryStore
 from src.rico_openai_agent import RicoOpenAIAgent
 from src.rico_repo_adapter import RicoSystem
-from src.rico_match_explanation import build_match_explanation
+from src.rico_match_explainer import build_match_explanation
 from src.repositories.onboarding_repo import (
     is_onboarding_complete,
     mark_onboarding_complete,

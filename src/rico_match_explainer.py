@@ -209,12 +209,33 @@ def calculate_confidence(
     return "low", concerns
 
 
-def build_match_explanation(job: Dict[str, Any], profile: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate structured match explanation using rule-based logic.
+def build_recommended_action(confidence: str, match_concerns: List[str], missing_facts: List[str]) -> str:
+    """Build recommended action based on confidence and concerns.
 
-    IMPORTANT: Confidence represents Rico's confidence in the recommendation quality
-    (how well this job fits the user's profile), NOT the user's chance of getting hired.
-    High confidence means "this appears to be a worthwhile opportunity," not "you will get the job."
+    Uses short, factual sentences in Rico's trust tone.
+
+    Args:
+        confidence: The calculated confidence tier ("high", "medium", or "low")
+        match_concerns: List of concerns detected
+        missing_facts: List of missing facts detected
+
+    Returns:
+        Short, factual recommended action string
+    """
+    if confidence == "high" and not match_concerns:
+        return "This looks like a strong fit based on your role, skills, and preferred location. The available information supports moving forward."
+    elif confidence == "high" and match_concerns:
+        return "This role looks strong, but verify the concerns before applying. Let me tailor your CV first."
+    elif confidence == "medium":
+        return "This role looks promising, but some important details are unclear. Review carefully before applying."
+    else:  # low
+        return "This role has meaningful risks or missing information. Do not apply blindly until these concerns are clarified."
+
+
+def build_match_explanation(job: Dict[str, Any], profile: Dict[str, Any]) -> Dict[str, Any]:
+    """Build a structured, rule-based explanation for why a job may fit a user.
+
+    Returns raw structured data only. The UI decides labels and layout.
 
     Args:
         job: Job dictionary with title, company, location, description, salary, etc.
@@ -222,12 +243,13 @@ def build_match_explanation(job: Dict[str, Any], profile: Dict[str, Any]) -> Dic
                  skills, salary_expectation_aed, minimum_salary_aed, visa_status, etc.
 
     Returns:
-        Dictionary with:
-        - match_reasons: List of reasons why this job fits
-        - match_concerns: List of concerns or risks
-        - missing_facts: List of missing information from the job posting
-        - recommended_action: What the user should do next
-        - confidence: "high" | "medium" | "low" (tiered, not percentage-based)
+        {
+            "confidence": "high" | "medium" | "low",
+            "match_reasons": list[str],
+            "match_concerns": list[str],
+            "missing_facts": list[str],
+            "recommended_action": str,
+        }
     """
     # Step 1: Detect critical red flags (override optimistic scores)
     red_flags = _detect_critical_red_flags(job, profile)
@@ -241,18 +263,14 @@ def build_match_explanation(job: Dict[str, Any], profile: Dict[str, Any]) -> Dic
     # Step 4: Calculate confidence (red flags > signals > missing facts)
     confidence, concerns = calculate_confidence(red_flags, positive_signals, missing_facts)
 
-    # Step 5: Determine recommended action with Rico's trust tone
-    if confidence == "high":
-        recommended_action = "This looks like a strong fit based on your role, skills, and preferred location. The available information supports moving forward."
-    elif confidence == "medium":
-        recommended_action = "This role looks promising, but some important details are unclear. Review carefully before applying."
-    else:  # low
-        recommended_action = "This role has meaningful risks or missing information. Do not apply blindly until these concerns are clarified."
+    # Step 5: Build recommended action
+    recommended_action = build_recommended_action(confidence, concerns, missing_facts)
 
+    # Step 6: Return structured data (limit to 3 items for cognitive load)
     return {
-        "match_reasons": positive_signals,
-        "match_concerns": concerns,
-        "missing_facts": missing_facts,
-        "recommended_action": recommended_action,
         "confidence": confidence,
+        "match_reasons": positive_signals[:3],
+        "match_concerns": concerns[:3],
+        "missing_facts": missing_facts[:3],
+        "recommended_action": recommended_action,
     }
