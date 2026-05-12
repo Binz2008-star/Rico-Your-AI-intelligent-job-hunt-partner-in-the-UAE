@@ -59,31 +59,131 @@ function ThinkingIndicator() {
 function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt: string) => void }) {
   const score = match.score ?? 0;
   const scoreLabel = score >= 0.8 ? "Strong match" : score >= 0.6 ? "Good match" : "Possible match";
+  const confidence = match.confidence || "medium";
+
+  // Confidence badge styling with clear accessibility (colored text + border on dark background)
+  const getConfidenceBadge = () => {
+    const config = {
+      high: {
+        label: "High confidence fit",
+        bgColor: "bg-transparent",
+        textColor: "text-[#5dcaa5]",
+        borderColor: "border-[#5dcaa5]",
+        icon: "✓"
+      },
+      medium: {
+        label: "Medium confidence fit",
+        bgColor: "bg-transparent",
+        textColor: "text-[#facc15]",
+        borderColor: "border-[#facc15]",
+        icon: "○"
+      },
+      low: {
+        label: "Needs careful review",
+        bgColor: "bg-transparent",
+        textColor: "text-[#f87171]",
+        borderColor: "border-[#f87171]",
+        icon: "!"
+      }
+    };
+    return config[confidence as keyof typeof config] || config.medium;
+  };
+
+  const confidenceBadge = getConfidenceBadge();
+
   return (
-    <div className="rounded-xl border border-white/8 bg-[#0f0f24] p-3 mb-2">
-      <div className="flex items-start justify-between gap-2 mb-1">
-        <div>
+    <article className="rounded-xl border border-white/8 bg-[#0f0f24] p-3 mb-2" aria-label={`Job match: ${match.title} at ${match.company}. ${scoreLabel}. ${confidenceBadge.label}.`}>
+      {/* Top row: title, company, score, confidence */}
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex-1 min-w-0">
           <div className="text-[13px] font-semibold text-white">{match.title}</div>
           <div className="text-[11px] text-[#8080a0]">{match.company}{match.location ? ` · ${match.location}` : ""}</div>
         </div>
-        {score > 0 && (
-          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${score >= 0.8
-            ? "bg-[#5dcaa522] text-[#5dcaa5]"
-            : score >= 0.6
-              ? "bg-[#facc1522] text-[#facc15]"
-              : "bg-[#a78bfa22] text-[#a78bfa]"
-            }`}>
-            {scoreLabel}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {score > 0 && (
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${score >= 0.8
+              ? "bg-[#5dcaa522] text-[#5dcaa5]"
+              : score >= 0.6
+                ? "bg-[#facc1522] text-[#facc15]"
+                : "bg-[#a78bfa22] text-[#a78bfa]"
+              }`}>
+              {scoreLabel}
+            </span>
+          )}
+          {/* Confidence badge with icon and label for accessibility */}
+          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 ${confidenceBadge.bgColor} ${confidenceBadge.textColor} border ${confidenceBadge.borderColor} cursor-pointer`}>
+            <span aria-hidden="true">{confidenceBadge.icon}</span>
+            <span>{confidenceBadge.label}</span>
           </span>
-        )}
+        </div>
       </div>
-      {match.why && <p className="text-[11px] text-[#5a5a7a] mb-2 leading-relaxed">{match.why}</p>}
+
+      {/* Why this fits - max 4 items for scan speed */}
+      {match.match_reasons && match.match_reasons.length > 0 && (
+        <section className="mb-2" aria-label="Why this job fits your profile">
+          <p className="text-[10px] font-semibold text-[#5dcaa5] mb-1">Why this fits:</p>
+          <ul className="text-[10px] text-[#8080a0] list-disc list-inside space-y-0.5">
+            {match.match_reasons.slice(0, 4).map((reason, idx) => (
+              <li key={idx}>{reason}</li>
+            ))}
+            {match.match_reasons.length > 4 && (
+              <li className="text-[9px] text-[#5a5a7a] italic">+{match.match_reasons.length - 4} more reasons</li>
+            )}
+          </ul>
+        </section>
+      )}
+
+      {/* Worth checking - max 3 items to prevent overwhelming */}
+      {match.match_concerns && match.match_concerns.length > 0 && (
+        <section className="mb-2" aria-label="Items worth checking about this job match">
+          <p className="text-[10px] font-semibold text-[#facc15] mb-1">Worth checking:</p>
+          <ul className="text-[10px] text-[#8080a0] list-disc list-inside space-y-0.5">
+            {match.match_concerns.slice(0, 3).map((concern, idx) => (
+              <li key={idx}>{concern}</li>
+            ))}
+            {match.match_concerns.length > 3 && (
+              <li className="text-[9px] text-[#5a5a7a] italic">+{match.match_concerns.length - 3} more</li>
+            )}
+          </ul>
+        </section>
+      )}
+
+      {/* Missing facts - max 3 items for cognitive load */}
+      {match.missing_facts && match.missing_facts.length > 0 && (
+        <section className="mb-2" aria-label="Missing facts from job posting">
+          <p className="text-[10px] font-semibold text-[#a78bfa] mb-1">Missing facts:</p>
+          <ul className="text-[10px] text-[#8080a0] list-disc list-inside space-y-0.5">
+            {match.missing_facts.slice(0, 3).map((fact, idx) => (
+              <li key={idx}>{fact}</li>
+            ))}
+            {match.missing_facts.length > 3 && (
+              <li className="text-[9px] text-[#5a5a7a] italic">+{match.missing_facts.length - 3} more</li>
+            )}
+          </ul>
+        </section>
+      )}
+
+      {/* Recommended action - max 2 lines for instant clarity */}
+      {match.recommended_action && (
+        <section className="mb-2 p-2 bg-white/5 rounded-lg border-l-2 border-[#5b4fff]" aria-label="Recommended next step">
+          <p className="text-[10px] font-semibold text-[#a78bfa] mb-0.5">Recommended next step:</p>
+          <p className="text-[10px] text-[#eeeef5] leading-relaxed line-clamp-2">{match.recommended_action}</p>
+        </section>
+      )}
+
+      {/* Fallback to legacy why field */}
+      {!match.match_reasons && match.why && (
+        <p className="text-[11px] text-[#5a5a7a] mb-2 leading-relaxed">{match.why}</p>
+      )}
+
+      {/* Actions */}
       {match.actions && match.actions.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mt-1">
+        <div className="flex flex-wrap gap-1.5 mt-2">
           {match.actions.map((action) => (
             <button
               key={action}
               onClick={() => onAction(`${action} — ${match.title} at ${match.company}`)}
+              aria-label={`${action} for ${match.title} at ${match.company}`}
               className="text-[10px] px-2.5 py-1 rounded-lg border border-white/10 text-[#8080a0] hover:border-[#5b4fff]/40 hover:text-white transition-colors"
             >
               {action}
@@ -91,7 +191,7 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
           ))}
         </div>
       )}
-    </div>
+    </article>
   );
 }
 
@@ -102,7 +202,7 @@ function OptionButtons({ options, onAction }: { options: RicoOption[]; onAction:
         <button
           key={opt.action}
           onClick={() => onAction(opt.label)}
-          className="text-[12px] px-3 py-2 rounded-xl border border-[#5b4fff]/30 text-[#a78bfa] hover:bg-[#5b4fff]/10 hover:border-[#5b4fff]/60 transition-colors"
+          className="text-[12px] px-3 py-2 rounded-xl border border-[#5b4fff]/30 text-[#a78bfa] hover:bg-[#5b4fff]/10 hover:border-[#5b4fff]/60 transition-colors rico-focus-strong"
         >
           {opt.label}
         </button>
@@ -371,7 +471,7 @@ export default function ChatPage() {
 
       <div className="relative z-10 flex flex-col flex-1 h-[calc(100vh-65px)] max-w-3xl w-full mx-auto px-4">
         {/* Messages Container */}
-        <div className="flex-1 overflow-y-auto px-2 py-6 space-y-5 pb-32">
+        <div className="flex-1 overflow-y-auto px-2 py-6 space-y-5 pb-32" role="log" aria-live="polite" aria-atomic="false">
 
           {/* Quick start (shown above first message) */}
           {messages.length <= 1 && !thinking && (
@@ -381,7 +481,7 @@ export default function ChatPage() {
                   key={qa.label}
                   onClick={() => sendMessage(qa.prompt)}
                   disabled={thinking || chatAudience === "checking"}
-                  className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-[#8080a0] transition-colors hover:border-[rgba(91,79,255,0.3)] hover:bg-white/[0.05] hover:text-[#eeeef5] disabled:opacity-50"
+                  className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-[#8080a0] transition-colors hover:border-[rgba(91,79,255,0.3)] hover:bg-white/[0.05] hover:text-[#eeeef5] disabled:opacity-50 rico-focus-strong"
                 >
                   {qa.label}
                 </button>
@@ -459,7 +559,7 @@ export default function ChatPage() {
               onClick={() => fileInputRef.current?.click()}
               disabled={thinking || chatAudience === "checking"}
               title="Upload your CV (PDF)"
-              className="w-10 h-10 rounded-xl border border-white/10 bg-[#13132a]/80 text-[#8080a0] flex items-center justify-center hover:border-[#5b4fff]/40 hover:text-white transition-all disabled:opacity-30 shrink-0"
+              className="w-10 h-10 rounded-xl border border-white/10 bg-[#13132a]/80 text-[#8080a0] flex items-center justify-center hover:border-[#5b4fff]/40 hover:text-white transition-all disabled:opacity-30 shrink-0 rico-focus-strong"
               aria-label="Upload CV"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -479,12 +579,12 @@ export default function ChatPage() {
                 placeholder={chatAudience === "checking"
                   ? "Checking your session…"
                   : "Ask Rico anything — jobs, CV, applications, interviews…"}
-                className="w-full resize-none bg-[#13132a]/80 border border-white/10 backdrop-blur-xl rounded-2xl py-3 pl-4 pr-12 text-sm text-white placeholder:text-[#5a5a7a] focus:outline-none focus:border-[#5b4fff]/50 transition-all shadow-2xl"
+                className="w-full resize-none bg-[#13132a]/80 border border-white/10 backdrop-blur-xl rounded-2xl py-3 pl-4 pr-12 text-sm text-white placeholder:text-[#5a5a7a] transition-all shadow-2xl"
               />
               <button
                 onClick={handleSend}
                 disabled={thinking || chatAudience === "checking" || !input.trim()}
-                className="absolute right-2 top-1.5 bottom-1.5 w-9 h-9 rounded-xl bg-[#5b4fff] text-white flex items-center justify-center hover:bg-[#4a3fdf] transition-all disabled:opacity-30 disabled:grayscale"
+                className="absolute right-2 top-1.5 bottom-1.5 w-9 h-9 rounded-xl bg-[#5b4fff] text-white flex items-center justify-center hover:bg-[#4a3fdf] transition-all disabled:opacity-30 disabled:grayscale rico-focus-strong"
                 aria-label={thinking ? "Sending…" : "Send"}
               >
                 {thinking ? (

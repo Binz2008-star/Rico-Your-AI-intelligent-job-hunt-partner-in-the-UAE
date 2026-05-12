@@ -606,6 +606,11 @@ export interface JobMatch {
   score?: number;
   why?: string;
   actions?: string[];
+  confidence?: "high" | "medium" | "low";
+  match_reasons?: string[];
+  match_concerns?: string[];
+  missing_facts?: string[];
+  recommended_action?: string;
 }
 
 export interface RicoOption {

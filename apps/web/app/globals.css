@@ -24,15 +24,28 @@ body {
 }
 
 #root,
-body > div:first-child {
+body>div:first-child {
   height: 100%;
 }
 
 /* scrollbar */
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
 
 /* noise grain overlay */
 body::after {
@@ -47,8 +60,41 @@ body::after {
 
 /* animate-in utility for toasts */
 @keyframes slide-in-from-right {
-  from { transform: translateX(16px); opacity: 0; }
-  to   { transform: translateX(0);    opacity: 1; }
+  from {
+    transform: translateX(16px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
-.animate-in { animation-duration: 300ms; animation-fill-mode: both; }
-.slide-in-from-right-4 { animation-name: slide-in-from-right; }
+
+.animate-in {
+  animation-duration: 300ms;
+  animation-fill-mode: both;
+}
+
+.slide-in-from-right-4 {
+  animation-name: slide-in-from-right;
+}
+
+/* Shared focus system for accessibility (WCAG 2.2 AA + AAA-style) */
+/* Philosophy: clarity under stress, orientation for tired users */
+/* Never remove outlines unless replacing with something stronger */
+:root {
+  --focus-ring: #00c9a7;
+  --focus-ring-shadow: rgba(0, 201, 167, 0.16);
+  --focus-ring-offset: 3px;
+  --focus-ring-width: 3px;
+}
+
+:where(a, button, input, textarea, select, summary, [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.rico-focus-strong:focus-visible {
+  box-shadow: 0 0 0 4px var(--focus-ring-shadow);
+}
