@@ -111,7 +111,7 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
             </span>
           )}
           {/* Confidence badge with icon and label for accessibility */}
-          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 ${confidenceBadge.bgColor} ${confidenceBadge.textColor} border ${confidenceBadge.borderColor} focus-visible-badge cursor-pointer`}>
+          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 ${confidenceBadge.bgColor} ${confidenceBadge.textColor} border ${confidenceBadge.borderColor} cursor-pointer`}>
             <span aria-hidden="true">{confidenceBadge.icon}</span>
             <span>{confidenceBadge.label}</span>
           </span>
@@ -183,7 +183,7 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
             <button
               key={action}
               onClick={() => onAction(`${action} — ${match.title} at ${match.company}`)}
-              className="text-[10px] px-2.5 py-1 rounded-lg border border-white/10 text-[#8080a0] hover:border-[#5b4fff]/40 hover:text-white transition-colors focus-visible-ring"
+              className="text-[10px] px-2.5 py-1 rounded-lg border border-white/10 text-[#8080a0] hover:border-[#5b4fff]/40 hover:text-white transition-colors"
             >
               {action}
             </button>
@@ -201,7 +201,7 @@ function OptionButtons({ options, onAction }: { options: RicoOption[]; onAction:
         <button
           key={opt.action}
           onClick={() => onAction(opt.label)}
-          className="text-[12px] px-3 py-2 rounded-xl border border-[#5b4fff]/30 text-[#a78bfa] hover:bg-[#5b4fff]/10 hover:border-[#5b4fff]/60 transition-colors"
+          className="text-[12px] px-3 py-2 rounded-xl border border-[#5b4fff]/30 text-[#a78bfa] hover:bg-[#5b4fff]/10 hover:border-[#5b4fff]/60 transition-colors rico-focus-strong"
         >
           {opt.label}
         </button>
@@ -480,7 +480,7 @@ export default function ChatPage() {
                   key={qa.label}
                   onClick={() => sendMessage(qa.prompt)}
                   disabled={thinking || chatAudience === "checking"}
-                  className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-[#8080a0] transition-colors hover:border-[rgba(91,79,255,0.3)] hover:bg-white/[0.05] hover:text-[#eeeef5] disabled:opacity-50"
+                  className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-[#8080a0] transition-colors hover:border-[rgba(91,79,255,0.3)] hover:bg-white/[0.05] hover:text-[#eeeef5] disabled:opacity-50 rico-focus-strong"
                 >
                   {qa.label}
                 </button>
@@ -558,7 +558,7 @@ export default function ChatPage() {
               onClick={() => fileInputRef.current?.click()}
               disabled={thinking || chatAudience === "checking"}
               title="Upload your CV (PDF)"
-              className="w-10 h-10 rounded-xl border border-white/10 bg-[#13132a]/80 text-[#8080a0] flex items-center justify-center hover:border-[#5b4fff]/40 hover:text-white transition-all disabled:opacity-30 shrink-0"
+              className="w-10 h-10 rounded-xl border border-white/10 bg-[#13132a]/80 text-[#8080a0] flex items-center justify-center hover:border-[#5b4fff]/40 hover:text-white transition-all disabled:opacity-30 shrink-0 rico-focus-strong"
               aria-label="Upload CV"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -578,12 +578,12 @@ export default function ChatPage() {
                 placeholder={chatAudience === "checking"
                   ? "Checking your session…"
                   : "Ask Rico anything — jobs, CV, applications, interviews…"}
-                className="w-full resize-none bg-[#13132a]/80 border border-white/10 backdrop-blur-xl rounded-2xl py-3 pl-4 pr-12 text-sm text-white placeholder:text-[#5a5a7a] focus:outline-none focus:border-[#5b4fff]/50 transition-all shadow-2xl"
+                className="w-full resize-none bg-[#13132a]/80 border border-white/10 backdrop-blur-xl rounded-2xl py-3 pl-4 pr-12 text-sm text-white placeholder:text-[#5a5a7a] transition-all shadow-2xl"
               />
               <button
                 onClick={handleSend}
                 disabled={thinking || chatAudience === "checking" || !input.trim()}
-                className="absolute right-2 top-1.5 bottom-1.5 w-9 h-9 rounded-xl bg-[#5b4fff] text-white flex items-center justify-center hover:bg-[#4a3fdf] transition-all disabled:opacity-30 disabled:grayscale"
+                className="absolute right-2 top-1.5 bottom-1.5 w-9 h-9 rounded-xl bg-[#5b4fff] text-white flex items-center justify-center hover:bg-[#4a3fdf] transition-all disabled:opacity-30 disabled:grayscale rico-focus-strong"
                 aria-label={thinking ? "Sending…" : "Send"}
               >
                 {thinking ? (
