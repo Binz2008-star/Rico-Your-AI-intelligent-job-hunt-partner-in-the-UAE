@@ -14,6 +14,7 @@ from typing import Any, Dict, List
 from dataclasses import asdict, is_dataclass
 
 from src.rico_agent import RicoAgent
+from src.rico_match_explainer import build_match_explanation
 from src.rico_memory import RicoMemoryStore
 from src.rico_openai_agent import RicoOpenAIAgent
 from src.rico_repo_adapter import RicoSystem
@@ -98,6 +99,20 @@ class RicoChatAPI:
         if isinstance(value, str) and value.strip():
             return [value.strip()]
         return []
+
+    @staticmethod
+    def _format_match(m: Dict[str, Any], profile: Any) -> Dict[str, Any]:
+        """Return a backward-compatible chat match with v1 structured guidance."""
+        explanation = build_match_explanation(m, profile)
+        return {
+            "title": m.get("title"),
+            "company": m.get("company"),
+            "location": m.get("location"),
+            "score": m.get("rico_score"),
+            "why": m.get("rico_explanation"),
+            "actions": ["Prepare application", "Save", "Ask why", "Skip"],
+            **explanation,
+        }
 
     def _get_openai_agent(self) -> RicoOpenAIAgent:
         agent = getattr(self, "openai_agent", None)
@@ -217,7 +232,7 @@ class RicoChatAPI:
             "type": "cv_first_profile",
             "message": (
                 f"I received {filename}. I will use the CV-first profile flow: extract every available detail "
-                "from the CV, pre-fill the career profile, and only ask for missing or unclear fields. "
+                "from the CV, pre-fill the career profile, and only ask for anything missing or unclear. "
                 "I will not run the long manual question-by-question form."
             ),
             "next_action": "parse_cv_and_prefill_profile",
@@ -256,17 +271,7 @@ class RicoChatAPI:
 
         workflow_result = self.system.run_for_profile(profile)
         top_matches = workflow_result.get("matches", [])[:5]
-        formatted = [
-            {
-                "title": m.get("title"),
-                "company": m.get("company"),
-                "location": m.get("location"),
-                "score": m.get("rico_score"),
-                "why": m.get("rico_explanation"),
-                "actions": ["Apply", "Save", "Skip", "Why this?", "Draft", "Remind me"],
-            }
-            for m in top_matches
-        ]
+        formatted = [self._format_match(m, profile) for m in top_matches]
 
         skills = self._as_list(self._profile_value(profile, "skills"))[:8]
         years = self._profile_value(profile, "years_experience")
@@ -425,17 +430,7 @@ class RicoChatAPI:
         if routed.intent == "search_jobs":
             workflow_result = self.system.run_for_profile(profile)
             top_matches = workflow_result.get("matches", [])[:5]
-            formatted = [
-                {
-                    "title": m.get("title"),
-                    "company": m.get("company"),
-                    "location": m.get("location"),
-                    "score": m.get("rico_score"),
-                    "why": m.get("rico_explanation"),
-                    "actions": ["Apply", "Save", "Skip", "Why this?", "Draft", "Remind me"],
-                }
-                for m in top_matches
-            ]
+            formatted = [self._format_match(m, profile) for m in top_matches]
             response = {
                 "type": "job_matches",
                 "intent": "search_jobs",
