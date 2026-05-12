@@ -14,6 +14,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+
+def _reset_limiter() -> None:
+    from src.api.rate_limit import limiter
+    try:
+        limiter._storage.reset()
+    except Exception:
+        pass
 os.environ.setdefault("ADMIN_EMAIL",    "admin@test.com")
 os.environ.setdefault("ADMIN_PASSWORD", "TestPass123")
 os.environ.setdefault("JWT_SECRET",     "x" * 32)
@@ -186,37 +194,45 @@ class TestJWTRoleClaim:
 # ── require_admin dependency ──────────────────────────────────────────────────
 
 class TestRequireAdmin:
-    def test_admin_can_reach_register(self, admin_client):
+    def test_any_user_can_register(self, user_client):
+        """Register is now public — any caller (even authenticated) can create an account."""
+        _reset_limiter()
         with patch("src.repositories.users_repo.get_user_by_email", return_value=None), \
              patch("src.api.auth._hash_password", return_value="$2b$12$fakehash"), \
              patch("src.repositories.users_repo.create_user", return_value=User(
-                 id=99, email="new@rico.ai", password_hash="$2b$12$fakehash",
+                 id=5, email="new@rico.ai", password_hash="$2b$12$fakehash",
                  role="user", is_active=True,
                  created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
                  last_login_at=None,
              )):
-            r = admin_client.post("/api/v1/auth/register",
-                                  json={"email": "new@rico.ai", "password": "SecurePass1"})
+            r = user_client.post("/api/v1/auth/register",
+                                 json={"email": "new@rico.ai", "password": "SecurePass1"})
         assert r.status_code == 201
 
-    def test_non_admin_blocked_from_register(self, user_client):
-        r = user_client.post("/api/v1/auth/register",
-                             json={"email": "hacker@rico.ai", "password": "pass1234"})
-        assert r.status_code == 403
-
-    def test_unauthenticated_blocked_from_register(self):
+    def test_unauthenticated_can_register(self):
+        """Register is public — no JWT required."""
         from fastapi.testclient import TestClient
         from src.api.app import app
+        _reset_limiter()
         tc = TestClient(app, raise_server_exceptions=False)
-        r = tc.post("/api/v1/auth/register",
-                    json={"email": "anon@rico.ai", "password": "pass1234"})
-        assert r.status_code == 401
+        with patch("src.repositories.users_repo.get_user_by_email", return_value=None), \
+             patch("src.api.auth._hash_password", return_value="$2b$12$fakehash"), \
+             patch("src.repositories.users_repo.create_user", return_value=User(
+                 id=6, email="anon@rico.ai", password_hash="$2b$12$fakehash",
+                 role="user", is_active=True,
+                 created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                 last_login_at=None,
+             )):
+            r = tc.post("/api/v1/auth/register",
+                        json={"email": "anon@rico.ai", "password": "pass1234xx"})
+        assert r.status_code == 201
 
 
 # ── Register endpoint ─────────────────────────────────────────────────────────
 
 class TestRegisterEndpoint:
-    def test_register_returns_201_with_user_fields(self, admin_client):
+    def test_register_returns_201_with_user_fields(self, user_client):
+        _reset_limiter()
         created = User(
             id=10, email="newuser@rico.ai", password_hash="$2b$12$fakehash",
             role="user", is_active=True,
@@ -226,7 +242,7 @@ class TestRegisterEndpoint:
         with patch("src.repositories.users_repo.get_user_by_email", return_value=None), \
              patch("src.api.auth._hash_password", return_value="$2b$12$fakehash"), \
              patch("src.repositories.users_repo.create_user", return_value=created):
-            r = admin_client.post("/api/v1/auth/register",
+            r = user_client.post("/api/v1/auth/register",
                                   json={"email": "newuser@rico.ai", "password": "SecurePass1"})
         assert r.status_code == 201
         data = r.json()
@@ -235,12 +251,14 @@ class TestRegisterEndpoint:
         assert data["created"] is True
 
     def test_register_duplicate_returns_409(self, admin_client):
+        _reset_limiter()
         with patch("src.repositories.users_repo.get_user_by_email", return_value=_DB_USER):
             r = admin_client.post("/api/v1/auth/register",
                                   json={"email": "alice@rico.ai", "password": "SecurePass1"})
         assert r.status_code == 409
 
     def test_register_db_unavailable_returns_503(self, admin_client):
+        _reset_limiter()
         with patch("src.repositories.users_repo.get_user_by_email", return_value=None), \
              patch("src.api.auth._hash_password", return_value="$2b$12$fakehash"), \
              patch("src.repositories.users_repo.create_user", return_value=None):
@@ -249,14 +267,17 @@ class TestRegisterEndpoint:
         assert r.status_code == 503
 
     def test_register_short_password_returns_422(self, admin_client):
+        _reset_limiter()
         r = admin_client.post("/api/v1/auth/register",
                               json={"email": "weak@rico.ai", "password": "short"})
         assert r.status_code == 422
 
-    def test_register_admin_role(self, admin_client):
+    def test_register_role_forced_to_user(self, admin_client):
+        """Role in request body is ignored — always forced to user."""
+        _reset_limiter()
         created = User(
             id=11, email="newadmin@rico.ai", password_hash="$2b$12$fakehash",
-            role="admin", is_active=True,
+            role="user", is_active=True,
             created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
             last_login_at=None,
         )
@@ -267,7 +288,7 @@ class TestRegisterEndpoint:
                                   json={"email": "newadmin@rico.ai",
                                         "password": "SecurePass1", "role": "admin"})
         assert r.status_code == 201
-        assert r.json()["role"] == "admin"
+        assert r.json()["role"] == "user"  # always forced to user, never admin
 
 
 # ── users_repo unit tests ─────────────────────────────────────────────────────
