@@ -232,6 +232,8 @@ def _build_client(provider: str):
         kwargs["api_key"] = api_key
     if provider == "deepseek":
         kwargs["base_url"] = DEEPSEEK_BASE_URL
+    # Disable SDK retries for chat requests - handle 429 explicitly instead
+    kwargs["max_retries"] = 0
     return OpenAI(**kwargs)
 
 

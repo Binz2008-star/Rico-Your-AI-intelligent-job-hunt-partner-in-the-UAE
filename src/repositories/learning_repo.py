@@ -25,7 +25,8 @@ from pathlib import Path
 # Core dependencies
 try:
     import spacy
-    from skillner.skill_extractor_class import SkillExtractor
+    from spacy.matcher import PhraseMatcher
+    from skillner.skill_extractor_class import SkillExtractor, SKILL_DB
     SKILLNER_AVAILABLE = True
 except ImportError:
     SKILLNER_AVAILABLE = False
@@ -54,8 +55,6 @@ def _init_nlp():
     if _nlp is None and SKILLNER_AVAILABLE:
         try:
             _nlp = spacy.load("en_core_web_sm")
-            # Load SKILL_DB from package or custom path
-            from skillner.skill_extractor_class import SKILL_DB
             _skill_extractor = SkillExtractor(_nlp, SKILL_DB, PhraseMatcher)
             logger.info("Skill extraction initialized")
         except Exception as e:
