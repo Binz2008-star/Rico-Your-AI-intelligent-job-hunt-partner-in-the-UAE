@@ -8,12 +8,22 @@ triggers workflows, and responds with autonomous actions.
 from __future__ import annotations
 
 import json
+import logging
 import re
-from typing import Any, Dict, List
-
 from dataclasses import asdict, is_dataclass
+from typing import Any
 
+# Standard library imports first
+# Third-party imports (none currently)
+# Local imports
+from src.agent.intelligence.normalizer import normalize_role
+from src.agent.intelligence.recommender import recommend_adjacent_roles
+from src.agent.intelligence.scorer import score_profile_fit
+from src.agent.runtime import agent_runtime
+from src.models.onboarding import ONBOARDING_IN_PROGRESS
 from src.rico_agent import RicoAgent
+from src.rico_hf_client import generate_text, is_available as hf_ok
+from src.rico_intent_router import route as _route
 from src.rico_match_explainer import build_match_explanation
 from src.rico_memory import RicoMemoryStore
 from src.rico_openai_agent import RicoOpenAIAgent
@@ -24,13 +34,29 @@ from src.repositories.onboarding_repo import (
     set_onboarding_status,
 )
 from src.repositories.profile_repo import get_profile, upsert_profile
-from src.models.onboarding import ONBOARDING_IN_PROGRESS
+
+logger = logging.getLogger(__name__)
 
 
 CV_FILE_RE = re.compile(r"\b[\w .()_-]+\.(?:pdf|docx?|txt)\b", re.IGNORECASE)
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PHONE_RE = re.compile(r"(?:\+?\d[\d\s().-]{7,}\d)")
 BARE_ROLE_RE = re.compile(r"^[A-Za-z][A-Za-z\s/&+-]{2,80}$")
+
+
+def profile_to_dict(profile: Any) -> dict[str, Any]:
+    """Normalize profile to dict, handling dataclass, dict, and object types."""
+    if profile is None:
+        return {}
+    if is_dataclass(profile):
+        return {k: v for k, v in asdict(profile).items() if v not in (None, "", [], {})}
+    if isinstance(profile, dict):
+        return {k: v for k, v in profile.items() if v not in (None, "", [], {})}
+    return {
+        k: getattr(profile, k)
+        for k in dir(profile)
+        if not k.startswith("_") and getattr(profile, k, None) not in (None, "", [], {})
+    }
 
 
 class RicoChatAPI:
@@ -42,8 +68,14 @@ class RicoChatAPI:
         self.system = RicoSystem()
         self.openai_agent = RicoOpenAIAgent()
 
+    def _append_chat(self, user_id: str, role: str, message: str | dict[str, Any]) -> None:
+        """Append chat message to memory, handling both string and dict messages."""
+        payload = json.dumps(message) if isinstance(message, dict) else message
+        self.memory.append_chat_message(user_id, role, payload)
+
     @staticmethod
-    def _build_openai_context(profile: Any) -> Dict[str, Any]:
+    def _build_openai_context(profile: Any) -> dict[str, Any]:
+        """Build context for OpenAI agent from profile."""
         if profile is None:
             return {"profile_exists": False}
         if is_dataclass(profile):
@@ -59,6 +91,7 @@ class RicoChatAPI:
 
     @staticmethod
     def _profile_value(profile: Any, key: str, default: Any = None) -> Any:
+        """Get value from profile, handling dict and object types."""
         if profile is None:
             return default
         if isinstance(profile, dict):
@@ -67,6 +100,7 @@ class RicoChatAPI:
 
     @staticmethod
     def _has_cv_profile(profile: Any) -> bool:
+        """Check if profile has CV data."""
         if profile is None:
             return False
         return bool(
@@ -78,6 +112,7 @@ class RicoChatAPI:
 
     @staticmethod
     def _looks_like_bare_target_role(message: str) -> bool:
+        """Check if message looks like a bare target role."""
         text = (message or "").strip()
         if not text or len(text.split()) > 6:
             return False
@@ -89,7 +124,8 @@ class RicoChatAPI:
         return bool(BARE_ROLE_RE.match(text))
 
     @staticmethod
-    def _as_list(value: Any) -> List[Any]:
+    def _as_list(value: Any) -> list[Any]:
+        """Convert value to list if not already."""
         if value is None:
             return []
         if isinstance(value, list):
@@ -101,7 +137,7 @@ class RicoChatAPI:
         return []
 
     @staticmethod
-    def _format_match(m: Dict[str, Any], profile: Any) -> Dict[str, Any]:
+    def _format_match(m: dict[str, Any], profile: Any) -> dict[str, Any]:
         """Return a backward-compatible chat match with v1 structured guidance."""
         explanation = build_match_explanation(m, profile)
         return {
@@ -115,6 +151,7 @@ class RicoChatAPI:
         }
 
     def _get_openai_agent(self) -> RicoOpenAIAgent:
+        """Get or create OpenAI agent instance."""
         agent = getattr(self, "openai_agent", None)
         if agent is None:
             agent = RicoOpenAIAgent()
@@ -129,7 +166,8 @@ class RicoChatAPI:
     SOURCE_RATE_LIMITED = "rate_limited"
 
     @staticmethod
-    def _source_for_openai_response(response: Dict[str, Any]) -> str:
+    def _source_for_openai_response(response: dict[str, Any]) -> str:
+        """Determine source type from response metadata."""
         rtype = response.get("type")
         if rtype == "openai_response":
             return RicoChatAPI.SOURCE_OPENAI
@@ -146,6 +184,7 @@ class RicoChatAPI:
 
     @staticmethod
     def _bool_attr(agent: Any, name: str, *, fallback: str | None = None) -> bool:
+        """Get boolean attribute from agent with optional fallback."""
         value = getattr(agent, name, None)
         if isinstance(value, bool):
             return value
@@ -157,11 +196,12 @@ class RicoChatAPI:
 
     def _finalize(
         self,
-        response: Dict[str, Any],
+        response: dict[str, Any],
         source: str,
         *,
         profile: Any = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
+        """Finalize response with metadata."""
         agent = self._get_openai_agent()
         return {
             **response,
@@ -193,8 +233,9 @@ class RicoChatAPI:
             ]
         )
 
-    def _extract_inline_contact_updates(self, message: str) -> Dict[str, Any]:
-        updates: Dict[str, Any] = {}
+    def _extract_inline_contact_updates(self, message: str) -> dict[str, Any]:
+        """Extract email and phone from message."""
+        updates: dict[str, Any] = {}
         emails = EMAIL_RE.findall(message)
         phones = PHONE_RE.findall(message)
         if emails:
@@ -203,7 +244,8 @@ class RicoChatAPI:
             updates["phone"] = phones[0].strip()
         return updates
 
-    def _cv_first_profile_response(self, user_id: str, message: str) -> Dict[str, Any]:
+    def _cv_first_profile_response(self, user_id: str, message: str) -> dict[str, Any]:
+        """Handle CV-first profile creation response."""
         filename_match = CV_FILE_RE.search(message)
         filename = filename_match.group(0).strip() if filename_match else "uploaded CV"
         updates = {
@@ -242,7 +284,7 @@ class RicoChatAPI:
                 "After extraction, show the profile summary and ask: save this profile, or edit a field?"
             ),
         }
-        self.memory.append_chat_message(user_id, "assistant", json.dumps(response))
+        self._append_chat(user_id, "assistant", response)
         return response
 
     _WHATS_NEXT_PHRASES = frozenset([
@@ -263,116 +305,123 @@ class RicoChatAPI:
         ],
     }
 
-    def _target_role_search_response(self, user_id: str, role: str, profile: Any) -> Dict[str, Any]:
+    def _target_role_search_response(self, user_id: str, role: str, profile: Any) -> dict[str, Any]:
+        """Handle target role search with role intelligence integration."""
         try:
-            # Use hardened role normalizer
-            from src.agent.intelligence.normalizer import normalize_role
             normalized_role = normalize_role(role)
+        except Exception as e:
+            logger.warning(f"Role normalization failed for '{role}': {e}")
+            normalized_role = role
 
-            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
-            if normalized_role and normalized_role.lower() not in {str(item).lower() for item in target_roles}:
-                target_roles.append(normalized_role)
-                profile = upsert_profile(user_id=user_id, updates={"target_roles": target_roles})
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        if normalized_role and normalized_role.lower() not in {str(item).lower() for item in target_roles}:
+            target_roles.append(normalized_role)
+            profile = upsert_profile(user_id=user_id, updates={"target_roles": target_roles})
 
-            workflow_result = self.system.run_for_profile(profile)
-            top_matches = workflow_result.get("matches", [])[:5]
-            formatted = [self._format_match(m, profile) for m in top_matches]
+        workflow_result = self.system.run_for_profile(profile)
+        top_matches = workflow_result.get("matches", [])[:5]
+        formatted = [self._format_match(m, profile) for m in top_matches]
 
-            skills = self._as_list(self._profile_value(profile, "skills"))[:8]
-            years = self._profile_value(profile, "years_experience")
-            cities = self._as_list(self._profile_value(profile, "preferred_cities"))
-            city_text = f" in {', '.join(map(str, cities[:2]))}" if cities else " in the UAE"
-            basis = []
-            if years:
-                basis.append(f"~{years} years experience")
-            if skills:
-                basis.append("skills: " + ", ".join(map(str, skills[:6])))
-            basis_text = " using your CV profile" + (f" ({'; '.join(basis)})" if basis else "")
+        skills = self._as_list(self._profile_value(profile, "skills"))[:8]
+        years = self._profile_value(profile, "years_experience")
+        cities = self._as_list(self._profile_value(profile, "preferred_cities"))
+        city_text = f" in {', '.join(map(str, cities[:2]))}" if cities else " in the UAE"
+        basis = []
+        if years:
+            basis.append(f"~{years} years experience")
+        if skills:
+            basis.append("skills: " + ", ".join(map(str, skills[:6])))
+        basis_text = " using your CV profile" + (f" ({'; '.join(basis)})" if basis else "")
 
-            # Use hardened role intelligence for fit scoring and recommendations
-            from src.agent.intelligence.scorer import score_profile_fit
-            from src.agent.intelligence.recommender import recommend_adjacent_roles
+        role_intelligence_data = self._enrich_with_role_intelligence(
+            user_id, normalized_role, profile, skills, years, cities
+        )
+
+        message = self._build_role_search_message(
+            normalized_role, city_text, basis_text, top_matches, role_intelligence_data
+        )
+
+        response = {
+            "type": "job_matches",
+            "intent": "search_jobs",
+            "message": message,
+            "matches": formatted,
+            "entities": {"job_title": normalized_role, "from_cv_profile": True},
+        }
+
+        if role_intelligence_data:
+            response["role_intelligence"] = role_intelligence_data
+
+        self._append_chat(user_id, "assistant", response)
+        return response
+
+    def _enrich_with_role_intelligence(
+        self,
+        user_id: str,
+        normalized_role: str,
+        profile: Any,
+        skills: list[Any],
+        years: Any,
+        cities: list[Any],
+    ) -> dict[str, Any] | None:
+        """Enrich response with role intelligence data."""
+        try:
             from src.rico_agent import RicoProfile
 
-            # Convert profile to RicoProfile if needed
-            try:
-                rico_profile = RicoProfile(
-                    user_id=user_id,
-                    skills=skills or [],
-                    years_experience=years,
-                    preferred_cities=cities or [],
-                    industries=self._as_list(self._profile_value(profile, "industries")) or []
-                )
+            rico_profile = RicoProfile(
+                user_id=user_id,
+                skills=skills or [],
+                years_experience=years,
+                preferred_cities=cities or [],
+                industries=self._as_list(self._profile_value(profile, "industries")) or []
+            )
 
-                # Score profile fit
-                fit_score = score_profile_fit(rico_profile, normalized_role)
+            fit_score = score_profile_fit(rico_profile, normalized_role)
 
-                # Get adjacent role recommendations if fit is weak
-                adjacent_roles = []
-                if fit_score.overall_score < 0.6:
-                    adjacent_roles = recommend_adjacent_roles(rico_profile, normalized_role, limit=3)
+            adjacent_roles = []
+            if fit_score.overall_score < 0.6:
+                adjacent_roles = recommend_adjacent_roles(rico_profile, normalized_role, limit=3)
 
-                # Build response with role intelligence data
-                message = (
-                    f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
-                    f"I found {len(top_matches)} current strong matches."
-                    if top_matches
-                    else f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
-                )
+            if not adjacent_roles:
+                return None
 
-                # Add adjacent role recommendations if available
-                if adjacent_roles and fit_score.overall_score < 0.6:
-                    role_names = [r.canonical_role for r in adjacent_roles[:3]]
-                    message += f" Your CV is also strong for {', '.join(role_names)} roles. I'll search those too if needed."
-                elif not top_matches:
-                    message += " I did not find strong matches yet, so I will keep scanning and use this profile for future matches."
-
-                response = {
-                    "type": "job_matches",
-                    "intent": "search_jobs",
-                    "message": message,
-                    "matches": formatted,
-                    "entities": {"job_title": normalized_role, "from_cv_profile": True},
-                    "role_intelligence": {
-                        "normalized_role": normalized_role,
-                        "fit_score": fit_score.overall_score,
-                        "adjacent_roles": [{"role": r.canonical_role, "similarity": r.similarity_score, "reason": r.reason} for r in adjacent_roles]
-                    } if adjacent_roles else None
-                }
-            except Exception as e:
-                # Fallback to original behavior if role intelligence fails
-                import logging
-                logging.warning(f"Role intelligence integration failed: {e}")
-                message = (
-                    f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
-                    f"I found {len(top_matches)} current strong matches."
-                    if top_matches
-                    else f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. I did not find strong matches yet, so I will keep scanning and use this profile for future matches."
-                )
-                response = {
-                    "type": "job_matches",
-                    "intent": "search_jobs",
-                    "message": message,
-                    "matches": formatted,
-                    "entities": {"job_title": normalized_role, "from_cv_profile": True},
-                }
-
-            self.memory.append_chat_message(user_id, "assistant", json.dumps(response))
-            return response
-        except Exception as e:
-            import logging
-            logging.error(f"Target role search response failed: {e}")
-            # Return basic response on error
             return {
-                "type": "job_matches",
-                "intent": "search_jobs",
-                "message": f"I'll search for {role} roles.",
-                "matches": [],
-                "entities": {"job_title": role, "from_cv_profile": True},
+                "normalized_role": normalized_role,
+                "fit_score": fit_score.overall_score,
+                "adjacent_roles": [
+                    {"role": r.canonical_role, "similarity": r.similarity_score, "reason": r.reason}
+                    for r in adjacent_roles
+                ]
             }
+        except Exception as e:
+            logger.warning(f"Role intelligence enrichment failed: {e}")
+            return None
 
-    def process_message(self, user_id: str, message: str) -> Dict[str, Any]:
-        self.memory.append_chat_message(user_id, "user", message)
+    def _build_role_search_message(
+        self,
+        normalized_role: str,
+        city_text: str,
+        basis_text: str,
+        top_matches: list[Any],
+        role_intelligence_data: dict[str, Any] | None,
+    ) -> str:
+        """Build message for role search response."""
+        if top_matches:
+            base_message = f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. I found {len(top_matches)} current strong matches."
+        else:
+            base_message = f"Got it — I will target {normalized_role} roles{city_text}{basis_text}."
+
+        if role_intelligence_data and role_intelligence_data.get("fit_score", 1.0) < 0.6:
+            adjacent = role_intelligence_data.get("adjacent_roles", [])
+            role_names = [r["role"] for r in adjacent[:3]]
+            base_message += f" Your CV is also strong for {', '.join(role_names)} roles. I'll search those too if needed."
+        elif not top_matches:
+            base_message += " I did not find strong matches yet, so I will keep scanning and use this profile for future matches."
+
+        return base_message
+
+    def process_message(self, user_id: str, message: str) -> dict[str, Any]:
+        self._append_chat(user_id, "user", message)
         completed = is_onboarding_complete(user_id)
 
         if completed:
@@ -398,22 +447,20 @@ class RicoChatAPI:
                     "the profile and only ask for anything missing or unclear."
                 ),
             }
-            self.memory.append_chat_message(user_id, "assistant", response["message"])
+            self._append_chat(user_id, "assistant", response["message"])
             return self._finalize(response, self.SOURCE_KEYWORD, profile=None)
 
         mark_onboarding_complete(user_id)
         return self._handle_active_user(user_id, message)
 
-    def _handle_active_user(self, user_id: str, message: str) -> Dict[str, Any]:
+    def _handle_active_user(self, user_id: str, message: str) -> dict[str, Any]:
         profile = get_profile(user_id)
         lower = message.lower()
 
         # ── Always-on fast paths (before router) ──────────────────────────────
 
         if any(phrase in lower for phrase in self._WHATS_NEXT_PHRASES):
-            self.memory.append_chat_message(
-                user_id, "assistant", json.dumps(self._JOB_SEARCH_OPTIONS)
-            )
+            self._append_chat(user_id, "assistant", self._JOB_SEARCH_OPTIONS)
             return self._finalize(self._JOB_SEARCH_OPTIONS, self.SOURCE_KEYWORD, profile=profile)
 
         if any(phrase in lower for phrase in ["skip this question", "don't know", "do not know"]):
@@ -425,7 +472,7 @@ class RicoChatAPI:
                 ),
                 "field_status": "skipped",
             }
-            self.memory.append_chat_message(user_id, "assistant", response["message"])
+            self._append_chat(user_id, "assistant", response["message"])
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         if any(phrase in lower for phrase in ["extract", "from the cv", "take it from", "use my cv", "use the cv"]):
@@ -452,14 +499,11 @@ class RicoChatAPI:
         # ── Intent router ─────────────────────────────────────────────────────
 
         context = self._build_router_context(user_id, profile)
-        from src.rico_intent_router import route as _route
         routed = _route(message, user_id=user_id, context=context)
 
         # Help / menu
         if routed.intent == "help":
-            self.memory.append_chat_message(
-                user_id, "assistant", json.dumps(self._JOB_SEARCH_OPTIONS)
-            )
+            self._append_chat(user_id, "assistant", self._JOB_SEARCH_OPTIONS)
             return self._finalize(self._JOB_SEARCH_OPTIONS, self.SOURCE_KEYWORD, profile=profile)
 
         # apply_job: gate on explicit confirmation before touching agent_runtime
@@ -473,13 +517,12 @@ class RicoChatAPI:
                 ),
                 "tool_args": routed.tool_args,
             }
-            self.memory.append_chat_message(user_id, "assistant", response["message"])
+            self._append_chat(user_id, "assistant", response["message"])
             return self._finalize(response, routed.source, profile=profile)
 
         # Tool-executable intents: delegate to agent_runtime
         if routed.tool_name and routed.intent not in {"search_jobs", "update_preferences", "prepare_interview", "unknown"}:
             job_key = routed.tool_args.get("job_key", "")
-            from src.agent.runtime import agent_runtime
             result = agent_runtime.handle_action(
                 user_id=user_id,
                 action=routed.intent.replace("_job", "").replace("_message", ""),
@@ -493,7 +536,7 @@ class RicoChatAPI:
                 "entities": routed.entities,
                 "confidence": routed.confidence,
             }
-            self.memory.append_chat_message(user_id, "assistant", result.message)
+            self._append_chat(user_id, "assistant", result.message)
             return self._finalize(response, routed.source, profile=profile)
 
         # search_jobs: run workflow with extracted entities
@@ -508,7 +551,7 @@ class RicoChatAPI:
                 "matches": formatted,
                 "entities": routed.entities,
             }
-            self.memory.append_chat_message(user_id, "assistant", json.dumps(response))
+            self._append_chat(user_id, "assistant", response)
             return self._finalize(response, routed.source, profile=profile)
 
         # update_preferences: apply extracted entities to profile
@@ -521,7 +564,7 @@ class RicoChatAPI:
                 "message": "Got it. I have updated your preferences and will apply them to future searches.",
                 "updated": prefs,
             }
-            self.memory.append_chat_message(user_id, "assistant", response["message"])
+            self._append_chat(user_id, "assistant", response["message"])
             return self._finalize(response, routed.source, profile=profile)
 
         # prepare_interview: use HF for richer content
@@ -531,7 +574,6 @@ class RicoChatAPI:
                 "You are Rico, a UAE career coach. Give concise, practical interview preparation "
                 "tips including likely questions, company research pointers, and answer frameworks."
             )
-            from src.rico_hf_client import generate_text, is_available as hf_ok
             hf_text = None
             if hf_ok():
                 hf_text = generate_text(message, system=system_prompt, max_new_tokens=400)
@@ -540,7 +582,7 @@ class RicoChatAPI:
                 "Share the specific job title or company name for a more tailored response."
             )
             response = {"type": "interview_prep", "message": msg}
-            self.memory.append_chat_message(user_id, "assistant", msg)
+            self._append_chat(user_id, "assistant", msg)
             src = self.SOURCE_HF if hf_text else self.SOURCE_FALLBACK
             return self._finalize(response, src, profile=profile)
 
@@ -572,10 +614,10 @@ class RicoChatAPI:
         # Post-process AI response to remove any blocked questions that slipped through
         ai_response["message"] = self._remove_blocked_questions(ai_response.get("message", ""), blocked_questions)
 
-        self.memory.append_chat_message(user_id, "assistant", ai_response.get("message", ""))
+        self._append_chat(user_id, "assistant", ai_response.get("message", ""))
         return self._finalize(ai_response, self._source_for_openai_response(ai_response), profile=profile)
 
-    def _get_blocked_questions(self, profile: Any) -> List[str]:
+    def _get_blocked_questions(self, profile: Any) -> list[str]:
         """Return list of question types that should not be asked based on profile data."""
         blocked = []
         if profile is None:
@@ -595,7 +637,7 @@ class RicoChatAPI:
 
         return blocked
 
-    def _remove_blocked_questions(self, response: str, blocked_questions: List[str]) -> str:
+    def _remove_blocked_questions(self, response: str, blocked_questions: list[str]) -> str:
         """Remove blocked question patterns from AI response."""
         if not response or not blocked_questions:
             return response
@@ -639,17 +681,17 @@ class RicoChatAPI:
         ctx: dict = {}
         if profile:
             try:
-                from dataclasses import asdict, is_dataclass
                 ctx["profile"] = asdict(profile) if is_dataclass(profile) else dict(profile)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to build router context: {e}")
         return ctx
 
 
 def demo() -> None:
+    """Demo function for testing the chat API."""
     api = RicoChatAPI()
 
-    messages: List[str] = [
+    messages: list[str] = [
         "Roben_Edwan_CV.pdf here u go",
         "take it from the c.v!",
         "Please skip this question.",
