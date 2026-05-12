@@ -30,3 +30,5 @@ openai>=1.0.0
 # CVE-2025-69872: cache data is internally generated (not from untrusted sources),
 # which mitigates the deserialization risk. Upgrade when a patched release is available.
 diskcache>=5.6.3
+# rapidfuzz for fuzzy string matching in role intelligence scoring
+rapidfuzz>=2.0.0
