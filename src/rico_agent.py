@@ -52,6 +52,10 @@ class RicoProfile:
     deal_breakers: List[str] = field(default_factory=list)
     green_flags: List[str] = field(default_factory=list)
     red_flags: List[str] = field(default_factory=list)
+    cv_filename: Optional[str] = None
+    cv_status: Optional[str] = None
+    profile_creation_mode: Optional[str] = None
+    manual_profile_wizard_disabled: bool = False
     settings: RicoAgentSettings = field(default_factory=RicoAgentSettings)
 
 
