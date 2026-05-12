@@ -192,3 +192,287 @@ def get_recent(limit: int = 20) -> list:
         return []
     finally:
         conn.close()
+
+
+# ── Learning signal logging ─────────────────────────────────────────────────────
+
+def log_learning_signal(
+    canonical_user_id: str,
+    signal_type: str,
+    signal_value: str,
+    signal_weight: float,
+    source: str,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> None:
+    """
+    Log a learning signal event.
+
+    Learning signals are behavioral cues extracted from user actions.
+    """
+    if is_db_available():
+        _db_write_learning_signal(canonical_user_id, signal_type, signal_value, signal_weight, source, metadata)
+    else:
+        logger.info(
+            "learning_signal user=%s type=%s value=%s weight=%.2f source=%s",
+            canonical_user_id, signal_type, signal_value, signal_weight, source,
+        )
+
+
+def _db_write_learning_signal(
+    canonical_user_id: str,
+    signal_type: str,
+    signal_value: str,
+    signal_weight: float,
+    source: str,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Write learning signal to database."""
+    conn = get_db_connection()
+    if not conn:
+        return
+
+    try:
+        with conn.cursor() as cur:
+            # Check if table exists
+            cur.execute(
+                """
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                    AND table_name = 'learning_signals_audit'
+                )
+                """
+            )
+            table_exists = cur.fetchone()[0]
+
+            if not table_exists:
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS learning_signals_audit (
+                        id SERIAL PRIMARY KEY,
+                        canonical_user_id VARCHAR(255) NOT NULL,
+                        signal_type VARCHAR(100) NOT NULL,
+                        signal_value TEXT NOT NULL,
+                        signal_weight FLOAT NOT NULL,
+                        source VARCHAR(50) NOT NULL,
+                        metadata JSONB,
+                        timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    )
+                    """
+                )
+                cur.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_learning_signals_audit_user
+                    ON learning_signals_audit(canonical_user_id, timestamp)
+                    """
+                )
+                conn.commit()
+
+            # Insert signal
+            import json
+            cur.execute(
+                """
+                INSERT INTO learning_signals_audit
+                (canonical_user_id, signal_type, signal_value, signal_weight, source, metadata)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    canonical_user_id,
+                    signal_type,
+                    signal_value,
+                    signal_weight,
+                    source,
+                    json.dumps(metadata) if metadata else None,
+                ),
+            )
+            conn.commit()
+
+        logger.info(
+            "learning_signal_logged user=%s type=%s value=%s weight=%.2f",
+            canonical_user_id, signal_type, signal_value, signal_weight,
+        )
+    except Exception:
+        logger.exception("learning_signal_db_write_failed user=%s type=%s", canonical_user_id, signal_type)
+    finally:
+        conn.close()
+
+
+# ── Profile hydration logging ───────────────────────────────────────────────────
+
+def log_profile_hydration(
+    canonical_user_id: str,
+    hydration_sources: List[str],
+    completeness_before: float,
+    completeness_after: float,
+) -> None:
+    """
+    Log a profile hydration event.
+
+    Tracks when and how user profiles are enriched from various sources.
+    """
+    if is_db_available():
+        _db_write_profile_hydration(canonical_user_id, hydration_sources, completeness_before, completeness_after)
+    else:
+        logger.info(
+            "profile_hydration user=%s sources=%s completeness_before=%.2f completeness_after=%.2f",
+            canonical_user_id, hydration_sources, completeness_before, completeness_after,
+        )
+
+
+def _db_write_profile_hydration(
+    canonical_user_id: str,
+    hydration_sources: List[str],
+    completeness_before: float,
+    completeness_after: float,
+) -> None:
+    """Write profile hydration event to database."""
+    conn = get_db_connection()
+    if not conn:
+        return
+
+    try:
+        with conn.cursor() as cur:
+            # Check if table exists
+            cur.execute(
+                """
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                    AND table_name = 'profile_hydration_audit'
+                )
+                """
+            )
+            table_exists = cur.fetchone()[0]
+
+            if not table_exists:
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS profile_hydration_audit (
+                        id SERIAL PRIMARY KEY,
+                        canonical_user_id VARCHAR(255) NOT NULL,
+                        hydration_sources TEXT[] NOT NULL,
+                        completeness_before FLOAT NOT NULL,
+                        completeness_after FLOAT NOT NULL,
+                        timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    )
+                    """
+                )
+                cur.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_profile_hydration_audit_user
+                    ON profile_hydration_audit(canonical_user_id, timestamp)
+                    """
+                )
+                conn.commit()
+
+            # Insert hydration event
+            cur.execute(
+                """
+                INSERT INTO profile_hydration_audit
+                (canonical_user_id, hydration_sources, completeness_before, completeness_after)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (canonical_user_id, hydration_sources, completeness_before, completeness_after),
+            )
+            conn.commit()
+
+        logger.info(
+            "profile_hydration_logged user=%s sources=%s completeness_before=%.2f completeness_after=%.2f",
+            canonical_user_id, hydration_sources, completeness_before, completeness_after,
+        )
+    except Exception:
+        logger.exception("profile_hydration_db_write_failed user=%s", canonical_user_id)
+    finally:
+        conn.close()
+
+
+# ── Permission check logging ────────────────────────────────────────────────────
+
+def log_permission_check(
+    canonical_user_id: str,
+    intent: str,
+    permission_level: str,
+    allowed: bool,
+    requires_confirmation: bool = False,
+) -> None:
+    """
+    Log a permission check event.
+
+    Tracks when high-impact actions are checked for permissions.
+    """
+    if is_db_available():
+        _db_write_permission_check(canonical_user_id, intent, permission_level, allowed, requires_confirmation)
+    else:
+        logger.info(
+            "permission_check user=%s intent=%s level=%s allowed=%s requires_confirmation=%s",
+            canonical_user_id, intent, permission_level, allowed, requires_confirmation,
+        )
+
+
+def _db_write_permission_check(
+    canonical_user_id: str,
+    intent: str,
+    permission_level: str,
+    allowed: bool,
+    requires_confirmation: bool,
+) -> None:
+    """Write permission check to database."""
+    conn = get_db_connection()
+    if not conn:
+        return
+
+    try:
+        with conn.cursor() as cur:
+            # Check if table exists
+            cur.execute(
+                """
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                    AND table_name = 'permission_check_audit'
+                )
+                """
+            )
+            table_exists = cur.fetchone()[0]
+
+            if not table_exists:
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS permission_check_audit (
+                        id SERIAL PRIMARY KEY,
+                        canonical_user_id VARCHAR(255) NOT NULL,
+                        intent VARCHAR(100) NOT NULL,
+                        permission_level VARCHAR(50) NOT NULL,
+                        allowed BOOLEAN NOT NULL,
+                        requires_confirmation BOOLEAN NOT NULL,
+                        timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    )
+                    """
+                )
+                cur.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_permission_check_audit_user
+                    ON permission_check_audit(canonical_user_id, timestamp)
+                    """
+                )
+                conn.commit()
+
+            # Insert permission check
+            cur.execute(
+                """
+                INSERT INTO permission_check_audit
+                (canonical_user_id, intent, permission_level, allowed, requires_confirmation)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (canonical_user_id, intent, permission_level, allowed, requires_confirmation),
+            )
+            conn.commit()
+
+        logger.info(
+            "permission_check_logged user=%s intent=%s level=%s allowed=%s",
+            canonical_user_id, intent, permission_level, allowed,
+        )
+    except Exception:
+        logger.exception("permission_check_db_write_failed user=%s intent=%s", canonical_user_id, intent)
+    finally:
+        conn.close()
