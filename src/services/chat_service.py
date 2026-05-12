@@ -7,9 +7,11 @@ via deferred imports to avoid eager loading of heavy dependencies.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
+_UTC = timezone.utc
 
 # ── Jotform field normalisation ───────────────────────────────────────────────
 # Maps raw Jotform label strings (as sent by the form or the Agent "Send API
@@ -192,3 +194,39 @@ def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
             "status": "accepted",
             "message": "Webhook received, profile processing pending",
         }
+
+
+def get_chat_history(user_id: str, limit: int = 50, before: datetime | None = None) -> list[Dict[str, Any]]:
+    """
+    Get conversation history for a user with pagination support.
+
+    Args:
+        user_id: User identifier
+        limit: Maximum number of messages to return (default: 50)
+        before: Optional timestamp for pagination (fetch messages before this time)
+
+    Returns:
+        List of message dictionaries with role, content, and timestamp
+    """
+    from src.rico_chat_api import RicoChatAPI
+    api = RicoChatAPI()
+
+    # Get messages from memory
+    messages = api.memory.get_chat_messages(user_id, limit=limit)
+
+    # Filter by 'before' timestamp if provided
+    if before:
+        messages = [
+            m for m in messages
+            if hasattr(m, 'timestamp') and m.timestamp < before
+        ]
+
+    # Convert to dict format
+    return [
+        {
+            "role": m.role,
+            "content": m.content,
+            "timestamp": m.timestamp.isoformat() if hasattr(m, 'timestamp') else None,
+        }
+        for m in messages
+    ]
