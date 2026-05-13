@@ -622,6 +622,8 @@ export interface JobMatch {
 export interface RicoOption {
   action: string;
   label: string;
+  message?: string;
+  role?: string;
 }
 
 export interface NextAction {
