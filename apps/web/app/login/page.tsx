@@ -26,7 +26,12 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      await login(email, password);
+      const publicUserId = typeof window !== "undefined" ? localStorage.getItem("rico_public_uid") : null;
+      await login(email, password, publicUserId);
+      // Clear stored public ID after successful auth merge
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("rico_public_uid");
+      }
       router.push(nextPath);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");

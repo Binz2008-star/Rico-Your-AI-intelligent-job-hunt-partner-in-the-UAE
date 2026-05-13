@@ -128,9 +128,10 @@ export interface MeResponse {
   authenticated: boolean;
 }
 
-export async function fetchMe(): Promise<MeResponse> {
+export async function fetchMe(signal?: AbortSignal): Promise<MeResponse> {
   const res = await fetch(`${PROXY}/api/v1/me`, {
     credentials: "include",
+    signal,
   });
   if (!res.ok) throw new Error(`/me failed: ${res.status}`);
   return res.json() as Promise<MeResponse>;
@@ -143,13 +144,18 @@ export interface LoginResponse {
 
 export async function login(
   email: string,
-  password: string
+  password: string,
+  publicUserIdToMerge?: string | null
 ): Promise<LoginResponse> {
+  const body: Record<string, unknown> = { email, password };
+  if (publicUserIdToMerge) {
+    body.public_user_id_to_merge = publicUserIdToMerge;
+  }
   const res = await fetch(`${PROXY}/api/v1/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { detail?: string };
@@ -718,12 +724,20 @@ export async function submitOnboarding(
 
 // ── Auth: register ────────────────────────────────────────────────────────────
 
-export async function register(email: string, password: string): Promise<{ email: string; role: string }> {
+export async function register(
+  email: string,
+  password: string,
+  publicUserIdToMerge?: string | null
+): Promise<{ email: string; role: string }> {
+  const body: Record<string, unknown> = { email, password };
+  if (publicUserIdToMerge) {
+    body.public_user_id_to_merge = publicUserIdToMerge;
+  }
   const res = await fetch(`${PROXY}/api/v1/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { detail?: string };

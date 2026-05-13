@@ -127,7 +127,7 @@ _ROLE_CHANGE_RE = re.compile(
 )
 
 _JOB_SEARCH_EXPLICIT_RE = re.compile(
-    r"\b(find|search|show|get|look for|looking for|any)\b.{0,60}"
+    r"\b(find|search|show|get|look for|looking for|any|need|want)\b.{0,60}"
     r"\b(jobs?|roles?|positions?|vacancy|vacancies|openings?|work)\b",
     re.IGNORECASE,
 )
