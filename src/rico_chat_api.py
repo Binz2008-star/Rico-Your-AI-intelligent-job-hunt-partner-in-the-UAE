@@ -167,6 +167,227 @@ class RicoChatAPI:
         return []
 
     @staticmethod
+    def normalize_role_label(text: str) -> str:
+        """Title-case role text while preserving known acronyms."""
+        if not text:
+            return text
+        acronyms = {"HSE", "QHSE", "EHS", "ESG", "UAE", "ISO", "CV", "NEBOSH"}
+        words = text.split()
+        result = []
+        for w in words:
+            upper = w.upper()
+            if upper in acronyms:
+                result.append(upper)
+            else:
+                result.append(w.capitalize())
+        return " ".join(result)
+
+    # ── Live / generic job search detection ────────────────────────────────
+
+    _LIVE_SEARCH_RE = re.compile(
+        # live/current near jobs/roles/openings (both word orders)
+        r"\b(live|current)\b.{0,40}\b(jobs?|roles?|openings?)\b"
+        r"|\b(jobs?|roles?|openings?)\b.{0,40}\b(live|current)\b"
+        # "uae jobs/roles" only when a role word follows (>=3 chars after whitespace)
+        r"|\buae\s+(?:jobs?|roles?|openings?)\s+(?:for\s+)?\w{3}"
+        r"|\b(?:jobs?|roles?|openings?)\s+(?:for\s+)?\w{3}.{0,40}\buae\b"
+        # find openings (bare -- strong enough signal on its own)
+        r"|\bfind\b.{0,20}\bopenings?\b"
+        # show current openings (explicit)
+        r"|\bshow\b.{0,20}\bcurrent\b.{0,20}\bopenings?\b",
+        re.IGNORECASE,
+    )
+
+    _GENERIC_JOB_REQUEST_RE = re.compile(
+        r"^\s*(?:i\s+(?:am|m)\s+|am\s+)?(?:looking\s+for|find|show|get|need|want)\s+(?:a\s+)?(?:job|jobs|work|role|roles)\s*$"
+        r"|^\s*(?:i\s+)?(?:need|want)\s+(?:a\s+)?(?:job|jobs|work|role|roles)\s*$"
+        r"|^\s*(?:find|show|get)\s+(?:me\s+)?(?:a\s+)?(?:job|jobs|role|roles)\s*$"
+        r"|^\s*(?:show|find|get)\s+me\s+jobs?\s*$"
+        r"|^\s*jobs?\s+(?:for\s+me|please)\s*$",
+        re.IGNORECASE,
+    )
+
+    @staticmethod
+    def _is_live_job_search_request(message: str) -> bool:
+        """True when user explicitly asks for live/current/UAE/openings jobs."""
+        return bool(RicoChatAPI._LIVE_SEARCH_RE.search(message))
+
+    @staticmethod
+    def _looks_like_generic_job_request(message: str) -> bool:
+        """True for generic job-search phrases without a specific role."""
+        return bool(RicoChatAPI._GENERIC_JOB_REQUEST_RE.search(message))
+
+    def _looks_like_selected_role(self, message: str, profile: Any) -> bool:
+        """True when the message looks like a user selecting a suggested role.
+
+        Guards (checked in order, fail-fast):
+          1. Non-empty, not live search, not generic job request
+          2. No question mark
+          3. No action verbs (find/search/show/...)
+          4. Short phrase -- _looks_like_bare_target_role
+          5. Exact or fuzzy match: generated suggestions + target_roles
+          6. Fallback: classify_role_candidate says profile_relevant or known_but_off_profile
+        """
+        if not message or not profile:
+            return False
+
+        text       = message.strip()
+        text_lower = text.lower()
+
+        if self._is_live_job_search_request(text_lower):
+            return False
+        if self._looks_like_generic_job_request(text_lower):
+            return False
+        if "?" in text:
+            return False
+        if set(text_lower.split()) & self._ACTION_WORDS:
+            return False
+        if not self._looks_like_bare_target_role(text):
+            return False
+
+        # Build known-role set: generated suggestions + saved target_roles
+        suggested = self._generate_role_suggestions(
+            self._as_list(self._profile_value(profile, "skills")),
+            self._as_list(self._profile_value(profile, "certifications")),
+            self._profile_value(profile, "years_experience"),
+            self._as_list(self._profile_value(profile, "industries")),
+        )
+        known: set[str] = {s["label"].lower() for s in suggested}
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        known.update(r.lower() for r in target_roles if isinstance(r, str))
+
+        if text_lower in known:
+            return True
+        for k in known:
+            if k in text_lower or text_lower in k:
+                return True
+
+        # Classifier fallback
+        try:
+            classification, canonical_role = classify_role_candidate(text, profile)
+            if classification in {"profile_relevant", "known_but_off_profile"} and canonical_role:
+                return True
+        except Exception:
+            pass
+
+        return False
+
+    def _extract_selected_role(self, message: str, profile: Any) -> str:
+        """Extract the best-matched role label, preserving acronym casing."""
+        text       = (message or "").strip()
+        text_lower = text.lower()
+
+        suggested = self._generate_role_suggestions(
+            self._as_list(self._profile_value(profile, "skills")),
+            self._as_list(self._profile_value(profile, "certifications")),
+            self._profile_value(profile, "years_experience"),
+            self._as_list(self._profile_value(profile, "industries")),
+        )
+        # Exact match in suggestions
+        for s in suggested:
+            if s["label"].lower() == text_lower:
+                return s["label"]
+
+        # Exact match in target_roles
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        for r in target_roles:
+            if isinstance(r, str) and r.lower() == text_lower:
+                return r
+
+        # Fuzzy: suggestion label contained in message
+        for s in suggested:
+            if s["label"].lower() in text_lower:
+                return s["label"]
+
+        # Fuzzy: saved role contained in message
+        for r in target_roles:
+            if isinstance(r, str) and r.lower() in text_lower:
+                return r
+
+        # Classifier canonical name
+        try:
+            _, canonical_role = classify_role_candidate(text, profile)
+            if canonical_role:
+                return canonical_role
+        except Exception:
+            pass
+
+        return self.normalize_role_label(text)
+
+    def _handle_role_confirmation(
+        self, user_id: str, role: str, profile: Any
+    ) -> dict[str, Any]:
+        """Deterministic role_confirmation -- no AI, no external calls."""
+        skills = self._as_list(self._profile_value(profile, "skills"))
+        years  = self._profile_value(profile, "years_experience")
+        certs  = self._as_list(self._profile_value(profile, "certifications"))
+
+        skill_lower = [s.lower() for s in skills]
+        cert_lower  = [c.lower() for c in certs]
+        all_lower   = skill_lower + cert_lower
+
+        # Safe numeric parsing
+        try:
+            years_num = float(years)
+        except (TypeError, ValueError):
+            years_num = None
+
+        reasons: list[str] = []
+
+        if any(k in s for s in all_lower for k in ("iso", "audit", "compliance")):
+            reasons.append("You have ISO, audit, or compliance background.")
+
+        if any(k in c for c in cert_lower for k in ("nebosh", "iosh")):
+            reasons.append("Your safety certifications support this role.")
+
+        if any(k in s for s in all_lower for k in ("environmental", "esg", "sustainability")):
+            reasons.append("Your background aligns with environmental and sustainability work.")
+
+        if any("hse" in s or "safety" in s for s in skill_lower):
+            reasons.append("Your HSE/safety background matches this role.")
+
+        if years_num is not None:
+            if years_num >= 10:
+                reasons.append("Your experience level supports senior roles.")
+            elif years_num >= 5:
+                reasons.append("Your experience level supports experienced professional roles.")
+            else:
+                reasons.append(f"Your ~{int(years_num)} years of experience fits this role.")
+
+        if not reasons:
+            reasons.append("This role aligns with your profile.")
+
+        response = {
+            "type": "role_confirmation",
+            "message": f"{role} is a strong fit for your CV.",
+            "role": role,
+            "reasons": reasons,
+            "next_actions": [
+                {
+                    "action":  "find_live_jobs",
+                    "label":   "Find live UAE jobs",
+                    "message": f"find live jobs for {role}",
+                    "role":    role,
+                },
+                {
+                    "action":  "save_target_role",
+                    "label":   "Save as target role",
+                    "message": f"save {role} as target role",
+                    "role":    role,
+                },
+                {
+                    "action":  "prepare_application_angle",
+                    "label":   "Prepare application angle",
+                    "message": f"prepare application angle for {role}",
+                    "role":    role,
+                },
+            ],
+            "next_action": "choose_role_next_step",
+        }
+        self._append_chat(user_id, "assistant", response["message"])
+        return response
+
+    @staticmethod
     def _format_match(m: dict[str, Any], profile: Any) -> dict[str, Any]:
         """Return a backward-compatible chat match with v1 structured guidance."""
         explanation = build_match_explanation(m, profile)
@@ -322,6 +543,11 @@ class RicoChatAPI:
         "what can you do", "what can i do", "help", "options", "menu",
         "show options", "show menu", "next steps",
     ])
+
+    _ACTION_WORDS = frozenset({
+        "find", "search", "show", "get", "apply", "save",
+        "prepare", "draft", "update", "track",
+    })
 
     _JOB_SEARCH_OPTIONS = {
         "type": "options",
@@ -522,6 +748,19 @@ class RicoChatAPI:
         """
         profile = get_profile(user_id)
         has_cv = self._has_cv_profile(profile)
+
+        # Fast path: user selected a suggested role → deterministic confirmation
+        if has_cv and not self._is_live_job_search_request(message):
+            if self._looks_like_selected_role(message, profile):
+                return self._finalize(
+                    self._handle_role_confirmation(
+                        user_id=user_id,
+                        role=self._extract_selected_role(message, profile),
+                        profile=profile,
+                    ),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
 
         # ── Step 1: Unified intent classification ────────────────────────────
         intent_result = classify_intent(message, has_cv_profile=has_cv)
@@ -891,6 +1130,13 @@ class RicoChatAPI:
         suggestions = []
         skill_lower = [s.lower() for s in skills]
         cert_lower = [c.lower() for c in certifications]
+
+        # Safe numeric parsing
+        try:
+            years_num = float(years_experience) if years_experience is not None else None
+        except (TypeError, ValueError):
+            years_num = None
+        years_experience = years_num
 
         # Role family mappings based on skills/certifications
         role_mappings = {

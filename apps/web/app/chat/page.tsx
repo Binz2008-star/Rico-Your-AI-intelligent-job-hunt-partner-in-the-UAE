@@ -1,6 +1,6 @@
 "use client";
 
-import type { ChatApiResponse, JobMatch, RicoOption, UploadCVResponse } from "@/lib/api";
+import type { ChatApiResponse, JobMatch, NextAction, RicoOption, UploadCVResponse } from "@/lib/api";
 import { fetchMe, logout, sendChat, sendChatPublic, uploadCV } from "@/lib/api";
 import { buildAuthHref } from "@/lib/redirect";
 import Link from "next/link";
@@ -26,6 +26,9 @@ interface Message {
   options?: RicoOption[];
   next_action?: string;
   freeMode?: boolean;
+  roleName?: string;
+  reasons?: string[];
+  next_actions?: NextAction[];
 }
 
 type ChatAudience = "checking" | "authenticated" | "public";
@@ -346,6 +349,9 @@ export default function ChatPage() {
             options: res.options as RicoOption[] | undefined,
             next_action: res.next_action,
             freeMode: freeMode && !hfMode,
+            roleName: res.role,
+            reasons: res.reasons,
+            next_actions: res.next_actions as NextAction[] | undefined,
           },
         ]);
       }
@@ -538,6 +544,32 @@ export default function ChatPage() {
                 {/* Option buttons */}
                 {m.options && m.options.length > 0 && (
                   <OptionButtons options={m.options} onAction={(prompt) => sendMessage(prompt)} />
+                )}
+
+                {/* Role confirmation reasons + next_actions */}
+                {m.type === "role_confirmation" && (
+                  <div className="mt-3 space-y-2">
+                    {m.reasons && m.reasons.length > 0 && (
+                      <ul className="list-disc list-inside text-[13px] text-[#a0a0c0] space-y-0.5">
+                        {m.reasons.map((r, i) => (
+                          <li key={i}>{r}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {m.next_actions && m.next_actions.length > 0 && (
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {m.next_actions.map((na) => (
+                          <button
+                            key={na.action}
+                            onClick={() => sendMessage(na.message ?? na.label)}
+                            className="text-[12px] px-3 py-2 rounded-xl border border-[#5b4fff]/30 text-[#a78bfa] hover:bg-[#5b4fff]/10 hover:border-[#5b4fff]/60 transition-colors rico-focus-strong"
+                          >
+                            {na.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {m.freeMode && (
