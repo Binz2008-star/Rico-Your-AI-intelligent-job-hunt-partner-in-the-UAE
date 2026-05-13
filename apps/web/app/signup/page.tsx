@@ -35,7 +35,12 @@ export default function SignupPage() {
     }
     setLoading(true);
     try {
-      await register(email, password);
+      const publicUserId = typeof window !== "undefined" ? localStorage.getItem("rico_public_uid") : null;
+      await register(email, password, publicUserId);
+      // Clear stored public ID after successful auth merge
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("rico_public_uid");
+      }
       router.push(nextPath);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");

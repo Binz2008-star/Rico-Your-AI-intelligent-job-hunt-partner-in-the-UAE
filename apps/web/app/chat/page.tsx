@@ -371,6 +371,10 @@ export default function ChatPage() {
         chatAudience === "authenticated"
           ? await uploadCV(file)
           : await uploadCV(file, `public:${getSessionId()}`);
+      // Store returned user_id for guest→auth merge later
+      if (result.user_id && result.user_id.startsWith("public:")) {
+        localStorage.setItem("rico_public_uid", result.user_id);
+      }
       const p = result.parsed;
       const summary = [
         p.skills?.length ? `Skills detected: ${p.skills.slice(0, 6).join(", ")}` : "",
