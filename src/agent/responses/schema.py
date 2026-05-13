@@ -38,6 +38,12 @@ ResponseType = Literal[
     "preferences_updated",
     "interview_prep",
     "profile_skip",
+    "profile_role_suggestions",
+    "role_confirmation",
+    "live_job_search_pending",
+    "save_job",
+    "draft_message",
+    "explain_match",
     "error",
 ]
 

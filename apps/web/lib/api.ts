@@ -624,6 +624,13 @@ export interface RicoOption {
   label: string;
 }
 
+export interface NextAction {
+  action: string;
+  label: string;
+  message: string;
+  role: string;
+}
+
 export interface ChatApiResponse {
   response?: string;
   reply?: string;
@@ -634,6 +641,9 @@ export interface ChatApiResponse {
   matches?: JobMatch[];
   options?: RicoOption[];
   next_action?: string;
+  role?: string;
+  reasons?: string[];
+  next_actions?: NextAction[];
   response_source?: string;
   provider?: string;
   provider_state?: string;

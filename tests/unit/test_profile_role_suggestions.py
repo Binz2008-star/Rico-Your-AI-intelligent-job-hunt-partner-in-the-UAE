@@ -405,9 +405,15 @@ class TestGenericJobSearchFastPath:
     def test_specific_role_search_still_calls_pipeline(self, monkeypatch, cv_profile):
         """'find HSE Manager jobs' → still calls run_for_profile (specific role)."""
         import src.rico_chat_api as chat_module
+        from unittest.mock import MagicMock
 
         api = RicoChatAPI()
         monkeypatch.setattr(chat_module, "get_profile", lambda uid: cv_profile)
+        # _route must return a job_title so fast path is skipped and pipeline runs
+        monkeypatch.setattr(chat_module, "_route", lambda *a, **kw: MagicMock(
+            tool_name=None, entities={"job_title": "HSE Manager"}, tool_args={},
+            confirmation_prompt=None, source="keyword"
+        ))
 
         run_called = [False]
 
