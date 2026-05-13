@@ -308,5 +308,139 @@ class TestProfileRoleSuggestionsIntegration:
         assert result["type"] == "profile_role_suggestions"
 
 
+class TestGenericJobSearchFastPath:
+    """Regression: generic job-search intent with CV profile must use the fast
+    deterministic path instead of the heavy run_for_profile pipeline.
+    """
+
+    @pytest.fixture
+    def cv_profile(self):
+        return MockProfile(
+            skills=["hse", "safety", "iso 14001"],
+            years_experience=10.0,
+            certifications=["iso"],
+        )
+
+    def test_am_looking_for_job_uses_fast_path(self, monkeypatch, cv_profile):
+        """'am looking for job' → profile_role_suggestions, no run_for_profile."""
+        import src.rico_chat_api as chat_module
+
+        api = RicoChatAPI()
+        monkeypatch.setattr(chat_module, "get_profile", lambda uid: cv_profile)
+
+        run_called = [False]
+
+        def fake_run_for_profile(profile):
+            run_called[0] = True
+            raise AssertionError("run_for_profile should NOT be called")
+
+        monkeypatch.setattr(api.system, "run_for_profile", fake_run_for_profile)
+
+        result = api._handle_active_user("test-user", "am looking for job")
+
+        assert not run_called[0]
+        assert result["type"] == "profile_role_suggestions"
+        assert len(result.get("options", [])) > 0
+
+    def test_show_me_jobs_uses_fast_path(self, monkeypatch, cv_profile):
+        """'show me jobs' → profile_role_suggestions, no run_for_profile."""
+        import src.rico_chat_api as chat_module
+
+        api = RicoChatAPI()
+        monkeypatch.setattr(chat_module, "get_profile", lambda uid: cv_profile)
+
+        run_called = [False]
+
+        def fake_run_for_profile(profile):
+            run_called[0] = True
+            raise AssertionError("run_for_profile should NOT be called")
+
+        monkeypatch.setattr(api.system, "run_for_profile", fake_run_for_profile)
+
+        result = api._handle_active_user("test-user", "show me jobs")
+
+        assert not run_called[0]
+        assert result["type"] == "profile_role_suggestions"
+
+    def test_find_me_a_job_uses_fast_path(self, monkeypatch, cv_profile):
+        """'find me a job' → profile_role_suggestions, no run_for_profile."""
+        import src.rico_chat_api as chat_module
+
+        api = RicoChatAPI()
+        monkeypatch.setattr(chat_module, "get_profile", lambda uid: cv_profile)
+
+        run_called = [False]
+
+        def fake_run_for_profile(profile):
+            run_called[0] = True
+            raise AssertionError("run_for_profile should NOT be called")
+
+        monkeypatch.setattr(api.system, "run_for_profile", fake_run_for_profile)
+
+        result = api._handle_active_user("test-user", "find me a job")
+
+        assert not run_called[0]
+        assert result["type"] == "profile_role_suggestions"
+
+    def test_i_need_a_job_uses_fast_path(self, monkeypatch, cv_profile):
+        """'i need a job' → profile_role_suggestions, no run_for_profile."""
+        import src.rico_chat_api as chat_module
+
+        api = RicoChatAPI()
+        monkeypatch.setattr(chat_module, "get_profile", lambda uid: cv_profile)
+
+        run_called = [False]
+
+        def fake_run_for_profile(profile):
+            run_called[0] = True
+            raise AssertionError("run_for_profile should NOT be called")
+
+        monkeypatch.setattr(api.system, "run_for_profile", fake_run_for_profile)
+
+        result = api._handle_active_user("test-user", "i need a job")
+
+        assert not run_called[0]
+        assert result["type"] == "profile_role_suggestions"
+
+    def test_specific_role_search_still_calls_pipeline(self, monkeypatch, cv_profile):
+        """'find HSE Manager jobs' → still calls run_for_profile (specific role)."""
+        import src.rico_chat_api as chat_module
+
+        api = RicoChatAPI()
+        monkeypatch.setattr(chat_module, "get_profile", lambda uid: cv_profile)
+
+        run_called = [False]
+
+        def fake_run_for_profile(profile):
+            run_called[0] = True
+            return {"matches": []}
+
+        monkeypatch.setattr(api.system, "run_for_profile", fake_run_for_profile)
+
+        result = api._handle_active_user("test-user", "find HSE Manager jobs")
+
+        assert run_called[0]
+
+    def test_no_cv_profile_falls_through_to_pipeline(self, monkeypatch):
+        """Generic job search WITHOUT CV → still calls run_for_profile."""
+        import src.rico_chat_api as chat_module
+
+        api = RicoChatAPI()
+        empty_profile = MockProfile()
+        monkeypatch.setattr(chat_module, "get_profile", lambda uid: empty_profile)
+
+        run_called = [False]
+
+        def fake_run_for_profile(profile):
+            run_called[0] = True
+            return {"matches": []}
+
+        monkeypatch.setattr(api.system, "run_for_profile", fake_run_for_profile)
+
+        result = api._handle_active_user("test-user", "am looking for job")
+
+        assert run_called[0]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
