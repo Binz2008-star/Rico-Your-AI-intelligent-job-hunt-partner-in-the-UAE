@@ -20,6 +20,7 @@ from typing import Any, Dict, Optional
 
 from src.db import get_db_connection
 from src.repositories.profile_repo import get_profile, upsert_profile
+from src.repositories.audit_repo import log_identity_resolution, log_identity_merge, log_identity_link
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,7 @@ class IdentityResolver:
         session_id: Optional[str] = None,
         jotform_submission: Optional[Dict[str, Any]] = None,
         cv_extracted_email: Optional[str] = None,
+        is_jwt: bool = False,
     ) -> IdentityResolution:
         """
         Resolve canonical user_id from provided identity signals.
@@ -72,6 +74,7 @@ class IdentityResolver:
             session_id: Guest session ID for public chat
             jotform_submission: Full Jotform submission payload
             cv_extracted_email: Email extracted from CV parsing
+            is_jwt: Explicit flag indicating JWT-authenticated context
 
         Returns:
             IdentityResolution with canonical user_id and resolution metadata
@@ -88,7 +91,7 @@ class IdentityResolver:
         # Determine identity source and canonical user_id
         if email:
             canonical_user_id = email.lower().strip()
-            identity_source = "authenticated" if self._is_jwt_context() else "jotform" if jotform_submission else "cv"
+            identity_source = "authenticated" if is_jwt else "jotform" if jotform_submission else "cv"
             confidence = 0.95
         elif telegram_username:
             canonical_user_id = f"telegram:{telegram_username.lstrip('@')}"
@@ -148,6 +151,14 @@ class IdentityResolver:
             existing_profile,
         )
 
+        # Log identity resolution for audit trail
+        log_identity_resolution(
+            canonical_user_id=canonical_user_id,
+            identity_source=identity_source,
+            confidence=confidence,
+            metadata=metadata,
+        )
+
         return resolution
 
     def _extract_email_from_jotform(self, submission: Dict[str, Any]) -> Optional[str]:
@@ -167,11 +178,16 @@ class IdentityResolver:
             return str(telegram).lstrip("@")
         return None
 
-    def _is_jwt_context(self) -> bool:
-        """Detect if we're in a JWT-authenticated context."""
-        # This is a simple heuristic - in practice, the caller should pass this info
-        # For now, we assume email without jotform/cv context is JWT
-        return False
+    def _is_jwt_context(self, is_jwt: bool = False) -> bool:
+        """Detect if we're in a JWT-authenticated context.
+
+        Args:
+            is_jwt: Explicit flag from caller indicating JWT context
+
+        Returns:
+            True if in JWT context, False otherwise
+        """
+        return is_jwt
 
     def _attempt_identity_merge(self, canonical_user_id: str, email: str) -> bool:
         """
@@ -188,7 +204,7 @@ class IdentityResolver:
             with conn.cursor() as cur:
                 # Check for existing users with this email
                 cur.execute(
-                    "SELECT id, external_user_id FROM users WHERE email = %s",
+                    "SELECT id, external_user_id FROM rico_users WHERE email = %s",
                     (email.lower(),),
                 )
                 existing = cur.fetchone()
@@ -224,8 +240,18 @@ class IdentityResolver:
             updates: Dict[str, Any] = {}
             if link_email:
                 updates["email"] = link_email
+                log_identity_link(
+                    canonical_user_id=canonical_user_id,
+                    link_type="email",
+                    link_value=link_email,
+                )
             if link_telegram:
                 updates["telegram_username"] = link_telegram
+                log_identity_link(
+                    canonical_user_id=canonical_user_id,
+                    link_type="telegram",
+                    link_value=link_telegram,
+                )
 
             if updates:
                 upsert_profile(user_id=canonical_user_id, updates=updates)
@@ -254,11 +280,24 @@ def resolve_canonical_user(
     session_id: Optional[str] = None,
     jotform_submission: Optional[Dict[str, Any]] = None,
     cv_extracted_email: Optional[str] = None,
+    is_jwt: bool = False,
 ) -> IdentityResolution:
     """
     Convenience function to resolve canonical user identity.
 
     Uses the singleton IdentityResolver instance.
+
+    Args:
+        email: User email from JWT, Jotform, or CV
+        telegram_username: Telegram handle from Jotform or Telegram
+        telegram_chat_id: Numeric Telegram chat ID from webhook
+        session_id: Guest session ID for public chat
+        jotform_submission: Full Jotform submission payload
+        cv_extracted_email: Email extracted from CV parsing
+        is_jwt: Explicit flag indicating JWT-authenticated context
+
+    Returns:
+        IdentityResolution with canonical user_id and resolution metadata
     """
     return _identity_resolver.resolve(
         email=email,
@@ -267,4 +306,5 @@ def resolve_canonical_user(
         session_id=session_id,
         jotform_submission=jotform_submission,
         cv_extracted_email=cv_extracted_email,
+        is_jwt=is_jwt,
     )
