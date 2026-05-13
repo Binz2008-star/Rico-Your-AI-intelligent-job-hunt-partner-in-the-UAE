@@ -180,6 +180,21 @@ def login(request: Request, req: LoginRequest, response: Response) -> LoginRespo
         secure=_secure,
         max_age=_ttl_hours() * 3600,
     )
+    # Merge guest profile into authenticated account if requested
+    if req.public_user_id_to_merge:
+        try:
+            from src.services.identity_merge_service import merge_public_identity_into_auth
+            merged = merge_public_identity_into_auth(
+                public_user_id=req.public_user_id_to_merge,
+                auth_user_id=user_info["email"],
+            )
+            if merged:
+                logger.info("public_profile_merged public_user_id=%s", req.public_user_id_to_merge)
+            else:
+                logger.warning("public_profile_merge_skipped public_user_id=%s", req.public_user_id_to_merge)
+        except Exception:
+            logger.exception("public_profile_merge_failed public_user_id=%s", req.public_user_id_to_merge)
+
     logger.info("login_success email=%r role=%s", user_info["email"], user_info["role"])
     return LoginResponse(message="Logged in", email=user_info["email"])
 
@@ -313,5 +328,20 @@ def register(request: Request, req: RegisterRequest, response: Response) -> Regi
         secure=_secure,
         max_age=_ttl_hours() * 3600,
     )
+    # Merge guest profile into authenticated account if requested
+    if req.public_user_id_to_merge:
+        try:
+            from src.services.identity_merge_service import merge_public_identity_into_auth
+            merged = merge_public_identity_into_auth(
+                public_user_id=req.public_user_id_to_merge,
+                auth_user_id=user.email,
+            )
+            if merged:
+                logger.info("public_profile_merged public_user_id=%s", req.public_user_id_to_merge)
+            else:
+                logger.warning("public_profile_merge_skipped public_user_id=%s", req.public_user_id_to_merge)
+        except Exception:
+            logger.exception("public_profile_merge_failed public_user_id=%s", req.public_user_id_to_merge)
+
     logger.info("register_success email=%r", user.email)
     return RegisterResponse(email=user.email, role=user.role, created=True)
