@@ -60,7 +60,7 @@ _UTC = timezone.utc
 _UNSAFE_CHARS_RE = re.compile(r"[<>\"']")
 _PDF_MAGIC = b"%PDF"
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
-_PUBLIC_USER_ID_RE = re.compile(r"^public:web-[a-z0-9-]{8,80}$", re.I)
+_PUBLIC_USER_ID_RE = re.compile(r"^public:[a-zA-Z0-9\-_]{8,80}$", re.I)
 _SAFE_SESSION_RE = re.compile(r"^[a-zA-Z0-9\-_]+$")
 
 router = APIRouter(prefix="/api/v1/rico", tags=["rico"])
