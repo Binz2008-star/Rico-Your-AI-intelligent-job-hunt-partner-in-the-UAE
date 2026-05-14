@@ -646,6 +646,13 @@ export interface NextAction {
   role: string;
 }
 
+export interface NextAction {
+  action: string;
+  label: string;
+  message: string;
+  role: string;
+}
+
 export interface ChatApiResponse {
   response?: string;
   reply?: string;

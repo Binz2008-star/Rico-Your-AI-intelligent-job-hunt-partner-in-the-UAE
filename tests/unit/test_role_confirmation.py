@@ -72,7 +72,6 @@ def _empty_profile() -> dict:
         "target_roles": [],
     }
 
-
 def _run_with_profile(api, message: str, profile: dict, route_entities=None) -> dict:
     """Call _handle_active_user with get_profile mocked to return profile."""
     from unittest.mock import MagicMock
@@ -481,3 +480,4 @@ class TestI_NextStepFollowup:
         api = _make_api()
         result = _run_with_profile(api, "continue", _cv_profile())
         assert result["type"] == "options"
+
