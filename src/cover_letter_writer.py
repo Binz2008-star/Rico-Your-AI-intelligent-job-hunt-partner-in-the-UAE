@@ -2,14 +2,15 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
-NAME = "Roben Edwan"
-LOCATION = "Ajman, UAE"
-PROFILE_LINE = "10+ years in environmental management, HSE leadership, UAE regulatory compliance, and multi-site operations"
+NAME = os.getenv("COVER_LETTER_NAME", "Your Name")
+LOCATION = os.getenv("COVER_LETTER_LOCATION", "Your Location")
+PROFILE_LINE = os.getenv("COVER_LETTER_PROFILE", "Your professional summary")
 
 SKILL_LINES = {
     "iso": "implemented and maintained ISO 14001-aligned environmental compliance systems",
