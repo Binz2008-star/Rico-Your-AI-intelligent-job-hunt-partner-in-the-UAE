@@ -18,7 +18,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 _TELEGRAM_MAX_CHARS = 4096
-_MAX_JOBS_PER_MESSAGE = 8  # conservative ceiling; adjust if needed
+_MAX_JOBS_PER_MESSAGE = 5  # demo-safe limit
+_DEMO_MODE = os.getenv("RICO_DEMO_MODE", "").lower() in ("true", "1", "yes")
+_PUBLIC_ALERTS_ENABLED = os.getenv("RICO_TELEGRAM_PUBLIC_ALERTS", "true").lower() in ("true", "1", "yes")
 
 
 def _safe_html(value: object) -> str:
@@ -43,7 +45,14 @@ def _safe_link(value: object) -> str:
 
 
 def send_telegram_message(message: str) -> bool:
-    """Send a Telegram message. Returns True on success."""
+    """Send a Telegram message. Returns True on success.
+
+    Respects RICO_TELEGRAM_PUBLIC_ALERTS=false kill switch.
+    """
+    if not _PUBLIC_ALERTS_ENABLED:
+        print("Telegram public alerts disabled (RICO_TELEGRAM_PUBLIC_ALERTS=false)")
+        return False
+
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
 
@@ -112,32 +121,76 @@ def send_job_card_with_buttons(job: Dict[str, Any], chat_id: str | None = None) 
         return False
 
 
+def _normalize_job_key(job: Dict[str, Any]) -> str:
+    """Create normalized key for deduplication: title|company|location|link."""
+    title = (job.get("title") or "").strip().lower()
+    company = (job.get("company") or "").strip().lower()
+    location = (job.get("location") or "").strip().lower()
+    link = (job.get("link") or "").strip().lower()
+    return f"{title}|{company}|{location}|{link}"
+
+
+def _format_score(score: int) -> str:
+    """Format score for demo-safe display."""
+    if _DEMO_MODE:
+        if score >= 90:
+            return "Match: Excellent"
+        elif score >= 75:
+            return "Match: Strong"
+        elif score >= 60:
+            return "Match: Good"
+        else:
+            return "Match: Fair"
+    return str(score)
+
+
 def format_telegram_jobs(jobs_with_scores) -> str:
     """
     Format jobs for Telegram with HTML.
     All fields are escaped; links are scheme-validated.
     Message is clamped to 4 096 chars.
+
+    Demo mode: dedupes jobs, caps score display, limits to 5 jobs.
     """
     if not jobs_with_scores:
+        if _DEMO_MODE:
+            # Suppress "No new jobs found today" in demo mode
+            return ""
         return "<b>No new jobs found today.</b>"
+
+    # Deduplicate jobs by normalized key
+    seen_keys = set()
+    deduped = []
+    for job, score in jobs_with_scores:
+        key = _normalize_job_key(job)
+        if key not in seen_keys:
+            seen_keys.add(key)
+            deduped.append((job, score))
+
+    if not deduped:
+        return ""
+
+    # Limit to max jobs
+    jobs_to_show = deduped[:_MAX_JOBS_PER_MESSAGE]
 
     lines = [
         "<b>🔔 Job Hunting Daily Report</b>",
-        f"Found {len(jobs_with_scores)} high-quality job matches",
+        f"Found {len(deduped)} high-quality job matches",
         "",
     ]
 
-    for job, score in list(jobs_with_scores)[:_MAX_JOBS_PER_MESSAGE]:
+    for job, score in jobs_to_show:
         title = _safe_html(job.get("title", "N/A"))
         company = _safe_html(job.get("company", "N/A"))
         location = _safe_html(job.get("location", "N/A"))
         link = _safe_link(job.get("link", ""))
+        display_score = _format_score(score)
 
         lines.extend([
             f"<b>📌 {title}</b>",
             f"🏢 {company}",
             f"📍 {location}",
-            f"⭐ Score: {_safe_html(score)}",
+            f"⭐ {display_score}",
             f'🔗 <a href="{link}">Apply</a>',
             "",
         ])

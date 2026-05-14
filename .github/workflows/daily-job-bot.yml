@@ -48,6 +48,8 @@ jobs:
           EXCLUDE_KEYWORDS:   ${{ secrets.EXCLUDE_KEYWORDS }}
           NG_ENABLED:         "false"
           AUTO_APPLY_ENABLED: "false"
+          RICO_DEMO_MODE:     ${{ secrets.RICO_DEMO_MODE || 'false' }}
+          RICO_TELEGRAM_PUBLIC_ALERTS: ${{ secrets.RICO_TELEGRAM_PUBLIC_ALERTS || 'true' }}
         run: python -m src.run_daily
 
       - name: Notify pipeline failure
@@ -55,18 +57,25 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          RICO_DEMO_MODE:     ${{ secrets.RICO_DEMO_MODE || 'false' }}
+          RICO_TELEGRAM_PUBLIC_ALERTS: ${{ secrets.RICO_TELEGRAM_PUBLIC_ALERTS || 'true' }}
         run: |
           python -c "
           import os, requests
-          token   = os.getenv('TELEGRAM_BOT_TOKEN', '')
-          chat_id = os.getenv('TELEGRAM_CHAT_ID', '')
-          if token and chat_id:
-              requests.post(
-                  f'https://api.telegram.org/bot{token}/sendMessage',
-                  json={'chat_id': chat_id,
-                        'text': '🔴 Daily pipeline failed — fetch/scoring error. Check GitHub Actions logs.'},
-                  timeout=10,
-              )
+          demo_mode = os.getenv('RICO_DEMO_MODE', '').lower() in ('true', '1', 'yes')
+          public_alerts = os.getenv('RICO_TELEGRAM_PUBLIC_ALERTS', 'true').lower() in ('true', '1', 'yes')
+          if not demo_mode and public_alerts:
+              token   = os.getenv('TELEGRAM_BOT_TOKEN', '')
+              chat_id = os.getenv('TELEGRAM_CHAT_ID', '')
+              if token and chat_id:
+                  requests.post(
+                      f'https://api.telegram.org/bot{token}/sendMessage',
+                      json={'chat_id': chat_id,
+                            'text': '🔴 Daily pipeline failed — fetch/scoring error. Check GitHub Actions logs.'},
+                      timeout=10,
+                  )
+          else:
+              print('Pipeline failure notification suppressed (demo mode or public alerts disabled)')
           "
 
       - name: Run follow-up reminders
