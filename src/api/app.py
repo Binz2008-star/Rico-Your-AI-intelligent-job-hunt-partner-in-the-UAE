@@ -44,6 +44,32 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+# ── Sentry (optional error tracking) ────────────────────────────────────────────
+def init_sentry() -> None:
+    """Initialize Sentry error tracking if SENTRY_DSN is set."""
+    dsn = os.getenv("SENTRY_DSN", "").strip()
+    if not dsn:
+        return
+
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+
+        sentry_sdk.init(
+            dsn=dsn,
+            environment=os.getenv("SENTRY_ENVIRONMENT", os.getenv("RICO_ENV", "production")),
+            traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
+            integrations=[FastApiIntegration()],
+        )
+        logger.info("sentry_initialized environment=%s", os.getenv("SENTRY_ENVIRONMENT", os.getenv("RICO_ENV", "production")))
+    except Exception:
+        logger.exception("sentry_init_failed")
+
+
+# Initialize Sentry at module import time (once during app startup)
+init_sentry()
+
 # ── Lifespan ─────────────────────────────────────────────────────────────────
 
 _CRITICAL_TABLES = frozenset({"users", "action_audit_log", "password_reset_tokens"})

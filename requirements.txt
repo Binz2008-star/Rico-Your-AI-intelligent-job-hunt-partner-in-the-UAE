@@ -1,5 +1,6 @@
 requests
 python-dotenv
+sentry-sdk[fastapi]>=2.0.0,<3.0.0
 schedule
 psycopg2-binary
 python-jobspy
