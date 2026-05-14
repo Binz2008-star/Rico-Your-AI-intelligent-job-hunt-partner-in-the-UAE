@@ -1,0 +1,55 @@
+services:
+  - type: web
+    name: rico-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m uvicorn src.api.app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: RAPIDAPI_KEY
+        sync: false
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASS
+        sync: false
+      - key: EMAIL_TO
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD_HASH
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_TTL_HOURS
+        value: "24"
+      - key: COOKIE_SECURE
+        value: "false"
+      - key: CORS_ORIGINS
+        value: "https://your-frontend-url.com"
+      - key: EXCLUDE_KEYWORDS
+        value: ""
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: RICO_OPENAI_MODEL
+        value: "gpt-4.1-mini"
+      - key: HF_TOKEN
+        sync: false
+      - key: JOTFORM_FORM_ID
+        sync: false
+      - key: JOTFORM_WEBHOOK_SECRET
+        sync: false
+      - key: JOTFORM_API_KEY
+        sync: false
+      - key: RICO_AI_PROVIDER
+        value: "hf"
+      - key: HF_API_TOKEN
+        sync: false
+      - key: GITHUB_WEBHOOK_SECRET
+        sync: false
