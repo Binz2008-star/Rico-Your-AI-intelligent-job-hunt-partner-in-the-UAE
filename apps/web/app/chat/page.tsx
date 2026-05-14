@@ -7,14 +7,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-function getSessionId(): string {
+function getSessionId(sessionIdRef: React.RefObject<string | null>): string {
   if (typeof window === "undefined") return "ssr-session";
-  let sid = localStorage.getItem("rico_sid");
-  if (!sid) {
-    sid = "web-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 9);
-    localStorage.setItem("rico_sid", sid);
-  }
-  return sid;
+  return sessionIdRef.current || "ssr-session";
 }
 
 interface Message {
@@ -223,10 +218,24 @@ export default function ChatPage() {
   const [sessionExpired, setSessionExpired] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [chatAudience, setChatAudience] = useState<ChatAudience>("checking");
+  const [mounted, setMounted] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const promptSentRef = useRef(false);
+  const sessionIdRef = useRef<string | null>(null);
+
+  // Gate client-only logic to prevent hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+    // Initialize session ID on client only
+    let sid = localStorage.getItem("rico_sid");
+    if (!sid) {
+      sid = "web-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 9);
+      localStorage.setItem("rico_sid", sid);
+    }
+    sessionIdRef.current = sid;
+  }, []);
 
   useEffect(() => {
     const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
@@ -266,7 +275,7 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => {
-    if (chatAudience === "checking" || typeof window === "undefined") return;
+    if (chatAudience === "checking" || !mounted || typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const prompt = params.get("prompt");
     if (prompt && !promptSentRef.current) {
@@ -277,7 +286,7 @@ export default function ChatPage() {
       // Greet immediately
       setMessages([{ id: 1, role: "rico", text: "Hi, I'm Rico. Tell me what UAE job you're looking for — role, city, and salary — and I'll find your best matches. You can also upload your CV and I'll set up your profile automatically." }]);
     }
-  }, [chatAudience]);
+  }, [chatAudience, mounted]);
 
   function scrollBottom() {
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
@@ -304,7 +313,7 @@ export default function ChatPage() {
       const res: ChatApiResponse =
         chatAudience === "authenticated"
           ? await sendChat(trimmed, controller.signal)
-          : await sendChatPublic(trimmed, getSessionId(), controller.signal);
+          : await sendChatPublic(trimmed, getSessionId(sessionIdRef), controller.signal);
       const reply =
         res.response ??
         res.reply ??
@@ -390,9 +399,9 @@ export default function ChatPage() {
       const result: UploadCVResponse =
         chatAudience === "authenticated"
           ? await uploadCV(file)
-          : await uploadCV(file, `public:${getSessionId()}`);
-      // Store returned user_id for guest→auth merge later
-      if (result.user_id && result.user_id.startsWith("public:")) {
+          : await uploadCV(file, `public:${getSessionId(sessionIdRef)}`);
+      // Store returned user_id for guest→auth merge later (client-only)
+      if (mounted && result.user_id && result.user_id.startsWith("public:")) {
         localStorage.setItem("rico_public_uid", result.user_id);
       }
       const p = result.parsed;
