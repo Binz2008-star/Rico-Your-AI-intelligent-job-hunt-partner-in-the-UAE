@@ -29,7 +29,6 @@ def get_db_connection():
 
     try:
         conn = psycopg2.connect(DATABASE_URL)
-        conn.autocommit = True
         return conn
     except OperationalError as e:
         print(f"⚠️ Database connection failed: {e}")
@@ -126,11 +125,16 @@ def init_db():
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_auto_apply_status ON auto_apply_attempts(status)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_auto_apply_timestamp ON auto_apply_attempts(timestamp DESC)")
 
+        conn.commit()
         print("✅ Database initialized successfully")
         return True
 
     except Exception as e:
         print(f"❌ Database initialization failed: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         return False
     finally:
         if conn:
@@ -162,11 +166,15 @@ def save_job(job: Dict[str, Any], score: int) -> bool:
                 job.get('profile_explanation', '') or '',
                 job.get('source', 'jobspy') or 'jobspy'
             ))
-
+        conn.commit()
         return True
 
     except Exception as e:
         print(f"❌ Failed to save job: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         return False
     finally:
         if conn:
@@ -223,11 +231,15 @@ def mark_applied(job_link: str, notes: str = None) -> bool:
                     applied_at = CURRENT_TIMESTAMP,
                     notes = COALESCE(applications.notes, '') || ' | ' || COALESCE(%s, '')
             """, (job_link, notes or '', notes or ''))
-
+        conn.commit()
         return True
 
     except Exception as e:
         print(f"❌ Failed to mark job as applied: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         return False
     finally:
         if conn:
@@ -256,11 +268,15 @@ def update_application_status(job_link: str, status: str, notes: str = None) -> 
             """, (status, notes, notes, status, job_link))
             # rowcount MUST be read inside the with-block; psycopg2 resets it on cursor close
             affected = cursor.rowcount
-
+        conn.commit()
         return affected > 0
 
     except Exception as e:
         print(f"❌ Failed to update application status: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         return False
     finally:
         if conn:
