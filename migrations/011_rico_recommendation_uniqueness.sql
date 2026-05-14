@@ -10,9 +10,10 @@ WHERE a.user_id = b.user_id
   AND a.id < b.id
   AND a.job_key IS NOT NULL;
 
--- Step 2: Add unique constraint on (user_id, job_key) to prevent duplicate recommendations
-ALTER TABLE rico_job_recommendations
-ADD CONSTRAINT rico_recommendations_user_job_unique UNIQUE (user_id, job_key);
+-- Step 2: Create unique index on (user_id, job_key) - idempotent and allows NULL job_key
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rico_recommendations_user_job_unique
+ON rico_job_recommendations (user_id, job_key)
+WHERE job_key IS NOT NULL;
 
 -- Step 3: Create index for faster lookups by user_id and job_key
 CREATE INDEX IF NOT EXISTS idx_rico_recommendations_user_job_key

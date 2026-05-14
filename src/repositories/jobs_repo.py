@@ -18,15 +18,12 @@ def list_from_db(
     limit: int,
     min_score: int,
     source: Optional[str],
-    user_id: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Paginated job query from Postgres.
+    jobs table is global feed (no user_id), filtering happens at service/application layer.
     Returns None on any DB error so callers can fall back to JSON.
     """
-    if not user_id:
-        raise ValueError("user_id is required for authenticated access")
-
     conn = get_db_connection()
     if not conn:
         return None
@@ -68,11 +65,8 @@ def list_from_db(
         conn.close()
 
 
-def get_by_db_id(db_id: int, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """Fetch a single job by its integer primary key. user_id required for authenticated access."""
-    if not user_id:
-        raise ValueError("user_id is required for authenticated access")
-
+def get_by_db_id(db_id: int) -> Optional[Dict[str, Any]]:
+    """Fetch a single job by its integer primary key. jobs table is global feed."""
     conn = get_db_connection()
     if not conn:
         return None

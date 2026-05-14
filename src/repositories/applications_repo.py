@@ -83,60 +83,71 @@ def _warn_legacy_fallback(operation: str) -> None:
 # ── Public API ───────────────────────────────────────────────────────────────
 
 
-def get_all(user_id: str) -> List[Dict[str, Any]]:
-    """Load tracked applications for a specific user. user_id is required for authenticated access."""
-    if not user_id:
-        raise ValueError("user_id is required for authenticated access")
+def get_all(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Load tracked applications for a specific user or fall back to legacy JSON."""
+    if user_id:
+        db = _db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        db_user_id = _provision_db_user_id(db, user_id)
+        return db.get_recommendations(db_user_id, limit=200)
 
-    db = _db()
-    if not db:
-        raise HTTPException(status_code=503, detail="Database unavailable")
-
-    db_user_id = _provision_db_user_id(db, user_id)
-    return db.get_recommendations(db_user_id, limit=200)
-
-
-def get_stats(user_id: str) -> Dict[str, Any]:
-    """Aggregate statistics for a specific user. user_id is required for authenticated access."""
-    if not user_id:
-        raise ValueError("user_id is required for authenticated access")
-
-    db = _db()
-    if not db:
-        raise HTTPException(status_code=503, detail="Database unavailable")
-
-    db_user_id = _provision_db_user_id(db, user_id)
-    return db.get_recommendation_stats(db_user_id)
+    # Legacy fallback
+    _warn_legacy_fallback("get_all")
+    return _get_applied()
 
 
-def find_by_job_id(job_id: str, user_id: str) -> Optional[Dict[str, Any]]:
-    """Find a single application record by job_id for a user. user_id is required for authenticated access."""
-    if not user_id:
-        raise ValueError("user_id is required for authenticated access")
+def get_stats(user_id: Optional[str] = None) -> Dict[str, Any]:
+    """Aggregate statistics for a specific user or fall back to legacy JSON."""
+    if user_id:
+        db = _db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        db_user_id = _provision_db_user_id(db, user_id)
+        return db.get_recommendation_stats(db_user_id)
 
-    db = _db()
-    if not db:
-        raise HTTPException(status_code=503, detail="Database unavailable")
+    # Legacy fallback
+    _warn_legacy_fallback("get_stats")
+    return _get_stats()
 
-    db_user_id = _provision_db_user_id(db, user_id)
-    apps = db.get_recommendations(db_user_id, limit=200)
+
+def find_by_job_id(job_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Find a single application record by job_id for a user or in legacy JSON."""
+    if user_id:
+        db = _db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        db_user_id = _provision_db_user_id(db, user_id)
+        apps = db.get_recommendations(db_user_id, limit=200)
+        return next(
+            (a for a in apps if isinstance(a, dict) and a.get("job_id") == job_id),
+            None,
+        )
+
+    # Legacy fallback
+    _warn_legacy_fallback("find_by_job_id")
     return next(
-        (a for a in apps if isinstance(a, dict) and a.get("job_id") == job_id),
+        (
+            app
+            for app in _get_applied()
+            if isinstance(app, dict) and app.get("job_id") == job_id
+        ),
         None,
     )
 
 
 def update_status(
-    job: Dict[str, Any], status: str, user_id: str, notes: str = ""
+    job: Dict[str, Any], status: str, user_id: Optional[str] = None, notes: str = ""
 ) -> bool:
-    """Update application status for a specific user. user_id is required for authenticated access."""
-    if not user_id:
-        raise ValueError("user_id is required for authenticated access")
+    """Update application status for a specific user or fall back to legacy JSON."""
+    if user_id:
+        db = _db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        db_user_id = _provision_db_user_id(db, user_id)
+        job_key = job.get("job_id", "")
+        return db.update_recommendation_status(db_user_id, job_key, status, notes)
 
-    db = _db()
-    if not db:
-        raise HTTPException(status_code=503, detail="Database unavailable")
-
-    db_user_id = _provision_db_user_id(db, user_id)
-    job_key = job.get("job_id", "")
-    return db.update_recommendation_status(db_user_id, job_key, status, notes)
+    # Legacy fallback
+    _warn_legacy_fallback("update_status")
+    return _update_status(job, status, notes)

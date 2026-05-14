@@ -30,8 +30,7 @@ def get_jobs(
     source: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    user_id = str(current_user.get("id", ""))
-    return list_jobs(page=page, limit=limit, min_score=min_score, source=source, user_id=user_id)
+    return list_jobs(page=page, limit=limit, min_score=min_score, source=source)
 
 
 @router.get("/{job_id}")
@@ -39,8 +38,7 @@ def get_job_by_id(
     job_id: str,
     current_user: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    user_id = str(current_user.get("id", ""))
-    job = get_job(job_id, user_id=user_id)
+    job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
     return job

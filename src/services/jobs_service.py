@@ -28,14 +28,12 @@ def list_jobs(
     source: Optional[str] = None,
     user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Paginated job list. DB preferred; applied_jobs.json fallback."""
-    if not user_id:
-        raise ValueError("user_id is required for authenticated access")
-
+    """Paginated job list. DB preferred; applied_jobs.json fallback.
+    jobs table is global feed, user_id is not required for listing."""
     offset = (page - 1) * limit
 
     if is_db_available():
-        result = jobs_repo.list_from_db(offset, limit, min_score, source, user_id=user_id)
+        result = jobs_repo.list_from_db(offset, limit, min_score, source)
         if result is not None:
             return result
 
@@ -58,13 +56,10 @@ def _list_from_json(offset: int, limit: int, min_score: int) -> Dict[str, Any]:
     }
 
 
-def get_job(job_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """Single job by DB integer id or SHA-256 job_id hash."""
-    if not user_id:
-        raise ValueError("user_id is required for authenticated access")
-
+def get_job(job_id: str) -> Optional[Dict[str, Any]]:
+    """Single job by DB integer id or SHA-256 job_id hash. jobs table is global feed."""
     if is_db_available() and job_id.isdigit():
-        job = jobs_repo.get_by_db_id(int(job_id), user_id=user_id)
+        job = jobs_repo.get_by_db_id(int(job_id))
         if job:
             return job
 
@@ -81,7 +76,7 @@ def skip_job(job: Dict[str, Any], user_id: Optional[str] = None) -> bool:
     if not user_id:
         raise ValueError("user_id is required for authenticated access")
 
-    if is_applied(job):
+    if is_applied(job, user_id=user_id):
         return False
     return mark_applied(job, status="decision_made", notes="Skipped via API", user_id=user_id)
 
@@ -91,7 +86,7 @@ def save_job(job: Dict[str, Any], user_id: Optional[str] = None) -> bool:
     if not user_id:
         raise ValueError("user_id is required for authenticated access")
 
-    if is_applied(job):
+    if is_applied(job, user_id=user_id):
         return False
     return mark_applied(job, status="saved", notes="Saved via API", user_id=user_id)
 
@@ -109,7 +104,7 @@ def block_company(job: Dict[str, Any], user_id: Optional[str] = None) -> str:
     if not company:
         raise ValueError("Job missing company field")
 
-    if not is_applied(job):
+    if not is_applied(job, user_id=user_id):
         mark_applied(job, status="decision_made", notes="Company blocked via API", user_id=user_id)
 
     # TODO: Store user-specific blocked companies in database table
