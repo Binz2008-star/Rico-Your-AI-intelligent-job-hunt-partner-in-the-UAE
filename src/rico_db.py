@@ -25,8 +25,41 @@ except Exception:  # pragma: no cover - dependency may be installed by cloud lat
 class RicoDB:
     """Thin PostgreSQL wrapper for Rico AI multi-user memory."""
 
+    MAX_RECOMMENDATION_LIMIT = 100
+    DEFAULT_RECOMMENDATION_LIMIT = 50
+
+    ALLOWED_RECOMMENDATION_STATUSES = {
+        "found",
+        "saved",
+        "applied",
+        "skipped",
+        "blocked",
+        "decision_made",
+        "interview",
+        "rejected",
+        "offer",
+    }
+
     def __init__(self, database_url: Optional[str] = None) -> None:
         self.database_url = database_url or os.getenv("DATABASE_URL")
+
+    @staticmethod
+    def _clamp_limit(value: int, default: int = DEFAULT_RECOMMENDATION_LIMIT) -> int:
+        """Clamp limit to safe bounds."""
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            return default
+        return max(1, min(value, RicoDB.MAX_RECOMMENDATION_LIMIT))
+
+    @staticmethod
+    def _clamp_offset(value: int) -> int:
+        """Clamp offset to non-negative."""
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            return 0
+        return max(0, value)
 
     @property
     def available(self) -> bool:
@@ -106,6 +139,10 @@ class RicoDB:
             created_at TIMESTAMPTZ DEFAULT now(),
             updated_at TIMESTAMPTZ DEFAULT now()
         );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_rico_recommendations_user_job_key
+        ON rico_job_recommendations(user_id, job_key)
+        WHERE job_key IS NOT NULL;
 
         CREATE TABLE IF NOT EXISTS rico_alerts (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -212,35 +249,38 @@ class RicoDB:
         if conn is None:
             conn = self.connect()
 
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO rico_users (external_user_id, name, email, phone, telegram_username, telegram_chat_id, source)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (external_user_id) DO UPDATE SET
-                    name = COALESCE(EXCLUDED.name, rico_users.name),
-                    email = COALESCE(EXCLUDED.email, rico_users.email),
-                    phone = COALESCE(EXCLUDED.phone, rico_users.phone),
-                    telegram_username = COALESCE(EXCLUDED.telegram_username, rico_users.telegram_username),
-                    telegram_chat_id = COALESCE(EXCLUDED.telegram_chat_id, rico_users.telegram_chat_id),
-                    updated_at = now()
-                RETURNING *
-                """,
-                (
-                    external_user_id,
-                    payload.get("name"),
-                    payload.get("email"),
-                    payload.get("phone"),
-                    payload.get("telegram_username"),
-                    payload.get("telegram_chat_id"),
-                    payload.get("source", "rico"),
-                ),
-            )
-            row = dict(cur.fetchone())
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO rico_users (external_user_id, name, email, phone, telegram_username, telegram_chat_id, source)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (external_user_id) DO UPDATE SET
+                        name = COALESCE(EXCLUDED.name, rico_users.name),
+                        email = COALESCE(EXCLUDED.email, rico_users.email),
+                        phone = COALESCE(EXCLUDED.phone, rico_users.phone),
+                        telegram_username = COALESCE(EXCLUDED.telegram_username, rico_users.telegram_username),
+                        telegram_chat_id = COALESCE(EXCLUDED.telegram_chat_id, rico_users.telegram_chat_id),
+                        updated_at = now()
+                    RETURNING *
+                    """,
+                    (
+                        external_user_id,
+                        payload.get("name"),
+                        payload.get("email"),
+                        payload.get("phone"),
+                        payload.get("telegram_username"),
+                        payload.get("telegram_chat_id"),
+                        payload.get("source", "rico"),
+                    ),
+                )
+                row = dict(cur.fetchone())
 
-        if should_close:
-            conn.commit()
-            conn.close()
+            if should_close:
+                conn.commit()
+        finally:
+            if should_close:
+                conn.close()
 
         return row
 
@@ -250,26 +290,29 @@ class RicoDB:
         if conn is None:
             conn = self.connect()
 
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO rico_profiles (user_id, profile, cv_file_url, cv_text, cv_structured)
-                VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (user_id) DO UPDATE SET
-                    profile = rico_profiles.profile || EXCLUDED.profile,
-                    cv_file_url = COALESCE(EXCLUDED.cv_file_url, rico_profiles.cv_file_url),
-                    cv_text = COALESCE(EXCLUDED.cv_text, rico_profiles.cv_text),
-                    cv_structured = rico_profiles.cv_structured || EXCLUDED.cv_structured,
-                    updated_at = now()
-                RETURNING *
-                """,
-                (user_id, Json(profile), cv_file_url, cv_text, Json(cv_structured or {})),
-            )
-            row = dict(cur.fetchone())
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO rico_profiles (user_id, profile, cv_file_url, cv_text, cv_structured)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (user_id) DO UPDATE SET
+                        profile = rico_profiles.profile || EXCLUDED.profile,
+                        cv_file_url = COALESCE(EXCLUDED.cv_file_url, rico_profiles.cv_file_url),
+                        cv_text = COALESCE(EXCLUDED.cv_text, rico_profiles.cv_text),
+                        cv_structured = rico_profiles.cv_structured || EXCLUDED.cv_structured,
+                        updated_at = now()
+                    RETURNING *
+                    """,
+                    (user_id, Json(profile), cv_file_url, cv_text, Json(cv_structured or {})),
+                )
+                row = dict(cur.fetchone())
 
-        if should_close:
-            conn.commit()
-            conn.close()
+            if should_close:
+                conn.commit()
+        finally:
+            if should_close:
+                conn.close()
 
         return row
 
@@ -279,23 +322,26 @@ class RicoDB:
         if conn is None:
             conn = self.connect()
 
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO rico_agent_settings (user_id, settings)
-                VALUES (%s, %s)
-                ON CONFLICT (user_id) DO UPDATE SET
-                    settings = rico_agent_settings.settings || EXCLUDED.settings,
-                    updated_at = now()
-                RETURNING *
-                """,
-                (user_id, Json(settings)),
-            )
-            row = dict(cur.fetchone())
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO rico_agent_settings (user_id, settings)
+                    VALUES (%s, %s)
+                    ON CONFLICT (user_id) DO UPDATE SET
+                        settings = rico_agent_settings.settings || EXCLUDED.settings,
+                        updated_at = now()
+                    RETURNING *
+                    """,
+                    (user_id, Json(settings)),
+                )
+                row = dict(cur.fetchone())
 
-        if should_close:
-            conn.commit()
-            conn.close()
+            if should_close:
+                conn.commit()
+        finally:
+            if should_close:
+                conn.close()
 
         return row
 
@@ -305,22 +351,23 @@ class RicoDB:
         if conn is None:
             conn = self.connect()
 
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT u.*, p.profile, p.cv_file_url, p.cv_text, p.cv_structured, s.settings
-                FROM rico_users u
-                LEFT JOIN rico_profiles p ON p.user_id = u.id
-                LEFT JOIN rico_agent_settings s ON s.user_id = u.id
-                WHERE u.id::text = %s OR u.external_user_id = %s OR u.email = %s OR u.telegram_username = %s
-                LIMIT 1
-                """,
-                (user_id, user_id, user_id, user_id),
-            )
-            row = cur.fetchone()
-
-        if should_close:
-            conn.close()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT u.*, p.profile, p.cv_file_url, p.cv_text, p.cv_structured, s.settings
+                    FROM rico_users u
+                    LEFT JOIN rico_profiles p ON p.user_id = u.id
+                    LEFT JOIN rico_agent_settings s ON s.user_id = u.id
+                    WHERE u.id::text = %s OR u.external_user_id = %s OR u.email = %s OR u.telegram_username = %s
+                    LIMIT 1
+                    """,
+                    (user_id, user_id, user_id, user_id),
+                )
+                row = cur.fetchone()
+        finally:
+            if should_close:
+                conn.close()
 
         return dict(row) if row else None
 
@@ -352,6 +399,12 @@ class RicoDB:
                         """
                         INSERT INTO rico_job_recommendations (user_id, job_key, job, repo_score, rico_score, explanation, status)
                         VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (user_id, job_key) DO UPDATE SET
+                            job = EXCLUDED.job,
+                            repo_score = EXCLUDED.repo_score,
+                            rico_score = EXCLUDED.rico_score,
+                            explanation = EXCLUDED.explanation,
+                            updated_at = now()
                         """,
                         (
                             user_id,
@@ -372,9 +425,15 @@ class RicoDB:
         limit: int = 200,
         offset: int = 0,
     ) -> List[Dict[str, Any]]:
+        # Clamp pagination parameters to safe bounds
+        limit = self._clamp_limit(limit)
+        offset = self._clamp_offset(offset)
+
         filters = ["user_id = %s"]
         params: List[Any] = [user_id]
         if status:
+            if status not in self.ALLOWED_RECOMMENDATION_STATUSES:
+                return []
             filters.append("status = %s")
             params.append(status)
         where = " AND ".join(filters)
@@ -415,6 +474,9 @@ class RicoDB:
         status: str,
         notes: Optional[str] = None,
     ) -> bool:
+        if status not in self.ALLOWED_RECOMMENDATION_STATUSES:
+            raise ValueError(f"Invalid recommendation status: {status}. Valid values: {sorted(self.ALLOWED_RECOMMENDATION_STATUSES)}")
+
         with self.connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
