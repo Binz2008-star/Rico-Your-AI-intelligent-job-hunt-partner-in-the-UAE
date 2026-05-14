@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from dataclasses import asdict, is_dataclass
 from typing import Any, NamedTuple
@@ -510,6 +511,10 @@ class RicoChatAPI:
     ) -> dict[str, Any]:
         """Finalize response with metadata."""
         agent = self._get_openai_agent()
+
+        # Get Jotform form IDs from environment
+        jotform_form_id = os.getenv("JOTFORM_FORM_ID") or os.getenv("JOTFORM_RICO_FORM_ID")
+
         return {
             **response,
             "response_source": response.get("response_source", source),
@@ -522,6 +527,7 @@ class RicoChatAPI:
             "openai_model": agent.model,
             "ai_model": agent.model,
             "profile_context_present": profile is not None,
+            "jotform_form_id": jotform_form_id,
         }
 
     def _looks_like_cv_upload(self, message: str) -> bool:
