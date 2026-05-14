@@ -118,11 +118,13 @@ def mark_applied(
     job: Dict[str, Any],
     status: str = "applied",
     notes: str = "",
+    user_id: Optional[str] = None,
 ) -> bool:
     """
     Mark a job as applied.
     Thread-safe and cross-process-safe via FileLock + atomic write.
     Returns True if newly added, False if already present.
+    For authenticated/SaaS path, user_id should be provided for user isolation.
     """
     if not isinstance(job, dict):
         return False
@@ -137,9 +139,18 @@ def mark_applied(
         with FileLock(_LOCK_FILE, timeout=_LOCK_TIMEOUT_S):
             with _THREAD_LOCK:
                 applied_jobs = load_applied_jobs()
-                if _is_in_list(job, applied_jobs):
-                    print(f"Job already marked as applied: {job.get('title', '')}")
-                    return False
+
+                # If user_id is provided, filter by user_id when checking for duplicates
+                if user_id:
+                    user_applied_jobs = [j for j in applied_jobs if j.get("user_id") == user_id]
+                    if _is_in_list(job, user_applied_jobs):
+                        print(f"Job already marked as applied for user: {job.get('title', '')}")
+                        return False
+                else:
+                    # Legacy behavior: check all jobs
+                    if _is_in_list(job, applied_jobs):
+                        print(f"Job already marked as applied: {job.get('title', '')}")
+                        return False
 
                 entry: Dict[str, Any] = {
                     "job_id": job_id,
@@ -154,6 +165,7 @@ def mark_applied(
                     "notes": notes or "",
                     "interview_date": None,
                     "rejection_reason": None,
+                    "user_id": user_id,
                 }
                 applied_jobs.append(entry)
                 save_applied_jobs(applied_jobs)
@@ -166,15 +178,21 @@ def mark_applied(
         return False
 
 
-def is_applied(job: Dict[str, Any]) -> bool:
+def is_applied(job: Dict[str, Any], user_id: Optional[str] = None) -> bool:
     """
     Check if a job has been applied to.
     Checks: new hash ID, legacy string ID, exact link, Indeed jk= key,
     and normalised title+company match.
+    When user_id is provided, only checks jobs for that user.
     """
     if not isinstance(job, dict):
         return False
     applied_jobs = load_applied_jobs()
+
+    # If user_id is provided, filter by user_id
+    if user_id:
+        applied_jobs = [j for j in applied_jobs if j.get("user_id") == user_id]
+
     return _is_in_list(job, applied_jobs)
 
 
