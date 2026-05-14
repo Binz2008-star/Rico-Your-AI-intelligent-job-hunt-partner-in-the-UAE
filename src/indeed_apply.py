@@ -79,7 +79,7 @@ INDEED_MAX_PER_RUN    = _env_int("INDEED_MAX_PER_RUN", 3)
 INDEED_DAILY_LIMIT    = _env_int("INDEED_DAILY_LIMIT", 15)
 INDEED_COOLDOWN       = _env_int("INDEED_COOLDOWN_SECONDS", 120)
 INDEED_SLOW_MO        = _env_int("INDEED_SLOW_MO", 800)
-INDEED_MAX_AGE_DAYS   = _env_int("INDEED_MAX_JOB_AGE_DAYS", 14)
+INDEED_MAX_AGE_DAYS   = _env_int("INDEED_MAX_AGE_DAYS", 14)
 INDEED_SCORE_THRESHOLD      = _env_int("INDEED_SCORE_THRESHOLD", 0)
 INDEED_STREET_ADDRESS       = os.getenv("INDEED_STREET_ADDRESS", "")
 INDEED_RELEVANT_JOB_TITLE   = os.getenv("INDEED_RELEVANT_JOB_TITLE", "")
@@ -87,6 +87,12 @@ INDEED_RELEVANT_COMPANY     = os.getenv("INDEED_RELEVANT_COMPANY", "")
 INDEED_PROFILE_DIR          = BASE_DIR / os.getenv("NG_PROFILE_DIR", "data/ng_profile")
 CV_PATH                 = BASE_DIR / os.getenv("CV_PATH", "data/cv.pdf")
 INDEED_SKIP_COMPANIES    = os.getenv("INDEED_SKIP_COMPANIES", "").lower()
+
+# Gate risky browser automation flags
+if not INDEED_HEADLESS:
+    logger.warning("INDEED_HEADLESS=false: Browser will be visible. This is risky in production. Set INDEED_HEADLESS=true for safe headless mode.")
+if INDEED_SLOW_MO > 1000:
+    logger.warning("INDEED_SLOW_MO=%dms: Slow motion delay may significantly slow down automation. Consider reducing to 0-500ms for production.", INDEED_SLOW_MO)
 
 
 # ── Target roles ──────────────────────────────────────────────────────────────
@@ -741,9 +747,13 @@ class IndeedApplyEngine:
 
     def _fill_apply_form(self, frame: Frame, job: Dict[str, Any]) -> bool:
         """Navigate Indeed's multi-step Easy Apply wizard."""
-        name  = "Roben Edwan"
-        email = os.getenv("INDEED_EMAIL", "robenedwan@gmail.com")
+        name = os.getenv("INDEED_NAME", "").strip()
+        email = os.getenv("INDEED_EMAIL", "").strip()
         phone = os.getenv("INDEED_PHONE", "")
+        if not name or not email:
+            logger.warning("indeed_profile_data_missing name=%s email=%s", bool(name), bool(email))
+            self._missing_field = "INDEED_NAME / INDEED_EMAIL"
+            return False
 
         max_steps = 12
         for step in range(max_steps):
