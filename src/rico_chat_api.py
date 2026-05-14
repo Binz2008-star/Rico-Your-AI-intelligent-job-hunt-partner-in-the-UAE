@@ -1048,14 +1048,9 @@ class RicoChatAPI:
             context = self._build_router_context(user_id, profile)
             routed = _route(message, user_id=user_id, context=context)
 
-            # Fast path: generic job search with CV profile → deterministic response
-            if has_cv and not routed.entities.get("job_title"):
-                return self._finalize(
-                    self._handle_profile_role_suggestions(profile),
-                    self.SOURCE_KEYWORD,
-                    profile=profile,
-                )
-
+            # Removed fast-path override to prevent intent interception
+            # Previously: generic job searches without job_title were intercepted by profile suggestions
+            # Now: all explicit job searches execute through the normal workflow
             workflow_result = self.system.run_for_profile(profile)
             all_explicit = workflow_result.get("matches", [])
             try:

@@ -122,8 +122,23 @@ export default function JobsPage() {
 
       throw new Error(`Unsupported job action: ${action}`);
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Action failed. Please try again.", "error");
-      throw err;
+      const errorMessage = err instanceof Error ? err.message : "Action failed. Please try again.";
+
+      // Check if error contains "Open manually:" or a job URL
+      const openManuallyMatch = errorMessage.match(/Open manually:\s*(https?:\/\/[^\s]+)/);
+      const urlMatch = errorMessage.match(/(https?:\/\/[^\s]+)/);
+      const manualUrl = openManuallyMatch?.[1] || urlMatch?.[1] || job.apply_url;
+
+      if (errorMessage.includes("Open manually:") || errorMessage.includes("automated apply engine")) {
+        // Show friendly message with manual apply option
+        toast("Auto-apply unavailable for this job source. Please open and apply manually.", "error");
+        if (manualUrl) {
+          window.open(manualUrl, "_blank");
+        }
+      } else {
+        toast(errorMessage, "error");
+      }
+      // Don't re-throw to prevent uncaught promise errors
     } finally {
       setSubmittingId(null);
     }
