@@ -1,6 +1,9 @@
 # Environment variables with sensitive data
 .env
 
+# Duplicate workspace folder
+job-automation-system-1-main/
+
 # Python cache
 __pycache__/
 *.pyc
