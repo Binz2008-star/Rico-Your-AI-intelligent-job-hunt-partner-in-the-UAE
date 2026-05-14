@@ -99,3 +99,124 @@ class TestApplyEndpointJobValidation:
 
         assert response.status_code == 422
         assert "does not match job_id in URL" in response.json()["detail"]
+
+    def test_get_job_finds_job_from_json_history(self, monkeypatch):
+        """get_job should find jobs from job_history.json when DB is not available."""
+        from src.services.jobs_service import get_job
+        from src.job_history import load_job_history
+
+        # Mock DB as unavailable
+        monkeypatch.setattr("src.services.jobs_service.is_db_available", lambda: False)
+
+        # Mock load_job_history to return a test job
+        test_job = {
+            "id": "abc123",
+            "title": "Test Job from JSON",
+            "company": "Test Company",
+            "location": "Remote",
+            "link": "https://example.com/job/123",
+            "score": 85,
+        }
+        monkeypatch.setattr("src.job_history.load_job_history", lambda: [test_job])
+
+        # get_job should find the job from JSON history
+        job = get_job("abc123")
+        assert job is not None
+        assert job["title"] == "Test Job from JSON"
+        assert job["id"] == "abc123"
+
+
+class TestJsonBackedJobActions:
+    """Regression tests for JSON-backed job action lookup after PR #131."""
+
+    @pytest.fixture
+    def mock_json_history(self, monkeypatch):
+        """Mock job_history.json to return test jobs."""
+        from src.job_history import load_job_history
+
+        listed_job = {
+            "id": "json-123",
+            "title": "JSON Job",
+            "company": "JSON Co",
+            "link": "https://example.com/json-123",
+        }
+
+        monkeypatch.setattr("src.job_history.load_job_history", lambda: [listed_job])
+        # Mock DB as unavailable to force JSON fallback
+        monkeypatch.setattr("src.services.jobs_service.is_db_available", lambda: False)
+        # Mock get_applied_jobs to return empty
+        monkeypatch.setattr("src.applications.get_applied_jobs", lambda: [])
+
+    def test_skip_json_backed_listed_job_succeeds(self, client_with_auth, mock_json_history, monkeypatch):
+        """skip endpoint should succeed for jobs listed in job_history.json."""
+        from src.services.jobs_service import skip_job
+        from src.applications import mark_applied
+
+        # Mock mark_applied to return True
+        monkeypatch.setattr("src.applications.mark_applied", lambda *args, **kwargs: True)
+        # Mock is_applied to return False
+        monkeypatch.setattr("src.applications.is_applied", lambda *args, **kwargs: False)
+
+        response = client_with_auth.post("/api/v1/jobs/json-123/skip")
+        assert response.status_code == 200
+
+    def test_save_json_backed_listed_job_succeeds(self, client_with_auth, mock_json_history, monkeypatch):
+        """save endpoint should succeed for jobs listed in job_history.json."""
+        from src.services.jobs_service import save_job
+        from src.applications import mark_applied
+
+        # Mock mark_applied to return True
+        monkeypatch.setattr("src.applications.mark_applied", lambda *args, **kwargs: True)
+        # Mock is_applied to return False
+        monkeypatch.setattr("src.applications.is_applied", lambda *args, **kwargs: False)
+
+        response = client_with_auth.post("/api/v1/jobs/json-123/save")
+        assert response.status_code == 200
+
+    def test_block_json_backed_listed_job_succeeds(self, client_with_auth, mock_json_history, monkeypatch):
+        """block endpoint should succeed for jobs listed in job_history.json."""
+        from src.services.jobs_service import block_company
+        from src.applications import mark_applied
+
+        # Mock mark_applied to return True
+        monkeypatch.setattr("src.applications.mark_applied", lambda *args, **kwargs: True)
+        # Mock is_applied to return False
+        monkeypatch.setattr("src.applications.is_applied", lambda *args, **kwargs: False)
+
+        response = client_with_auth.post("/api/v1/jobs/json-123/block")
+        assert response.status_code == 200
+
+    def test_apply_json_backed_listed_job_succeeds(self, client_with_auth, mock_json_history, monkeypatch):
+        """apply endpoint should succeed for jobs listed in job_history.json."""
+        from src.applications import mark_applied
+
+        # Mock mark_applied to return True
+        monkeypatch.setattr("src.applications.mark_applied", lambda *args, **kwargs: True)
+        # Mock is_applied to return False
+        monkeypatch.setattr("src.applications.is_applied", lambda *args, **kwargs: False)
+
+        response = client_with_auth.post(
+            "/api/v1/jobs/json-123/apply",
+            json={"job": {"id": "json-123", "title": "JSON Job"}}
+        )
+        assert response.status_code == 200
+
+    def test_unknown_json_backed_job_still_returns_404(self, client_with_auth, mock_json_history, monkeypatch):
+        """unknown job_id should still return 404 even with JSON fallback."""
+        response = client_with_auth.post("/api/v1/jobs/unknown-999/skip")
+        assert response.status_code == 404
+
+    def test_client_body_mismatch_still_returns_422_for_apply(self, client_with_auth, mock_json_history, monkeypatch):
+        """apply endpoint should still reject mismatched client job_id with 422."""
+        from src.applications import mark_applied
+
+        # Mock mark_applied to return True
+        monkeypatch.setattr("src.applications.mark_applied", lambda *args, **kwargs: True)
+        # Mock is_applied to return False
+        monkeypatch.setattr("src.applications.is_applied", lambda *args, **kwargs: False)
+
+        response = client_with_auth.post(
+            "/api/v1/jobs/json-123/apply",
+            json={"job": {"id": "different-456", "title": "Different Job"}}
+        )
+        assert response.status_code == 422

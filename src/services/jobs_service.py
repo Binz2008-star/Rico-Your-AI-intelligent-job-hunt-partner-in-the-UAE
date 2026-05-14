@@ -56,6 +56,24 @@ def _list_from_json(offset: int, limit: int, min_score: int) -> Dict[str, Any]:
     }
 
 
+def _job_matches_id(job: Dict[str, Any], job_id: str) -> bool:
+    """Check if job matches the given job_id across multiple field names."""
+    if not isinstance(job, dict):
+        return False
+
+    candidates = {
+        job.get("id"),
+        job.get("job_id"),
+        job.get("key"),
+        job.get("job_key"),
+        job.get("link"),
+        job.get("url"),
+        job.get("job_url"),
+    }
+
+    return str(job_id) in {str(value) for value in candidates if value is not None}
+
+
 def get_job(job_id: str) -> Optional[Dict[str, Any]]:
     """Single job by DB integer id or SHA-256 job_id hash. jobs table is global feed."""
     if is_db_available() and job_id.isdigit():
@@ -64,10 +82,17 @@ def get_job(job_id: str) -> Optional[Dict[str, Any]]:
             return job
 
     for job in get_applied_jobs():
-        if not isinstance(job, dict):
-            continue
-        if get_job_id(job) == job_id or str(job.get("id", "")) == job_id:
+        if _job_matches_id(job, job_id):
             return job
+
+    # Fallback: search job_history.json (same source as list_jobs fallback)
+    from src.job_history import load_job_history
+    for item in load_job_history():
+        # Handle both flat job objects and nested {"job": {...}} entries
+        job = item.get("job") if isinstance(item, dict) and isinstance(item.get("job"), dict) else item
+        if _job_matches_id(job, job_id):
+            return job
+
     return None
 
 
