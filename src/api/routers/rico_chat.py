@@ -34,7 +34,7 @@ from typing import Any
 from functools import wraps
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.api.deps import get_current_user, get_current_user_id
 from src.api.rate_limit import LIMIT_CHAT, LIMIT_UPLOAD, LIMIT_WEBHOOK, limiter
@@ -74,7 +74,8 @@ class RicoChatRequest(BaseModel):
     """Authenticated chat request - user_id derived from JWT."""
     message: str = Field(..., max_length=4096)
 
-    @validator("message")
+    @field_validator("message")
+    @classmethod
     def non_empty_message(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError("Message cannot be empty")
@@ -82,17 +83,27 @@ class RicoChatRequest(BaseModel):
 
 
 class RicoPublicChatRequest(BaseModel):
-    """Public chat request with session tracking."""
+    """Public chat request with session tracking or email-based user identification."""
     message: str = Field(..., max_length=2048)
-    session_id: str = Field(..., min_length=8, max_length=64)
+    session_id: str | None = Field(None, min_length=8, max_length=64)
+    email: str | None = Field(None)
 
-    @validator("session_id")
+    @field_validator("session_id")
+    @classmethod
     def safe_session_id(cls, v: str) -> str:
-        if not _SAFE_SESSION_RE.match(v):
+        if v and not _SAFE_SESSION_RE.match(v):
             raise ValueError("Session ID must be alphanumeric, hyphen, or underscore")
         return v
 
-    @validator("message")
+    @field_validator("email")
+    @classmethod
+    def safe_email(cls, v: str) -> str:
+        if v and "@" not in v:
+            raise ValueError("Email must contain @")
+        return v.lower().strip() if v else v
+
+    @field_validator("message")
+    @classmethod
     def non_empty_message(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError("Message cannot be empty")
@@ -124,7 +135,8 @@ class SavedSearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=500)
     filters: dict[str, Any] = Field(default_factory=dict)
 
-    @validator("query")
+    @field_validator("query")
+    @classmethod
     def non_empty_query(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError("Query cannot be empty")
@@ -453,13 +465,25 @@ def rico_chat(request: Request, payload: RicoChatRequest) -> dict[str, Any]:
 @router.post("/chat/public", response_model=PublicChatResponse)
 @limiter.limit("10/minute")
 def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> PublicChatResponse:
-    """Unauthenticated chat for landing page visitors."""
+    """Unauthenticated chat for landing page visitors.
+
+    Supports two user identification modes:
+    - session_id: for anonymous visitors (user_id = public:{session_id})
+    - email: for users who completed Jotform onboarding (user_id = email)
+    """
     start_time = time.time()
 
+    # Validate that either session_id or email is provided
+    if not payload.email and not payload.session_id:
+        raise HTTPException(status_code=422, detail="Either session_id or email must be provided")
+
     try:
-        # Sanitize session_id (already validated by Pydantic)
-        safe_sid = payload.session_id[:64]
-        user_id = f"public:{safe_sid}"
+        # Determine user_id: email takes precedence over session_id
+        if payload.email:
+            user_id = payload.email
+        else:
+            safe_sid = payload.session_id[:64]
+            user_id = f"public:{safe_sid}"
 
         result = chat_service.send_message(user_id=user_id, message=payload.message)
 
@@ -478,10 +502,11 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> Public
         return response
     except Exception as exc:
         _metrics.record_request((time.time() - start_time) * 1000)
+        user_id_for_log = payload.email or f"public:{payload.session_id[:16] if payload.session_id else 'unknown'}"
         err = build_error_response(
             "I encountered an error processing your request. Please try again.",
             log_exc=exc,
-            user_id=f"public:{payload.session_id[:16]}",
+            user_id=user_id_for_log,
         )
         return PublicChatResponse(
             message=err["message"],
