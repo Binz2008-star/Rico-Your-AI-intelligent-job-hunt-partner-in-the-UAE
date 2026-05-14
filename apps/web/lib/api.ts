@@ -252,6 +252,14 @@ export async function createSavedSearch(
   return res.json() as Promise<{ status: string; query: string }>;
 }
 
+export async function deleteSavedSearch(id: string): Promise<void> {
+  const res = await fetch(`${PROXY}/api/v1/rico/settings/saved-searches/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(`Delete search failed: ${res.status}`);
+}
+
 // ── Jobs ──────────────────────────────────────────────────────────────────────
 
 const MOCK_JOBS: Job[] = [
