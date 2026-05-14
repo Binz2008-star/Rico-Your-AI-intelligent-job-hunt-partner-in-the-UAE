@@ -151,7 +151,7 @@ class AgentRuntime:
         )
 
         try:
-            tool_result = tool_def.fn(resolved_job)
+            tool_result = tool_def.fn(resolved_job, user_id=user_id)
         except Exception as exc:
             logger.exception("runtime_tool_error action=%s tool=%s", action, tool_name)
             tool_result = None

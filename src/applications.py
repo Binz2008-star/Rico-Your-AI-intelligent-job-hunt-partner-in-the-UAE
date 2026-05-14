@@ -10,6 +10,7 @@ Application tracking with:
 
 import hashlib
 import json
+import logging
 import os
 import tempfile
 import threading
@@ -17,6 +18,8 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional, Set
 
 from filelock import FileLock, Timeout as FileLockTimeout
+
+logger = logging.getLogger(__name__)
 
 APPLIED_JOBS_FILE = os.path.join(
     os.path.dirname(os.path.dirname(__file__)), "data", "applied_jobs.json"
@@ -124,12 +127,18 @@ def mark_applied(
     Mark a job as applied.
     Thread-safe and cross-process-safe via FileLock + atomic write.
     Returns True if newly added, False if already present.
+
     For authenticated/SaaS path, user_id should be provided for user isolation.
+    When user_id is None (legacy path), writes to shared global state.
+    WARNING: Legacy path without user_id writes to shared state visible to all users.
     """
     if not isinstance(job, dict):
         return False
     if status not in VALID_STATUSES:
         status = "applied"
+
+    if user_id is None:
+        logger.warning("LEGACY_FALLBACK_NO_USER_ID mark_applied writing to shared global state")
 
     job_id = get_job_id(job)
     if not job_id:

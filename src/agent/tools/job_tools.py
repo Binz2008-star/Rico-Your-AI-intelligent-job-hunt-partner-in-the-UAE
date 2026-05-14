@@ -61,8 +61,10 @@ def get_ranked_jobs(
         return _timed("get_ranked_jobs", False, exc, int((time.monotonic() - start) * 1000))
 
 
-def apply_job(job: Dict[str, Any]) -> ToolExecutionResult:
+def apply_job(job: Dict[str, Any], user_id: Optional[str] = None) -> ToolExecutionResult:
     """Trigger automated application for a single job."""
+    if not user_id:
+        raise ValueError("user_id is required for authenticated access")
     if not job.get("link"):
         return ToolExecutionResult(
             success=False,
@@ -72,18 +74,20 @@ def apply_job(job: Dict[str, Any]) -> ToolExecutionResult:
     from src.services.apply_service import apply_to_job
     start = time.monotonic()
     try:
-        data = apply_to_job(job)
+        data = apply_to_job(job, user_id=user_id)
         return _timed("apply_job", True, data, int((time.monotonic() - start) * 1000))
     except Exception as exc:
         return _timed("apply_job", False, exc, int((time.monotonic() - start) * 1000))
 
 
-def skip_job(job: Dict[str, Any]) -> ToolExecutionResult:
+def skip_job(job: Dict[str, Any], user_id: Optional[str] = None) -> ToolExecutionResult:
     """Mark a job as skipped so it won't resurface."""
+    if not user_id:
+        raise ValueError("user_id is required for authenticated access")
     from src.services.jobs_service import skip_job as _svc_skip
     start = time.monotonic()
     try:
-        skipped = _svc_skip(job)
+        skipped = _svc_skip(job, user_id=user_id)
         elapsed = int((time.monotonic() - start) * 1000)
         data = {"skipped": bool(skipped), "title": job.get("title", "Unknown")}
         return _timed("skip_job", True, data, elapsed)
@@ -91,12 +95,14 @@ def skip_job(job: Dict[str, Any]) -> ToolExecutionResult:
         return _timed("skip_job", False, exc, int((time.monotonic() - start) * 1000))
 
 
-def save_job(job: Dict[str, Any]) -> ToolExecutionResult:
+def save_job(job: Dict[str, Any], user_id: Optional[str] = None) -> ToolExecutionResult:
     """Save a job without applying — marks as 'saved' in the tracker."""
-    from src.applications import mark_applied
+    if not user_id:
+        raise ValueError("user_id is required for authenticated access")
+    from src.services.jobs_service import save_job as _svc_save
     start = time.monotonic()
     try:
-        saved = mark_applied(job, "saved", "Saved via agent")
+        saved = _svc_save(job, user_id=user_id)
         elapsed = int((time.monotonic() - start) * 1000)
         data = {"saved": bool(saved), "title": job.get("title", "Unknown")}
         return _timed("save_job", True, data, elapsed)
@@ -104,12 +110,14 @@ def save_job(job: Dict[str, Any]) -> ToolExecutionResult:
         return _timed("save_job", False, exc, int((time.monotonic() - start) * 1000))
 
 
-def block_company(job: Dict[str, Any]) -> ToolExecutionResult:
+def block_company(job: Dict[str, Any], user_id: Optional[str] = None) -> ToolExecutionResult:
     """Block all future results from this company."""
+    if not user_id:
+        raise ValueError("user_id is required for authenticated access")
     from src.services.jobs_service import block_company as _svc_block
     start = time.monotonic()
     try:
-        company = _svc_block(job)
+        company = _svc_block(job, user_id=user_id)
         elapsed = int((time.monotonic() - start) * 1000)
         return _timed("block_company", True, {"company": company}, elapsed)
     except ValueError as exc:

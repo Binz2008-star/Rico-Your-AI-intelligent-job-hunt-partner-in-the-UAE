@@ -89,6 +89,7 @@ RICO_ENABLE_METRICS = os.getenv("RICO_ENABLE_METRICS", "false").lower() in {"1",
 RICO_REDIS_URL = os.getenv("RICO_REDIS_URL", "redis://localhost:6379/0")
 RICO_MAX_APPLIES_DAILY = int(os.getenv("RICO_MAX_APPLIES_DAILY", "4"))
 RICO_MIN_JOBS_THRESHOLD = int(os.getenv("RICO_MIN_JOBS_THRESHOLD", "5"))
+RICO_METRICS_PORT = int(os.getenv("RICO_METRICS_PORT", "9090"))
 
 # 23h: prevents double-runs on the same calendar day
 _FEEDBACK_COOLDOWN = timedelta(hours=23)
@@ -109,8 +110,8 @@ if METRICS_AVAILABLE and RICO_ENABLE_METRICS and not hasattr(__import__('__main_
     apply_errors = Counter("pipeline_apply_errors", "Apply errors by platform")
 
     try:
-        start_http_server(8000)
-        logger.info("prometheus_metrics_enabled port=8000")
+        start_http_server(RICO_METRICS_PORT)
+        logger.info("prometheus_metrics_enabled port=%s", RICO_METRICS_PORT)
         __import__('__main__')._metrics_initialized = True
     except Exception as e:
         logger.warning(f"prometheus_start_failed: {e}")
@@ -175,7 +176,7 @@ def distributed_lock(lock_key: str, timeout: int = 3600):
             r.eval(_UNLOCK_SCRIPT, 1, lock_key, lock_id)
     except Exception as e:
         logger.error(f"lock_error: {e}")
-        yield True  # Fail open
+        yield False  # Fail closed
 
 
 def retryable(max_retries: int = 3, delay: int = 5, retry_exceptions: Tuple[Exception, ...] = (TimeoutError, ConnectionError)):
@@ -213,9 +214,9 @@ def _init_metrics() -> None:
     """Initialize Prometheus metrics if enabled (lazy initialization)."""
     if METRICS_AVAILABLE and RICO_ENABLE_METRICS and not hasattr(_init_metrics, "_started"):
         try:
-            start_http_server(8000)
+            start_http_server(RICO_METRICS_PORT)
             _init_metrics._started = True
-            logger.info("prometheus_metrics_enabled port=8000")
+            logger.info("prometheus_metrics_enabled port=%s", RICO_METRICS_PORT)
         except Exception as e:
             logger.warning(f"prometheus_start_failed: {e}")
 
@@ -423,7 +424,8 @@ def _apply_assistant(matches: List[Tuple[Dict[str, Any], int]]) -> None:
         for job in apply_decisions:
             if not is_applied(job):
                 # Mark as "decision_made" status to track AI decisions without actual application
-                mark_applied(job, status="decision_made")
+                # Legacy path: no user_id available in daily automation context
+                mark_applied(job, status="decision_made", user_id=None)
                 logger.info(f"apply_decision_logged title={job.get('title', 'unknown')} company={job.get('company', 'unknown')}")
 
         if RICO_INTERACTIVE_APPLY:
