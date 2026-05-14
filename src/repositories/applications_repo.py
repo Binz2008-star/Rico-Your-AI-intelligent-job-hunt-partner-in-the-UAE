@@ -83,18 +83,58 @@ def _warn_legacy_fallback(operation: str) -> None:
 # ── Public API ───────────────────────────────────────────────────────────────
 
 
-def get_all(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Load tracked applications for a specific user or fall back to legacy JSON."""
+def get_all(
+    user_id: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> List[Dict[str, Any]]:
+    """Load tracked applications for a specific user or fall back to legacy JSON.
+
+    Args:
+        user_id: User identifier for SaaS path
+        status: Optional status filter
+        limit: Maximum number of results to return
+        offset: Number of results to skip
+    """
     if user_id:
         db = _db()
         if not db:
             raise HTTPException(status_code=503, detail="Database unavailable")
         db_user_id = _provision_db_user_id(db, user_id)
-        return db.get_recommendations(db_user_id, limit=200)
+        return db.get_recommendations(db_user_id, status=status, limit=limit, offset=offset)
+
+    # Legacy fallback - pagination not supported for legacy JSON path
+    _warn_legacy_fallback("get_all")
+    all_apps = _get_applied()
+    if status:
+        all_apps = [a for a in all_apps if a.get("status") == status]
+    return all_apps[offset : offset + limit]
+
+
+def get_count(user_id: Optional[str] = None, status: Optional[str] = None) -> int:
+    """Get total count of applications for a specific user or fall back to legacy JSON.
+
+    Args:
+        user_id: User identifier for SaaS path
+        status: Optional status filter
+    """
+    if user_id:
+        db = _db()
+        if not db:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        db_user_id = _provision_db_user_id(db, user_id)
+        stats = db.get_recommendation_stats(db_user_id)
+        if status:
+            return stats.get("by_status", {}).get(status, 0)
+        return stats.get("total", 0)
 
     # Legacy fallback
-    _warn_legacy_fallback("get_all")
-    return _get_applied()
+    _warn_legacy_fallback("get_count")
+    all_apps = _get_applied()
+    if status:
+        all_apps = [a for a in all_apps if a.get("status") == status]
+    return len(all_apps)
 
 
 def get_stats(user_id: Optional[str] = None) -> Dict[str, Any]:

@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.api.deps import get_current_user_id
 from src.applications import VALID_STATUSES
-from src.repositories.applications_repo import find_by_job_id, get_all, get_stats, update_status
+from src.repositories.applications_repo import find_by_job_id, get_all, get_count, get_stats, update_status
 from src.schemas.applications import (
     ApplicationListResponse,
     StatusUpdateRequest,
@@ -34,14 +34,12 @@ def list_applications(
             detail=f"Invalid status. Valid values: {sorted(VALID_STATUSES)}",
         )
 
-    all_apps: List[Dict[str, Any]] = get_all(user_id=user_id)
-    if status:
-        all_apps = [a for a in all_apps if a.get("status") == status]
-
-    total = len(all_apps)
     offset = (page - 1) * limit
+    applications = get_all(user_id=user_id, status=status, limit=limit, offset=offset)
+    total = get_count(user_id=user_id, status=status)
+
     return {
-        "applications": all_apps[offset : offset + limit],
+        "applications": applications,
         "total": total,
         "page": page,
         "limit": limit,
