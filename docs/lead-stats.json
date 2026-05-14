@@ -1,0 +1,28 @@
+{
+  "generated_at": "2026-05-15T02:34:00Z",
+  "week_label": "Week of May 11, 2026",
+  "pipeline": {
+    "total_leads": 8,
+    "new_this_week": 8,
+    "high_fit_leads": 7,
+    "avg_lead_score": 86.1,
+    "contacted": 0,
+    "replies": 0,
+    "meetings_booked": 0,
+    "closed_won": 0
+  },
+  "top_industries": [
+    "Logistics & Freight",
+    "Healthcare Clinics",
+    "Financial Services",
+    "Real Estate",
+    "HR & Recruitment"
+  ],
+  "top_locations": [
+    "Dubai",
+    "London",
+    "Riyadh",
+    "Abu Dhabi",
+    "Singapore"
+  ]
+}
