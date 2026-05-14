@@ -86,6 +86,21 @@ def profile_to_dict(profile: Any) -> dict[str, Any]:
 class RicoChatAPI:
     """Simple conversational controller for Rico AI."""
 
+    # Deterministic follow-up phrases (must be checked before role classification)
+    _FOLLOWUP_BOTH_ACTION_PHRASES = frozenset({
+        "both",
+        "both please",
+        "do both",
+        "yes both",
+    })
+
+    _FOLLOWUP_KEEP_ALL_PHRASES = frozenset({
+        "keep all",
+        "keep them all",
+        "yes keep all",
+        "keep everything",
+    })
+
     def __init__(self) -> None:
         self.memory = RicoMemoryStore()
         self.agent = RicoAgent(profile_store=self.memory)
@@ -270,6 +285,45 @@ class RicoChatAPI:
                 },
             ],
             "next_action": "choose_next_step",
+        }
+        self._append_chat(user_id, "assistant", response["message"])
+        return response
+
+    def _handle_keep_all_target_roles(self, user_id: str, profile: Any) -> dict[str, Any]:
+        """Handle 'keep all' follow-up - confirm keeping all target roles."""
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        role_text = ", ".join(map(str, target_roles)) if target_roles else "your current target roles"
+
+        response = {
+            "type": "target_roles_confirmed",
+            "message": f"Got it — I will keep all current target roles: {role_text}.",
+            "target_roles": target_roles,
+            "next_actions": [
+                {"action": "find_live_jobs", "label": "Find live UAE jobs", "message": "find live jobs for my target roles"},
+                {"action": "prepare_application_angle", "label": "Prepare application angle", "message": "prepare application angle for my target roles"},
+                {"action": "show_profile_roles", "label": "Show roles from my CV", "message": "show roles from my CV"},
+            ],
+            "next_action": "choose_next_step",
+        }
+        self._append_chat(user_id, "assistant", response["message"])
+        return response
+
+    def _handle_both_requested_actions(self, user_id: str, profile: Any) -> dict[str, Any]:
+        """Handle 'both please' follow-up - trigger both job search and resume review."""
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        role = target_roles[-1] if target_roles else "your target role"
+
+        response = {
+            "type": "combined_action_plan",
+            "message": (
+                f"Got it — I will do both: start with live UAE job matching for {role}, "
+                "then prepare your resume/application angle for the strongest matches."
+            ),
+            "next_actions": [
+                {"action": "find_live_jobs", "label": "Find live UAE jobs", "message": f"find live jobs for {role}"},
+                {"action": "prepare_application_angle", "label": "Prepare application angle", "message": f"prepare application angle for {role}"},
+            ],
+            "next_action": "find_live_jobs_then_prepare_application",
         }
         self._append_chat(user_id, "assistant", response["message"])
         return response
@@ -818,13 +872,30 @@ class RicoChatAPI:
         """Intent-first active-user handler.
 
         Pipeline:
-          1. Classify intent (never defaults to job search)
-          2. Route by intent
-          3. For role-like text, use 3-tier role classifier
-          4. Unknown / nonsense → clarification, not search
+          1. Deterministic follow-up phrases (before role classification)
+          2. Classify intent (never defaults to job search)
+          3. Route by intent
+          4. For role-like text, use 3-tier role classifier
+          5. Unknown / nonsense → clarification, not search
         """
         profile = self._resolve_profile(user_id)
         has_cv = profile.has_cv
+        text = (message or "").strip().lower()
+
+        # ── Deterministic follow-up phrases (must be before role classification) ──
+        if text in self._FOLLOWUP_KEEP_ALL_PHRASES:
+            return self._finalize(
+                self._handle_keep_all_target_roles(user_id, profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        if text in self._FOLLOWUP_BOTH_ACTION_PHRASES:
+            return self._finalize(
+                self._handle_both_requested_actions(user_id, profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
 
         logger.info(
             "rico_followup_check user=%s has_cv=%s msg=%r followup=%s",
@@ -970,15 +1041,6 @@ class RicoChatAPI:
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
-
-        # Follow-up confirmation — handle "both please", "keep all", etc.
-        if intent == "follow_up_confirmation":
-            response = {
-                "type": "follow_up_acknowledged",
-                "message": "Got it. Could you clarify what you'd like me to do next? For example, you can ask me to search for jobs, show your profile, or help with applications.",
-            }
-            self._append_chat(user_id, "assistant", response["message"])
-            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # Explicit job search (regex-matched "find ... jobs" etc.)
         if intent == "job_search_explicit":
