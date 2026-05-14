@@ -68,7 +68,8 @@ def search_jobs(
 ) -> Dict[str, Any]:
     """Run Rico's recommendation workflow scoped to the requesting user.
 
-    Falls back to the default profile only when no user-specific profile exists.
+    Authenticated users without a profile get an explicit empty result.
+    Only the literal "default" user falls back to the global demo profile.
     """
     profile_obj = get_profile(user_id)
     if profile_obj:
@@ -77,9 +78,27 @@ def search_jobs(
             result = RicoSystem().run_for_profile(profile, limit=limit)
         except Exception as exc:
             logger.warning("user_scoped_search_failed: %s", exc)
-            result = run_rico_for_default_profile()
-    else:
+            if user_id == "default":
+                result = run_rico_for_default_profile()
+            else:
+                return {
+                    "query": query,
+                    "city": city,
+                    "count": 0,
+                    "matches": [],
+                    "status": "search_error",
+                }
+    elif user_id == "default":
         result = run_rico_for_default_profile()
+    else:
+        return {
+            "query": query,
+            "city": city,
+            "count": 0,
+            "matches": [],
+            "status": "profile_required",
+            "message": "A user profile is required before searching jobs. Upload your CV or complete onboarding first.",
+        }
 
     matches = result.get("matches", [])[:limit]
     if city:
