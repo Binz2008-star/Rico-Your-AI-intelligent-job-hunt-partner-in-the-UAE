@@ -104,16 +104,33 @@ def import_profile_file(
     }
 
     if run_jobs:
-        # TODO: Connect to existing job pipeline entrypoint
-        # from src.services.jobs_service import run_personalized_job_search
-        # result["jobs"] = run_personalized_job_search(resolved_user_id)
-        result["jobs"] = "TODO: connect existing job pipeline entrypoint"
+        from src.rico_repo_adapter import RicoRepoAdapter
+        from src.profile import get_candidate_profile
+
+        adapter = RicoRepoAdapter()
+        profile = get_candidate_profile(user_id=resolved_user_id)
+        jobs = adapter.fetch_jobs(use_cache=False)
+        scored = adapter.score_jobs(jobs, profile)
+        result["jobs"] = {
+            "fetched": len(jobs),
+            "scored": len(scored),
+            "top_matches": [
+                {"title": job.get("title"), "company": job.get("company"), "score": score}
+                for job, score in scored[:5]
+            ]
+        }
 
     if send_telegram:
-        # TODO: Connect to existing Telegram alert entrypoint
-        # from src.services.telegram_service import send_clean_profile_import_alert
-        # send_clean_profile_import_alert(resolved_user_id, result)
-        result["telegram"] = "TODO: connect existing Telegram alert entrypoint"
+        from src.telegram_bot import send_telegram_message
+
+        message = f"<b>Profile imported successfully</b>\n\n"
+        message += f"User: {resolved_user_id}\n"
+        message += f"Completeness: {result.get('completeness_score', 'N/A')}\n"
+        if result.get("jobs"):
+            jobs_data = result["jobs"]
+            message += f"Jobs: {jobs_data.get('scored', 0)} scored\n"
+        send_telegram_message(message)
+        result["telegram"] = "sent"
 
     return result
 
