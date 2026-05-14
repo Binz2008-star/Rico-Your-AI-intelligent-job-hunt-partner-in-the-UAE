@@ -282,7 +282,7 @@ class RicoChatAPI:
           3. No action verbs (find/search/show/...)
           4. Short phrase -- _looks_like_bare_target_role
           5. Exact or fuzzy match: generated suggestions + target_roles
-          6. Fallback: classify_role_candidate says profile_relevant or known_but_off_profile
+          6. Fallback: classify_role_candidate says profile_relevant only
         """
         if not message or not profile:
             return False
@@ -321,7 +321,10 @@ class RicoChatAPI:
         # Classifier fallback
         try:
             classification, canonical_role = classify_role_candidate(text, profile)
-            if classification in {"profile_relevant", "known_but_off_profile"} and canonical_role:
+            # Only profile-relevant roles count as a selected suggested role.
+            # Known but off-profile roles must fall through to _classified_role_search,
+            # which asks for confirmation instead of bypassing straight to role_confirmation.
+            if classification == "profile_relevant" and canonical_role:
                 return True
         except Exception:
             pass
@@ -1148,8 +1151,12 @@ class RicoChatAPI:
             src = self.SOURCE_HF if hf_text else self.SOURCE_FALLBACK
             return self._finalize(response, src, profile=profile)
 
-        # Nonsense — do NOT search
-        if intent == "nonsense":
+        # Nonsense / short gibberish — do NOT search or defer to AI fallback
+        if intent == "nonsense" or (
+            intent == "unknown"
+            and len(message.strip().split()) == 1
+            and any(ch.isdigit() for ch in message)
+        ):
             response = {
                 "type": "clarification",
                 "message": (

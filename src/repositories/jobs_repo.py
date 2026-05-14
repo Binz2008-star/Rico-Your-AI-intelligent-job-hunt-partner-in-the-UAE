@@ -21,6 +21,7 @@ def list_from_db(
 ) -> Optional[Dict[str, Any]]:
     """
     Paginated job query from Postgres.
+    jobs table is global feed (no user_id), filtering happens at service/application layer.
     Returns None on any DB error so callers can fall back to JSON.
     """
     conn = get_db_connection()
@@ -65,7 +66,7 @@ def list_from_db(
 
 
 def get_by_db_id(db_id: int) -> Optional[Dict[str, Any]]:
-    """Fetch a single job by its integer primary key."""
+    """Fetch a single job by its integer primary key. jobs table is global feed."""
     conn = get_db_connection()
     if not conn:
         return None
