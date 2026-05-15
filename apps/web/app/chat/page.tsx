@@ -352,22 +352,14 @@ export default function ChatPage() {
         res.data?.message ??
         res.data?.content ??
         "";
-      const provider = res.provider ?? res.response_source ?? "unknown";
-      const isRateLimited = res.response_source === "rate_limited" || res.provider_state === "rate_limited";
-      const hfMode = provider === "huggingface" || provider === "hf";
-      const deepseekMode = provider === "deepseek";
-      const providerAvailable =
-        res.provider_available ??
-        (provider === "openai"
-          ? (res.openai_available ?? true)
-          : deepseekMode
-            ? (res.deepseek_available ?? true)
-            : hfMode);
+      const responseSource = res.response_source ?? "unknown";
+      const isRateLimited = responseSource === "rate_limited";
+      const hfMode = responseSource === "huggingface" || responseSource === "hf";
+      const deepseekMode = responseSource === "deepseek";
       const freeMode =
         isRateLimited ||
-        provider === "fallback" ||
-        provider === "none" ||
-        (!hfMode && !deepseekMode && providerAvailable === false);
+        responseSource === "fallback" ||
+        responseSource === "none";
 
       if (isRateLimited) {
         setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: "Rico's AI is rate-limited right now — please try again in a minute.", freeMode: true }]);

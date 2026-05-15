@@ -668,29 +668,21 @@ export interface ChatApiResponse {
   message?: string;
   content?: string;
   answer?: string;
-  type?: string;
-  matches?: JobMatch[];
-  options?: RicoOption[];
-  next_action?: string;
-  role?: string;
-  reasons?: string[];
-  next_actions?: NextAction[];
-  response_source?: string;
-  provider?: string;
-  provider_state?: string;
-  provider_available?: boolean;
-  openai_available?: boolean;
-  deepseek_available?: boolean;
-  hf_available?: boolean;
-  ai_model?: string;
   data?: {
     response?: string;
     reply?: string;
     message?: string;
     content?: string;
   };
+  type?: string;
+  matches?: JobMatch[];
+  options?: RicoOption[];
+  next_action?: string;
+  response_source?: string;
+  role?: string;
+  reasons?: string[];
+  next_actions?: NextAction[];
 }
-// ── CV upload ─────────────────────────────────────────────────────────────────
 
 export interface ParsedCV {
   text: string;

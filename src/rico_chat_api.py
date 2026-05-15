@@ -570,13 +570,11 @@ class RicoChatAPI:
         # Get Jotform form IDs from environment
         jotform_form_id = os.getenv("JOTFORM_FORM_ID") or os.getenv("JOTFORM_RICO_FORM_ID")
 
-        # Hide provider details from normal users - only include for diagnostics
-        # These should only be exposed in admin/diagnostic views, not in user-facing responses
+        # Provider diagnostics are only logged internally, not exposed to users
+        # Admin diagnostics available at /health/ai-provider endpoint
         return {
             **response,
             "response_source": response.get("response_source", source),
-            "provider": response.get("provider", source),
-            "provider_state": response.get("provider_state"),
             "profile_context_present": profile is not None,
             "jotform_form_id": jotform_form_id,
         }
