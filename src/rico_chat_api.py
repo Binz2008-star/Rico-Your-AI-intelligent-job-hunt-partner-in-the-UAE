@@ -11,7 +11,8 @@ import json
 import logging
 import os
 import re
-from dataclasses import asdict, is_dataclass
+import uuid
+from datetime import datetime, timezone
 from typing import Any, NamedTuple
 
 # Standard library imports first
@@ -47,6 +48,11 @@ CV_FILE_RE = re.compile(r"\b[\w .()_-]+\.(?:pdf|docx?|txt)\b", re.IGNORECASE)
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PHONE_RE = re.compile(r"(?:\+?\d[\d\s().-]{7,}\d)")
 BARE_ROLE_RE = re.compile(r"^[A-Za-z][A-Za-z\s/&+-]{2,80}$", re.IGNORECASE)
+
+
+def generate_error_ref() -> str:
+    """Generate a unique error reference ID for tracking and support lookup."""
+    return f"ERR-{uuid.uuid4().hex[:8].upper()}"
 
 ONBOARDING_FIELD_LABELS = {
     "email": "email address",

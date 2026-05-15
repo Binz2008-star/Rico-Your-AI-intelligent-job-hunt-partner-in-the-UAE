@@ -41,15 +41,14 @@ from src.api.rate_limit import LIMIT_CHAT, LIMIT_UPLOAD, LIMIT_WEBHOOK, limiter
 from src.repositories.profile_repo import (
     get_profile,
     upsert_profile,
-    list_saved_searches,
-    save_search,
-    delete_search,
 )
 from src.repositories.onboarding_repo import mark_onboarding_complete
-from src.repositories.learning_repo import get_learning_repository
-from src.rico_openai_runtime import call_openai_minimal
-from src.rico_env import get_ai_provider
-import src.services.chat_service as chat_service
+from src.agent.responses.schema import RicoResponse, build_error_response, _generate_debug_id
+from src.agent.runtime import agent_runtime
+from src.models.onboarding import ONBOARDING_IN_PROGRESS
+from src.rico_agent import RicoAgent
+from src.rico_chat_api import generate_error_ref
+from src.rico_hf_client import generate_text, is_available as hf_ok
 from src.rico_openai_agent import RicoOpenAIAgent
 from src.agent.responses.schema import build_error_response
 
@@ -466,40 +465,46 @@ def rico_delete_saved_search(request: Request, search_id: str) -> None:
 def rico_chat(request: Request, payload: RicoChatRequest) -> dict[str, Any]:
     """Authenticated chat endpoint."""
     start_time = time.time()
+    error_ref = generate_error_ref()
     try:
         user = get_current_user(request)
         user_id = user["email"]
 
         logger.info(
-            "chat_request user=%s message_len=%d",
+            "chat_request user=%s message_len=%d error_ref=%s",
             user_id,
             len(payload.message),
+            error_ref,
         )
 
         result = chat_service.send_message(user_id=user_id, message=payload.message)
 
         logger.info(
-            "chat_response user=%s intent=%s matches=%d",
+            "chat_response user=%s intent=%s matches=%d error_ref=%s",
             user_id,
             result.get("intent", "unknown"),
             len(result.get("matches", [])),
+            error_ref,
         )
 
         _metrics.record_request((time.time() - start_time) * 1000)
         return result
     except Exception as exc:
         logger.exception(
-            "chat_error user=%s message_len=%d error=%s",
+            "chat_error user=%s message_len=%d error=%s error_ref=%s",
             user_id if "user_id" in locals() else "unknown",
             len(payload.message) if "payload" in locals() else 0,
             str(exc),
+            error_ref,
         )
         _metrics.record_request((time.time() - start_time) * 1000)
-        return build_error_response(
-            "I couldn't process your request. Please try again or rephrase your message.",
+        error_response = build_error_response(
+            f"I couldn't process your request. Reference: {error_ref}. Please try again or rephrase your message.",
             log_exc=exc,
             user_id=user_id if "user_id" in locals() else "unknown",
         )
+        error_response["error_ref"] = error_ref
+        return error_response
 
 
 @router.post("/chat/public", response_model=PublicChatResponse)
@@ -512,6 +517,7 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> Public
     - email: for users who completed Jotform onboarding (user_id = email)
     """
     start_time = time.time()
+    error_ref = generate_error_ref()
 
     # Validate that either session_id or email is provided
     if not payload.email and not payload.session_id:
@@ -526,18 +532,20 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> Public
             user_id = f"public:{safe_sid}"
 
         logger.info(
-            "chat_public_request user=%s message_len=%d",
+            "chat_public_request user=%s message_len=%d error_ref=%s",
             user_id,
             len(payload.message),
+            error_ref,
         )
 
         result = chat_service.send_message(user_id=user_id, message=payload.message)
 
         logger.info(
-            "chat_public_response user=%s intent=%s matches=%d",
+            "chat_public_response user=%s intent=%s matches=%d error_ref=%s",
             user_id,
             result.get("intent", "unknown"),
             len(result.get("matches", [])),
+            error_ref,
         )
 
         # Strip internal diagnostics from unauthenticated responses
@@ -555,15 +563,16 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> Public
         return response
     except Exception as exc:
         logger.exception(
-            "chat_public_error user=%s message_len=%d error=%s",
+            "chat_public_error user=%s message_len=%d error=%s error_ref=%s",
             user_id if "user_id" in locals() else "unknown",
             len(payload.message) if "payload" in locals() else 0,
             str(exc),
+            error_ref,
         )
         _metrics.record_request((time.time() - start_time) * 1000)
         # Return a simple error for public users without exposing details
         return PublicChatResponse(
-            message="I couldn't process your request. Please try again or rephrase your message.",
+            message=f"I couldn't process your request. Reference: {error_ref}. Please try again or rephrase your message.",
             type="error",
             matches=None,
             options=None,
