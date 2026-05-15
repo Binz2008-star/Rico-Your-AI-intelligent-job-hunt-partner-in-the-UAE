@@ -32,6 +32,7 @@ class RicoEnvReport:
     ready_for_deepseek: bool
     ready_for_jotform: bool
     ready_for_hf: bool
+    hf_available: bool
     ai_provider: str
     checks: List[EnvCheck]
 
@@ -44,6 +45,7 @@ class RicoEnvReport:
             "ready_for_deepseek": self.ready_for_deepseek,
             "ready_for_jotform": self.ready_for_jotform,
             "ready_for_hf": self.ready_for_hf,
+            "hf_available": self.hf_available,
             "ai_provider": self.ai_provider,
             "checks": [asdict(check) for check in self.checks],
         }
@@ -145,6 +147,7 @@ def get_rico_env_report() -> RicoEnvReport:
     ready_for_openai = provider == "openai" and openai_key_present
     ready_for_deepseek = provider == "deepseek" and deepseek_key_present
     ready_for_hf = provider == "huggingface" and hf_key_present
+    hf_available = hf_key_present
 
     jotform_form_id_present = bool(
         present.get("JOTFORM_FORM_ID", False)
@@ -160,6 +163,7 @@ def get_rico_env_report() -> RicoEnvReport:
         ready_for_deepseek=ready_for_deepseek,
         ready_for_jotform=ready_for_jotform,
         ready_for_hf=ready_for_hf,
+        hf_available=hf_available,
         ai_provider=provider,
         checks=checks,
     )

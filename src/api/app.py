@@ -240,6 +240,7 @@ def health() -> Dict[str, Any]:
         "ready_for_openai": rico.ready_for_openai,
         "ready_for_deepseek": rico.ready_for_deepseek,
         "ready_for_hf": rico.ready_for_hf,
+        "hf_available": rico.hf_available,
         "ready_for_jotform": rico.ready_for_jotform,
         "ai_provider": rico.ai_provider,
         "rico": {
@@ -250,6 +251,7 @@ def health() -> Dict[str, Any]:
             "ready_for_deepseek": rico.ready_for_deepseek,
             "ready_for_jotform":  rico.ready_for_jotform,
             "ready_for_hf":       rico.ready_for_hf,
+            "hf_available":       rico.hf_available,
             "ai_provider":        rico.ai_provider,
         },
         "endpoints": {

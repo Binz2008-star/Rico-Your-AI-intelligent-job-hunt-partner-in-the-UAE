@@ -28,6 +28,7 @@ class TestAIProviderHealthEndpoint:
         # Verify all required fields exist
         assert hasattr(report, "ready_for_deepseek")
         assert hasattr(report, "ready_for_hf")
+        assert hasattr(report, "hf_available")
         assert hasattr(report, "ready_for_jotform")
         assert hasattr(report, "ai_provider")
         assert hasattr(report, "ready_for_openai")
@@ -36,6 +37,7 @@ class TestAIProviderHealthEndpoint:
         report_dict = report.to_dict()
         assert "ready_for_deepseek" in report_dict
         assert "ready_for_hf" in report_dict
+        assert "hf_available" in report_dict
         assert "ready_for_jotform" in report_dict
         assert "ai_provider" in report_dict
         assert "ready_for_openai" in report_dict
@@ -80,6 +82,7 @@ class TestAIProviderHealthEndpoint:
 
             assert provider == "huggingface"
             assert report.ready_for_hf == True
+            assert report.hf_available == True
 
         finally:
             # Restore original values
@@ -91,6 +94,42 @@ class TestAIProviderHealthEndpoint:
                 os.environ.pop("RICO_AI_PROVIDER", None)
             else:
                 os.environ["RICO_AI_PROVIDER"] = original_provider
+
+    def test_hf_available_separate_from_ready_for_hf(self):
+        """hf_available should report HF key presence regardless of active provider."""
+        # Save original values
+        original_hf = os.getenv("HF_API_TOKEN")
+        original_provider = os.getenv("RICO_AI_PROVIDER")
+        original_deepseek = os.getenv("DEEPSEEK_API_KEY")
+
+        try:
+            # Test with DeepSeek as active provider but HF key present
+            os.environ["DEEPSEEK_API_KEY"] = "test_deepseek"
+            os.environ["HF_API_TOKEN"] = "test_hf_key"
+            os.environ["RICO_AI_PROVIDER"] = "deepseek"
+
+            report = get_rico_env_report()
+            provider = get_ai_provider()
+
+            assert provider == "deepseek"
+            assert report.ready_for_deepseek == True
+            assert report.ready_for_hf == False  # HF is not the active provider
+            assert report.hf_available == True  # HF key is present for fallback
+
+        finally:
+            # Restore original values
+            if original_hf is None:
+                os.environ.pop("HF_API_TOKEN", None)
+            else:
+                os.environ["HF_API_TOKEN"] = original_hf
+            if original_provider is None:
+                os.environ.pop("RICO_AI_PROVIDER", None)
+            else:
+                os.environ["RICO_AI_PROVIDER"] = original_provider
+            if original_deepseek is None:
+                os.environ.pop("DEEPSEEK_API_KEY", None)
+            else:
+                os.environ["DEEPSEEK_API_KEY"] = original_deepseek
 
     def test_jotform_readiness_detection(self):
         """Jotform readiness should be detected when form ID is set."""
