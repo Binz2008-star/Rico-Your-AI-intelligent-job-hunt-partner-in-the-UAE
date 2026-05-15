@@ -436,6 +436,8 @@ export default function ChatPage() {
       // Check if preview is ready for confirmation
       if (result.status === "preview_ready" && result.preview) {
         const preview = result.preview;
+        // Handle both new (skills_detected) and old (skills) response shapes
+        const skills = preview.skills_detected ?? preview.skills ?? [];
         const previewText = (
           `CV profile preview\n\n` +
           `Name: ${preview.name || "—"}\n` +
@@ -443,7 +445,7 @@ export default function ChatPage() {
           `Phone: ${preview.phone || "—"}\n` +
           `Current role: ${preview.current_role || "—"}\n` +
           `Experience: ${preview.experience_years ? `~${preview.experience_years} years` : "—"}\n` +
-          `Skills: ${preview.skills?.slice(0, 6).join(", ") || "—"}\n` +
+          `Skills: ${skills.slice(0, 6).join(", ") || "—"}\n` +
           `Document quality: ${result.extraction_quality || "unknown"}\n\n` +
           `Use this profile for job matching?`
         );
@@ -464,8 +466,9 @@ export default function ChatPage() {
       // Fallback for old response format (shouldn't happen with new backend)
       const p = result.parsed;
       if (p) {
+        const skills = p.skills ?? [];
         const summary = [
-          p.skills?.length ? `Skills detected: ${p.skills.slice(0, 6).join(", ")}` : "",
+          skills.length ? `Skills detected: ${skills.slice(0, 6).join(", ")}` : "",
           p.emails?.length ? `Email: ${p.emails[0]}` : "",
           p.phones?.length ? `Phone: ${p.phones[0]}` : "",
           p.extracted_chars ? `Chars extracted: ${p.extracted_chars}` : "",
