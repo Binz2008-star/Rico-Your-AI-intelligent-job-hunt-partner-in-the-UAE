@@ -214,8 +214,21 @@ def logout(response: Response) -> Dict[str, str]:
 def me(request: Request) -> Dict[str, Any]:
     # Deferred import avoids circular dependency (deps imports from this module)
     from src.api.deps import get_current_user
-    user = get_current_user(request)
-    return {"email": user["email"], "role": user.get("role", "user"), "authenticated": True}
+
+    try:
+        user = get_current_user(request)
+        return {"email": user["email"], "role": user.get("role", "user"), "authenticated": True}
+    except HTTPException as e:
+        # Return guest-friendly response for unauthenticated requests
+        # This allows public/guest users to use the app without being forced to login
+        if e.status_code == 401:
+            return {
+                "email": None,
+                "role": "guest",
+                "authenticated": False,
+                "guest": True
+            }
+        raise
 
 
 def _reset_base_url() -> str:

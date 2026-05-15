@@ -31,12 +31,16 @@ export function useAuth() {
             name: me.email.split("@")[0],
             email: me.email,
           });
+        } else if (me.guest) {
+          // Guest user - set user as null but mark as ready
+          setUser(null);
         } else {
           router.push("/login");
         }
       })
       .catch(() => {
-        router.push("/login");
+        // On error, treat as guest
+        setUser(null);
       })
       .finally(() => setReady(true));
   }, [router]);

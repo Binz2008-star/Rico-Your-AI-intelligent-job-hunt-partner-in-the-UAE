@@ -136,9 +136,10 @@ export async function getVersion(): Promise<VersionResponse> {
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 export interface MeResponse {
-  email: string;
+  email: string | null;
   role: string;
   authenticated: boolean;
+  guest?: boolean;
 }
 
 export async function fetchMe(signal?: AbortSignal): Promise<MeResponse> {
