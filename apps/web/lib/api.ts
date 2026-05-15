@@ -809,7 +809,84 @@ export async function submitOnboarding(
   return res.json() as Promise<{ status: string; updated_fields: string[] }>;
 }
 
-// ── Auth: register ────────────────────────────────────────────────────────────
+// ── Applications Tracking ───────────────────────────────────────────────────────
+
+export interface ApplicationCreatePayload {
+  job_id: string;
+  title: string;
+  company: string;
+  location?: string;
+  url?: string;
+  status?: string;
+  source?: string;
+}
+
+export interface ApplicationUpdatePayload {
+  status: string;
+  notes?: string;
+}
+
+export async function createApplication(
+  payload: ApplicationCreatePayload
+): Promise<{ status: string; job_id: string; message: string }> {
+  const res = await fetch(`${PROXY}/api/v1/applications`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { detail?: unknown };
+    throw new Error(extractDetail(body.detail, `Create application failed: ${res.status}`));
+  }
+  return res.json() as Promise<{ status: string; job_id: string; message: string }>;
+}
+
+export async function updateApplication(
+  jobId: string,
+  payload: ApplicationUpdatePayload
+): Promise<{ status: string; job_id: string; message: string }> {
+  const res = await fetch(`${PROXY}/api/v1/applications/${jobId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { detail?: unknown };
+    throw new Error(extractDetail(body.detail, `Update application failed: ${res.status}`));
+  }
+  return res.json() as Promise<{ status: string; job_id: string; message: string }>;
+}
+
+// ── Profile Updates ───────────────────────────────────────────────────────────
+
+export interface ProfileUpdatePayload {
+  target_roles?: string[];
+  preferred_cities?: string[];
+  salary_expectation_aed?: number;
+  years_experience?: number;
+  current_role?: string;
+  skills?: string[];
+}
+
+export async function updateProfile(
+  payload: ProfileUpdatePayload
+): Promise<{ status: string; updated_fields: string[] }> {
+  const res = await fetch(`${PROXY}/api/v1/rico/profile`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { detail?: unknown };
+    throw new Error(extractDetail(body.detail, `Profile update failed: ${res.status}`));
+  }
+  return res.json() as Promise<{ status: string; updated_fields: string[] }>;
+}
+
+// ── Auth Register ───────────────────────────────────────────────────────────────
 
 export async function register(
   email: string,

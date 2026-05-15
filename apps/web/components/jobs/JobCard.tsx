@@ -24,6 +24,7 @@ const LOGO_COLORS = [
 export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps) {
   const [localAction, setLocalAction] = useState<string | null>(null);
   const [isDone, setIsDone] = useState(false);
+  const [showMarkApplied, setShowMarkApplied] = useState(false);
 
   const config = useMemo(() => {
     const name = job.company ?? "Unknown";
@@ -40,7 +41,11 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
     setLocalAction(action);
     try {
       await onAction(job.job_id, action);
-      setIsDone(true);
+      if (action === "apply") {
+        setShowMarkApplied(true);
+      } else {
+        setIsDone(true);
+      }
     } finally {
       setLocalAction(null);
     }
@@ -101,7 +106,19 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
       </div>
 
       {/* actions */}
-      {!isDone ? (
+      {showMarkApplied ? (
+        <div className="flex gap-2 mt-4 pt-3 border-t border-white/5">
+          <Button
+            variant="teal"
+            size="sm"
+            loading={localAction === "mark_applied" || isSubmitting}
+            onClick={() => handleActionClick("mark_applied")}
+            className="flex-1"
+          >
+            Mark as applied
+          </Button>
+        </div>
+      ) : !isDone ? (
         <div className="flex gap-2 mt-4 pt-3 border-t border-white/5">
           <Button
             variant="teal"

@@ -34,6 +34,10 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<"auth" | "other" | null>(null);
 
+  // TODO: Implement proper admin role check via fetchMe when available
+  // For now, hide backend diagnostics from all users
+  const isAdmin = false;
+
   useEffect(() => {
     getHealth()
       .then(setHealth)
@@ -217,75 +221,77 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        {/* Backend Status */}
-        <section className="bg-[#13132a]/80 border border-white/[0.06] rounded-2xl p-6">
-          <h2 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[15px] mb-4 text-white">Backend Status</h2>
-          {loadingHealth ? (
-            <div className="flex flex-col gap-2">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="h-10 rounded-lg bg-white/[0.03] animate-pulse" />
-              ))}
-            </div>
-          ) : health ? (
-            (() => {
-              const rico = health.rico;
-              const readyForHf = health.ready_for_hf ?? rico?.ready_for_hf ?? false;
-              const readyForOpenAI =
-                health.ready_for_openai ?? rico?.ready_for_openai ?? health.openai ?? false;
-              const readyForDeepSeek =
-                health.ready_for_deepseek ?? rico?.ready_for_deepseek ?? false;
-              const readyForJotform =
-                health.ready_for_jotform ?? rico?.ready_for_jotform ?? false;
-              const readyForTelegram =
-                health.telegram ?? rico?.ready_for_telegram ?? false;
-              const aiProvider = health.ai_provider ?? rico?.ai_provider ?? "unknown";
-              const dbStatus =
-                health.database ?? health.db ?? (rico?.ready_for_db ? "connected" : "unknown");
+        {/* Backend Status — Admin Only */}
+        {isAdmin && (
+          <section className="bg-[#13132a]/80 border border-white/[0.06] rounded-2xl p-6">
+            <h2 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[15px] mb-4 text-white">Backend Status</h2>
+            {loadingHealth ? (
+              <div className="flex flex-col gap-2">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="h-10 rounded-lg bg-white/[0.03] animate-pulse" />
+                ))}
+              </div>
+            ) : health ? (
+              (() => {
+                const rico = health.rico;
+                const readyForHf = health.ready_for_hf ?? rico?.ready_for_hf ?? false;
+                const readyForOpenAI =
+                  health.ready_for_openai ?? rico?.ready_for_openai ?? health.openai ?? false;
+                const readyForDeepSeek =
+                  health.ready_for_deepseek ?? rico?.ready_for_deepseek ?? false;
+                const readyForJotform =
+                  health.ready_for_jotform ?? rico?.ready_for_jotform ?? false;
+                const readyForTelegram =
+                  health.telegram ?? rico?.ready_for_telegram ?? false;
+                const aiProvider = health.ai_provider ?? rico?.ai_provider ?? "unknown";
+                const dbStatus =
+                  health.database ?? health.db ?? (rico?.ready_for_db ? "connected" : "unknown");
 
-              return (
-                <>
-                  <Row label="Service" value={health.service ?? "—"} />
-                  <Row label="Status" value={health.status} ok={health.status === "ok" || health.status === "healthy"} />
-                  <Row label="Environment" value={health.environment ?? "—"} />
-                  <Row label="Database" value={dbStatus} ok={dbStatus === "connected"} />
-                  <Row
-                    label="AI Provider"
-                    value={aiProvider}
-                    ok={readyForHf || readyForOpenAI || readyForDeepSeek}
-                  />
-                  <Row
-                    label="Hugging Face"
-                    value={readyForHf ? "Configured" : "Not configured"}
-                    ok={readyForHf}
-                  />
-                  <Row
-                    label="DeepSeek"
-                    value={readyForDeepSeek ? "Active" : "Not active"}
-                    ok={readyForDeepSeek}
-                  />
-                  <Row
-                    label="OpenAI"
-                    value={readyForOpenAI ? "Active" : "Not active"}
-                    ok={readyForOpenAI}
-                  />
-                  <Row
-                    label="Jotform"
-                    value={readyForJotform ? "Configured" : "Not configured"}
-                    ok={readyForJotform}
-                  />
-                  <Row
-                    label="Telegram"
-                    value={readyForTelegram ? "Connected" : "Not configured"}
-                    ok={readyForTelegram}
-                  />
-                  <Row label="Version" value={`v${health.version ?? "0"}`} />
-                </>
-              );
-            })()
-          ) : (
-            <p className="text-[13px] text-[#ff5e5b]">Could not reach backend</p>
-          )}
-        </section>
+                return (
+                  <>
+                    <Row label="Service" value={health.service ?? "—"} />
+                    <Row label="Status" value={health.status} ok={health.status === "ok" || health.status === "healthy"} />
+                    <Row label="Environment" value={health.environment ?? "—"} />
+                    <Row label="Database" value={dbStatus} ok={dbStatus === "connected"} />
+                    <Row
+                      label="AI Provider"
+                      value={aiProvider}
+                      ok={readyForHf || readyForOpenAI || readyForDeepSeek}
+                    />
+                    <Row
+                      label="Hugging Face"
+                      value={readyForHf ? "Configured" : "Not configured"}
+                      ok={readyForHf}
+                    />
+                    <Row
+                      label="DeepSeek"
+                      value={readyForDeepSeek ? "Active" : "Not active"}
+                      ok={readyForDeepSeek}
+                    />
+                    <Row
+                      label="OpenAI"
+                      value={readyForOpenAI ? "Active" : "Not active"}
+                      ok={readyForOpenAI}
+                    />
+                    <Row
+                      label="Jotform"
+                      value={readyForJotform ? "Configured" : "Not configured"}
+                      ok={readyForJotform}
+                    />
+                    <Row
+                      label="Telegram"
+                      value={readyForTelegram ? "Connected" : "Not configured"}
+                      ok={readyForTelegram}
+                    />
+                    <Row label="Version" value={`v${health.version ?? "0"}`} />
+                  </>
+                );
+              })()
+            ) : (
+              <p className="text-[13px] text-[#ff5e5b]">Could not reach backend</p>
+            )}
+          </section>
+        )}
 
         {/* Frontend Config */}
         <section className="bg-[#13132a]/80 border border-white/[0.06] rounded-2xl p-6">

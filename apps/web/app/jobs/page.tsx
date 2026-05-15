@@ -8,7 +8,7 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
-import { ApiError, applyJob, getJobs, saveJob, skipJob } from "@/lib/api";
+import { ApiError, createApplication, getJobs, saveJob, skipJob, updateApplication } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { Job } from "@/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -84,14 +84,32 @@ export default function JobsPage() {
 
     try {
       if (action === "apply") {
-        if (!job.apply_url) {
-          throw new Error("This job is missing an apply link.");
+        // Create application record with status "opened_external"
+        await createApplication({
+          job_id: job.job_id,
+          title: job.title,
+          company: job.company,
+          location: job.location,
+          url: job.apply_url,
+          status: "opened_external",
+          source: "manual",
+        });
+
+        // Open external URL
+        if (job.apply_url) {
+          window.open(job.apply_url, "_blank");
+          toast("Application opened. Click 'Mark as applied' after submitting.", "success");
+        } else {
+          toast("Job opened. Mark as applied when you submit externally.", "success");
         }
-        const result = await applyJob(jobId, payload);
-        if (!SUCCESS_STATUSES.includes(String(result.status ?? "").toLowerCase())) {
-          throw new Error(result.message || "Manual apply required for this job.");
-        }
-        toast("Application submitted", "success");
+        return;
+      }
+
+      if (action === "mark_applied") {
+        // Update application status to "applied"
+        await updateApplication(jobId, { status: "applied" });
+        toast("Application marked as applied", "success");
+        setJobs((prev) => prev.filter((item) => item.job_id !== jobId));
         return;
       }
 
@@ -123,22 +141,7 @@ export default function JobsPage() {
       throw new Error(`Unsupported job action: ${action}`);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Action failed. Please try again.";
-
-      // Check if error contains "Open manually:" or a job URL
-      const openManuallyMatch = errorMessage.match(/Open manually:\s*(https?:\/\/[^\s]+)/);
-      const urlMatch = errorMessage.match(/(https?:\/\/[^\s]+)/);
-      const manualUrl = openManuallyMatch?.[1] || urlMatch?.[1] || job.apply_url;
-
-      if (errorMessage.includes("Open manually:") || errorMessage.includes("automated apply engine")) {
-        // Show friendly message with manual apply option
-        toast("Auto-apply unavailable for this job source. Please open and apply manually.", "error");
-        if (manualUrl) {
-          window.open(manualUrl, "_blank");
-        }
-      } else {
-        toast(errorMessage, "error");
-      }
-      // Don't re-throw to prevent uncaught promise errors
+      toast(errorMessage, "error");
     } finally {
       setSubmittingId(null);
     }
