@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://ricohunt.com"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
   title: "Rico AI — Your Autonomous UAE Career Agent",
   description: "Stop searching for UAE jobs manually. Rico AI finds matching jobs, scores them, sends Telegram alerts, helps you apply, and tracks everything — so you never have to scroll job boards again.",
   alternates: { canonical: "/" },
@@ -10,7 +10,6 @@ export const metadata: Metadata = {
     title: "Rico AI — Your Autonomous UAE Career Agent",
     description: "The AI career agent that job-hunts for you in the UAE. Rico finds, scores, alerts, and tracks — and never applies without your approval.",
     type: "website",
-    url: "https://ricohunt.com",
     siteName: "Rico AI",
   },
   twitter: {

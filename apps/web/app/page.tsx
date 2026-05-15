@@ -10,7 +10,14 @@ const CHAT_URL = "/chat";
 function useReveal() {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
     const el = ref.current;
     if (!el) return;
     const obs = new IntersectionObserver(
@@ -19,16 +26,22 @@ function useReveal() {
     );
     obs.observe(el);
     return () => obs.disconnect();
-  }, []);
+  }, [mounted]);
   return { ref, visible };
 }
 
 function Reveal({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   const { ref, visible } = useReveal();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   return (
     <div
       ref={ref}
-      className={`transition-all duration-700 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-5"} ${className}`}
+      className={`transition-all duration-700 ${mounted && visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-5"} ${className}`}
     >
       {children}
     </div>
@@ -52,10 +65,17 @@ const TICKER_ITEMS = [
 /* ─── Phone mockup with animated typing completion ─── */
 function PhoneMockup() {
   const [replied, setReplied] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
     const t = setTimeout(() => setReplied(true), 3500);
     return () => clearTimeout(t);
-  }, []);
+  }, [mounted]);
 
   return (
     <div style={{ animation: "float 4s ease-in-out infinite" }}>
