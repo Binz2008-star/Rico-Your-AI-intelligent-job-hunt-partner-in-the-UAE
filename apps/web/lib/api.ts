@@ -698,9 +698,11 @@ export interface ParsedCV {
   skills: string[];
   emails: string[];
   phones: string[];
-  years_experience_hint: number | null;
+  years_experience_hint?: number | null;
   certifications: string[];
   languages: string[];
+  extraction_quality?: string;
+  extracted_chars?: number;
 }
 
 export interface UploadCVResponse {

@@ -23,6 +23,8 @@ class ParsedCV:
     years_experience_hint: Optional[float]
     certifications: List[str]
     languages: List[str]
+    extraction_quality: str = "unknown"
+    extracted_chars: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -70,7 +72,27 @@ class CVParser:
         certifications = [cert for cert in self.CERT_HINTS if cert in lower]
         languages = [lang for lang in self.LANGUAGE_HINTS if lang in lower]
         years = self._extract_years(lower)
-        return ParsedCV(cleaned, skills, emails, phones, years, certifications, languages)
+
+        char_count = len(cleaned)
+
+        if char_count < 300:
+            quality = "poor"
+        elif char_count < 1000:
+            quality = "partial"
+        else:
+            quality = "good"
+
+        return ParsedCV(
+            text=cleaned,
+            skills=skills,
+            emails=emails,
+            phones=phones,
+            years_experience_hint=years,
+            certifications=certifications,
+            languages=languages,
+            extraction_quality=quality,
+            extracted_chars=char_count,
+        )
 
     def _extract_years(self, text: str) -> Optional[float]:
         matches = re.findall(r"(\d+(?:\.\d+)?)\+?\s*(?:years|yrs|year)", text)

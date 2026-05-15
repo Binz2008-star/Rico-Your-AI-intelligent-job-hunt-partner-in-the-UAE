@@ -411,7 +411,15 @@ export default function ChatPage() {
         p.phones?.length ? `Phone: ${p.phones[0]}` : "",
         p.years_experience_hint ? `Experience: ~${p.years_experience_hint} years` : "",
       ].filter(Boolean).join(" · ");
-      const text = `CV received: ${file.name}. I extracted your details and pre-filled your profile.${summary ? `\n\n${summary}` : ""}\n\nTell me your target roles and I'll start finding matches.`;
+
+      let text: string;
+      if (p.extraction_quality === "poor") {
+        text = `CV received: ${file.name}, but I could not read enough text from the document. It may be scanned or image-based. Please upload a text-based PDF or DOCX for better extraction.`;
+      } else if (p.extraction_quality === "partial") {
+        text = `CV received: ${file.name}. I extracted the readable details and updated your profile.${summary ? `\n\n${summary}` : ""}\n\nTell me your target roles and I'll start finding matches.`;
+      } else {
+        text = `CV received: ${file.name}. I extracted your details and pre-filled your profile.${summary ? `\n\n${summary}` : ""}\n\nTell me your target roles and I'll start finding matches.`;
+      }
       setMessages((prev) => [...prev, { id: nextId(), role: "rico", text }]);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Upload failed";
