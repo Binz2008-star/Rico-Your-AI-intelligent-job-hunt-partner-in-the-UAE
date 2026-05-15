@@ -224,9 +224,15 @@ class RicoSystem:
         started_at = datetime.now(_UTC).isoformat()
         limit = limit or self.config.max_matches
 
+        # Generate deterministic search ID based on profile parameters
+        import hashlib
+        search_params = f"{profile.user_id}|{profile.target_roles}|{profile.preferred_cities}|{profile.salary_expectation_aed or 0}|{limit}"
+        search_id = hashlib.md5(search_params.encode()).hexdigest()[:8]
+
         logger.info(
-            "job_search_start user=%s target_roles=%s city=%s salary=%d limit=%d",
+            "job_search_start user=%s search_id=%s target_roles=%s city=%s salary=%d limit=%d",
             profile.user_id,
+            search_id,
             profile.target_roles,
             profile.preferred_cities,
             profile.salary_expectation_aed or 0,
@@ -260,7 +266,15 @@ class RicoSystem:
                 if getattr(decision, "decision", None) in {"apply", "watch"}:
                     selected.append((decision.job, int(decision.final_score)))
 
-            selected = sorted(selected, key=lambda item: item[1], reverse=True)
+            # Deterministic sorting: primary by score, secondary by title, tertiary by company
+            selected = sorted(
+                selected,
+                key=lambda item: (
+                    -item[1],  # Score descending
+                    str(item[0].get("title", "")).lower(),  # Title ascending
+                    str(item[0].get("company", "")).lower(),  # Company ascending
+                )
+            )
             selected = self.repo.remove_applied_jobs(selected)
             selected = selected[:limit]
 
@@ -347,6 +361,7 @@ class RicoSystem:
 
             return {
                 "status": "completed",
+                "search_id": search_id,
                 "started_at": started_at,
                 "completed_at": completed_at,
                 "jobs_fetched": len(jobs),
