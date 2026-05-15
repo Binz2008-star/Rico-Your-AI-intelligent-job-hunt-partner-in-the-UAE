@@ -773,104 +773,124 @@ async def rico_upload_cv(
 ) -> dict[str, Any]:
     """Upload and parse CV file (PDF only)."""
     start_time = time.time()
+    error_ref = generate_error_ref()
     resolved_user_id = _resolve_upload_user_id(request, user_id, form_user_id)
 
-    data = await file.read()
-    if len(data) > _MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="File exceeds 10 MB limit")
-    if not data:
-        raise HTTPException(status_code=422, detail="Uploaded file is empty")
-    if not data.startswith(_PDF_MAGIC):
-        raise HTTPException(status_code=422, detail="Only PDF files are accepted")
+    try:
+        data = await file.read()
+        if len(data) > _MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="File exceeds 10 MB limit")
+        if not data:
+            raise HTTPException(status_code=422, detail="Uploaded file is empty")
+        if not data.startswith(_PDF_MAGIC):
+            raise HTTPException(status_code=422, detail="Only PDF files are accepted")
 
-    safe_name = _safe_filename(file.filename)
-    parsed = chat_service.parse_cv(data, filename=safe_name)
+        safe_name = _safe_filename(file.filename)
+        parsed = chat_service.parse_cv(data, filename=safe_name)
 
-    # Log CV upload details for debugging
-    logger.info(
-        "cv_upload user=%s filename=%s doc_type=%s quality=%s chars=%d skills=%d",
-        resolved_user_id,
-        safe_name,
-        "unknown",  # Will be updated after detection
-        parsed.get("extraction_quality", "unknown"),
-        parsed.get("extracted_chars", 0),
-        len(parsed.get("skills", [])),
-    )
+        # Log CV upload details for debugging
+        logger.info(
+            "cv_upload user=%s filename=%s doc_type=%s quality=%s chars=%d skills=%d error_ref=%s",
+            resolved_user_id,
+            safe_name,
+            "unknown",  # Will be updated after detection
+            parsed.get("extraction_quality", "unknown"),
+            parsed.get("extracted_chars", 0),
+            len(parsed.get("skills", [])),
+            error_ref,
+        )
 
-    # Detect document type to prevent company profiles from being treated as CVs
-    from src.cv_parser import CVParser
-    doc_type = CVParser().detect_document_type(parsed.get("text", ""))
+        # Detect document type to prevent company profiles from being treated as CVs
+        from src.cv_parser import CVParser
+        doc_type = CVParser().detect_document_type(parsed.get("text", ""))
 
-    # Update log with detected document type
-    logger.info(
-        "cv_upload_detected user=%s filename=%s doc_type=%s quality=%s chars=%d skills=%d",
-        resolved_user_id,
-        safe_name,
-        doc_type,
-        parsed.get("extraction_quality", "unknown"),
-        parsed.get("extracted_chars", 0),
-        len(parsed.get("skills", [])),
-    )
-
-    if doc_type != "cv":
-        _metrics.record_request((time.time() - start_time) * 1000)
-        logger.warning(
-            "cv_upload_rejected user=%s filename=%s doc_type=%s reason=not_cv",
+        # Update log with detected document type
+        logger.info(
+            "cv_upload_detected user=%s filename=%s doc_type=%s quality=%s chars=%d skills=%d error_ref=%s",
             resolved_user_id,
             safe_name,
             doc_type,
+            parsed.get("extraction_quality", "unknown"),
+            parsed.get("extracted_chars", 0),
+            len(parsed.get("skills", [])),
+            error_ref,
         )
-        return {
-            "ok": False,
-            "status": "rejected",
-            "document_type": doc_type,
-            "message": (
-                f"This document does not look like a CV/resume (detected as: {doc_type}). "
-                "I did not update your personal job profile. "
-                "Please upload a personal CV or resume."
-            ),
-            "parsed": parsed,
+
+        if doc_type != "cv":
+            _metrics.record_request((time.time() - start_time) * 1000)
+            logger.warning(
+                "cv_upload_rejected user=%s filename=%s doc_type=%s reason=not_cv error_ref=%s",
+                resolved_user_id,
+                safe_name,
+                doc_type,
+                error_ref,
+            )
+            return {
+                "ok": False,
+                "status": "rejected",
+                "document_type": doc_type,
+                "message": (
+                    f"This document does not look like a CV/resume (detected as: {doc_type}). "
+                    "I did not update your personal job profile. "
+                    "Please upload a personal CV or resume."
+                ),
+                "parsed": parsed,
+            }
+
+        # Build profile preview without auto-updating the permanent profile
+        existing_profile = get_profile(resolved_user_id)
+        existing_skills = getattr(existing_profile, "skills", []) if existing_profile else []
+
+        # Extract target roles from CV text using role patterns
+        cv_text = parsed.get("text", "")
+        target_roles = _extract_roles_from_cv_text(cv_text)
+
+        # Build preview data
+        preview = {
+            "name": None,  # CV parser doesn't extract name yet
+            "email": parsed.get("emails", [None])[0] if parsed.get("emails") else None,
+            "phone": parsed.get("phones", [None])[0] if parsed.get("phones") else None,
+            "current_role": None,  # CV parser doesn't extract current role yet
+            "experience_years": parsed.get("years_experience_hint"),
+            "target_roles": target_roles if target_roles else [],
+            "skills": parsed.get("skills", []) if parsed.get("skills") else existing_skills,
+            "certifications": parsed.get("certifications", []),
+            "languages": parsed.get("languages", []),
         }
 
-    # Build profile preview without auto-updating the permanent profile
-    existing_profile = get_profile(resolved_user_id)
-    existing_skills = getattr(existing_profile, "skills", []) if existing_profile else []
+        _metrics.record_request((time.time() - start_time) * 1000)
+        logger.info(
+            "cv_upload_preview user=%s filename=%s quality=%s preview_ready error_ref=%s",
+            resolved_user_id,
+            safe_name,
+            parsed.get("extraction_quality", "unknown"),
+            error_ref,
+        )
 
-    # Extract target roles from CV text using role patterns
-    cv_text = parsed.get("text", "")
-    target_roles = _extract_roles_from_cv_text(cv_text)
-
-    # Build preview data
-    preview = {
-        "name": None,  # CV parser doesn't extract name yet
-        "email": parsed.get("emails", [None])[0] if parsed.get("emails") else None,
-        "phone": parsed.get("phones", [None])[0] if parsed.get("phones") else None,
-        "current_role": None,  # CV parser doesn't extract current role yet
-        "experience_years": parsed.get("years_experience_hint"),
-        "target_roles": target_roles if target_roles else [],
-        "skills": parsed.get("skills", []) if parsed.get("skills") else existing_skills,
-        "certifications": parsed.get("certifications", []),
-        "languages": parsed.get("languages", []),
-    }
-
-    _metrics.record_request((time.time() - start_time) * 1000)
-    logger.info(
-        "cv_upload_preview user=%s filename=%s quality=%s preview_ready",
-        resolved_user_id,
-        safe_name,
-        parsed.get("extraction_quality", "unknown"),
-    )
-
-    return {
-        "ok": True,
-        "status": "preview_ready",
-        "document_type": doc_type,
-        "extraction_quality": parsed.get("extraction_quality", "unknown"),
-        "extracted_chars": parsed.get("extracted_chars", 0),
-        "filename": safe_name,
-        "preview": preview,
-        "message": "I found these details in your CV. Please review before I use them for job matching.",
-    }
+        return {
+            "ok": True,
+            "status": "preview_ready",
+            "document_type": doc_type,
+            "extraction_quality": parsed.get("extraction_quality"),
+            "extracted_chars": parsed.get("extracted_chars"),
+            "filename": safe_name,
+            "preview": preview,
+            "parsed": parsed,
+            "user_id": resolved_user_id,
+        }
+    except Exception as exc:
+        logger.exception(
+            "cv_upload_error user=%s filename=%s error=%s error_ref=%s",
+            resolved_user_id,
+            safe_name if "safe_name" in locals() else "unknown",
+            str(exc),
+            error_ref,
+        )
+        _metrics.record_request((time.time() - start_time) * 1000)
+        raise HTTPException(
+            status_code=500,
+            detail=f"CV upload failed. Reference: {error_ref}"
+        )
 
 
 @router.post("/confirm-cv-profile")
@@ -878,51 +898,68 @@ async def rico_upload_cv(
 async def confirm_cv_profile(request: Request, body: ConfirmCVProfileRequest) -> dict[str, Any]:
     """Confirm and save CV profile preview to permanent profile."""
     start_time = time.time()
+    error_ref = generate_error_ref()
     user = get_current_user(request)
     user_id = user["email"]
 
-    logger.info(
-        "cv_profile_confirm user=%s filename=%s",
-        user_id,
-        body.filename,
-    )
+    try:
+        logger.info(
+            "cv_profile_confirm user=%s filename=%s error_ref=%s",
+            user_id,
+            body.filename,
+            error_ref,
+        )
 
-    # Build profile updates from preview
-    profile_updates = {
-        "email": body.preview.get("email"),
-        "phone": body.preview.get("phone"),
-        "skills": body.preview.get("skills", []),
-        "years_experience": body.preview.get("experience_years"),
-        "target_roles": body.preview.get("target_roles", []) if body.preview.get("target_roles") else None,
-        "certifications": body.preview.get("certifications", []),
-        "languages": body.preview.get("languages", []),
-        "cv_filename": body.filename,
-        "cv_status": "parsed",
-        "cv_extracted_at": datetime.now(_UTC).isoformat(),
-        "profile_creation_mode": "cv_first",
-        "manual_profile_wizard_disabled": True,
-    }
+        # Build profile updates from preview
+        profile_updates = {
+            "email": body.preview.get("email"),
+            "phone": body.preview.get("phone"),
+            "skills": body.preview.get("skills", []),
+            "years_experience": body.preview.get("experience_years"),
+            "target_roles": body.preview.get("target_roles", []) if body.preview.get("target_roles") else None,
+            "certifications": body.preview.get("certifications", []),
+            "languages": body.preview.get("languages", []),
+            "cv_filename": body.filename,
+            "cv_status": "parsed",
+            "cv_extracted_at": datetime.now(_UTC).isoformat(),
+            "profile_creation_mode": "cv_first",
+            "manual_profile_wizard_disabled": True,
+        }
 
-    # Filter out None/empty values
-    profile_updates = {k: v for k, v in profile_updates.items() if v not in (None, [], {})}
+        # Filter out None/empty values
+        profile_updates = {k: v for k, v in profile_updates.items() if v not in (None, [], {})}
 
-    # Update permanent profile
-    upsert_profile(user_id=user_id, updates=profile_updates)
-    mark_onboarding_complete(user_id)
+        # Update permanent profile
+        upsert_profile(user_id=user_id, updates=profile_updates)
+        mark_onboarding_complete(user_id)
 
-    _metrics.record_request((time.time() - start_time) * 1000)
-    logger.info(
-        "cv_profile_confirmed user=%s fields=%d",
-        user_id,
-        len(profile_updates),
-    )
+        _metrics.record_request((time.time() - start_time) * 1000)
+        logger.info(
+            "cv_profile_confirmed user=%s fields=%d error_ref=%s",
+            user_id,
+            len(profile_updates),
+            error_ref,
+        )
 
-    return {
-        "ok": True,
-        "status": "profile_updated",
-        "message": "Profile confirmed. I can now use it for job matching.",
-        "profile": profile_updates,
-    }
+        return {
+            "ok": True,
+            "status": "profile_updated",
+            "message": "Profile confirmed. I can now use it for job matching.",
+            "profile": profile_updates,
+        }
+    except Exception as exc:
+        logger.exception(
+            "cv_profile_confirm_error user=%s filename=%s error=%s error_ref=%s",
+            user_id,
+            body.filename,
+            str(exc),
+            error_ref,
+        )
+        _metrics.record_request((time.time() - start_time) * 1000)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Profile confirmation failed. Reference: {error_ref}"
+        )
 
 
 # ============================================================================
