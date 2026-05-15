@@ -41,6 +41,51 @@ class CVParser:
     CERT_HINTS = ["nebosh", "iosh", "iso", "pmp", "six sigma", "osha", "first aid"]
     LANGUAGE_HINTS = ["english", "arabic", "hindi", "urdu", "french", "tagalog"]
 
+    COMPANY_SIGNALS = [
+        "company profile",
+        "corporate profile",
+        "core service portfolio",
+        "sectors served",
+        "why clients",
+        "client base",
+        "service portfolio",
+        "l.l.c",
+        "llc",
+        "our services",
+        "about us",
+        "our mission",
+        "our vision",
+        "company overview",
+    ]
+
+    CV_SIGNALS = [
+        "curriculum vitae",
+        "resume",
+        "work experience",
+        "employment history",
+        "education",
+        "professional experience",
+        "career summary",
+        "objective",
+        "skills",
+        "contact information",
+    ]
+
+    def detect_document_type(self, text: str) -> str:
+        """Detect if document is a CV, company profile, or unknown type."""
+        lower = text.lower()
+
+        company_score = sum(1 for s in self.COMPANY_SIGNALS if s in lower)
+        cv_score = sum(1 for s in self.CV_SIGNALS if s in lower)
+
+        if company_score >= 2 and company_score > cv_score:
+            return "company_profile"
+
+        if cv_score >= 2:
+            return "cv"
+
+        return "unknown"
+
     def parse_file(self, path: str | Path) -> ParsedCV:
         path = Path(path)
         suffix = path.suffix.lower()

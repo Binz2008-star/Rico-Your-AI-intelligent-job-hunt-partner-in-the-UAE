@@ -405,6 +405,14 @@ export default function ChatPage() {
         localStorage.setItem("rico_public_uid", result.user_id);
       }
       const p = result.parsed;
+
+      // Check if document was rejected due to wrong type
+      if (result.ok === false && result.document_type) {
+        const text = result.message || `This document does not look like a CV/resume (detected as: ${result.document_type}). I did not update your personal job profile. Please upload a personal CV or resume.`;
+        setMessages((prev) => [...prev, { id: nextId(), role: "rico", text }]);
+        return;
+      }
+
       const summary = [
         p.skills?.length ? `Skills detected: ${p.skills.slice(0, 6).join(", ")}` : "",
         p.emails?.length ? `Email: ${p.emails[0]}` : "",

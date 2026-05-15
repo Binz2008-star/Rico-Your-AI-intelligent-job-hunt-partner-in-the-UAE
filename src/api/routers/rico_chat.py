@@ -737,6 +737,23 @@ async def rico_upload_cv(
     safe_name = _safe_filename(file.filename)
     parsed = chat_service.parse_cv(data, filename=safe_name)
 
+    # Detect document type to prevent company profiles from being treated as CVs
+    from src.cv_parser import CVParser
+    doc_type = CVParser().detect_document_type(parsed.get("text", ""))
+
+    if doc_type != "cv":
+        _metrics.record_request((time.time() - start_time) * 1000)
+        return {
+            "ok": False,
+            "document_type": doc_type,
+            "message": (
+                f"This document does not look like a CV/resume (detected as: {doc_type}). "
+                "I did not update your personal job profile. "
+                "Please upload a personal CV or resume."
+            ),
+            "parsed": parsed,
+        }
+
     # Persist extracted CV fields to profile
     existing_profile = get_profile(resolved_user_id)
     existing_skills = getattr(existing_profile, "skills", []) if existing_profile else []

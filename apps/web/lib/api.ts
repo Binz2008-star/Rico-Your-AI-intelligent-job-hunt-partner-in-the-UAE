@@ -709,6 +709,9 @@ export interface UploadCVResponse {
   user_id: string;
   filename: string;
   parsed: ParsedCV;
+  ok?: boolean;
+  document_type?: string;
+  message?: string;
 }
 
 function extractDetail(detail: unknown, fallback: string): string {
