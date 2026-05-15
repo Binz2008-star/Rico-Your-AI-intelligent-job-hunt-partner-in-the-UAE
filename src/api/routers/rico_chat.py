@@ -489,7 +489,7 @@ def rico_chat(request: Request, payload: RicoChatRequest) -> dict[str, Any]:
         )
         _metrics.record_request((time.time() - start_time) * 1000)
         return build_error_response(
-            "I encountered an error processing your request. Please try again.",
+            "I couldn't process your request. Please try again or rephrase your message.",
             log_exc=exc,
             user_id=user_id if "user_id" in locals() else "unknown",
         )
@@ -547,19 +547,20 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> Public
         _metrics.record_request((time.time() - start_time) * 1000)
         return response
     except Exception as exc:
-        _metrics.record_request((time.time() - start_time) * 1000)
-        user_id_for_log = payload.email or f"public:{payload.session_id[:16] if payload.session_id else 'unknown'}"
-        err = build_error_response(
-            "I encountered an error processing your request. Please try again.",
-            log_exc=exc,
-            user_id=user_id_for_log,
+        logger.exception(
+            "chat_public_error user=%s message_len=%d error=%s",
+            user_id if "user_id" in locals() else "unknown",
+            len(payload.message) if "payload" in locals() else 0,
+            str(exc),
         )
+        _metrics.record_request((time.time() - start_time) * 1000)
+        # Return a simple error for public users without exposing details
         return PublicChatResponse(
-            message=err["message"],
+            message="I couldn't process your request. Please try again or rephrase your message.",
             type="error",
             matches=None,
             options=None,
-            next_action=err.get("debug_id"),
+            next_action=None,
         )
 
 

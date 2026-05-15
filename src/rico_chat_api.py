@@ -570,17 +570,13 @@ class RicoChatAPI:
         # Get Jotform form IDs from environment
         jotform_form_id = os.getenv("JOTFORM_FORM_ID") or os.getenv("JOTFORM_RICO_FORM_ID")
 
+        # Hide provider details from normal users - only include for diagnostics
+        # These should only be exposed in admin/diagnostic views, not in user-facing responses
         return {
             **response,
             "response_source": response.get("response_source", source),
             "provider": response.get("provider", source),
             "provider_state": response.get("provider_state"),
-            "openai_available": self._bool_attr(agent, "openai_available", fallback="available"),
-            "deepseek_available": self._bool_attr(agent, "deepseek_available"),
-            "provider_available": self._bool_attr(agent, "provider_available", fallback="available"),
-            "hf_available": self._bool_attr(agent, "hf_available"),
-            "openai_model": agent.model,
-            "ai_model": agent.model,
             "profile_context_present": profile is not None,
             "jotform_form_id": jotform_form_id,
         }
@@ -1049,10 +1045,39 @@ class RicoChatAPI:
             context = self._build_router_context(user_id, profile)
             routed = _route(message, user_id=user_id, context=context)
 
+            # Check if profile has target role before running job search
+            if not profile.target_roles or (isinstance(profile.target_roles, list) and len(profile.target_roles) == 0):
+                response = {
+                    "type": "profile_incomplete",
+                    "intent": "search_jobs",
+                    "message": (
+                        "I can search jobs using your profile. Please confirm:\n"
+                        "• Target role (e.g., HSE Manager, ESG Specialist)\n"
+                        "• Preferred city (e.g., Dubai, Abu Dhabi)\n"
+                        "• Expected salary (optional)\n\n"
+                        "I cannot search for jobs until at least your target role is known."
+                    ),
+                    "entities": routed.entities,
+                }
+                self._append_chat(user_id, "assistant", response["message"])
+                return self._finalize(response, routed.source, profile=profile)
+
             # Removed fast-path override to prevent intent interception
             # Previously: generic job searches without job_title were intercepted by profile suggestions
             # Now: all explicit job searches execute through the normal workflow
             workflow_result = self.system.run_for_profile(profile)
+
+            # Handle blocked status from job search
+            if workflow_result.get("status") == "blocked":
+                response = {
+                    "type": "profile_incomplete",
+                    "intent": "search_jobs",
+                    "message": workflow_result.get("message", "Please provide at least one target role before searching for jobs."),
+                    "entities": routed.entities,
+                }
+                self._append_chat(user_id, "assistant", response["message"])
+                return self._finalize(response, routed.source, profile=profile)
+
             all_explicit = workflow_result.get("matches", [])
             try:
                 from src.applications import is_applied_batch, get_job_id
