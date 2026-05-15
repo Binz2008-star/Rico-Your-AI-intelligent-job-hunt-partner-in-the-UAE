@@ -357,6 +357,7 @@ class RicoSystem:
                         "location": job.get("location") or job.get("city"),
                         "repo_score": score,
                         "rico_score": job.get("rico_score"),
+                        "score": max(0, min(100, int(job.get("rico_score") or job.get("score") or score))),  # Normalized score
                         "rico_explanation": job.get("rico_explanation"),
                         "success_probability": job.get("success_probability"),
                         "url": job.get("url") or job.get("job_url"),

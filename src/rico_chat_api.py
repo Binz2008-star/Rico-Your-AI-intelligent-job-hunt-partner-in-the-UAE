@@ -509,11 +509,14 @@ class RicoChatAPI:
     def _format_match(m: dict[str, Any], profile: Any) -> dict[str, Any]:
         """Return a backward-compatible chat match with v1 structured guidance."""
         explanation = build_match_explanation(m, profile)
+        # Normalize score to 0-100 range for display
+        raw_score = m.get("rico_score") or m.get("score") or 0
+        normalized_score = max(0, min(100, int(raw_score))) if raw_score else 0
         return {
             "title": m.get("title"),
             "company": m.get("company"),
             "location": m.get("location"),
-            "score": m.get("rico_score"),
+            "score": normalized_score,
             "why": m.get("rico_explanation"),
             "actions": ["Prepare application", "Save", "Ask why", "Skip"],
             **explanation,
