@@ -373,10 +373,11 @@ class RicoChatAPI:
             if k in text_lower or text_lower in k:
                 return True
 
-        # Classifier fallback
+        # Classifier fallback - only profile_relevant roles get fast-path confirmation
+        # known_but_off_profile roles should go through _classified_role_search for clarification
         try:
             classification, canonical_role = classify_role_candidate(text, profile)
-            if classification in {"profile_relevant", "known_but_off_profile"} and canonical_role:
+            if classification == "profile_relevant" and canonical_role:
                 return True
         except Exception:
             pass
