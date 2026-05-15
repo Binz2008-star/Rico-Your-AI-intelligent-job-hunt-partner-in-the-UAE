@@ -463,11 +463,30 @@ def rico_chat(request: Request, payload: RicoChatRequest) -> dict[str, Any]:
         user = get_current_user(request)
         user_id = user["email"]
 
+        logger.info(
+            "chat_request user=%s message_len=%d",
+            user_id,
+            len(payload.message),
+        )
+
         result = chat_service.send_message(user_id=user_id, message=payload.message)
+
+        logger.info(
+            "chat_response user=%s intent=%s matches=%d",
+            user_id,
+            result.get("intent", "unknown"),
+            len(result.get("matches", [])),
+        )
 
         _metrics.record_request((time.time() - start_time) * 1000)
         return result
     except Exception as exc:
+        logger.exception(
+            "chat_error user=%s message_len=%d error=%s",
+            user_id if "user_id" in locals() else "unknown",
+            len(payload.message) if "payload" in locals() else 0,
+            str(exc),
+        )
         _metrics.record_request((time.time() - start_time) * 1000)
         return build_error_response(
             "I encountered an error processing your request. Please try again.",
@@ -499,7 +518,20 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> Public
             safe_sid = payload.session_id[:64]
             user_id = f"public:{safe_sid}"
 
+        logger.info(
+            "chat_public_request user=%s message_len=%d",
+            user_id,
+            len(payload.message),
+        )
+
         result = chat_service.send_message(user_id=user_id, message=payload.message)
+
+        logger.info(
+            "chat_public_response user=%s intent=%s matches=%d",
+            user_id,
+            result.get("intent", "unknown"),
+            len(result.get("matches", [])),
+        )
 
         # Strip internal diagnostics from unauthenticated responses
         stripped_result = _strip_internal_fields(result)
@@ -737,12 +769,40 @@ async def rico_upload_cv(
     safe_name = _safe_filename(file.filename)
     parsed = chat_service.parse_cv(data, filename=safe_name)
 
+    # Log CV upload details for debugging
+    logger.info(
+        "cv_upload user=%s filename=%s doc_type=%s quality=%s chars=%d skills=%d",
+        resolved_user_id,
+        safe_name,
+        "unknown",  # Will be updated after detection
+        parsed.get("extraction_quality", "unknown"),
+        parsed.get("extracted_chars", 0),
+        len(parsed.get("skills", [])),
+    )
+
     # Detect document type to prevent company profiles from being treated as CVs
     from src.cv_parser import CVParser
     doc_type = CVParser().detect_document_type(parsed.get("text", ""))
 
+    # Update log with detected document type
+    logger.info(
+        "cv_upload_detected user=%s filename=%s doc_type=%s quality=%s chars=%d skills=%d",
+        resolved_user_id,
+        safe_name,
+        doc_type,
+        parsed.get("extraction_quality", "unknown"),
+        parsed.get("extracted_chars", 0),
+        len(parsed.get("skills", [])),
+    )
+
     if doc_type != "cv":
         _metrics.record_request((time.time() - start_time) * 1000)
+        logger.warning(
+            "cv_upload_rejected user=%s filename=%s doc_type=%s reason=not_cv",
+            resolved_user_id,
+            safe_name,
+            doc_type,
+        )
         return {
             "ok": False,
             "document_type": doc_type,

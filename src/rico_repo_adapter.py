@@ -224,6 +224,28 @@ class RicoSystem:
         started_at = datetime.now(_UTC).isoformat()
         limit = limit or self.config.max_matches
 
+        logger.info(
+            "job_search_start user=%s target_roles=%s city=%s salary=%d limit=%d",
+            profile.user_id,
+            profile.target_roles,
+            profile.preferred_cities,
+            profile.salary_expectation_aed or 0,
+            limit,
+        )
+
+        # Guard: require at least one target role before job search
+        if not profile.target_roles or (isinstance(profile.target_roles, list) and len(profile.target_roles) == 0):
+            logger.warning(
+                "job_search_blocked user=%s reason=no_target_roles",
+                profile.user_id,
+            )
+            return {
+                "status": "blocked",
+                "error": "Target role is required before job search",
+                "message": "Please provide at least one target role before searching for jobs.",
+                "matches": [],
+            }
+
         try:
             # Fetch and score jobs
             jobs = self.repo.fetch_jobs()
@@ -351,12 +373,19 @@ class RicoSystem:
                 },
             }
         except Exception as exc:
-            logger.exception("run_for_profile_failed user=%s", profile.user_id)
+            logger.exception("run_for_profile_failed user=%s target_roles=%s error=%s", profile.user_id, profile.target_roles, str(exc))
             return {
                 "status": "error",
                 "error": str(exc),
                 "matches": [],
             }
+        finally:
+            logger.info(
+                "job_search_complete user=%s status=%s matches=%d",
+                profile.user_id,
+                "completed" if "final_matches" in locals() else "error",
+                len(final_matches) if "final_matches" in locals() else 0,
+            )
 
 
 def run_rico_for_default_profile(config: Optional[AdapterConfig] = None) -> Dict[str, Any]:

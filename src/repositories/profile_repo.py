@@ -157,6 +157,19 @@ def get_profile(user_id: str) -> RicoProfile | None:
 
 def upsert_profile(user_id: str, updates: dict[str, Any]) -> RicoProfile:
     """Write profile to DB (primary) and JSON (fallback mirror) with transaction safety."""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # Log profile update for debugging
+    logger.info(
+        "profile_update user=%s fields=%s target_roles=%s city=%s salary=%d",
+        user_id,
+        list(updates.keys()),
+        updates.get("target_roles"),
+        updates.get("preferred_cities"),
+        updates.get("salary_expectation_aed") or 0,
+    )
+
     # Filter updates to valid fields
     filtered_updates = {
         k: v for k, v in updates.items()
