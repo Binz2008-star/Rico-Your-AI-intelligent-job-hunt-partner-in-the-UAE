@@ -1,0 +1,289 @@
+"""Integration test for issue #135: Verify DeepSeek, HF fallback, and Jotform onboarding in production.
+
+This test validates:
+1. /api/v1/rico/health/ai-provider endpoint returns correct provider state
+2. HF fallback readiness is properly detected
+3. Jotform metadata is returned in chat responses
+4. Provider cascade fallback logic
+
+Follow-up intent routing (issue #133) is covered by tests/test_follow_up_intent.py
+"""
+
+import os
+import pytest
+
+from src.rico_env import get_rico_env_report, get_ai_provider
+from src.rico_openai_agent import RicoOpenAIAgent
+from src.rico_hf_client import is_available
+from src.rico_chat_api import RicoChatAPI
+
+
+class TestAIProviderHealthEndpoint:
+    """Verify AI provider health endpoint behavior."""
+
+    def test_health_endpoint_data_structure(self):
+        """Health endpoint should return all required fields."""
+        report = get_rico_env_report()
+
+        # Verify all required fields exist
+        assert hasattr(report, "ready_for_deepseek")
+        assert hasattr(report, "ready_for_hf")
+        assert hasattr(report, "ready_for_jotform")
+        assert hasattr(report, "ai_provider")
+        assert hasattr(report, "ready_for_openai")
+
+        # Verify to_dict works
+        report_dict = report.to_dict()
+        assert "ready_for_deepseek" in report_dict
+        assert "ready_for_hf" in report_dict
+        assert "ready_for_jotform" in report_dict
+        assert "ai_provider" in report_dict
+        assert "ready_for_openai" in report_dict
+
+    def test_deepseek_readiness_detection(self):
+        """DeepSeek readiness should be detected when DEEPSEEK_API_KEY is set."""
+        # Save original value
+        original_key = os.getenv("DEEPSEEK_API_KEY")
+
+        try:
+            # Test with key set
+            os.environ["DEEPSEEK_API_KEY"] = "test_key"
+            os.environ["RICO_AI_PROVIDER"] = "deepseek"
+
+            report = get_rico_env_report()
+            provider = get_ai_provider()
+
+            assert provider == "deepseek"
+            assert report.ready_for_deepseek == True
+
+        finally:
+            # Restore original value
+            if original_key is None:
+                os.environ.pop("DEEPSEEK_API_KEY", None)
+            else:
+                os.environ["DEEPSEEK_API_KEY"] = original_key
+            os.environ.pop("RICO_AI_PROVIDER", None)
+
+    def test_hf_readiness_detection(self):
+        """HF readiness should be detected when HF key is set."""
+        # Save original values
+        original_hf = os.getenv("HF_API_TOKEN")
+        original_provider = os.getenv("RICO_AI_PROVIDER")
+
+        try:
+            # Test with HF key set
+            os.environ["HF_API_TOKEN"] = "test_hf_key"
+            os.environ["RICO_AI_PROVIDER"] = "huggingface"
+
+            report = get_rico_env_report()
+            provider = get_ai_provider()
+
+            assert provider == "huggingface"
+            assert report.ready_for_hf == True
+
+        finally:
+            # Restore original values
+            if original_hf is None:
+                os.environ.pop("HF_API_TOKEN", None)
+            else:
+                os.environ["HF_API_TOKEN"] = original_hf
+            if original_provider is None:
+                os.environ.pop("RICO_AI_PROVIDER", None)
+            else:
+                os.environ["RICO_AI_PROVIDER"] = original_provider
+
+    def test_jotform_readiness_detection(self):
+        """Jotform readiness should be detected when form ID is set."""
+        # Save original values
+        original_form_id = os.getenv("JOTFORM_FORM_ID")
+        original_alias = os.getenv("JOTFORM_RICO_FORM_ID")
+
+        try:
+            # Test with form ID set
+            os.environ["JOTFORM_FORM_ID"] = "test_form_123"
+
+            report = get_rico_env_report()
+            assert report.ready_for_jotform == True
+
+            # Test with alias
+            os.environ.pop("JOTFORM_FORM_ID")
+            os.environ["JOTFORM_RICO_FORM_ID"] = "test_form_456"
+
+            report = get_rico_env_report()
+            assert report.ready_for_jotform == True
+
+        finally:
+            # Restore original values
+            if original_form_id is None:
+                os.environ.pop("JOTFORM_FORM_ID", None)
+            else:
+                os.environ["JOTFORM_FORM_ID"] = original_form_id
+            if original_alias is None:
+                os.environ.pop("JOTFORM_RICO_FORM_ID", None)
+            else:
+                os.environ["JOTFORM_RICO_FORM_ID"] = original_alias
+
+
+class TestHFFallbackReadiness:
+    """Verify HF fallback is properly configured."""
+
+    def test_hf_client_availability(self):
+        """HF client should report availability correctly."""
+        # Save all HF token aliases
+        original_tokens = {
+            "HF_API_TOKEN": os.getenv("HF_API_TOKEN"),
+            "HF_API_KEY": os.getenv("HF_API_KEY"),
+            "HF_TOKEN": os.getenv("HF_TOKEN"),
+            "HUGGINGFACE_API_KEY": os.getenv("HUGGINGFACE_API_KEY"),
+        }
+
+        try:
+            # Test with token
+            os.environ["HF_API_TOKEN"] = "test_token"
+            assert is_available() == True
+
+            # Test without any HF tokens
+            for key in original_tokens:
+                os.environ.pop(key, None)
+            assert is_available() == False
+
+        finally:
+            # Restore original values
+            for key, value in original_tokens.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+    def test_openai_agent_hf_available(self):
+        """RicoOpenAIAgent should report HF availability correctly."""
+        agent = RicoOpenAIAgent()
+
+        # The property checks for any HF key alias
+        # This test verifies the property exists and returns a boolean
+        assert isinstance(agent.hf_available, bool)
+
+        # Verify it checks multiple env var aliases
+        original_tokens = {
+            "HF_API_TOKEN": os.getenv("HF_API_TOKEN"),
+            "HF_API_KEY": os.getenv("HF_API_KEY"),
+            "HF_TOKEN": os.getenv("HF_TOKEN"),
+            "HUGGINGFACE_API_KEY": os.getenv("HUGGINGFACE_API_KEY"),
+        }
+
+        try:
+            # Test with one alias
+            os.environ["HF_API_TOKEN"] = "test"
+            agent2 = RicoOpenAIAgent()
+            assert agent2.hf_available == True
+
+            # Test without any
+            for key in original_tokens:
+                os.environ.pop(key, None)
+            agent3 = RicoOpenAIAgent()
+            assert agent3.hf_available == False
+
+        finally:
+            # Restore original values
+            for key, value in original_tokens.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+
+class TestJotformMetadataInChatResponses:
+    """Verify Jotform metadata is returned in chat responses."""
+
+    def test_jotform_metadata_in_finalize(self):
+        """Chat API should include Jotform form ID in finalized responses."""
+        api = RicoChatAPI()
+
+        # Save original values
+        original_form_id = os.getenv("JOTFORM_FORM_ID")
+        original_alias = os.getenv("JOTFORM_RICO_FORM_ID")
+
+        try:
+            # Test with form ID set
+            os.environ["JOTFORM_FORM_ID"] = "test_form_123"
+
+            # Create a minimal response
+            test_response = {"type": "test", "message": "test"}
+            finalized = api._finalize(test_response, "keyword", profile=None)
+
+            assert "jotform_form_id" in finalized
+            assert finalized["jotform_form_id"] == "test_form_123"
+
+            # Test with alias
+            os.environ.pop("JOTFORM_FORM_ID")
+            os.environ["JOTFORM_RICO_FORM_ID"] = "test_form_456"
+
+            finalized2 = api._finalize(test_response, "keyword", profile=None)
+            assert "jotform_form_id" in finalized2
+            assert finalized2["jotform_form_id"] == "test_form_456"
+
+            # Test without form ID
+            os.environ.pop("JOTFORM_RICO_FORM_ID")
+            finalized3 = api._finalize(test_response, "keyword", profile=None)
+            assert "jotform_form_id" in finalized3
+            assert finalized3["jotform_form_id"] is None
+
+        finally:
+            # Restore original values
+            if original_form_id is None:
+                os.environ.pop("JOTFORM_FORM_ID", None)
+            else:
+                os.environ["JOTFORM_FORM_ID"] = original_form_id
+            if original_alias is None:
+                os.environ.pop("JOTFORM_RICO_FORM_ID", None)
+            else:
+                os.environ["JOTFORM_RICO_FORM_ID"] = original_alias
+
+
+class TestProviderCascadeFallback:
+    """Verify provider cascade fallback logic."""
+
+    def test_agent_provider_available_property(self):
+        """Agent should report provider availability based on configured provider."""
+        # Save original values for all provider keys
+        original_values = {
+            "RICO_AI_PROVIDER": os.getenv("RICO_AI_PROVIDER"),
+            "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY"),
+            "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
+            "OPEN_AI_API": os.getenv("OPEN_AI_API"),
+            "HF_API_TOKEN": os.getenv("HF_API_TOKEN"),
+            "HF_API_KEY": os.getenv("HF_API_KEY"),
+            "HF_TOKEN": os.getenv("HF_TOKEN"),
+            "HUGGINGFACE_API_KEY": os.getenv("HUGGINGFACE_API_KEY"),
+        }
+
+        try:
+            # Test DeepSeek provider
+            os.environ["RICO_AI_PROVIDER"] = "deepseek"
+            os.environ["DEEPSEEK_API_KEY"] = "test"
+            # Clear other provider keys
+            for key in ["OPENAI_API_KEY", "OPEN_AI_API", "HF_API_TOKEN", "HF_API_KEY", "HF_TOKEN", "HUGGINGFACE_API_KEY"]:
+                os.environ.pop(key, None)
+            agent1 = RicoOpenAIAgent()
+            assert agent1.provider_available == True
+
+            # Test HF provider
+            os.environ.pop("DEEPSEEK_API_KEY")
+            os.environ["RICO_AI_PROVIDER"] = "huggingface"
+            os.environ["HF_API_TOKEN"] = "test"
+            agent2 = RicoOpenAIAgent()
+            assert agent2.provider_available == True
+
+            # Test no provider (clear all)
+            for key in original_values:
+                os.environ.pop(key, None)
+            agent3 = RicoOpenAIAgent()
+            assert agent3.provider_available == False
+
+        finally:
+            # Restore original values
+            for key, value in original_values.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
