@@ -179,6 +179,13 @@ class ProfileResponse(BaseModel):
     completeness_score: float | None = None
 
 
+class ConfirmCVProfileRequest(BaseModel):
+    """Request to confirm and save CV profile preview."""
+    preview: dict[str, Any] = Field(..., description="Profile preview data to confirm")
+    filename: str = Field(..., description="Original CV filename")
+
+
+
 class MetricsResponse(BaseModel):
     """Prometheus-style metrics response."""
     uptime_seconds: float
@@ -806,6 +813,7 @@ async def rico_upload_cv(
         )
         return {
             "ok": False,
+            "status": "rejected",
             "document_type": doc_type,
             "message": (
                 f"This document does not look like a CV/resume (detected as: {doc_type}). "
@@ -815,7 +823,7 @@ async def rico_upload_cv(
             "parsed": parsed,
         }
 
-    # Persist extracted CV fields to profile
+    # Build profile preview without auto-updating the permanent profile
     existing_profile = get_profile(resolved_user_id)
     existing_skills = getattr(existing_profile, "skills", []) if existing_profile else []
 
@@ -823,28 +831,88 @@ async def rico_upload_cv(
     cv_text = parsed.get("text", "")
     target_roles = _extract_roles_from_cv_text(cv_text)
 
-    profile_updates = {
+    # Build preview data
+    preview = {
+        "name": None,  # CV parser doesn't extract name yet
         "email": parsed.get("emails", [None])[0] if parsed.get("emails") else None,
         "phone": parsed.get("phones", [None])[0] if parsed.get("phones") else None,
+        "current_role": None,  # CV parser doesn't extract current role yet
+        "experience_years": parsed.get("years_experience_hint"),
+        "target_roles": target_roles if target_roles else [],
         "skills": parsed.get("skills", []) if parsed.get("skills") else existing_skills,
-        "years_experience": parsed.get("years_experience_hint"),
-        "target_roles": target_roles if target_roles else None,
-        "cv_filename": safe_name,
+        "certifications": parsed.get("certifications", []),
+        "languages": parsed.get("languages", []),
+    }
+
+    _metrics.record_request((time.time() - start_time) * 1000)
+    logger.info(
+        "cv_upload_preview user=%s filename=%s quality=%s preview_ready",
+        resolved_user_id,
+        safe_name,
+        parsed.get("extraction_quality", "unknown"),
+    )
+
+    return {
+        "ok": True,
+        "status": "preview_ready",
+        "document_type": doc_type,
+        "extraction_quality": parsed.get("extraction_quality", "unknown"),
+        "extracted_chars": parsed.get("extracted_chars", 0),
+        "filename": safe_name,
+        "preview": preview,
+        "message": "I found these details in your CV. Please review before I use them for job matching.",
+    }
+
+
+@router.post("/confirm-cv-profile")
+@limiter.limit(LIMIT_UPLOAD)
+async def confirm_cv_profile(request: Request, body: ConfirmCVProfileRequest) -> dict[str, Any]:
+    """Confirm and save CV profile preview to permanent profile."""
+    start_time = time.time()
+    user = get_current_user(request)
+    user_id = user["email"]
+
+    logger.info(
+        "cv_profile_confirm user=%s filename=%s",
+        user_id,
+        body.filename,
+    )
+
+    # Build profile updates from preview
+    profile_updates = {
+        "email": body.preview.get("email"),
+        "phone": body.preview.get("phone"),
+        "skills": body.preview.get("skills", []),
+        "years_experience": body.preview.get("experience_years"),
+        "target_roles": body.preview.get("target_roles", []) if body.preview.get("target_roles") else None,
+        "certifications": body.preview.get("certifications", []),
+        "languages": body.preview.get("languages", []),
+        "cv_filename": body.filename,
         "cv_status": "parsed",
         "cv_extracted_at": datetime.now(_UTC).isoformat(),
         "profile_creation_mode": "cv_first",
         "manual_profile_wizard_disabled": True,
     }
 
+    # Filter out None/empty values
     profile_updates = {k: v for k, v in profile_updates.items() if v not in (None, [], {})}
-    upsert_profile(user_id=resolved_user_id, updates=profile_updates)
-    mark_onboarding_complete(resolved_user_id)
+
+    # Update permanent profile
+    upsert_profile(user_id=user_id, updates=profile_updates)
+    mark_onboarding_complete(user_id)
 
     _metrics.record_request((time.time() - start_time) * 1000)
+    logger.info(
+        "cv_profile_confirmed user=%s fields=%d",
+        user_id,
+        len(profile_updates),
+    )
+
     return {
-        "user_id": resolved_user_id,
-        "filename": safe_name,
-        "parsed": parsed,
+        "ok": True,
+        "status": "profile_updated",
+        "message": "Profile confirmed. I can now use it for job matching.",
+        "profile": profile_updates,
     }
 
 
