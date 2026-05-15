@@ -712,12 +712,12 @@ def rico_openai_smoke(request: Request) -> dict[str, Any]:
 
 
 # ============================================================================
-# AI Provider Health Endpoint
+# AI Provider Health Endpoint (Admin Only)
 # ============================================================================
 
-@router.get("/health/ai-provider")
-def rico_ai_provider_health(request: Request) -> dict[str, Any]:
-    """Health check endpoint exposing current AI provider availability and state."""
+@router.get("/admin/health/ai-provider")
+def rico_ai_provider_health_admin(request: Request) -> dict[str, Any]:
+    """Admin-only health check endpoint exposing current AI provider availability and state."""
     get_current_user(request)
     from src.rico_openai_agent import RicoOpenAIAgent
     from src.rico_env import get_ai_provider
@@ -741,6 +741,19 @@ def rico_ai_provider_health(request: Request) -> dict[str, Any]:
         "provider_state": "available" if agent.provider_available else "unavailable",
         "jotform_form_configured": jotform_configured,
         "jotform_webhook_secret_configured": webhook_secret_configured,
+        "timestamp": datetime.now(_UTC).isoformat(),
+    }
+
+
+@router.get("/health/ai-provider")
+def rico_ai_provider_health_public(request: Request) -> dict[str, Any]:
+    """Public health check endpoint with minimal information."""
+    from src.rico_env import get_ai_provider
+
+    provider = get_ai_provider()
+
+    return {
+        "status": "healthy",
         "timestamp": datetime.now(_UTC).isoformat(),
     }
 
