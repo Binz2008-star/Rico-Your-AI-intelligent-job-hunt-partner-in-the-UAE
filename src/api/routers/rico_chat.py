@@ -759,6 +759,48 @@ def rico_ai_provider_health_public(request: Request) -> dict[str, Any]:
 
 
 # ============================================================================
+# Profile Update Endpoint
+# ============================================================================
+
+class ProfileUpdateRequest(BaseModel):
+    target_roles: Optional[list[str]] = None
+    preferred_cities: Optional[list[str]] = None
+    salary_expectation_aed: Optional[float] = None
+    years_experience: Optional[float] = None
+    current_role: Optional[str] = None
+    skills: Optional[list[str]] = None
+
+
+@router.patch("/profile")
+def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, Any]:
+    """Direct profile update endpoint for inline edits."""
+    user = get_current_user(request)
+    user_id = user["email"]
+
+    updates: dict[str, Any] = {}
+    if body.target_roles is not None:
+        updates["target_roles"] = [r.strip() for r in body.target_roles if r.strip()]
+    if body.preferred_cities is not None:
+        updates["preferred_cities"] = [c.strip() for c in body.preferred_cities if c.strip()]
+    if body.salary_expectation_aed is not None:
+        updates["salary_expectation_aed"] = body.salary_expectation_aed
+    if body.years_experience is not None:
+        updates["years_experience"] = body.years_experience
+    if body.current_role is not None:
+        updates["current_role"] = body.current_role.strip()
+    if body.skills is not None:
+        updates["skills"] = [s.strip() for s in body.skills if s.strip()]
+
+    if updates:
+        upsert_profile(user_id, updates)
+        logger.info("profile_update user=%s fields=%s", user_id, list(updates.keys()))
+    else:
+        logger.warning("profile_update no fields user=%s", user_id)
+
+    return {"status": "ok", "updated_fields": list(updates.keys())}
+
+
+# ============================================================================
 # Metrics Endpoint
 # ============================================================================
 
