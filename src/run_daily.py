@@ -300,23 +300,23 @@ def _fetch_and_score() -> Tuple[
         if hasattr(score_duration, "observe"):
             score_duration.observe(time.perf_counter() - start)
 
-        all_scored: List[Tuple[Dict[str, Any], int]] = []
-        for job in jobs:
-            score = job["score"]
-            all_scored.append((job, score))
-            if is_db_available():
-                save_job(job, score)
+    all_scored: List[Tuple[Dict[str, Any], int]] = []
+    for job in jobs:
+        score = job["score"]
+        all_scored.append((job, score))
+        if is_db_available():
+            save_job(job, score)
 
-        matches = sorted(
-            [(j, s) for j, s in all_scored if s >= 45],
-            key=lambda x: x[1],
-            reverse=True,
-        )
-        logger.info(f"scoring_complete total={len(all_scored)} high_quality={len(matches)}", extra={"total": len(all_scored), "high_quality": len(matches)})
-        jobs_scored_gauge.set(len(all_scored))
-        high_quality_gauge.set(len(matches))
+    matches = sorted(
+        [(j, s) for j, s in all_scored if s >= 45],
+        key=lambda x: x[1],
+        reverse=True,
+    )
+    logger.info(f"scoring_complete total={len(all_scored)} high_quality={len(matches)}", extra={"total": len(all_scored), "high_quality": len(matches)})
+    jobs_scored_gauge.set(len(all_scored))
+    high_quality_gauge.set(len(matches))
 
-        print(f"Scoring complete: {len(all_scored)} jobs scored, {len(matches)} high quality matches")
+    print(f"Scoring complete: {len(all_scored)} jobs scored, {len(matches)} high quality matches")
 
     # Agent decision making with V2 decision engine
     from src.job_agent import decide_jobs
