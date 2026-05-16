@@ -91,7 +91,7 @@ jobs:
   # self-hosted runner is offline or session is missing.
   apply:
     name: NaukriGulf Apply
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_apply == 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_apply == 'true' }}
     runs-on: self-hosted
     needs: intelligence
     timeout-minutes: 30
@@ -191,7 +191,7 @@ jobs:
   # self-hosted runner is offline or session is missing.
   indeed-apply:
     name: Indeed Apply
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_apply == 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_apply == 'true' }}
     runs-on: self-hosted
     needs: intelligence
     timeout-minutes: 30
