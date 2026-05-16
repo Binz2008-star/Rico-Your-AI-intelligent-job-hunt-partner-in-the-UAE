@@ -1,5 +1,7 @@
 # Rico AI — AI-Native UAE Career Companion
 
+[![Deploy to Production](https://github.com/Binz2008-star/job-automation-system-1/actions/workflows/deploy-production.yml/badge.svg)](https://github.com/Binz2008-star/job-automation-system-1/actions/workflows/deploy-production.yml)
+
 Rico AI is evolving this repository from a job automation pipeline into an **AI-native UAE career companion**.
 
 Rico is designed to feel like:
@@ -22,7 +24,7 @@ Rico learns from the user through chat and actions, scans UAE jobs in the backgr
 
 Primary public onboarding form:
 
-**Rico AI Quick Start**  
+**Rico AI Quick Start**
 https://form.jotform.com/261278237812056
 
 Users should start with only:
