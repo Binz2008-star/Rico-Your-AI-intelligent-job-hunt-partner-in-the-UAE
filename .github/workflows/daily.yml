@@ -10,6 +10,15 @@ on:
     - cron: '0 6 * * *'   # 6:00 AM UTC
     - cron: '0 15 * * *'  # 3:00 PM UTC
   workflow_dispatch:
+    inputs:
+      run_apply:
+        description: "Run self-hosted apply jobs"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 jobs:
   # ── Job 1: Intelligence — GitHub-hosted ───────────────────────────────────
@@ -82,6 +91,7 @@ jobs:
   # self-hosted runner is offline or session is missing.
   apply:
     name: NaukriGulf Apply
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_apply == 'true' }}
     runs-on: self-hosted
     needs: intelligence
     timeout-minutes: 30
@@ -181,6 +191,7 @@ jobs:
   # self-hosted runner is offline or session is missing.
   indeed-apply:
     name: Indeed Apply
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_apply == 'true' }}
     runs-on: self-hosted
     needs: intelligence
     timeout-minutes: 30
