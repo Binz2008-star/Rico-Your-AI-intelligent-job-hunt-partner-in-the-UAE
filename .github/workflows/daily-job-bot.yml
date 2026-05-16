@@ -1,4 +1,4 @@
-name: Daily Job Bot
+name: Daily Job Bot Legacy
 
 on:
   schedule:
