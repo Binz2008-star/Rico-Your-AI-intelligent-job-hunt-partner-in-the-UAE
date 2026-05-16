@@ -619,7 +619,6 @@ def _regenerate_dashboard(
 
 
 @retryable(max_retries=1, retry_exceptions=(TimeoutError, ConnectionError))
-@pipeline_duration.time()
 def run_pipeline() -> int:
     """
     Execute the full pipeline with distributed lock and monitoring.
