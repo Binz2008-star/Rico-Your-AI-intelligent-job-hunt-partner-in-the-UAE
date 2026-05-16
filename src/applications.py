@@ -13,7 +13,7 @@ import json
 import os
 import tempfile
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Set
 
 from filelock import FileLock, Timeout as FileLockTimeout
@@ -378,6 +378,47 @@ def mark_job_interactive(job: Dict[str, Any]) -> None:
         print(f"Job marked as {status}")
     else:
         print("Failed to mark job as applied")
+
+
+def get_applied_jobs_count(days=None, status=None):
+    applied_jobs = load_applied_jobs()
+
+    cutoff = None
+    if days is not None:
+        cutoff = datetime.now() - timedelta(days=int(days))
+
+    count = 0
+
+    for job in applied_jobs:
+        if not isinstance(job, dict):
+            continue
+
+        if status is not None and job.get("status") != status:
+            continue
+
+        if cutoff is not None:
+            raw_date = job.get("date_applied") or job.get("date_updated")
+
+            if not raw_date:
+                continue
+
+            try:
+                applied_at = datetime.fromisoformat(
+                    str(raw_date).replace("Z", "+00:00")
+                )
+
+                if applied_at.tzinfo is not None:
+                    applied_at = applied_at.astimezone().replace(tzinfo=None)
+
+            except ValueError:
+                continue
+
+            if applied_at < cutoff:
+                continue
+
+        count += 1
+
+    return count
 
 
 def main() -> None:
