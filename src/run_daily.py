@@ -26,6 +26,7 @@ import json
 import logging
 import os
 import sys
+import time
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta
@@ -278,7 +279,8 @@ def _fetch_and_score() -> Tuple[
     Dict[str, Any],
 ]:
     """Returns (all_scored, high_quality_matches, stats). High quality = score >= 65."""
-    with fetch_duration.time():
+    start = time.perf_counter()
+    try:
         jobs = get_jobs()
         jobs = filter_new_jobs(jobs)
         logger.info(f"jobs_fetched count={len(jobs)}", extra={"count": len(jobs)})
@@ -286,10 +288,17 @@ def _fetch_and_score() -> Tuple[
 
         if len(jobs) < RICO_MIN_JOBS_THRESHOLD:
             _send_slack_alert(f"⚠️ Low job volume: {len(jobs)} jobs found (threshold {RICO_MIN_JOBS_THRESHOLD})", "warning")
+    finally:
+        if hasattr(fetch_duration, "observe"):
+            fetch_duration.observe(time.perf_counter() - start)
 
-    with score_duration.time():
+    start = time.perf_counter()
+    try:
         logger.info(f"scoring_starting jobs_count={len(jobs)}", extra={"jobs_count": len(jobs)})
         jobs = score_jobs_llm(jobs)
+    finally:
+        if hasattr(score_duration, "observe"):
+            score_duration.observe(time.perf_counter() - start)
 
         all_scored: List[Tuple[Dict[str, Any], int]] = []
         for job in jobs:
