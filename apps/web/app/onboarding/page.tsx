@@ -112,6 +112,8 @@ export default function OnboardingPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const signUpHref = buildAuthHref("/signup", "/onboarding");
   const loginHref = buildAuthHref("/login", "/onboarding");
+  const yearsExperience =
+    parsed?.years_experience_hint ?? parsed?.years_experience ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -293,9 +295,9 @@ export default function OnboardingPage() {
               {parsed && (
                 <div className="mb-6 rounded-xl bg-[#0d0d1f] p-4 border border-[rgba(255,255,255,0.06)] space-y-1">
                   <p className="text-[11px] uppercase tracking-wider text-[#5a5a7a] mb-2">Extracted from CV</p>
-                  {parsed.years_experience_hint != null && (
+                  {yearsExperience != null && (
                     <p className="text-sm text-[#8080a0]">
-                      <span className="text-[#5a5a7a]">Experience: </span>{parsed.years_experience_hint} yrs
+                      <span className="text-[#5a5a7a]">Experience: </span>{yearsExperience} yrs
                     </p>
                   )}
                   {(parsed.skills?.length ?? 0) > 0 && (

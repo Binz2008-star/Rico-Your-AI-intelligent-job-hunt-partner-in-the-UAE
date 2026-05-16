@@ -691,6 +691,8 @@ export interface ParsedCV {
   skills: string[];
   certifications: string[];
   languages: string[];
+  years_experience_hint?: number | null;
+  years_experience?: number | null;
   extraction_quality?: string;
   extracted_chars?: number;
 }

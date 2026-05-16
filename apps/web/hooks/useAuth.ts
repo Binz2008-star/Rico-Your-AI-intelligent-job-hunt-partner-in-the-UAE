@@ -25,7 +25,7 @@ export function useAuth() {
 
     fetchMe()
       .then((me) => {
-        if (me.authenticated) {
+        if (me.authenticated && me.email) {
           setUser({
             user_id: me.email,
             name: me.email.split("@")[0],
