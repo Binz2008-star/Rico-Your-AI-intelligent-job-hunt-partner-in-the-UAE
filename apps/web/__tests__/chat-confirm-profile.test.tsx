@@ -11,7 +11,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-import ChatPage from "@/app/chat/page";
+import CommandPage from "@/app/command/page";
 
 type JsonValue = Record<string, unknown>;
 
@@ -71,7 +71,7 @@ describe("handleConfirmProfile", () => {
       throw new Error(`Unhandled fetch: ${url}`);
     });
 
-    render(<ChatPage />);
+    render(<CommandPage />);
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(fileInput, new File(["%PDF-1.4"], "cv.pdf", { type: "application/pdf" }));
@@ -125,7 +125,7 @@ describe("Edit before saving", () => {
       throw new Error(`Unhandled fetch: ${url}`);
     });
 
-    render(<ChatPage />);
+    render(<CommandPage />);
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(fileInput, new File(["%PDF-1.4"], "cv.pdf", { type: "application/pdf" }));
@@ -178,7 +178,7 @@ describe("Edit before saving", () => {
       throw new Error(`Unhandled fetch: ${url}`);
     });
 
-    render(<ChatPage />);
+    render(<CommandPage />);
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(fileInput, new File(["%PDF-1.4"], "cv.pdf", { type: "application/pdf" }));
