@@ -56,6 +56,7 @@ from src.rico_env import get_ai_provider
 from src.rico_hf_client import generate_text, is_available as hf_ok
 from src.rico_openai_agent import RicoOpenAIAgent
 from src.rico_openai_runtime import call_openai_minimal
+from src.services import chat_service
 from src.agent.responses.schema import build_error_response
 
 logger = logging.getLogger(__name__)
