@@ -22,6 +22,23 @@ from src.services.jobs_service import (
 router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
 
 
+def _current_user_id(current_user: dict[str, Any]) -> str:
+    return str(current_user.get("email") or current_user.get("id") or "")
+
+
+def _resolve_action_job(job_id: str, req: Optional[JobActionRequest] = None) -> Dict[str, Any]:
+    body_job = req.job if req and req.job else None
+    client_job_id = body_job.get("job_id") or body_job.get("id") if body_job else None
+    if client_job_id and str(client_job_id) != job_id:
+        raise HTTPException(status_code=422, detail="Job object in request body does not match job_id in URL")
+    job = get_job(job_id)
+    if job:
+        return job
+    if body_job:
+        return {"id": job_id, **body_job}
+    raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+
+
 @router.get("", response_model=JobListResponse)
 def get_jobs(
     page: int = Query(1, ge=1),
@@ -50,16 +67,7 @@ def apply_job(
     req: Optional[JobActionRequest] = None,
     current_user: dict = Depends(get_current_user),
 ) -> JobActionResponse:
-    user_id = str(current_user.get("id", ""))
-    # Fetch job server-side to validate job_id
-    job = get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
-    # If client provided job object, validate it matches server-side job_id
-    if req and req.job:
-        client_job_id = req.job.get("job_id") or req.job.get("id")
-        if client_job_id and str(client_job_id) != job_id:
-            raise HTTPException(status_code=422, detail="Job object in request body does not match job_id in URL")
+    job = _resolve_action_job(job_id, req)
     result = apply_to_job(job)
     return JobActionResponse(
         status=result.get("status", "unknown"),
@@ -71,13 +79,11 @@ def apply_job(
 @router.post("/{job_id}/skip", response_model=JobActionResponse)
 def skip_job_route(
     job_id: str,
+    req: Optional[JobActionRequest] = None,
     current_user: dict = Depends(get_current_user),
 ) -> JobActionResponse:
-    user_id = str(current_user.get("id", ""))
-    # Fetch job server-side to validate job_id
-    job = get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+    user_id = _current_user_id(current_user)
+    job = _resolve_action_job(job_id, req)
     skipped = skip_job(job, user_id=user_id)
     if skipped:
         return JobActionResponse(status="skipped", message="Job skipped and persisted")
@@ -87,13 +93,11 @@ def skip_job_route(
 @router.post("/{job_id}/save", response_model=JobActionResponse)
 def save_job_route(
     job_id: str,
+    req: Optional[JobActionRequest] = None,
     current_user: dict = Depends(get_current_user),
 ) -> JobActionResponse:
-    user_id = str(current_user.get("id", ""))
-    # Fetch job server-side to validate job_id
-    job = get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+    user_id = _current_user_id(current_user)
+    job = _resolve_action_job(job_id, req)
     saved = save_job(job, user_id=user_id)
     if saved:
         return JobActionResponse(status="saved", message="Job saved and persisted")
@@ -103,13 +107,11 @@ def save_job_route(
 @router.post("/{job_id}/block", response_model=JobActionResponse)
 def block_job_route(
     job_id: str,
+    req: Optional[JobActionRequest] = None,
     current_user: dict = Depends(get_current_user),
 ) -> JobActionResponse:
-    user_id = str(current_user.get("id", ""))
-    # Fetch job server-side to validate job_id
-    job = get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+    user_id = _current_user_id(current_user)
+    job = _resolve_action_job(job_id, req)
     try:
         company = block_company(job, user_id=user_id)
     except ValueError as exc:

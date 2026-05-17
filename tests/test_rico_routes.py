@@ -34,6 +34,29 @@ def clear_github_webhook_secret():
         else:
             os.environ["GITHUB_WEBHOOK_SECRET"] = original
 
+
+@pytest.fixture(autouse=True)
+def clear_jotform_webhook_secret():
+    """Keep Jotform route tests independent from any developer-local .env secret."""
+    original = os.environ.get("JOTFORM_WEBHOOK_SECRET")
+    os.environ["JOTFORM_WEBHOOK_SECRET"] = ""
+    try:
+        yield
+    finally:
+        if original is None:
+            os.environ.pop("JOTFORM_WEBHOOK_SECRET", None)
+        else:
+            os.environ["JOTFORM_WEBHOOK_SECRET"] = original
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter_storage():
+    from src.api.rate_limit import limiter
+    try:
+        limiter._storage.reset()
+    except Exception:
+        pass
+
 # ── Shared test clients ───────────────────────────────────────────────────────
 
 @pytest.fixture(scope="module")
@@ -59,6 +82,7 @@ def auth_client():
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 _CHAT_RESPONSE = {"type": "assistant", "message": "Hello from Rico"}
+_PUBLIC_UPLOAD_ID = "public:web-upload12345"
 _CV_PARSED = {
     "text": "Sample CV text",
     "skills": ["hse"],
@@ -70,6 +94,11 @@ _CV_PARSED = {
 }
 _TELEGRAM_RESPONSE = {"chat_id": "12345", "reply": {"type": "assistant", "message": "Hi"}}
 _JOTFORM_RESPONSE = {"status": "ok", "user_id": "42"}
+
+
+def _mock_cv_detector(doc_type: str = "cv"):
+    mock_parser = type("Parser", (), {"detect_document_type": lambda self, text: doc_type})()
+    return patch("src.cv_parser.CVParser", return_value=mock_parser)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -132,35 +161,36 @@ class TestRicoChatRouteExists:
 
 class TestRicoCVUploadRouteExists:
     def test_upload_cv_route_returns_200(self, client):
-        with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED):
+        with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED), _mock_cv_detector():
             r = client.post(
-                "/api/v1/rico/upload-cv?user_id=user-1",
+                f"/api/v1/rico/upload-cv?user_id={_PUBLIC_UPLOAD_ID}",
                 files={"file": ("cv.pdf", io.BytesIO(b"%PDF-1.4 fake"), "application/pdf")},
             )
         assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
+        assert r.json()["status"] == "preview_ready"
 
     def test_upload_cv_route_not_404(self, client):
-        with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED):
+        with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED), _mock_cv_detector():
             r = client.post(
-                "/api/v1/rico/upload-cv?user_id=user-1",
+                f"/api/v1/rico/upload-cv?user_id={_PUBLIC_UPLOAD_ID}",
                 files={"file": ("cv.pdf", io.BytesIO(b"%PDF-1.4 fake"), "application/pdf")},
             )
         assert r.status_code != 404, "Rico upload-cv route is not mounted"
 
     def test_upload_cv_response_contains_parsed_key(self, client):
-        with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED):
+        with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED), _mock_cv_detector():
             r = client.post(
-                "/api/v1/rico/upload-cv?user_id=user-1",
+                f"/api/v1/rico/upload-cv?user_id={_PUBLIC_UPLOAD_ID}",
                 files={"file": ("resume.pdf", io.BytesIO(b"%PDF"), "application/pdf")},
             )
         assert r.status_code == 200
         body = r.json()
         assert "parsed" in body
-        assert "user_id" in body
-        assert body["user_id"] == "user-1"
+        assert body["user_id"] == _PUBLIC_UPLOAD_ID
+        assert body["status"] == "preview_ready"
 
     def test_upload_cv_missing_file_returns_422(self, client):
-        r = client.post("/api/v1/rico/upload-cv?user_id=user-1")
+        r = client.post(f"/api/v1/rico/upload-cv?user_id={_PUBLIC_UPLOAD_ID}")
         assert r.status_code == 422
 
     def test_upload_cv_missing_user_id_returns_422(self, client):
@@ -172,14 +202,14 @@ class TestRicoCVUploadRouteExists:
 
     def test_upload_cv_non_pdf_returns_422(self, client):
         r = client.post(
-            "/api/v1/rico/upload-cv?user_id=user-1",
+            f"/api/v1/rico/upload-cv?user_id={_PUBLIC_UPLOAD_ID}",
             files={"file": ("resume.pdf", io.BytesIO(b"This is not a PDF"), "application/pdf")},
         )
         assert r.status_code == 422
 
     def test_upload_cv_empty_file_returns_422(self, client):
         r = client.post(
-            "/api/v1/rico/upload-cv?user_id=user-1",
+            f"/api/v1/rico/upload-cv?user_id={_PUBLIC_UPLOAD_ID}",
             files={"file": ("empty.pdf", io.BytesIO(b""), "application/pdf")},
         )
         assert r.status_code == 422
@@ -187,15 +217,15 @@ class TestRicoCVUploadRouteExists:
     def test_upload_cv_exe_disguised_as_pdf_returns_422(self, client):
         exe_header = b"MZ\x90\x00" + b"\x00" * 60
         r = client.post(
-            "/api/v1/rico/upload-cv?user_id=user-1",
+            f"/api/v1/rico/upload-cv?user_id={_PUBLIC_UPLOAD_ID}",
             files={"file": ("malware.pdf", io.BytesIO(exe_header), "application/pdf")},
         )
         assert r.status_code == 422
 
     def test_upload_cv_path_traversal_filename_sanitised(self, client):
-        with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED):
+        with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED), _mock_cv_detector():
             r = client.post(
-                "/api/v1/rico/upload-cv?user_id=user-1",
+                f"/api/v1/rico/upload-cv?user_id={_PUBLIC_UPLOAD_ID}",
                 files={"file": ("../../etc/passwd", io.BytesIO(b"%PDF-1.4 ok"), "application/pdf")},
             )
         assert r.status_code == 200
@@ -203,9 +233,9 @@ class TestRicoCVUploadRouteExists:
         assert ".." not in r.json()["filename"]
 
     def test_upload_cv_xss_filename_sanitised(self, client):
-        with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED):
+        with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED), _mock_cv_detector():
             r = client.post(
-                "/api/v1/rico/upload-cv?user_id=user-1",
+                f"/api/v1/rico/upload-cv?user_id={_PUBLIC_UPLOAD_ID}",
                 files={"file": ('<script>alert(1)</script>.pdf', io.BytesIO(b"%PDF-1.4 ok"), "application/pdf")},
             )
         assert r.status_code == 200
@@ -216,23 +246,19 @@ class TestRicoCVUploadRouteExists:
 class TestRicoCVUploadSecurity:
     """Security tests for CV upload with validated public session IDs."""
 
-    def test_public_web_session_cv_upload_persists_profile(self, client):
-        """Guest users with valid public:web-* session IDs should have CV data persisted."""
+    def test_public_web_session_cv_upload_returns_preview(self, client):
+        """Guest users with valid public:web-* session IDs should receive preview_ready, not persistence."""
         public_session_id = "public:web-abc123xyz789"
-        with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED), \
-             patch("src.repositories.profile_repo.upsert_profile") as mock_upsert, \
-             patch("src.repositories.profile_repo.get_profile", return_value=None), \
-             patch("src.repositories.onboarding_repo.mark_onboarding_complete") as mock_mark:
+        with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED), _mock_cv_detector():
             r = client.post(
                 f"/api/v1/rico/upload-cv?user_id={public_session_id}",
                 files={"file": ("cv.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
             )
         assert r.status_code == 200
-        mock_upsert.assert_called_once()
-        # Verify the public session ID was used for persistence
-        call_kwargs = mock_upsert.call_args[1]
-        assert call_kwargs["user_id"] == public_session_id
-        mock_mark.assert_called_once_with(public_session_id)
+        body = r.json()
+        assert body["status"] == "preview_ready"
+        assert body["user_id"] == public_session_id
+        assert body["preview"]["skills_detected"] == ["hse"]
 
     def test_guest_invalid_user_id_is_rejected(self, client):
         """Guest users with invalid user_id format should be rejected with 401."""
@@ -267,52 +293,29 @@ class TestRicoCVUploadSecurity:
 
     def test_authenticated_upload_ignores_supplied_public_user_id(self, auth_client):
         """Authenticated uploads must ignore supplied public user_id and use auth identity."""
-        from src.api.rate_limit import limiter
-        try:
-            limiter._storage.reset()
-        except Exception:
-            pass
-
         public_session_id = "public:web-abc123"
-        with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED), \
-             patch("src.repositories.profile_repo.upsert_profile") as mock_upsert, \
-             patch("src.repositories.profile_repo.get_profile", return_value=None), \
-             patch("src.repositories.onboarding_repo.mark_onboarding_complete"):
+        with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED), _mock_cv_detector():
             r = auth_client.post(
                 f"/api/v1/rico/upload-cv?user_id={public_session_id}",
                 files={"file": ("cv.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
             )
         assert r.status_code == 200
-        # Verify the authenticated user ID was used, not the supplied public ID
-        call_kwargs = mock_upsert.call_args[1]
-        assert call_kwargs["user_id"] == "alice@rico.ai"
-        assert call_kwargs["user_id"] != public_session_id
+        body = r.json()
+        assert body["status"] == "preview_ready"
+        assert body["user_id"] == "alice@rico.ai"
+        assert body["user_id"] != public_session_id
 
     def test_public_chat_after_upload_loads_persisted_cv_profile(self, client):
         """Public chat should load persisted CV profile from previous upload."""
-        from src.api.rate_limit import limiter
-        try:
-            limiter._storage.reset()
-        except Exception:
-            pass
-
         public_session_id = "public:web-xyz789abc"
-        mock_profile = type("Profile", (), {
-            "skills": ["hse", "iso45001"],
-            "years_experience": 5,
-            "cv_filename": "cv.pdf",
-        })()
-
-        with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED), \
-             patch("src.repositories.profile_repo.upsert_profile"), \
-             patch("src.repositories.onboarding_repo.mark_onboarding_complete"), \
-             patch("src.repositories.profile_repo.get_profile", return_value=mock_profile):
+        with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED), _mock_cv_detector():
             # First, upload CV
             r = client.post(
                 f"/api/v1/rico/upload-cv?user_id={public_session_id}",
                 files={"file": ("cv.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
             )
             assert r.status_code == 200
+            assert r.json()["status"] == "preview_ready"
 
         # Then verify chat can load the persisted profile
         with patch("src.services.chat_service.send_message", return_value=_CHAT_RESPONSE) as mock_send:
@@ -429,6 +432,22 @@ class TestRicoJotformWebhookRouteExists:
             r = client.post("/api/v1/rico/webhooks/jotform", json=payload)
         assert r.status_code == 200
         assert captured["payload"] == payload
+
+    def test_jotform_webhook_secret_enforced_when_set(self, client):
+        with patch.dict(os.environ, {"JOTFORM_WEBHOOK_SECRET": "supersecret"}):
+            r = client.post("/api/v1/rico/webhooks/jotform", json={"pretty": {"email": "test@example.com"}})
+        assert r.status_code == 403
+
+    def test_jotform_webhook_valid_secret_passes(self, client):
+        payload = {"pretty": {"email": "test@example.com", "full_name": "Test User"}}
+        with patch("src.services.chat_service.handle_jotform_submission", return_value=_JOTFORM_RESPONSE), \
+             patch.dict(os.environ, {"JOTFORM_WEBHOOK_SECRET": "supersecret"}):
+            r = client.post(
+                "/api/v1/rico/webhooks/jotform",
+                json=payload,
+                headers={"X-Webhook-Secret": "supersecret"},
+            )
+        assert r.status_code == 200
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -901,6 +920,11 @@ class TestJobsRoutes:
         assert r.status_code == 200
         body = r.json()
         assert body["status"] == "saved"
+
+    def test_save_job_rejects_conflicting_body_job_id(self, auth_client):
+        payload = {"job": {"id": "other-job", "title": "Risk Manager", "link": "https://example.com/job/ep-001"}}
+        r = auth_client.post("/api/v1/jobs/job-1/save", json=payload)
+        assert r.status_code == 422
 
 
 # =============================================================================

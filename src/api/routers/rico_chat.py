@@ -38,15 +38,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.api.deps import get_current_user, get_current_user_id
 from src.api.rate_limit import LIMIT_CHAT, LIMIT_UPLOAD, LIMIT_WEBHOOK, limiter
-from src.repositories.profile_repo import (
-    delete_search,
-    get_profile,
-    list_saved_searches,
-    save_search,
-    upsert_profile,
-)
+from src.repositories import onboarding_repo, profile_repo
 from src.repositories.learning_repo import get_learning_repository
-from src.repositories.onboarding_repo import mark_onboarding_complete
 from src.agent.responses.schema import RicoResponse, build_error_response, _generate_debug_id
 from src.agent.runtime import agent_runtime
 from src.models.onboarding import ONBOARDING_IN_PROGRESS
@@ -177,11 +170,15 @@ class FeedbackRequest(BaseModel):
 class ProfileResponse(BaseModel):
     """Typed profile response."""
     profile_exists: bool
+    user_id: str | None = None
+    name: str | None = None
     email: str | None = None
+    phone: str | None = None
     target_roles: list[str] | None = None
     preferred_cities: list[str] | None = None
     skills: list[str] | None = None
     years_experience: float | None = None
+    current_role: str | None = None
     completeness_score: float | None = None
 
 
@@ -213,6 +210,31 @@ def _safe_filename(name: str | None) -> str:
     name = os.path.basename(name)
     name = _UNSAFE_CHARS_RE.sub("", name)
     return name.strip() or "upload"
+
+
+# Thin wrappers keep the router on one adapter path while preserving stable patch points.
+def get_profile(user_id: str):
+    return profile_repo.get_profile(user_id)
+
+
+def upsert_profile(user_id: str, updates: dict[str, Any]):
+    return profile_repo.upsert_profile(user_id=user_id, updates=updates)
+
+
+def list_saved_searches(user_id: str, limit: int = 20):
+    return profile_repo.list_saved_searches(user_id, limit=limit)
+
+
+def save_search(user_id: str, query: str, filters: dict[str, Any]):
+    return profile_repo.save_search(user_id, query, filters)
+
+
+def delete_search(user_id: str, search_id: str):
+    return profile_repo.delete_search(user_id, search_id)
+
+
+def mark_onboarding_complete(user_id: str) -> None:
+    onboarding_repo.mark_onboarding_complete(user_id)
 
 
 def _is_valid_public_user_id(value: str) -> bool:
@@ -396,11 +418,15 @@ def rico_get_profile(request: Request) -> ProfileResponse:
 
     response = ProfileResponse(
         profile_exists=True,
+        user_id=user_id,
+        name=getattr(profile, "name", None),
         email=user_id,
+        phone=getattr(profile, "phone", None),
         target_roles=getattr(profile, "target_roles", None),
         preferred_cities=getattr(profile, "preferred_cities", None),
         skills=getattr(profile, "skills", None),
         years_experience=getattr(profile, "years_experience", None),
+        current_role=getattr(profile, "current_role", None),
         completeness_score=context.completeness_score,
     )
 
@@ -442,7 +468,7 @@ def rico_create_saved_search(request: Request, body: SavedSearchRequest) -> Save
 
     _metrics.record_request((time.time() - start_time) * 1000)
     return SavedSearchResponse(
-        id=search_id,
+        id=str(search_id) if search_id is not None else None,
         query=body.query,
         filters=body.filters,
         status="saved"
@@ -994,6 +1020,8 @@ async def rico_upload_cv(
             "parsed": parsed,
             "user_id": resolved_user_id,
         }
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception(
             "cv_upload_error user=%s filename=%s error=%s request_ref=%s",
