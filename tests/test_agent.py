@@ -129,16 +129,23 @@ class TestStatsTools:
         from src.agent.tools.stats_tools import get_application_stats
         mock_stats = {"total_applied": 10, "interviews_scheduled": 2, "success_rate": 20.0}
         with patch("src.repositories.applications_repo.get_stats", return_value=mock_stats):
-            result = get_application_stats()
+            result = get_application_stats(user_id="test-user")
         assert result.success is True
         assert result.data == mock_stats
 
     def test_get_stats_service_exception_returns_failure(self):
         from src.agent.tools.stats_tools import get_application_stats
         with patch("src.repositories.applications_repo.get_stats", side_effect=OSError("file locked")):
-            result = get_application_stats()
+            result = get_application_stats(user_id="test-user")
         assert result.success is False
         assert "file locked" in (result.error or "")
+
+    def test_process_passes_user_id_to_stats_tool(self):
+        from src.agent.orchestrator.orchestrator import process
+        with patch("src.repositories.applications_repo.get_stats", return_value={"total_applied": 3, "interviews_scheduled": 1, "success_rate": 33.3, "rejections": 0, "pending": 2, "status_breakdown": {}}) as mock_get:
+            result = process("show my application stats", user_email="test-user")
+        assert result is not None
+        mock_get.assert_called_once_with(user_id="test-user")
 
 
 class TestPipelineTools:

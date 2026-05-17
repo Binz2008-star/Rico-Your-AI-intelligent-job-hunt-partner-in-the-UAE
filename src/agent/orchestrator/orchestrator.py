@@ -40,7 +40,7 @@ def process(
     if action is not None:
         result = _execute_action(action, user_email)
     else:
-        result = _execute_intent(message)
+        result = _execute_intent(message, user_email=user_email)
 
     response = _build(result, message, action)
     response.execution_time_ms = int((time.monotonic() - wall_start) * 1000)
@@ -116,7 +116,7 @@ def _execute_action(action: AgentAction, user_email: str) -> ToolExecutionResult
 
 # ── Intent execution path ─────────────────────────────────────────────────────
 
-def _execute_intent(message: str) -> ToolExecutionResult:
+def _execute_intent(message: str, user_email: str = "anonymous") -> ToolExecutionResult:
     intent, tool_name = detect(message)
     logger.info("intent_detected intent=%r tool=%r message=%r", intent, tool_name, message[:80])
 
@@ -128,7 +128,7 @@ def _execute_intent(message: str) -> ToolExecutionResult:
     except KeyError as exc:
         return ToolExecutionResult(success=False, tool_name=tool_name, error=str(exc))
 
-    return tool_def.fn()
+    return tool_def.fn(user_id=user_email) if "user_id" in inspect.signature(tool_def.fn).parameters else tool_def.fn()
 
 
 # ── Response assembly ─────────────────────────────────────────────────────────
