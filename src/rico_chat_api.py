@@ -1063,12 +1063,31 @@ class RicoChatAPI:
                 return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
             # Use profile target roles for search
             target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            logger.info(
+                "rico_profile_match_search user=%s target_roles=%s has_cv=%s",
+                user_id, target_roles, has_cv,
+            )
             role = target_roles[0] if target_roles else "your profile"
             return self._finalize(
                 self._target_role_search_response(user_id, role, profile),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
+
+        # Profile update — route BEFORE role-change fallback
+        if intent == "profile_update":
+            context = self._build_router_context(user_id, profile)
+            routed = _route(message, user_id=user_id, context=context)
+            prefs = routed.tool_args.get("preferences", {})
+            if prefs:
+                upsert_profile(user_id=user_id, updates=prefs)
+            response = {
+                "type": "preferences_updated",
+                "message": "Got it. I have updated your preferences and will apply them to future searches.",
+                "updated": prefs,
+            }
+            self._append_chat(user_id, "assistant", response["message"])
+            return self._finalize(response, routed.source, profile=profile)
 
         # Role change — extract role and classify
         if intent == "role_change" and intent_result.extracted_role:
@@ -1204,21 +1223,6 @@ class RicoChatAPI:
                 }
                 self._append_chat(user_id, "assistant", result.message)
                 return self._finalize(response, routed.source, profile=profile)
-
-        # Profile update
-        if intent == "profile_update":
-            context = self._build_router_context(user_id, profile)
-            routed = _route(message, user_id=user_id, context=context)
-            prefs = routed.tool_args.get("preferences", {})
-            if prefs:
-                upsert_profile(user_id=user_id, updates=prefs)
-            response = {
-                "type": "preferences_updated",
-                "message": "Got it. I have updated your preferences and will apply them to future searches.",
-                "updated": prefs,
-            }
-            self._append_chat(user_id, "assistant", response["message"])
-            return self._finalize(response, routed.source, profile=profile)
 
         # Interview prep
         if intent == "interview_prep":

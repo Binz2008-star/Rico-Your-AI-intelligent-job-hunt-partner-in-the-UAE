@@ -240,7 +240,10 @@ def update_application_status(job_link: str, status: str, notes: str = None) -> 
     if not conn:
         return False
 
-    valid_statuses = ['saved', 'opened', 'applied', 'interview', 'rejected', 'offer']
+    valid_statuses = ['saved', 'opened', 'opened_external', 'applied', 'interview', 'rejected', 'offer']
+    # Map opened_external to opened for storage
+    if status == 'opened_external':
+        status = 'opened'
     if status not in valid_statuses:
         print(f"❌ Invalid status: {status}")
         return False

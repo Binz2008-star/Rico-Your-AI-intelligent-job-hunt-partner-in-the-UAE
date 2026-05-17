@@ -28,7 +28,7 @@ _THREAD_LOCK = threading.RLock()
 
 # Valid application statuses — enforced on every write
 VALID_STATUSES: Set[str] = {
-    "saved", "opened", "applied", "interview",
+    "saved", "opened", "opened_external", "applied", "interview",
     "rejected", "offer", "decision_made",
 }
 

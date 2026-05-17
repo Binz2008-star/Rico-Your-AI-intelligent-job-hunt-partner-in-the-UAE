@@ -94,6 +94,7 @@ _SMALLTALK_PHRASES = frozenset([
     "hi", "hello", "hey", "good morning", "good afternoon", "good evening",
     "thanks", "thank you", "ok", "okay", "cool", "great", "nice",
     "bye", "goodbye", "see you", "cheers",
+    "hallo", "hola", "hi there", "salam", "marhaba", "ahlan",
 ])
 
 _PROFILE_SUMMARY_PHRASES = frozenset([
@@ -117,6 +118,11 @@ _PROFILE_ROLE_SUGGESTIONS_PHRASES = frozenset([
 _SKIP_PHRASES = frozenset([
     "skip this question", "don't know", "do not know", "skip",
     "not sure", "pass", "next question",
+])
+
+_PROFILE_UPDATE_PHRASES = frozenset([
+    "update my name", "update my skills", "change my", "edit my profile",
+    "update my phone", "update my salary", "update my city", "update my role",
 ])
 
 _FOLLOW_UP_CONFIRMATION_PHRASES = frozenset([
@@ -245,6 +251,9 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
 
     if lower in _SKIP_PHRASES:
         return IntentResult("onboarding_answer", 0.9, "exact")
+
+    if lower in _PROFILE_UPDATE_PHRASES:
+        return IntentResult("profile_update", 1.0, "exact")
 
     if lower in _FOLLOW_UP_CONFIRMATION_PHRASES:
         return IntentResult("follow_up_confirmation", 1.0, "exact")
