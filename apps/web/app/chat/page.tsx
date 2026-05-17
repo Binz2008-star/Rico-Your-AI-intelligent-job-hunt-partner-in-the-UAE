@@ -503,14 +503,15 @@ export default function ChatPage() {
     try {
       const PROXY = "/proxy";
       const userId = `public:${getSessionId(sessionIdRef)}`;
-      const url = new URL(`${PROXY}/api/v1/rico/confirm-cv-profile`);
-      url.searchParams.set("user_id", userId);
-      const res = await fetch(url.toString(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ preview, filename }),
-      });
+      const res = await fetch(
+        `${PROXY}/api/v1/rico/confirm-cv-profile?${new URLSearchParams({ user_id: userId })}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ preview, filename }),
+        }
+      );
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { detail?: unknown };
         throw new Error(body.detail ? String(body.detail) : `Confirm profile failed: ${res.status}`);
