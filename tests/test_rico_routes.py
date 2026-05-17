@@ -127,6 +127,21 @@ class TestRicoChatRouteExists:
         r = client.post("/api/v1/rico/chat", json={"message": "Hello"})
         assert r.status_code == 401, f"Expected 401, got {r.status_code}: {r.text}"
 
+    def test_chat_history_returns_200_for_authenticated_user(self, auth_client):
+        """Chat history endpoint must return 200 (not 500) for authenticated users."""
+        r = auth_client.get("/api/v1/rico/chat/history?limit=6")
+        assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
+        body = r.json()
+        assert "messages" in body
+        assert "total" in body
+        assert "has_more" in body
+
+    def test_chat_history_not_500_for_authenticated_user(self, auth_client):
+        """Chat history must not return 500 server error."""
+        r = auth_client.get("/api/v1/rico/chat/history?limit=8")
+        assert r.status_code != 500, f"Chat history returned 500: {r.text}"
+        assert r.status_code in (200, 401), f"Expected 200 or 401, got {r.status_code}"
+
     def test_request_body_user_id_is_ignored_for_authenticated_users(self, auth_client):
         """user_id in body must never override the identity from the JWT."""
         captured = {}

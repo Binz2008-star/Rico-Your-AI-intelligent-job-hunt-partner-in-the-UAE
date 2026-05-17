@@ -137,16 +137,24 @@ class RicoMemoryStore:
                 confidence=0.55,
             )
 
-    def load_chat_history(self, user_id: str) -> List[Dict[str, Any]]:
+    def load_chat_history(self, user_id: str, limit: int | None = None) -> List[Dict[str, Any]]:
         path = self._chat_path(user_id)
         if not path.exists():
             return []
         try:
             content = path.read_text(encoding="utf-8").strip()
-            return json.loads(content) if content else []
+            messages = json.loads(content) if content else []
+            if limit is not None:
+                messages = messages[-limit:]
+            return messages
         except (json.JSONDecodeError, OSError):
             logger.warning("rico_memory: corrupt/empty chat history for user=%s — resetting", user_id)
             return []
+
+    # Alias for API consistency with chat_service
+    def get_chat_messages(self, user_id: str, limit: int | None = None) -> List[Dict[str, Any]]:
+        """Alias for load_chat_history for chat_service compatibility."""
+        return self.load_chat_history(user_id, limit=limit)
 
     def record_learning_signal(self, user_id: str, job_id: str, action: str) -> None:
         signals = self.load_learning_signals(user_id)
