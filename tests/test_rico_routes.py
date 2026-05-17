@@ -326,6 +326,44 @@ class TestRicoCVUploadSecurity:
         assert call_kwargs["user_id"] == public_session_id
 
 
+class TestRicoConfirmCVProfileRoute:
+    def test_confirm_cv_profile_flat_body_accepted(self, client):
+        public_session_id = "public:web-confirm123xyz"
+        payload = {
+            "preview": {
+                "name": "Test User",
+                "email": "test@example.com",
+                "phone": "0501234567",
+                "current_role": "HSE Manager",
+                "experience_years": 5,
+                "skills_detected": ["hse", "nebosh"],
+                "target_roles": ["HSE Manager"],
+                "certifications": ["NEBOSH"],
+                "languages": ["English"],
+            },
+            "filename": "cv.pdf",
+        }
+
+        with patch("src.api.routers.rico_chat.upsert_profile") as mock_upsert, \
+             patch("src.api.routers.rico_chat.mark_onboarding_complete") as mock_mark:
+            r = client.post(
+                f"/api/v1/rico/confirm-cv-profile?user_id={public_session_id}",
+                json=payload,
+            )
+
+        assert r.status_code != 422, f"Body rejected by FastAPI: {r.text}"
+        assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
+        body = r.json()
+        assert body["status"] == "profile_updated"
+        mock_upsert.assert_called_once()
+        mock_mark.assert_not_called()
+
+        call_kwargs = mock_upsert.call_args.kwargs
+        assert call_kwargs["user_id"] == public_session_id
+        assert call_kwargs["updates"]["skills"] == ["hse", "nebosh"]
+        assert call_kwargs["updates"]["cv_filename"] == "cv.pdf"
+
+
 class TestRicoTelegramWebhookRouteExists:
     def test_telegram_webhook_route_returns_200(self, client):
         update = {

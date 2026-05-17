@@ -1011,34 +1011,38 @@ async def rico_upload_cv(
 @limiter.limit(LIMIT_UPLOAD)
 async def confirm_cv_profile(
     request: Request,
-    body: ConfirmCVProfileRequest,
-    user_id: str | None = None,
-    form_user_id: str | None = Form(None, alias="user_id"),
+    payload: ConfirmCVProfileRequest,
+    user_id: str | None = Query(None),
 ) -> dict[str, Any]:
-    """Confirm and save CV profile preview to permanent profile. Supports both authenticated and public sessions."""
+    """Confirm and save CV profile preview to permanent profile.
+
+    This endpoint accepts JSON, so declaring a Form(...) parameter here would
+    force FastAPI to expect an embedded "body" key. Keep user_id in the query
+    string for public sessions and resolve auth identity from the cookie.
+    """
     start_time = time.time()
     request_ref = generate_error_ref()
-    resolved_user_id = _resolve_upload_user_id(request, user_id, form_user_id)
+    resolved_user_id = _resolve_upload_user_id(request, user_id, None)
 
     try:
         logger.info(
             "cv_profile_confirm user=%s filename=%s request_ref=%s",
             resolved_user_id,
-            body.filename,
+            payload.filename,
             request_ref,
         )
 
         # Build profile updates from preview - use skills_detected if available, fallback to skills
-        preview_skills = body.preview.get("skills_detected") or body.preview.get("skills", [])
+        preview_skills = payload.preview.get("skills_detected") or payload.preview.get("skills", [])
         profile_updates = {
-            "email": body.preview.get("email"),
-            "phone": body.preview.get("phone"),
+            "email": payload.preview.get("email"),
+            "phone": payload.preview.get("phone"),
             "skills": preview_skills,
-            "years_experience": body.preview.get("experience_years"),
-            "target_roles": body.preview.get("target_roles", []) if body.preview.get("target_roles") else None,
-            "certifications": body.preview.get("certifications", []),
-            "languages": body.preview.get("languages", []),
-            "cv_filename": body.filename,
+            "years_experience": payload.preview.get("experience_years"),
+            "target_roles": payload.preview.get("target_roles", []) if payload.preview.get("target_roles") else None,
+            "certifications": payload.preview.get("certifications", []),
+            "languages": payload.preview.get("languages", []),
+            "cv_filename": payload.filename,
             "cv_status": "parsed",
             "cv_extracted_at": datetime.now(_UTC).isoformat(),
             "profile_creation_mode": "cv_first",
@@ -1073,7 +1077,7 @@ async def confirm_cv_profile(
         logger.exception(
             "cv_profile_confirm_error user=%s filename=%s error=%s request_ref=%s",
             resolved_user_id,
-            body.filename,
+            payload.filename,
             str(exc),
             request_ref,
         )
