@@ -250,8 +250,14 @@ def _resolve_upload_user_id(
     """Resolve user ID for CV upload, allowing authenticated or validated public sessions."""
     try:
         return get_current_user_id(request)
-    except HTTPException:
-        pass
+    except HTTPException as auth_exc:
+        if getattr(request.state, "access_token_present", False) or request.cookies.get("access_token"):
+            logger.warning(
+                "upload_identity_auth_failed path=%s detail=%s",
+                request.url.path,
+                auth_exc.detail,
+            )
+            raise auth_exc
 
     user_id = (query_user_id or form_user_id or "").strip()
     if not user_id:

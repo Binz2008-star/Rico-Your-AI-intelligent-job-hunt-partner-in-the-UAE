@@ -17,7 +17,12 @@ def get_current_user(request: Request) -> Dict[str, Any]:
     Returns dict with ``email`` and ``role`` (defaults to "user" for legacy tokens).
     Usage: route(user: dict = Depends(get_current_user))
     """
+    cached_user = getattr(request.state, "current_user", None)
+    if isinstance(cached_user, dict) and cached_user.get("email"):
+        return cached_user
+
     token = request.cookies.get("access_token")
+    request.state.access_token_present = bool(token)
     if not token:
         raise HTTPException(
             status_code=401,
@@ -26,10 +31,13 @@ def get_current_user(request: Request) -> Dict[str, Any]:
     payload = decode_access_token(token)
     if not payload or "sub" not in payload:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
-    return {
+    user = {
         "email": payload["sub"],
         "role":  payload.get("role", "user"),   # legacy tokens have no role → default "user"
     }
+    request.state.current_user = user
+    request.state.user_id = user["email"]
+    return user
 
 
 def get_current_user_id(request: Request) -> str:
@@ -43,10 +51,15 @@ def get_current_user_id(request: Request) -> str:
     Raises HTTP 401 if the token is missing, invalid, or has an empty sub.
     Usage: route(user_id: str = Depends(get_current_user_id))
     """
+    cached_user_id = getattr(request.state, "user_id", None)
+    if isinstance(cached_user_id, str) and cached_user_id.strip():
+        return cached_user_id.strip()
+
     user = get_current_user(request)
     user_id = user.get("email", "").strip()
     if not user_id:
         raise HTTPException(status_code=401, detail="Token missing user identity (sub)")
+    request.state.user_id = user_id
     return user_id
 
 

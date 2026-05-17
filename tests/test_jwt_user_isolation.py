@@ -93,6 +93,18 @@ class TestGetCurrentUserIdDep:
         assert get_current_user_id(req_alice) == "alice@rico.ai"
         assert get_current_user_id(req_bob) == "bob@rico.ai"
 
+    def test_valid_token_populates_request_state(self):
+        from src.api.deps import get_current_user
+
+        token = _make_token("alice@rico.ai")
+        req = self._request_with_cookie(token)
+        user = get_current_user(req)
+
+        assert user["email"] == "alice@rico.ai"
+        assert req.state.current_user == user
+        assert req.state.user_id == "alice@rico.ai"
+        assert req.state.access_token_present is True
+
 
 # ── Route-level enforcement ───────────────────────────────────────────────────
 

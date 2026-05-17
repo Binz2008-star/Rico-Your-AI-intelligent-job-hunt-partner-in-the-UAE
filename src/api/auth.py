@@ -9,8 +9,9 @@ Config (env vars):
   JWT_SECRET            — HS256 signing secret (32+ bytes recommended)
   JWT_TTL_HOURS         — token lifetime in hours (default: 24)
   COOKIE_SECURE         — set "true" in production (HTTPS only cookie)
+  COOKIE_DOMAIN         — optional cookie domain (defaults to .ricohunt.com in production)
 
-Token stored as an httpOnly, SameSite=strict cookie named "access_token".
+Token stored as an httpOnly cookie named "access_token".
 """
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
 import bcrypt as _bcrypt
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -76,6 +78,68 @@ def _ttl_hours() -> int:
         return int(os.getenv("JWT_TTL_HOURS", "24"))
     except ValueError:
         return 24
+
+
+def _cookie_secure() -> bool:
+    raw = os.getenv("COOKIE_SECURE", "").strip().lower()
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return _is_production()
+
+
+def _cookie_samesite() -> str:
+    return "none" if _cookie_secure() else "lax"
+
+
+def _cookie_domain() -> Optional[str]:
+    explicit = os.getenv("COOKIE_DOMAIN", "").strip()
+    if explicit:
+        return explicit
+
+    app_url = (
+        os.getenv("APP_URL")
+        or os.getenv("FRONTEND_URL")
+        or os.getenv("NEXT_PUBLIC_APP_URL")
+        or ""
+    ).strip()
+    if app_url:
+        parsed = urlparse(app_url if "://" in app_url else f"https://{app_url}")
+        hostname = (parsed.hostname or "").strip().lower()
+        if hostname.endswith("ricohunt.com"):
+            return ".ricohunt.com"
+
+    if _is_production():
+        return ".ricohunt.com"
+    return None
+
+
+def _cookie_set_kwargs(*, max_age: int) -> Dict[str, Any]:
+    kwargs: Dict[str, Any] = {
+        "httponly": True,
+        "secure": _cookie_secure(),
+        "samesite": _cookie_samesite(),
+        "max_age": max_age,
+        "path": "/",
+    }
+    domain = _cookie_domain()
+    if domain:
+        kwargs["domain"] = domain
+    return kwargs
+
+
+def _cookie_delete_kwargs() -> Dict[str, Any]:
+    kwargs: Dict[str, Any] = {
+        "httponly": True,
+        "secure": _cookie_secure(),
+        "samesite": _cookie_samesite(),
+        "path": "/",
+    }
+    domain = _cookie_domain()
+    if domain:
+        kwargs["domain"] = domain
+    return kwargs
 
 
 # ── Credential check ─────────────────────────────────────────────────────────
@@ -167,18 +231,10 @@ def login(request: Request, req: LoginRequest, response: Response) -> LoginRespo
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     token = create_access_token({"sub": user_info["email"], "role": user_info["role"]})
-    _secure = os.getenv("COOKIE_SECURE", "false").lower() == "true"
     response.set_cookie(
         key=_COOKIE_NAME,
         value=token,
-        httponly=True,
-        # SameSite=None;Secure allows cross-origin cookie sending (required when
-        # the frontend and API are on different origins, e.g. localhost vs Render).
-        # SameSite=Lax is used in local dev (COOKIE_SECURE=false) where Secure
-        # cookies cannot be set over plain HTTP.
-        samesite="none" if _secure else "lax",
-        secure=_secure,
-        max_age=_ttl_hours() * 3600,
+        **_cookie_set_kwargs(max_age=_ttl_hours() * 3600),
     )
     # Merge guest profile into authenticated account if requested
     if req.public_user_id_to_merge:
@@ -201,11 +257,9 @@ def login(request: Request, req: LoginRequest, response: Response) -> LoginRespo
 
 @router.post("/logout")
 def logout(response: Response) -> Dict[str, str]:
-    _secure = os.getenv("COOKIE_SECURE", "false").lower() == "true"
     response.delete_cookie(
         key=_COOKIE_NAME,
-        samesite="none" if _secure else "lax",
-        secure=_secure,
+        **_cookie_delete_kwargs(),
     )
     return {"message": "Logged out"}
 
@@ -236,7 +290,13 @@ def _reset_base_url() -> str:
 
 
 def _is_production() -> bool:
-    env = os.getenv("RICO_ENV", os.getenv("ENV", "")).lower()
+    env = (
+        os.getenv("RICO_ENV")
+        or os.getenv("APP_ENV")
+        or os.getenv("ENV")
+        or os.getenv("ENVIRONMENT")
+        or ""
+    ).lower()
     return env in ("production", "prod")
 
 
@@ -332,14 +392,10 @@ def register(request: Request, req: RegisterRequest, response: Response) -> Regi
         )
 
     token = create_access_token({"sub": user.email, "role": user.role})
-    _secure = os.getenv("COOKIE_SECURE", "false").lower() == "true"
     response.set_cookie(
         key=_COOKIE_NAME,
         value=token,
-        httponly=True,
-        samesite="none" if _secure else "lax",
-        secure=_secure,
-        max_age=_ttl_hours() * 3600,
+        **_cookie_set_kwargs(max_age=_ttl_hours() * 3600),
     )
     # Merge guest profile into authenticated account if requested
     if req.public_user_id_to_merge:

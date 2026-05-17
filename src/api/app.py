@@ -25,7 +25,7 @@ from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from src.api.auth import router as auth_router
+from src.api.auth import decode_access_token, router as auth_router
 from src.api.rate_limit import limiter, rate_limit_exceeded_handler
 from src.api.routers.actions import router as actions_router
 from src.api.routers.agent import router as agent_router
@@ -149,11 +149,24 @@ app.add_middleware(SlowAPIMiddleware)
 # ── CORS ──────────────────────────────────────────────────────────────────────
 # CORS_ORIGINS: comma-separated list of allowed origins, or "*" for public endpoints.
 # Wildcard "*" disables credentials (incompatible per spec); use explicit origins for
-# authenticated routes. Set on Render: CORS_ORIGINS=https://your-vercel-app.vercel.app
+# authenticated routes. Default to localhost plus the production Rico domains.
 
-_origins_raw = os.getenv("CORS_ORIGINS", "http://localhost:3000")
+_DEFAULT_CORS_ORIGINS = ",".join(
+    [
+        "http://localhost:3000",
+        "https://ricohunt.com",
+        "https://www.ricohunt.com",
+    ]
+)
+_origins_raw = os.getenv("CORS_ORIGINS", _DEFAULT_CORS_ORIGINS)
 _origins_list = [o.strip() for o in _origins_raw.split(",") if o.strip()]
 _wildcard = _origins_list == ["*"]
+
+if not _wildcard:
+    _required_rico_origins = {"https://ricohunt.com", "https://www.ricohunt.com"}
+    _missing_rico_origins = sorted(_required_rico_origins - set(_origins_list))
+    if _missing_rico_origins:
+        logger.warning("cors_origins_missing_recommended=%s", _missing_rico_origins)
 
 app.add_middleware(
     CORSMiddleware,
@@ -162,6 +175,34 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
+
+
+@app.middleware("http")
+async def hydrate_request_auth_context(request: Request, call_next):
+    """
+    Decode the access_token cookie once per request and expose auth context on
+    request.state for hybrid routes that support either authenticated or public flows.
+    """
+    request.state.current_user = None
+    request.state.user_id = None
+    request.state.access_token_present = False
+    request.state.auth_cookie_invalid = False
+
+    token = request.cookies.get("access_token")
+    if token:
+        request.state.access_token_present = True
+        payload = decode_access_token(token)
+        if payload and payload.get("sub"):
+            user = {
+                "email": payload["sub"],
+                "role": payload.get("role", "user"),
+            }
+            request.state.current_user = user
+            request.state.user_id = user["email"]
+        else:
+            request.state.auth_cookie_invalid = True
+
+    return await call_next(request)
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 

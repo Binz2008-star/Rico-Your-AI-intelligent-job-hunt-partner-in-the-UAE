@@ -30,9 +30,15 @@ services:
       - key: JWT_TTL_HOURS
         value: "24"
       - key: COOKIE_SECURE
-        value: "false"
+        value: "true"
+      - key: COOKIE_DOMAIN
+        value: ".ricohunt.com"
       - key: CORS_ORIGINS
-        value: "https://your-frontend-url.com"
+        value: "https://ricohunt.com,https://www.ricohunt.com"
+      - key: APP_URL
+        value: "https://ricohunt.com"
+      - key: RICO_ENV
+        value: "production"
       - key: EXCLUDE_KEYWORDS
         value: ""
       - key: OPENAI_API_KEY

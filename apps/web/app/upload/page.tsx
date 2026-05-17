@@ -6,6 +6,15 @@ import { GlassPanel } from '@/components/ui/GlassPanel';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { uploadCV } from '@/lib/api';
 
+function getGuestUploadUserId(): string {
+  let sessionId = window.localStorage.getItem('rico_sid');
+  if (!sessionId) {
+    sessionId = `web-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+    window.localStorage.setItem('rico_sid', sessionId);
+  }
+  return `public:${sessionId}`;
+}
+
 export default function UploadPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -39,7 +48,7 @@ export default function UploadPage() {
   const handleUpload = async (file: File) => {
     setIsUploading(true);
     try {
-      await uploadCV(file);
+      await uploadCV(file, getGuestUploadUserId());
       setUploadComplete(true);
     } catch (error) {
       console.error('Upload failed:', error);

@@ -200,6 +200,28 @@ class TestRicoCVUploadRouteExists:
         )
         assert r.status_code == 422
 
+    def test_authenticated_upload_without_query_user_id_uses_cookie_identity(self, auth_client):
+        with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED), _mock_cv_detector():
+            r = auth_client.post(
+                "/api/v1/rico/upload-cv",
+                files={"file": ("cv.pdf", io.BytesIO(b"%PDF-1.4 fake"), "application/pdf")},
+            )
+        assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
+        body = r.json()
+        assert body["status"] == "preview_ready"
+        assert body["user_id"] == "alice@rico.ai"
+
+    def test_invalid_auth_cookie_without_query_user_id_returns_401(self, client):
+        client.cookies.set("access_token", "not.a.valid.jwt")
+        try:
+            r = client.post(
+                "/api/v1/rico/upload-cv",
+                files={"file": ("cv.pdf", io.BytesIO(b"%PDF-1.4 fake"), "application/pdf")},
+            )
+        finally:
+            client.cookies.clear()
+        assert r.status_code == 401
+
     def test_upload_cv_non_pdf_returns_422(self, client):
         r = client.post(
             f"/api/v1/rico/upload-cv?user_id={_PUBLIC_UPLOAD_ID}",

@@ -191,6 +191,37 @@ class TestJWTRoleClaim:
         assert r.json()["role"] == "user"
 
 
+class TestCookieSessionSettings:
+    def test_login_sets_secure_cross_subdomain_cookie_flags(self):
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+        from src.api.rate_limit import limiter
+
+        limiter._storage.reset()
+        tc = TestClient(app, raise_server_exceptions=False)
+        env = {
+            "COOKIE_SECURE": "true",
+            "COOKIE_DOMAIN": ".ricohunt.com",
+            "APP_URL": "https://ricohunt.com",
+            "RICO_ENV": "production",
+        }
+        with patch.dict(os.environ, env, clear=False), \
+             patch("src.api.auth.verify_credentials", return_value={"email": "admin@test.com", "role": "admin"}):
+            r = tc.post(
+                "/api/v1/auth/login",
+                json={"email": "admin@test.com", "password": "TestPass123"},
+            )
+
+        assert r.status_code == 200
+        set_cookie = r.headers.get("set-cookie", "")
+        set_cookie_lower = set_cookie.lower()
+        assert "access_token=" in set_cookie
+        assert "httponly" in set_cookie_lower
+        assert "secure" in set_cookie_lower
+        assert "samesite=none" in set_cookie_lower
+        assert "domain=.ricohunt.com" in set_cookie_lower
+
+
 # ── require_admin dependency ──────────────────────────────────────────────────
 
 class TestRequireAdmin:
