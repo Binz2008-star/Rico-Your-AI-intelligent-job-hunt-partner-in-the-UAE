@@ -828,6 +828,37 @@ class RicoChatAPI:
             # Guarantee debug_id on every response
             if isinstance(result, dict):
                 result.setdefault("debug_id", debug_id)
+                message_text = str(result.get("message") or "").strip()
+                if not message_text:
+                    logger.error(
+                        "rico_empty_message_response user=%s type=%s source=%s",
+                        user_id,
+                        result.get("type", "unknown"),
+                        result.get("response_source", "unknown"),
+                    )
+                    error_response = build_error_response(
+                        "Rico could not produce a usable reply for that request. Please rephrase your request or ask a more specific question.",
+                        debug_id=debug_id,
+                        user_id=user_id,
+                    )
+                    for key in (
+                        "provider",
+                        "model",
+                        "response_source",
+                        "provider_state",
+                        "profile_context_present",
+                        "jotform_form_id",
+                        "fallback_model",
+                        "openai_model",
+                        "deepseek_model",
+                        "error",
+                        "error_detail",
+                        "is_rate_limited",
+                    ):
+                        if key in result:
+                            error_response[key] = result[key]
+                    error_response.setdefault("error", "empty_message")
+                    return error_response
                 result.setdefault("success", True)
             return result
         except Exception as exc:
@@ -1271,9 +1302,22 @@ class RicoChatAPI:
             user_context["blocked_questions"] = blocked_questions
 
         ai_response = self._get_openai_agent().respond(message, user_context=user_context)
-        ai_response["message"] = self._remove_blocked_questions(ai_response.get("message", ""), blocked_questions)
+        raw_ai_message = ai_response.get("message", "")
+        filtered_ai_message = self._remove_blocked_questions(raw_ai_message, blocked_questions)
+        if str(raw_ai_message or "").strip() and not filtered_ai_message:
+            logger.warning(
+                "rico_ai_response_filtered_empty user=%s type=%s provider=%s blocked=%s",
+                user_id,
+                ai_response.get("type", "unknown"),
+                ai_response.get("provider", "unknown"),
+                blocked_questions,
+            )
+            ai_response["error"] = "empty_message_after_filter"
+            ai_response["error_detail"] = "AI response was empty after blocked-question filtering"
+        ai_response["message"] = filtered_ai_message
 
-        self._append_chat(user_id, "assistant", ai_response.get("message", ""))
+        if filtered_ai_message:
+            self._append_chat(user_id, "assistant", filtered_ai_message)
         return self._finalize(ai_response, self._source_for_openai_response(ai_response), profile=profile)
 
     # ── New intent-specific handlers ─────────────────────────────────────────
