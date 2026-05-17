@@ -23,7 +23,12 @@ router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
 
 
 def _current_user_id(current_user: dict[str, Any]) -> str:
-    return str(current_user.get("email") or current_user.get("id") or "")
+    return str(
+        current_user.get("email")
+        or current_user.get("sub")
+        or current_user.get("id")
+        or ""
+    )
 
 
 def _resolve_action_job(job_id: str, req: Optional[JobActionRequest] = None) -> Dict[str, Any]:
@@ -47,7 +52,8 @@ def get_jobs(
     source: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    return list_jobs(page=page, limit=limit, min_score=min_score, source=source)
+    user_id = _current_user_id(current_user)
+    return list_jobs(page=page, limit=limit, min_score=min_score, source=source, user_id=user_id)
 
 
 @router.get("/{job_id}")

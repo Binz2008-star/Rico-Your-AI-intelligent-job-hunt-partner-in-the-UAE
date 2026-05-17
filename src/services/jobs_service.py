@@ -19,6 +19,7 @@ from src.db import is_db_available
 from src.repositories import jobs_repo
 
 logger = logging.getLogger(__name__)
+_PERSONALIZED_DB_FETCH_FLOOR = 1000
 
 
 def list_jobs(
@@ -29,22 +30,82 @@ def list_jobs(
     user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Paginated job list. DB preferred; applied_jobs.json fallback.
-    jobs table is global feed, user_id is not required for listing."""
+    jobs table is global feed, but scoring is personalized with user_id."""
     offset = (page - 1) * limit
 
     if is_db_available():
+        if user_id:
+            fetch_limit = max(page * limit, _PERSONALIZED_DB_FETCH_FLOOR)
+            result = jobs_repo.list_from_db(0, fetch_limit, 0, source)
+            if result is not None:
+                jobs = result.get("jobs", [])
+                return _score_and_paginate_jobs(
+                    jobs=jobs,
+                    user_id=user_id,
+                    offset=offset,
+                    limit=limit,
+                    min_score=min_score,
+                )
+
         result = jobs_repo.list_from_db(offset, limit, min_score, source)
         if result is not None:
             return result
 
-    return _list_from_json(offset, limit, min_score)
+    return _list_from_json(offset, limit, min_score, user_id)
 
 
-def _list_from_json(offset: int, limit: int, min_score: int) -> Dict[str, Any]:
+def _list_from_json(offset: int, limit: int, min_score: int, user_id: Optional[str] = None) -> Dict[str, Any]:
     from src.job_history import load_job_history
     all_jobs = load_job_history()
+
+    if all_jobs and user_id:
+        return _score_and_paginate_jobs(
+            jobs=all_jobs,
+            user_id=user_id,
+            offset=offset,
+            limit=limit,
+            min_score=min_score,
+        )
+
     filtered = [j for j in all_jobs if isinstance(j, dict) and j.get("score", 0) >= min_score]
     filtered.sort(key=lambda j: j.get("score", 0), reverse=True)
+    total = len(filtered)
+    page_jobs = filtered[offset : offset + limit]
+    return {
+        "jobs": page_jobs,
+        "total": total,
+        "page": offset // limit + 1,
+        "limit": limit,
+        "pages": max(1, -(-total // limit)),
+    }
+
+
+def _score_and_paginate_jobs(
+    jobs: list[Dict[str, Any]],
+    user_id: str,
+    offset: int,
+    limit: int,
+    min_score: int,
+) -> Dict[str, Any]:
+    """Score the full candidate window for one user, then filter, sort, and paginate."""
+    from src.scoring import score_jobs_for_user
+
+    personalized_jobs = [dict(job) for job in jobs if isinstance(job, dict)]
+    scored_jobs = score_jobs_for_user(personalized_jobs, user_id)
+
+    filtered = [
+        job for job in scored_jobs
+        if isinstance(job, dict) and int(job.get("score", 0) or 0) >= min_score
+    ]
+    filtered.sort(
+        key=lambda job: (
+            int(job.get("score", 0) or 0),
+            str(job.get("title", "")).lower(),
+            str(get_job_id(job) or ""),
+        ),
+        reverse=True,
+    )
+
     total = len(filtered)
     page_jobs = filtered[offset : offset + limit]
     return {
