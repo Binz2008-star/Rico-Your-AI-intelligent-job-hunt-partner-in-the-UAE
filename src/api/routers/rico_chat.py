@@ -496,6 +496,8 @@ def rico_chat(request: Request, payload: RicoChatRequest) -> dict[str, Any]:
 
         _metrics.record_request((time.time() - start_time) * 1000)
         return result
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception(
             "chat_error user=%s message_len=%d error=%s request_ref=%s",
