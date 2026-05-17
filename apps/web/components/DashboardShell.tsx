@@ -18,14 +18,20 @@ interface DashboardShellProps {
     actions?: React.ReactNode;
 }
 
-const APP_ROUTES = [
+type DashboardRoute = {
+    href: string;
+    label: string;
+    icon?: string;
+};
+
+const APP_ROUTES: readonly DashboardRoute[] = [
     { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
     { href: "/jobs", label: "Jobs", icon: "work" },
     { href: "/applications", label: "Applications", icon: "fact_check" },
     { href: "/profile", label: "Profile", icon: "account_circle" },
     { href: "/saved-searches", label: "Saved" },
     { href: "/settings", label: "Settings", icon: "settings" },
-] as const;
+];
 
 function isActive(pathname: string, href: string): boolean {
     return pathname === href || pathname.startsWith(`${href}/`);
