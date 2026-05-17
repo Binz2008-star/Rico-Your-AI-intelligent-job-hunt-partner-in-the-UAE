@@ -11,17 +11,17 @@ const config: Config = {
         extend: {
             colors: {
                 // Rico AI Cinematic Design System
-                background: "#131313",
-                surface: "#131313",
-                "surface-dim": "#131313",
-                "surface-bright": "#3a3939",
-                "surface-container": "#201f1f",
-                "surface-container-low": "#1c1b1b",
-                "surface-container-lowest": "#0e0e0e",
-                "surface-container-high": "#2a2a2a",
-                "surface-container-highest": "#353535",
-                "surface-variant": "#353534",
-                "surface-tint": "#00dddd",
+                background: "#06060f",
+                surface: "#0d0d1f",
+                "surface-dim": "#090914",
+                "surface-bright": "#20203a",
+                "surface-container": "#14142a",
+                "surface-container-low": "#101023",
+                "surface-container-lowest": "#080811",
+                "surface-container-high": "#1b1b35",
+                "surface-container-highest": "#232345",
+                "surface-variant": "#2d2d4c",
+                "surface-tint": "#5b4fff",
 
                 on: {
                     background: "#e5e2e1",
@@ -71,6 +71,25 @@ const config: Config = {
                 // Glow effects
                 "glow-cyan": "rgba(0, 229, 255, 0.12)",
                 "glow-magenta": "rgba(255, 45, 142, 0.18)",
+
+                rico: {
+                    bg: "#06060f",
+                    surface: "#121226",
+                    "surface-2": "#17172d",
+                    border: "rgba(255, 255, 255, 0.08)",
+                    accent: "#5b4fff",
+                    "accent-hover": "#4a3fdf",
+                    "accent-muted": "rgba(91, 79, 255, 0.14)",
+                    "accent-border": "rgba(91, 79, 255, 0.3)",
+                    "accent-glow": "rgba(91, 79, 255, 0.16)",
+                    text: "#f5f2ff",
+                    "text-muted": "#c8c2dd",
+                    "text-dim": "#877f9f",
+                    purple: "#a78bfa",
+                    teal: "#5dcaa5",
+                    red: "#f87171",
+                    amber: "#facc15",
+                },
             },
             borderRadius: {
                 DEFAULT: "0.25rem",

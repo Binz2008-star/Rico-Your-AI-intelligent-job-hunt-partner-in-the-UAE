@@ -11,8 +11,11 @@
 
 html,
 body {
-    background: #000000;
-    color: #e5e2e1;
+    background:
+        radial-gradient(circle at top left, rgba(91, 79, 255, 0.12) 0%, rgba(6, 6, 15, 0) 38%),
+        radial-gradient(circle at bottom right, rgba(0, 201, 167, 0.09) 0%, rgba(6, 6, 15, 0) 32%),
+        #06060f;
+    color: #f5f2ff;
     font-family: var(--font-inter), system-ui, sans-serif;
     height: 100%;
     overflow-x: hidden;
@@ -25,16 +28,24 @@ body>div:first-child {
 
 /* Glass panel utility */
 .glass-panel {
-    backdrop-filter: blur(40px);
-    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(36px);
+    background:
+        linear-gradient(180deg, rgba(19, 19, 42, 0.78) 0%, rgba(10, 10, 24, 0.7) 100%);
     border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow:
+        0 20px 60px rgba(5, 5, 16, 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .glass-island {
     backdrop-filter: blur(40px);
-    background: rgba(255, 255, 255, 0.03);
+    background:
+        linear-gradient(180deg, rgba(18, 18, 40, 0.84) 0%, rgba(10, 10, 24, 0.76) 100%);
     border-top: 0.5px solid rgba(255, 255, 255, 0.1);
     border-left: 0.5px solid rgba(255, 255, 255, 0.05);
+    box-shadow:
+        0 18px 45px rgba(5, 5, 16, 0.24),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 /* Aura glow effects */

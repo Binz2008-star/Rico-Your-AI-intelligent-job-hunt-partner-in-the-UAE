@@ -89,19 +89,19 @@ export function DashboardStats() {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       <StatusCard title="Job matches" badge="live" value={String(stats.jobsTotal)} href="/jobs">
-        <p className="text-sm text-[#5a5a7a]">
+        <p className="text-sm text-on-surface-variant">
           {stats.jobsTotal === 0 ? "No matches yet — Rico will scan soon." : "Active job recommendations"}
         </p>
       </StatusCard>
       <StatusCard title="Applications tracked" badge="live" value={String(stats.appsTotal)} href="/applications">
-        <p className="text-sm text-[#5a5a7a]">
+        <p className="text-sm text-on-surface-variant">
           {stats.applied > 0 && `${stats.applied} applied`}
           {stats.interview > 0 && ` · ${stats.interview} interview`}
           {stats.offer > 0 && ` · ${stats.offer} offer`}
         </p>
       </StatusCard>
       <StatusCard title="Daily limit" badge={stats.maxDaily > 0 ? "live" : "placeholder"} value={`${stats.maxDaily}`} href="/settings">
-        <p className="text-sm text-[#5a5a7a]">Max {stats.maxDaily} auto-applies per day</p>
+        <p className="text-sm text-on-surface-variant">Max {stats.maxDaily} auto-applies per day</p>
       </StatusCard>
     </div>
   );
@@ -111,7 +111,7 @@ function StatsSkeleton() {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className="h-28 rounded-2xl bg-[#13132a]/60 border border-[rgba(255,255,255,0.06)] animate-pulse" />
+        <div key={i} className="glass-panel h-28 rounded-[24px] border border-white/10 animate-pulse motion-reduce:animate-none" />
       ))}
     </div>
   );
@@ -119,9 +119,9 @@ function StatsSkeleton() {
 
 function ErrorMessage({ message, icon }: { message: string; icon: string }) {
   return (
-    <div className="rounded-2xl border border-[rgba(255,255,255,0.06)] bg-[#13132a]/60 p-5 text-center">
+    <div className="glass-panel rounded-[24px] border border-white/10 p-5 text-center">
       <span className="text-2xl block mb-2">{icon}</span>
-      <p className="text-sm text-[#5a5a7a] font-medium">{message}</p>
+      <p className="text-sm font-medium text-on-surface-variant">{message}</p>
     </div>
   );
 }

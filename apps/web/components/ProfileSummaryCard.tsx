@@ -49,10 +49,10 @@ export function ProfileSummaryCard() {
   if (status === "error") {
     return (
       <StatusCard title="Profile Summary" badge="error">
-        <p className="text-sm text-[#5a5a7a] mb-2">Could not load profile.</p>
+        <p className="mb-2 text-sm text-on-surface-variant">Could not load profile.</p>
         <button
           onClick={handleRetry}
-          className="text-xs text-[#a78bfa] underline hover:text-[#eeeef5] transition-colors"
+          className="text-xs text-primary underline transition-colors hover:text-on-surface"
         >
           Try again
         </button>
@@ -63,7 +63,7 @@ export function ProfileSummaryCard() {
   if (!profile?.profile_exists) {
     return (
       <StatusCard title="Profile Summary" badge="pending">
-        <p className="text-[13px] text-[#8080a0] leading-relaxed">
+        <p className="text-[13px] leading-relaxed text-on-surface-variant">
           No profile yet. Use the Rico chat to complete onboarding.
         </p>
       </StatusCard>
@@ -73,26 +73,26 @@ export function ProfileSummaryCard() {
   return (
     <StatusCard title="Profile Summary" badge="live">
       <div className="space-y-1.5">
-        <p className="text-[16px] font-black font-['Cabinet_Grotesk',sans-serif] text-[#eeeef5] tracking-tight">
+        <p className="text-[16px] font-semibold tracking-tight text-on-surface">
           {profile.name ?? profile.email ?? "—"}
         </p>
 
         {displayRoles && (
-          <p className="text-[13px] text-[#5a5a7a]">
-            Targeting: <span className="text-[#8080a0]">{displayRoles}</span>
+          <p className="text-[13px] text-on-surface-variant">
+            Targeting: <span className="text-on-surface">{displayRoles}</span>
           </p>
         )}
 
         <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
           {profile.years_experience != null && (
-            <p className="text-[12px] text-[#5a5a7a]">
-              Experience: <span className="text-[#8080a0] font-medium">{profile.years_experience} yrs</span>
+            <p className="text-[12px] text-on-surface-variant">
+              Experience: <span className="font-medium text-on-surface">{profile.years_experience} yrs</span>
             </p>
           )}
 
           {profile.visa_status && (
-            <p className="text-[12px] text-[#5a5a7a]">
-              Visa: <span className="text-[#8080a0] font-medium">{profile.visa_status}</span>
+            <p className="text-[12px] text-on-surface-variant">
+              Visa: <span className="font-medium text-on-surface">{profile.visa_status}</span>
             </p>
           )}
         </div>

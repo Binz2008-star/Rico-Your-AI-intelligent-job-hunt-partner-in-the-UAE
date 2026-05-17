@@ -35,7 +35,7 @@ export function SavedSearchesList() {
   if (loading) {
     return (
       <StatusCard title="Saved searches" badge="pending">
-        <p className="text-sm text-zinc-500">Loading…</p>
+        <p className="text-sm text-on-surface-variant">Loading…</p>
       </StatusCard>
     );
   }
@@ -43,7 +43,7 @@ export function SavedSearchesList() {
   if (error) {
     return (
       <StatusCard title="Saved searches" badge="error">
-        <p className="text-sm text-zinc-400">Could not load saved searches.</p>
+        <p className="text-sm text-on-surface-variant">Could not load saved searches.</p>
       </StatusCard>
     );
   }
@@ -51,7 +51,7 @@ export function SavedSearchesList() {
   if (searches.length === 0) {
     return (
       <StatusCard title="Saved searches" badge="live" value="0">
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-on-surface-variant">
           No saved searches yet. Use the Rico chat to save a job search.
         </p>
       </StatusCard>
@@ -67,11 +67,11 @@ export function SavedSearchesList() {
         {searches.map((s) => (
           <li
             key={s.id}
-            className="flex items-start justify-between gap-2 rounded-lg bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.05)] px-3 py-2 text-sm"
+            className="flex items-start justify-between gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5 text-sm"
           >
-            <span className="text-[#eeeef5] break-all flex-1">{s.query}</span>
+            <span className="flex-1 break-all text-on-surface">{s.query}</span>
             <div className="flex items-center gap-2 shrink-0">
-              <span className="text-xs text-[#5a5a7a]">
+              <span className="text-xs text-on-surface-variant/70">
                 {new Date(s.created_at).toLocaleDateString()}
               </span>
               <button

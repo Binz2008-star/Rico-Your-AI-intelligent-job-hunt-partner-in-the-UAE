@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 
 interface StatusCardProps {
@@ -6,6 +7,7 @@ interface StatusCardProps {
   value?: string;
   href?: string;
   children?: React.ReactNode;
+  className?: string;
 }
 
 const BADGE_STYLES: Record<NonNullable<StatusCardProps["badge"]>, string> = {
@@ -22,11 +24,11 @@ const BADGE_LABELS: Record<NonNullable<StatusCardProps["badge"]>, string> = {
   placeholder: "Not connected",
 };
 
-export function StatusCard({ title, badge, value, href, children }: StatusCardProps) {
+export function StatusCard({ title, badge, value, href, children, className }: StatusCardProps) {
   const body = (
     <>
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium text-[#8080a0]">{title}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-on-surface-variant/70">{title}</span>
         {badge && (
           <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${BADGE_STYLES[badge]}`}>
             {BADGE_LABELS[badge]}
@@ -34,7 +36,7 @@ export function StatusCard({ title, badge, value, href, children }: StatusCardPr
         )}
       </div>
       {value && (
-        <p className="font-['Cabinet_Grotesk',sans-serif] font-800 text-[28px] text-[#eeeef5] tracking-tight">
+        <p className="font-headline-lg text-[30px] font-semibold tracking-tight text-on-surface">
           {value}
         </p>
       )}
@@ -42,16 +44,18 @@ export function StatusCard({ title, badge, value, href, children }: StatusCardPr
     </>
   );
 
-  const className =
-    "rounded-2xl border border-[rgba(255,255,255,0.06)] bg-[#13132a]/80 p-5 flex flex-col gap-3 transition-all duration-300 hover:border-[rgba(255,255,255,0.1)] hover:bg-[#13132a] hover:-translate-y-0.5 hover:shadow-[0_20px_45px_rgba(0,0,0,0.22)]";
+  const cardClass = cn(
+    "glass-panel rounded-[24px] border border-white/10 p-5 md:p-6 flex flex-col gap-4 transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-white/[0.045] hover:shadow-[0_24px_65px_rgba(5,5,16,0.24)]",
+    className
+  );
 
   if (href) {
     return (
-      <Link href={href} className={className}>
+      <Link href={href} className={cardClass}>
         {body}
       </Link>
     );
   }
 
-  return <div className={className}>{body}</div>;
+  return <div className={cardClass}>{body}</div>;
 }

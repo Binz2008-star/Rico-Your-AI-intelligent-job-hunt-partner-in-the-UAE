@@ -23,11 +23,10 @@ export const Navigation = React.forwardRef<HTMLElement, NavigationProps>(
             <nav
                 ref={ref as any}
                 className={cn(
-                    'fixed bottom-10 left-1/2 -translate-x-1/2 z-50',
-                    'flex items-center gap-4 p-2',
-                    'bg-surface-glass/80 backdrop-blur-xl',
-                    'border-t-[0.5px] border-l-[0.5px] border-white/10',
-                    'shadow-2xl rounded-full',
+                    'fixed bottom-6 left-1/2 -translate-x-1/2 z-50',
+                    'flex items-center gap-1 rounded-full border border-white/10 px-2 py-2',
+                    'bg-[rgba(10,10,24,0.72)] backdrop-blur-2xl',
+                    'shadow-[0_22px_60px_rgba(5,5,16,0.32)]',
                     className
                 )}
                 aria-label="Section navigation"
@@ -35,7 +34,7 @@ export const Navigation = React.forwardRef<HTMLElement, NavigationProps>(
                 <Link
                     href="/command"
                     aria-current={pathname === "/command" ? "page" : undefined}
-                    className={navClass('/command', 'bg-secondary/10 text-secondary-fixed-dim rounded-full px-6 py-2 flex flex-col items-center gap-1 hover:bg-white/5 transition-all duration-300 active:scale-95')}
+                    className={navClass('/command', 'rounded-full border border-primary/25 bg-primary/10 px-5 py-2 text-primary flex flex-col items-center gap-1 shadow-[0_10px_30px_rgba(91,79,255,0.18)] transition-all duration-300 active:scale-95')}
                 >
                     <MaterialIcon icon="auto_awesome" filled size={20} />
                     <span className="text-label-caps text-[10px]">Command</span>
@@ -43,7 +42,7 @@ export const Navigation = React.forwardRef<HTMLElement, NavigationProps>(
                 <Link
                     href="/signals"
                     aria-current={pathname === "/signals" ? "page" : undefined}
-                    className={navClass('/signals', 'bg-secondary/10 text-secondary-fixed-dim rounded-full px-6 py-2 flex flex-col items-center gap-1 hover:bg-white/5 transition-all duration-300 active:scale-95')}
+                    className={navClass('/signals', 'rounded-full border border-primary/25 bg-primary/10 px-5 py-2 text-primary flex flex-col items-center gap-1 shadow-[0_10px_30px_rgba(91,79,255,0.18)] transition-all duration-300 active:scale-95')}
                 >
                     <MaterialIcon icon="insights" size={20} />
                     <span className="text-label-caps text-[10px]">Signals</span>
@@ -51,7 +50,7 @@ export const Navigation = React.forwardRef<HTMLElement, NavigationProps>(
                 <Link
                     href="/flow"
                     aria-current={pathname === "/flow" ? "page" : undefined}
-                    className={navClass('/flow', 'bg-secondary/10 text-secondary-fixed-dim rounded-full px-6 py-2 flex flex-col items-center gap-1 hover:bg-white/5 transition-all duration-300 active:scale-95')}
+                    className={navClass('/flow', 'rounded-full border border-primary/25 bg-primary/10 px-5 py-2 text-primary flex flex-col items-center gap-1 shadow-[0_10px_30px_rgba(91,79,255,0.18)] transition-all duration-300 active:scale-95')}
                 >
                     <MaterialIcon icon="waves" size={20} />
                     <span className="text-label-caps text-[10px]">Flow</span>
@@ -59,7 +58,7 @@ export const Navigation = React.forwardRef<HTMLElement, NavigationProps>(
                 <Link
                     href="/archive"
                     aria-current={pathname === "/archive" ? "page" : undefined}
-                    className={navClass('/archive', 'bg-secondary/10 text-secondary-fixed-dim rounded-full px-6 py-2 flex flex-col items-center gap-1 hover:bg-white/5 transition-all duration-300 active:scale-95')}
+                    className={navClass('/archive', 'rounded-full border border-primary/25 bg-primary/10 px-5 py-2 text-primary flex flex-col items-center gap-1 shadow-[0_10px_30px_rgba(91,79,255,0.18)] transition-all duration-300 active:scale-95')}
                 >
                     <MaterialIcon icon="history" size={20} />
                     <span className="text-label-caps text-[10px]">Archive</span>
