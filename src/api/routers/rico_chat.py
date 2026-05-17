@@ -30,7 +30,7 @@ import re
 import secrets
 import time
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 from functools import wraps
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile

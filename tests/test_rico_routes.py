@@ -159,6 +159,48 @@ class TestRicoChatRouteExists:
         assert r.status_code == 200
 
 
+class TestRicoProfileUpdateRouteExists:
+    def test_profile_patch_route_returns_200_and_updates_fields(self, auth_client):
+        captured = {}
+
+        def spy_upsert(user_id, updates):
+            captured["user_id"] = user_id
+            captured["updates"] = updates
+            return {"ok": True}
+
+        payload = {
+            "preferred_cities": ["Dubai", " Abu Dhabi "],
+            "current_role": " HSE Lead ",
+            "skills": ["HSE", " NEBOSH "],
+            "years_experience": 10.0,
+            "target_roles": [" HSE Manager "],
+        }
+
+        with patch("src.api.routers.rico_chat.upsert_profile", side_effect=spy_upsert):
+            r = auth_client.patch("/api/v1/rico/profile", json=payload)
+
+        assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
+        body = r.json()
+        assert body == {
+            "status": "ok",
+            "updated_fields": [
+                "target_roles",
+                "preferred_cities",
+                "years_experience",
+                "current_role",
+                "skills",
+            ],
+        }
+        assert captured["user_id"] == "alice@rico.ai"
+        assert captured["updates"] == {
+            "target_roles": ["HSE Manager"],
+            "preferred_cities": ["Dubai", "Abu Dhabi"],
+            "years_experience": 10.0,
+            "current_role": "HSE Lead",
+            "skills": ["HSE", "NEBOSH"],
+        }
+
+
 class TestRicoCVUploadRouteExists:
     def test_upload_cv_route_returns_200(self, client):
         with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED), _mock_cv_detector():
