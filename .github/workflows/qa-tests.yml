@@ -23,7 +23,12 @@ jobs:
           pip install -r requirements.txt
           pip install pytest
 
-      - name: Run targeted QA tests
+      - name: Run unit tests
         run: |
           cd $GITHUB_WORKSPACE
-          PYTHONPATH=$GITHUB_WORKSPACE pytest tests/unit/test_filter.py tests/unit/test_telegram_bot.py -v
+          PYTHONPATH=$GITHUB_WORKSPACE pytest tests/unit/ -v --tb=short
+
+      - name: Run core route and security tests
+        run: |
+          cd $GITHUB_WORKSPACE
+          PYTHONPATH=$GITHUB_WORKSPACE pytest tests/test_rico_routes.py tests/test_security_audit.py tests/test_rico_memory_safety.py tests/test_rico_hardening.py -v --tb=short

@@ -116,9 +116,12 @@ class RicoChatAPI:
         self.openai_agent = RicoOpenAIAgent()
 
     def _append_chat(self, user_id: str, role: str, message: str | dict[str, Any]) -> None:
-        """Append chat message to memory, handling both string and dict messages."""
+        """Append chat message to memory and DB, handling both string and dict messages."""
         payload = json.dumps(message) if isinstance(message, dict) else message
         self.memory.append_chat_message(user_id, role, payload)
+        # Dual-write to PostgreSQL for production persistence
+        from src.services.chat_service import db_append_chat
+        db_append_chat(user_id, role, payload)
 
     @staticmethod
     def _build_openai_context(profile: Any) -> dict[str, Any]:

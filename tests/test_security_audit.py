@@ -19,6 +19,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 os.environ.setdefault("ADMIN_EMAIL", "admin@test.com")
 os.environ.setdefault("ADMIN_PASSWORD", "TestPass123")
 os.environ.setdefault("JWT_SECRET", "x" * 32)
+# Ensure Jotform webhook secret is unset so dev-mode pass-through works
+os.environ.pop("JOTFORM_WEBHOOK_SECRET", None)
 
 
 @pytest.fixture(scope="module")
@@ -167,6 +169,13 @@ class TestSQLInjection:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestPublicEndpointAbuse:
+    @pytest.fixture(autouse=True)
+    def _clear_jotform_secret(self):
+        """Ensure Jotform webhook secret is unset so dev-mode pass-through works."""
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("JOTFORM_WEBHOOK_SECRET", None)
+            yield
+
     def test_jotform_empty_payload_returns_200(self, client):
         r = client.post("/api/v1/rico/webhooks/jotform", json={})
         assert r.status_code == 200

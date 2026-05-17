@@ -196,37 +196,132 @@ def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
         }
 
 
+def _resolve_db_user_id(user_id: str):
+    """Resolve external user_id (email/public-id) to rico_users UUID string.
+
+    Returns None when DB is unavailable or user doesn't exist.
+    """
+    try:
+        from src.rico_db import RicoDB
+        db = RicoDB()
+        if not db.available:
+            return None
+        with db.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id::text FROM rico_users
+                    WHERE external_user_id = %s OR email = %s OR id::text = %s
+                    LIMIT 1
+                    """,
+                    (user_id, user_id, user_id),
+                )
+                row = cur.fetchone()
+        return row["id"] if row else None
+    except Exception as exc:
+        logger.debug("chat_service: _resolve_db_user_id failed: %s", exc)
+        return None
+
+
+def _db_get_chat_history(
+    db_user_id: str, limit: int = 50, before: datetime | None = None,
+) -> list[Dict[str, Any]] | None:
+    """Fetch chat history rows from PostgreSQL. Returns None on failure."""
+    try:
+        from src.rico_db import RicoDB
+        db = RicoDB()
+        if not db.available:
+            return None
+        where = "WHERE user_id = %s"
+        params: list = [db_user_id]
+        if before:
+            where += " AND created_at < %s"
+            params.append(before)
+        params.append(limit)
+        with db.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"SELECT role, message, metadata, created_at "
+                    f"FROM rico_chat_history {where} "
+                    f"ORDER BY created_at DESC LIMIT %s",
+                    params,
+                )
+                rows = cur.fetchall()
+        # Reverse so oldest-first (chat order)
+        rows.reverse()
+        return [
+            {
+                "role": r["role"],
+                "content": r["message"],
+                "timestamp": r["created_at"].isoformat() if r.get("created_at") else None,
+            }
+            for r in rows
+        ]
+    except Exception as exc:
+        logger.warning("chat_service: DB chat history fetch failed: %s", exc)
+        return None
+
+
+def db_append_chat(user_id: str, role: str, message: str) -> None:
+    """Best-effort write of a chat message to PostgreSQL."""
+    try:
+        from src.rico_db import RicoDB
+        db = RicoDB()
+        if not db.available:
+            return
+        db_uid = _resolve_db_user_id(user_id)
+        if not db_uid:
+            return
+        db.append_chat(db_uid, role, message)
+    except Exception as exc:
+        logger.debug("chat_service: db_append_chat failed: %s", exc)
+
+
 def get_chat_history(user_id: str, limit: int = 50, before: datetime | None = None) -> list[Dict[str, Any]]:
     """
     Get conversation history for a user with pagination support.
 
+    DB-first with fallback to local JSON memory for backward compatibility.
+
     Args:
-        user_id: User identifier
+        user_id: User identifier (email or public-id)
         limit: Maximum number of messages to return (default: 50)
         before: Optional timestamp for pagination (fetch messages before this time)
 
     Returns:
         List of message dictionaries with role, content, and timestamp
     """
+    # --- DB path (primary) ---
+    db_uid = _resolve_db_user_id(user_id)
+    if db_uid:
+        db_rows = _db_get_chat_history(db_uid, limit=limit, before=before)
+        if db_rows is not None:
+            return db_rows
+
+    # --- Fallback: local JSON memory ---
     from src.rico_chat_api import RicoChatAPI
     api = RicoChatAPI()
-
-    # Get messages from memory
     messages = api.memory.get_chat_messages(user_id, limit=limit)
 
-    # Filter by 'before' timestamp if provided
     if before:
         messages = [
             m for m in messages
-            if hasattr(m, 'timestamp') and m.timestamp < before
+            if isinstance(m, dict) and m.get("timestamp") and datetime.fromisoformat(m["timestamp"]) < before
         ]
 
-    # Convert to dict format
-    return [
-        {
-            "role": m.role,
-            "content": m.content,
-            "timestamp": m.timestamp.isoformat() if hasattr(m, 'timestamp') else None,
-        }
-        for m in messages
-    ]
+    # Normalise to dict format (messages may already be dicts from JSON)
+    result = []
+    for m in messages:
+        if isinstance(m, dict):
+            result.append({
+                "role": m.get("role", "unknown"),
+                "content": m.get("content") or m.get("message", ""),
+                "timestamp": m.get("timestamp"),
+            })
+        else:
+            result.append({
+                "role": getattr(m, "role", "unknown"),
+                "content": getattr(m, "content", ""),
+                "timestamp": m.timestamp.isoformat() if hasattr(m, "timestamp") else None,
+            })
+    return result

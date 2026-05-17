@@ -7,29 +7,40 @@ on:
 
 jobs:
   deploy:
-    name: Deploy Backend Changes
+    name: Deploy & Verify Production
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        
-      - name: Deploy Notification
+
+      - name: Wait for Render deploy propagation
+        run: sleep 30
+
+      - name: Verify backend health
         run: |
-          echo "🚀 Deploying backend changes to production"
-          echo "✅ QA hardening tests deployed"
-          echo "✅ Settings migration deployed"
-          echo "✅ Ungated HF model deployed"
-          echo "✅ Stats normalization deployed"
-          echo "✅ Frontend accuracy fixes deployed"
-          
-      - name: Verify Deployment
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://rico-job-automation-api.onrender.com/health)
+          if [ "$STATUS" != "200" ]; then
+            echo "Backend health check failed (HTTP $STATUS)"
+            exit 1
+          fi
+          echo "Backend health: OK ($STATUS)"
+          curl -s https://rico-job-automation-api.onrender.com/health | python3 -m json.tool
+
+      - name: Verify frontend reachability
         run: |
-          echo "📋 Deployment Summary:"
-          echo "- PR #77: Frontend landing accuracy ✅"
-          echo "- PR #78: Dashboard stats normalization ✅"  
-          echo "- PR #79: Settings migration ✅"
-          echo "- PR #81: QA regression tests ✅"
-          echo "- PR #82: Ungated HF model ✅"
-          echo ""
-          echo "🎯 Production deployment complete!"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://ricohunt.com)
+          if [ "$STATUS" != "200" ]; then
+            echo "Frontend check failed (HTTP $STATUS)"
+            exit 1
+          fi
+          echo "Frontend: OK ($STATUS)"
+
+      - name: Verify proxy pass-through
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://ricohunt.com/proxy/health)
+          if [ "$STATUS" != "200" ]; then
+            echo "Proxy pass-through failed (HTTP $STATUS)"
+            exit 1
+          fi
+          echo "Proxy: OK ($STATUS)"
