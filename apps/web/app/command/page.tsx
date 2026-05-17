@@ -64,11 +64,11 @@ const COMMAND_SIGNUP_HREF = buildAuthHref("/signup", "/command");
 function ThinkingIndicator() {
     return (
         <div className="flex justify-start animate-pulse motion-reduce:animate-none" role="status" aria-live="polite" aria-label="Rico is thinking">
-            <div className="bg-[#13132a] border border-white/5 rounded-2xl rounded-tl-none px-4 py-4 flex gap-1.5 items-center backdrop-blur-md">
+            <div className="bg-surface border border-border-subtle rounded-2xl rounded-tl-none px-4 py-4 flex gap-1.5 items-center backdrop-blur-md">
                 <span className="sr-only">Rico is thinking</span>
-                <span aria-hidden="true" className="w-1.5 h-1.5 bg-[#a78bfa] rounded-full animate-bounce motion-reduce:animate-none [animation-duration:0.8s]" />
-                <span aria-hidden="true" className="w-1.5 h-1.5 bg-[#a78bfa] rounded-full animate-bounce motion-reduce:animate-none [animation-duration:0.8s] [animation-delay:0.2s]" />
-                <span aria-hidden="true" className="w-1.5 h-1.5 bg-[#a78bfa] rounded-full animate-bounce motion-reduce:animate-none [animation-duration:0.8s] [animation-delay:0.4s]" />
+                <span aria-hidden="true" className="w-1.5 h-1.5 bg-magenta rounded-full animate-bounce motion-reduce:animate-none [animation-duration:0.8s]" />
+                <span aria-hidden="true" className="w-1.5 h-1.5 bg-cyan rounded-full animate-bounce motion-reduce:animate-none [animation-duration:0.8s] [animation-delay:0.2s]" />
+                <span aria-hidden="true" className="w-1.5 h-1.5 bg-magenta rounded-full animate-bounce motion-reduce:animate-none [animation-duration:0.8s] [animation-delay:0.4s]" />
             </div>
         </div>
     );
@@ -85,9 +85,9 @@ function OperationStateIndicator({ state, message }: { state: string; message: s
 
     return (
         <div className="flex justify-start animate-pulse motion-reduce:animate-none" role="status" aria-live="polite">
-            <div className="bg-[#13132a] border border-white/5 rounded-2xl rounded-tl-none px-4 py-3 flex gap-2 items-center backdrop-blur-md">
+            <div className="bg-surface border border-border-subtle rounded-2xl rounded-tl-none px-4 py-3 flex gap-2 items-center backdrop-blur-md">
                 <span className="text-lg" aria-hidden="true">{icon}</span>
-                <span className="text-[13px] text-[#8080a0]">{message}</span>
+                <span className="text-[13px] text-text-secondary">{message}</span>
             </div>
         </div>
     );
@@ -104,22 +104,22 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
             high: {
                 label: "High confidence fit",
                 bgColor: "bg-transparent",
-                textColor: "text-[#5dcaa5]",
-                borderColor: "border-[#5dcaa5]",
+                textColor: "text-cyan",
+                borderColor: "border-cyan",
                 icon: "✓"
             },
             medium: {
                 label: "Medium confidence fit",
                 bgColor: "bg-transparent",
-                textColor: "text-[#facc15]",
-                borderColor: "border-[#facc15]",
+                textColor: "text-rico-amber",
+                borderColor: "border-rico-amber",
                 icon: "○"
             },
             low: {
                 label: "Needs careful review",
                 bgColor: "bg-transparent",
-                textColor: "text-[#f87171]",
-                borderColor: "border-[#f87171]",
+                textColor: "text-rico-red",
+                borderColor: "border-rico-red",
                 icon: "!"
             }
         };
@@ -129,20 +129,20 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
     const confidenceBadge = getConfidenceBadge();
 
     return (
-        <article className="rounded-xl border border-white/8 bg-[#0f0f24] p-3 mb-2" aria-label={`Job match: ${match.title} at ${match.company}. ${scoreLabel}. ${confidenceBadge.label}.`}>
+        <article className="rounded-xl border border-border-subtle bg-surface p-3 mb-2" aria-label={`Job match: ${match.title} at ${match.company}. ${scoreLabel}. ${confidenceBadge.label}.`}>
             {/* Top row: title, company, score, confidence */}
             <div className="flex items-start justify-between gap-2 mb-2">
                 <div className="flex-1 min-w-0">
                     <div className="text-[13px] font-semibold text-white">{match.title}</div>
-                    <div className="text-[11px] text-[#8080a0]">{match.company}{match.location ? ` · ${match.location}` : ""}</div>
+                    <div className="text-[11px] text-text-secondary">{match.company}{match.location ? ` · ${match.location}` : ""}</div>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                     {score > 0 && (
                         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${score >= 0.8
-                            ? "bg-[#5dcaa522] text-[#5dcaa5]"
+                            ? "bg-cyan-dim text-cyan"
                             : score >= 0.6
-                                ? "bg-[#facc1522] text-[#facc15]"
-                                : "bg-[#a78bfa22] text-[#a78bfa]"
+                                ? "bg-rico-amber/10 text-rico-amber"
+                                : "bg-magenta-dim text-magenta"
                             }`}>
                             {scoreLabel}
                         </span>
@@ -158,13 +158,13 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
             {/* Why this fits - max 4 items for scan speed */}
             {match.match_reasons && match.match_reasons.length > 0 && (
                 <section className="mb-2" aria-label="Why this job fits your profile">
-                    <p className="text-[10px] font-semibold text-[#5dcaa5] mb-1">Why this fits:</p>
-                    <ul className="text-[10px] text-[#8080a0] list-disc list-inside space-y-0.5">
+                    <p className="text-[10px] font-semibold text-cyan mb-1">Why this fits:</p>
+                    <ul className="text-[10px] text-text-secondary list-disc list-inside space-y-0.5">
                         {match.match_reasons.slice(0, 4).map((reason, idx) => (
                             <li key={idx}>{reason}</li>
                         ))}
                         {match.match_reasons.length > 4 && (
-                            <li className="text-[9px] text-[#5a5a7a] italic">+{match.match_reasons.length - 4} more reasons</li>
+                            <li className="text-[9px] text-text-muted italic">+{match.match_reasons.length - 4} more reasons</li>
                         )}
                     </ul>
                 </section>
@@ -173,13 +173,13 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
             {/* Worth checking - max 3 items to prevent overwhelming */}
             {match.match_concerns && match.match_concerns.length > 0 && (
                 <section className="mb-2" aria-label="Items worth checking about this job match">
-                    <p className="text-[10px] font-semibold text-[#facc15] mb-1">Worth checking:</p>
-                    <ul className="text-[10px] text-[#8080a0] list-disc list-inside space-y-0.5">
+                    <p className="text-[10px] font-semibold text-rico-amber mb-1">Worth checking:</p>
+                    <ul className="text-[10px] text-text-secondary list-disc list-inside space-y-0.5">
                         {match.match_concerns.slice(0, 3).map((concern, idx) => (
                             <li key={idx}>{concern}</li>
                         ))}
                         {match.match_concerns.length > 3 && (
-                            <li className="text-[9px] text-[#5a5a7a] italic">+{match.match_concerns.length - 3} more</li>
+                            <li className="text-[9px] text-text-muted italic">+{match.match_concerns.length - 3} more</li>
                         )}
                     </ul>
                 </section>
@@ -188,13 +188,13 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
             {/* Missing facts - max 3 items for cognitive load */}
             {match.missing_facts && match.missing_facts.length > 0 && (
                 <section className="mb-2" aria-label="Missing facts from job posting">
-                    <p className="text-[10px] font-semibold text-[#a78bfa] mb-1">Missing facts:</p>
-                    <ul className="text-[10px] text-[#8080a0] list-disc list-inside space-y-0.5">
+                    <p className="text-[10px] font-semibold text-magenta mb-1">Missing facts:</p>
+                    <ul className="text-[10px] text-text-secondary list-disc list-inside space-y-0.5">
                         {match.missing_facts.slice(0, 3).map((fact, idx) => (
                             <li key={idx}>{fact}</li>
                         ))}
                         {match.missing_facts.length > 3 && (
-                            <li className="text-[9px] text-[#5a5a7a] italic">+{match.missing_facts.length - 3} more</li>
+                            <li className="text-[9px] text-text-muted italic">+{match.missing_facts.length - 3} more</li>
                         )}
                     </ul>
                 </section>
@@ -202,15 +202,15 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
 
             {/* Recommended action - max 2 lines for instant clarity */}
             {match.recommended_action && (
-                <section className="mb-2 p-2 bg-white/5 rounded-lg border-l-2 border-[#5b4fff]" aria-label="Recommended next step">
-                    <p className="text-[10px] font-semibold text-[#a78bfa] mb-0.5">Recommended next step:</p>
-                    <p className="text-[10px] text-[#eeeef5] leading-relaxed line-clamp-2">{match.recommended_action}</p>
+                <section className="mb-2 p-2 bg-surface-subtle rounded-lg border-l-2 border-magenta" aria-label="Recommended next step">
+                    <p className="text-[10px] font-semibold text-magenta mb-0.5">Recommended next step:</p>
+                    <p className="text-[10px] text-white leading-relaxed line-clamp-2">{match.recommended_action}</p>
                 </section>
             )}
 
             {/* Fallback to legacy why field */}
             {!match.match_reasons && match.why && (
-                <p className="text-[11px] text-[#5a5a7a] mb-2 leading-relaxed">{match.why}</p>
+                <p className="text-[11px] text-text-muted mb-2 leading-relaxed">{match.why}</p>
             )}
 
             {/* Actions */}
@@ -222,7 +222,7 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
                             key={action}
                             onClick={() => onAction(`${action} — ${match.title} at ${match.company}`)}
                             aria-label={`${action} for ${match.title} at ${match.company}`}
-                            className="text-[10px] px-2.5 py-1 rounded-lg border border-white/10 text-[#8080a0] hover:border-[#5b4fff]/40 hover:text-white transition-colors"
+                            className="text-[10px] px-2.5 py-1 rounded-lg border border-border-soft text-text-secondary hover:border-magenta/40 hover:text-white transition-colors"
                         >
                             {action}
                         </button>
@@ -241,7 +241,7 @@ function OptionButtons({ options, onAction }: { options: RicoOption[]; onAction:
                     type="button"
                     key={opt.action}
                     onClick={() => onAction(opt.message ?? opt.label)}
-                    className="text-[12px] px-3 py-2 rounded-xl border border-[#5b4fff]/30 text-[#a78bfa] hover:bg-[#5b4fff]/10 hover:border-[#5b4fff]/60 transition-colors rico-focus-strong"
+                    className="text-[12px] px-3 py-2 rounded-xl border border-magenta/30 text-magenta hover:bg-magenta-soft hover:border-magenta/60 transition-colors rico-focus-strong"
                 >
                     {opt.label}
                 </button>
@@ -552,11 +552,11 @@ export default function CommandPage() {
 
     if (sessionExpired) {
         return (
-            <div className="min-h-screen bg-[#06060f] flex items-center justify-center">
-                <div className="flex max-w-lg flex-col items-center gap-4 rounded-2xl border border-white/5 bg-[#13132a]/80 p-8 text-center backdrop-blur-md">
-                    <p className="text-sm font-medium text-[#eeeef5]">Session expired.</p>
-                    <p className="text-sm text-[#5a5a7a]">Sign in again to continue chatting with Rico.</p>
-                    <Link href={COMMAND_LOGIN_HREF} className="rounded-lg bg-[#5b4fff] px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#4a3fe0]">
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <div className="flex max-w-lg flex-col items-center gap-4 rounded-2xl border border-border-subtle bg-surface/80 p-8 text-center backdrop-blur-md">
+                    <p className="text-sm font-medium text-white">Session expired.</p>
+                    <p className="text-sm text-text-muted">Sign in again to continue chatting with Rico.</p>
+                    <Link href={COMMAND_LOGIN_HREF} className="rounded-lg bg-magenta px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-magenta-hover">
                         Sign in
                     </Link>
                 </div>
@@ -565,35 +565,35 @@ export default function CommandPage() {
     }
 
     return (
-        <div className="min-h-screen bg-[#06060f] flex flex-col relative overflow-hidden">
-            {/* Ambient glows matching landing page */}
+        <div className="min-h-screen bg-background flex flex-col relative overflow-hidden">
+            {/* Ambient glows - cinematic magenta/cyan */}
             <div className="fixed inset-0 pointer-events-none z-0">
-                <div aria-hidden="true" className="absolute -top-[250px] -left-[150px] w-[700px] h-[700px] rounded-full bg-[rgba(91,79,255,0.06)] blur-[140px]" />
-                <div aria-hidden="true" className="absolute bottom-0 -right-[100px] w-[500px] h-[500px] rounded-full bg-[rgba(0,201,167,0.04)] blur-[140px]" />
+                <div aria-hidden="true" className="absolute -top-[250px] -left-[150px] w-[700px] h-[700px] rounded-full bg-magenta-dim blur-[140px]" />
+                <div aria-hidden="true" className="absolute bottom-0 -right-[100px] w-[500px] h-[500px] rounded-full bg-cyan-dim blur-[140px]" />
             </div>
 
             {/* Top nav — minimal, matches landing */}
-            <header className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-white/[0.05]">
+            <header className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-border-subtle">
                 <Link href="/" className="flex items-center gap-2 text-white font-black text-lg tracking-tight">
-                    <div className="w-8 h-8 rounded-[9px] bg-gradient-to-br from-[#5b4fff] to-[#8b5cf6] flex items-center justify-center text-sm font-black shadow-[0_4px_16px_rgba(91,79,255,0.3)]">R</div>
-                    Rico<span className="text-[#5b4fff]">.ai</span>
+                    <div className="w-8 h-8 rounded-[9px] bg-gradient-to-br from-magenta to-cyan flex items-center justify-center text-sm font-black shadow-[0_4px_16px_rgba(255,45,142,0.3)]">R</div>
+                    Rico<span className="text-magenta">.ai</span>
                 </Link>
                 <div className="flex items-center gap-3">
                     {chatAudience === "authenticated" ? (
                         <>
-                            <Link href="/dashboard" className="text-[13px] text-[#5a5a7a] hover:text-white transition-colors">Dashboard</Link>
+                            <Link href="/dashboard" className="text-[13px] text-text-muted hover:text-white transition-colors">Dashboard</Link>
                             <button
                                 type="button"
                                 onClick={handleLogout}
-                                className="text-[12px] px-3 py-1.5 rounded-lg bg-[#5b4fff] text-white hover:bg-[#4a3fdf] transition-colors font-medium"
+                                className="text-[12px] px-3 py-1.5 rounded-lg bg-magenta text-white hover:bg-magenta-hover transition-colors font-medium"
                             >
                                 Sign out
                             </button>
                         </>
                     ) : (
                         <>
-                            <Link href={COMMAND_LOGIN_HREF} className="text-[13px] text-[#5a5a7a] hover:text-white transition-colors">Sign in</Link>
-                            <Link href={COMMAND_SIGNUP_HREF} className="text-[12px] px-3 py-1.5 rounded-lg bg-[#5b4fff] text-white hover:bg-[#4a3fdf] transition-colors font-medium">Sign up free</Link>
+                            <Link href={COMMAND_LOGIN_HREF} className="text-[13px] text-text-muted hover:text-white transition-colors">Sign in</Link>
+                            <Link href={COMMAND_SIGNUP_HREF} className="text-[12px] px-3 py-1.5 rounded-lg bg-magenta text-white hover:bg-magenta-hover transition-colors font-medium">Sign up free</Link>
                         </>
                     )}
                 </div>
@@ -623,7 +623,7 @@ export default function CommandPage() {
                                     key={qa.label}
                                     onClick={() => sendMessage(qa.prompt)}
                                     disabled={thinking || chatAudience === "checking"}
-                                    className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-[#8080a0] transition-colors hover:border-[rgba(91,79,255,0.3)] hover:bg-white/[0.05] hover:text-[#eeeef5] disabled:opacity-50 rico-focus-strong"
+                                    className="rounded-xl border border-border-subtle bg-surface-glass px-3 py-2 text-xs text-text-secondary transition-colors hover:border-magenta/30 hover:bg-surface-subtle hover:text-white disabled:opacity-50 rico-focus-strong"
                                 >
                                     {qa.label}
                                 </button>
@@ -639,13 +639,13 @@ export default function CommandPage() {
                                 }`}
                         >
                             {m.role === "rico" && (
-                                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#5b4fff] to-[#8b5cf6] flex items-center justify-center text-[11px] font-black text-white shrink-0 mb-1 shadow-[0_2px_8px_rgba(91,79,255,0.3)]">
+                                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-magenta to-cyan flex items-center justify-center text-[11px] font-black text-white shrink-0 mb-1 shadow-[0_2px_8px_rgba(255,45,142,0.3)]">
                                     R
                                 </div>
                             )}
                             <div className={`max-w-[82%] ${m.role === "user"
-                                ? "rounded-2xl rounded-tr-none bg-[#5b4fff] px-4 py-3 text-[14px] text-white leading-relaxed shadow-[0_4px_15px_rgba(91,79,255,0.2)]"
-                                : "rounded-2xl rounded-tl-none bg-[#13132a] border border-white/5 px-4 py-3 text-[14px] text-[#eeeef5] leading-relaxed backdrop-blur-md"
+                                ? "rounded-2xl rounded-tr-none bg-magenta px-4 py-3 text-[14px] text-white leading-relaxed shadow-[0_4px_15px_rgba(255,45,142,0.2)]"
+                                : "rounded-2xl rounded-tl-none bg-surface border border-border-subtle px-4 py-3 text-[14px] text-white leading-relaxed backdrop-blur-md"
                                 }`}>
                                 {/* Message text */}
                                 {m.text && <div className="whitespace-pre-wrap">{m.text}</div>}
@@ -666,7 +666,7 @@ export default function CommandPage() {
                                             type="button"
                                             onClick={() => handleConfirmProfile(m.preview!, m.filename!, m.id)}
                                             disabled={thinking}
-                                            className="text-[12px] px-4 py-2 rounded-lg bg-[#5dcaa5] text-white font-medium hover:bg-[#4db894] transition-colors disabled:opacity-50"
+                                            className="text-[12px] px-4 py-2 rounded-lg bg-cyan text-white font-medium hover:bg-cyan-hover transition-colors disabled:opacity-50"
                                         >
                                             Use this profile
                                         </button>
@@ -677,15 +677,15 @@ export default function CommandPage() {
                                                 setDraftProfile(m.preview!);
                                             }}
                                             disabled={thinking}
-                                            className="text-[12px] px-4 py-2 rounded-lg border border-white/10 text-[#8080a0] hover:border-[#5b4fff]/40 hover:text-white transition-colors disabled:opacity-50"
+                                            className="text-[12px] px-4 py-2 rounded-lg border border-border-soft text-text-secondary hover:border-magenta/40 hover:text-white transition-colors disabled:opacity-50"
                                         >
                                             Edit before saving
                                         </button>
                                     </div>
                                 )}
                                 {m.type === "profile_preview" && editingProfileId === m.id && draftProfile && (
-                                    <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
-                                        <p className="text-[11px] font-semibold text-[#a78bfa]">Edit profile</p>
+                                    <div className="mt-3 space-y-2 border-t border-border-soft pt-3">
+                                        <p className="text-[11px] font-semibold text-magenta">Edit profile</p>
 
                                         {(
                                             [
@@ -696,19 +696,19 @@ export default function CommandPage() {
                                             ] as [keyof ProfilePreview, string][]
                                         ).map(([field, label]) => (
                                             <label key={field} className="block space-y-0.5">
-                                                <span className="text-[10px] text-[#5a5a7a]">{label}</span>
+                                                <span className="text-[10px] text-text-muted">{label}</span>
                                                 <input
                                                     value={(draftProfile[field] as string) ?? ""}
                                                     onChange={(e) =>
                                                         setDraftProfile((prev) => (prev ? { ...prev, [field]: e.target.value } : prev))
                                                     }
-                                                    className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-1.5 text-[12px] text-white placeholder:text-[#5a5a7a] focus:outline-none focus:border-[#5b4fff]/60"
+                                                    className="w-full rounded-lg bg-surface-subtle border border-border-soft px-3 py-1.5 text-[12px] text-white placeholder:text-text-muted focus:outline-none focus:border-magenta/60"
                                                 />
                                             </label>
                                         ))}
 
                                         <label className="block space-y-0.5">
-                                            <span className="text-[10px] text-[#5a5a7a]">Skills (comma-separated)</span>
+                                            <span className="text-[10px] text-text-muted">Skills (comma-separated)</span>
                                             <input
                                                 value={(draftProfile.skills_detected ?? draftProfile.skills ?? []).join(", ")}
                                                 onChange={(e) => {
@@ -717,7 +717,7 @@ export default function CommandPage() {
                                                         prev ? { ...prev, skills_detected: skills, skills } : prev
                                                     );
                                                 }}
-                                                className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-1.5 text-[12px] text-white placeholder:text-[#5a5a7a] focus:outline-none focus:border-[#5b4fff]/60"
+                                                className="w-full rounded-lg bg-surface-subtle border border-border-soft px-3 py-1.5 text-[12px] text-white placeholder:text-text-muted focus:outline-none focus:border-magenta/60"
                                             />
                                         </label>
 
@@ -730,7 +730,7 @@ export default function CommandPage() {
                                                     setDraftProfile(null);
                                                 }}
                                                 disabled={thinking}
-                                                className="text-[12px] px-4 py-2 rounded-lg bg-[#5dcaa5] text-white font-medium hover:bg-[#4db894] transition-colors disabled:opacity-50"
+                                                className="text-[12px] px-4 py-2 rounded-lg bg-cyan text-white font-medium hover:bg-cyan-hover transition-colors disabled:opacity-50"
                                             >
                                                 Save profile
                                             </button>
@@ -740,7 +740,7 @@ export default function CommandPage() {
                                                     setEditingProfileId(null);
                                                     setDraftProfile(null);
                                                 }}
-                                                className="text-[12px] px-4 py-2 rounded-lg border border-white/10 text-[#8080a0] hover:border-[#5b4fff]/40 hover:text-white transition-colors"
+                                                className="text-[12px] px-4 py-2 rounded-lg border border-border-soft text-text-secondary hover:border-magenta/40 hover:text-white transition-colors"
                                             >
                                                 Cancel
                                             </button>
@@ -755,7 +755,7 @@ export default function CommandPage() {
                                 {m.type === "role_confirmation" && (
                                     <div className="mt-3 space-y-2">
                                         {m.reasons && m.reasons.length > 0 && (
-                                            <ul className="list-disc list-inside text-[13px] text-[#a0a0c0] space-y-0.5">
+                                            <ul className="list-disc list-inside text-[13px] text-text-secondary space-y-0.5">
                                                 {m.reasons.map((r, i) => (
                                                     <li key={i}>{r}</li>
                                                 ))}
@@ -768,7 +768,7 @@ export default function CommandPage() {
                                                         type="button"
                                                         key={na.action}
                                                         onClick={() => sendMessage(na.message ?? na.label)}
-                                                        className="text-[12px] px-3 py-2 rounded-xl border border-[#5b4fff]/30 text-[#a78bfa] hover:bg-[#5b4fff]/10 hover:border-[#5b4fff]/60 transition-colors rico-focus-strong"
+                                                        className="text-[12px] px-3 py-2 rounded-xl border border-magenta/30 text-magenta hover:bg-magenta-soft hover:border-magenta/60 transition-colors rico-focus-strong"
                                                     >
                                                         {na.label}
                                                     </button>
@@ -779,11 +779,11 @@ export default function CommandPage() {
                                 )}
 
                                 {m.freeMode && (
-                                    <p className="mt-2 text-[11px] text-[#5a5a7a]">Free mode — HF fallback active</p>
+                                    <p className="mt-2 text-[11px] text-text-muted">Free mode — HF fallback active</p>
                                 )}
                             </div>
                             {m.role === "user" && (
-                                <div className="w-6 h-6 rounded-full bg-white/[0.08] flex items-center justify-center text-[10px] font-medium text-[#8080a0] shrink-0 mb-1">
+                                <div className="w-6 h-6 rounded-full bg-surface-subtle flex items-center justify-center text-[10px] font-medium text-text-secondary shrink-0 mb-1">
                                     You
                                 </div>
                             )}
@@ -798,7 +798,7 @@ export default function CommandPage() {
                                 <ThinkingIndicator />
                             )}
                             {slowHint && (
-                                <p className="text-[11px] text-[#5a5a7a] pl-9 animate-pulse motion-reduce:animate-none" role="status">
+                                <p className="text-[11px] text-text-muted pl-9 animate-pulse motion-reduce:animate-none" role="status">
                                     Rico is waking up — first request after idle can take up to a minute…
                                 </p>
                             )}
@@ -809,9 +809,9 @@ export default function CommandPage() {
                 </div>
 
                 {/* Floating input bar */}
-                <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#06060f] via-[#06060f]/95 to-transparent">
+                <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-background via-background/95 to-transparent">
                     {uploadError && (
-                        <p className="text-[11px] text-red-400 mb-2 text-center" role="alert">{uploadError}</p>
+                        <p className="text-[11px] text-rico-red mb-2 text-center" role="alert">{uploadError}</p>
                     )}
                     <div className="flex items-end gap-2">
                         {/* CV upload button */}
@@ -820,7 +820,7 @@ export default function CommandPage() {
                             onClick={() => fileInputRef.current?.click()}
                             disabled={thinking || chatAudience === "checking"}
                             title="Upload your CV (PDF)"
-                            className="w-10 h-10 rounded-xl border border-white/10 bg-[#13132a]/80 text-[#8080a0] flex items-center justify-center hover:border-[#5b4fff]/40 hover:text-white transition-all disabled:opacity-30 shrink-0 rico-focus-strong"
+                            className="w-10 h-10 rounded-xl border border-border-soft bg-surface/80 text-text-secondary flex items-center justify-center hover:border-magenta/40 hover:text-white transition-all disabled:opacity-30 shrink-0 rico-focus-strong"
                             aria-label="Upload CV"
                         >
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -842,13 +842,13 @@ export default function CommandPage() {
                                 placeholder={chatAudience === "checking"
                                     ? "Checking your session…"
                                     : "Ask Rico anything — jobs, CV, applications, interviews…"}
-                                className="w-full resize-none bg-[#13132a]/80 border border-white/10 backdrop-blur-xl rounded-2xl py-3 pl-4 pr-12 text-sm text-white placeholder:text-[#5a5a7a] transition-all shadow-2xl"
+                                className="w-full resize-none bg-surface/80 border border-border-soft backdrop-blur-xl rounded-2xl py-3 pl-4 pr-12 text-sm text-white placeholder:text-text-muted transition-all shadow-2xl"
                             />
                             <button
                                 type="button"
                                 onClick={handleSend}
                                 disabled={thinking || chatAudience === "checking" || !input.trim()}
-                                className="absolute right-2 top-1.5 bottom-1.5 w-9 h-9 rounded-xl bg-[#5b4fff] text-white flex items-center justify-center hover:bg-[#4a3fdf] transition-all disabled:opacity-30 disabled:grayscale rico-focus-strong"
+                                className="absolute right-2 top-1.5 bottom-1.5 w-9 h-9 rounded-xl bg-magenta text-white flex items-center justify-center hover:bg-magenta-hover transition-all disabled:opacity-30 disabled:grayscale rico-focus-strong"
                                 aria-label={thinking ? "Sending…" : "Send"}
                             >
                                 {thinking ? (
@@ -861,7 +861,7 @@ export default function CommandPage() {
                             </button>
                         </div>
                     </div>
-                    <p id="command-input-hint" className="text-center text-[10px] text-[#5a5a7a] mt-2 opacity-40">
+                    <p id="command-input-hint" className="text-center text-[10px] text-text-muted mt-2 opacity-40">
                         Enter to send · Shift+Enter for new line · 📎 to upload CV
                     </p>
                 </div>
