@@ -3,7 +3,10 @@
 import { AuraGlow } from '@/components/ui/AuraGlow';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { PageTransition } from '@/components/ui/PageTransition';
+import { ProcessingOverlay } from '@/components/ui/ProcessingOverlay';
 import { uploadCV } from '@/lib/api';
+import { useRouter } from 'next/navigation';
 import React, { useState } from 'react';
 
 function getGuestUploadUserId(): string {
@@ -18,7 +21,10 @@ function getGuestUploadUserId(): string {
 export default function UploadPage() {
     const [isDragging, setIsDragging] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
     const [uploadComplete, setUploadComplete] = useState(false);
+    const [error, setError] = useState('');
+    const router = useRouter();
 
     const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault();
@@ -45,20 +51,31 @@ export default function UploadPage() {
         }
     };
 
+    const handleProcessingComplete = () => {
+        setIsProcessing(false);
+        setUploadComplete(true);
+        setTimeout(() => router.push('/command'), 2000);
+    };
+
     const handleUpload = async (file: File) => {
         setIsUploading(true);
+        setError('');
         try {
             await uploadCV(file, getGuestUploadUserId());
-            setUploadComplete(true);
-        } catch (error) {
-            console.error('Upload failed:', error);
-        } finally {
+            setIsUploading(false);
+            setIsProcessing(true);
+        } catch (err) {
+            console.error('Upload failed:', err);
+            setError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
             setIsUploading(false);
         }
     };
 
     return (
         <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
+            {/* Cinematic processing overlay */}
+            <ProcessingOverlay active={isProcessing} onComplete={handleProcessingComplete} />
+
             {/* Atmospheric Background */}
             <AuraGlow variant="magenta" position="top-right" className="animate-pulse-magenta" />
             <AuraGlow variant="cyan" position="bottom-left" className="animate-pulse-magenta" style={{ animationDelay: '-2s' }} />
@@ -66,88 +83,94 @@ export default function UploadPage() {
             {/* Main Content */}
             <main className="relative z-10 w-full max-w-2xl px-container-padding-mobile md:px-container-padding-desktop">
                 {uploadComplete ? (
-                    <GlassPanel className="p-12 rounded-2xl border border-white/10 text-center">
-                        <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
-                            <MaterialIcon icon="check_circle" className="text-primary text-5xl" />
-                        </div>
-                        <h1 className="font-headline-xl text-headline-xl text-on-surface mb-4">CV Uploaded Successfully</h1>
-                        <p className="text-body-lg text-on-surface-variant mb-8">
-                            Your career trajectory is now being analyzed. Intelligence integration in progress.
-                        </p>
-                        <a
-                            href="/command"
-                            className="inline-flex items-center gap-2 px-8 py-4 bg-primary/10 text-primary rounded-full hover:bg-primary/20 transition-all"
-                        >
-                            <span className="text-label-caps">Begin Orchestration</span>
-                            <MaterialIcon icon="arrow_forward" />
-                        </a>
-                    </GlassPanel>
-                ) : (
-                    <>
-                        <div className="text-center mb-12">
-                            <h1 className="font-headline-xl text-headline-xl text-on-surface mb-4 tracking-tight">
-                                Release your history
-                            </h1>
-                            <p className="font-body-lg text-body-lg text-on-surface-variant">
-                                Upload your CV to initiate trajectory intelligence
-                            </p>
-                        </div>
-
-                        <GlassPanel
-                            className={`p-16 rounded-2xl border border-white/10 text-center transition-all ${isDragging ? 'border-primary/50 bg-primary/5' : 'hover:border-primary/30'
-                                }`}
-                            onDragOver={handleDragOver}
-                            onDragLeave={handleDragLeave}
-                            onDrop={handleDrop}
-                        >
-                            <div className="mb-8">
-                                <MaterialIcon icon="upload_file" className="text-6xl text-on-surface-variant/40 mb-4" />
-                                <p className="text-body-lg text-on-surface-variant mb-2">
-                                    {isDragging ? 'Drop your CV here' : 'Drag and drop your CV'}
-                                </p>
-                                <p className="text-sm text-on-surface-variant/60">or</p>
+                    <PageTransition>
+                        <GlassPanel className="p-12 rounded-2xl border border-white/10 text-center">
+                            <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
+                                <MaterialIcon icon="check_circle" className="text-primary text-5xl" />
                             </div>
-
-                            <label className="inline-block cursor-pointer">
-                                <input
-                                    type="file"
-                                    accept=".pdf"
-                                    onChange={handleFileSelect}
-                                    className="hidden"
-                                    disabled={isUploading}
-                                />
-                                <span className="inline-flex items-center gap-2 px-8 py-4 bg-primary/10 text-primary rounded-full hover:bg-primary/20 transition-all">
-                                    {isUploading ? (
-                                        <>
-                                            <MaterialIcon icon="hourglass_empty" className="animate-spin" />
-                                            <span className="text-label-caps">Processing...</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <span className="text-label-caps">Select File</span>
-                                            <MaterialIcon icon="folder_open" />
-                                        </>
-                                    )}
-                                </span>
-                            </label>
-
-                            <div className="mt-8 pt-8 border-t border-white/5">
-                                <p className="text-[10px] text-on-surface-variant/40 uppercase tracking-widest mb-4">
-                                    Supported formats
-                                </p>
-                                <div className="flex justify-center gap-4">
-                                    <span className="text-label-caps text-[10px] px-3 py-1 border border-white/10 rounded-full">PDF</span>
-                                </div>
+                            <h1 className="font-headline-xl text-headline-xl text-on-surface mb-4">Profile Intelligence Ready</h1>
+                            <p className="text-body-lg text-on-surface-variant mb-4">
+                                Your career trajectory has been mapped. Redirecting to command center...
+                            </p>
+                            <div className="flex justify-center">
+                                <div className="w-8 h-0.5 bg-[var(--magenta)] rounded-full animate-pulse" />
                             </div>
                         </GlassPanel>
+                    </PageTransition>
+                ) : (
+                    <PageTransition>
+                        <>
+                            <div className="text-center mb-12">
+                                <h1 className="font-headline-xl text-headline-xl text-on-surface mb-4 tracking-tight">
+                                    Release your history
+                                </h1>
+                                <p className="font-body-lg text-body-lg text-on-surface-variant">
+                                    Upload your CV to initiate trajectory intelligence
+                                </p>
+                            </div>
 
-                        <div className="mt-8 flex items-center justify-center gap-3">
-                            <MaterialIcon icon="lock" className="text-on-surface-variant/40 text-sm" />
-                            <p className="text-[10px] text-on-surface-variant/40 uppercase tracking-widest">
-                                End-to-end encrypted processing
-                            </p>
-                        </div>
-                    </>
+                            {error && (
+                                <div className="mb-6 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center animate-[fadeSlideIn_0.3s_ease-out]">
+                                    {error}
+                                </div>
+                            )}
+
+                            <GlassPanel
+                                className={`p-16 rounded-2xl border border-white/10 text-center transition-all ${isDragging ? 'border-primary/50 bg-primary/5' : 'hover:border-primary/30'
+                                    }`}
+                                onDragOver={handleDragOver}
+                                onDragLeave={handleDragLeave}
+                                onDrop={handleDrop}
+                            >
+                                <div className="mb-8">
+                                    <MaterialIcon icon="upload_file" className="text-6xl text-on-surface-variant/40 mb-4" />
+                                    <p className="text-body-lg text-on-surface-variant mb-2">
+                                        {isDragging ? 'Drop your CV here' : 'Drag and drop your CV'}
+                                    </p>
+                                    <p className="text-sm text-on-surface-variant/60">or</p>
+                                </div>
+
+                                <label className="inline-block cursor-pointer">
+                                    <input
+                                        type="file"
+                                        accept=".pdf"
+                                        onChange={handleFileSelect}
+                                        className="hidden"
+                                        disabled={isUploading}
+                                    />
+                                    <span className="inline-flex items-center gap-2 px-8 py-4 bg-primary/10 text-primary rounded-full hover:bg-primary/20 transition-all">
+                                        {isUploading ? (
+                                            <>
+                                                <MaterialIcon icon="hourglass_empty" className="animate-spin" />
+                                                <span className="text-label-caps">Processing...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span className="text-label-caps">Select File</span>
+                                                <MaterialIcon icon="folder_open" />
+                                            </>
+                                        )}
+                                    </span>
+                                </label>
+
+                                <div className="mt-8 pt-8 border-t border-white/5">
+                                    <p className="text-[10px] text-on-surface-variant/40 uppercase tracking-widest mb-4">
+                                        Supported formats
+                                    </p>
+                                    <div className="flex justify-center gap-4">
+                                        <span className="text-label-caps text-[10px] px-3 py-1 border border-white/10 rounded-full">PDF</span>
+                                    </div>
+                                </div>
+                            </GlassPanel>
+
+                            <div className="mt-8 flex items-center justify-center gap-3">
+                                <MaterialIcon icon="lock" className="text-on-surface-variant/40 text-sm" />
+                                <p className="text-[10px] text-on-surface-variant/40 uppercase tracking-widest">
+                                    End-to-end encrypted processing
+                                </p>
+                            </div>
+                        </>
+                    </PageTransition>
                 )}
             </main>
 

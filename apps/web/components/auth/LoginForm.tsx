@@ -3,6 +3,7 @@
 import { AuraGlow } from '@/components/ui/AuraGlow';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { PageTransition, StaggerChildren } from '@/components/ui/PageTransition';
 import { useAuthStore } from '@/lib/store/useAuthStore';
 import { useRouter } from 'next/navigation';
 import React, { useState } from 'react';
@@ -10,17 +11,19 @@ import React, { useState } from 'react';
 export function LoginForm() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
     const { login, isLoading } = useAuthStore();
     const router = useRouter();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setError('');
         try {
             await login(email, password);
             router.push('/command');
             router.refresh();
-        } catch (error) {
-            console.error('Login failed:', error);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Authentication failed');
         }
     };
 
@@ -29,68 +32,76 @@ export function LoginForm() {
             <AuraGlow variant="magenta" position="top-right" className="animate-pulse-magenta" />
             <AuraGlow variant="cyan" position="bottom-left" className="animate-pulse-magenta" style={{ animationDelay: '-2s' }} />
 
-            <GlassPanel className="w-full max-w-md p-8 rounded-2xl border border-white/10">
-                <div className="text-center mb-8">
-                    <h1 className="font-headline-xl text-headline-xl text-on-surface mb-2">Welcome Back</h1>
-                    <p className="text-body-md text-on-surface-variant">Access your trajectory intelligence</p>
-                </div>
+            <PageTransition>
+                <GlassPanel className="w-full max-w-md p-8 rounded-2xl border border-white/10 transition-all duration-300">
+                    <StaggerChildren baseDelay={100} className="text-center mb-8">
+                        <h1 className="font-headline-xl text-headline-xl text-on-surface mb-2">Welcome Back</h1>
+                        <p className="text-body-md text-on-surface-variant">Access your trajectory intelligence</p>
+                    </StaggerChildren>
 
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <div>
-                        <label htmlFor="email" className="block text-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant mb-2">
-                            Email
-                        </label>
-                        <input
-                            id="email"
-                            type="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            className="w-full bg-surface-container border border-white/10 rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:border-primary transition-all"
-                            placeholder="you@example.com"
-                            required
-                        />
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        <div>
+                            <label htmlFor="email" className="block text-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant mb-2">
+                                Email
+                            </label>
+                            <input
+                                id="email"
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                className="w-full bg-surface-container border border-white/10 rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:border-primary transition-all"
+                                placeholder="you@example.com"
+                                required
+                            />
+                        </div>
+
+                        <div>
+                            <label htmlFor="password" className="block text-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant mb-2">
+                                Password
+                            </label>
+                            <input
+                                id="password"
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className="w-full bg-surface-container border border-white/10 rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:border-primary transition-all"
+                                placeholder="••••••••"
+                                required
+                            />
+                        </div>
+
+                        <button
+                            type="submit"
+                            disabled={isLoading}
+                            className="w-full bg-primary/10 text-primary rounded-lg px-6 py-4 font-label-caps uppercase tracking-widest hover:bg-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                            {isLoading ? (
+                                <>
+                                    <MaterialIcon icon="hourglass_empty" className="animate-spin" />
+                                    <span>Authenticating...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <span>Access Intelligence</span>
+                                    <MaterialIcon icon="arrow_forward" />
+                                </>
+                            )}
+                        </button>
+                    </form>
+
+                    {error && (
+                        <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center animate-[fadeSlideIn_0.3s_ease-out]">
+                            {error}
+                        </div>
+                    )}
+
+                    <div className="mt-6 text-center">
+                        <a href="/signup" className="text-sm text-on-surface-variant hover:text-primary transition-colors">
+                            Create account
+                        </a>
                     </div>
-
-                    <div>
-                        <label htmlFor="password" className="block text-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant mb-2">
-                            Password
-                        </label>
-                        <input
-                            id="password"
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="w-full bg-surface-container border border-white/10 rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:border-primary transition-all"
-                            placeholder="••••••••"
-                            required
-                        />
-                    </div>
-
-                    <button
-                        type="submit"
-                        disabled={isLoading}
-                        className="w-full bg-primary/10 text-primary rounded-lg px-6 py-4 font-label-caps uppercase tracking-widest hover:bg-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                    >
-                        {isLoading ? (
-                            <>
-                                <MaterialIcon icon="hourglass_empty" className="animate-spin" />
-                                <span>Authenticating...</span>
-                            </>
-                        ) : (
-                            <>
-                                <span>Access Intelligence</span>
-                                <MaterialIcon icon="arrow_forward" />
-                            </>
-                        )}
-                    </button>
-                </form>
-
-                <div className="mt-6 text-center">
-                    <a href="/signup" className="text-sm text-on-surface-variant hover:text-primary transition-colors">
-                        Create account
-                    </a>
-                </div>
-            </GlassPanel>
+                </GlassPanel>
+            </PageTransition>
 
             <div className="fixed top-0 left-0 w-full h-full pointer-events-none">
                 <div className="absolute inset-0 opacity-[0.04] bg-[url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27%3E%3Cfilter id=%27n%27%3E%3CfeTurbulence type=%27fractalNoise%27 baseFrequency=%27.85%27 numOctaves=%274%27 stitchTiles=%27stitch%27/%3E%3C/filter%3E%3Crect width=%27100%25%27 height=%27100%25%27 filter=%27url(%23n)%27 opacity=%27.025%27/%3E%3C/svg%3E')]" />
