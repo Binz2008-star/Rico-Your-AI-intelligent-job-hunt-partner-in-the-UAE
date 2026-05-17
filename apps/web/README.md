@@ -27,11 +27,14 @@ cp .env.example .env.local
 Required runtime variables:
 
 ```bash
+BACKEND_API_BASE_URL=http://localhost:8000
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 NEXT_PUBLIC_APP_URL=https://ricohunt.com
 ```
+
+For production, set these in Vercel Project Settings instead of hardcoding backend URLs in `vercel.json`.
 
 ## Expected backend routes
 

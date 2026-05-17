@@ -5,9 +5,6 @@
     "regions": [
         "iad1"
     ],
-    "env": {
-        "NEXT_PUBLIC_APP_URL": "https://ricohunt.com"
-    },
     "headers": [
         {
             "source": "/(.*)",
@@ -21,24 +18,10 @@
                     "value": "DENY"
                 },
                 {
-                    "key": "X-XSS-Protection",
-                    "value": "1; mode=block"
-                },
-                {
                     "key": "Referrer-Policy",
                     "value": "strict-origin-when-cross-origin"
                 }
             ]
-        }
-    ],
-    "rewrites": [
-        {
-            "source": "/proxy/api/:path*",
-            "destination": "https://rico-job-automation-api.onrender.com/api/:path*"
-        },
-        {
-            "source": "/proxy/health",
-            "destination": "https://rico-job-automation-api.onrender.com/health"
         }
     ]
 }
