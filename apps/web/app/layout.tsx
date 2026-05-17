@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-    metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
+    metadataBase: new URL(
+        process.env.NEXT_PUBLIC_APP_URL ||
+        process.env.NEXT_PUBLIC_SITE_URL ||
+        "http://localhost:3000"
+    ),
     title: "Rico AI — Autonomous Career Trajectory Intelligence",
     description: "Cinematic career intelligence system. Memory-weighted trajectory mapping, command-centered orchestration, and opportunity momentum analysis for autonomous career evolution.",
     alternates: { canonical: "/" },
