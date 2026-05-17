@@ -15,8 +15,9 @@ import type {
 
 // Absolute backend URL — used only for server-side (SSR) fetches such as fetchHealth().
 const RICO_API =
+    process.env.NEXT_PUBLIC_API_BASE_URL ??
     process.env.NEXT_PUBLIC_RICO_API ??
-    "https://rico-job-automation-api.onrender.com";
+    "http://localhost:8000";
 
 // All client-side fetches route through /proxy so the session cookie is set and
 // sent as a first-party (same-origin) cookie, bypassing Chrome's cross-site

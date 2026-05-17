@@ -21,30 +21,27 @@ npm run dev
 ## Environment
 
 ```bash
-NEXT_PUBLIC_RICO_API=http://localhost:8000
+cp .env.example .env.local
 ```
 
-## Expected backend route
+Required runtime variables:
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_APP_URL=https://ricohunt.com
+```
+
+## Expected backend routes
 
 ```http
-POST /chat
-```
-
-Example request:
-
-```json
-{
-  "user_id": "web-user",
-  "message": "Find UAE operations roles"
-}
-```
-
-Example response:
-
-```json
-{
-  "reply": "Rico response"
-}
+POST /api/v1/rico/chat
+POST /api/v1/agent/chat
+POST /api/v1/rico/upload-cv
+POST /api/v1/rico/confirm-cv-profile
+GET  /api/v1/jobs/{job_id}
+GET  /api/v1/pipeline/status
 ```
 
 ## Planned upgrades

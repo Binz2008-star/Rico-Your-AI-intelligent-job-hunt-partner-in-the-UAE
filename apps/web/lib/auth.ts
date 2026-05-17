@@ -10,10 +10,9 @@ export interface StoredUser {
   email: string;
 }
 
-/** Best-effort auth check — caller should validate with fetchMe(). */
+/** HTTP-only cookies are not readable in the browser. Validate with fetchMe(). */
 export function isAuthenticated(): boolean {
-  if (typeof document === "undefined") return false;
-  return document.cookie.includes("session");
+  return false;
 }
 
 /** Call backend logout to clear the session cookie. */

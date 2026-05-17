@@ -8,8 +8,9 @@ const nextConfig = {
   // backend API are on different origins (e.g. localhost:3001 vs onrender.com).
   async rewrites() {
     const api =
+      process.env.NEXT_PUBLIC_API_BASE_URL ||
       process.env.NEXT_PUBLIC_RICO_API ||
-      "https://rico-job-automation-api.onrender.com";
+      "http://localhost:8000";
     return [
       { source: "/proxy/api/:path*", destination: `${api}/api/:path*` },
       { source: "/proxy/health",     destination: `${api}/health` },

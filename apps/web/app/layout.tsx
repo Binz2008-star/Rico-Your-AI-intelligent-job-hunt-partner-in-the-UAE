@@ -2,37 +2,41 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
-  title: "Rico AI — Your Autonomous UAE Career Agent",
-  description: "Stop searching for UAE jobs manually. Rico AI finds matching jobs, scores them, sends Telegram alerts, helps you apply, and tracks everything — so you never have to scroll job boards again.",
-  alternates: { canonical: "/" },
-  openGraph: {
-    title: "Rico AI — Your Autonomous UAE Career Agent",
-    description: "The AI career agent that job-hunts for you in the UAE. Rico finds, scores, alerts, and tracks — and never applies without your approval.",
-    type: "website",
-    siteName: "Rico AI",
-  },
-  twitter: {
-    card: "summary",
-    title: "Rico AI — Your Autonomous UAE Career Agent",
-    description: "The AI career agent that job-hunts for you in the UAE. Rico finds, scores, alerts, and tracks — and never applies without your approval.",
-  },
+    metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
+    title: "Rico AI — Autonomous Career Trajectory Intelligence",
+    description: "Cinematic career intelligence system. Memory-weighted trajectory mapping, command-centered orchestration, and opportunity momentum analysis for autonomous career evolution.",
+    alternates: { canonical: "/" },
+    openGraph: {
+        title: "Rico AI — Autonomous Career Trajectory Intelligence",
+        description: "The future of career intelligence. Memory-weighted trajectory mapping, command-centered orchestration, and opportunity momentum analysis.",
+        type: "website",
+        siteName: "Rico AI",
+    },
+    twitter: {
+        card: "summary",
+        title: "Rico AI — Autonomous Career Trajectory Intelligence",
+        description: "The future of career intelligence. Memory-weighted trajectory mapping, command-centered orchestration, and opportunity momentum analysis.",
+    },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Cabinet+Grotesk:wght@400;500;700;800;900&family=Instrument+Sans:ital,wght@0,400;0,500;1,400&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body className="antialiased bg-[#06060f] text-[#eeeef5] font-[Instrument_Sans,sans-serif]">
-        {children}
-      </body>
-    </html>
-  );
+    return (
+        <html lang="en" className="dark">
+            <head>
+                <link rel="preconnect" href="https://fonts.googleapis.com" />
+                <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+                <link
+                    href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Geist:wght@300;400;500;600&family=Space+Mono:wght@400;500;600&display=swap"
+                    rel="stylesheet"
+                />
+                <link
+                    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+                    rel="stylesheet"
+                />
+            </head>
+            <body className="antialiased bg-background text-on-surface font-body overflow-x-hidden">
+                {children}
+            </body>
+        </html>
+    );
 }

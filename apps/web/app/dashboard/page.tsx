@@ -10,7 +10,9 @@ import { redirect } from "next/navigation";
 export const dynamic = "force-dynamic";
 
 const RICO_API =
-  process.env.NEXT_PUBLIC_RICO_API ?? "https://rico-job-automation-api.onrender.com";
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  process.env.NEXT_PUBLIC_RICO_API ??
+  "http://localhost:8000";
 
 async function checkProfileExists(): Promise<boolean | null> {
   try {
@@ -43,7 +45,7 @@ async function SystemStatus() {
       <StatusCard title="API status" badge="error">
         <p className="text-sm text-rico-text-muted">
           Could not reach the backend. Check{" "}
-          <code className="text-rico-text">NEXT_PUBLIC_RICO_API</code>.
+          <code className="text-rico-text">NEXT_PUBLIC_API_BASE_URL</code>.
         </p>
       </StatusCard>
     );

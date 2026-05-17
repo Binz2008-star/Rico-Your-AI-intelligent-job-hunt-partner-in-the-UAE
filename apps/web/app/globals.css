@@ -3,98 +3,106 @@
 @tailwind utilities;
 
 :root {
-  --bg: #070712;
-  --s1: #0e0e20;
-  --s2: #14142a;
-  --s3: #1a1a33;
-  --accent: #5b4fff;
-  --accent-glow: rgba(91, 79, 255, 0.28);
-  --teal: #00c9a7;
-  --amber: #f5a623;
-  --red: #ff5e5b;
+    --focus-ring: #00fbfb;
+    --focus-ring-shadow: rgba(0, 251, 251, 0.16);
+    --focus-ring-offset: 3px;
+    --focus-ring-width: 3px;
 }
 
 html,
 body {
-  background: var(--bg);
-  color: white;
-  font-family: var(--font-instrument), system-ui, sans-serif;
-  height: 100%;
-  overflow-x: hidden;
+    background: #000000;
+    color: #e5e2e1;
+    font-family: 'Geist', system-ui, sans-serif;
+    height: 100%;
+    overflow-x: hidden;
 }
 
 #root,
 body>div:first-child {
-  height: 100%;
+    height: 100%;
 }
 
-/* scrollbar */
+/* Glass panel utility */
+.glass-panel {
+    backdrop-filter: blur(40px);
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-island {
+    backdrop-filter: blur(40px);
+    background: rgba(255, 255, 255, 0.03);
+    border-top: 0.5px solid rgba(255, 255, 255, 0.1);
+    border-left: 0.5px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Aura glow effects */
+.aura-glow-cyan {
+    background: radial-gradient(circle, rgba(0, 221, 221, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
+}
+
+.aura-glow-magenta {
+    background: radial-gradient(circle, rgba(254, 0, 254, 0.1) 0%, rgba(0, 0, 0, 0) 70%);
+}
+
+.glow-aura {
+    filter: blur(140px);
+    background: radial-gradient(circle, rgba(255, 45, 142, 0.18) 0%, rgba(255, 45, 142, 0) 70%);
+}
+
+.glow-cyan-point {
+    filter: blur(40px);
+    background: rgba(0, 229, 255, 0.12);
+}
+
+/* Material symbols */
+.material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Scrollbar */
 ::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+    width: 4px;
+    height: 4px;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+    background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 99px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 99px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.18);
 }
 
-/* noise grain overlay */
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.025'/%3E%3C/svg%3E");
-  pointer-events: none;
-  z-index: 9999;
-  opacity: 0.4;
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
 }
 
-/* animate-in utility for toasts */
-@keyframes slide-in-from-right {
-  from {
-    transform: translateX(16px);
-    opacity: 0;
-  }
-
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+    /* Firefox */
 }
 
-.animate-in {
-  animation-duration: 300ms;
-  animation-fill-mode: both;
-}
-
-.slide-in-from-right-4 {
-  animation-name: slide-in-from-right;
-}
-
-/* Shared focus system for accessibility (WCAG 2.2 AA + AAA-style) */
-/* Philosophy: clarity under stress, orientation for tired users */
-/* Never remove outlines unless replacing with something stronger */
-:root {
-  --focus-ring: #00c9a7;
-  --focus-ring-shadow: rgba(0, 201, 167, 0.16);
-  --focus-ring-offset: 3px;
-  --focus-ring-width: 3px;
-}
-
+/* Focus system */
 :where(a, button, input, textarea, select, summary, [tabindex]:not([tabindex="-1"])):focus-visible {
-  outline: var(--focus-ring-width) solid var(--focus-ring);
-  outline-offset: var(--focus-ring-offset);
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: var(--focus-ring-offset);
 }
 
-.rico-focus-strong:focus-visible {
-  box-shadow: 0 0 0 4px var(--focus-ring-shadow);
+/* Noise grain overlay */
+body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.025'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.04;
 }
