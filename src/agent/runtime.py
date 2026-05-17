@@ -24,6 +24,7 @@ Interactive code is unreachable from this module.
 from __future__ import annotations
 
 import hashlib
+import inspect
 import logging
 import time
 from typing import Any, Dict, Optional
@@ -151,7 +152,8 @@ class AgentRuntime:
         )
 
         try:
-            tool_result = tool_def.fn(resolved_job)
+            sig = inspect.signature(tool_def.fn)
+            tool_result = tool_def.fn() if len(sig.parameters) == 0 else tool_def.fn(resolved_job)
         except Exception as exc:
             logger.exception("runtime_tool_error action=%s tool=%s", action, tool_name)
             tool_result = None

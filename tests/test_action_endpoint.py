@@ -233,6 +233,15 @@ class TestActionEndpointLiveExecution:
         assert data["ok"] is True
         assert "reminder_date" in data["data"]
 
+    def test_trigger_pipeline_runtime_handles_zero_arg_tool(self):
+        from src.agent.runtime import agent_runtime
+        with patch("src.agent.runtime.log_action"), \
+             patch("src.agent.runtime.is_duplicate", return_value=False), \
+             patch("src.services.pipeline_service.trigger", return_value=None):
+            result = agent_runtime.handle_action(user_id="test", action="trigger_pipeline", job_key="", source="test")
+        assert result is not None
+        assert result.ok is True
+
 
 # ── job_key fallback ──────────────────────────────────────────────────────────
 
