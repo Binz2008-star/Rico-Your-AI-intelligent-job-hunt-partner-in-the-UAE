@@ -242,6 +242,8 @@ export default function ChatPage() {
   const [chatAudience, setChatAudience] = useState<ChatAudience>("checking");
   const [mounted, setMounted] = useState(false);
   const [operationState, setOperationState] = useState<{ state: string; message: string } | null>(null);
+  const [editingProfileId, setEditingProfileId] = useState<number | null>(null);
+  const [draftProfile, setDraftProfile] = useState<ProfilePreview | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -652,7 +654,7 @@ export default function ChatPage() {
                 )}
 
                 {/* Profile preview confirmation buttons */}
-                {m.type === "profile_preview" && m.preview && m.filename && (
+                {m.type === "profile_preview" && m.preview && m.filename && editingProfileId !== m.id && (
                   <div className="mt-3 flex gap-2">
                     <button
                       onClick={() => handleConfirmProfile(m.preview!, m.filename!, m.id)}
@@ -662,12 +664,77 @@ export default function ChatPage() {
                       Use this profile
                     </button>
                     <button
-                      onClick={() => sendMessage("I want to edit my profile before saving")}
+                      onClick={() => {
+                        setEditingProfileId(m.id);
+                        setDraftProfile(m.preview!);
+                      }}
                       disabled={thinking}
                       className="text-[12px] px-4 py-2 rounded-lg border border-white/10 text-[#8080a0] hover:border-[#5b4fff]/40 hover:text-white transition-colors disabled:opacity-50"
                     >
                       Edit before saving
                     </button>
+                  </div>
+                )}
+                {m.type === "profile_preview" && editingProfileId === m.id && draftProfile && (
+                  <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
+                    <p className="text-[11px] font-semibold text-[#a78bfa]">Edit profile</p>
+
+                    {(
+                      [
+                        ["name", "Name"],
+                        ["current_role", "Current role"],
+                        ["email", "Email"],
+                        ["phone", "Phone"],
+                      ] as [keyof ProfilePreview, string][]
+                    ).map(([field, label]) => (
+                      <label key={field} className="block space-y-0.5">
+                        <span className="text-[10px] text-[#5a5a7a]">{label}</span>
+                        <input
+                          value={(draftProfile[field] as string) ?? ""}
+                          onChange={(e) =>
+                            setDraftProfile((prev) => (prev ? { ...prev, [field]: e.target.value } : prev))
+                          }
+                          className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-1.5 text-[12px] text-white placeholder:text-[#5a5a7a] focus:outline-none focus:border-[#5b4fff]/60"
+                        />
+                      </label>
+                    ))}
+
+                    <label className="block space-y-0.5">
+                      <span className="text-[10px] text-[#5a5a7a]">Skills (comma-separated)</span>
+                      <input
+                        value={(draftProfile.skills_detected ?? draftProfile.skills ?? []).join(", ")}
+                        onChange={(e) => {
+                          const skills = e.target.value.split(",").map((skill) => skill.trim()).filter(Boolean);
+                          setDraftProfile((prev) =>
+                            prev ? { ...prev, skills_detected: skills, skills } : prev
+                          );
+                        }}
+                        className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-1.5 text-[12px] text-white placeholder:text-[#5a5a7a] focus:outline-none focus:border-[#5b4fff]/60"
+                      />
+                    </label>
+
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={() => {
+                          handleConfirmProfile(draftProfile, m.filename!, m.id);
+                          setEditingProfileId(null);
+                          setDraftProfile(null);
+                        }}
+                        disabled={thinking}
+                        className="text-[12px] px-4 py-2 rounded-lg bg-[#5dcaa5] text-white font-medium hover:bg-[#4db894] transition-colors disabled:opacity-50"
+                      >
+                        Save profile
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingProfileId(null);
+                          setDraftProfile(null);
+                        }}
+                        className="text-[12px] px-4 py-2 rounded-lg border border-white/10 text-[#8080a0] hover:border-[#5b4fff]/40 hover:text-white transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 )}
                 {m.options && m.options.length > 0 && (
