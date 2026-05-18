@@ -980,6 +980,18 @@ class RicoChatAPI:
                     profile=profile,
                 )
 
+        # Generic job request with CV → suggest CV-based roles instead of blind search
+        if (
+            has_cv
+            and not self._is_live_job_search_request(message)
+            and self._looks_like_generic_job_request(message)
+        ):
+            return self._finalize(
+                self._handle_profile_role_suggestions(profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
         # ── Step 1: Unified intent classification ────────────────────────────
         intent_result = classify_intent(message, has_cv_profile=has_cv)
         intent = intent_result.intent
