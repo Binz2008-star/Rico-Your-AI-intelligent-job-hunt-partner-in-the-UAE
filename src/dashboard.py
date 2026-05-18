@@ -461,7 +461,7 @@ def load_feedback_loop_data(orchestrator: FeedbackLoopOrchestrator = None) -> Di
                 try:
                     response_type = ResponseType.from_raw(status)
                     normalized_status = response_type.value
-                except:
+                except Exception:
                     normalized_status = status
 
                 status_counts[normalized_status] = status_counts.get(normalized_status, 0) + 1
@@ -528,7 +528,7 @@ def load_dashboard_data() -> Dict[str, Any]:
         try:
             response_type = ResponseType.from_raw(status)
             normalized_statuses.append(response_type.value)
-        except:
+        except Exception:
             normalized_statuses.append(status)
 
     status_counts = Counter(normalized_statuses)

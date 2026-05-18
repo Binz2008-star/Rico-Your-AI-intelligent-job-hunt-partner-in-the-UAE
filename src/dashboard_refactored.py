@@ -93,7 +93,7 @@ def application_row(app: Dict[str, Any]) -> str:
         try:
             date_obj = datetime.fromisoformat(applied_date.replace("Z", "+00:00"))
             date_str = date_obj.strftime("%Y-%m-%d")
-        except:
+        except (ValueError, AttributeError):
             date_str = "Unknown"
     else:
         date_str = "Unknown"
