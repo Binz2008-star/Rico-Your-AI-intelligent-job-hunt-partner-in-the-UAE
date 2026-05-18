@@ -151,3 +151,34 @@ class TestPublicChatWithEmail:
             call_kwargs = mock_send_message.call_args[1]
             assert call_kwargs["user_id"] == "user@example.com"
             assert call_kwargs["user_id"] != "public:ignored-session"
+
+    def test_public_chat_returns_safe_provider_metadata_only(self, client):
+        """Public chat may expose provider metadata, but must not leak internal diagnostics."""
+        with patch("src.services.chat_service.send_message") as mock_send_message:
+            mock_send_message.return_value = {
+                "type": "deepseek_response",
+                "message": "Hello!",
+                "matches": [],
+                "response_source": "deepseek",
+                "provider": "deepseek",
+                "provider_state": "available",
+                "internal_debug": {"secret": "should-not-leak"},
+                "raw_prompt": "should-not-leak",
+            }
+
+            response = client.post(
+                "/api/v1/rico/chat/public",
+                json={
+                    "message": "Hello",
+                    "session_id": "public-session-123",
+                }
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["message"] == "Hello!"
+            assert data["response_source"] == "deepseek"
+            assert data["provider"] == "deepseek"
+            assert data["provider_state"] == "available"
+            assert "internal_debug" not in data
+            assert "raw_prompt" not in data

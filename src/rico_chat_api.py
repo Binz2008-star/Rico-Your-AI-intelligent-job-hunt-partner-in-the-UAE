@@ -605,6 +605,11 @@ class RicoChatAPI:
         return {
             **response,
             "response_source": response.get("response_source", source),
+            "openai_available": self._bool_attr(agent, "openai_available", fallback="available"),
+            "deepseek_available": self._bool_attr(agent, "deepseek_available"),
+            "hf_available": self._bool_attr(agent, "hf_available"),
+            "provider_available": self._bool_attr(agent, "provider_available", fallback="available"),
+            "openai_model": str(getattr(agent, "model", "") or ""),
             "profile_context_present": profile is not None,
             "jotform_form_id": jotform_form_id,
         }

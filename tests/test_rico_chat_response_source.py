@@ -184,8 +184,8 @@ def test_missing_key_reports_fallback_source(chat_api, monkeypatch):
 # ── 4. Greetings ("hi") fall through to OpenAI, not to a hidden keyword ───────
 
 
-def test_greeting_falls_through_to_openai_path(chat_api, monkeypatch):
-    """A bare 'hi' must not match any keyword — it must reach RicoOpenAIAgent.respond()."""
+def test_greeting_reports_keyword_clarification_without_ai_call(chat_api, monkeypatch):
+    """A bare 'hi' is handled deterministically as smalltalk, not by the premium provider."""
     profile = {"user_id": "dave@rico.ai"}
     _stub_active_user(monkeypatch, profile)
 
@@ -199,8 +199,9 @@ def test_greeting_falls_through_to_openai_path(chat_api, monkeypatch):
 
     resp = chat_api._handle_active_user("dave@rico.ai", "hi")
 
-    chat_api.openai_agent.respond.assert_called_once()
-    _assert_metadata(resp, source="openai", openai_available=True, profile_present=True)
+    chat_api.openai_agent.respond.assert_not_called()
+    _assert_metadata(resp, source="keyword", openai_available=True, profile_present=True)
+    assert resp["type"] == "clarification"
 
 
 # ── 5. OpenAI 429 → response_source = "rate_limited" ─────────────────────────
@@ -223,7 +224,7 @@ def test_openai_rate_limit_reports_rate_limited_source(chat_api, monkeypatch):
         "response_source": "rate_limited",
     }
 
-    resp = chat_api._handle_active_user("erin@rico.ai", "hi")
+    resp = chat_api._handle_active_user("erin@rico.ai", "what should I do next?")
 
     chat_api.openai_agent.respond.assert_called_once()
     _assert_metadata(resp, source="rate_limited", openai_available=True, profile_present=True, hf_available=False)
