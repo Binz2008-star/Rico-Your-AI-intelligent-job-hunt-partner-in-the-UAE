@@ -5,7 +5,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { StatusCard } from "@/components/StatusCard";
-import { fetchProfile, type ProfileResponse } from "@/lib/api";
+import { fetchProfile, updateProfile, type ProfileResponse } from "@/lib/api";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -51,7 +51,111 @@ function ChatEditCTA({ prompt }: { prompt: string }) {
     );
 }
 
-function ProfileDetail({ profile }: { profile: ProfileResponse }) {
+function EditableNameField({
+    value,
+    onSave,
+}: {
+    value: string | null | undefined;
+    onSave: (nextName: string) => Promise<void>;
+}) {
+    const [editing, setEditing] = useState(false);
+    const [draft, setDraft] = useState(value ?? "");
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const displayValue = value?.trim() ? value : "—";
+
+    const handleCancel = useCallback(() => {
+        setDraft(value ?? "");
+        setEditing(false);
+        setError(null);
+    }, [value]);
+
+    const handleSave = useCallback(
+        async (event: React.FormEvent<HTMLFormElement>) => {
+            event.preventDefault();
+            const trimmed = draft.trim();
+            if (!trimmed) {
+                setError("Name cannot be empty.");
+                return;
+            }
+
+            setSaving(true);
+            setError(null);
+            try {
+                await onSave(trimmed);
+                setEditing(false);
+            } catch (err: unknown) {
+                setError(err instanceof Error ? err.message : "Could not save name.");
+            } finally {
+                setSaving(false);
+            }
+        },
+        [draft, onSave]
+    );
+
+    if (!editing) {
+        return (
+            <>
+                <span className="text-[#eeeef5]">{displayValue}</span>
+                <button
+                    type="button"
+                    onClick={() => {
+                        setDraft(value ?? "");
+                        setError(null);
+                        setEditing(true);
+                    }}
+                    className="ml-2 text-[11px] text-rico-purple underline underline-offset-2 transition-colors hover:text-[#c4b5fd]"
+                >
+                    Edit
+                </button>
+            </>
+        );
+    }
+
+    return (
+        <form className="mt-2 flex max-w-sm flex-col gap-2" onSubmit={handleSave}>
+            <label htmlFor="profile-name" className="sr-only">
+                Name
+            </label>
+            <input
+                id="profile-name"
+                type="text"
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-[#eeeef5] outline-none transition focus:border-rico-accent"
+                placeholder="Enter your name"
+                disabled={saving}
+            />
+            {error && <p className="text-xs text-rico-red" role="alert">{error}</p>}
+            <div className="flex items-center gap-2">
+                <button
+                    type="submit"
+                    disabled={saving}
+                    className="rounded-lg bg-rico-accent px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-rico-accent-hover disabled:opacity-60"
+                >
+                    {saving ? "Saving..." : "Save"}
+                </button>
+                <button
+                    type="button"
+                    onClick={handleCancel}
+                    disabled={saving}
+                    className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-rico-text-muted transition-colors hover:border-white/20 hover:text-[#eeeef5] disabled:opacity-60"
+                >
+                    Cancel
+                </button>
+            </div>
+        </form>
+    );
+}
+
+function ProfileDetail({
+    profile,
+    onSaveName,
+}: {
+    profile: ProfileResponse;
+    onSaveName: (nextName: string) => Promise<void>;
+}) {
     const hasJobPrefs =
         (profile.target_roles?.length ?? 0) > 0 ||
         (profile.preferred_cities?.length ?? 0) > 0 ||
@@ -66,8 +170,7 @@ function ProfileDetail({ profile }: { profile: ProfileResponse }) {
             <StatusCard title="Identity" badge="live">
                 <dl className="grid grid-cols-1 gap-y-3 text-sm sm:grid-cols-2 sm:gap-x-6">
                     <Row label="Name">
-                        <span className="text-[#eeeef5]">{profile.name ?? "—"}</span>
-                        <ChatEditCTA prompt="Update my name" />
+                        <EditableNameField value={profile.name} onSave={onSaveName} />
                     </Row>
                     <Row label="Email">
                         <span className="text-[#eeeef5]">{profile.email ?? "—"}</span>
@@ -185,6 +288,18 @@ export default function ProfilePage() {
         void loadProfile();
     }, [loadProfile]);
 
+    const handleSaveName = useCallback(async (nextName: string) => {
+        await updateProfile({ name: nextName });
+        setProfile((current) => (current ? { ...current, name: nextName } : current));
+
+        try {
+            const refreshed = await fetchProfile();
+            setProfile(refreshed);
+        } catch {
+            // Keep the optimistic value if the follow-up read fails.
+        }
+    }, []);
+
     return (
         <DashboardShell title="Profile">
             <div className="max-w-2xl">
@@ -229,7 +344,7 @@ export default function ProfilePage() {
                 )}
 
                 {!loading && !error && profile?.profile_exists && (
-                    <ProfileDetail profile={profile} />
+                    <ProfileDetail profile={profile} onSaveName={handleSaveName} />
                 )}
             </div>
         </DashboardShell>

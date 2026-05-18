@@ -804,6 +804,7 @@ def rico_ai_provider_health_public(request: Request) -> dict[str, Any]:
 # ============================================================================
 
 class ProfileUpdateRequest(BaseModel):
+    name: Optional[str] = None
     target_roles: Optional[list[str]] = None
     preferred_cities: Optional[list[str]] = None
     salary_expectation_aed: Optional[float] = None
@@ -819,6 +820,10 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
     user_id = user["email"]
 
     updates: dict[str, Any] = {}
+    if body.name is not None:
+        name = body.name.strip()
+        if name:
+            updates["name"] = name
     if body.target_roles is not None:
         updates["target_roles"] = [r.strip() for r in body.target_roles if r.strip()]
     if body.preferred_cities is not None:

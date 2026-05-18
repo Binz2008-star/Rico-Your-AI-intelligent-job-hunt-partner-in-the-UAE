@@ -215,6 +215,25 @@ class TestRicoProfileUpdateRouteExists:
             "skills": ["HSE", "NEBOSH"],
         }
 
+    def test_profile_patch_route_accepts_name(self, auth_client):
+        captured = {}
+
+        def spy_upsert(user_id, updates):
+            captured["user_id"] = user_id
+            captured["updates"] = updates
+            return {"ok": True}
+
+        with patch("src.api.routers.rico_chat.upsert_profile", side_effect=spy_upsert):
+            r = auth_client.patch("/api/v1/rico/profile", json={"name": "  Roben Nihad  "})
+
+        assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
+        assert r.json() == {
+            "status": "ok",
+            "updated_fields": ["name"],
+        }
+        assert captured["user_id"] == "alice@rico.ai"
+        assert captured["updates"] == {"name": "Roben Nihad"}
+
 
 class TestRicoCVUploadRouteExists:
     def test_upload_cv_route_returns_200(self, client):
@@ -406,7 +425,6 @@ class TestRicoCVUploadSecurity:
         # Verify the chat service received the correct user_id
         call_kwargs = mock_send.call_args[1]
         assert call_kwargs["user_id"] == public_session_id
-
 
 class TestRicoConfirmCVProfileRoute:
     def test_confirm_cv_profile_flat_body_accepted(self, client):

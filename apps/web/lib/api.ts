@@ -876,6 +876,7 @@ export async function updateApplication(
 // ── Profile Updates ───────────────────────────────────────────────────────────
 
 export interface ProfileUpdatePayload {
+    name?: string;
     target_roles?: string[];
     preferred_cities?: string[];
     salary_expectation_aed?: number;
