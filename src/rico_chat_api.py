@@ -116,12 +116,22 @@ class RicoChatAPI:
         self.openai_agent = RicoOpenAIAgent()
 
     def _append_chat(self, user_id: str, role: str, message: str | dict[str, Any]) -> None:
-        """Append chat message to memory and DB, handling both string and dict messages."""
+        """Append chat message to memory (sync) and DB (async fire-and-forget).
+
+        Memory write is synchronous so subsequent reads see the message immediately.
+        DB write is dispatched to a background thread to avoid blocking the request
+        path on remote PostgreSQL latency (~1s round-trip on Neon).
+        """
         payload = json.dumps(message) if isinstance(message, dict) else message
         self.memory.append_chat_message(user_id, role, payload)
-        # Dual-write to PostgreSQL for production persistence
+        # Async DB persistence — non-blocking
+        import threading
         from src.services.chat_service import db_append_chat
-        db_append_chat(user_id, role, payload)
+        threading.Thread(
+            target=db_append_chat,
+            args=(user_id, role, payload),
+            daemon=True,
+        ).start()
 
     @staticmethod
     def _build_openai_context(profile: Any) -> dict[str, Any]:
