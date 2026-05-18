@@ -1,0 +1,42 @@
+name: Error Notifications
+
+on:
+  workflow_run:
+    workflows: ["Daily Job Bot Full", "Daily Job Bot Legacy", "Deploy to Production", "QA Tests"]
+    types:
+      - completed
+
+jobs:
+  notify-on-failure:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    steps:
+      - name: Send Telegram Alert
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_TO }}
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          format: markdown
+          message: |
+            🚨 **Workflow Failed!**
+            
+            **Workflow:** ${{ github.event.workflow_run.name }}
+            **Repository:** ${{ github.repository }}
+            **Branch:** ${{ github.event.workflow_run.head_branch }}
+            **Run ID:** [View Logs](${{ github.event.workflow_run.html_url }})
+            **Commit:** ${{ github.event.workflow_run.head_sha }}
+
+      - name: Send Discord Alert
+        uses: appleboy/discord-action@master
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          message: |
+            🚨 **Workflow Failed!**
+
+            **Workflow:** ${{ github.event.workflow_run.name }}
+            **Repository:** ${{ github.repository }}
+            **Branch:** ${{ github.event.workflow_run.head_branch }}
+            **Run:** [View Logs](${{ github.event.workflow_run.html_url }})
+            **Commit:** ${{ github.event.workflow_run.head_sha }}
+          username: "Rico AI Bot"
+          color: "0xFF0000"
