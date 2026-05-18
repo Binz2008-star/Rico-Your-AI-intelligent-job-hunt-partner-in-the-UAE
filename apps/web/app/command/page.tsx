@@ -43,12 +43,32 @@ interface Message {
     preview?: ProfilePreview;
     filename?: string;
     extractionQuality?: string;
+    sourceLabel?: string;
 }
 
 type ChatAudience = "checking" | "authenticated" | "public";
 
 let _id = 0;
 function nextId() { return ++_id; }
+
+function getSourceLabel(responseSource: string | undefined): string | null {
+    switch ((responseSource ?? "").toLowerCase()) {
+        case "fallback":
+        case "none":
+            return "Fallback mode";
+        case "huggingface":
+        case "hf":
+            return "HF active";
+        case "deepseek":
+            return "DeepSeek active";
+        case "openai":
+            return "OpenAI active";
+        case "rate_limited":
+            return "Provider rate-limited";
+        default:
+            return null;
+    }
+}
 
 const QUICK_ACTIONS = [
     { label: "Analyze my trajectory", prompt: "Analyze my current career trajectory." },
@@ -359,16 +379,16 @@ export default function CommandPage() {
                 res.data?.text ??
                 "";
             const responseSource = res.response_source ?? "unknown";
+            const sourceLabel = getSourceLabel(responseSource);
             const isRateLimited = responseSource === "rate_limited";
-            const hfMode = responseSource === "huggingface" || responseSource === "hf";
-            const deepseekMode = responseSource === "deepseek";
-            const freeMode =
-                isRateLimited ||
-                responseSource === "fallback" ||
-                responseSource === "none";
 
             if (isRateLimited) {
-                setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: "Rico's AI is rate-limited right now — please try again in a minute.", freeMode: true }]);
+                setMessages((prev) => [...prev, {
+                    id: nextId(),
+                    role: "rico",
+                    text: "Rico's AI is rate-limited right now — please try again in a minute.",
+                    sourceLabel: sourceLabel ?? undefined,
+                }]);
             } else if (!reply && !res.matches && !res.options) {
                 setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: "Rico returned an empty response. Please try again." }]);
             } else {
@@ -382,10 +402,10 @@ export default function CommandPage() {
                         matches: res.matches as JobMatch[] | undefined,
                         options: res.options as RicoOption[] | undefined,
                         next_action: res.next_action,
-                        freeMode: freeMode && !hfMode,
                         roleName: res.role,
                         reasons: res.reasons,
                         next_actions: res.next_actions as NextAction[] | undefined,
+                        sourceLabel: sourceLabel ?? undefined,
                     },
                 ]);
             }
@@ -778,8 +798,8 @@ export default function CommandPage() {
                                     </div>
                                 )}
 
-                                {m.freeMode && (
-                                    <p className="mt-2 text-[11px] text-text-muted">Free mode — HF fallback active</p>
+                                {m.sourceLabel && (
+                                    <p className="mt-2 text-[11px] text-text-muted">{m.sourceLabel}</p>
                                 )}
                             </div>
                             {m.role === "user" && (

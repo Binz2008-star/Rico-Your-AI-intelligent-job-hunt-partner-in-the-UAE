@@ -1328,17 +1328,7 @@ class RicoChatAPI:
 
         ai_response = self._get_openai_agent().respond(message, user_context=user_context)
         raw_ai_message = ai_response.get("message", "")
-        filtered_ai_message = self._remove_blocked_questions(raw_ai_message, blocked_questions)
-        if str(raw_ai_message or "").strip() and not filtered_ai_message:
-            logger.warning(
-                "rico_ai_response_filtered_empty user=%s type=%s provider=%s blocked=%s",
-                user_id,
-                ai_response.get("type", "unknown"),
-                ai_response.get("provider", "unknown"),
-                blocked_questions,
-            )
-            ai_response["error"] = "empty_message_after_filter"
-            ai_response["error_detail"] = "AI response was empty after blocked-question filtering"
+        filtered_ai_message = self._preserve_ai_message(raw_ai_message, blocked_questions)
         ai_response["message"] = filtered_ai_message
 
         if filtered_ai_message:
@@ -1577,46 +1567,80 @@ class RicoChatAPI:
 
         return blocked
 
+    @staticmethod
+    def _contains_blocked_question_pattern(text: str, blocked_questions: list[str]) -> bool:
+        lower_text = text.lower()
+        for blocked in blocked_questions:
+            if blocked == "experience" and any(pattern in lower_text for pattern in [
+                "experience level", "years experience", "years of experience",
+                "how many years", "how much experience", "entry/mid/senior",
+                "experience?", "your experience"
+            ]):
+                return True
+            if blocked == "location" and any(pattern in lower_text for pattern in [
+                "location", "city", "where", "uae city", "preferred city",
+                "which city", "where are you", "where do you want"
+            ]):
+                return True
+            if blocked == "industry" and any(pattern in lower_text for pattern in [
+                "industry", "sector", "field", "which industry", "what industry"
+            ]):
+                return True
+        return False
+
     def _remove_blocked_questions(self, response: str, blocked_questions: list[str]) -> str:
-        """Remove blocked question patterns from AI response."""
+        """Remove lines that only ask for profile facts we already know."""
         if not response or not blocked_questions:
             return response
 
-        lines = response.split("\n")
         filtered_lines = []
-        skip_next = False
-
-        for line in lines:
-            lower_line = line.lower()
-
-            # Skip if line contains blocked question patterns
-            should_skip = False
-            for blocked in blocked_questions:
-                if blocked == "experience" and any(pattern in lower_line for pattern in [
-                    "experience level", "years experience", "years of experience",
-                    "how many years", "how much experience", "entry/mid/senior",
-                    "experience?", "your experience"
-                ]):
-                    should_skip = True
-                    break
-                elif blocked == "location" and any(pattern in lower_line for pattern in [
-                    "location", "city", "where", "uae city", "preferred city",
-                    "which city", "where are you", "where do you want"
-                ]):
-                    should_skip = True
-                    break
-                elif blocked == "industry" and any(pattern in lower_line for pattern in [
-                    "industry", "sector", "field", "which industry", "what industry"
-                ]):
-                    should_skip = True
-                    break
-
-            if should_skip:
+        for line in response.split("\n"):
+            if self._contains_blocked_question_pattern(line, blocked_questions):
                 continue
-
             filtered_lines.append(line)
 
         return "\n".join(filtered_lines).strip()
+
+    def _remove_blocked_question_sentences(self, response: str, blocked_questions: list[str]) -> str:
+        """Prefer sentence-level cleanup before falling back to the raw provider reply."""
+        if not response or not blocked_questions:
+            return response
+
+        fragments = re.split(r"(?<=[.!?])\s+", response.strip())
+        kept_fragments = []
+        for fragment in fragments:
+            trimmed = fragment.strip()
+            if not trimmed:
+                continue
+            if trimmed.endswith("?") and self._contains_blocked_question_pattern(trimmed, blocked_questions):
+                continue
+            kept_fragments.append(trimmed)
+
+        return " ".join(kept_fragments).strip()
+
+    def _preserve_ai_message(self, response: str, blocked_questions: list[str]) -> str:
+        """Never discard a non-empty provider reply just because the broad filter removed it."""
+        raw_message = str(response or "").strip()
+        if not raw_message:
+            return raw_message
+
+        filtered_message = self._remove_blocked_questions(raw_message, blocked_questions)
+        if filtered_message:
+            return filtered_message
+
+        minimally_filtered = self._remove_blocked_question_sentences(raw_message, blocked_questions)
+        if minimally_filtered:
+            logger.warning(
+                "rico_ai_response_line_filter_empty_using_sentence_fallback blocked=%s",
+                blocked_questions,
+            )
+            return minimally_filtered
+
+        logger.warning(
+            "rico_ai_response_filter_empty_using_raw_fallback blocked=%s",
+            blocked_questions,
+        )
+        return raw_message
 
     @staticmethod
     def _build_router_context(user_id: str, profile: Any) -> dict:

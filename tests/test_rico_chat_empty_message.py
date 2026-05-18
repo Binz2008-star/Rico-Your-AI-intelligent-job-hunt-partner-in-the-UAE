@@ -48,7 +48,7 @@ def auth_client():
     return client
 
 
-def test_process_message_converts_filtered_empty_ai_reply_to_error(monkeypatch):
+def test_process_message_preserves_non_empty_ai_reply_when_filter_would_erase_it(monkeypatch):
     from src.rico_chat_api import RicoChatAPI
 
     monkeypatch.setattr("src.rico_chat_api.is_onboarding_complete", lambda _u: True)
@@ -65,16 +65,16 @@ def test_process_message_converts_filtered_empty_ai_reply_to_error(monkeypatch):
         "Analyze my current career trajectory in one paragraph.",
     )
 
-    assert response["success"] is False
-    assert response["type"] == "error"
+    assert response["success"] is True
+    assert response["type"] == "deepseek_response"
     assert response["message"].strip()
-    assert "Reference:" in response["message"]
+    assert "Which city do you want to target" in response["message"]
     assert response["response_source"] == "deepseek"
     assert response["provider"] == "deepseek"
-    assert response["error"] == "empty_message_after_filter"
+    assert response.get("error") is None
 
 
-def test_authenticated_chat_route_never_returns_success_true_with_empty_message(
+def test_authenticated_chat_route_preserves_non_empty_ai_reply_when_filter_would_erase_it(
     monkeypatch, auth_client
 ):
     monkeypatch.setattr("src.rico_chat_api.is_onboarding_complete", lambda _u: True)
@@ -101,10 +101,10 @@ def test_authenticated_chat_route_never_returns_success_true_with_empty_message(
 
     assert response.status_code == 200
     body = response.json()
-    assert body["success"] is False
-    assert body["type"] == "error"
+    assert body["success"] is True
+    assert body["type"] == "deepseek_response"
     assert body["message"].strip()
-    assert "Reference:" in body["message"]
+    assert "Which city do you want to target" in body["message"]
     assert body["response_source"] == "deepseek"
     assert body["provider"] == "deepseek"
-    assert body["error"] == "empty_message_after_filter"
+    assert body.get("error") is None

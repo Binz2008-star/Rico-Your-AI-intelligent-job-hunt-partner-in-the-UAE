@@ -45,6 +45,10 @@ services:
         sync: false
       - key: RICO_OPENAI_MODEL
         value: "gpt-4.1-mini"
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: DEEPSEEK_MODEL
+        value: "deepseek-v4-flash"
       - key: HF_TOKEN
         sync: false
       - key: JOTFORM_FORM_ID
@@ -53,8 +57,6 @@ services:
         sync: false
       - key: JOTFORM_API_KEY
         sync: false
-      - key: RICO_AI_PROVIDER
-        value: "hf"
       - key: HF_API_TOKEN
         sync: false
       - key: GITHUB_WEBHOOK_SECRET

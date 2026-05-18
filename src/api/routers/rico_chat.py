@@ -124,6 +124,9 @@ class PublicChatResponse(BaseModel):
     matches: list[dict[str, Any]] | None = None
     options: list[dict[str, Any]] | None = None
     next_action: str | None = None
+    response_source: str | None = None
+    provider: str | None = None
+    provider_state: str | None = None
 
     class Config:
         json_schema_extra = {
@@ -598,6 +601,9 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> Public
             matches=stripped_result.get("matches"),
             options=stripped_result.get("options"),
             next_action=stripped_result.get("next_action"),
+            response_source=stripped_result.get("response_source"),
+            provider=stripped_result.get("provider"),
+            provider_state=stripped_result.get("provider_state"),
         )
 
         _metrics.record_request((time.time() - start_time) * 1000)
