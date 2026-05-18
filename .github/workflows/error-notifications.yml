@@ -7,11 +7,35 @@ on:
       - completed
 
 jobs:
-  notify-on-failure:
+  notify:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
     steps:
+      - name: 🚨 Create PagerDuty Incident on Failure
+        if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+        uses: Entle/action-pagerduty-alert@1.0.5
+        with:
+          pagerduty-integration-key: ${{ secrets.PAGERDUTY_INTEGRATION_KEY }}
+          summary: "${{ github.event.workflow_run.name }} failed in ${{ github.repository }}"
+          severity: "critical"
+          source: "GitHub Actions"
+          dedup-key: "github-workflow-${{ github.event.workflow_run.name }}-${{ github.repository }}"
+          details: |
+            Workflow: ${{ github.event.workflow_run.name }}
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.event.workflow_run.head_branch }}
+            Commit: ${{ github.event.workflow_run.head_sha }}
+            Run URL: ${{ github.event.workflow_run.html_url }}
+
+      - name: ✅ Resolve PagerDuty Incident on Success
+        if: ${{ github.event.workflow_run.conclusion == 'success' }}
+        uses: Entle/action-pagerduty-alert@1.0.5
+        with:
+          pagerduty-integration-key: ${{ secrets.PAGERDUTY_INTEGRATION_KEY }}
+          resolve: true
+          dedup-key: "github-workflow-${{ github.event.workflow_run.name }}-${{ github.repository }}"
+
       - name: Send Telegram Alert
+        if: ${{ github.event.workflow_run.conclusion == 'failure' }}
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_TO }}
@@ -27,6 +51,7 @@ jobs:
             **Commit:** ${{ github.event.workflow_run.head_sha }}
 
       - name: Send Discord Alert
+        if: ${{ github.event.workflow_run.conclusion == 'failure' }}
         uses: appleboy/discord-action@master
         with:
           webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
@@ -40,17 +65,3 @@ jobs:
             **Commit:** ${{ github.event.workflow_run.head_sha }}
           username: "Rico AI Bot"
           color: "0xFF0000"
-
-      - name: 🚨 Create PagerDuty Incident
-        uses: Entle/action-pagerduty-alert@1.0.5
-        with:
-          pagerduty-integration-key: ${{ secrets.PAGERDUTY_INTEGRATION_KEY }}
-          summary: "${{ github.event.workflow_run.name }} failed in ${{ github.repository }}"
-          severity: "critical"
-          source: "GitHub Actions"
-          details: |
-            Workflow: ${{ github.event.workflow_run.name }}
-            Repository: ${{ github.repository }}
-            Branch: ${{ github.event.workflow_run.head_branch }}
-            Commit: ${{ github.event.workflow_run.head_sha }}
-            Run URL: ${{ github.event.workflow_run.html_url }}
