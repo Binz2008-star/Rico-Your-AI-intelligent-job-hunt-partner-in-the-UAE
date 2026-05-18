@@ -402,50 +402,49 @@ class TestGenericJobSearchFastPath:
         assert not run_called[0]
         assert result["type"] == "profile_role_suggestions"
 
-    def test_specific_role_search_still_calls_pipeline(self, monkeypatch, cv_profile):
-        """'find HSE Manager jobs' → still calls run_for_profile (specific role)."""
+    def test_specific_role_search_returns_job_search_response(self, monkeypatch, cv_profile):
+        """'find HSE Manager jobs' should return a search response, not CV role suggestions."""
         import src.rico_chat_api as chat_module
-        from unittest.mock import MagicMock
 
         api = RicoChatAPI()
+        cv_profile.target_roles = ["HSE Manager"]
         monkeypatch.setattr(chat_module, "get_profile", lambda uid: cv_profile)
-        # _route must return a job_title so fast path is skipped and pipeline runs
-        monkeypatch.setattr(chat_module, "_route", lambda *a, **kw: MagicMock(
-            tool_name=None, entities={"job_title": "HSE Manager"}, tool_args={},
-            confirmation_prompt=None, source="keyword"
-        ))
-
-        run_called = [False]
 
         def fake_run_for_profile(profile):
-            run_called[0] = True
-            return {"matches": []}
+            return {
+                "matches": [
+                    {
+                        "title": "HSE Manager",
+                        "company": "Test Company",
+                        "location": "Dubai",
+                        "score": 82,
+                    }
+                ]
+            }
 
         monkeypatch.setattr(api.system, "run_for_profile", fake_run_for_profile)
 
         result = api._handle_active_user("test-user", "find HSE Manager jobs")
 
-        assert run_called[0]
+        assert result["type"] == "job_matches"
+        assert result["intent"] == "search_jobs"
+        assert len(result["matches"]) == 1
+        assert result["matches"][0]["title"] == "HSE Manager"
 
     def test_no_cv_profile_falls_through_to_pipeline(self, monkeypatch):
-        """Generic job search WITHOUT CV → still calls run_for_profile."""
+        """Generic job search WITHOUT CV should not return CV role suggestions."""
         import src.rico_chat_api as chat_module
 
         api = RicoChatAPI()
         empty_profile = MockProfile()
         monkeypatch.setattr(chat_module, "get_profile", lambda uid: empty_profile)
 
-        run_called = [False]
-
-        def fake_run_for_profile(profile):
-            run_called[0] = True
-            return {"matches": []}
-
-        monkeypatch.setattr(api.system, "run_for_profile", fake_run_for_profile)
-
         result = api._handle_active_user("test-user", "am looking for job")
 
-        assert run_called[0]
+        assert result["type"] == "profile_incomplete"
+        assert result["intent"] == "search_jobs"
+        assert "target role" in result["message"].lower()
+        assert result["type"] != "profile_role_suggestions"
 
 
 if __name__ == "__main__":
