@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-05-15T02:34:00Z",
-  "week_label": "Week of May 11, 2026",
+  "generated_at": "2026-05-18T04:00:56.206263",
+  "week_label": "Week of May 18, 2026",
   "pipeline": {
     "total_leads": 8,
     "new_this_week": 8,
-    "high_fit_leads": 7,
+    "high_fit": 7,
     "avg_lead_score": 86.1,
     "contacted": 0,
     "replies": 0,
@@ -12,17 +12,16 @@
     "closed_won": 0
   },
   "top_industries": [
+    "Accounting Firms",
     "Logistics & Freight",
-    "Healthcare Clinics",
-    "Financial Services",
+    "Marketing Agencies",
     "Real Estate",
-    "HR & Recruitment"
+    "Construction"
   ],
   "top_locations": [
     "Dubai",
     "London",
-    "Riyadh",
-    "Abu Dhabi",
-    "Singapore"
-  ]
+    "Riyadh"
+  ],
+  "summary": "Week of May 18: 8 new leads generated. 7 high-fit opportunities. Avg score: 86.1/100. Total pipeline: 8 leads. Key action: prioritize Accounting Firms (1) outreach."
 }
