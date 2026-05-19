@@ -41,6 +41,9 @@ class CVParser:
     CERT_HINTS = ["nebosh", "iosh", "iso", "pmp", "six sigma", "osha", "first aid"]
     LANGUAGE_HINTS = ["english", "arabic", "hindi", "urdu", "french", "tagalog"]
 
+    # Strong signals that only appear in company-profile documents, not personal CVs.
+    # Deliberately excludes "llc", "our services", "our mission", "our vision", "about us"
+    # because those appear routinely in employer names and job descriptions inside CVs.
     COMPANY_SIGNALS = [
         "company profile",
         "corporate profile",
@@ -49,12 +52,6 @@ class CVParser:
         "why clients",
         "client base",
         "service portfolio",
-        "l.l.c",
-        "llc",
-        "our services",
-        "about us",
-        "our mission",
-        "our vision",
         "company overview",
     ]
 
@@ -66,22 +63,49 @@ class CVParser:
         "education",
         "professional experience",
         "career summary",
-        "objective",
+        "career objective",
         "skills",
         "contact information",
+    ]
+
+    # First-person personal markers: if any of these appear, the document is
+    # almost certainly a personal CV, not a company profile.
+    PERSONAL_MARKERS = [
+        "i am",
+        "my name",
+        "my experience",
+        "i have",
+        "my skills",
+        "my background",
+        "i worked",
+        "i was",
+        "i led",
+        "i managed",
     ]
 
     def detect_document_type(self, text: str) -> str:
         """Detect if document is a CV, company profile, or unknown type."""
         lower = text.lower()
 
+        # Personal markers are a strong veto against company_profile.
+        has_personal_marker = any(m in lower for m in self.PERSONAL_MARKERS)
+
         company_score = sum(1 for s in self.COMPANY_SIGNALS if s in lower)
         cv_score = sum(1 for s in self.CV_SIGNALS if s in lower)
 
-        if company_score >= 2 and company_score > cv_score:
+        # Require ≥3 strong company signals AND no personal first-person language
+        # to avoid false-positives on CVs that quote employer mission statements.
+        if not has_personal_marker and company_score >= 3:
             return "company_profile"
 
-        if cv_score >= 2:
+        # A single unambiguous company-profile phrase ("company profile" /
+        # "corporate profile") with no personal markers is sufficient.
+        strong_company = {"company profile", "corporate profile"}
+        has_strong_company = any(s in lower for s in strong_company)
+        if not has_personal_marker and has_strong_company and company_score >= 2:
+            return "company_profile"
+
+        if cv_score >= 2 or has_personal_marker:
             return "cv"
 
         return "unknown"

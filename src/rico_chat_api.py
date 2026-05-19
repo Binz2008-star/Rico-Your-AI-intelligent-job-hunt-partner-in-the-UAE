@@ -653,7 +653,8 @@ class RicoChatAPI:
             "provider_available": self._bool_attr(agent, "provider_available", fallback="available"),
             "openai_model": str(getattr(agent, "model", "") or ""),
             "profile_context_present": profile is not None,
-            "jotform_form_id": jotform_form_id,
+            # Always a string — null would fail frontend Zod schema validation.
+            "jotform_form_id": jotform_form_id or "",
         }
 
     def _looks_like_cv_upload(self, message: str) -> bool:
