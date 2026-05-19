@@ -184,34 +184,37 @@ class TestE_ShowCurrentOpenings:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# F. CV profile + "am looking for job" → profile_role_suggestions, no run_for_profile
+# F. CV profile (no target_roles) + "am looking for job" → profile_role_suggestions
 # ══════════════════════════════════════════════════════════════════════════════
+# Note: with target_roles set, the user has a clear target and the search runs
+# via job_search_explicit. The suggestion path only fires when target_roles is
+# empty — i.e. the user has a CV but no committed role yet.
 
 class TestF_AmLookingForJob:
     def test_returns_profile_role_suggestions(self):
         api = _make_api()
-        result = _run_with_profile(api, "am looking for job", _cv_profile())
+        result = _run_with_profile(api, "am looking for job", _cv_profile(target_roles=[]))
         assert result["type"] == "profile_role_suggestions"
 
     def test_run_for_profile_not_called(self):
         api = _make_api()
-        _run_with_profile(api, "am looking for job", _cv_profile())
+        _run_with_profile(api, "am looking for job", _cv_profile(target_roles=[]))
         api.system.run_for_profile.assert_not_called()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# G. CV profile + "show me jobs" → profile_role_suggestions, no run_for_profile
+# G. CV profile (no target_roles) + "show me jobs" → profile_role_suggestions
 # ══════════════════════════════════════════════════════════════════════════════
 
 class TestG_ShowMeJobs:
     def test_returns_profile_role_suggestions(self):
         api = _make_api()
-        result = _run_with_profile(api, "show me jobs", _cv_profile())
+        result = _run_with_profile(api, "show me jobs", _cv_profile(target_roles=[]))
         assert result["type"] == "profile_role_suggestions"
 
     def test_run_for_profile_not_called(self):
         api = _make_api()
-        _run_with_profile(api, "show me jobs", _cv_profile())
+        _run_with_profile(api, "show me jobs", _cv_profile(target_roles=[]))
         api.system.run_for_profile.assert_not_called()
 
     def test_generic_detection(self):
@@ -220,18 +223,18 @@ class TestG_ShowMeJobs:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# H. CV profile + "find me jobs" → profile_role_suggestions, no run_for_profile
+# H. CV profile (no target_roles) + "find me jobs" → profile_role_suggestions
 # ══════════════════════════════════════════════════════════════════════════════
 
 class TestH_FindMeJobs:
     def test_returns_profile_role_suggestions(self):
         api = _make_api()
-        result = _run_with_profile(api, "find me jobs", _cv_profile())
+        result = _run_with_profile(api, "find me jobs", _cv_profile(target_roles=[]))
         assert result["type"] == "profile_role_suggestions"
 
     def test_run_for_profile_not_called(self):
         api = _make_api()
-        _run_with_profile(api, "find me jobs", _cv_profile())
+        _run_with_profile(api, "find me jobs", _cv_profile(target_roles=[]))
         api.system.run_for_profile.assert_not_called()
 
     def test_generic_detection(self):

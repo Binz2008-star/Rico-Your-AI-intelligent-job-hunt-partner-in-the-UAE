@@ -144,14 +144,16 @@ class TestD_UAEJobsRouting:
 # ══════════════════════════════════════════════════════════════════════════════
 # Spec test H — routing level: "find me jobs" → profile_role_suggestions
 # ══════════════════════════════════════════════════════════════════════════════
+# Suggestion path fires only when CV exists but target_roles is empty. With
+# target_roles set the message reaches job_search_explicit and run_for_profile.
 
 class TestH_FindMeJobsRouting:
     def test_returns_profile_role_suggestions(self, monkeypatch):
-        """'find me jobs' with CV profile → profile_role_suggestions, no pipeline."""
+        """'find me jobs' with CV but no target_roles → profile_role_suggestions, no pipeline."""
         import src.rico_chat_api as mod
         from src.rico_chat_api import RicoChatAPI
 
-        profile = _HSEProfile()
+        profile = _HSEProfile(target_roles=[])
         result  = _run_active(monkeypatch, "find me jobs", profile)
 
         assert result["type"] == "profile_role_suggestions"
@@ -160,7 +162,7 @@ class TestH_FindMeJobsRouting:
         import src.rico_chat_api as mod
         from src.rico_chat_api import RicoChatAPI
 
-        profile = _HSEProfile()
+        profile = _HSEProfile(target_roles=[])
 
         # Call _run_active but capture the api instance to check mock
         monkeypatch.setattr(mod, "get_profile",    lambda uid: profile)
