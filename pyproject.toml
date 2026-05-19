@@ -1,2 +1,39 @@
+[project]
+name = "job-automation-system-1"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "requests",
+    "python-dotenv",
+    "sentry-sdk[fastapi]>=2.0.0,<3.0.0",
+    "schedule",
+    "psycopg2-binary",
+    "python-jobspy",
+    "google-api-python-client",
+    "google-auth",
+    "google-auth-oauthlib",
+    "google-auth-httplib2",
+    "playwright",
+    "fastapi",
+    "uvicorn[standard]",
+    "slowapi>=0.1.9",
+    "limits>=3.6.0",
+    "python-multipart",
+    "pydantic",
+    "PyMuPDF",
+    "python-docx",
+    "filelock",
+    "redis",
+    "rq",
+    "python-jose[cryptography]",
+    "passlib[bcrypt]",
+    "alembic",
+    "httpx",
+    "openai>=1.0.0",
+    "diskcache>=5.6.3",
+    "rapidfuzz>=2.0.0",
+    "spacy>=3.7.0",
+]
+
 [tool.vercel]
 entrypoint = "app:app"
