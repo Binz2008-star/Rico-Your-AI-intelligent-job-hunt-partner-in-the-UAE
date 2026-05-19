@@ -325,8 +325,49 @@ const MOCK_JOBS: Job[] = [
     },
 ];
 
+function normalizeStringArray(value: unknown, fallback: string[]): string[] {
+    const items = Array.isArray(value)
+        ? value
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => item.trim())
+            .filter(Boolean)
+        : [];
+
+    return items.length > 0 ? items : fallback;
+}
+
+function normalizeMatchExplanation(raw: unknown): Job["match_explanation"] {
+    if (!raw || typeof raw !== "object") return undefined;
+
+    const item = raw as Record<string, unknown>;
+    const verdict = item.verdict;
+    const confidence = item.confidence;
+
+    return {
+        verdict:
+            verdict === "strong_fit" || verdict === "worth_checking" || verdict === "weak_fit"
+                ? verdict
+                : "worth_checking",
+        summary: String(item.summary ?? ""),
+        why_this_fits: normalizeStringArray(
+            item.why_this_fits,
+            ["Review the role title and score for the main available fit signals."]
+        ),
+        worth_checking: normalizeStringArray(
+            item.worth_checking,
+            ["Confirm the full role details before applying."]
+        ),
+        recommended_next_step: String(item.recommended_next_step ?? "Review the role details before deciding."),
+        confidence:
+            confidence === "high" || confidence === "medium" || confidence === "low"
+                ? confidence
+                : "medium",
+    };
+}
+
 function normalizeJob(raw: unknown): Job {
     const item = raw as Record<string, unknown>;
+    const matchExplanation = normalizeMatchExplanation(item.match_explanation);
     return {
         job_id: String(item.job_id ?? item.id ?? item._id ?? ""),
         title: String(item.title ?? "Untitled role"),
@@ -338,6 +379,7 @@ function normalizeJob(raw: unknown): Job {
         tags: Array.isArray(item.tags) ? (item.tags as string[]) : [],
         posted_at: String(item.posted_at ?? item.date_found ?? ""),
         apply_url: String(item.apply_url ?? item.link ?? ""),
+        match_explanation: matchExplanation,
     };
 }
 
@@ -345,7 +387,8 @@ export async function getJobs(
     page = 1,
     limit = 20,
     minScore = 0,
-    source?: string
+    source?: string,
+    signal?: AbortSignal
 ): Promise<JobListResponse> {
     if (USE_MOCK) {
         return {
@@ -359,7 +402,7 @@ export async function getJobs(
 
     const data = await requestJson<JobListResponse>(
         "/api/v1/jobs",
-        { method: "GET" },
+        { method: "GET", signal },
         { page, limit, min_score: minScore, source }
     );
     const rawJobs = Array.isArray(data?.jobs) ? (data.jobs as unknown[]) : [];
@@ -517,7 +560,8 @@ function normalizeApplication(raw: unknown): Application {
 export async function getApplications(
     status?: string,
     page = 1,
-    limit = 50
+    limit = 50,
+    signal?: AbortSignal
 ): Promise<ApplicationsResponse> {
     if (USE_MOCK) {
         return {
@@ -531,7 +575,7 @@ export async function getApplications(
 
     const data = await requestJson<ApplicationsResponse>(
         "/api/v1/applications",
-        { method: "GET" },
+        { method: "GET", signal },
         { status, page, limit }
     );
     const rawApplications = Array.isArray(data?.applications)
@@ -566,7 +610,7 @@ export async function updateApplicationStatus(
     });
 }
 
-export async function getApplicationStats(): Promise<Record<string, number>> {
+export async function getApplicationStats(signal?: AbortSignal): Promise<Record<string, number>> {
     if (USE_MOCK) {
         return {
             applied: 2,
@@ -577,9 +621,13 @@ export async function getApplicationStats(): Promise<Record<string, number>> {
         };
     }
 
-    const data = await requestJson<Record<string, number>>("/api/v1/applications/stats", {
-        method: "GET",
-    });
+    const data = await requestJson<Record<string, number>>(
+        "/api/v1/applications/stats",
+        {
+            method: "GET",
+            signal,
+        }
+    );
     const normalized: Record<string, number> = {};
 
     for (const [key, value] of Object.entries(data)) {
@@ -602,9 +650,9 @@ const MOCK_SETTINGS: SettingsResponse = {
     score_threshold_watch: 60,
 };
 
-export async function getSettings(): Promise<SettingsResponse> {
+export async function getSettings(signal?: AbortSignal): Promise<SettingsResponse> {
     if (USE_MOCK) return MOCK_SETTINGS;
-    return requestJson<SettingsResponse>("/api/v1/settings", { method: "GET" });
+    return requestJson<SettingsResponse>("/api/v1/settings", { method: "GET", signal });
 }
 
 export async function updateSettings(

@@ -39,6 +39,15 @@ export interface HealthResponse {
 }
 
 // ── Jobs ──────────────────────────────────────────────────────────────────────
+export interface MatchExplanation {
+  verdict: "strong_fit" | "worth_checking" | "weak_fit";
+  summary: string;
+  why_this_fits: string[];
+  worth_checking: string[];
+  recommended_next_step: string;
+  confidence: "high" | "medium" | "low";
+}
+
 export interface Job {
   job_id: string;
   title: string;
@@ -52,6 +61,7 @@ export interface Job {
   apply_url: string;
   tags: string[];
   posted_at?: string;
+  match_explanation?: MatchExplanation;
 }
 
 // GET /api/v1/jobs

@@ -17,6 +17,8 @@ from src.applications import (
 )
 from src.db import is_db_available
 from src.repositories import jobs_repo
+from src.repositories.profile_repo import get_profile as get_user_profile
+from src.services.job_match_explanation import build_match_explanation
 
 logger = logging.getLogger(__name__)
 _PERSONALIZED_DB_FETCH_FLOOR = 1000
@@ -49,7 +51,7 @@ def list_jobs(
 
         result = jobs_repo.list_from_db(offset, limit, min_score, source)
         if result is not None:
-            return result
+            return _attach_match_explanations(result, user_id=user_id)
 
     return _list_from_json(offset, limit, min_score, user_id)
 
@@ -71,13 +73,13 @@ def _list_from_json(offset: int, limit: int, min_score: int, user_id: Optional[s
     filtered.sort(key=lambda j: j.get("score", 0), reverse=True)
     total = len(filtered)
     page_jobs = filtered[offset : offset + limit]
-    return {
+    return _attach_match_explanations({
         "jobs": page_jobs,
         "total": total,
         "page": offset // limit + 1,
         "limit": limit,
         "pages": max(1, -(-total // limit)),
-    }
+    }, user_id=user_id)
 
 
 def _score_and_paginate_jobs(
@@ -108,13 +110,44 @@ def _score_and_paginate_jobs(
 
     total = len(filtered)
     page_jobs = filtered[offset : offset + limit]
-    return {
+    return _attach_match_explanations({
         "jobs": page_jobs,
         "total": total,
         "page": offset // limit + 1,
         "limit": limit,
         "pages": max(1, -(-total // limit)),
-    }
+    }, user_id=user_id)
+
+
+def _load_profile_for_jobs(user_id: Optional[str]) -> Any | None:
+    if not user_id:
+        return None
+
+    try:
+        return get_user_profile(user_id)
+    except Exception:
+        logger.exception("job match explanation profile lookup failed user_id=%s", user_id)
+        return None
+
+
+def _attach_match_explanations(
+    result: Dict[str, Any],
+    user_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    jobs = result.get("jobs", [])
+    if not isinstance(jobs, list):
+        return result
+
+    profile = _load_profile_for_jobs(user_id)
+    enriched_jobs = []
+    for job in jobs:
+        if not isinstance(job, dict):
+            continue
+        job_data = dict(job)
+        job_data["match_explanation"] = build_match_explanation(job_data, profile)
+        enriched_jobs.append(job_data)
+
+    return {**result, "jobs": enriched_jobs}
 
 
 def _job_matches_id(job: Dict[str, Any], job_id: str) -> bool:

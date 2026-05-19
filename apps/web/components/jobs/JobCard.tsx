@@ -21,6 +21,18 @@ const LOGO_COLORS = [
   "from-rose-500/20 to-rose-400/10 text-rose-300",
 ];
 
+const VERDICT_LABELS = {
+  strong_fit: "Strong fit",
+  worth_checking: "Worth checking",
+  weak_fit: "Weak fit",
+} as const;
+
+const VERDICT_STYLES = {
+  strong_fit: "bg-emerald-500/10 text-emerald-300 border-emerald-500/20",
+  worth_checking: "bg-amber-500/10 text-amber-300 border-amber-500/20",
+  weak_fit: "bg-rose-500/10 text-rose-300 border-rose-500/20",
+} as const;
+
 export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps) {
   const [localAction, setLocalAction] = useState<string | null>(null);
   const [isDone, setIsDone] = useState(false);
@@ -89,6 +101,63 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
         <p className="mt-3 text-[12px] text-[#5a5a7a] leading-relaxed bg-white/5 rounded-lg px-3 py-2 border border-white/5">
           {job.reason}
         </p>
+      )}
+
+      {job.match_explanation && (
+        <div className="mt-3 rounded-xl border border-white/5 bg-white/5 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <span
+              className={cn(
+                "inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em]",
+                VERDICT_STYLES[job.match_explanation.verdict]
+              )}
+            >
+              {VERDICT_LABELS[job.match_explanation.verdict]}
+            </span>
+            <span className="text-[10px] text-[#5a5a7a] uppercase tracking-widest">
+              {job.match_explanation.confidence} confidence
+            </span>
+          </div>
+
+          {job.match_explanation.summary && (
+            <p className="text-[12px] text-[#d6d6e5] leading-relaxed mb-3">
+              {job.match_explanation.summary}
+            </p>
+          )}
+
+          <div className="space-y-3">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8080a0]">
+                Why this fits
+              </p>
+              <ul className="mt-1 space-y-1 pl-4 text-[12px] leading-relaxed text-[#d6d6e5] list-disc">
+                {job.match_explanation.why_this_fits.map((item, idx) => (
+                  <li key={`why-${idx}`}>{item}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8080a0]">
+                Worth checking
+              </p>
+              <ul className="mt-1 space-y-1 pl-4 text-[12px] leading-relaxed text-[#d6d6e5] list-disc">
+                {job.match_explanation.worth_checking.map((item, idx) => (
+                  <li key={`check-${idx}`}>{item}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8080a0]">
+                Recommended next step
+              </p>
+              <p className="mt-1 text-[12px] text-[#d6d6e5] leading-relaxed">
+                {job.match_explanation.recommended_next_step}
+              </p>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* tags + salary */}

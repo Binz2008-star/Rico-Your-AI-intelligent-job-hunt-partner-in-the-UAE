@@ -17,55 +17,166 @@ interface Stats {
   interview: number;
   offer: number;
   rejected: number;
-  minScore: number;
   maxDaily: number;
+  jobsAvailable: boolean;
+  applicationsAvailable: boolean;
+  applicationStatsAvailable: boolean;
+  settingsAvailable: boolean;
+  jobsError: string | null;
+  applicationsError: string | null;
+  settingsError: string | null;
+}
+
+const DASHBOARD_REQUEST_TIMEOUT_MS = 5000;
+
+const EMPTY_STATS: Stats = {
+  jobsTotal: 0,
+  appsTotal: 0,
+  applied: 0,
+  interview: 0,
+  offer: 0,
+  rejected: 0,
+  maxDaily: 0,
+  jobsAvailable: false,
+  applicationsAvailable: false,
+  applicationStatsAvailable: false,
+  settingsAvailable: false,
+  jobsError: null,
+  applicationsError: null,
+  settingsError: null,
+};
+
+type LoadResult<T> =
+  | { status: "fulfilled"; value: T }
+  | { status: "rejected"; reason: unknown };
+
+function asCount(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+async function loadWithTimeout<T>(
+  loader: (signal: AbortSignal) => Promise<T>,
+  timeoutMs = DASHBOARD_REQUEST_TIMEOUT_MS
+): Promise<LoadResult<T>> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const value = await loader(controller.signal);
+    return { status: "fulfilled", value };
+  } catch (reason) {
+    return { status: "rejected", reason };
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+function getLoadError(label: string, reason: unknown): string {
+  if (reason instanceof ApiError) {
+    return `${label} request failed (${reason.statusCode}).`;
+  }
+
+  if (reason instanceof Error && reason.name === "AbortError") {
+    return `${label} request timed out after 5s.`;
+  }
+
+  if (reason instanceof Error && reason.message) {
+    return `${label} unavailable: ${reason.message}`;
+  }
+
+  return `${label} unavailable right now.`;
+}
+
+function getJobsCopy(stats: Stats): string {
+  if (stats.jobsError) return stats.jobsError;
+  if (!stats.jobsAvailable) return "Match count unavailable right now.";
+  if (stats.jobsTotal === 0) return "No matches yet — Rico will scan soon.";
+  return "Active job recommendations";
+}
+
+function getApplicationsCopy(stats: Stats): string {
+  if (stats.applicationsError) {
+    return stats.applicationsError;
+  }
+  if (!stats.applicationsAvailable && !stats.applicationStatsAvailable) {
+    return "Application data unavailable right now.";
+  }
+  if (stats.appsTotal === 0) return "No tracked applications yet.";
+
+  const parts: string[] = [];
+
+  if (stats.applied > 0) parts.push(`${stats.applied} applied`);
+  if (stats.interview > 0) parts.push(`${stats.interview} interview`);
+  if (stats.offer > 0) parts.push(`${stats.offer} offer`);
+  if (stats.rejected > 0) parts.push(`${stats.rejected} rejected`);
+
+  return parts.length > 0 ? parts.join(" · ") : "Tracking active applications.";
+}
+
+function getDailyLimitCopy(stats: Stats): string {
+  if (stats.settingsError) return stats.settingsError;
+  if (!stats.settingsAvailable) return "Daily limit unavailable right now.";
+  if (stats.maxDaily > 0) return `Max ${stats.maxDaily} auto-applies per day`;
+  return "Auto-apply limit not set.";
 }
 
 export function DashboardStats() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<"auth" | "other" | null>(null);
+  const [error, setError] = useState<"auth" | null>(null);
 
   const loadData = useCallback(async () => {
     try {
       const [jobsResult, appsResult, statsResult, settingsResult] =
-        await Promise.allSettled([
-          getJobs(1, 1),
-          getApplications(undefined, 1, 1),
-          getApplicationStats(),
-          getSettings(),
+        await Promise.all([
+          loadWithTimeout((signal) => getJobs(1, 1, 0, undefined, signal)),
+          loadWithTimeout((signal) => getApplications(undefined, 1, 1, signal)),
+          loadWithTimeout((signal) => getApplicationStats(signal)),
+          loadWithTimeout((signal) => getSettings(signal)),
         ]);
+
+      const authFailure = [jobsResult, appsResult, statsResult, settingsResult].some(
+        (result) =>
+          result.status === "rejected" &&
+          result.reason instanceof ApiError &&
+          result.reason.statusCode === 401
+      );
+
+      if (authFailure) {
+        setError("auth");
+        return;
+      }
 
       const jobsRes = jobsResult.status === "fulfilled" ? jobsResult.value : null;
       const appsRes = appsResult.status === "fulfilled" ? appsResult.value : null;
       const statsRes = statsResult.status === "fulfilled" ? statsResult.value : null;
       const settingsRes = settingsResult.status === "fulfilled" ? settingsResult.value : null;
-      const firstApiError = [jobsResult, appsResult, statsResult, settingsResult]
-        .find(
-          (result): result is PromiseRejectedResult =>
-            result.status === "rejected" && result.reason instanceof ApiError
-        )
-        ?.reason;
-
-      if (!jobsRes && !appsRes) {
-        setError(firstApiError?.statusCode === 401 ? "auth" : "other");
-        return;
-      }
+      const jobsError = jobsResult.status === "rejected" ? getLoadError("Jobs", jobsResult.reason) : null;
+      const appsError = appsResult.status === "rejected" ? getLoadError("Applications", appsResult.reason) : null;
+      const statsError = statsResult.status === "rejected" ? getLoadError("Application stats", statsResult.reason) : null;
+      const settingsError = settingsResult.status === "rejected" ? getLoadError("Settings", settingsResult.reason) : null;
 
       setError(null);
       setStats({
         jobsTotal: jobsRes?.total ?? 0,
         appsTotal: appsRes?.total ?? 0,
-        applied: statsRes?.applied ?? 0,
-        interview: statsRes?.interview ?? 0,
-        offer: statsRes?.offer ?? 0,
-        rejected: statsRes?.rejected ?? 0,
-        minScore: settingsRes?.min_score ?? 0,
-        maxDaily: settingsRes?.max_daily_applies ?? 0,
+        applied: asCount(statsRes?.applied),
+        interview: asCount(statsRes?.interview),
+        offer: asCount(statsRes?.offer),
+        rejected: asCount(statsRes?.rejected),
+        maxDaily: asCount(settingsRes?.max_daily_applies),
+        jobsAvailable: jobsRes !== null,
+        applicationsAvailable: appsRes !== null,
+        applicationStatsAvailable: statsRes !== null,
+        settingsAvailable: settingsRes !== null,
+        jobsError,
+        applicationsError: appsError ?? statsError,
+        settingsError,
       });
     } catch (err) {
       const is401 = err instanceof ApiError && err.statusCode === 401;
-      setError(is401 ? "auth" : "other");
+      setError(is401 ? "auth" : null);
+      setStats(EMPTY_STATS);
     } finally {
       setLoading(false);
     }
@@ -82,26 +193,37 @@ export function DashboardStats() {
 
   if (error === "auth") return <ErrorMessage message="Session expired — please log in again." icon="🔒" />;
 
-  if (error === "other") return <ErrorMessage message="Could not load dashboard stats. The backend may be unavailable." icon="⚠️" />;
-
-  if (!stats) return null;
+  if (!stats) return <ErrorMessage message="Could not load dashboard stats." icon="⚠️" />;
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <StatusCard title="Job matches" badge="live" value={String(stats.jobsTotal)} href="/jobs">
+      <StatusCard
+        title="Job matches"
+        badge={stats.jobsAvailable ? "live" : "placeholder"}
+        value={String(stats.jobsTotal)}
+        href="/jobs"
+      >
         <p className="text-sm text-on-surface-variant">
-          {stats.jobsTotal === 0 ? "No matches yet — Rico will scan soon." : "Active job recommendations"}
+          {getJobsCopy(stats)}
         </p>
       </StatusCard>
-      <StatusCard title="Applications tracked" badge="live" value={String(stats.appsTotal)} href="/applications">
+      <StatusCard
+        title="Applications tracked"
+        badge={stats.applicationsAvailable || stats.applicationStatsAvailable ? "live" : "placeholder"}
+        value={String(stats.appsTotal)}
+        href="/applications"
+      >
         <p className="text-sm text-on-surface-variant">
-          {stats.applied > 0 && `${stats.applied} applied`}
-          {stats.interview > 0 && ` · ${stats.interview} interview`}
-          {stats.offer > 0 && ` · ${stats.offer} offer`}
+          {getApplicationsCopy(stats)}
         </p>
       </StatusCard>
-      <StatusCard title="Daily limit" badge={stats.maxDaily > 0 ? "live" : "placeholder"} value={`${stats.maxDaily}`} href="/settings">
-        <p className="text-sm text-on-surface-variant">Max {stats.maxDaily} auto-applies per day</p>
+      <StatusCard
+        title="Daily limit"
+        badge={stats.settingsAvailable && stats.maxDaily > 0 ? "live" : "placeholder"}
+        value={String(stats.maxDaily)}
+        href="/settings"
+      >
+        <p className="text-sm text-on-surface-variant">{getDailyLimitCopy(stats)}</p>
       </StatusCard>
     </div>
   );

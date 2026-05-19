@@ -1003,6 +1003,46 @@ class TestJobsRoutes:
         r = client.post("/api/v1/jobs/job-1/save", json={"job": {"title": "Role"}})
         assert r.status_code == 401
 
+    def test_list_jobs_includes_match_explanation(self, auth_client):
+        jobs = [{
+            "id": "job-1",
+            "title": "Senior Python Developer",
+            "company": "Acme",
+            "location": "Remote",
+            "skills": ["Python", "SQL"],
+            "score": 84,
+            "link": "https://example.com/jobs/1",
+        }]
+        profile = type(
+            "Profile",
+            (),
+            {
+                "skills": ["Python", "SQL", "AWS"],
+                "target_roles": ["Python Developer"],
+                "years_experience": 6,
+                "current_role": "Backend Engineer",
+            },
+        )()
+
+        def score_jobs(scored_jobs, user_id):
+            for job in scored_jobs:
+                job["score"] = int(job.get("score", 0) or 0)
+            return scored_jobs
+
+        with patch("src.services.jobs_service.is_db_available", return_value=False), \
+             patch("src.job_history.load_job_history", return_value=jobs), \
+             patch("src.scoring.score_jobs_for_user", side_effect=score_jobs), \
+             patch("src.services.jobs_service.get_user_profile", return_value=profile):
+            r = auth_client.get("/api/v1/jobs")
+
+        assert r.status_code == 200
+        body = r.json()
+        explanation = body["jobs"][0]["match_explanation"]
+        assert explanation["verdict"] == "strong_fit"
+        assert explanation["why_this_fits"]
+        assert explanation["worth_checking"]
+        assert explanation["recommended_next_step"]
+
     def test_save_job_route_returns_200(self, auth_client):
         payload = {
             "job": {
