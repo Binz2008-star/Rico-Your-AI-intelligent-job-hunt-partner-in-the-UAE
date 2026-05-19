@@ -9,9 +9,14 @@ on:
 jobs:
   notify:
     runs-on: ubuntu-latest
+    env:
+      PAGERDUTY_CONFIGURED: ${{ secrets.PAGERDUTY_INTEGRATION_KEY != '' }}
+      TELEGRAM_CONFIGURED: ${{ secrets.TELEGRAM_TO != '' && secrets.TELEGRAM_TOKEN != '' }}
+      DISCORD_CONFIGURED: ${{ secrets.DISCORD_WEBHOOK_URL != '' }}
+
     steps:
       - name: 🚨 Create PagerDuty Incident on Failure
-        if: ${{ github.event.workflow_run.conclusion == 'failure' && secrets.PAGERDUTY_INTEGRATION_KEY != '' }}
+        if: ${{ github.event.workflow_run.conclusion == 'failure' && env.PAGERDUTY_CONFIGURED == 'true' }}
         uses: Entle/action-pagerduty-alert@1.0.5
         with:
           pagerduty-integration-key: ${{ secrets.PAGERDUTY_INTEGRATION_KEY }}
@@ -20,7 +25,7 @@ jobs:
           runbook-url: "https://github.com/Binz2008-star/job-automation-system-1/wiki/Runbook"
 
       - name: ✅ Resolve PagerDuty Incident on Success
-        if: ${{ github.event.workflow_run.conclusion == 'success' && secrets.PAGERDUTY_INTEGRATION_KEY != '' }}
+        if: ${{ github.event.workflow_run.conclusion == 'success' && env.PAGERDUTY_CONFIGURED == 'true' }}
         uses: Entle/action-pagerduty-alert@1.0.5
         with:
           pagerduty-integration-key: ${{ secrets.PAGERDUTY_INTEGRATION_KEY }}
@@ -28,7 +33,7 @@ jobs:
           pagerduty-dedup-key: "github-workflow-${{ github.event.workflow_run.name }}-${{ github.repository }}"
 
       - name: Send Telegram Alert
-        if: ${{ github.event.workflow_run.conclusion == 'failure' && secrets.TELEGRAM_TO != '' && secrets.TELEGRAM_TOKEN != '' }}
+        if: ${{ github.event.workflow_run.conclusion == 'failure' && env.TELEGRAM_CONFIGURED == 'true' }}
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_TO }}
@@ -44,7 +49,7 @@ jobs:
             **Commit:** ${{ github.event.workflow_run.head_sha }}
 
       - name: Send Discord Alert
-        if: ${{ github.event.workflow_run.conclusion == 'failure' && secrets.DISCORD_WEBHOOK_URL != '' }}
+        if: ${{ github.event.workflow_run.conclusion == 'failure' && env.DISCORD_CONFIGURED == 'true' }}
         uses: appleboy/discord-action@master
         with:
           webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
