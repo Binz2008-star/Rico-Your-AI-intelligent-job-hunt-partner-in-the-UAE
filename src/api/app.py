@@ -194,3 +194,9 @@ app.include_router(settings_router)
 app.include_router(onboarding_router)
 app.include_router(pipeline_router)
 app.include_router(subscription_router)
+
+
+@app.get("/health")
+def health_check() -> Dict[str, Any]:
+    """Health check endpoint for load balancers and monitoring."""
+    return {"status": "ok", "service": "Job Automation Platform API"}
