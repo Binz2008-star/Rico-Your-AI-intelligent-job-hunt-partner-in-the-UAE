@@ -1,0 +1,28 @@
+{
+    "buildCommand": "cd apps/web && npm ci && npm run build",
+    "outputDirectory": "apps/web/.next",
+    "framework": "nextjs",
+    "installCommand": "cd apps/web && npm ci",
+    "regions": [
+        "iad1"
+    ],
+    "headers": [
+        {
+            "source": "/(.*)",
+            "headers": [
+                {
+                    "key": "X-Content-Type-Options",
+                    "value": "nosniff"
+                },
+                {
+                    "key": "X-Frame-Options",
+                    "value": "DENY"
+                },
+                {
+                    "key": "Referrer-Policy",
+                    "value": "strict-origin-when-cross-origin"
+                }
+            ]
+        }
+    ]
+}
