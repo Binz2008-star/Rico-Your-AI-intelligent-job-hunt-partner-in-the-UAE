@@ -11,32 +11,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 🚨 Create PagerDuty Incident on Failure
-        if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+        if: ${{ github.event.workflow_run.conclusion == 'failure' && secrets.PAGERDUTY_INTEGRATION_KEY != '' }}
         uses: Entle/action-pagerduty-alert@1.0.5
         with:
           pagerduty-integration-key: ${{ secrets.PAGERDUTY_INTEGRATION_KEY }}
-          summary: "${{ github.event.workflow_run.name }} failed in ${{ github.repository }}"
-          severity: "critical"
-          source: "GitHub Actions"
-          dedup-key: "github-workflow-${{ github.event.workflow_run.name }}-${{ github.repository }}"
-          details: |
-            Workflow: ${{ github.event.workflow_run.name }}
-            Repository: ${{ github.repository }}
-            Branch: ${{ github.event.workflow_run.head_branch }}
-            Commit: ${{ github.event.workflow_run.head_sha }}
-            Run URL: ${{ github.event.workflow_run.html_url }}
-            Runbook: https://github.com/Binz2008-star/job-automation-system-1/wiki/Runbook
+          pagerduty-dedup-key: "github-workflow-${{ github.event.workflow_run.name }}-${{ github.repository }}"
+          severity: critical
+          runbook-url: "https://github.com/Binz2008-star/job-automation-system-1/wiki/Runbook"
 
       - name: ✅ Resolve PagerDuty Incident on Success
-        if: ${{ github.event.workflow_run.conclusion == 'success' }}
+        if: ${{ github.event.workflow_run.conclusion == 'success' && secrets.PAGERDUTY_INTEGRATION_KEY != '' }}
         uses: Entle/action-pagerduty-alert@1.0.5
         with:
           pagerduty-integration-key: ${{ secrets.PAGERDUTY_INTEGRATION_KEY }}
           resolve: true
-          dedup-key: "github-workflow-${{ github.event.workflow_run.name }}-${{ github.repository }}"
+          pagerduty-dedup-key: "github-workflow-${{ github.event.workflow_run.name }}-${{ github.repository }}"
 
       - name: Send Telegram Alert
-        if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+        if: ${{ github.event.workflow_run.conclusion == 'failure' && secrets.TELEGRAM_TO != '' && secrets.TELEGRAM_TOKEN != '' }}
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_TO }}
@@ -44,7 +36,7 @@ jobs:
           format: markdown
           message: |
             🚨 **Workflow Failed!**
-            
+
             **Workflow:** ${{ github.event.workflow_run.name }}
             **Repository:** ${{ github.repository }}
             **Branch:** ${{ github.event.workflow_run.head_branch }}
@@ -52,7 +44,7 @@ jobs:
             **Commit:** ${{ github.event.workflow_run.head_sha }}
 
       - name: Send Discord Alert
-        if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+        if: ${{ github.event.workflow_run.conclusion == 'failure' && secrets.DISCORD_WEBHOOK_URL != '' }}
         uses: appleboy/discord-action@master
         with:
           webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}

@@ -505,3 +505,53 @@ class TestDeterministicPerformance:
 
         # 100 classifications should complete in under 2 seconds
         assert elapsed < 2.0, f"100 role classifications took {elapsed:.2f}s"
+
+
+class TestProfileContextTargetRolesAccess:
+    """Regression tests for ProfileContext target_roles access bug fix."""
+
+    def test_profile_context_target_roles_access_does_not_crash(self):
+        """'find a job' with ProfileContext should not crash on target_roles access."""
+        user_id = "test-profile-ctx-target@example.com"
+        from src.services.profile_context_resolver import resolve_profile_context
+
+        profile_updates = {
+            "skills": ["hse", "safety"],
+            "years_experience": 5.0,
+            "target_roles": ["HSE Manager"],
+            "preferred_cities": ["Dubai"],
+            "cv_filename": "cv.pdf",
+            "cv_status": "parsed",
+        }
+        upsert_profile(user_id=user_id, updates=profile_updates)
+        mark_onboarding_complete(user_id)
+
+        api = RicoChatAPI()
+        profile = resolve_profile_context(user_id)
+
+        # This should not crash even with ProfileContext
+        response = api.process_message(user_id, "find a job")
+        assert response is not None
+        assert "message" in response
+
+    def test_profile_context_without_target_roles_returns_profile_incomplete(self):
+        """'find a job' without target_roles should return profile_incomplete response."""
+        user_id = "test-profile-ctx-no-target@example.com"
+        from src.services.profile_context_resolver import resolve_profile_context
+
+        profile_updates = {
+            "skills": ["hse"],
+            "years_experience": 5.0,
+            "cv_filename": "cv.pdf",
+            "cv_status": "parsed",
+        }
+        upsert_profile(user_id=user_id, updates=profile_updates)
+        mark_onboarding_complete(user_id)
+
+        api = RicoChatAPI()
+        profile = resolve_profile_context(user_id)
+
+        response = api.process_message(user_id, "find a job")
+        assert response is not None
+        assert response.get("type") == "profile_incomplete"
+

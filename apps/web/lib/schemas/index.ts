@@ -284,6 +284,19 @@ export const RicoChatResponseSchema = z.object({
     provider: z.string().optional(),
     model: z.string().optional(),
     profile_context_present: z.boolean().optional(),
+    intent: z.string().optional(),
+    entities: z.record(z.string(), z.unknown()).optional(),
+    tool_args: z.record(z.string(), z.unknown()).optional(),
+    field_status: z.string().optional(),
+    updated: z.record(z.string(), z.unknown()).optional(),
+    profile: z.record(z.string(), z.unknown()).optional(),
+    target_roles: z.array(z.string()).optional(),
+    openai_available: z.boolean().optional(),
+    deepseek_available: z.boolean().optional(),
+    hf_available: z.boolean().optional(),
+    provider_available: z.boolean().optional(),
+    openai_model: z.string().optional(),
+    jotform_form_id: z.string().optional(),
 }).passthrough();
 
 export const RicoProfileResponseSchema = z.object({

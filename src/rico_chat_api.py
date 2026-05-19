@@ -1292,7 +1292,8 @@ class RicoChatAPI:
             routed = _route(message, user_id=user_id, context=context)
 
             # Check if profile has target role before running job search
-            if not profile.target_roles or (isinstance(profile.target_roles, list) and len(profile.target_roles) == 0):
+            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            if not target_roles:
                 response = {
                     "type": "profile_incomplete",
                     "intent": "search_jobs",
