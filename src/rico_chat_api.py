@@ -1112,9 +1112,12 @@ class RicoChatAPI:
                     profile=profile,
                 )
 
-        # Generic job request with CV → suggest CV-based roles instead of blind search
+        # Generic job request with CV and no established target roles → suggest CV-based roles
+        # When target roles are already set, skip to intent classification so run_for_profile fires
+        _profile_target_roles = self._as_list(self._profile_value(profile, "target_roles"))
         if (
             has_cv
+            and not _profile_target_roles
             and not self._is_live_job_search_request(message)
             and self._looks_like_generic_job_request(message)
         ):

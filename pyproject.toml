@@ -1,2 +1,4 @@
-[tool.vercel]
-entrypoint = "app:app"
+[project]
+name = "job-automation-system-1"
+version = "0.1.0"
+requires-python = ">=3.11"
