@@ -36,7 +36,9 @@ from functools import wraps
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from src.api.admin_guard import require_admin_user
 from src.api.deps import get_current_user, get_current_user_id
+from src.api.public_identity import normalize_public_email
 from src.api.rate_limit import LIMIT_CHAT, LIMIT_UPLOAD, LIMIT_WEBHOOK, limiter
 from src.repositories import onboarding_repo, profile_repo
 from src.repositories.learning_repo import get_learning_repository
@@ -104,10 +106,8 @@ class RicoPublicChatRequest(BaseModel):
 
     @field_validator("email")
     @classmethod
-    def safe_email(cls, v: str) -> str:
-        if v and "@" not in v:
-            raise ValueError("Email must contain @")
-        return v.lower().strip() if v else v
+    def safe_email(cls, v: str | None) -> str | None:
+        return normalize_public_email(v)
 
     @field_validator("message")
     @classmethod
@@ -759,7 +759,7 @@ def rico_openai_smoke(request: Request) -> dict[str, Any]:
 @router.get("/admin/health/ai-provider")
 def rico_ai_provider_health_admin(request: Request) -> dict[str, Any]:
     """Admin-only health check endpoint exposing current AI provider availability and state."""
-    get_current_user(request)
+    require_admin_user(get_current_user(request))
     from src.rico_openai_agent import RicoOpenAIAgent
     from src.rico_env import get_ai_provider
 
