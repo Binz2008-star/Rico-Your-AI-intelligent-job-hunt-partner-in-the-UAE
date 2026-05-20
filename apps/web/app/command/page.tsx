@@ -55,7 +55,7 @@ function getSourceLabel(responseSource: string | undefined): string | null {
     switch ((responseSource ?? "").toLowerCase()) {
         case "fallback":
         case "none":
-            return "Fallback mode";
+            return null;
         case "huggingface":
         case "hf":
             return "HF active";
