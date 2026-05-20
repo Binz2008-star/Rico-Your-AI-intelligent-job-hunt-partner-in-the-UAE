@@ -14,23 +14,23 @@ interface JobCardProps {
 }
 
 const LOGO_COLORS = [
-  "from-blue-500/20 to-blue-400/10 text-blue-300",
-  "from-emerald-500/20 to-emerald-400/10 text-emerald-300",
-  "from-amber-500/20 to-amber-400/10 text-amber-300",
-  "from-purple-500/20 to-purple-400/10 text-purple-300",
-  "from-rose-500/20 to-rose-400/10 text-rose-300",
+  "from-cyan-500/20 to-cyan-400/10 text-cyan-200",
+  "from-fuchsia-500/20 to-pink-400/10 text-pink-200",
+  "from-violet-500/20 to-fuchsia-400/10 text-violet-200",
+  "from-emerald-500/20 to-cyan-400/10 text-emerald-200",
+  "from-amber-500/20 to-orange-400/10 text-amber-100",
 ];
 
 const VERDICT_LABELS = {
   strong_fit: "Strong fit",
   worth_checking: "Worth checking",
-  weak_fit: "Weak fit",
+  weak_fit: "Low alignment",
 } as const;
 
 const VERDICT_STYLES = {
-  strong_fit: "bg-emerald-500/10 text-emerald-300 border-emerald-500/20",
-  worth_checking: "bg-amber-500/10 text-amber-300 border-amber-500/20",
-  weak_fit: "bg-rose-500/10 text-rose-300 border-rose-500/20",
+  strong_fit: "bg-emerald-500/10 text-emerald-200 border-emerald-400/20",
+  worth_checking: "bg-amber-500/10 text-amber-100 border-amber-400/20",
+  weak_fit: "bg-rose-500/10 text-rose-200 border-rose-400/20",
 } as const;
 
 export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps) {
@@ -66,117 +66,128 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
   return (
     <div
       className={cn(
-        "group bg-[#0e0e20] border border-white/5 rounded-2xl p-5",
-        "hover:border-[rgba(91,79,255,0.25)] hover:bg-[#14142a] hover:shadow-[0_8px_30px_rgba(0,0,0,0.12)] transition-all duration-300",
-        isDone && "opacity-60 grayscale-[0.5]",
+        "rico-card group rounded-[30px] p-5 md:p-6 transition-all duration-300",
+        "hover:-translate-y-1 hover:border-[rgba(255,45,142,0.18)] hover:shadow-[0_30px_90px_rgba(0,0,0,0.42)]",
+        isDone && "opacity-60 grayscale-[0.3]",
         className
       )}
     >
-      {/* top row */}
-      <div className="flex gap-3 items-start">
+      <div className="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+        <div className="absolute left-0 top-0 h-40 w-40 rounded-full bg-fuchsia-500/10 blur-3xl" />
+        <div className="absolute bottom-0 right-0 h-40 w-40 rounded-full bg-cyan-500/10 blur-3xl" />
+      </div>
+
+      <div className="relative z-10 flex gap-4 items-start">
         <div
           className={cn(
-            "w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center",
-            "bg-gradient-to-br font-bold text-xs",
+            "flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-gradient-to-br text-sm font-bold shadow-inner",
             config.colorClass
           )}
         >
           {config.initials}
         </div>
 
-        <div className="flex-1 min-w-0">
-          <p className="font-['Cabinet_Grotesk',sans-serif] font-700 text-[15px] text-[#eeeef5] truncate">
-            {job.title ?? "Untitled Role"}
-          </p>
-          <p className="text-[13px] text-[#8080a0] mt-0.5 truncate">
-            {job.company ?? "Unknown"} · {job.location ?? "Remote"}
-          </p>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[17px] font-semibold tracking-[-0.03em] text-white leading-tight">
+                {job.title ?? "Untitled Role"}
+              </p>
+              <p className="mt-1 text-[13px] text-[rgba(255,255,255,0.48)] truncate">
+                {job.company ?? "Unknown"} · {job.location ?? "Remote"}
+              </p>
+            </div>
+            <ScoreBadge score={job.score} />
+          </div>
         </div>
-
-        <ScoreBadge score={job.score} />
       </div>
 
-      {/* reason */}
       {job.reason && (
-        <p className="mt-3 text-[12px] text-[#5a5a7a] leading-relaxed bg-white/5 rounded-lg px-3 py-2 border border-white/5">
-          {job.reason}
-        </p>
+        <div className="relative z-10 mt-4 rounded-2xl border border-white/6 bg-white/[0.035] p-4">
+          <p className="rico-kicker mb-2">Rico insight</p>
+          <p className="text-[13px] leading-relaxed text-[rgba(255,255,255,0.68)]">
+            {job.reason}
+          </p>
+        </div>
       )}
 
       {job.match_explanation && (
-        <div className="mt-3 rounded-xl border border-white/5 bg-white/5 p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-            <span
-              className={cn(
-                "inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em]",
-                VERDICT_STYLES[job.match_explanation.verdict]
-              )}
-            >
-              {VERDICT_LABELS[job.match_explanation.verdict]}
-            </span>
-            <span className="text-[10px] text-[#5a5a7a] uppercase tracking-widest">
+        <div className="relative z-10 mt-4 rounded-[24px] border border-white/6 bg-[rgba(255,255,255,0.03)] p-4 md:p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="rico-kicker mb-1">Match analysis</p>
+              <span
+                className={cn(
+                  "inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em]",
+                  VERDICT_STYLES[job.match_explanation.verdict]
+                )}
+              >
+                {VERDICT_LABELS[job.match_explanation.verdict]}
+              </span>
+            </div>
+
+            <div className="rounded-full border border-cyan-400/10 bg-cyan-400/5 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-cyan-100">
               {job.match_explanation.confidence} confidence
-            </span>
+            </div>
           </div>
 
           {job.match_explanation.summary && (
-            <p className="text-[12px] text-[#d6d6e5] leading-relaxed mb-3">
+            <p className="mb-5 text-[13px] leading-relaxed text-[rgba(255,255,255,0.82)]">
               {job.match_explanation.summary}
             </p>
           )}
 
-          <div className="space-y-3">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8080a0]">
-                Why this fits
-              </p>
-              <ul className="mt-1 space-y-1 pl-4 text-[12px] leading-relaxed text-[#d6d6e5] list-disc">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
+              <p className="rico-kicker mb-2">Why Rico likes this</p>
+              <ul className="space-y-2 text-[12px] leading-relaxed text-[rgba(255,255,255,0.72)]">
                 {job.match_explanation.why_this_fits.map((item, idx) => (
-                  <li key={`why-${idx}`}>{item}</li>
+                  <li key={`why-${idx}`} className="flex gap-2">
+                    <span className="mt-1 h-1.5 w-1.5 rounded-full bg-cyan-300 shrink-0" />
+                    <span>{item}</span>
+                  </li>
                 ))}
               </ul>
             </div>
 
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8080a0]">
-                Worth checking
-              </p>
-              <ul className="mt-1 space-y-1 pl-4 text-[12px] leading-relaxed text-[#d6d6e5] list-disc">
+            <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
+              <p className="rico-kicker mb-2">Worth checking</p>
+              <ul className="space-y-2 text-[12px] leading-relaxed text-[rgba(255,255,255,0.72)]">
                 {job.match_explanation.worth_checking.map((item, idx) => (
-                  <li key={`check-${idx}`}>{item}</li>
+                  <li key={`check-${idx}`} className="flex gap-2">
+                    <span className="mt-1 h-1.5 w-1.5 rounded-full bg-fuchsia-300 shrink-0" />
+                    <span>{item}</span>
+                  </li>
                 ))}
               </ul>
             </div>
+          </div>
 
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8080a0]">
-                Recommended next step
-              </p>
-              <p className="mt-1 text-[12px] text-[#d6d6e5] leading-relaxed">
-                {job.match_explanation.recommended_next_step}
-              </p>
-            </div>
+          <div className="mt-4 rounded-2xl border border-fuchsia-500/10 bg-fuchsia-500/[0.04] p-4">
+            <p className="rico-kicker mb-2">Recommended next step</p>
+            <p className="text-[13px] leading-relaxed text-[rgba(255,255,255,0.8)]">
+              {job.match_explanation.recommended_next_step}
+            </p>
           </div>
         </div>
       )}
 
-      {/* tags + salary */}
-      <div className="flex gap-1.5 mt-3 flex-wrap items-center">
+      <div className="relative z-10 mt-4 flex flex-wrap items-center gap-2">
         {(job.salary_range || job.salary) && (
-          <span className="text-[11px] px-2.5 py-1 rounded-md bg-[#5b4fff1a] text-[#a78bfa] border border-[#5b4fff2e] font-medium">
+          <span className="rico-chip-accent rounded-full px-3 py-1 text-[11px] font-semibold">
             {job.salary_range || job.salary}
           </span>
         )}
+
         {Array.isArray(job.tags) && job.tags.map((tag) => (
-          <span key={tag} className="text-[11px] px-2.5 py-1 rounded-md bg-white/5 text-[#5a5a7a] border border-white/5">
+          <span key={tag} className="rico-chip rounded-full px-3 py-1 text-[11px]">
             {tag}
           </span>
         ))}
       </div>
 
-      {/* actions */}
       {showMarkApplied ? (
-        <div className="flex gap-2 mt-4 pt-3 border-t border-white/5">
+        <div className="relative z-10 mt-5 flex gap-2 border-t rico-divider pt-4">
           <Button
             variant="teal"
             size="sm"
@@ -188,7 +199,7 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
           </Button>
         </div>
       ) : !isDone ? (
-        <div className="flex gap-2 mt-4 pt-3 border-t border-white/5">
+        <div className="relative z-10 mt-5 flex gap-2 border-t rico-divider pt-4">
           <Button
             variant="teal"
             size="sm"
@@ -196,7 +207,7 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
             onClick={() => handleActionClick("apply")}
             className="flex-1"
           >
-            Apply
+            Apply now
           </Button>
           <Button
             variant="ghost"
@@ -216,9 +227,11 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
           </Button>
         </div>
       ) : (
-        <div className="mt-4 pt-3 border-t border-white/5 flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          <p className="text-[11px] text-[#5a5a7a] uppercase tracking-widest font-bold">Action Completed</p>
+        <div className="relative z-10 mt-5 flex items-center gap-2 border-t rico-divider pt-4">
+          <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_16px_rgba(74,222,128,0.8)]" />
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[rgba(255,255,255,0.48)]">
+            Action completed
+          </p>
         </div>
       )}
     </div>
