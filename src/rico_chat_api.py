@@ -23,6 +23,10 @@ from src.agent.intelligence.intent_classifier import classify_intent
 from src.agent.intelligence.normalizer import normalize_role
 from src.agent.intelligence.recommender import recommend_adjacent_roles
 from src.agent.intelligence.role_classifier import classify_role_candidate
+from src.agent.intelligence.role_suggester import (
+    generate_role_suggestions as _suggest_roles,
+    needs_clarification as _needs_clarification,
+)
 from src.agent.intelligence.scorer import score_profile_fit
 from src.agent.responses.schema import RicoResponse, build_error_response, _generate_debug_id
 from src.agent.runtime import agent_runtime
@@ -320,6 +324,7 @@ class RicoChatAPI:
             self._as_list(self._profile_value(profile, "certifications")),
             self._profile_value(profile, "years_experience"),
             self._as_list(self._profile_value(profile, "industries")),
+            self._profile_value(profile, "current_role"),
         )
         # Prefer fresh CV-derived suggestions over potentially stale target_roles
         role = (
@@ -1574,23 +1579,59 @@ class RicoChatAPI:
         certifications = self._as_list(self._profile_value(profile, "certifications"))
         years_experience = self._profile_value(profile, "years_experience")
         industries = self._as_list(self._profile_value(profile, "industries"))
+        current_role = self._profile_value(profile, "current_role")
 
-        # Map skills/certifications to role families
-        suggestions = self._generate_role_suggestions(skills, certifications, years_experience, industries)
+        suggestions = self._generate_role_suggestions(
+            skills, certifications, years_experience, industries, current_role
+        )
 
         if not suggestions:
+            # Not enough evidence — ask 1–2 targeted clarifying questions
             return {
-                "type": "profile_role_suggestions",
-                "message": "Your profile doesn't have enough specific skills or certifications to suggest roles yet.",
-                "options": [],
-                "next_action": "add_skills"
+                "type": "profile_clarification",
+                "message": (
+                    "I need a bit more information to suggest the right roles for you. "
+                    "Please answer one or both:"
+                ),
+                "questions": [
+                    {
+                        "id": "field",
+                        "text": "What field or industry do you work in?",
+                        "options": [
+                            "HSE / Safety / Environment",
+                            "IT / Software / Data",
+                            "Finance / Accounting",
+                            "Sales / Customer Service",
+                            "Admin / Operations",
+                            "Healthcare",
+                            "Engineering / Construction",
+                            "Logistics / Transport",
+                            "Hospitality / Retail",
+                            "Other",
+                        ],
+                    },
+                    {
+                        "id": "experience_level",
+                        "text": "How many years of work experience do you have?",
+                        "options": [
+                            "I am a fresh graduate",
+                            "1–3 years",
+                            "3–7 years",
+                            "7+ years",
+                        ],
+                    },
+                ],
+                "next_action": "answer_clarification",
             }
 
         return {
             "type": "profile_role_suggestions",
-            "message": f"Based on your CV, here are {len(suggestions)} role suggestions that match your skills:",
+            "message": (
+                f"Based on your CV, here are {len(suggestions)} roles that match your background. "
+                "Choose one to start searching:"
+            ),
             "options": suggestions,
-            "next_action": "select_role_to_search"
+            "next_action": "select_role_to_search",
         }
 
     def _handle_no_results_recovery(
@@ -1605,6 +1646,7 @@ class RicoChatAPI:
             self._as_list(self._profile_value(profile, "certifications")),
             self._profile_value(profile, "years_experience"),
             self._as_list(self._profile_value(profile, "industries")),
+            self._profile_value(profile, "current_role"),
         )
         searched_lower = {r.lower() for r in searched_roles}
         alt_options = [
@@ -1641,94 +1683,17 @@ class RicoChatAPI:
         skills: list[str],
         certifications: list[str],
         years_experience: float | None,
-        industries: list[str]
+        industries: list[str],
+        current_role: str | None = None,
     ) -> list[dict[str, str]]:
-        """Generate role suggestions based on profile data."""
-        suggestions = []
-        skill_lower = [s.lower() for s in skills]
-        cert_lower = [c.lower() for c in certifications]
-
-        # Safe numeric parsing
-        try:
-            years_num = float(years_experience) if years_experience is not None else None
-        except (TypeError, ValueError):
-            years_num = None
-        years_experience = years_num
-
-        # Role family mappings based on skills/certifications
-        role_mappings = {
-            # HSE/Safety roles
-            "hse": ["HSE Officer", "HSE Manager", "Safety Officer", "QHSE Coordinator"],
-            "safety": ["Safety Officer", "Safety Manager", "HSE Officer"],
-            "qhse": ["QHSE Coordinator", "QHSE Manager", "HSE Manager"],
-
-            # Environmental / HSE roles (cross-mapped — environmental management is part of the HSE domain)
-            "environmental": [
-                "Environmental Officer", "Environmental Manager", "Environmental Specialist",
-                "HSE Manager", "Environmental Compliance Officer", "QHSE Manager",
-            ],
-            "sustainability": [
-                "Sustainability Officer", "ESG Specialist", "Sustainability Manager",
-                "QHSE Manager",
-            ],
-            "esg": [
-                "ESG Specialist", "Sustainability Officer", "ESG Manager",
-                "QHSE Manager", "ISO 14001 Lead Auditor",
-            ],
-
-            # Compliance/Audit/ISO roles
-            "compliance": ["Compliance Officer", "Compliance Manager", "Regulatory Affairs"],
-            "audit": ["Internal Auditor", "External Auditor", "Audit Manager"],
-            "iso": ["ISO Coordinator", "ISO 14001 Specialist", "ISO 14001 Lead Auditor", "Quality Manager"],
-
-            # Operations roles
-            "operations": ["Operations Manager", "Operations Coordinator", "Facilities Manager"],
-
-            # General management
-            "management": ["Operations Manager", "Project Manager", "Team Lead"],
-        }
-
-        # Add seniority prefix based on experience
-        seniority_prefix = ""
-        if years_experience:
-            if years_experience >= 10:
-                seniority_prefix = "Senior "
-            elif years_experience >= 5:
-                seniority_prefix = ""
-
-        # Generate suggestions based on skill matches
-        for skill, roles in role_mappings.items():
-            if any(skill in s for s in skill_lower):
-                for role in roles:
-                    # Check if already added
-                    if not any(s["label"] == role for s in suggestions):
-                        reason = f"Matches your {skill} background"
-                        if years_experience and years_experience >= 5:
-                            role_with_seniority = f"{seniority_prefix}{role}"
-                        else:
-                            role_with_seniority = role
-                        suggestions.append({
-                            "label": role_with_seniority,
-                            "reason": reason
-                        })
-
-        # Add certification-based suggestions
-        if any("iso" in c for c in cert_lower):
-            if not any(s["label"] == "ISO 14001 Specialist" for s in suggestions):
-                suggestions.append({
-                    "label": "ISO 14001 Specialist",
-                    "reason": "Based on your ISO certification"
-                })
-
-        if any("nebosh" in c for c in cert_lower):
-            if not any(s["label"] == "HSE Manager" for s in suggestions):
-                suggestions.append({
-                    "label": "HSE Manager",
-                    "reason": "Based on your NEBOSH certification"
-                })
-
-        # Limit to top 12 suggestions (enough to cover all major role families)
-        return suggestions[:12]
+        """Delegate to the standalone role suggester (covers all segments)."""
+        return _suggest_roles(
+            skills=skills,
+            certifications=certifications,
+            years_experience=years_experience,
+            industries=industries,
+            current_role=current_role,
+        )
 
     def _classified_role_search(self, user_id: str, role_text: str, profile: Any) -> dict[str, Any]:
         """Use 3-tier role classifier before searching.
