@@ -100,6 +100,7 @@ function EditableNameField({
                 <span className="text-[#eeeef5]">{displayValue}</span>
                 <button
                     type="button"
+                    aria-label="Edit name"
                     onClick={() => {
                         setDraft(value ?? "");
                         setError(null);
@@ -149,12 +150,124 @@ function EditableNameField({
     );
 }
 
+function EditableTextField({
+    value,
+    onSave,
+    placeholder = "Enter value",
+    label = "Field",
+}: {
+    value: string | null | undefined;
+    onSave: (nextValue: string) => Promise<void>;
+    placeholder?: string;
+    label?: string;
+}) {
+    const [editing, setEditing] = useState(false);
+    const [draft, setDraft] = useState(value ?? "");
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const displayValue = value?.trim() ? value : "—";
+
+    const handleCancel = useCallback(() => {
+        setDraft(value ?? "");
+        setEditing(false);
+        setError(null);
+    }, [value]);
+
+    const handleSave = useCallback(
+        async (event: React.FormEvent<HTMLFormElement>) => {
+            event.preventDefault();
+            const trimmed = draft.trim();
+            setSaving(true);
+            setError(null);
+            try {
+                await onSave(trimmed);
+                setEditing(false);
+            } catch (err: unknown) {
+                setError(err instanceof Error ? err.message : "Could not save.");
+            } finally {
+                setSaving(false);
+            }
+        },
+        [draft, onSave]
+    );
+
+    if (!editing) {
+        return (
+            <>
+                <span className="text-[#eeeef5]">{displayValue}</span>
+                <button
+                    type="button"
+                    aria-label={`Edit ${label}`}
+                    onClick={() => {
+                        setDraft(value ?? "");
+                        setError(null);
+                        setEditing(true);
+                    }}
+                    className="ml-2 text-[11px] text-rico-purple underline underline-offset-2 transition-colors hover:text-[#c4b5fd]"
+                >
+                    Edit
+                </button>
+            </>
+        );
+    }
+
+    return (
+        <form className="mt-2 flex max-w-sm flex-col gap-2" onSubmit={handleSave}>
+            <label htmlFor={`profile-${label}`} className="sr-only">
+                {label}
+            </label>
+            <input
+                id={`profile-${label}`}
+                type="text"
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-[#eeeef5] outline-none transition focus:border-rico-accent"
+                placeholder={placeholder}
+                disabled={saving}
+            />
+            {error && <p className="text-xs text-rico-red" role="alert">{error}</p>}
+            <div className="flex items-center gap-2">
+                <button
+                    type="submit"
+                    disabled={saving}
+                    className="rounded-lg bg-rico-accent px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-rico-accent-hover disabled:opacity-60"
+                >
+                    {saving ? "Saving..." : "Save"}
+                </button>
+                <button
+                    type="button"
+                    onClick={handleCancel}
+                    disabled={saving}
+                    className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-rico-text-muted transition-colors hover:border-white/20 hover:text-[#eeeef5] disabled:opacity-60"
+                >
+                    Cancel
+                </button>
+            </div>
+        </form>
+    );
+}
+
 function ProfileDetail({
     profile,
     onSaveName,
+    onSavePhone,
+    onSaveTelegram,
+    onSaveVisa,
+    onSaveNotice,
+    onSaveMinSalary,
+    onSaveCurrentCompany,
+    onSaveLinkedin,
 }: {
     profile: ProfileResponse;
     onSaveName: (nextName: string) => Promise<void>;
+    onSavePhone: (nextPhone: string) => Promise<void>;
+    onSaveTelegram: (nextTelegram: string) => Promise<void>;
+    onSaveVisa: (nextVisa: string) => Promise<void>;
+    onSaveNotice: (nextNotice: string) => Promise<void>;
+    onSaveMinSalary: (nextMinSalary: number) => Promise<void>;
+    onSaveCurrentCompany: (nextCompany: string) => Promise<void>;
+    onSaveLinkedin: (nextLinkedin: string) => Promise<void>;
 }) {
     const hasJobPrefs =
         (profile.target_roles?.length ?? 0) > 0 ||
@@ -176,20 +289,52 @@ function ProfileDetail({
                         <span className="text-[#eeeef5]">{profile.email ?? "—"}</span>
                     </Row>
                     <Row label="Phone">
-                        <span className="text-[#eeeef5]">{profile.phone ?? "—"}</span>
-                        <ChatEditCTA prompt="Update my phone number" />
+                        <EditableTextField
+                            value={profile.phone}
+                            onSave={onSavePhone}
+                            placeholder="Enter phone number"
+                            label="phone"
+                        />
                     </Row>
                     <Row label="Telegram">
-                        <span className="text-[#eeeef5]">{profile.telegram_username ?? "—"}</span>
-                        <ChatEditCTA prompt="Update my Telegram username" />
+                        <EditableTextField
+                            value={profile.telegram_username}
+                            onSave={onSaveTelegram}
+                            placeholder="Enter Telegram username"
+                            label="telegram"
+                        />
                     </Row>
                     <Row label="Visa">
-                        <span className="text-[#eeeef5]">{profile.visa_status ?? "—"}</span>
-                        <ChatEditCTA prompt="Update my visa status" />
+                        <EditableTextField
+                            value={profile.visa_status}
+                            onSave={onSaveVisa}
+                            placeholder="Enter visa status"
+                            label="visa"
+                        />
                     </Row>
                     <Row label="Notice">
-                        <span className="text-[#eeeef5]">{profile.notice_period ?? "—"}</span>
-                        <ChatEditCTA prompt="Update my notice period" />
+                        <EditableTextField
+                            value={profile.notice_period}
+                            onSave={onSaveNotice}
+                            placeholder="Enter notice period"
+                            label="notice"
+                        />
+                    </Row>
+                    <Row label="Current company">
+                        <EditableTextField
+                            value={profile.current_company}
+                            onSave={onSaveCurrentCompany}
+                            placeholder="Enter current company"
+                            label="current-company"
+                        />
+                    </Row>
+                    <Row label="LinkedIn">
+                        <EditableTextField
+                            value={profile.linkedin_url}
+                            onSave={onSaveLinkedin}
+                            placeholder="Enter LinkedIn URL"
+                            label="linkedin"
+                        />
                     </Row>
                 </dl>
             </StatusCard>
@@ -225,10 +370,18 @@ function ProfileDetail({
                             <ChatEditCTA prompt="Update my salary target" />
                         </Row>
                         <Row label="Minimum salary">
-                            <span className="text-[#eeeef5]">
-                                {profile.minimum_salary_aed != null ? `AED ${profile.minimum_salary_aed.toLocaleString()}` : "—"}
-                            </span>
-                            <ChatEditCTA prompt="Update my minimum salary" />
+                            <EditableTextField
+                                value={profile.minimum_salary_aed != null ? String(profile.minimum_salary_aed) : null}
+                                onSave={async (val) => {
+                                    const parsed = Number(val);
+                                    if (!Number.isFinite(parsed) || parsed < 0) {
+                                        throw new Error("Enter a valid salary amount.");
+                                    }
+                                    return onSaveMinSalary(parsed);
+                                }}
+                                placeholder="Enter minimum salary (AED)"
+                                label="min-salary"
+                            />
                         </Row>
                         <Row label="Experience">
                             <span className="text-[#eeeef5]">
@@ -300,6 +453,90 @@ export default function ProfilePage() {
         }
     }, []);
 
+    const handleSavePhone = useCallback(async (nextPhone: string) => {
+        await updateProfile({ phone: nextPhone });
+        setProfile((current) => (current ? { ...current, phone: nextPhone } : current));
+
+        try {
+            const refreshed = await fetchProfile();
+            setProfile(refreshed);
+        } catch {
+            // Keep the optimistic value if the follow-up read fails.
+        }
+    }, []);
+
+    const handleSaveTelegram = useCallback(async (nextTelegram: string) => {
+        await updateProfile({ telegram_username: nextTelegram });
+        setProfile((current) => (current ? { ...current, telegram_username: nextTelegram } : current));
+
+        try {
+            const refreshed = await fetchProfile();
+            setProfile(refreshed);
+        } catch {
+            // Keep the optimistic value if the follow-up read fails.
+        }
+    }, []);
+
+    const handleSaveVisa = useCallback(async (nextVisa: string) => {
+        await updateProfile({ visa_status: nextVisa });
+        setProfile((current) => (current ? { ...current, visa_status: nextVisa } : current));
+
+        try {
+            const refreshed = await fetchProfile();
+            setProfile(refreshed);
+        } catch {
+            // Keep the optimistic value if the follow-up read fails.
+        }
+    }, []);
+
+    const handleSaveNotice = useCallback(async (nextNotice: string) => {
+        await updateProfile({ notice_period: nextNotice });
+        setProfile((current) => (current ? { ...current, notice_period: nextNotice } : current));
+
+        try {
+            const refreshed = await fetchProfile();
+            setProfile(refreshed);
+        } catch {
+            // Keep the optimistic value if the follow-up read fails.
+        }
+    }, []);
+
+    const handleSaveMinSalary = useCallback(async (nextMinSalary: number) => {
+        await updateProfile({ minimum_salary_aed: nextMinSalary });
+        setProfile((current) => (current ? { ...current, minimum_salary_aed: nextMinSalary } : current));
+
+        try {
+            const refreshed = await fetchProfile();
+            setProfile(refreshed);
+        } catch {
+            // Keep the optimistic value if the follow-up read fails.
+        }
+    }, []);
+
+    const handleSaveCurrentCompany = useCallback(async (nextCompany: string) => {
+        await updateProfile({ current_company: nextCompany });
+        setProfile((current) => (current ? { ...current, current_company: nextCompany } : current));
+
+        try {
+            const refreshed = await fetchProfile();
+            setProfile(refreshed);
+        } catch {
+            // Keep the optimistic value if the follow-up read fails.
+        }
+    }, []);
+
+    const handleSaveLinkedin = useCallback(async (nextLinkedin: string) => {
+        await updateProfile({ linkedin_url: nextLinkedin });
+        setProfile((current) => (current ? { ...current, linkedin_url: nextLinkedin } : current));
+
+        try {
+            const refreshed = await fetchProfile();
+            setProfile(refreshed);
+        } catch {
+            // Keep the optimistic value if the follow-up read fails.
+        }
+    }, []);
+
     return (
         <DashboardShell title="Profile">
             <div className="max-w-2xl">
@@ -344,7 +581,17 @@ export default function ProfilePage() {
                 )}
 
                 {!loading && !error && profile?.profile_exists && (
-                    <ProfileDetail profile={profile} onSaveName={handleSaveName} />
+                    <ProfileDetail
+                        profile={profile}
+                        onSaveName={handleSaveName}
+                        onSavePhone={handleSavePhone}
+                        onSaveTelegram={handleSaveTelegram}
+                        onSaveVisa={handleSaveVisa}
+                        onSaveNotice={handleSaveNotice}
+                        onSaveMinSalary={handleSaveMinSalary}
+                        onSaveCurrentCompany={handleSaveCurrentCompany}
+                        onSaveLinkedin={handleSaveLinkedin}
+                    />
                 )}
             </div>
         </DashboardShell>
