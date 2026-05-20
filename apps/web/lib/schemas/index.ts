@@ -296,7 +296,7 @@ export const RicoChatResponseSchema = z.object({
     hf_available: z.boolean().optional(),
     provider_available: z.boolean().optional(),
     openai_model: z.string().optional(),
-    jotform_form_id: z.string().optional(),
+    jotform_form_id: z.string().nullable().optional(),
 }).passthrough();
 
 export const RicoProfileResponseSchema = z.object({

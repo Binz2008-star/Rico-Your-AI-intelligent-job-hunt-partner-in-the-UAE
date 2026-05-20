@@ -593,15 +593,15 @@ export default function CommandPage() {
             </div>
 
             {/* Top nav — minimal, matches landing */}
-            <header className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-border-subtle">
-                <Link href="/" className="flex items-center gap-2 text-white font-black text-lg tracking-tight">
-                    <div className="w-8 h-8 rounded-[9px] bg-gradient-to-br from-magenta to-cyan flex items-center justify-center text-sm font-black shadow-[0_4px_16px_rgba(255,45,142,0.3)]">R</div>
+            <header className="relative z-10 flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border-subtle">
+                <Link href="/" className="flex items-center gap-2 text-white font-black text-base sm:text-lg tracking-tight">
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-[9px] bg-gradient-to-br from-magenta to-cyan flex items-center justify-center text-sm font-black shadow-[0_4px_16px_rgba(255,45,142,0.3)]">R</div>
                     Rico<span className="text-magenta">.ai</span>
                 </Link>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 sm:gap-3">
                     {chatAudience === "authenticated" ? (
                         <>
-                            <Link href="/dashboard" className="text-[13px] text-text-muted hover:text-white transition-colors">Dashboard</Link>
+                            <Link href="/dashboard" className="hidden sm:block text-[13px] text-text-muted hover:text-white transition-colors">Dashboard</Link>
                             <button
                                 type="button"
                                 onClick={handleLogout}
@@ -630,20 +630,20 @@ export default function CommandPage() {
                 onChange={handleCVUpload}
             />
 
-            <div className="relative z-10 flex flex-col flex-1 h-[calc(100vh-65px)] max-w-3xl w-full mx-auto px-4">
+            <div className="relative z-10 flex flex-col flex-1 h-[calc(100vh-57px)] sm:h-[calc(100vh-65px)] max-w-3xl w-full mx-auto px-2 sm:px-4">
                 {/* Messages Container */}
                 <div className="flex-1 overflow-y-auto px-2 py-6 space-y-5 pb-32" role="log" aria-live="polite" aria-atomic="false" aria-busy={thinking}>
 
                     {/* Quick start (shown above first message) */}
                     {messages.length <= 1 && !thinking && (
-                        <div className="flex flex-wrap justify-center gap-2 pb-4">
+                        <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:justify-center gap-2 pb-4">
                             {QUICK_ACTIONS.map((qa) => (
                                 <button
                                     type="button"
                                     key={qa.label}
                                     onClick={() => sendMessage(qa.prompt)}
                                     disabled={thinking || chatAudience === "checking"}
-                                    className="rounded-xl border border-border-subtle bg-surface-glass px-3 py-2 text-xs text-text-secondary transition-colors hover:border-magenta/30 hover:bg-surface-subtle hover:text-white disabled:opacity-50 rico-focus-strong"
+                                    className="rounded-xl border border-border-subtle bg-surface-glass px-3 py-2 text-[11px] sm:text-xs text-text-secondary transition-colors hover:border-magenta/30 hover:bg-surface-subtle hover:text-white disabled:opacity-50 rico-focus-strong text-center"
                                 >
                                     {qa.label}
                                 </button>

@@ -972,7 +972,9 @@ async def rico_upload_cv(
             request_ref,
         )
 
-        if doc_type != "cv":
+        # Only reject confirmed company profiles — "unknown" passes through so
+        # sparse-but-valid CVs (few section headers) are not incorrectly rejected.
+        if doc_type == "company_profile":
             _metrics.record_request((time.time() - start_time) * 1000)
             logger.warning(
                 "cv_upload_rejected user=%s filename=%s doc_type=%s reason=not_cv request_ref=%s",
@@ -986,7 +988,7 @@ async def rico_upload_cv(
                 "status": "rejected",
                 "document_type": doc_type,
                 "message": (
-                    f"This document does not look like a CV/resume (detected as: {doc_type}). "
+                    "This document looks like a company profile, not a personal CV/resume. "
                     "I did not update your personal job profile. "
                     "Please upload a personal CV or resume."
                 ),
