@@ -64,6 +64,7 @@ class CVParser:
         "professional experience",
         "career summary",
         "career objective",
+        "objective",
         "skills",
         "contact information",
     ]
@@ -105,7 +106,11 @@ class CVParser:
         if not has_personal_marker and has_strong_company and company_score >= 2:
             return "company_profile"
 
-        if cv_score >= 2 or has_personal_marker:
+        if cv_score >= 2:
+            return "cv"
+        # Personal markers alone are not sufficient — require at least one CV-section
+        # signal so that first-person company bios are not misclassified as CVs.
+        if has_personal_marker and cv_score >= 1:
             return "cv"
 
         return "unknown"

@@ -612,7 +612,7 @@ export default function CommandPage() {
                         </>
                     ) : (
                         <>
-                            <Link href={COMMAND_LOGIN_HREF} className="hidden sm:block text-[13px] text-text-muted hover:text-white transition-colors">Sign in</Link>
+                            <Link href={COMMAND_LOGIN_HREF} className="text-[13px] text-text-muted hover:text-white transition-colors">Sign in</Link>
                             <Link href={COMMAND_SIGNUP_HREF} className="text-[12px] px-3 py-1.5 rounded-lg bg-magenta text-white hover:bg-magenta-hover transition-colors font-medium">Sign up free</Link>
                         </>
                     )}
