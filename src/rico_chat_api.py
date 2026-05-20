@@ -1586,42 +1586,15 @@ class RicoChatAPI:
         )
 
         if not suggestions:
-            # Not enough evidence — ask 1–2 targeted clarifying questions
+            # Weak/empty profile — prompt user to add skills or upload CV
             return {
-                "type": "profile_clarification",
+                "type": "profile_role_suggestions",
                 "message": (
                     "I need a bit more information to suggest the right roles for you. "
-                    "Please answer one or both:"
+                    "Add your skills or upload your CV to get started."
                 ),
-                "questions": [
-                    {
-                        "id": "field",
-                        "text": "What field or industry do you work in?",
-                        "options": [
-                            "HSE / Safety / Environment",
-                            "IT / Software / Data",
-                            "Finance / Accounting",
-                            "Sales / Customer Service",
-                            "Admin / Operations",
-                            "Healthcare",
-                            "Engineering / Construction",
-                            "Logistics / Transport",
-                            "Hospitality / Retail",
-                            "Other",
-                        ],
-                    },
-                    {
-                        "id": "experience_level",
-                        "text": "How many years of work experience do you have?",
-                        "options": [
-                            "I am a fresh graduate",
-                            "1–3 years",
-                            "3–7 years",
-                            "7+ years",
-                        ],
-                    },
-                ],
-                "next_action": "answer_clarification",
+                "options": [],
+                "next_action": "add_skills",
             }
 
         return {
@@ -1686,14 +1659,18 @@ class RicoChatAPI:
         industries: list[str],
         current_role: str | None = None,
     ) -> list[dict[str, str]]:
-        """Delegate to the standalone role suggester (covers all segments)."""
-        return _suggest_roles(
+        """Delegate to the standalone role suggester and adapt to label-keyed list."""
+        result = _suggest_roles(
             skills=skills,
             certifications=certifications,
             years_experience=years_experience,
             industries=industries,
             current_role=current_role,
         )
+        return [
+            {"label": r["title"], "reason": r.get("reason", "")}
+            for r in result.get("roles", [])
+        ]
 
     def _classified_role_search(self, user_id: str, role_text: str, profile: Any) -> dict[str, Any]:
         """Use 3-tier role classifier before searching.

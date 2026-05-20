@@ -63,33 +63,33 @@ class TestEnvironmentalComplianceSenior:
 
     def test_returns_suggestions(self):
         results = generate_role_suggestions(self.SKILLS, self.CERTS, self.YEARS, [])
-        assert len(results) >= 3
+        assert len(results["roles"]) >= 3
 
-    def test_all_results_have_label_and_reason(self):
+    def test_all_results_have_title_and_reason(self):
         results = generate_role_suggestions(self.SKILLS, self.CERTS, self.YEARS, [])
-        for r in results:
-            assert "label" in r and r["label"]
+        for r in results["roles"]:
+            assert "title" in r and r["title"]
             assert "reason" in r and r["reason"]
 
     @pytest.mark.parametrize("expected", [
         "HSE Manager",
         "Environmental Manager",
         "Environmental Compliance Officer",
-        "ESG Manager",
+        "ESG Specialist",
         "ISO 14001 Lead Auditor",
-        "Compliance Manager",
+        "Sustainability Officer",
         "QHSE Manager",
     ])
     def test_expected_role_covered(self, expected):
         results = generate_role_suggestions(self.SKILLS, self.CERTS, self.YEARS, [])
-        labels = [r["label"] for r in results]
+        labels = [r["title"] for r in results["roles"]]
         words = set(expected.lower().split())
         matched = any(len(words & set(l.lower().split())) >= 2 for l in labels)
         assert matched, f"Expected role variant of '{expected}' in {labels}"
 
     def test_no_junior_titles_for_10yr_profile(self):
         results = generate_role_suggestions(self.SKILLS, self.CERTS, self.YEARS, [])
-        labels = [r["label"].lower() for r in results]
+        labels = [r["title"].lower() for r in results["roles"]]
         junior_markers = {"trainee", "assistant", "graduate", "junior", "entry"}
         junior_results = [l for l in labels if any(m in l for m in junior_markers)]
         # Primary results should not be junior titles (adjacent tiers OK in small number)
@@ -97,12 +97,12 @@ class TestEnvironmentalComplianceSenior:
 
     def test_no_duplicates(self):
         results = generate_role_suggestions(self.SKILLS, self.CERTS, self.YEARS, [])
-        labels = [r["label"] for r in results]
-        assert len(labels) == len(set(labels)), f"Duplicate labels: {labels}"
+        labels = [r["title"] for r in results["roles"]]
+        assert len(labels) == len(set(labels)), f"Duplicate titles: {labels}"
 
     def test_capped_at_max_results(self):
         results = generate_role_suggestions(self.SKILLS, self.CERTS, self.YEARS, [])
-        assert len(results) <= 7
+        assert len(results["roles"]) <= 7
 
 
 # ---------------------------------------------------------------------------
@@ -113,13 +113,13 @@ class TestFreshGraduate:
     def test_fresh_grad_with_no_skills_returns_empty(self):
         """No skills = needs_clarification, not fabricated suggestions."""
         results = generate_role_suggestions([], [], 0, [])
-        assert results == []
+        assert results["roles"] == []
 
     def test_fresh_grad_admin_skills_gets_entry_roles(self):
         results = generate_role_suggestions(
             ["administration", "excel", "microsoft office"], [], 0, []
         )
-        labels = [r["label"].lower() for r in results]
+        labels = [r["title"].lower() for r in results["roles"]]
         entry_markers = {"assistant", "trainee", "associate", "officer", "coordinator"}
         assert any(any(m in l for m in entry_markers) for l in labels), (
             f"Expected entry-level role for fresh graduate, got: {labels}"
@@ -129,7 +129,7 @@ class TestFreshGraduate:
         results = generate_role_suggestions(
             ["python", "javascript", "web development"], [], 1, []
         )
-        labels = [r["label"].lower() for r in results]
+        labels = [r["title"].lower() for r in results["roles"]]
         assert any("developer" in l or "engineer" in l for l in labels), (
             f"Expected developer/engineer role for IT grad, got: {labels}"
         )
@@ -138,7 +138,7 @@ class TestFreshGraduate:
         results = generate_role_suggestions(
             ["accounting", "finance", "excel"], [], 1, []
         )
-        labels = [r["label"].lower() for r in results]
+        labels = [r["title"].lower() for r in results["roles"]]
         assert any("account" in l or "analyst" in l or "finance" in l for l in labels), (
             f"Expected finance/accounting role, got: {labels}"
         )
@@ -153,7 +153,7 @@ class TestTechnicianFieldWorker:
         results = generate_role_suggestions(
             ["hvac", "ac technician", "maintenance"], [], 4, []
         )
-        labels = [r["label"].lower() for r in results]
+        labels = [r["title"].lower() for r in results["roles"]]
         assert any(
             "technician" in l or "maintenance" in l or "supervisor" in l
             for l in labels
@@ -163,7 +163,7 @@ class TestTechnicianFieldWorker:
         results = generate_role_suggestions(
             ["electrician", "wiring", "maintenance"], [], 5, []
         )
-        labels = [r["label"].lower() for r in results]
+        labels = [r["title"].lower() for r in results["roles"]]
         assert any(
             "technician" in l or "engineer" in l or "supervisor" in l
             for l in labels
@@ -173,7 +173,7 @@ class TestTechnicianFieldWorker:
         results = generate_role_suggestions(
             ["electrical", "hvac", "maintenance"], [], 10, []
         )
-        labels = [r["label"].lower() for r in results]
+        labels = [r["title"].lower() for r in results["roles"]]
         assert any(
             "supervisor" in l or "manager" in l or "foreman" in l
             for l in labels
@@ -189,7 +189,7 @@ class TestDriverLogistics:
         results = generate_role_suggestions(
             ["driving", "heavy vehicle", "transport"], [], 3, []
         )
-        labels = [r["label"].lower() for r in results]
+        labels = [r["title"].lower() for r in results["roles"]]
         assert any(
             "driver" in l or "transport" in l or "logistics" in l
             for l in labels
@@ -199,7 +199,7 @@ class TestDriverLogistics:
         results = generate_role_suggestions(
             ["logistics", "warehouse", "inventory", "procurement"], [], 4, []
         )
-        labels = [r["label"].lower() for r in results]
+        labels = [r["title"].lower() for r in results["roles"]]
         assert any(
             "logistics" in l or "supply chain" in l or "coordinator" in l
             for l in labels
@@ -209,7 +209,7 @@ class TestDriverLogistics:
         results = generate_role_suggestions(
             ["logistics", "supply chain", "procurement"], [], 10, []
         )
-        labels = [r["label"].lower() for r in results]
+        labels = [r["title"].lower() for r in results["roles"]]
         assert any("manager" in l for l in labels), (
             f"Expected manager-level role for 10yr logistics, got: {labels}"
         )
@@ -224,7 +224,7 @@ class TestAdminCustomerService:
         results = generate_role_suggestions(
             ["administration", "office management", "scheduling"], [], 3, []
         )
-        labels = [r["label"].lower() for r in results]
+        labels = [r["title"].lower() for r in results["roles"]]
         assert any(
             "admin" in l or "office" in l or "coordinator" in l
             for l in labels
@@ -234,7 +234,7 @@ class TestAdminCustomerService:
         results = generate_role_suggestions(
             ["customer service", "crm", "sales"], [], 2, []
         )
-        labels = [r["label"].lower() for r in results]
+        labels = [r["title"].lower() for r in results["roles"]]
         assert any(
             "customer" in l or "sales" in l or "service" in l
             for l in labels
@@ -244,7 +244,7 @@ class TestAdminCustomerService:
         results = generate_role_suggestions(
             ["office management", "administration", "executive assistant"], [], 10, []
         )
-        labels = [r["label"].lower() for r in results]
+        labels = [r["title"].lower() for r in results["roles"]]
         assert any("manager" in l or "director" in l for l in labels), (
             f"Expected manager-level admin role, got: {labels}"
         )
@@ -266,16 +266,25 @@ class TestWeakProfile:
 
     def test_empty_profile_returns_no_suggestions(self):
         results = generate_role_suggestions([], [], None, [])
-        assert results == []
+        assert results["roles"] == []
+        assert results["source"] == "weak_profile"
+
+    def test_empty_profile_returns_add_skills_action(self):
+        results = generate_role_suggestions([], [], None, [])
+        actions = results.get("actions", [])
+        action_names = [a.get("action") for a in actions]
+        assert "add_skills" in action_names, (
+            f"Expected add_skills action for empty profile, got: {action_names}"
+        )
 
     def test_vague_skill_alone_still_needs_clarification(self):
         """Single generic skill like 'excel' alone should not produce suggestions
         without any domain context — Excel appears in too many segments."""
-        # NOTE: Excel is a data signal — it may match data_analytics family.
+        # NOTE: Excel is an admin signal — it may match admin_office family.
         # Acceptable either way; just verify no nonsense roles are produced.
         results = generate_role_suggestions(["excel"], [], None, [])
-        if results:
-            labels = [r["label"].lower() for r in results]
+        if results.get("roles"):
+            labels = [r["title"].lower() for r in results["roles"]]
             nonsense = [l for l in labels if "excel" in l]
             assert not nonsense, f"Should not suggest 'Excel' as a role: {labels}"
 
@@ -291,7 +300,7 @@ class TestArabicMixedProfile:
         results = generate_role_suggestions(
             ["hse", "safety", "iso 45001"], ["nebosh"], 5, []
         )
-        labels = [r["label"].lower() for r in results]
+        labels = [r["title"].lower() for r in results["roles"]]
         assert any("hse" in l or "safety" in l for l in labels), (
             f"Expected HSE role for Arabic user with English skills, got: {labels}"
         )
@@ -305,8 +314,8 @@ class TestArabicMixedProfile:
             7,
             ["oil and gas"],
         )
-        assert isinstance(results, list)
-        assert len(results) > 0
+        assert isinstance(results, dict)
+        assert len(results["roles"]) > 0
 
     def test_current_role_in_arabic_does_not_crash(self):
         """current_role may be set from a CV in Arabic. Function must not crash."""
@@ -317,7 +326,8 @@ class TestArabicMixedProfile:
             [],
             current_role="مدير مالي",  # "Finance Manager" in Arabic
         )
-        assert isinstance(results, list)
+        assert isinstance(results, dict)
+        assert "roles" in results
 
     def test_arabic_user_gets_uae_relevant_titles(self):
         """Suggestions for an Arabic user must use UAE-standard English titles,
@@ -325,7 +335,7 @@ class TestArabicMixedProfile:
         results = generate_role_suggestions(
             ["hr", "recruitment", "payroll"], [], 4, []
         )
-        labels = [r["label"] for r in results]
+        labels = [r["title"] for r in results["roles"]]
         assert labels, "Expected HR role suggestions"
         # UAE HR market uses Officer/Manager — not "HR Generalist" or "HR Rep"
         assert any(

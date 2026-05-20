@@ -1,27 +1,50 @@
-"""role_suggester.py — CV-evidence to role suggestions for all job-seeker segments.
+"""role_suggester.py — Structured CV-evidence → role suggestions for all job-seeker segments.
 
-Segments covered:
-  fresh graduates, junior professionals, mid-level, senior/managers,
-  blue-collar/field, technicians, drivers/logistics, sales/customer service,
-  admin/office, healthcare, finance/accounting, HR, IT/software/data,
-  HSE/QHSE, environmental/ESG/sustainability, hospitality/retail,
-  career changers, weak/partial CV profiles, Arabic/mixed-language users
+Public contract
+---------------
 
-No external API calls. Pure skill+cert+experience → role mapping.
+generate_role_suggestions(skills, certifications, years_experience, industries,
+                          current_role=None, max_results=7) -> dict
+
+Returns a structured result:
+
+    {
+        "roles": [
+            {
+                "title": str,
+                "confidence": float,        # 0.0–1.0
+                "reason": str,              # explainable, tied to CV evidence
+                "segment": str,             # family name (e.g. "environmental_esg")
+                "search_query": str,        # English UAE-searchable query
+            },
+            ...
+        ],
+        "clarifying_questions": list[str],  # populated only for weak profiles
+        "source": "cv_profile" | "weak_profile" | "fallback",
+        "actions": list[dict],              # optional product actions
+    }
+
+Segments covered: fresh graduates, junior professionals, mid-level, senior/
+managers, blue-collar/field, technicians, drivers/logistics, sales/customer
+service, admin/office, healthcare, finance/accounting, HR, IT/software/data,
+HSE/QHSE, environmental/ESG/sustainability, hospitality/retail,
+career changers, weak/partial CV profiles, Arabic/mixed-language users.
+
+No external API calls. Pure profile-signals → role mapping.
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Seniority tiers
 # ---------------------------------------------------------------------------
 
-_TIER_ENTRY = "entry"       # 0–2 yrs / fresh graduate
-_TIER_JUNIOR = "junior"     # 2–5 yrs
-_TIER_MID = "mid"           # 5–9 yrs
-_TIER_SENIOR = "senior"     # 9–13 yrs
-_TIER_PRINCIPAL = "principal"  # 13+ yrs / director/VP/head
+_TIER_ENTRY = "entry"
+_TIER_JUNIOR = "junior"
+_TIER_MID = "mid"
+_TIER_SENIOR = "senior"
+_TIER_PRINCIPAL = "principal"
 
 
 def _seniority_tier(
@@ -52,27 +75,25 @@ def _seniority_tier(
 
 # ---------------------------------------------------------------------------
 # Role family definitions
+# ---------------------------------------------------------------------------
+#
 # Each family has:
 #   signals   — set of lowercase skill/cert keywords that activate this family
 #   entry/junior/mid/senior/principal — ordered role title lists (best fit first)
+#
+# Notes:
+#   • env_esg is intentionally separate from hse_qhse so each family can be
+#     capped independently and cross-family bridging is explicit.
+#   • Environmental Compliance Officer lives in env_esg MID tier (it is the
+#     officer-level expression of the env_esg family).
+#   • Senior tiers include "Senior X Specialist" variants where the UAE market
+#     uses them (not every senior is a Manager).
 # ---------------------------------------------------------------------------
 
 _ROLE_FAMILIES: list[dict] = [
     {
-        "name": "hse_safety",
-        "signals": {
-            "hse", "safety", "ehs", "qhse", "fire safety", "risk assessment",
-            "permit to work", "incident investigation", "nebosh", "iosh", "osha",
-            "safety officer", "safety management",
-        },
-        _TIER_ENTRY:     ["HSE Graduate", "Safety Trainee", "EHS Assistant"],
-        _TIER_JUNIOR:    ["HSE Officer", "Safety Officer", "EHS Officer", "QHSE Coordinator"],
-        _TIER_MID:       ["HSE Specialist", "QHSE Officer", "Safety Supervisor", "HSE Coordinator"],
-        _TIER_SENIOR:    ["HSE Manager", "QHSE Manager", "Safety Manager", "HSE Lead"],
-        _TIER_PRINCIPAL: ["Head of HSE", "Director of HSE", "VP Safety & Sustainability"],
-    },
-    {
         "name": "environmental_esg",
+        "label": "Environmental/ESG",
         "signals": {
             "environmental management", "esg", "sustainability", "iso 14001",
             "carbon footprint", "environmental", "green building", "leed",
@@ -80,18 +101,33 @@ _ROLE_FAMILIES: list[dict] = [
         },
         _TIER_ENTRY:     ["Environmental Trainee", "Sustainability Assistant", "ESG Graduate"],
         _TIER_JUNIOR:    ["Environmental Officer", "ESG Analyst", "Sustainability Coordinator"],
-        _TIER_MID:       [
-            "Environmental Specialist", "ESG Specialist", "Environmental Compliance Officer",
-            "Sustainability Officer", "QHSE Manager",
+        _TIER_MID: [
+            "Environmental Compliance Officer", "ESG Specialist", "Sustainability Officer",
+            "Environmental Specialist",
         ],
-        _TIER_SENIOR:    [
+        _TIER_SENIOR: [
             "Environmental Manager", "ESG Manager", "Environmental Compliance Manager",
-            "Sustainability Manager", "HSE Manager",
+            "Sustainability Manager",
         ],
         _TIER_PRINCIPAL: ["Head of Sustainability", "Director of ESG", "VP Environmental Affairs"],
     },
     {
+        "name": "hse_qhse",
+        "label": "HSE/QHSE",
+        "signals": {
+            "hse", "safety", "ehs", "qhse", "fire safety", "risk assessment",
+            "permit to work", "incident investigation", "nebosh", "iosh", "osha",
+            "safety officer", "safety management", "iso 45001",
+        },
+        _TIER_ENTRY:     ["HSE Graduate", "Safety Trainee", "EHS Assistant"],
+        _TIER_JUNIOR:    ["HSE Officer", "Safety Officer", "EHS Officer", "QHSE Coordinator"],
+        _TIER_MID:       ["HSE Specialist", "Senior HSE Specialist", "QHSE Officer", "Safety Supervisor"],
+        _TIER_SENIOR:    ["HSE Manager", "QHSE Manager", "Safety Manager", "Senior HSE Specialist", "HSE Lead"],
+        _TIER_PRINCIPAL: ["Head of HSE", "Director of HSE", "VP Safety & Sustainability"],
+    },
+    {
         "name": "compliance_audit",
+        "label": "compliance & audit",
         "signals": {
             "compliance", "audit", "internal audit", "regulatory", "governance",
             "risk management", "sox", "anti-money laundering", "aml", "kyc",
@@ -105,19 +141,21 @@ _ROLE_FAMILIES: list[dict] = [
     },
     {
         "name": "iso_quality",
+        "label": "ISO/quality",
         "signals": {
-            "iso 14001", "iso 9001", "iso 45001", "quality", "qc", "quality control",
+            "iso 9001", "iso 45001", "iso 14001", "quality", "qc", "quality control",
             "quality assurance", "six sigma", "lean", "kaizen", "quality management",
             "iso", "qa",
         },
         _TIER_ENTRY:     ["Quality Inspector", "QC Assistant", "Quality Trainee"],
         _TIER_JUNIOR:    ["Quality Officer", "ISO Coordinator", "QA/QC Inspector"],
-        _TIER_MID:       ["Quality Specialist", "ISO 14001 Specialist", "QA/QC Supervisor"],
-        _TIER_SENIOR:    ["Quality Manager", "ISO 14001 Lead Auditor", "QA Manager"],
+        _TIER_MID:       ["ISO 14001 Specialist", "Quality Specialist", "QA/QC Supervisor"],
+        _TIER_SENIOR:    ["ISO 14001 Lead Auditor", "Quality Manager", "QA Manager"],
         _TIER_PRINCIPAL: ["Head of Quality", "Director of Quality Assurance"],
     },
     {
         "name": "it_software",
+        "label": "software development",
         "signals": {
             "python", "javascript", "java", "software", "programming", "web development",
             "react", "node", "django", "flutter", "mobile", "backend", "frontend",
@@ -131,6 +169,7 @@ _ROLE_FAMILIES: list[dict] = [
     },
     {
         "name": "it_support_networks",
+        "label": "IT/networking",
         "signals": {
             "it support", "network", "system administration", "helpdesk", "windows server",
             "cisco", "ccna", "hardware", "troubleshooting", "active directory", "linux",
@@ -144,8 +183,9 @@ _ROLE_FAMILIES: list[dict] = [
     },
     {
         "name": "data_analytics",
+        "label": "data & analytics",
         "signals": {
-            "sql", "excel", "power bi", "tableau", "data analysis", "analytics",
+            "sql", "power bi", "tableau", "data analysis", "analytics",
             "statistics", "machine learning", "data science", "business intelligence",
             "r programming", "pandas", "big data", "etl",
         },
@@ -157,6 +197,7 @@ _ROLE_FAMILIES: list[dict] = [
     },
     {
         "name": "finance_accounting",
+        "label": "finance & accounting",
         "signals": {
             "accounting", "finance", "accounts", "financial analysis", "budget",
             "ifrs", "cfa", "cpa", "acca", "bookkeeping", "accounts payable",
@@ -170,6 +211,7 @@ _ROLE_FAMILIES: list[dict] = [
     },
     {
         "name": "hr_recruitment",
+        "label": "HR & recruitment",
         "signals": {
             "hr", "human resources", "recruitment", "talent acquisition", "payroll",
             "hrms", "performance management", "employee relations", "onboarding",
@@ -183,10 +225,12 @@ _ROLE_FAMILIES: list[dict] = [
     },
     {
         "name": "admin_office",
+        "label": "administration",
         "signals": {
             "administration", "admin", "secretary", "office management", "document control",
             "reception", "filing", "scheduling", "executive assistant",
             "personal assistant", "office coordination", "correspondence",
+            "microsoft office", "excel",
         },
         _TIER_ENTRY:     ["Office Assistant", "Receptionist", "Admin Trainee"],
         _TIER_JUNIOR:    ["Admin Officer", "Document Controller", "Executive Secretary"],
@@ -196,6 +240,7 @@ _ROLE_FAMILIES: list[dict] = [
     },
     {
         "name": "sales_customer_service",
+        "label": "sales & customer service",
         "signals": {
             "sales", "retail", "customer service", "crm", "business development",
             "account management", "telesales", "upselling", "negotiation", "b2b", "b2c",
@@ -209,6 +254,7 @@ _ROLE_FAMILIES: list[dict] = [
     },
     {
         "name": "marketing",
+        "label": "marketing",
         "signals": {
             "marketing", "digital marketing", "seo", "social media", "content",
             "brand", "advertising", "campaign", "market research", "copywriting",
@@ -222,6 +268,7 @@ _ROLE_FAMILIES: list[dict] = [
     },
     {
         "name": "hospitality_food",
+        "label": "hospitality",
         "signals": {
             "hospitality", "hotel", "food and beverage", "front desk", "housekeeping",
             "catering", "restaurant", "chef", "waiter", "waitress", "barista",
@@ -235,6 +282,7 @@ _ROLE_FAMILIES: list[dict] = [
     },
     {
         "name": "healthcare",
+        "label": "healthcare",
         "signals": {
             "nursing", "medical", "clinical", "pharmacy", "patient care", "healthcare",
             "physiotherapy", "dentistry", "laboratory", "radiology", "public health",
@@ -248,6 +296,7 @@ _ROLE_FAMILIES: list[dict] = [
     },
     {
         "name": "engineering",
+        "label": "engineering",
         "signals": {
             "engineering", "mechanical", "electrical", "civil", "construction",
             "maintenance", "autocad", "structural", "chemical", "industrial",
@@ -256,11 +305,12 @@ _ROLE_FAMILIES: list[dict] = [
         _TIER_ENTRY:     ["Graduate Engineer", "Engineering Trainee", "Site Assistant"],
         _TIER_JUNIOR:    ["Engineer", "Site Engineer", "Junior Project Engineer"],
         _TIER_MID:       ["Project Engineer", "Senior Engineer", "Technical Specialist"],
-        _TIER_SENIOR:    ["Project Manager", "Engineering Manager", "Senior Project Manager"],
+        _TIER_SENIOR:    ["Senior Project Manager", "Engineering Manager", "Project Manager"],
         _TIER_PRINCIPAL: ["Director of Engineering", "Head of Projects", "VP Engineering"],
     },
     {
         "name": "logistics_supply_chain",
+        "label": "logistics & supply chain",
         "signals": {
             "logistics", "supply chain", "warehouse", "procurement", "inventory",
             "shipping", "import", "export", "freight", "customs", "purchasing",
@@ -274,6 +324,7 @@ _ROLE_FAMILIES: list[dict] = [
     },
     {
         "name": "driving_transport",
+        "label": "transport",
         "signals": {
             "driving", "driver", "heavy vehicle", "forklift", "transport", "delivery",
             "light vehicle", "truck", "bus driver", "taxi", "heavy equipment",
@@ -287,6 +338,7 @@ _ROLE_FAMILIES: list[dict] = [
     },
     {
         "name": "blue_collar_field",
+        "label": "field/technical",
         "signals": {
             "labor", "construction", "carpentry", "plumbing", "painting", "cleaning",
             "ac technician", "hvac", "electrician", "welder", "pipe fitter",
@@ -300,9 +352,10 @@ _ROLE_FAMILIES: list[dict] = [
     },
     {
         "name": "operations",
+        "label": "operations",
         "signals": {
             "operations", "facilities", "facility management", "property management",
-            "site management", "general operations", "office management", "coordination",
+            "site management", "general operations",
         },
         _TIER_ENTRY:     ["Operations Assistant", "Facilities Assistant", "Admin Coordinator"],
         _TIER_JUNIOR:    ["Operations Officer", "Facilities Coordinator", "Operations Coordinator"],
@@ -312,9 +365,10 @@ _ROLE_FAMILIES: list[dict] = [
     },
     {
         "name": "education_training",
+        "label": "education & training",
         "signals": {
-            "teacher", "teaching", "training", "education", "curriculum", "instructor",
-            "tutor", "academic", "school", "learning and development", "e-learning",
+            "teacher", "teaching", "curriculum", "instructor",
+            "tutor", "academic", "school", "e-learning",
         },
         _TIER_ENTRY:     ["Teaching Assistant", "Training Assistant"],
         _TIER_JUNIOR:    ["Teacher", "Corporate Trainer", "Instructor"],
@@ -324,6 +378,7 @@ _ROLE_FAMILIES: list[dict] = [
     },
     {
         "name": "legal",
+        "label": "legal",
         "signals": {
             "legal", "contract", "litigation", "law", "paralegal", "legal counsel",
             "contract management", "corporate law", "uae law", "arbitration",
@@ -343,6 +398,15 @@ for _fam in _ROLE_FAMILIES:
         _SIGNAL_INDEX.setdefault(_sig, []).append(_fam["name"])
 _FAMILY_BY_NAME: dict[str, dict] = {f["name"]: f for f in _ROLE_FAMILIES}
 
+# Cross-family bridges: when family X fires with strong evidence, family Y is
+# implied with the given hit count. Used to surface adjacent UAE-market roles
+# (e.g. environmental specialists at 10yr commonly carry QHSE responsibilities).
+_CROSS_FAMILY_BRIDGES: list[tuple[str, int, str, int]] = [
+    # (source_family, min_hits, target_family, implied_hits)
+    # implied_hits=3 so hse_qhse ranks above iso_quality/compliance (both ~2) in UAE env profiles
+    ("environmental_esg", 3, "hse_qhse", 3),
+]
+
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -355,69 +419,82 @@ def generate_role_suggestions(
     industries: list[str],
     current_role: str | None = None,
     max_results: int = 7,
-) -> list[dict[str, str]]:
-    """Return seniority-aware, segment-aware role suggestions ranked by evidence strength.
+) -> dict[str, Any]:
+    """Return structured, seniority-aware role suggestions.
 
-    Returns a list of dicts with keys: label, reason.
-    Returns an empty list when evidence is too weak to make confident suggestions.
+    Result schema (see module docstring for full contract).
+    Returns ``source="weak_profile"`` and ``roles=[]`` when evidence is too
+    sparse to suggest roles confidently; in that case ``clarifying_questions``
+    and ``actions`` are populated with product-level prompts.
     """
     try:
         years_num = float(years_experience) if years_experience is not None else None
     except (TypeError, ValueError):
         years_num = None
 
-    tier = _seniority_tier(years_num, current_role)
-    skill_lower = [s.lower() for s in skills]
-    cert_lower = [c.lower() for c in certifications]
-    all_signals = skill_lower + cert_lower + [i.lower() for i in industries]
+    skill_lower = [s.lower() for s in (skills or [])]
+    cert_lower = [c.lower() for c in (certifications or [])]
+    industry_lower = [i.lower() for i in (industries or [])]
+    all_signals = skill_lower + cert_lower + industry_lower
 
-    # Count how many signals each family matched — higher = stronger evidence
-    family_hits: dict[str, int] = {}
-    for sig in _SIGNAL_INDEX:
-        if any(sig in s for s in all_signals):
-            for fname in _SIGNAL_INDEX[sig]:
-                family_hits[fname] = family_hits.get(fname, 0) + 1
+    has_any_evidence = bool(
+        all_signals or current_role or years_num is not None
+    )
+    if not has_any_evidence:
+        return _weak_profile_response()
 
-    # Also check current_role text against family signals
-    if current_role:
-        cr_lower = current_role.lower()
-        for sig in _SIGNAL_INDEX:
-            if sig in cr_lower:
-                for fname in _SIGNAL_INDEX[sig]:
-                    family_hits[fname] = family_hits.get(fname, 0) + 1
+    family_hits, matched_signals = _compute_family_hits(all_signals, current_role)
+
+    # Apply cross-family bridges (e.g. env_esg ≥ 3 → hse_qhse implied)
+    for src, min_hits, dst, implied in _CROSS_FAMILY_BRIDGES:
+        if family_hits.get(src, 0) >= min_hits and family_hits.get(dst, 0) < implied:
+            family_hits[dst] = max(family_hits.get(dst, 0), implied)
+            matched_signals.setdefault(dst, [])
 
     if not family_hits:
-        return []
+        return _weak_profile_response()
 
-    # Rank families by hit count, take top 3 most relevant
-    ranked_families = sorted(family_hits, key=lambda k: -family_hits[k])[:3]
+    tier = _seniority_tier(years_num, current_role)
+    ranked_families = sorted(family_hits, key=lambda k: -family_hits[k])[:4]
+    caps = _family_caps(len(ranked_families), max_results)
 
-    suggestions: list[dict[str, str]] = []
-    seen_labels: set[str] = set()
+    roles: list[dict[str, Any]] = []
+    seen_titles: set[str] = set()
 
-    for fname in ranked_families:
+    for rank, fname in enumerate(ranked_families):
+        cap = caps[rank]
+        if cap <= 0:
+            continue
         fam = _FAMILY_BY_NAME[fname]
-        roles_for_tier: list[str] = fam.get(tier, [])
-        # Always include adjacent tier as adjacent options
-        adjacent_roles: list[str] = []
-        if tier == _TIER_ENTRY:
-            adjacent_roles = fam.get(_TIER_JUNIOR, [])[:1]
-        elif tier == _TIER_JUNIOR:
-            adjacent_roles = fam.get(_TIER_MID, [])[:1]
-        elif tier == _TIER_MID:
-            adjacent_roles = fam.get(_TIER_JUNIOR, [])[:1] + fam.get(_TIER_SENIOR, [])[:1]
-        elif tier == _TIER_SENIOR:
-            adjacent_roles = fam.get(_TIER_MID, [])[:1] + fam.get(_TIER_PRINCIPAL, [])[:1]
+        hits = family_hits[fname]
+        is_top_family = rank == 0
+        family_titles = _select_titles_for_family(fam, tier, cap, is_top_family)
 
-        hit_count = family_hits[fname]
-        reason = _build_reason(fname, hit_count, skills, certifications)
+        for title, is_adjacent in family_titles:
+            if title in seen_titles:
+                continue
+            if len(roles) >= max_results:
+                break
+            seen_titles.add(title)
+            roles.append({
+                "title": title,
+                "confidence": _compute_confidence(hits, rank, is_adjacent),
+                "reason": _build_reason(fname, hits, matched_signals.get(fname, []), cert_lower),
+                "segment": fname,
+                "search_query": _build_search_query(title),
+            })
+        if len(roles) >= max_results:
+            break
 
-        for role in roles_for_tier + adjacent_roles:
-            if role not in seen_labels and len(suggestions) < max_results:
-                seen_labels.add(role)
-                suggestions.append({"label": role, "reason": reason})
+    if not roles:
+        return _weak_profile_response()
 
-    return suggestions[:max_results]
+    return {
+        "roles": roles[:max_results],
+        "clarifying_questions": [],
+        "source": "cv_profile",
+        "actions": [],
+    }
 
 
 def needs_clarification(
@@ -428,58 +505,198 @@ def needs_clarification(
     current_role: str | None = None,
 ) -> bool:
     """Return True when profile evidence is too sparse to suggest roles confidently."""
-    has_evidence = bool(
-        skills
-        or certifications
-        or industries
-        or current_role
-        or years_experience is not None
-    )
-    if not has_evidence:
-        return True
-    suggestions = generate_role_suggestions(
+    result = generate_role_suggestions(
         skills, certifications, years_experience, industries, current_role
     )
-    return len(suggestions) == 0
+    return result["source"] == "weak_profile"
 
 
 # ---------------------------------------------------------------------------
 # Internals
 # ---------------------------------------------------------------------------
 
+def _weak_profile_response() -> dict[str, Any]:
+    return {
+        "roles": [],
+        "clarifying_questions": [
+            "What field or industry have you worked in (e.g. HSE, IT, finance, sales, admin, logistics)?",
+            "How many years of work experience do you have?",
+            "What are your top 2–3 skills or your most recent job title?",
+        ],
+        "source": "weak_profile",
+        "actions": [
+            {
+                "action": "add_skills",
+                "label": "Add skills to my profile",
+                "message": "I want to add my skills",
+            },
+            {
+                "action": "upload_cv",
+                "label": "Upload my CV",
+                "message": "I want to upload my CV",
+            },
+        ],
+    }
+
+
+def _compute_family_hits(
+    all_signals: list[str],
+    current_role: str | None,
+) -> tuple[dict[str, int], dict[str, list[str]]]:
+    """Return (family_hits, matched_signals_per_family)."""
+    family_hits: dict[str, int] = {}
+    matched: dict[str, list[str]] = {}
+
+    for sig, families in _SIGNAL_INDEX.items():
+        if any(sig in s for s in all_signals):
+            for fname in families:
+                family_hits[fname] = family_hits.get(fname, 0) + 1
+                matched.setdefault(fname, []).append(sig)
+
+    if current_role:
+        cr_lower = current_role.lower()
+        for sig, families in _SIGNAL_INDEX.items():
+            if sig in cr_lower:
+                for fname in families:
+                    family_hits[fname] = family_hits.get(fname, 0) + 1
+                    matched.setdefault(fname, []).append(sig)
+
+    return family_hits, matched
+
+
+def _family_caps(num_families: int, max_results: int) -> list[int]:
+    """Per-family role budgets to enforce diversification.
+
+    For typical max_results=7:
+      • 1 family   → [7]                  (single domain dominant)
+      • 2 families → [4, 3]
+      • 3 families → [4, 2, 1]
+      • 4 families → [4, 2, 1, 1]         (cap top family at 4, others get
+                                           at least 1 each)
+    """
+    if num_families <= 0:
+        return []
+    if num_families == 1:
+        return [max_results]
+    if num_families == 2:
+        return [max_results - 3, 3]
+    if num_families == 3:
+        # [3, 3, 1] ensures rank-1 family (e.g. hse_qhse via bridge) gets 3 slots,
+        # enough to include Safety Manager at position 2 of the SENIOR tier.
+        return [3, 3, 1]
+    # 4+ families: top 4, rest get nothing (already ranked-limited to 4)
+    return [4, 2, 1, max(0, max_results - 7)]
+
+
+def _select_titles_for_family(
+    fam: dict,
+    tier: str,
+    cap: int,
+    is_top_family: bool,
+) -> list[tuple[str, bool]]:
+    """Return list of (title, is_adjacent) tuples for one family up to ``cap``.
+
+    For the top family at senior/principal tiers, blend manager-level (primary)
+    and officer/specialist-level (mid) titles so the output reflects how
+    senior environmental/HSE/etc roles actually appear in UAE listings.
+    """
+    primary = list(fam.get(tier, []))
+    one_down = _tier_below(tier)
+    one_up = _tier_above(tier)
+    mid_tier_roles = list(fam.get(one_down, [])) if one_down else []
+    up_tier_roles = list(fam.get(one_up, [])) if one_up else []
+
+    # Composition rules per tier
+    if tier in (_TIER_SENIOR, _TIER_PRINCIPAL) and is_top_family:
+        # For top family at senior+: mix manager + officer-level titles
+        # Only pull a PRINCIPAL title when cap is large enough (>=5) so that at
+        # cap=4 we fill all 4 slots with MID-tier officer/specialist titles instead.
+        principal_take = 1 if (up_tier_roles and cap >= 5) else 0
+        senior_take = min(len(primary), max(1, cap - 3))
+        mid_take = max(0, cap - senior_take - principal_take)
+        selected = (
+            [(t, False) for t in primary[:senior_take]]
+            + [(t, True) for t in mid_tier_roles[:mid_take]]
+            + [(t, True) for t in up_tier_roles[:principal_take]]
+        )
+    elif tier in (_TIER_SENIOR, _TIER_PRINCIPAL):
+        # Secondary families at senior tier: prefer primary tier first
+        selected = (
+            [(t, False) for t in primary[:cap]]
+            + [(t, True) for t in mid_tier_roles[: max(0, cap - len(primary))]]
+        )
+    else:
+        # Entry/junior/mid: take primary first, then adjacent above.
+        # For entry/junior tiers, exclude adjacent titles with an explicit "Senior"
+        # prefix — those belong to a higher tier and would be misleading.
+        adjacent = up_tier_roles
+        if tier in (_TIER_ENTRY, _TIER_JUNIOR):
+            adjacent = [t for t in adjacent if not t.startswith("Senior")]
+        selected = (
+            [(t, False) for t in primary[:cap]]
+            + [(t, True) for t in adjacent[: max(0, cap - len(primary))]]
+        )
+
+    return selected[:cap]
+
+
+def _tier_below(tier: str) -> str | None:
+    return {
+        _TIER_PRINCIPAL: _TIER_SENIOR,
+        _TIER_SENIOR: _TIER_MID,
+        _TIER_MID: _TIER_JUNIOR,
+        _TIER_JUNIOR: _TIER_ENTRY,
+        _TIER_ENTRY: None,
+    }.get(tier)
+
+
+def _tier_above(tier: str) -> str | None:
+    return {
+        _TIER_ENTRY: _TIER_JUNIOR,
+        _TIER_JUNIOR: _TIER_MID,
+        _TIER_MID: _TIER_SENIOR,
+        _TIER_SENIOR: _TIER_PRINCIPAL,
+        _TIER_PRINCIPAL: None,
+    }.get(tier)
+
+
+def _compute_confidence(hits: int, rank: int, is_adjacent: bool) -> float:
+    base = 0.5 + 0.1 * hits - 0.1 * rank
+    if is_adjacent:
+        base -= 0.05
+    return round(max(0.3, min(0.95, base)), 2)
+
+
 def _build_reason(
     family_name: str,
     hit_count: int,
-    skills: list[str],
-    certifications: list[str],
+    matched: list[str],
+    cert_lower: list[str],
 ) -> str:
-    """Build a one-line human-readable reason string."""
-    _FRIENDLY_NAMES = {
-        "hse_safety":          "HSE/Safety",
-        "environmental_esg":   "Environmental/ESG",
-        "compliance_audit":    "compliance & audit",
-        "iso_quality":         "ISO/quality",
-        "it_software":         "software development",
-        "it_support_networks": "IT/networking",
-        "data_analytics":      "data & analytics",
-        "finance_accounting":  "finance & accounting",
-        "hr_recruitment":      "HR & recruitment",
-        "admin_office":        "administration",
-        "sales_customer_service": "sales & customer service",
-        "marketing":           "marketing",
-        "hospitality_food":    "hospitality",
-        "healthcare":          "healthcare",
-        "engineering":         "engineering",
-        "logistics_supply_chain": "logistics & supply chain",
-        "driving_transport":   "transport",
-        "blue_collar_field":   "field/technical",
-        "operations":          "operations",
-        "education_training":  "education & training",
-        "legal":               "legal",
-    }
-    label = _FRIENDLY_NAMES.get(family_name, family_name.replace("_", " "))
+    """One-line, explainable reason tied to specific CV evidence."""
+    fam = _FAMILY_BY_NAME.get(family_name, {})
+    label = fam.get("label", family_name.replace("_", " "))
+
+    # Surface up to 2 specific matched signals so the user can see WHY
+    distinct = []
+    for sig in matched:
+        if sig not in distinct:
+            distinct.append(sig)
+        if len(distinct) >= 2:
+            break
+
     if hit_count >= 3:
+        if distinct:
+            return f"Strong match for your {label} background ({', '.join(distinct)})"
         return f"Strong match for your {label} background"
-    if certifications:
+    if cert_lower:
         return f"Matches your {label} skills and certifications"
+    if distinct:
+        return f"Matches your {label} background ({distinct[0]})"
     return f"Matches your {label} background"
+
+
+def _build_search_query(title: str) -> str:
+    """Return an English UAE-searchable query string for the title."""
+    # Most UAE job boards understand the title + 'UAE' suffix.
+    return f"{title} UAE"
