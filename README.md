@@ -20,6 +20,20 @@ Rico learns from the user through chat and actions, scans UAE jobs in the backgr
 
 ---
 
+## Creator, Ownership & Product Direction
+
+Rico Hunt / Rico AI is created, designed, owned, and directed by **Roben Edwan** (GitHub: [`Binz2008-star`](https://github.com/Binz2008-star)).
+
+Roben is the product owner, system designer, and final decision-maker for Rico's product vision, AI behavior, UX direction, safety boundaries, roadmap priority, and release readiness.
+
+Rico is not intended to become a generic chatbot or a simple job board. The product direction is a UAE-focused AI career operating system that helps job seekers understand their profile, discover realistic opportunities, receive explainable matches, and stay in control of each high-impact action.
+
+AI agents, automation tools, and contributors must preserve the existing Rico architecture and user-first product direction. They must not create parallel systems, bypass safety boundaries, or claim production readiness without tests, deployment verification, and smoke evidence.
+
+See [`OWNERSHIP.md`](OWNERSHIP.md) for project ownership and governance rules.
+
+---
+
 ## Public Quick Start
 
 Primary public onboarding form:
@@ -333,6 +347,7 @@ Every recommendation should include:
 ## Important Project Docs
 
 ```text
+OWNERSHIP.md                    # Creator, ownership, and project governance
 RICO_PRODUCT_MANIFESTO.md       # Product identity and philosophy
 RICO_HARDENING_CHECKLIST.md     # Production and safety checklist
 RICO_CLOUD_SETUP.md             # Cloud deployment and integration guide
