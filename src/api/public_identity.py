@@ -30,7 +30,7 @@ def normalize_public_email(value: str | None) -> str | None:
 
     email = value.strip().lower()
     if not email:
-        return None
+        raise ValueError("Email must be a valid address")
     if not _EMAIL_RE.fullmatch(email):
         raise ValueError("Email must be a valid address")
     return email
