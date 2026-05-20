@@ -1,7 +1,7 @@
 "use client";
 
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, RicoOption, UploadCVResponse } from "@/lib/api";
-import { confirmCVProfile, fetchMe, logout, sendChat, sendChatPublic, uploadCV } from "@/lib/api";
+import { ApiError, confirmCVProfile, fetchMe, logout, sendChat, sendChatPublic, uploadCV } from "@/lib/api";
 import { buildAuthHref } from "@/lib/redirect";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -55,7 +55,7 @@ function getSourceLabel(responseSource: string | undefined): string | null {
     switch ((responseSource ?? "").toLowerCase()) {
         case "fallback":
         case "none":
-            return "Fallback mode";
+            return null;
         case "huggingface":
         case "hf":
             return "HF active";
@@ -415,7 +415,7 @@ export default function CommandPage() {
                     setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: "Rico is taking longer than usual — the server may be waking up. Please try again in 30 seconds." }]);
                     return;
                 }
-                if (err.message.includes("401")) { setSessionExpired(true); return; }
+                if ((err instanceof ApiError && err.statusCode === 401) || err.message.includes("401")) { setSessionExpired(true); return; }
                 if (err.name === "TypeError" || err.message === "Failed to fetch" || err.message.includes("network")) {
                     setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: "Could not reach Rico. Check your connection or try again." }]);
                     return;

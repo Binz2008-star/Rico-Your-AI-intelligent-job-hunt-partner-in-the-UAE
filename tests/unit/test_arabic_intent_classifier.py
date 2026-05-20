@@ -120,3 +120,30 @@ class TestArabicNonsenseSafeguard:
         """Pure digit-only strings are nonsense regardless of language context."""
         result = classify_intent("12345")
         assert result.intent == "nonsense"
+
+
+class TestArabicStandaloneRequestVerb:
+    """Standalone Arabic request verb + has_cv_profile must classify as job_search_explicit."""
+
+    def test_ibhath_alone_with_cv(self):
+        """'ابحث' (search) alone with CV profile = job search request."""
+        result = classify_intent("ابحث", has_cv_profile=True)
+        assert result.intent == "job_search_explicit", (
+            f"Expected job_search_explicit for 'ابحث' with CV, got {result.intent!r}"
+        )
+
+    def test_ibhath_alone_without_cv(self):
+        """'ابحث' alone without CV profile = unknown (ambiguous without context)."""
+        result = classify_intent("ابحث", has_cv_profile=False)
+        assert result.intent != "nonsense", "Arabic request verb must never be nonsense"
+
+    def test_dawer_alone_with_cv(self):
+        """'دور' (look/find) alone with CV profile = job search request."""
+        result = classify_intent("دور", has_cv_profile=True)
+        assert result.intent == "job_search_explicit"
+
+    def test_arabic_verb_not_nonsense_either_way(self):
+        """Arabic request verbs must never be classified as nonsense."""
+        for msg in ["ابحث", "دور", "شوف", "جيب"]:
+            result = classify_intent(msg)
+            assert result.intent != "nonsense", f"'{msg}' must not be nonsense"

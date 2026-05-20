@@ -209,6 +209,9 @@ class RicoChatAPI:
         text = (message or "").strip()
         if not text:
             return False
+        # Pure Arabic / non-ASCII input can't match the English role taxonomy
+        if not any(ch.isascii() and ch.isalpha() for ch in text):
+            return False
         if any(ch in _QUESTION_CHARS for ch in text):
             return False
         if ". " in text or text.endswith("..."):
@@ -1339,10 +1342,18 @@ class RicoChatAPI:
                 pass
             top_matches = all_explicit[:5]
             formatted = [self._format_match(m, profile) for m in top_matches]
+            if top_matches:
+                job_msg = "I found {} strong UAE job matches for you.".format(len(top_matches))
+            else:
+                job_msg = (
+                    "No strong UAE job matches found right now. "
+                    "Try specifying your target role — for example: "
+                    "'find HSE Manager jobs in Dubai'."
+                )
             response = {
                 "type": "job_matches",
                 "intent": "search_jobs",
-                "message": "I found {} strong UAE job matches for you.".format(len(top_matches)),
+                "message": job_msg,
                 "matches": formatted,
                 "entities": routed.entities,
             }
