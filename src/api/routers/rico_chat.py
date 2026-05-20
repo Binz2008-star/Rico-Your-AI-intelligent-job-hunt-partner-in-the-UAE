@@ -177,11 +177,19 @@ class ProfileResponse(BaseModel):
     name: str | None = None
     email: str | None = None
     phone: str | None = None
+    telegram_username: str | None = None
     target_roles: list[str] | None = None
     preferred_cities: list[str] | None = None
+    salary_expectation_aed: int | None = None
+    minimum_salary_aed: int | None = None
     skills: list[str] | None = None
+    industries: list[str] | None = None
+    visa_status: str | None = None
+    notice_period: str | None = None
     years_experience: float | None = None
     current_role: str | None = None
+    current_company: str | None = None
+    linkedin_url: str | None = None
     completeness_score: float | None = None
 
 
@@ -431,11 +439,19 @@ def rico_get_profile(request: Request) -> ProfileResponse:
         name=getattr(profile, "name", None),
         email=user_id,
         phone=getattr(profile, "phone", None),
+        telegram_username=getattr(profile, "telegram_username", None),
         target_roles=getattr(profile, "target_roles", None),
         preferred_cities=getattr(profile, "preferred_cities", None),
+        salary_expectation_aed=getattr(profile, "salary_expectation_aed", None),
+        minimum_salary_aed=getattr(profile, "minimum_salary_aed", None),
         skills=getattr(profile, "skills", None),
+        industries=getattr(profile, "industries", None),
+        visa_status=getattr(profile, "visa_status", None),
+        notice_period=getattr(profile, "notice_period", None),
         years_experience=getattr(profile, "years_experience", None),
         current_role=getattr(profile, "current_role", None),
+        current_company=getattr(profile, "current_company", None),
+        linkedin_url=getattr(profile, "linkedin_url", None),
         completeness_score=context.completeness_score,
     )
 
@@ -805,11 +821,18 @@ def rico_ai_provider_health_public(request: Request) -> dict[str, Any]:
 
 class ProfileUpdateRequest(BaseModel):
     name: Optional[str] = None
+    phone: Optional[str] = None
+    telegram_username: Optional[str] = None
     target_roles: Optional[list[str]] = None
     preferred_cities: Optional[list[str]] = None
-    salary_expectation_aed: Optional[float] = None
+    salary_expectation_aed: Optional[int] = None
+    minimum_salary_aed: Optional[int] = None
     years_experience: Optional[float] = None
     current_role: Optional[str] = None
+    current_company: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    visa_status: Optional[str] = None
+    notice_period: Optional[str] = None
     skills: Optional[list[str]] = None
 
 
@@ -824,16 +847,34 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
         name = body.name.strip()
         if name:
             updates["name"] = name
+    if body.phone is not None:
+        phone = body.phone.strip()
+        if phone:
+            updates["phone"] = phone
+    if body.telegram_username is not None:
+        telegram = body.telegram_username.strip()
+        if telegram:
+            updates["telegram_username"] = telegram
     if body.target_roles is not None:
         updates["target_roles"] = [r.strip() for r in body.target_roles if r.strip()]
     if body.preferred_cities is not None:
         updates["preferred_cities"] = [c.strip() for c in body.preferred_cities if c.strip()]
     if body.salary_expectation_aed is not None:
         updates["salary_expectation_aed"] = body.salary_expectation_aed
+    if body.minimum_salary_aed is not None:
+        updates["minimum_salary_aed"] = body.minimum_salary_aed
     if body.years_experience is not None:
         updates["years_experience"] = body.years_experience
     if body.current_role is not None:
         updates["current_role"] = body.current_role.strip()
+    if body.current_company is not None:
+        updates["current_company"] = body.current_company.strip()
+    if body.linkedin_url is not None:
+        updates["linkedin_url"] = body.linkedin_url.strip()
+    if body.visa_status is not None:
+        updates["visa_status"] = body.visa_status.strip()
+    if body.notice_period is not None:
+        updates["notice_period"] = body.notice_period.strip()
     if body.skills is not None:
         updates["skills"] = [s.strip() for s in body.skills if s.strip()]
 

@@ -1,3 +1,13 @@
+import {
+    ConfirmCVProfileResponseSchema,
+    MeResponseSchema,
+    ProfileUpdateResponseSchema,
+    RicoChatHistoryResponseSchema,
+    RicoChatResponseSchema,
+    RicoProfileResponseSchema,
+    SavedSearchesResponseSchema,
+    UploadCVResponseSchema,
+} from "@/lib/schemas";
 import type {
     Application,
     ApplicationActionRequest,
@@ -12,16 +22,6 @@ import type {
     SettingsResponse,
     SettingsUpdateRequest,
 } from "@/types";
-import {
-    ConfirmCVProfileResponseSchema,
-    MeResponseSchema,
-    ProfileUpdateResponseSchema,
-    RicoChatHistoryResponseSchema,
-    RicoChatResponseSchema,
-    RicoProfileResponseSchema,
-    SavedSearchesResponseSchema,
-    UploadCVResponseSchema,
-} from "@/lib/schemas";
 import type { ZodType } from "zod";
 
 // Absolute backend URL — used only for server-side (SSR) fetches such as fetchHealth().
@@ -904,6 +904,30 @@ export async function createApplication(
     return res.json() as Promise<{ status: string; job_id: string; message: string }>;
 }
 
+export interface ManualApplicationCreatePayload {
+    title: string;
+    company: string;
+    location?: string;
+    url?: string;
+    status?: string;
+}
+
+export async function createManualApplication(
+    payload: ManualApplicationCreatePayload
+): Promise<{ status: string; job_id: string; message: string }> {
+    const res = await fetch(`${PROXY}/api/v1/applications/manual`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { detail?: unknown };
+        throw new Error(extractDetail(body.detail, `Create manual application failed: ${res.status}`));
+    }
+    return res.json() as Promise<{ status: string; job_id: string; message: string }>;
+}
+
 export async function updateApplication(
     jobId: string,
     payload: ApplicationUpdatePayload
@@ -925,11 +949,18 @@ export async function updateApplication(
 
 export interface ProfileUpdatePayload {
     name?: string;
+    phone?: string;
+    telegram_username?: string;
     target_roles?: string[];
     preferred_cities?: string[];
     salary_expectation_aed?: number;
+    minimum_salary_aed?: number;
     years_experience?: number;
     current_role?: string;
+    current_company?: string;
+    linkedin_url?: string;
+    visa_status?: string;
+    notice_period?: string;
     skills?: string[];
 }
 
