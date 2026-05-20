@@ -247,7 +247,7 @@ def _normalize_arabic(text: str) -> str:
     return text
 
 
-def _is_arabic_job_search(normalized_lower: str) -> bool:
+def _is_arabic_job_search(normalized_lower: str, *, has_cv: bool = False) -> bool:
     """Return True when a normalised Arabic message is a job-search request."""
     has_request = any(t in normalized_lower for t in _ARABIC_REQUEST_TERMS)
     if not has_request:
@@ -255,7 +255,9 @@ def _is_arabic_job_search(normalized_lower: str) -> bool:
     has_ar_job = any(t in normalized_lower for t in _ARABIC_JOB_TERMS)
     # Mixed-language: Arabic request verb + English role name (e.g. "دور لي safety officer")
     has_en_content = bool(re.search(r"[a-zA-Z]{2,}", normalized_lower))
-    return has_ar_job or has_en_content
+    # A standalone request verb from a user who has a CV is always a job-search request
+    # e.g. "ابحث" alone = "search [for jobs for me]"
+    return has_ar_job or has_en_content or has_cv
 
 
 def _extract_english_role_from_mixed(text: str) -> Optional[str]:
@@ -358,7 +360,7 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         return IntentResult("job_search_explicit", 0.85, "regex")
 
     # Arabic job search: request verb + job noun, or request verb + English role name
-    if has_arabic and _is_arabic_job_search(lower):
+    if has_arabic and _is_arabic_job_search(lower, has_cv=has_cv_profile):
         role = _extract_english_role_from_mixed(text)
         return IntentResult("job_search_explicit", 0.85, "regex", extracted_role=role)
 
