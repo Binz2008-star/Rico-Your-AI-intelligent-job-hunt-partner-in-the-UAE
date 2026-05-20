@@ -25,6 +25,8 @@ class ParsedCV:
     languages: List[str]
     extraction_quality: str = "unknown"
     extracted_chars: int = 0
+    name: Optional[str] = None
+    current_role: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -166,7 +168,83 @@ class CVParser:
             languages=languages,
             extraction_quality=quality,
             extracted_chars=char_count,
+            name=self._extract_name(text),
+            current_role=self._extract_current_role(text),
         )
+
+    _NAME_SECTION_KEYWORDS = frozenset({
+        "objective", "summary", "profile", "education", "experience", "skills",
+        "certifications", "languages", "contact", "address", "email", "phone",
+        "curriculum", "vitae", "resume", "personal", "details", "linkedin",
+        "nationality", "references", "declaration", "date", "birth",
+    })
+
+    def _extract_name(self, text: str) -> Optional[str]:
+        """Return the candidate name from the first lines of a CV, or None."""
+        for line in text.split("\n")[:30]:
+            line = line.strip()
+            if not line or len(line) > 60:
+                continue
+            if any(ch in line for ch in "@:0123456789+/\\"):
+                continue
+            words = line.split()
+            if not (2 <= len(words) <= 4):
+                continue
+            # Require most words to start with uppercase
+            if sum(1 for w in words if w and w[0].isupper()) < len(words) - 1:
+                continue
+            lower_words = {w.lower().rstrip(".,;") for w in words}
+            if lower_words & self._NAME_SECTION_KEYWORDS:
+                continue
+            # Only alphabetic characters (hyphens and apostrophes allowed inside)
+            clean = re.sub(r"['\-]", "", line.replace(" ", ""))
+            if not clean.isalpha():
+                continue
+            return line
+        return None
+
+    _ROLE_TITLE_KEYWORDS = frozenset({
+        "officer", "manager", "engineer", "specialist", "coordinator", "analyst",
+        "director", "lead", "head", "consultant", "advisor", "executive",
+        "supervisor", "technician", "administrator", "auditor", "associate",
+        "inspector", "controller", "planner", "strategist",
+    })
+
+    def _extract_current_role(self, text: str) -> Optional[str]:
+        """Return the most recent job title from a CV, or None."""
+        # Pattern 1: explicit "Current Role: X" or "Present Position: X" markers
+        explicit = re.search(
+            r"(?:current(?:ly)?|present)\s*(?:role|position|title|job)[\s:]+([A-Za-z][A-Za-z\s&/,.\-]{3,60})",
+            text, re.IGNORECASE,
+        )
+        if explicit:
+            return explicit.group(1).strip().title()
+
+        # Pattern 2: scan backwards from a line containing "Present" for a role title.
+        # Require the candidate to contain a recognized role keyword to avoid returning
+        # company names (e.g. "Green Holdings UAE") instead of titles.
+        lines = text.split("\n")
+        present_re = re.compile(r"\bpresent\b", re.IGNORECASE)
+        for i, line in enumerate(lines):
+            if not present_re.search(line):
+                continue
+            for back in range(1, 5):
+                idx = i - back
+                if idx < 0:
+                    break
+                candidate = lines[idx].strip()
+                if not candidate or not candidate[0].isalpha():
+                    continue
+                words = candidate.split()
+                if not (1 <= len(words) <= 6):
+                    continue
+                clean = re.sub(r"['\-&/,.]", "", candidate.replace(" ", ""))
+                if not (clean.isalpha() and candidate[0].isupper()):
+                    continue
+                # Must contain a recognized role keyword — skips company/location lines
+                if any(kw in candidate.lower() for kw in self._ROLE_TITLE_KEYWORDS):
+                    return candidate
+        return None
 
     def _extract_years(self, text: str) -> Optional[float]:
         matches = re.findall(r"(\d+(?:\.\d+)?)\+?\s*(?:years|yrs|year)", text)

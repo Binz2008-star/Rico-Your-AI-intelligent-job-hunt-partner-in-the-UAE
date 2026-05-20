@@ -1006,10 +1006,10 @@ async def rico_upload_cv(
         # Build preview data with trust controls - separate detected from existing
         detected_skills = parsed.get("skills", []) if parsed.get("skills") else []
         preview = {
-            "name": None,  # CV parser doesn't extract name yet
+            "name": parsed.get("name"),
             "email": parsed.get("emails", [None])[0] if parsed.get("emails") else None,
             "phone": parsed.get("phones", [None])[0] if parsed.get("phones") else None,
-            "current_role": None,  # CV parser doesn't extract current role yet
+            "current_role": parsed.get("current_role"),
             "experience_years": parsed.get("years_experience_hint"),
             "target_roles": target_roles if target_roles else [],
             "skills_detected": detected_skills,
@@ -1084,8 +1084,10 @@ async def confirm_cv_profile(
         # Build profile updates from preview - use skills_detected if available, fallback to skills
         preview_skills = payload.preview.get("skills_detected") or payload.preview.get("skills", [])
         profile_updates = {
+            "name": payload.preview.get("name"),
             "email": payload.preview.get("email"),
             "phone": payload.preview.get("phone"),
+            "current_role": payload.preview.get("current_role"),
             "skills": preview_skills,
             "years_experience": payload.preview.get("experience_years"),
             "target_roles": payload.preview.get("target_roles", []) if payload.preview.get("target_roles") else None,
