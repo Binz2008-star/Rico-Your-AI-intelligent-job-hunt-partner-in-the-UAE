@@ -95,6 +95,8 @@ _SMALLTALK_PHRASES = frozenset([
     "thanks", "thank you", "ok", "okay", "cool", "great", "nice",
     "bye", "goodbye", "see you", "cheers",
     "hallo", "hola", "hi there", "salam", "marhaba", "ahlan",
+    # Arabic greetings / social phrases (normalised: alef variants, ta marbuta)
+    "مرحبا", "اهلا", "اهلا وسهلا", "السلام عليكم", "شكرا", "مع السلامه",
 ])
 
 _PROFILE_SUMMARY_PHRASES = frozenset([
@@ -129,6 +131,8 @@ _FOLLOW_UP_CONFIRMATION_PHRASES = frozenset([
     "both please", "both", "all", "keep all", "keep them all", "yes keep all",
     "continue", "ok continue", "okay continue", "yes continue",
     "yes", "confirm", "confirmed", "proceed", "go ahead",
+    # Arabic confirmations / follow-up affirmatives (normalised forms)
+    "تمام", "اوكي", "نعم", "اي", "موافق", "كمل", "استمر", "حسنا", "طيب",
 ])
 
 # ── Regex patterns ───────────────────────────────────────────────────────────
@@ -140,7 +144,8 @@ _ROLE_CHANGE_RE = re.compile(
 
 _JOB_SEARCH_EXPLICIT_RE = re.compile(
     r"\b(find|search|show|get|look for|looking for|any|need|want)\b.{0,60}"
-    r"\b(jobs?|roles?|positions?|vacancy|vacancies|openings?|work)\b",
+    r"\b(jobs?|roles?|positions?|vacancy|vacancies|openings?|work)\b"
+    r"|^(any\s+)?(jobs?|roles?|positions?|openings?|vacancies?)\s*(please|for me|available)?\s*\??$",
     re.IGNORECASE,
 )
 
@@ -209,6 +214,60 @@ def _normalize_exact_phrase(text: str) -> str:
     return re.sub(r"^[\s\"'([{]+|[\s\"')\]}.,!?;:]+$", "", lowered)
 
 
+# ── Arabic script support ────────────────────────────────────────────────────
+
+_ARABIC_SCRIPT_RE = re.compile(r"[؀-ۿ]")
+
+# Arabic job-related nouns (normalised: ta marbuta ة→ه, alef variants→bare alef, ى→ي)
+_ARABIC_JOB_TERMS = frozenset([
+    "وظيفه", "وظائف", "عمل", "شغل",
+    "فرصه", "فرص", "مهنه", "مهن",
+    "شاغر", "شواغر", "وضيفه",
+    "منصب", "مناصب",
+])
+
+# Arabic verbs / phrases expressing a job-search request
+_ARABIC_REQUEST_TERMS = frozenset([
+    "ابحث", "بحث", "دور", "اريد", "ابي", "ابغي",
+    "احتاج", "محتاج", "شوف", "طلع", "جيب",
+    "ساعدني", "ايجاد", "طلب",
+])
+
+
+def _normalize_arabic(text: str) -> str:
+    """Remove diacritics and normalise Arabic letter variants before phrase lookup."""
+    # Remove tashkeel (fatha, kasra, damma, sukun, shadda, tanwin, tatweel)
+    text = re.sub(r"[ً-ٰٟـ]", "", text)
+    # Normalise alef variants (madda آ, hamza above أ, hamza below إ, wasla ٱ) → bare alef ا
+    text = re.sub(r"[آأإٱ]", "ا", text)
+    # Normalise alef maqsura ى → ya ي
+    text = re.sub(r"ى", "ي", text)
+    # Normalise ta marbuta ة → ha ه  (so وظيفة == وظيفه in lookups)
+    text = re.sub(r"ة", "ه", text)
+    return text
+
+
+def _is_arabic_job_search(normalized_lower: str) -> bool:
+    """Return True when a normalised Arabic message is a job-search request."""
+    has_request = any(t in normalized_lower for t in _ARABIC_REQUEST_TERMS)
+    if not has_request:
+        return False
+    has_ar_job = any(t in normalized_lower for t in _ARABIC_JOB_TERMS)
+    # Mixed-language: Arabic request verb + English role name (e.g. "دور لي safety officer")
+    has_en_content = bool(re.search(r"[a-zA-Z]{2,}", normalized_lower))
+    return has_ar_job or has_en_content
+
+
+def _extract_english_role_from_mixed(text: str) -> Optional[str]:
+    """Extract a trailing English role phrase from a mixed Arabic+English message."""
+    m = re.search(r"([A-Za-z][A-Za-z\s/()\-]{1,50}[A-Za-z])\s*$", text.strip())
+    if m:
+        role = m.group(1).strip()
+        if 1 <= len(role.split()) <= _MAX_WORD_COUNT_FOR_ROLE:
+            return role
+    return None
+
+
 def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResult:
     """Classify a user message into a canonical intent.
 
@@ -222,6 +281,12 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     text = (message or "").strip()
     lower = _normalize_exact_phrase(text)
 
+    # Apply Arabic normalisation so phrase lookups work regardless of hamza /
+    # ta marbuta / diacritic variants typed by the user.
+    has_arabic = bool(_ARABIC_SCRIPT_RE.search(text))
+    if has_arabic:
+        lower = _normalize_arabic(lower)
+
     if not text or len(text) < _MIN_MEANINGFUL_LENGTH:
         return IntentResult("unknown", 0.0, "fallback")
 
@@ -230,7 +295,9 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         return IntentResult("smalltalk", 1.0, "exact")
 
     # ── 1b. Nonsense gate (after smalltalk check) ───────────────────────
-    if _NONSENSE_RE.match(text):
+    # Arabic text contains no Latin letters — skip the gate so Arabic is not
+    # incorrectly flagged as nonsense.
+    if not has_arabic and _NONSENSE_RE.match(text):
         return IntentResult("nonsense", 0.95, "regex")
 
     # ── 2. Exact-phrase fast paths (continued) ───────────────────────────
@@ -289,6 +356,11 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     # Check explicit job search FIRST (has job/role/position keyword)
     if _JOB_SEARCH_EXPLICIT_RE.search(text):
         return IntentResult("job_search_explicit", 0.85, "regex")
+
+    # Arabic job search: request verb + job noun, or request verb + English role name
+    if has_arabic and _is_arabic_job_search(lower):
+        role = _extract_english_role_from_mixed(text)
+        return IntentResult("job_search_explicit", 0.85, "regex", extracted_role=role)
 
     # Role change — only if no explicit job-search keyword present
     role_match = _ROLE_CHANGE_RE.match(text)
