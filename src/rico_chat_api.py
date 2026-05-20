@@ -747,6 +747,20 @@ class RicoChatAPI:
         "continue", "go on",
     })
 
+    _ARABIC_WHAT_NOW_TERMS = frozenset({
+        "مالحل", "ما الحل", "ماالحل",
+        "مالحل الان", "مالحل الآن",
+        "ايش نسوي", "شو نسوي",
+        "ايش اسوي", "شو اسوي",
+        "وش نسوي",
+    })
+
+    @staticmethod
+    def _is_arabic_what_now(message: str) -> bool:
+        """True for Arabic 'what now / what's the solution' follow-up phrases."""
+        text = re.sub(r"[\s؟?.!,]+", " ", (message or "").strip().lower()).strip()
+        return any(term in text for term in RicoChatAPI._ARABIC_WHAT_NOW_TERMS)
+
     _JOB_SEARCH_OPTIONS = {
         "type": "options",
         "message": "Here is what I can help you with:",
@@ -1095,7 +1109,10 @@ class RicoChatAPI:
         )
 
         # Fast path: short follow-up after role confirmation → instant options
-        if has_cv and self._looks_like_next_step_followup(message):
+        if has_cv and (
+            self._looks_like_next_step_followup(message)
+            or self._is_arabic_what_now(message)
+        ):
             logger.info("rico_followup_hit user=%s msg=%r", user_id, message)
             return self._finalize(
                 self._handle_next_step_options(user_id, profile),
@@ -1301,6 +1318,13 @@ class RicoChatAPI:
             # Check if profile has target role before running job search
             target_roles = self._as_list(self._profile_value(profile, "target_roles"))
             if not target_roles:
+                if has_cv:
+                    # CV present but no confirmed target role → suggest roles from skills
+                    return self._finalize(
+                        self._handle_profile_role_suggestions(profile),
+                        self.SOURCE_KEYWORD,
+                        profile=profile,
+                    )
                 response = {
                     "type": "profile_incomplete",
                     "intent": "search_jobs",
@@ -1344,21 +1368,35 @@ class RicoChatAPI:
             formatted = [self._format_match(m, profile) for m in top_matches]
             if top_matches:
                 job_msg = "I found {} strong UAE job matches for you.".format(len(top_matches))
+                response = {
+                    "type": "job_matches",
+                    "intent": "search_jobs",
+                    "message": job_msg,
+                    "matches": formatted,
+                    "entities": routed.entities,
+                }
+                self._append_chat(user_id, "assistant", response)
+                return self._finalize(response, routed.source, profile=profile)
             else:
-                job_msg = (
-                    "No strong UAE job matches found right now. "
-                    "Try specifying your target role — for example: "
-                    "'find HSE Manager jobs in Dubai'."
-                )
-            response = {
-                "type": "job_matches",
-                "intent": "search_jobs",
-                "message": job_msg,
-                "matches": formatted,
-                "entities": routed.entities,
-            }
-            self._append_chat(user_id, "assistant", response)
-            return self._finalize(response, routed.source, profile=profile)
+                if has_cv:
+                    return self._finalize(
+                        self._handle_no_results_recovery(user_id, profile, target_roles),
+                        self.SOURCE_KEYWORD,
+                        profile=profile,
+                    )
+                response = {
+                    "type": "job_matches",
+                    "intent": "search_jobs",
+                    "message": (
+                        "No strong UAE job matches found right now. "
+                        "Try specifying your target role — for example: "
+                        "'find HSE Manager jobs in Dubai'."
+                    ),
+                    "matches": [],
+                    "entities": routed.entities,
+                }
+                self._append_chat(user_id, "assistant", response)
+                return self._finalize(response, routed.source, profile=profile)
 
         # Apply job — confirmation gate
         if intent == "apply_job":
@@ -1555,6 +1593,49 @@ class RicoChatAPI:
             "next_action": "select_role_to_search"
         }
 
+    def _handle_no_results_recovery(
+        self,
+        user_id: str,
+        profile: Any,
+        searched_roles: list[str],
+    ) -> dict[str, Any]:
+        """Return structured role-broadening options when live search returns no matches."""
+        suggestions = self._generate_role_suggestions(
+            self._as_list(self._profile_value(profile, "skills")),
+            self._as_list(self._profile_value(profile, "certifications")),
+            self._profile_value(profile, "years_experience"),
+            self._as_list(self._profile_value(profile, "industries")),
+        )
+        searched_lower = {r.lower() for r in searched_roles}
+        alt_options = [
+            {"action": "search_role", "label": s["label"], "reason": s.get("reason", "")}
+            for s in suggestions
+            if s["label"].lower() not in searched_lower
+        ][:5]
+
+        if searched_roles:
+            alt_options.append({
+                "action": "broaden_search",
+                "label": f"Broaden search for {searched_roles[0]}",
+                "message": f"find {searched_roles[0]} jobs in UAE",
+            })
+        alt_options.append({
+            "action": "show_all_suggestions",
+            "label": "Show more roles from my CV",
+            "message": "show roles from my cv",
+        })
+
+        searched_label = ", ".join(searched_roles[:2]) if searched_roles else "your target role"
+        return {
+            "type": "no_results_recovery",
+            "message": (
+                f"No live UAE matches found for **{searched_label}** right now. "
+                "Here are related roles from your CV that may have active openings:"
+            ),
+            "options": alt_options,
+            "next_action": "select_role_to_search",
+        }
+
     def _generate_role_suggestions(
         self,
         skills: list[str],
@@ -1581,15 +1662,24 @@ class RicoChatAPI:
             "safety": ["Safety Officer", "Safety Manager", "HSE Officer"],
             "qhse": ["QHSE Coordinator", "QHSE Manager", "HSE Manager"],
 
-            # Environmental roles
-            "environmental": ["Environmental Officer", "Environmental Manager", "Environmental Specialist"],
-            "sustainability": ["Sustainability Officer", "ESG Specialist", "Sustainability Manager"],
-            "esg": ["ESG Specialist", "Sustainability Officer", "ESG Manager"],
+            # Environmental / HSE roles (cross-mapped — environmental management is part of the HSE domain)
+            "environmental": [
+                "Environmental Officer", "Environmental Manager", "Environmental Specialist",
+                "HSE Manager", "Environmental Compliance Officer", "QHSE Manager",
+            ],
+            "sustainability": [
+                "Sustainability Officer", "ESG Specialist", "Sustainability Manager",
+                "QHSE Manager",
+            ],
+            "esg": [
+                "ESG Specialist", "Sustainability Officer", "ESG Manager",
+                "QHSE Manager", "ISO 14001 Lead Auditor",
+            ],
 
-            # Compliance/Audit roles
+            # Compliance/Audit/ISO roles
             "compliance": ["Compliance Officer", "Compliance Manager", "Regulatory Affairs"],
             "audit": ["Internal Auditor", "External Auditor", "Audit Manager"],
-            "iso": ["ISO Coordinator", "ISO 14001 Specialist", "Quality Manager"],
+            "iso": ["ISO Coordinator", "ISO 14001 Specialist", "ISO 14001 Lead Auditor", "Quality Manager"],
 
             # Operations roles
             "operations": ["Operations Manager", "Operations Coordinator", "Facilities Manager"],
@@ -1637,8 +1727,8 @@ class RicoChatAPI:
                     "reason": "Based on your NEBOSH certification"
                 })
 
-        # Limit to top 8 suggestions
-        return suggestions[:8]
+        # Limit to top 12 suggestions (enough to cover all major role families)
+        return suggestions[:12]
 
     def _classified_role_search(self, user_id: str, role_text: str, profile: Any) -> dict[str, Any]:
         """Use 3-tier role classifier before searching.

@@ -88,6 +88,8 @@ _HELP_PHRASES = frozenset([
     "help", "menu", "options", "what can you do", "commands",
     "start", "get started", "what's next", "whats next", "what next",
     "what now", "show options", "show menu", "next steps",
+    # Arabic "what now / what's the solution"
+    "مالحل", "ما الحل", "مالحل الان", "مالحل الآن",
 ])
 
 _SMALLTALK_PHRASES = frozenset([
