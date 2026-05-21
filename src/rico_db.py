@@ -92,7 +92,8 @@ CREATE TABLE IF NOT EXISTS rico_job_recommendations (
     explanation TEXT,
     status TEXT DEFAULT 'found',
     created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now()
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE(user_id, job_key)
 );
 
 CREATE TABLE IF NOT EXISTS rico_saved_searches (
@@ -397,6 +398,13 @@ class RicoDB:
                         """
                         INSERT INTO rico_job_recommendations (user_id, job_key, job, repo_score, rico_score, explanation, status)
                         VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (user_id, job_key) DO UPDATE SET
+                            job = EXCLUDED.job,
+                            repo_score = EXCLUDED.repo_score,
+                            rico_score = EXCLUDED.rico_score,
+                            explanation = EXCLUDED.explanation,
+                            status = EXCLUDED.status,
+                            updated_at = now()
                         """,
                         (
                             user_id,
