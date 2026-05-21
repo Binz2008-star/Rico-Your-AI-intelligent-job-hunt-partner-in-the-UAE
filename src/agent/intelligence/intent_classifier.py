@@ -137,6 +137,27 @@ _FOLLOW_UP_CONFIRMATION_PHRASES = frozenset([
     "تمام", "اوكي", "نعم", "اي", "موافق", "كمل", "استمر", "حسنا", "طيب",
 ])
 
+# Vague replies when asked "what role?" — user wants Rico to suggest from CV
+_PROFILE_GUIDANCE_PHRASES = frozenset([
+    "you tell me",
+    "what do you think",
+    "what do you suggest",
+    "what should i search for",
+    "what role should i apply for",
+    "surprise me",
+    "anything",
+    "whatever",
+    "i don't know",
+    "i do not know",
+    "idk",
+    "not sure what to search",
+    "no idea",
+    "you choose",
+    "up to you",
+    "what fits me",
+    "what suits me best",
+])
+
 # ── Regex patterns ───────────────────────────────────────────────────────────
 
 _ROLE_CHANGE_RE = re.compile(
@@ -193,6 +214,14 @@ _INTERVIEW_PREP_RE = re.compile(
 
 _DRAFT_RE = re.compile(
     r"\b(draft|write|generate|create)\b.{0,40}\b(cover letter|message|email|letter)\b",
+    re.IGNORECASE,
+)
+
+# Vague replies when assistant asked "what role?" — maps to profile_role_suggestions
+_PROFILE_GUIDANCE_RE = re.compile(
+    r"\b(you\s+(?:tell|choose|pick)\s+me|up\s+to\s+you|surprise\s+me|whatever|anything|no\s+idea|idk)\b"
+    r"|\b(i\s+(?:do\s+not|don't)\s+know|not\s+sure)\b"
+    r"|\b(what\s+(?:do|should|would)\s+(?:you|i)\s+(?:think|suggest|search|apply))\b",
     re.IGNORECASE,
 )
 
@@ -329,10 +358,18 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     if lower in _FOLLOW_UP_CONFIRMATION_PHRASES:
         return IntentResult("follow_up_confirmation", 1.0, "exact")
 
+    if lower in _PROFILE_GUIDANCE_PHRASES:
+        return IntentResult("profile_role_suggestions", 0.95, "exact")
+
     # ── 3. Regex patterns (ordered by specificity) ───────────────────────
 
     if _CV_UPLOAD_RE.search(text):
         return IntentResult("cv_upload_or_parse", 0.95, "regex")
+
+    # Profile guidance must come before apply/save to catch phrases like
+    # "what do you suggest I apply for" → profile suggestions, not apply_job.
+    if _PROFILE_GUIDANCE_RE.search(text):
+        return IntentResult("profile_role_suggestions", 0.85, "regex")
 
     if _APPLY_JOB_RE.search(text):
         return IntentResult("apply_job", 0.95, "regex")
@@ -378,5 +415,5 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     if has_cv_profile and any(w in lower.split() for w in _GENERIC_MATCH_WORDS):
         return IntentResult("job_search_profile_match", 0.8, "regex")
 
-    # ── 6. Unknown — DO NOT default to job search ────────────────────────
+    # ── 7. Unknown — DO NOT default to job search ────────────────────────
     return IntentResult("unknown", 0.0, "fallback")

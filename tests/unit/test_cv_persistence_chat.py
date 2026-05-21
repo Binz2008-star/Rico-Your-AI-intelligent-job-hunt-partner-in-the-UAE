@@ -124,6 +124,20 @@ class TestLooksLikeBareTargetRole:
     def test_empty_rejected(self):
         assert RicoChatAPI._looks_like_bare_target_role("") is False
 
+    @pytest.mark.parametrize("message", [
+        "you tell me",
+        "whatever",
+        "i don't know",
+        "no idea",
+        "up to you",
+    ])
+    def test_conversational_phrases_rejected(self, message):
+        assert RicoChatAPI._looks_like_bare_target_role(message) is False
+
+    def test_pronoun_only_phrases_rejected(self):
+        assert RicoChatAPI._looks_like_bare_target_role("you tell me") is False
+        assert RicoChatAPI._looks_like_bare_target_role("i do not know") is False
+
 
 class TestGetBlockedQuestions:
     """_get_blocked_questions must block questions for fields already known from CV."""

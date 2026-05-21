@@ -207,6 +207,16 @@ class RicoChatAPI:
             or RicoChatAPI._profile_value(profile, "years_experience")
         )
 
+    # Common conversational phrases that are NOT job roles
+    _CONVERSATIONAL_REJECT = frozenset({
+        "you tell me", "you choose", "up to you", "surprise me",
+        "i don't know", "i do not know", "idk", "no idea",
+        "not sure", "whatever", "anything", "don't care",
+        "dont care", "i dont care", "i don't care",
+        "what do you think", "what do you suggest",
+        "what should i do", "what now", "help me",
+    })
+
     @staticmethod
     def _looks_like_bare_target_role(message: str) -> bool:
         """Accept only short noun-phrase job titles, not questions or commands."""
@@ -219,6 +229,8 @@ class RicoChatAPI:
         if any(ch in _QUESTION_CHARS for ch in text):
             return False
         if ". " in text or text.endswith("..."):
+            return False
+        if text.lower() in RicoChatAPI._CONVERSATIONAL_REJECT:
             return False
         if any(ch.isdigit() for ch in text):
             return False
@@ -238,6 +250,16 @@ class RicoChatAPI:
 
         if text.lower() in RicoChatAPI._WHATS_NEXT_PHRASES:
             return False
+
+        # Reject pure pronoun/auxiliary phrases (e.g. "you tell me")
+        _NON_ROLE_WORDS = {
+            "you", "me", "i", "tell", "choose", "pick", "know",
+            "think", "suggest", "whatever", "anything", "idea",
+        }
+        words = set(text.lower().split())
+        if len(words) >= 2 and words.issubset(_NON_ROLE_WORDS):
+            return False
+
         return True
 
     @staticmethod
@@ -1502,7 +1524,22 @@ class RicoChatAPI:
             self._append_chat(user_id, "assistant", response["message"])
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
-        # ── Step 3: Unknown intent — try role classification, then clarify ───
+        # ── Step 3: Conversation-state aware fallback ────────────────────────
+        # If previous assistant asked "what role?" and user says "you tell me" etc.,
+        # route to profile suggestions instead of role classification.
+        if has_cv and intent == "unknown":
+            if self._was_asked_for_role(user_id) and len(message.strip().split()) <= 5:
+                logger.info(
+                    "rico_conversation_state user=%s msg=%r state=asked_for_role → profile_suggestions",
+                    user_id, message,
+                )
+                return self._finalize(
+                    self._handle_profile_role_suggestions(profile),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
+
+        # ── Step 4: Unknown intent — try role classification, then clarify ───
         # Only attempt role search if message looks like a plausible role (short text, no digits)
         if has_cv and self._looks_like_bare_target_role(message):
             logger.info(
@@ -1824,6 +1861,58 @@ class RicoChatAPI:
             blocked_questions,
         )
         return raw_message
+
+    def _was_asked_for_role(self, user_id: str) -> bool:
+        """Check if the last assistant message was asking for a role or showing role options.
+
+        Uses chat history to detect conversation state. If the assistant recently
+        asked "what role?" or presented role options, a vague user reply should be
+        treated as a request for profile-based suggestions, not a role name.
+        """
+        try:
+            history = self.memory.load_chat_history(user_id)
+        except Exception:
+            return False
+
+        if not history:
+            return False
+
+        # Find the most recent assistant message before the current user message
+        assistant_msgs = [
+            entry for entry in history
+            if entry.get("role") == "assistant"
+        ]
+        if not assistant_msgs:
+            return False
+
+        last_assistant = assistant_msgs[-1].get("message", "")
+        if isinstance(last_assistant, dict):
+            # Structured response — check if it was role suggestions or options
+            msg_type = last_assistant.get("type", "")
+            if msg_type in {"profile_role_suggestions", "options", "role_confirmation"}:
+                return True
+            last_text = last_assistant.get("message", "")
+        else:
+            last_text = str(last_assistant)
+
+        lower = last_text.lower()
+
+        # Heuristic: assistant asked about roles
+        _ROLE_QUESTION_PATTERNS = [
+            "what role",
+            "which role",
+            "tell me a role",
+            "choose a role",
+            "pick a role",
+            "what job title",
+            "which job",
+            "what position",
+            "what would you like to search",
+            "what do you want to search",
+            "role to search",
+            "job to search",
+        ]
+        return any(p in lower for p in _ROLE_QUESTION_PATTERNS)
 
     @staticmethod
     def _build_router_context(user_id: str, profile: Any) -> dict:
