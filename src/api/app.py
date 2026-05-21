@@ -196,6 +196,25 @@ app.include_router(pipeline_router)
 app.include_router(subscription_router)
 
 
+@app.get("/")
+def root() -> Dict[str, Any]:
+    """Root endpoint returning service info and docs link."""
+    return {
+        "status": "ok",
+        "service": "Job Automation Platform API",
+        "docs": "/api/docs",
+    }
+
+
+@app.get("/version")
+def version() -> Dict[str, Any]:
+    """Version endpoint for deployment tracking."""
+    return {
+        "version": "1.0.0",
+        "service": "Job Automation Platform API",
+    }
+
+
 @app.get("/health")
 def health_check() -> Dict[str, Any]:
     """Health check endpoint for load balancers and monitoring."""
