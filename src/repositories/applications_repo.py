@@ -147,35 +147,35 @@ def create(
     source: str = "manual",
     user_id: Optional[str] = None,
 ) -> bool:
-    """Create a new application record."""
+    """Create a new application record.
+
+    SaaS path (user_id present): writes directly to rico_job_recommendations so
+    that get_all() (which reads from that table) sees the record immediately.
+    Legacy path (no user_id): falls back to the JSON file via mark_applied().
+    """
     if user_id:
         db = _db()
         if not db:
             raise HTTPException(status_code=503, detail="Database unavailable")
         db_user_id = _provision_db_user_id(db, user_id)
+        return db.upsert_recommendation(
+            user_id=db_user_id,
+            job_key=job_id,
+            job_data={
+                "title": title,
+                "company": company,
+                "location": location,
+                "link": url,
+            },
+            status=status,
+        )
 
-        # Create job dict for mark_applied
-        job = {
-            "job_id": job_id,
-            "title": title,
-            "company": company,
-            "location": location,
-            "link": url,
-        }
-
-        # Use mark_applied which handles both DB and legacy
-        return _mark_applied(job, status=status, user_id=user_id)
-
-    # Legacy fallback
+    # Legacy fallback (no user context — pipeline-managed JSON file)
     _warn_legacy_fallback("create")
-    job = {
-        "job_id": job_id,
-        "title": title,
-        "company": company,
-        "location": location,
-        "link": url,
-    }
-    return _mark_applied(job, status=status)
+    return _mark_applied(
+        {"job_id": job_id, "title": title, "company": company, "location": location, "link": url},
+        status=status,
+    )
 
 
 def create_manual(
