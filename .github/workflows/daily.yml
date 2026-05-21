@@ -1,10 +1,5 @@
 name: Daily Job Bot Full
 
-permissions:
-  contents: write
-  pages: write
-  id-token: write
-
 on:
   schedule:
     - cron: '0 6 * * *'   # 6:00 AM UTC
@@ -26,10 +21,16 @@ jobs:
     name: Intelligence Pipeline
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -71,14 +72,16 @@ jobs:
         run: python -m src.follow_up
 
       - name: Deploy dashboard to GitHub Pages
-        if: always()
+        if: success()
         run: |
           if [ ! -f dashboard.html ]; then
             echo "dashboard.html not found — skipping deploy"
             exit 0
           fi
           mkdir -p docs
-          cp dashboard.html docs/index.html
+          # Atomic write: copy to temp file first, then replace
+          cp dashboard.html docs/index.html.tmp
+          mv docs/index.html.tmp docs/index.html
           git config user.email "action@github.com"
           git config user.name "GitHub Action"
           git add docs/index.html
@@ -100,6 +103,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -200,6 +205,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v4

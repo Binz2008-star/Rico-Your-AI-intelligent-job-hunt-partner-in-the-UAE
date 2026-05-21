@@ -6,18 +6,19 @@ on:
     - cron: '0 15 * * *'  # 3:00 PM UTC
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   intelligence:
     name: Intelligence Pipeline
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -88,14 +89,16 @@ jobs:
         run: python -m src.follow_up
 
       - name: Deploy dashboard to GitHub Pages
-        if: always()
+        if: success()
         run: |
           if [ ! -f dashboard.html ]; then
             echo "dashboard.html not found — skipping deploy"
             exit 0
           fi
           mkdir -p docs
-          cp dashboard.html docs/index.html
+          # Atomic write: copy to temp file first, then replace
+          cp dashboard.html docs/index.html.tmp
+          mv docs/index.html.tmp docs/index.html
           git config user.email "action@github.com"
           git config user.name "GitHub Action"
           git add docs/index.html
