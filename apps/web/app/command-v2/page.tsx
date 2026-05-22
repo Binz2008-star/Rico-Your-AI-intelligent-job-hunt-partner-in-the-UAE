@@ -167,7 +167,7 @@ export default function CommandV2Page() {
     const [editingProfileId, setEditingProfileId] = useState<number | null>(null);
     const [draftProfile, setDraftProfile] = useState<ProfilePreview | null>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
-    const inputRef = useRef<HTMLInputElement>(null);
+    const inputRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const promptSentRef = useRef(false);
     const sessionIdRef = useRef<string | null>(null);
@@ -435,7 +435,7 @@ export default function CommandV2Page() {
         router.push("/login");
     }
 
-    function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             void handleSend();
