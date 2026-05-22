@@ -49,7 +49,7 @@ const liveMatches = [
     { role: "Backend Automation Architect", score: "86", signal: "Compensation momentum" },
 ];
 
-function GradientPanel({
+function RicoCardPanel({
     children,
     className = "",
     delay = 0,
@@ -64,9 +64,9 @@ function GradientPanel({
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay, ease: "easeOut" }}
             whileHover={{ y: -4 }}
-            className={`rounded-lg bg-gradient-to-br from-magenta/40 via-white/10 to-cyan/40 p-[1px] ${className}`}
+            className={`rico-card rounded-[28px] p-5 transition-all duration-300 hover:border-[rgba(0,229,255,0.22)] hover:shadow-[0_28px_80px_rgba(0,0,0,0.38),0_0_50px_rgba(0,229,255,0.055)] md:p-6 ${className}`}
         >
-            <div className="h-full rounded-lg bg-black/75 p-5 backdrop-blur-2xl md:p-6">
+            <div className="relative z-10 h-full">
                 {children}
             </div>
         </motion.div>
@@ -185,7 +185,7 @@ export default function LandingPage() {
                             </div>
                         </motion.div>
 
-                        <GradientPanel delay={0.15} className="mx-auto w-full max-w-[560px]">
+                        <RicoCardPanel delay={0.15} className="mx-auto w-full max-w-[560px]">
                             <div className="mb-6 flex items-center justify-between gap-4">
                                 <div>
                                     <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-text-tertiary">
@@ -219,7 +219,7 @@ export default function LandingPage() {
                                     </div>
                                 ))}
                             </div>
-                        </GradientPanel>
+                        </RicoCardPanel>
                     </section>
 
                     <section className="px-5 py-16 md:px-10 lg:px-16">
@@ -230,18 +230,18 @@ export default function LandingPage() {
                         />
                         <div className="mx-auto grid max-w-7xl gap-4 md:grid-cols-2 lg:grid-cols-4">
                             {howItWorks.map((step, index) => (
-                                <GradientPanel key={step.title} delay={0.08 * index}>
+                                <RicoCardPanel key={step.title} delay={0.08 * index}>
                                     <p className="font-mono text-xs text-cyan">{step.eyebrow}</p>
                                     <h3 className="mt-5 text-xl font-semibold text-white">{step.title}</h3>
                                     <p className="mt-4 text-sm leading-6 text-text-secondary">{step.body}</p>
-                                </GradientPanel>
+                                </RicoCardPanel>
                             ))}
                         </div>
                     </section>
 
                     <section className="px-5 py-16 md:px-10 lg:px-16">
                         <div className="mx-auto grid max-w-7xl gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-                            <GradientPanel>
+                            <RicoCardPanel>
                                 <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-magenta">
                                     What Rico remembers
                                 </p>
@@ -252,8 +252,8 @@ export default function LandingPage() {
                                     Rico turns your CV and outcomes into a living profile, so each match is judged against
                                     your actual trajectory instead of a one-time keyword search.
                                 </p>
-                            </GradientPanel>
-                            <GradientPanel delay={0.08}>
+                            </RicoCardPanel>
+                            <RicoCardPanel delay={0.08}>
                                 <div className="grid gap-3 sm:grid-cols-2">
                                     {memoryItems.map((item) => (
                                         <div key={item} className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-4">
@@ -262,13 +262,13 @@ export default function LandingPage() {
                                         </div>
                                     ))}
                                 </div>
-                            </GradientPanel>
+                            </RicoCardPanel>
                         </div>
                     </section>
 
                     <section className="px-5 py-16 md:px-10 lg:px-16">
                         <div className="mx-auto grid max-w-7xl gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-                            <GradientPanel>
+                            <RicoCardPanel>
                                 <div className="mb-6 flex items-center justify-between gap-4">
                                     <div>
                                         <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-cyan">
@@ -300,8 +300,8 @@ export default function LandingPage() {
                                         </div>
                                     ))}
                                 </div>
-                            </GradientPanel>
-                            <GradientPanel delay={0.08}>
+                            </RicoCardPanel>
+                            <RicoCardPanel delay={0.08}>
                                 <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-magenta">
                                     Telegram and job alerts
                                 </p>
@@ -320,13 +320,13 @@ export default function LandingPage() {
                                         A senior backend role crossed the fit threshold after your CV profile update.
                                     </p>
                                 </div>
-                            </GradientPanel>
+                            </RicoCardPanel>
                         </div>
                     </section>
 
                     <section className="px-5 py-16 md:px-10 lg:px-16">
                         <div className="mx-auto grid max-w-7xl gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-                            <GradientPanel>
+                            <RicoCardPanel>
                                 <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-cyan">
                                     You stay in control
                                 </p>
@@ -337,8 +337,8 @@ export default function LandingPage() {
                                     Rico can analyze, rank, draft, and track. You decide when to apply, when to pause,
                                     and what career direction is worth pursuing.
                                 </p>
-                            </GradientPanel>
-                            <GradientPanel delay={0.08}>
+                            </RicoCardPanel>
+                            <RicoCardPanel delay={0.08}>
                                 <div className="grid gap-4 md:grid-cols-3">
                                     {["No setup wizard", "No enterprise forms", "No silent applying"].map((item) => (
                                         <div key={item} className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-4">
@@ -347,12 +347,12 @@ export default function LandingPage() {
                                         </div>
                                     ))}
                                 </div>
-                            </GradientPanel>
+                            </RicoCardPanel>
                         </div>
                     </section>
 
                     <section className="px-5 pb-20 pt-10 md:px-10 lg:px-16">
-                        <GradientPanel className="mx-auto max-w-5xl text-center">
+                        <RicoCardPanel className="mx-auto max-w-5xl text-center">
                             <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-magenta">
                                 Start free
                             </p>
@@ -377,7 +377,7 @@ export default function LandingPage() {
                                     Sign up free
                                 </Link>
                             </div>
-                        </GradientPanel>
+                        </RicoCardPanel>
                     </section>
                 </main>
             </div>
