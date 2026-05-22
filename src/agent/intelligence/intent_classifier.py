@@ -183,8 +183,8 @@ _SAVE_JOB_RE = re.compile(
 # Extracts explicit role name from "find/search … jobs for <role>" patterns.
 # Checked alongside _JOB_SEARCH_EXPLICIT_RE to attach extracted_role.
 _JOB_SEARCH_FOR_ROLE_RE = re.compile(
-    r"\b(?:find|search|show|get|look\s+for)\b.{0,40}\b(?:jobs?|roles?|positions?|openings?|vacancies?)\b"
-    r"\s+for\s+([A-Za-z][A-Za-z &/\-]{2,60}?)(?:\s+in\b|\s*$)",
+    r"\b(?:find|search|show|get|look(?:ing)?\s+for|need|want)\b.{0,40}\b(?:jobs?|roles?|positions?|openings?|vacancies?)\b"
+    r"\s+for\s+([A-Za-z][A-Za-z &/\-]{2,60}?)(?:\s+in\b|[?.!,\s]*$)",
     re.IGNORECASE,
 )
 

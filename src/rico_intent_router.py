@@ -203,8 +203,8 @@ def _extract_entities(message: str) -> Dict[str, Any]:
     # Extract explicit role from "find/search … jobs for <role>" patterns first,
     # before falling back to the static _TITLE_PHRASES list.
     _for_role_m = re.search(
-        r"\b(?:find|search|show|get|look\s+for)\b.{0,40}\b(?:jobs?|roles?|positions?|openings?)\b"
-        r"\s+for\s+([A-Za-z][A-Za-z &/\-]{2,60}?)(?:\s+in\b|\s*$)",
+        r"\b(?:find|search|show|get|look(?:ing)?\s+for|need|want)\b.{0,40}\b(?:jobs?|roles?|positions?|openings?)\b"
+        r"\s+for\s+([A-Za-z][A-Za-z &/\-]{2,60}?)(?:\s+in\b|[?.!,\s]*$)",
         message,
         re.IGNORECASE,
     )

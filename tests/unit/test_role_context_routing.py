@@ -104,6 +104,13 @@ class TestFindJobsForRoleRegex:
         ("search jobs for ESG Specialist", "ESG Specialist"),
         ("find jobs for Environmental Compliance Officer in Dubai", "Environmental Compliance Officer"),
         ("search openings for Sustainability Officer", "Sustainability Officer"),
+        # Codex P2-A: trailing punctuation must not lose the extracted role
+        ("find jobs for Environmental Compliance Officer?", "Environmental Compliance Officer"),
+        ("search openings for ESG Specialist!", "ESG Specialist"),
+        # Codex P2-B: verbs present in _JOB_SEARCH_EXPLICIT_RE must also extract the role
+        ("looking for jobs for HSE Manager", "HSE Manager"),
+        ("need jobs for Environmental Manager", "Environmental Manager"),
+        ("want jobs for ESG Specialist", "ESG Specialist"),
     ])
     def test_extracts_role(self, msg, expected):
         m = _JOB_SEARCH_FOR_ROLE_RE.search(msg)
