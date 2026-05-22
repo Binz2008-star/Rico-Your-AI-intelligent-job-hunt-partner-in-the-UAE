@@ -247,6 +247,7 @@ body>div:first-child {
 .rico-chip-accent {
     background: rgba(255, 45, 142, 0.095);
     border: 1px solid rgba(255, 45, 142, 0.22);
+    color: rgba(255, 191, 222, 0.96);
 }
 
 /* =========================================================================

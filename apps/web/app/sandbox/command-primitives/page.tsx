@@ -4,8 +4,8 @@ import { RicoMessageBubble } from "@/components/ui/rico/RicoMessageBubble";
 import { RicoJobMatchCard, JobMatchData } from "@/components/ui/rico/RicoJobMatchCard";
 
 export default function CommandPrimitivesSandbox() {
-  const handleActionClick = (action: string) => {
-    console.log("Action clicked:", action);
+  const handleActionClick = (action: string, job: JobMatchData) => {
+    console.log("Action clicked:", action, "for job:", job.title);
   };
 
   const sampleJobMatch: JobMatchData = {

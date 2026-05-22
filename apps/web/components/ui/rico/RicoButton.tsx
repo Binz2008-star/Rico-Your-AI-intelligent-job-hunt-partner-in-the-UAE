@@ -43,6 +43,7 @@ export function RicoButton({
 
   return (
     <button
+      type="button"
       disabled={disabled}
       className={cn(
         // Base button styles

@@ -18,11 +18,12 @@ export interface JobMatchData {
   missing_facts?: string[];
   recommended_action?: string;
   actions?: string[];
+  why?: string; // Legacy fallback field for backward compatibility
 }
 
 interface RicoJobMatchCardProps {
   match: JobMatchData;
-  onActionClick?: (action: string) => void;
+  onActionClick?: (action: string, job: JobMatchData) => void;
   className?: string;
 }
 
@@ -118,6 +119,18 @@ export function RicoJobMatchCard({ match, onActionClick, className }: RicoJobMat
         </section>
       )}
 
+      {/* Legacy why fallback for backward compatibility */}
+      {(!match.match_reasons || match.match_reasons.length === 0) && match.why && (
+        <section className="space-y-1.5">
+          <p className="text-[10px] font-semibold text-[var(--rico-secondary-dim)] uppercase tracking-wider">
+            Why this fits
+          </p>
+          <p className="text-[10px] text-[var(--rico-fg-2)] leading-relaxed">
+            {match.why}
+          </p>
+        </section>
+      )}
+
       {/* Concerns section */}
       {match.match_concerns && match.match_concerns.length > 0 && (
         <section className="space-y-1.5">
@@ -181,7 +194,7 @@ export function RicoJobMatchCard({ match, onActionClick, className }: RicoJobMat
               key={action}
               variant={idx === 0 ? "magenta" : "ghost"}
               size="sm"
-              onClick={() => onActionClick?.(action)}
+              onClick={() => onActionClick?.(action, match)}
             >
               {action}
             </RicoButton>
