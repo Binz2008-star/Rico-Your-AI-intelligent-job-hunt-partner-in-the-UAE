@@ -1,9 +1,9 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { InputHTMLAttributes, forwardRef } from "react";
+import { TextareaHTMLAttributes, forwardRef } from "react";
 
-interface RicoCommandInputProps extends InputHTMLAttributes<HTMLInputElement> {
+interface RicoCommandInputProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   placeholder?: string;
 }
 
@@ -12,16 +12,20 @@ interface RicoCommandInputProps extends InputHTMLAttributes<HTMLInputElement> {
  *
  * Uses the new --rico-* design tokens for consistent input styling.
  * Implements the design system's boxed glass input pattern.
+ * Rendered as a textarea (rows=1, resize-none) so Shift+Enter works.
  */
-export const RicoCommandInput = forwardRef<HTMLInputElement, RicoCommandInputProps>(
+export const RicoCommandInput = forwardRef<HTMLTextAreaElement, RicoCommandInputProps>(
   ({ placeholder = "Type a command...", className, ...props }, ref) => {
     return (
-      <input
+      <textarea
         ref={ref}
+        rows={1}
         placeholder={placeholder}
         className={cn(
           // Base input styles
           "w-full",
+          // Single-line appearance, multiline capable
+          "resize-none min-h-[46px]",
           // Background and border from design system
           "bg-[rgba(255,255,255,0.04)]",
           "border border-[var(--rico-border-soft)]",
