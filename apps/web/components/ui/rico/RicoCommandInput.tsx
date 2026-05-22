@@ -12,18 +12,20 @@ interface RicoCommandInputProps extends TextareaHTMLAttributes<HTMLTextAreaEleme
  *
  * Uses the new --rico-* design tokens for consistent input styling.
  * Implements the design system's boxed glass input pattern.
- * Uses textarea to support multiline input with Shift+Enter for new lines.
+ * Rendered as a textarea (rows=1, resize-none) so Shift+Enter works for new lines.
  */
 export const RicoCommandInput = forwardRef<HTMLTextAreaElement, RicoCommandInputProps>(
   ({ placeholder = "Type a command...", className, ...props }, ref) => {
     return (
       <textarea
         ref={ref}
-        placeholder={placeholder}
         rows={1}
+        placeholder={placeholder}
         className={cn(
           // Base input styles
           "w-full",
+          // Single-line appearance, multiline capable
+          "resize-none min-h-[46px]",
           // Background and border from design system
           "bg-[rgba(255,255,255,0.04)]",
           "border border-[var(--rico-border-soft)]",
@@ -43,10 +45,6 @@ export const RicoCommandInput = forwardRef<HTMLTextAreaElement, RicoCommandInput
           "transition-all duration-[var(--dur-state)] ease-[var(--ease-out)]",
           // Focus state
           "focus:border-[var(--rico-primary-container)]",
-          // Resize behavior
-          "resize-none",
-          // Min height for single line
-          "min-h-[46px]",
           className
         )}
         {...props}
