@@ -197,6 +197,7 @@ app.include_router(subscription_router)
 
 
 @app.get("/health")
+@app.head("/health")
 def health_check() -> Dict[str, Any]:
     """Health check endpoint for load balancers and monitoring."""
     return {"status": "ok", "service": "Job Automation Platform API"}
@@ -209,6 +210,7 @@ def version() -> Dict[str, str]:
 
 
 @app.get("/")
+@app.head("/")
 def root() -> Dict[str, str]:
     """Root endpoint — confirms the API is reachable."""
     return {"status": "ok", "service": "Job Automation Platform API", "docs": "/api/docs"}
