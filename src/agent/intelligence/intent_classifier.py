@@ -170,8 +170,21 @@ _APPLICATION_TRACKING_RE = re.compile(
     re.IGNORECASE,
 )
 
+_SAVE_TARGET_ROLE_RE = re.compile(
+    r"\b(?:save|set|add|use)\s+(.+?)\s+as\s+(?:my\s+)?target\s+role\b",
+    re.IGNORECASE,
+)
+
 _SAVE_JOB_RE = re.compile(
     r"\b(save|bookmark|keep|shortlist)\b.{0,30}\b(job|this|it|one|role)\b",
+    re.IGNORECASE,
+)
+
+# Extracts explicit role name from "find/search … jobs for <role>" patterns.
+# Checked alongside _JOB_SEARCH_EXPLICIT_RE to attach extracted_role.
+_JOB_SEARCH_FOR_ROLE_RE = re.compile(
+    r"\b(?:find|search|show|get|look(?:ing)?\s+for|need|want)\b.{0,40}\b(?:jobs?|roles?|positions?|openings?|vacancies?)\b"
+    r"\s+for\s+([A-Za-z][A-Za-z &/\-]{2,60}?)(?:\s+in\b|[?.!,\s]*$)",
     re.IGNORECASE,
 )
 
@@ -337,6 +350,15 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     if _APPLY_JOB_RE.search(text):
         return IntentResult("apply_job", 0.95, "regex")
 
+    # Check save-target-role BEFORE save_job so "save X as target role" isn't
+    # misclassified as a job-bookmark action.
+    save_role_match = _SAVE_TARGET_ROLE_RE.search(text)
+    if save_role_match:
+        return IntentResult(
+            "save_target_role", 0.95, "regex",
+            extracted_role=save_role_match.group(1).strip(),
+        )
+
     if _SAVE_JOB_RE.search(text):
         return IntentResult("save_job", 0.95, "regex")
 
@@ -359,7 +381,11 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     # ── 4. Job search patterns ───────────────────────────────────────────
     # Check explicit job search FIRST (has job/role/position keyword)
     if _JOB_SEARCH_EXPLICIT_RE.search(text):
-        return IntentResult("job_search_explicit", 0.85, "regex")
+        # Try to extract an explicit "find jobs for <role>" target so the handler
+        # can search for that role directly instead of falling back to profile roles.
+        for_role_m = _JOB_SEARCH_FOR_ROLE_RE.search(text)
+        extracted_role = for_role_m.group(1).strip() if for_role_m else None
+        return IntentResult("job_search_explicit", 0.85, "regex", extracted_role=extracted_role)
 
     # Arabic job search: request verb + job noun, or request verb + English role name
     if has_arabic and _is_arabic_job_search(lower, has_cv=has_cv_profile):

@@ -7,7 +7,7 @@ triggers workflows, and responds with autonomous actions.
 
 from __future__ import annotations
 
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, is_dataclass, replace as _dc_replace
 import json
 import logging
 import os
@@ -778,6 +778,72 @@ class RicoChatAPI:
         ],
     }
 
+    @staticmethod
+    def _search_jsearch_direct(role: str) -> list[dict[str, Any]]:
+        """Query JSearch (RapidAPI) for live UAE jobs matching *role*.
+
+        Returns a list of job dicts ready for ``_format_match``.  Never raises —
+        any failure (missing key, network error, bad JSON) returns an empty list.
+        """
+        import json as _json
+        import urllib.request
+        from urllib.parse import quote_plus
+
+        api_key = os.getenv("RAPIDAPI_KEY", "").strip()
+        if not api_key:
+            logger.debug("jsearch_direct: RAPIDAPI_KEY not set — skipping")
+            return []
+
+        query = f"{role} UAE"
+        url = (
+            "https://jsearch.p.rapidapi.com/search-v2"
+            f"?query={quote_plus(query)}&num_pages=1&country=ae&date_posted=all"
+        )
+        headers = {
+            "x-rapidapi-host": "jsearch.p.rapidapi.com",
+            "x-rapidapi-key": api_key,
+            "Content-Type": "application/json",
+        }
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                data = _json.loads(resp.read().decode())
+        except Exception as exc:
+            logger.warning("jsearch_direct_failed role=%r: %s", role, exc)
+            return []
+
+        raw_items = (
+            data.get("data", {}).get("jobs", [])
+            if isinstance(data.get("data"), dict)
+            else data.get("data", [])
+        )
+        jobs: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for item in raw_items:
+            link = item.get("job_apply_link") or item.get("job_google_link") or ""
+            dedup = item.get("job_id") or link
+            if not dedup or dedup in seen:
+                continue
+            seen.add(dedup)
+            location = ", ".join(filter(None, [
+                item.get("job_city"),
+                item.get("job_state"),
+                item.get("job_country"),
+            ])) or "UAE"
+            jobs.append({
+                "title":           item.get("job_title", ""),
+                "company":         item.get("employer_name", ""),
+                "location":        location,
+                "link":            link,
+                "description":     item.get("job_description", ""),
+                "source":          "jsearch",
+                "salary_string":   item.get("job_salary_string") or "",
+                "employment_type": item.get("job_employment_type") or "",
+                "score":           50,
+            })
+        logger.info("jsearch_direct role=%r results=%d", role, len(jobs))
+        return jobs
+
     def _target_role_search_response(self, user_id: str, role: str, profile: Any) -> dict[str, Any]:
         """Handle target role search with role intelligence integration."""
         try:
@@ -791,8 +857,19 @@ class RicoChatAPI:
             target_roles.append(normalized_role)
             profile = upsert_profile(user_id=user_id, updates={"target_roles": target_roles})
 
-        workflow_result = self.system.run_for_profile(profile)
-        all_matches = workflow_result.get("matches", [])
+        search_role = normalized_role or role
+
+        # Primary path: live JSearch query for the exact requested role.
+        # Falls back to the legacy scraper pipeline only when JSearch is unavailable.
+        all_matches = self._search_jsearch_direct(search_role)
+        if not all_matches:
+            search_profile = (
+                _dc_replace(profile, target_roles=[search_role])
+                if is_dataclass(profile)
+                else profile
+            )
+            workflow_result = self.system.run_for_profile(search_profile)
+            all_matches = workflow_result.get("matches", [])
 
         # Filter out already-applied jobs
         try:
@@ -1316,6 +1393,15 @@ class RicoChatAPI:
 
         # Explicit job search (regex-matched "find ... jobs" etc.)
         if intent == "job_search_explicit":
+            # If the message names an explicit role ("find jobs for Environmental
+            # Compliance Officer"), honour it and bypass profile target_roles fallback.
+            if intent_result.extracted_role:
+                return self._finalize(
+                    self._classified_role_search(user_id, intent_result.extracted_role, profile),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
+
             # Fall through to legacy router for entity extraction
             context = self._build_router_context(user_id, profile)
             routed = _route(message, user_id=user_id, context=context)
@@ -1418,6 +1504,25 @@ class RicoChatAPI:
             }
             self._append_chat(user_id, "assistant", response["message"])
             return self._finalize(response, routed.source, profile=profile)
+
+        # Save target role — "save X as target role" / "set X as target role"
+        if intent == "save_target_role" and intent_result.extracted_role:
+            role = intent_result.extracted_role.strip()
+            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            if role.lower() not in {str(r).lower() for r in target_roles}:
+                target_roles.append(role)
+                upsert_profile(user_id=user_id, updates={"target_roles": target_roles})
+            response = {
+                "type": "preferences_updated",
+                "message": (
+                    f"Got it — I've saved **{role}** as your target role. "
+                    "I'll use it for all future job searches. "
+                    "Say 'find jobs' whenever you're ready."
+                ),
+                "updated": {"target_roles": target_roles},
+            }
+            self._append_chat(user_id, "assistant", response["message"])
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # Save job
         if intent == "save_job":
@@ -1668,7 +1773,7 @@ class RicoChatAPI:
             current_role=current_role,
         )
         return [
-            {"label": r["title"], "reason": r.get("reason", "")}
+            {"action": r["title"], "label": r["title"], "reason": r.get("reason", "")}
             for r in result.get("roles", [])
         ]
 
@@ -1678,7 +1783,32 @@ class RicoChatAPI:
         - profile_relevant → search directly
         - known_but_off_profile → ask confirmation
         - unknown → clarify / redirect
+
+        Roles that Rico itself suggested (from role_suggester) are treated as
+        profile_relevant without running them through the taxonomy classifier,
+        because they are already derived from the user's CV.
         """
+        from rapidfuzz import fuzz as _fuzz
+
+        # Roles already in the user's target_roles are always profile_relevant.
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        role_lower = role_text.strip().lower()
+        for tr in target_roles:
+            if _fuzz.ratio(role_lower, str(tr).lower()) >= 70:
+                return self._target_role_search_response(user_id, role_text.strip(), profile)
+
+        # Rico's own suggestions are always profile_relevant — they came from the CV.
+        suggested = self._generate_role_suggestions(
+            self._as_list(self._profile_value(profile, "skills")),
+            self._as_list(self._profile_value(profile, "certifications")),
+            self._profile_value(profile, "years_experience"),
+            self._as_list(self._profile_value(profile, "industries")),
+            self._profile_value(profile, "current_role"),
+        )
+        suggested_lower = {s["label"].lower() for s in suggested}
+        if role_lower in suggested_lower:
+            return self._target_role_search_response(user_id, role_text.strip(), profile)
+
         classification, canonical_role = classify_role_candidate(role_text, profile)
 
         if classification == "profile_relevant" and canonical_role:
