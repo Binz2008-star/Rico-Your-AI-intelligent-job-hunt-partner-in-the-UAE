@@ -1696,7 +1696,7 @@ class RicoChatAPI:
             current_role=current_role,
         )
         return [
-            {"label": r["title"], "reason": r.get("reason", "")}
+            {"action": r["title"], "label": r["title"], "reason": r.get("reason", "")}
             for r in result.get("roles", [])
         ]
 
