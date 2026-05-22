@@ -140,3 +140,34 @@ def test_specific_job_search_with_sustainability_role_executes_search_workflow()
         # Verify the response contains job matches
         assert result.get("type") == "job_matches"
         assert "matches" in result
+
+
+def test_format_match_omits_null_why_for_jsearch_result():
+    """
+    Test that _format_match omits null optional fields for JSearch results
+    without rico_explanation, preventing Zod schema validation failures.
+
+    Regression for: Post-merge Zod failure - JobMatchSchema.why is optional,
+    not nullable. Direct JSearch results do not include rico_explanation, so
+    the response should not emit "why": null.
+    """
+    from src.rico_chat_api import RicoChatAPI
+
+    api = RicoChatAPI()
+    job = {
+        "title": "HSE Manager",
+        "company": "Acme Safety",
+        "location": "Dubai, AE",
+        "score": 50,
+        "source": "jsearch",
+        "description": "HSE role in Dubai",
+    }
+
+    formatted = api._format_match(job, profile=None)
+
+    assert formatted["title"] == "HSE Manager"
+    assert formatted["company"] == "Acme Safety"
+    assert formatted["score"] == 50
+    assert "why" not in formatted
+    assert isinstance(formatted["title"], str)
+    assert isinstance(formatted["company"], str)
