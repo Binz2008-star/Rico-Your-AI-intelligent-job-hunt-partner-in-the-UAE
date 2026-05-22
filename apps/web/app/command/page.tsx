@@ -569,15 +569,26 @@ export default function CommandV2Page() {
                                 {/* Job match cards */}
                                 {m.matches && m.matches.length > 0 && (
                                     <div className="mt-3 w-full space-y-3">
-                                        {m.matches.map((match, i) => (
-                                            <RicoJobMatchCard
-                                                key={i}
-                                                match={match as JobMatchData}
-                                                onActionClick={(action, job) =>
-                                                    sendMessage(`${action} — ${job.title} at ${job.company}`)
-                                                }
-                                            />
-                                        ))}
+                                        {m.matches.map((match, i) => {
+                                            const stableKey = match.job_key || `${i}-${match.title}-${match.company}-${match.location}`;
+                                            return (
+                                                <RicoJobMatchCard
+                                                    key={stableKey}
+                                                    match={match as JobMatchData}
+                                                    onActionClick={(action, job) => {
+                                                        if (action === "Prepare application") {
+                                                            void sendMessage(`prepare application for ${job.title} at ${job.company}`);
+                                                        } else if (action === "Save") {
+                                                            void sendMessage(`save — ${job.title} at ${job.company}`);
+                                                        } else if (action === "Mark as applied") {
+                                                            void sendMessage(`mark as applied — ${job.title} at ${job.company}`);
+                                                        } else {
+                                                            void sendMessage(`${action} — ${job.title} at ${job.company}`);
+                                                        }
+                                                    }}
+                                                />
+                                            );
+                                        })}
                                     </div>
                                 )}
 

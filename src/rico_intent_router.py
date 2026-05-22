@@ -38,6 +38,7 @@ SUPPORTED_INTENTS = {
     "update_preferences",
     "prepare_interview",
     "set_reminder",
+    "show_how_to_apply",
     "help",
     "unknown",
 }
@@ -53,6 +54,7 @@ INTENT_TO_TOOL: Dict[str, Optional[str]] = {
     "update_preferences": None,
     "prepare_interview":  None,
     "set_reminder":       "set_reminder",
+    "show_how_to_apply":  "show_how_to_apply",
     "help":               None,
     "unknown":            None,
 }
@@ -85,7 +87,8 @@ _SEARCH_PATTERNS = re.compile(
 )
 _SAVE_PATTERNS = re.compile(
     r"\b(save|bookmark|keep|shortlist|hold on to)\b.{0,30}\b(job|this|it|one|role|position)\b"
-    r"|\bsave (the )?(first|second|third|last|this|that)\b",
+    r"|\bsave (the )?(first|second|third|last|this|that)\b"
+    r"|\bsave\s+[—-]",  # Handle "save —" format from frontend
     re.IGNORECASE,
 )
 _SKIP_PATTERNS = re.compile(
@@ -125,6 +128,12 @@ _INTERVIEW_PATTERNS = re.compile(
 )
 _REMIND_PATTERNS = re.compile(
     r"\b(remind|reminder|follow.?up|follow up|check back|ping me)\b",
+    re.IGNORECASE,
+)
+_SHOW_HOW_TO_APPLY_PATTERNS = re.compile(
+    r"\b(show|tell|explain|guide|walk)\b.{0,30}\b(how (to )?(apply|submit|send application))\b"
+    r"|\b(how (do )?i (apply|submit|send application))\b"
+    r"|\b(application instructions|apply instructions|how to apply)\b",
     re.IGNORECASE,
 )
 _HELP_PATTERNS = re.compile(
@@ -216,6 +225,16 @@ def _extract_entities(message: str) -> Dict[str, Any]:
                 entities["job_title"] = phrase.title()
                 break
 
+    # Extract company name from "action — Title at Company" pattern
+    # Handles: "save — Manager at NMC Health", "apply — Engineer at Google"
+    _at_company_m = re.search(
+        r"\b(?:save|apply|skip|prepare|mark)\s+[—-]\s*.{0,100}\bat\s+([A-Za-z0-9][A-Za-z0-9 .&\-]{2,60}?)(?:[?.!,\s]*$)",
+        message,
+        re.IGNORECASE,
+    )
+    if _at_company_m:
+        entities["company"] = _at_company_m.group(1).strip()
+
     ordinal_match = _ORDINAL_REF_RE.search(lower)
     if ordinal_match:
         token = ordinal_match.group(1).lower()
@@ -246,6 +265,8 @@ def _keyword_classify(message: str) -> Tuple[Optional[str], float]:
         return "draft_message", 0.90
     if _EXPLAIN_PATTERNS.search(message):
         return "explain_match", 0.90
+    if _SHOW_HOW_TO_APPLY_PATTERNS.search(message):
+        return "show_how_to_apply", 0.90
     if _REMIND_PATTERNS.search(message):
         return "set_reminder", 0.90
     if _INTERVIEW_PATTERNS.search(message):
@@ -282,6 +303,7 @@ _HF_LABEL_TO_INTENT = {
     "update job preferences or salary":         "update_preferences",
     "prepare for an interview":                 "prepare_interview",
     "set a reminder":                           "set_reminder",
+    "show how to apply for a job":              "show_how_to_apply",
     "help or menu":                             "help",
 }
 
@@ -338,7 +360,7 @@ def _build_tool_args(
             args["salary_hint"] = entities["salary_raw"]
 
     elif intent in {"save_job", "skip_job", "apply_job", "draft_message",
-                    "explain_match", "set_reminder"}:
+                    "explain_match", "set_reminder", "show_how_to_apply"}:
         job_key = _resolve_job_key(entities, context)
         if job_key:
             args["job_key"] = job_key
@@ -366,6 +388,7 @@ def _resolve_job_key(
     Resolve job_key from context.
 
     If user said 'the first one', look up index 0 in context['recent_jobs'].
+    If user provided title and company, match against recent jobs.
     If context has 'last_job_key', use that.
     """
     if not context:
@@ -373,10 +396,31 @@ def _resolve_job_key(
 
     idx = entities.get("job_index")
     recent = context.get("recent_jobs", [])
+    
+    # Try ordinal reference first (e.g., "the first one")
     if idx is not None and isinstance(recent, list) and len(recent) > idx:
         job = recent[idx]
         if isinstance(job, dict):
             return job.get("job_key") or job.get("id") or job.get("link")
+    
+    # Try matching by title and company (e.g., "save — Manager at NMC Health")
+    title = entities.get("job_title", "").lower()
+    company = entities.get("company", "").lower()
+    if title and company and isinstance(recent, list):
+        for job in recent:
+            if isinstance(job, dict):
+                job_title = (job.get("title") or "").lower()
+                job_company = (job.get("company") or "").lower()
+                if title in job_title and company in job_company:
+                    return job.get("job_key") or job.get("id") or job.get("link")
+    
+    # Try matching by title only
+    if title and isinstance(recent, list):
+        for job in recent:
+            if isinstance(job, dict):
+                job_title = (job.get("title") or "").lower()
+                if title in job_title:
+                    return job.get("job_key") or job.get("id") or job.get("link")
 
     return context.get("last_job_key")
 

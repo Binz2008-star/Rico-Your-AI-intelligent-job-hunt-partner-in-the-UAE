@@ -710,6 +710,7 @@ export interface JobMatch {
     match_concerns?: string[];
     missing_facts?: string[];
     recommended_action?: string;
+    job_key?: string;
 }
 
 export interface RicoOption {

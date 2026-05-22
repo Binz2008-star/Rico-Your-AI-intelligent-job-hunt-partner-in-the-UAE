@@ -65,3 +65,36 @@ def set_reminder(job: Dict[str, Any]) -> ToolExecutionResult:
                       int((time.monotonic() - start) * 1000))
     except Exception as exc:
         return _timed("set_reminder", False, exc, int((time.monotonic() - start) * 1000))
+
+
+def show_how_to_apply(job: Dict[str, Any]) -> ToolExecutionResult:
+    """Provide application instructions for a job."""
+    start = time.monotonic()
+    try:
+        title = job.get("title", "this role")
+        company = job.get("company", "the company")
+        link = job.get("link", "")
+        
+        instructions = []
+        instructions.append(f"**How to apply for {title} at {company}:**\n")
+        
+        if link:
+            instructions.append(f"1. Visit the job posting: {link}\n")
+        else:
+            instructions.append("1. Check the job posting link for the application portal\n")
+        
+        instructions.append("2. Prepare your CV tailored to this role\n")
+        instructions.append("3. Write a concise cover letter highlighting your relevant experience\n")
+        instructions.append("4. Submit your application through the portal\n")
+        instructions.append("5. Follow up after 3-5 business days if you don't hear back\n")
+        
+        if job.get("description"):
+            instructions.append(f"\n**Job Details:**\n{job.get('description')[:500]}...\n")
+        
+        instructions.append("\nLet me know if you'd like me to draft a message or help with your CV for this application.")
+        
+        return _timed("show_how_to_apply", True,
+                      {"instructions": "".join(instructions), "title": title, "link": link},
+                      int((time.monotonic() - start) * 1000))
+    except Exception as exc:
+        return _timed("show_how_to_apply", False, exc, int((time.monotonic() - start) * 1000))

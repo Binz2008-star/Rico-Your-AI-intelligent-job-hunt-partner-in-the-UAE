@@ -15,6 +15,7 @@ Intent list (from Issue #110 blueprint):
   - job_search_explicit          user names a role / asks to search
   - job_search_profile_match     "find me one that matches", "use my CV"
   - application_tracking         "show my tracked applications"
+  - prepare_application          "prepare application", "show me how to apply"
   - role_change                  "switch to X", "what about X"
   - profile_summary              "show my profile"
   - profile_update               "update my salary", "change my city"
@@ -167,6 +168,13 @@ _PROFILE_UPDATE_RE = re.compile(
 
 _APPLICATION_TRACKING_RE = re.compile(
     r"\b(tracked?|applied|application|applications|interviews?|offers?|rejected|status)\b",
+    re.IGNORECASE,
+)
+
+_PREPARE_APPLICATION_RE = re.compile(
+    r"\b(prepare|tailor|help|show|tell|guide)\b.{0,50}\b(apply|application|cv|resume|cover note|cover letter)\b"
+    r"|\bshow me how to apply\b"
+    r"|\bhow (?:do|can|should) i apply\b",
     re.IGNORECASE,
 )
 
@@ -346,6 +354,9 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
 
     if _CV_UPLOAD_RE.search(text):
         return IntentResult("cv_upload_or_parse", 0.95, "regex")
+
+    if _PREPARE_APPLICATION_RE.search(text):
+        return IntentResult("prepare_application", 0.95, "regex")
 
     if _APPLY_JOB_RE.search(text):
         return IntentResult("apply_job", 0.95, "regex")

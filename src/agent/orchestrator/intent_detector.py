@@ -71,6 +71,7 @@ ACTION_TO_TOOL: dict[str, str] = {
     "draft":            "draft_message",
     "why":              "explain_match",
     "remind":           "set_reminder",
+    "show_how_to_apply": "show_how_to_apply",
 }
 
 VALID_ACTION_TYPES = frozenset(ACTION_TO_TOOL)

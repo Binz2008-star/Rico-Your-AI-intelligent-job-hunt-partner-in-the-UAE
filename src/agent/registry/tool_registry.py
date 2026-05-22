@@ -75,6 +75,7 @@ from src.agent.tools.messaging_tools import (  # noqa: E402
     draft_message,
     explain_match,
     set_reminder,
+    show_how_to_apply,
 )
 
 _register("search_jobs",           search_jobs,           "Search jobs by score/source/page")
@@ -89,5 +90,6 @@ _register("get_application_stats", get_application_stats, "Return aggregate appl
 _register("draft_message",         draft_message,         "Generate a tailored application message for a job")
 _register("explain_match",         explain_match,         "Explain why Rico recommended this job")
 _register("set_reminder",          set_reminder,          "Set a 2-day reminder for a job")
+_register("show_how_to_apply",     show_how_to_apply,     "Provide application instructions for a job")
 
 logger.debug("tool_registry_loaded tools=%d names=%s", len(_REGISTRY), sorted(_REGISTRY))

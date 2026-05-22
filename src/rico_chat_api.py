@@ -582,20 +582,59 @@ class RicoChatAPI:
         return response
 
     @staticmethod
+    def _job_identity_key(job: dict[str, Any]) -> str:
+        """Stable duplicate key for visually identical listings."""
+        def norm(value: Any) -> str:
+            return re.sub(r"\s+", " ", str(value or "").strip().lower())
+
+        title = norm(job.get("title") or job.get("job_title"))
+        company = norm(job.get("company") or job.get("employer_name"))
+        location = norm(job.get("location"))
+        source = norm(job.get("source"))
+        if not title and not company:
+            return norm(job.get("link") or job.get("job_apply_link") or job.get("id"))
+        return "|".join([title, company, location, source])
+
+    @classmethod
+    def _dedupe_jobs(cls, jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        deduped: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for job in jobs or []:
+            if not isinstance(job, dict):
+                continue
+            key = cls._job_identity_key(job)
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            deduped.append(job)
+        return deduped
+
+    @staticmethod
     def _format_match(m: dict[str, Any], profile: Any) -> dict[str, Any]:
         """Return a backward-compatible chat match with v1 structured guidance."""
+        from src.applications import get_job_id
+
         explanation = build_match_explanation(m, profile)
 
         raw_score = m.get("rico_score") or m.get("score") or 0
         normalized_score = max(0, min(100, int(raw_score))) if raw_score else 0
+        link = str(m.get("link") or m.get("apply_url") or m.get("url") or "")
 
         result = {
+            "job_key": get_job_id(m),
             "title": str(m.get("title") or "Untitled role"),
             "company": str(m.get("company") or "Unknown company"),
             "score": normalized_score,
-            "actions": ["Prepare application", "Save", "Ask why", "Skip"],
+            "actions": ["Prepare application", "Save", "Mark as applied", "Ask why", "Skip"],
             **explanation,
         }
+        if link:
+            result["link"] = link
+            result["apply_url"] = link
+        if m.get("source"):
+            result["source"] = str(m.get("source"))
+        if m.get("description"):
+            result["description"] = str(m.get("description"))
 
         location = m.get("location")
         if location:
@@ -838,13 +877,12 @@ class RicoChatAPI:
             dedup = str(item.get("job_id") or link)
             if not dedup or dedup in seen:
                 continue
-            seen.add(dedup)
             location = ", ".join(filter(None, [
                 item.get("job_city") or "",
                 item.get("job_state") or "",
                 item.get("job_country") or "",
             ])) or "UAE"
-            jobs.append({
+            job = {
                 "title":           str(item.get("job_title") or ""),
                 "company":         str(item.get("employer_name") or ""),
                 "location":        location,
@@ -854,7 +892,13 @@ class RicoChatAPI:
                 "salary_string":   str(item.get("job_salary_string") or ""),
                 "employment_type": str(item.get("job_employment_type") or ""),
                 "score":           50,
-            })
+            }
+            visual_dedup = RicoChatAPI._job_identity_key(job)
+            if visual_dedup in seen:
+                continue
+            seen.add(dedup)
+            seen.add(visual_dedup)
+            jobs.append(job)
         logger.info("jsearch_direct role=%r results=%d", role, len(jobs))
         return jobs
 
@@ -894,6 +938,7 @@ class RicoChatAPI:
         except Exception as e:
             logger.debug("Applied-job filter unavailable: %s", e)
 
+        all_matches = self._dedupe_jobs(all_matches)
         top_matches = all_matches[:5]
         formatted = [self._format_match(m, profile) for m in top_matches]
 
@@ -1327,6 +1372,18 @@ class RicoChatAPI:
 
         # Generic follow-up confirmations should never fall into role classification.
         if intent == "follow_up_confirmation":
+            pending = self._get_pending_apply_confirmation(user_id)
+            if pending and text in {"yes", "confirm", "confirmed", "proceed", "go ahead"}:
+                response = self._confirm_pending_apply(user_id, pending)
+                self._append_chat(user_id, "assistant", response)
+                return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+            if pending and text in {"cancel", "no", "nope"}:
+                response = {
+                    "type": "action_cancelled",
+                    "message": "Cancelled. I did not change the application tracker.",
+                }
+                self._append_chat(user_id, "assistant", response["message"])
+                return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
             if text == "all":
                 return self._finalize(
                     self._handle_keep_all_target_roles(user_id, profile),
@@ -1350,6 +1407,11 @@ class RicoChatAPI:
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # Application tracking — route to applications repo, NOT job search
+        if intent == "prepare_application":
+            response = self._handle_prepare_application(user_id, message, profile)
+            self._append_chat(user_id, "assistant", response)
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+
         if intent == "application_tracking":
             return self._finalize(
                 self._handle_application_tracking(user_id),
@@ -1469,6 +1531,7 @@ class RicoChatAPI:
                     all_explicit = [m for m in all_explicit if not app_map.get(get_job_id(m), False)]
             except Exception:
                 pass
+            all_explicit = self._dedupe_jobs(all_explicit)
             top_matches = all_explicit[:5]
             formatted = [self._format_match(m, profile) for m in top_matches]
             if top_matches:
@@ -1505,19 +1568,20 @@ class RicoChatAPI:
 
         # Apply job — confirmation gate
         if intent == "apply_job":
-            context = self._build_router_context(user_id, profile)
-            routed = _route(message, user_id=user_id, context=context)
+            job = self._resolve_selected_job(user_id, message)
+            label = self._job_label(job) if job else "this job"
             response = {
                 "type": "confirmation_required",
                 "intent": "apply_job",
-                "message": routed.confirmation_prompt or (
-                    "To confirm: mark this job as applied and track it. "
+                "message": (
+                    f"To confirm: mark {label} as applied and track it. "
                     "Reply YES to confirm or CANCEL to abort."
                 ),
-                "tool_args": routed.tool_args,
+                "pending_action": "mark_applied",
+                "job": job,
             }
-            self._append_chat(user_id, "assistant", response["message"])
-            return self._finalize(response, routed.source, profile=profile)
+            self._append_chat(user_id, "assistant", response)
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # Save target role — "save X as target role" / "set X as target role"
         if intent == "save_target_role" and intent_result.extracted_role:
@@ -1540,21 +1604,25 @@ class RicoChatAPI:
 
         # Save job
         if intent == "save_job":
-            context = self._build_router_context(user_id, profile)
-            routed = _route(message, user_id=user_id, context=context)
-            if routed.tool_name:
-                job_key = routed.tool_args.get("job_key", "")
-                result = agent_runtime.handle_action(
-                    user_id=user_id, action="save", job_key=job_key, source="chat",
-                )
+            job = self._resolve_selected_job(user_id, message)
+            if job:
+                self._track_job_status(user_id, job, "saved", "Saved via Rico chat")
+                label = self._job_label(job)
                 response = {
                     "type": "save_job",
                     "intent": "save_job",
-                    "message": result.message,
-                    "entities": routed.entities,
+                    "message": f"Saved {label}. Rico will keep it in your tracked applications.",
+                    "job": job,
                 }
-                self._append_chat(user_id, "assistant", result.message)
-                return self._finalize(response, routed.source, profile=profile)
+                self._append_chat(user_id, "assistant", response)
+                return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+            response = {
+                "type": "clarification",
+                "intent": "save_job",
+                "message": "Which job should I save? Use a job card action, or say for example: save the first job.",
+            }
+            self._append_chat(user_id, "assistant", response["message"])
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # Explain match
         if intent == "explain_match":
@@ -1585,6 +1653,23 @@ class RicoChatAPI:
                 response = {
                     "type": "draft_message",
                     "intent": "draft_message",
+                    "message": result.message,
+                }
+                self._append_chat(user_id, "assistant", result.message)
+                return self._finalize(response, routed.source, profile=profile)
+
+        # Show how to apply
+        if intent == "show_how_to_apply":
+            context = self._build_router_context(user_id, profile)
+            routed = _route(message, user_id=user_id, context=context)
+            if routed.tool_name:
+                job_key = routed.tool_args.get("job_key", "")
+                result = agent_runtime.handle_action(
+                    user_id=user_id, action="show_how_to_apply", job_key=job_key, source="chat",
+                )
+                response = {
+                    "type": "show_how_to_apply",
+                    "intent": "show_how_to_apply",
                     "message": result.message,
                 }
                 self._append_chat(user_id, "assistant", result.message)
@@ -1649,6 +1734,197 @@ class RicoChatAPI:
         )
 
     # ── New intent-specific handlers ─────────────────────────────────────────
+
+    def _recent_job_matches(self, user_id: str, limit: int = 5) -> list[dict[str, Any]]:
+        """Load the latest job matches Rico showed to this user."""
+        jobs: list[dict[str, Any]] = []
+        for entry in reversed(self.memory.load_chat_history(user_id, limit=80)):
+            if entry.get("role") != "assistant":
+                continue
+            payload = entry.get("message")
+            if isinstance(payload, str):
+                try:
+                    payload = json.loads(payload)
+                except Exception:
+                    continue
+            if not isinstance(payload, dict):
+                continue
+            matches = payload.get("matches") or []
+            if not isinstance(matches, list):
+                continue
+            for match in matches:
+                if isinstance(match, dict):
+                    jobs.append(match)
+            if len(jobs) >= limit:
+                break
+        return jobs[:limit]
+
+    @staticmethod
+    def _message_mentions_job(message: str, job: dict[str, Any]) -> bool:
+        text = re.sub(r"\s+", " ", (message or "").lower())
+        title = re.sub(r"\s+", " ", str(job.get("title") or "").lower()).strip()
+        company = re.sub(r"\s+", " ", str(job.get("company") or "").lower()).strip()
+        if title and company and title in text and company in text:
+            return True
+        return bool(title and title in text)
+
+    def _resolve_selected_job(self, user_id: str, message: str) -> dict[str, Any] | None:
+        recent = self._recent_job_matches(user_id)
+        if not recent:
+            return None
+        lowered = (message or "").lower()
+        ordinal_map = {"first": 0, "1st": 0, "second": 1, "2nd": 1, "third": 2, "3rd": 2, "fourth": 3, "4th": 3, "fifth": 4, "5th": 4}
+        for token, idx in ordinal_map.items():
+            if token in lowered and idx < len(recent):
+                return recent[idx]
+        for job in recent:
+            if self._message_mentions_job(message, job):
+                return job
+        return recent[0] if any(ref in lowered for ref in ("this job", "this role", "it", "that one", "this one")) else None
+
+    @staticmethod
+    def _job_label(job: dict[str, Any]) -> str:
+        title = str(job.get("title") or "this role")
+        company = str(job.get("company") or "the company")
+        return f"{title} at {company}"
+
+    def _track_job_status(
+        self,
+        user_id: str,
+        job: dict[str, Any],
+        status: str,
+        notes: str,
+    ) -> bool:
+        from src.applications import get_job_id, mark_applied
+
+        job_id = str(job.get("job_key") or job.get("job_id") or get_job_id(job))
+        try:
+            from src.repositories.applications_repo import create, update_status
+            created = create(
+                job_id=job_id,
+                title=str(job.get("title") or ""),
+                company=str(job.get("company") or ""),
+                location=str(job.get("location") or ""),
+                url=str(job.get("apply_url") or job.get("link") or ""),
+                status=status,
+                source="chat",
+                user_id=user_id,
+            )
+            if not created:
+                update_status({"job_id": job_id}, status, user_id=user_id, notes=notes)
+            return True
+        except Exception:
+            return mark_applied(
+                {
+                    "title": job.get("title"),
+                    "company": job.get("company"),
+                    "location": job.get("location"),
+                    "link": job.get("apply_url") or job.get("link"),
+                    "score": job.get("score", 0),
+                },
+                status=status,
+                notes=notes,
+                user_id=user_id,
+            )
+
+    def _get_pending_apply_confirmation(self, user_id: str) -> dict[str, Any] | None:
+        for entry in reversed(self.memory.load_chat_history(user_id, limit=20)):
+            if entry.get("role") != "assistant":
+                continue
+            payload = entry.get("message")
+            if isinstance(payload, str):
+                try:
+                    payload = json.loads(payload)
+                except Exception:
+                    continue
+            if (
+                isinstance(payload, dict)
+                and payload.get("type") == "confirmation_required"
+                and payload.get("intent") == "apply_job"
+                and payload.get("pending_action") == "mark_applied"
+            ):
+                return payload
+        return None
+
+    def _confirm_pending_apply(self, user_id: str, pending: dict[str, Any]) -> dict[str, Any]:
+        job = pending.get("job")
+        if not isinstance(job, dict) or not job:
+            return {
+                "type": "clarification",
+                "intent": "apply_job",
+                "message": "I lost the selected job context. Please use Mark as applied on the job card again.",
+            }
+
+        self._track_job_status(user_id, job, "applied", "Marked as applied via Rico chat")
+        label = self._job_label(job)
+        return {
+            "type": "application_tracked",
+            "intent": "apply_job",
+            "message": f"Marked {label} as applied and added it to your tracked applications.",
+            "job": job,
+            "status": "applied",
+        }
+
+    def _handle_prepare_application(self, user_id: str, message: str, profile: Any) -> dict[str, Any]:
+        job = self._resolve_selected_job(user_id, message)
+        if not job:
+            return {
+                "type": "clarification",
+                "intent": "prepare_application",
+                "message": "Which job should I prepare? Use a card action, or say for example: prepare application for the first job.",
+            }
+
+        label = self._job_label(job)
+        reasons = self._as_list(job.get("match_reasons") or job.get("reasons"))[:3]
+        skills = self._as_list(self._profile_value(profile, "skills"))[:5]
+        apply_url = str(job.get("apply_url") or job.get("link") or "").strip()
+        source = str(job.get("source") or "").strip()
+        link_line = (
+            f"Apply link: {apply_url}"
+            if apply_url
+            else "Apply link: I do not have a direct apply link for this listing yet. Check the company careers page or the original source."
+        )
+        if source and not apply_url:
+            link_line += f" Source: {source}."
+
+        fit_lines = reasons or [
+            f"The role lines up with your profile skills: {', '.join(map(str, skills[:4]))}." if skills else "The role appears aligned with your saved job-search profile.",
+            "The title and location match the kind of UAE opportunity Rico selected for you.",
+        ]
+        bullets = [
+            f"Led work relevant to {job.get('title', 'this role')} with measurable business or compliance outcomes.",
+            f"Applied {', '.join(map(str, skills[:3])) if skills else 'core role skills'} to solve operational problems.",
+            "Partnered with cross-functional teams and kept stakeholders aligned through delivery.",
+        ]
+        cover_note = (
+            f"Hello, I am interested in the {label} opportunity. My background matches the role through "
+            f"{', '.join(map(str, skills[:3])) if skills else 'relevant hands-on experience'}, and I can bring practical execution, clear communication, and ownership from day one."
+        )
+        message_text = (
+            f"Application prep for {label}\n\n"
+            "Why this job fits:\n"
+            + "\n".join(f"- {line}" for line in fit_lines)
+            + "\n\nTailored CV bullets:\n"
+            + "\n".join(f"- {line}" for line in bullets)
+            + "\n\nCover note draft:\n"
+            f"{cover_note}\n\n"
+            "Application checklist:\n"
+            "- Tailor your CV headline and first 3 bullets to the job title.\n"
+            "- Mirror the most relevant keywords from the listing honestly.\n"
+            "- Attach the tailored CV and use the cover note as your message.\n"
+            "- After submitting externally, tell Rico 'mark as applied' so I can track it.\n\n"
+            f"{link_line}"
+        )
+        return {
+            "type": "application_prep",
+            "intent": "prepare_application",
+            "message": message_text,
+            "job": job,
+            "next_actions": [
+                {"action": "save_job", "label": "Save job", "message": f"save {label}"},
+                {"action": "mark_applied", "label": "Mark as applied", "message": f"mark as applied {label}"},
+            ],
+        }
 
     def _handle_application_tracking(self, user_id: str) -> dict[str, Any]:
         """Route application tracking requests to the applications repository."""
@@ -1969,8 +2245,7 @@ class RicoChatAPI:
         )
         return raw_message
 
-    @staticmethod
-    def _build_router_context(user_id: str, profile: Any) -> dict:
+    def _build_router_context(self, user_id: str, profile: Any) -> dict:
         """Build the context dict passed to the intent router."""
         ctx: dict = {}
         if profile:
@@ -1978,6 +2253,20 @@ class RicoChatAPI:
                 ctx["profile"] = asdict(profile) if is_dataclass(profile) else dict(profile)
             except Exception as e:
                 logger.warning("Failed to build router context", extra={"user_id": user_id, "error": str(e)})
+        
+        # Add recent jobs from chat history for job action resolution
+        try:
+            recent_jobs = self._recent_job_matches(user_id)
+            if recent_jobs:
+                ctx["recent_jobs"] = recent_jobs
+                ctx["last_job_key"] = (
+                    recent_jobs[0].get("job_key")
+                    or recent_jobs[0].get("id")
+                    or recent_jobs[0].get("link")
+                )
+        except Exception as e:
+            logger.debug("Failed to add recent jobs to context", extra={"user_id": user_id, "error": str(e)})
+        
         return ctx
 
 

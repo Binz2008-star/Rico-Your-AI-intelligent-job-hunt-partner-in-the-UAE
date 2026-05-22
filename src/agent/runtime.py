@@ -43,6 +43,7 @@ _IDEMPOTENT = frozenset(IDEMPOTENT_ACTION_TYPES)
 _CONFIDENCE: Dict[str, float] = {
     "apply": 1.0, "save": 1.0, "skip": 1.0, "not_relevant": 1.0,
     "block": 1.0, "draft": 1.0, "why": 1.0, "remind": 1.0,
+    "show_how_to_apply": 1.0,
     "trigger_pipeline": 1.0,
 }
 
@@ -55,6 +56,7 @@ _REPLY: Dict[str, str] = {
     "draft":        "",   # filled from tool data
     "why":          "",   # filled from tool data
     "remind":       "",   # filled from tool data
+    "show_how_to_apply": "",   # filled from tool data
 }
 
 
@@ -222,6 +224,8 @@ class AgentRuntime:
         if action == "remind":
             reminder_date = data.get("reminder_date", "")
             return f"Reminder set for {reminder_date}." if reminder_date else "Reminder noted."
+        if action == "show_how_to_apply":
+            return data.get("instructions") or "Application instructions could not be generated."
 
         return _REPLY.get(action, "Action completed.")
 
