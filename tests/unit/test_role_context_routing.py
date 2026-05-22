@@ -175,3 +175,92 @@ class TestSaveTargetRoleHandler:
 
         assert "target_roles" in saved
         assert "Environmental Manager" in saved["target_roles"]
+
+
+# ── _search_jsearch_direct (unit, no network) ─────────────────────────────────
+
+class TestSearchJsearchDirect:
+    def test_returns_empty_when_no_api_key(self, monkeypatch):
+        monkeypatch.delenv("RAPIDAPI_KEY", raising=False)
+        from src.rico_chat_api import RicoChatAPI
+        result = RicoChatAPI._search_jsearch_direct("HSE Manager")
+        assert result == []
+
+    def test_returns_jobs_from_mock_response(self, monkeypatch):
+        import json as _json
+        import urllib.request
+
+        monkeypatch.setenv("RAPIDAPI_KEY", "test-key")
+
+        fake_data = {
+            "data": [
+                {
+                    "job_id": "abc123",
+                    "job_title": "HSE Manager",
+                    "employer_name": "ADNOC",
+                    "job_city": "Abu Dhabi",
+                    "job_country": "United Arab Emirates",
+                    "job_apply_link": "https://example.com/job/abc123",
+                    "job_description": "HSE Manager role",
+                    "job_salary_string": "25000 AED",
+                    "job_employment_type": "FULLTIME",
+                }
+            ]
+        }
+
+        class FakeResp:
+            def read(self):
+                return _json.dumps(fake_data).encode()
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                pass
+
+        monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: FakeResp())
+
+        from src.rico_chat_api import RicoChatAPI
+        result = RicoChatAPI._search_jsearch_direct("HSE Manager")
+        assert len(result) == 1
+        assert result[0]["title"] == "HSE Manager"
+        assert result[0]["company"] == "ADNOC"
+        assert result[0]["source"] == "jsearch"
+        assert result[0]["score"] == 50
+
+    def test_returns_empty_on_network_error(self, monkeypatch):
+        import urllib.request
+
+        monkeypatch.setenv("RAPIDAPI_KEY", "test-key")
+        monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: (_ for _ in ()).throw(OSError("timeout")))
+
+        from src.rico_chat_api import RicoChatAPI
+        result = RicoChatAPI._search_jsearch_direct("HSE Manager")
+        assert result == []
+
+    def test_deduplicates_by_job_id(self, monkeypatch):
+        import json as _json
+        import urllib.request
+
+        monkeypatch.setenv("RAPIDAPI_KEY", "test-key")
+
+        fake_data = {
+            "data": [
+                {"job_id": "dup1", "job_title": "HSE Manager", "employer_name": "A",
+                 "job_apply_link": "https://a.com/1", "job_description": ""},
+                {"job_id": "dup1", "job_title": "HSE Manager", "employer_name": "A",
+                 "job_apply_link": "https://a.com/1", "job_description": ""},
+            ]
+        }
+
+        class FakeResp:
+            def read(self):
+                return _json.dumps(fake_data).encode()
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                pass
+
+        monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: FakeResp())
+
+        from src.rico_chat_api import RicoChatAPI
+        result = RicoChatAPI._search_jsearch_direct("HSE Manager")
+        assert len(result) == 1

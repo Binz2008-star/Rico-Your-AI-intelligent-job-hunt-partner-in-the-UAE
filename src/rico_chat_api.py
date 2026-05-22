@@ -778,6 +778,72 @@ class RicoChatAPI:
         ],
     }
 
+    @staticmethod
+    def _search_jsearch_direct(role: str) -> list[dict[str, Any]]:
+        """Query JSearch (RapidAPI) for live UAE jobs matching *role*.
+
+        Returns a list of job dicts ready for ``_format_match``.  Never raises —
+        any failure (missing key, network error, bad JSON) returns an empty list.
+        """
+        import json as _json
+        import urllib.request
+        from urllib.parse import quote_plus
+
+        api_key = os.getenv("RAPIDAPI_KEY", "").strip()
+        if not api_key:
+            logger.debug("jsearch_direct: RAPIDAPI_KEY not set — skipping")
+            return []
+
+        query = f"{role} UAE"
+        url = (
+            "https://jsearch.p.rapidapi.com/search-v2"
+            f"?query={quote_plus(query)}&num_pages=1&country=ae&date_posted=all"
+        )
+        headers = {
+            "x-rapidapi-host": "jsearch.p.rapidapi.com",
+            "x-rapidapi-key": api_key,
+            "Content-Type": "application/json",
+        }
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                data = _json.loads(resp.read().decode())
+        except Exception as exc:
+            logger.warning("jsearch_direct_failed role=%r: %s", role, exc)
+            return []
+
+        raw_items = (
+            data.get("data", {}).get("jobs", [])
+            if isinstance(data.get("data"), dict)
+            else data.get("data", [])
+        )
+        jobs: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for item in raw_items:
+            link = item.get("job_apply_link") or item.get("job_google_link") or ""
+            dedup = item.get("job_id") or link
+            if not dedup or dedup in seen:
+                continue
+            seen.add(dedup)
+            location = ", ".join(filter(None, [
+                item.get("job_city"),
+                item.get("job_state"),
+                item.get("job_country"),
+            ])) or "UAE"
+            jobs.append({
+                "title":           item.get("job_title", ""),
+                "company":         item.get("employer_name", ""),
+                "location":        location,
+                "link":            link,
+                "description":     item.get("job_description", ""),
+                "source":          "jsearch",
+                "salary_string":   item.get("job_salary_string") or "",
+                "employment_type": item.get("job_employment_type") or "",
+                "score":           50,
+            })
+        logger.info("jsearch_direct role=%r results=%d", role, len(jobs))
+        return jobs
+
     def _target_role_search_response(self, user_id: str, role: str, profile: Any) -> dict[str, Any]:
         """Handle target role search with role intelligence integration."""
         try:
@@ -791,16 +857,19 @@ class RicoChatAPI:
             target_roles.append(normalized_role)
             profile = upsert_profile(user_id=user_id, updates={"target_roles": target_roles})
 
-        # Search with only the explicitly requested role so stale or generic
-        # target_roles ("Engineer", "Manager") do not dilute or replace the query.
         search_role = normalized_role or role
-        search_profile = (
-            _dc_replace(profile, target_roles=[search_role])
-            if is_dataclass(profile)
-            else profile
-        )
-        workflow_result = self.system.run_for_profile(search_profile)
-        all_matches = workflow_result.get("matches", [])
+
+        # Primary path: live JSearch query for the exact requested role.
+        # Falls back to the legacy scraper pipeline only when JSearch is unavailable.
+        all_matches = self._search_jsearch_direct(search_role)
+        if not all_matches:
+            search_profile = (
+                _dc_replace(profile, target_roles=[search_role])
+                if is_dataclass(profile)
+                else profile
+            )
+            workflow_result = self.system.run_for_profile(search_profile)
+            all_matches = workflow_result.get("matches", [])
 
         # Filter out already-applied jobs
         try:
