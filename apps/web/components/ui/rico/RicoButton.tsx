@@ -57,6 +57,8 @@ export function RicoButton({
         // Cursor and user select
         "cursor-pointer select-none",
         "whitespace-nowrap",
+        // Focus ring using Rico token
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--rico-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--rico-bg)]",
         // Transition from design system
         "transition-all duration-[var(--dur-hover)] ease-[var(--ease-out)]",
         // Disabled state
