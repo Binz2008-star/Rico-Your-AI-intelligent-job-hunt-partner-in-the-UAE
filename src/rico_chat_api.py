@@ -829,25 +829,25 @@ class RicoChatAPI:
         jobs: list[dict[str, Any]] = []
         seen: set[str] = set()
         for item in raw_items:
-            link = item.get("job_apply_link") or item.get("job_google_link") or ""
-            dedup = item.get("job_id") or link
+            link = str(item.get("job_apply_link") or item.get("job_google_link") or "")
+            dedup = str(item.get("job_id") or link)
             if not dedup or dedup in seen:
                 continue
             seen.add(dedup)
             location = ", ".join(filter(None, [
-                item.get("job_city"),
-                item.get("job_state"),
-                item.get("job_country"),
+                item.get("job_city") or "",
+                item.get("job_state") or "",
+                item.get("job_country") or "",
             ])) or "UAE"
             jobs.append({
-                "title":           item.get("job_title", ""),
-                "company":         item.get("employer_name", ""),
+                "title":           str(item.get("job_title") or ""),
+                "company":         str(item.get("employer_name") or ""),
                 "location":        location,
                 "link":            link,
-                "description":     item.get("job_description", ""),
+                "description":     str(item.get("job_description") or ""),
                 "source":          "jsearch",
-                "salary_string":   item.get("job_salary_string") or "",
-                "employment_type": item.get("job_employment_type") or "",
+                "salary_string":   str(item.get("job_salary_string") or ""),
+                "employment_type": str(item.get("job_employment_type") or ""),
                 "score":           50,
             })
         logger.info("jsearch_direct role=%r results=%d", role, len(jobs))

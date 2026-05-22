@@ -172,3 +172,62 @@ def test_format_match_omits_null_why_for_jsearch_result():
     assert "why" not in formatted
     assert isinstance(formatted["title"], str)
     assert isinstance(formatted["company"], str)
+
+
+def test_jsearch_direct_coerces_nullable_strings(monkeypatch):
+    """
+    Direct JSearch responses can contain explicit null values. Those must not
+    reach the frontend as null for fields typed as optional strings in Zod.
+    """
+    import json
+
+    from src.rico_chat_api import RicoChatAPI
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def read(self):
+            return json.dumps({
+                "data": {
+                    "jobs": [
+                        {
+                            "job_id": "job-1",
+                            "job_apply_link": None,
+                            "job_google_link": "https://example.com/job-1",
+                            "job_title": None,
+                            "employer_name": None,
+                            "job_city": None,
+                            "job_state": None,
+                            "job_country": "AE",
+                            "job_description": None,
+                            "job_salary_string": None,
+                            "job_employment_type": None,
+                        }
+                    ]
+                }
+            }).encode()
+
+    monkeypatch.setenv("RAPIDAPI_KEY", "test-key")
+
+    with patch("urllib.request.urlopen", return_value=FakeResponse()):
+        jobs = RicoChatAPI._search_jsearch_direct("HSE Manager")
+
+    assert jobs == [
+        {
+            "title": "",
+            "company": "",
+            "location": "AE",
+            "link": "https://example.com/job-1",
+            "description": "",
+            "source": "jsearch",
+            "salary_string": "",
+            "employment_type": "",
+            "score": 50,
+        }
+    ]
+    for field in ("title", "company", "location", "link", "description", "salary_string", "employment_type"):
+        assert isinstance(jobs[0][field], str)
