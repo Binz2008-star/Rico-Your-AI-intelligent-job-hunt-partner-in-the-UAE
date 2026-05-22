@@ -29,7 +29,6 @@ const APP_ROUTES: readonly DashboardRoute[] = [
     { href: "/jobs", label: "Jobs", icon: "work" },
     { href: "/applications", label: "Applications", icon: "fact_check" },
     { href: "/profile", label: "Profile", icon: "account_circle" },
-    { href: "/saved-searches", label: "Saved" },
     { href: "/settings", label: "Settings", icon: "settings" },
 ];
 
