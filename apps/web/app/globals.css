@@ -247,7 +247,21 @@ body>div:first-child {
 .rico-chip-accent {
     background: rgba(255, 45, 142, 0.095);
     border: 1px solid rgba(255, 45, 142, 0.22);
-    color: rgba(255, 191, 222, 0.96);
+}
+
+/* =========================================================================
+ * Rico AI Design System — Animations
+ * ========================================================================= */
+
+@keyframes rico-flicker {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.4;
+        transform: scale(0.8);
+    }
 }
 
 /* Aura glow effects */
