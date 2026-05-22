@@ -160,7 +160,7 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
     <article
       aria-label={`${job.title || "Untitled role"} at ${job.company || "Unknown company"}`}
       className={cn(
-        "rico-card group rounded-[30px] p-5 md:p-6 transition-all duration-300",
+        "rico-card group rounded-[28px] p-5 md:p-6 transition-all duration-300",
         "hover:-translate-y-1 hover:border-[rgba(255,45,142,0.18)] hover:shadow-[0_30px_90px_rgba(0,0,0,0.42)]",
         isDone && "opacity-60 grayscale-[0.3]",
         className

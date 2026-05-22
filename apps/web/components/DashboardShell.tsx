@@ -64,7 +64,7 @@ export function DashboardShell({
             <TopNav />
 
             <main className="relative z-10 mx-auto max-w-7xl px-container-padding-mobile pb-52 pt-36 md:px-container-padding-desktop md:pt-40">
-                <GlassPanel className="mb-8 rounded-[30px] border border-white/10 px-5 py-5 md:px-8 md:py-7">
+                <GlassPanel className="mb-8 rounded-[28px] border border-white/10 px-5 py-5 md:px-8 md:py-7">
                     <div className="flex flex-col gap-6">
                         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                             <div className="space-y-3">
