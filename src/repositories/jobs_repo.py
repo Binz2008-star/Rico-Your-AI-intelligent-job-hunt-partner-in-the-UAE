@@ -28,7 +28,7 @@ def list_from_db(
     if not conn:
         return None
     try:
-        filters = ["score >= %s"]
+        filters = ["score >= %s", "date_found >= now() - interval '14 days'"]
         params: list = [min_score]
 
         if source:
