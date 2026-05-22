@@ -21,12 +21,17 @@ interface ProcessingOverlayProps {
  */
 export function ProcessingOverlay({ active, onComplete }: ProcessingOverlayProps) {
     const [stageIndex, setStageIndex] = useState(0);
+    const [prevActive, setPrevActive] = useState(active);
+
+    // React derived-state pattern: reset stage during render when active transitions,
+    // rather than calling setState inside the effect body (avoids cascading renders).
+    if (prevActive !== active) {
+        setPrevActive(active);
+        setStageIndex(0);
+    }
 
     useEffect(() => {
-        if (!active) {
-            setStageIndex(0);
-            return;
-        }
+        if (!active) return;
         const interval = setInterval(() => {
             setStageIndex((prev) => {
                 const next = prev + 1;
