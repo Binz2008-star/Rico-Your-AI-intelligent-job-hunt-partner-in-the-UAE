@@ -1316,6 +1316,15 @@ class RicoChatAPI:
 
         # Explicit job search (regex-matched "find ... jobs" etc.)
         if intent == "job_search_explicit":
+            # If the message names an explicit role ("find jobs for Environmental
+            # Compliance Officer"), honour it and bypass profile target_roles fallback.
+            if intent_result.extracted_role:
+                return self._finalize(
+                    self._classified_role_search(user_id, intent_result.extracted_role, profile),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
+
             # Fall through to legacy router for entity extraction
             context = self._build_router_context(user_id, profile)
             routed = _route(message, user_id=user_id, context=context)
@@ -1418,6 +1427,25 @@ class RicoChatAPI:
             }
             self._append_chat(user_id, "assistant", response["message"])
             return self._finalize(response, routed.source, profile=profile)
+
+        # Save target role — "save X as target role" / "set X as target role"
+        if intent == "save_target_role" and intent_result.extracted_role:
+            role = intent_result.extracted_role.strip()
+            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            if role.lower() not in {str(r).lower() for r in target_roles}:
+                target_roles.append(role)
+                upsert_profile(user_id=user_id, updates={"target_roles": target_roles})
+            response = {
+                "type": "preferences_updated",
+                "message": (
+                    f"Got it — I've saved **{role}** as your target role. "
+                    "I'll use it for all future job searches. "
+                    "Say 'find jobs' whenever you're ready."
+                ),
+                "updated": {"target_roles": target_roles},
+            }
+            self._append_chat(user_id, "assistant", response["message"])
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # Save job
         if intent == "save_job":
@@ -1678,7 +1706,32 @@ class RicoChatAPI:
         - profile_relevant → search directly
         - known_but_off_profile → ask confirmation
         - unknown → clarify / redirect
+
+        Roles that Rico itself suggested (from role_suggester) are treated as
+        profile_relevant without running them through the taxonomy classifier,
+        because they are already derived from the user's CV.
         """
+        from rapidfuzz import fuzz as _fuzz
+
+        # Roles already in the user's target_roles are always profile_relevant.
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        role_lower = role_text.strip().lower()
+        for tr in target_roles:
+            if _fuzz.ratio(role_lower, str(tr).lower()) >= 70:
+                return self._target_role_search_response(user_id, role_text.strip(), profile)
+
+        # Rico's own suggestions are always profile_relevant — they came from the CV.
+        suggested = self._generate_role_suggestions(
+            self._as_list(self._profile_value(profile, "skills")),
+            self._as_list(self._profile_value(profile, "certifications")),
+            self._profile_value(profile, "years_experience"),
+            self._as_list(self._profile_value(profile, "industries")),
+            self._profile_value(profile, "current_role"),
+        )
+        suggested_lower = {s["label"].lower() for s in suggested}
+        if role_lower in suggested_lower:
+            return self._target_role_search_response(user_id, role_text.strip(), profile)
+
         classification, canonical_role = classify_role_candidate(role_text, profile)
 
         if classification == "profile_relevant" and canonical_role:

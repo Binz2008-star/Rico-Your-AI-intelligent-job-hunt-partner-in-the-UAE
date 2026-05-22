@@ -200,10 +200,21 @@ def _extract_entities(message: str) -> Dict[str, Any]:
     if industry_match:
         entities["industry"] = industry_match.group(0).lower()
 
-    for phrase in _TITLE_PHRASES:
-        if phrase in lower:
-            entities["job_title"] = phrase.title()
-            break
+    # Extract explicit role from "find/search … jobs for <role>" patterns first,
+    # before falling back to the static _TITLE_PHRASES list.
+    _for_role_m = re.search(
+        r"\b(?:find|search|show|get|look\s+for)\b.{0,40}\b(?:jobs?|roles?|positions?|openings?)\b"
+        r"\s+for\s+([A-Za-z][A-Za-z &/\-]{2,60}?)(?:\s+in\b|\s*$)",
+        message,
+        re.IGNORECASE,
+    )
+    if _for_role_m:
+        entities["job_title"] = _for_role_m.group(1).strip().title()
+    else:
+        for phrase in _TITLE_PHRASES:
+            if phrase in lower:
+                entities["job_title"] = phrase.title()
+                break
 
     ordinal_match = _ORDINAL_REF_RE.search(lower)
     if ordinal_match:
