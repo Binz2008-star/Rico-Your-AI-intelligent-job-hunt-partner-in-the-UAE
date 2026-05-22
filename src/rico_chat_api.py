@@ -227,7 +227,12 @@ class RicoChatAPI:
         if not tokens or len(tokens) > _MAX_ROLE_WORDS:
             return False
 
-        first = tokens[0].lower().strip(".,/&+-()")
+        # Contractions (e.g. "can't", "don't") start with a verb, not a job title.
+        # They never appear in English role names, so reject on apostrophe in first token.
+        first_raw = tokens[0].lower()
+        if "'" in first_raw or "’" in first_raw:
+            return False
+        first = first_raw.strip(".,/&+-()")
         if first in _NON_ROLE_STARTERS:
             return False
         if not any(

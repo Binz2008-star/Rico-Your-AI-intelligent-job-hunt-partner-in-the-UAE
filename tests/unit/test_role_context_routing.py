@@ -122,6 +122,30 @@ class TestFindJobsForRoleRegex:
         assert _JOB_SEARCH_FOR_ROLE_RE.search("find jobs") is None
 
 
+# ── _looks_like_bare_target_role contraction guard ───────────────────────────
+
+class TestBareRoleGateContractions:
+    """Regression: contraction-led messages must not pass through the bare-role gate."""
+
+    def test_cant_you_see_chat_history(self):
+        from src.rico_chat_api import RicoChatAPI
+        assert RicoChatAPI._looks_like_bare_target_role("can't you see our chat history") is False
+
+    def test_dont_search_that(self):
+        from src.rico_chat_api import RicoChatAPI
+        assert RicoChatAPI._looks_like_bare_target_role("don't search for that") is False
+
+    def test_wont_work(self):
+        from src.rico_chat_api import RicoChatAPI
+        assert RicoChatAPI._looks_like_bare_target_role("won't this work") is False
+
+    def test_valid_roles_still_pass(self):
+        from src.rico_chat_api import RicoChatAPI
+        assert RicoChatAPI._looks_like_bare_target_role("HSE Manager") is True
+        assert RicoChatAPI._looks_like_bare_target_role("Environmental Compliance Officer") is True
+        assert RicoChatAPI._looks_like_bare_target_role("Head of Environmental Health Safety") is True
+
+
 # ── rico_intent_router entity extraction ─────────────────────────────────────
 
 class TestExtractEntitiesForRole:
