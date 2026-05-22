@@ -840,11 +840,11 @@ class RicoChatAPI:
                 item.get("job_country"),
             ])) or "UAE"
             jobs.append({
-                "title":           item.get("job_title", ""),
-                "company":         item.get("employer_name", ""),
+                "title":           item.get("job_title") or "",
+                "company":         item.get("employer_name") or "",
                 "location":        location,
                 "link":            link,
-                "description":     item.get("job_description", ""),
+                "description":     item.get("job_description") or "",
                 "source":          "jsearch",
                 "salary_string":   item.get("job_salary_string") or "",
                 "employment_type": item.get("job_employment_type") or "",
