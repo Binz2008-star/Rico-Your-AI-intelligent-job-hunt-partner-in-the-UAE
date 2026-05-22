@@ -204,6 +204,7 @@ def health_check() -> Dict[str, Any]:
 
 
 @app.get("/version")
+@app.get("/api/v1/version")
 def version() -> Dict[str, str]:
     """Return API version."""
     return {"version": app.version, "service": "Job Automation Platform API"}
