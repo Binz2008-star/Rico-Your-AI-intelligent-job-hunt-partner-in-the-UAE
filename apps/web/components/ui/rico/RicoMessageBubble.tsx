@@ -55,6 +55,8 @@ export function RicoMessageBubble({
         "text-[14px] leading-relaxed",
         // Whitespace handling for streaming/reflow
         "whitespace-pre-wrap",
+        // Selection color using Rico accent
+        "selection:bg-[var(--rico-primary-container)] selection:text-[var(--rico-on-primary)]",
         // Variant-specific styles
         variantStyles[variant],
         className
@@ -72,6 +74,19 @@ export function RicoMessageBubble({
         </div>
       </div>
     );
+  }
+
+  // Alignment and max-width wrappers for each variant
+  if (variant === "user") {
+    return <div className="max-w-[82%] ml-auto">{content}</div>;
+  }
+
+  if (variant === "assistant") {
+    return <div className="max-w-[82%]">{content}</div>;
+  }
+
+  if (variant === "system" || variant === "error") {
+    return <div className="max-w-[600px] mx-auto">{content}</div>;
   }
 
   return content;

@@ -48,12 +48,19 @@ interface RicoJobMatchCardProps {
  * All actions go through callback props.
  */
 export function RicoJobMatchCard({ match, onActionClick, className }: RicoJobMatchCardProps) {
-  const score = match.score ?? 0;
-  const scoreLabel = score >= 0.8 ? "Strong match" : score >= 0.6 ? "Good match" : "Possible match";
+  // Normalize score to handle both 0-1 and 0-100 ranges
+  const rawScore = match.score ?? 0;
+  const normalizedScore = rawScore <= 1 ? rawScore * 100 : rawScore;
+  const boundedScore = Math.max(0, Math.min(100, normalizedScore));
+
+  const scoreLabel =
+    boundedScore >= 80 ? "Strong match" :
+    boundedScore >= 60 ? "Good match" :
+    "Possible match";
 
   const getScoreVariant = (): "cyan" | "magenta" | "default" => {
-    if (score >= 0.8) return "cyan";
-    if (score >= 0.6) return "default";
+    if (boundedScore >= 80) return "cyan";
+    if (boundedScore >= 60) return "default";
     return "magenta";
   };
 
@@ -71,18 +78,18 @@ export function RicoJobMatchCard({ match, onActionClick, className }: RicoJobMat
   return (
     <RicoGlassIsland className={cn("p-4 space-y-3", className)}>
       {/* Header: title, company, location, score */}
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <h3 className="text-[13px] font-semibold text-[var(--rico-fg-1)] leading-tight">
+          <h3 className="text-[13px] font-semibold text-[var(--rico-fg-1)] leading-tight line-clamp-2" title={match.title}>
             {match.title}
           </h3>
-          <p className="text-[11px] text-[var(--rico-fg-3)] mt-0.5">
+          <p className="text-[11px] text-[var(--rico-fg-3)] mt-0.5 truncate" title={`${match.company}${match.location ? ` · ${match.location}` : ""}`}>
             {match.company}
             {match.location && ` · ${match.location}`}
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {score > 0 && (
+        <div className="flex items-center gap-2 shrink-0 sm:mt-0">
+          {boundedScore > 0 && (
             <RicoPill variant={getScoreVariant()}>{scoreLabel}</RicoPill>
           )}
           <RicoPill variant={confidenceBadge.variant}>{confidenceBadge.label}</RicoPill>
@@ -169,10 +176,10 @@ export function RicoJobMatchCard({ match, onActionClick, className }: RicoJobMat
       {/* Footer action buttons */}
       {match.actions && match.actions.length > 0 && (
         <div className="flex flex-wrap gap-2 pt-2 border-t border-[var(--rico-border-subtle)]">
-          {match.actions.map((action) => (
+          {match.actions.map((action, idx) => (
             <RicoButton
               key={action}
-              variant="ghost"
+              variant={idx === 0 ? "magenta" : "ghost"}
               size="sm"
               onClick={() => onActionClick?.(action)}
             >
