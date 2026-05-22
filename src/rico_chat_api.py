@@ -7,7 +7,7 @@ triggers workflows, and responds with autonomous actions.
 
 from __future__ import annotations
 
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, is_dataclass, replace as _dc_replace
 import json
 import logging
 import os
@@ -791,7 +791,15 @@ class RicoChatAPI:
             target_roles.append(normalized_role)
             profile = upsert_profile(user_id=user_id, updates={"target_roles": target_roles})
 
-        workflow_result = self.system.run_for_profile(profile)
+        # Search with only the explicitly requested role so stale or generic
+        # target_roles ("Engineer", "Manager") do not dilute or replace the query.
+        search_role = normalized_role or role
+        search_profile = (
+            _dc_replace(profile, target_roles=[search_role])
+            if is_dataclass(profile)
+            else profile
+        )
+        workflow_result = self.system.run_for_profile(search_profile)
         all_matches = workflow_result.get("matches", [])
 
         # Filter out already-applied jobs
