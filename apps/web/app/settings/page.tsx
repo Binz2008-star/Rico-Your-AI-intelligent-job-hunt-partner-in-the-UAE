@@ -6,7 +6,7 @@ import { StatusCard } from "@/components/StatusCard";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
-import { ApiError, getHealth, getSettings, updateSettings } from "@/lib/api";
+import { ApiError, fetchMe, getHealth, getSettings, updateSettings } from "@/lib/api";
 import type { HealthResponse, SettingsResponse } from "@/types";
 import { useCallback, useEffect, useState } from "react";
 
@@ -33,10 +33,9 @@ export default function SettingsPage() {
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<"auth" | "other" | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
-  // TODO: Implement proper admin role check via fetchMe when available
-  // For now, hide backend diagnostics from all users
-  const isAdmin = false;
+  const isAdmin = userRole === "admin";
 
   useEffect(() => {
     getHealth()
@@ -67,6 +66,23 @@ export default function SettingsPage() {
     }, 0);
     return () => window.clearTimeout(timeoutId);
   }, [loadSettings, user]);
+
+  useEffect(() => {
+    if (!user) {
+      const timeoutId = window.setTimeout(() => {
+        setUserRole(null);
+      }, 0);
+      return () => window.clearTimeout(timeoutId);
+    }
+    fetchMe()
+      .then((me) => {
+        setUserRole(me.role || null);
+      })
+      .catch(() => {
+        // If fetchMe fails, treat as non-admin
+        setUserRole(null);
+      });
+  }, [user]);
 
   const handleRetrySettings = useCallback(() => {
     setError(null);
