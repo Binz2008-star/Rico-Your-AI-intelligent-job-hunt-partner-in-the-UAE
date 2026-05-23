@@ -46,6 +46,38 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _first_env(*names: str, default: str = "") -> str:
+    for name in names:
+        value = os.getenv(name, "").strip()
+        if value:
+            return value
+    return default
+
+
+def version_metadata() -> Dict[str, Any]:
+    """Deployment metadata shared by legacy and versioned routes."""
+    return {
+        "app": "ricohunt",
+        "version": app.version,
+        "commit": _first_env(
+            "GIT_COMMIT",
+            "VERCEL_GIT_COMMIT_SHA",
+            "RENDER_GIT_COMMIT",
+            "COMMIT_SHA",
+            "SOURCE_VERSION",
+            default="unknown",
+        ),
+        "environment": _first_env(
+            "RICO_ENV",
+            "ENV",
+            "ENVIRONMENT",
+            "VERCEL_ENV",
+            default="development",
+        ),
+        "deployed_at": _first_env("DEPLOYED_AT", "BUILD_TIME", "BUILD_TIMESTAMP"),
+    }
+
+
 def init_sentry() -> None:
     dsn = os.getenv("SENTRY_DSN", "").strip()
     if not dsn:
@@ -209,10 +241,13 @@ def root() -> Dict[str, Any]:
 @app.get("/version")
 def version() -> Dict[str, Any]:
     """Version endpoint for deployment tracking."""
-    return {
-        "version": "1.0.0",
-        "service": "Job Automation Platform API",
-    }
+    return version_metadata()
+
+
+@app.get("/api/v1/version")
+def api_version() -> Dict[str, Any]:
+    """Versioned deployment metadata endpoint."""
+    return version_metadata()
 
 
 @app.get("/health")

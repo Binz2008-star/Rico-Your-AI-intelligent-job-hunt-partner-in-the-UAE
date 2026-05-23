@@ -435,7 +435,7 @@ class TestErrorLeakage:
 
     def test_500_response_does_not_expose_internals(self, client):
         """Force a 500 via bad data and confirm no internal details leak."""
-        with patch("src.services.jobs_service.list_jobs", side_effect=RuntimeError("secret DB error")):
+        with patch("src.api.routers.jobs.list_jobs", side_effect=RuntimeError("secret DB error")):
             from fastapi.testclient import TestClient
             from src.api.app import app
             from src.api.auth import create_access_token

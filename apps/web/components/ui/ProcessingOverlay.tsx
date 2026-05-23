@@ -23,9 +23,10 @@ export function ProcessingOverlay({ active, onComplete }: ProcessingOverlayProps
     const [stageIndex, setStageIndex] = useState(0);
 
     useEffect(() => {
+        const resetTimer = setTimeout(() => setStageIndex(0), 0);
+
         if (!active) {
-            setStageIndex(0);
-            return;
+            return () => clearTimeout(resetTimer);
         }
         const interval = setInterval(() => {
             setStageIndex((prev) => {
@@ -38,7 +39,10 @@ export function ProcessingOverlay({ active, onComplete }: ProcessingOverlayProps
                 return next;
             });
         }, 1800);
-        return () => clearInterval(interval);
+        return () => {
+            clearTimeout(resetTimer);
+            clearInterval(interval);
+        };
     }, [active, onComplete]);
 
     if (!active) return null;
