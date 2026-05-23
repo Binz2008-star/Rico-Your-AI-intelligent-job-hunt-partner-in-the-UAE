@@ -46,6 +46,20 @@ def create_subscription_checkout(
         raise HTTPException(status_code=422, detail=str(exc))
 
 
+@router.get("/diagnostic/env-check")
+def stripe_env_diagnostic() -> dict:
+    """Temporary diagnostic endpoint to check Stripe env var presence without exposing values."""
+    return {
+        "STRIPE_SECRET_KEY": bool(os.getenv("STRIPE_SECRET_KEY", "").strip()),
+        "STRIPE_PRO_PRICE_ID": bool(os.getenv("STRIPE_PRO_PRICE_ID", "").strip()),
+        "STRIPE_PRICE_PRO": bool(os.getenv("STRIPE_PRICE_PRO", "").strip()),
+        "STRIPE_PREMIUM_PRICE_ID": bool(os.getenv("STRIPE_PREMIUM_PRICE_ID", "").strip()),
+        "STRIPE_PRICE_PREMIUM": bool(os.getenv("STRIPE_PRICE_PREMIUM", "").strip()),
+        "FRONTEND_URL": bool(os.getenv("FRONTEND_URL", "").strip()),
+        "STRIPE_WEBHOOK_SECRET": bool(os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()),
+    }
+
+
 @router.post("/webhook", response_model=SubscriptionWebhookResponse)
 async def subscription_webhook(
     request: Request,
