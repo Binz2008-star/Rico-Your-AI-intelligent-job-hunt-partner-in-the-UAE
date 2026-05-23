@@ -153,8 +153,8 @@ class RicoChatAPI:
         """
         payload = json.dumps(message) if isinstance(message, dict) else message
         self.memory.append_chat_message(user_id, role, payload)
-        # Async DB persistence — non-blocking. Non-daemon so write completes
-        # even if the main thread exits before the DB round-trip finishes.
+        # Async DB persistence — non-blocking, daemon so worker shutdown is
+        # not stalled by a slow or unreachable Postgres during deploys.
         import threading
         from src.services.chat_service import db_append_chat
 
@@ -167,7 +167,7 @@ class RicoChatAPI:
         threading.Thread(
             target=_safe_db_append,
             args=(user_id, role, payload),
-            daemon=False,
+            daemon=True,
         ).start()
 
     @staticmethod

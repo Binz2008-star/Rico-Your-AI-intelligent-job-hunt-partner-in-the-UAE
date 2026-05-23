@@ -162,12 +162,20 @@ class TestUpsertProfile:
         assert profile_data["target_roles"] == ["HSE"]
 
     def test_writes_settings_to_db(self):
+        from contextlib import contextmanager
         from src.repositories.profile_repo import upsert_profile
         db = _mock_db()
         db.upsert_settings = MagicMock()
         mem = _mock_mem()
+        mock_conn = MagicMock()
+
+        @contextmanager
+        def _fake_transaction():
+            yield mock_conn
+
         with patch("src.repositories.profile_repo._db", return_value=db), \
-             patch("src.repositories.profile_repo._memory", return_value=mem):
+             patch("src.repositories.profile_repo._memory", return_value=mem), \
+             patch("src.repositories.profile_repo._db_transaction", _fake_transaction):
             upsert_profile("u@x.com", {"autonomy_level": "auto"})
         db.upsert_settings.assert_called_once()
 

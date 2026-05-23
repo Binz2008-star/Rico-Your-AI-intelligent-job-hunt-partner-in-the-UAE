@@ -145,7 +145,7 @@ class TestFormIdValidation:
     def test_no_env_var_accepts_any_form_id(self):
         from src.rico_jotform_webhook import handle_jotform_submission
         db = _mock_db()
-        env = {k: v for k, v in os.environ.items() if k != "JOTFORM_FORM_ID"}
+        env = {k: v for k, v in os.environ.items() if k not in ("JOTFORM_FORM_ID", "JOTFORM_RICO_FORM_ID")}
         with patch("src.rico_jotform_webhook.RicoDB", return_value=db), \
              patch.dict(os.environ, env, clear=True), \
              patch("src.repositories.onboarding_repo.mark_onboarding_complete"):
@@ -172,7 +172,7 @@ class TestNoUserId:
     def test_name_only_payload_skips_db(self):
         from src.rico_jotform_webhook import handle_jotform_submission
         db = _mock_db()
-        env = {k: v for k, v in os.environ.items() if k != "JOTFORM_FORM_ID"}
+        env = {k: v for k, v in os.environ.items() if k not in ("JOTFORM_FORM_ID", "JOTFORM_RICO_FORM_ID")}
         with patch("src.rico_jotform_webhook.RicoDB", return_value=db), \
              patch.dict(os.environ, env, clear=True):
             result = handle_jotform_submission({"submissionID": "sub-ghost-1", "full_name": "Ghost User"})
@@ -183,7 +183,7 @@ class TestNoUserId:
         """Payload with no submissionID (not even a name) must be rejected."""
         from src.rico_jotform_webhook import handle_jotform_submission
         db = _mock_db()
-        env = {k: v for k, v in os.environ.items() if k != "JOTFORM_FORM_ID"}
+        env = {k: v for k, v in os.environ.items() if k not in ("JOTFORM_FORM_ID", "JOTFORM_RICO_FORM_ID")}
         with patch("src.rico_jotform_webhook.RicoDB", return_value=db), \
              patch.dict(os.environ, env, clear=True):
             result = handle_jotform_submission({})
@@ -198,7 +198,7 @@ class TestConsentOnboarding:
         from src.rico_jotform_webhook import handle_jotform_submission
         db = _mock_db()
         payload = {"submissionID": "sub-consent-1", "email": "u@x.com", "consent": consent}
-        _env = env or {k: v for k, v in os.environ.items() if k != "JOTFORM_FORM_ID"}
+        _env = env or {k: v for k, v in os.environ.items() if k not in ("JOTFORM_FORM_ID", "JOTFORM_RICO_FORM_ID")}
         with patch("src.rico_jotform_webhook.RicoDB", return_value=db), \
              patch.dict(os.environ, _env, clear=True), \
              patch("src.repositories.onboarding_repo.mark_onboarding_complete") as mock_complete:
@@ -216,7 +216,7 @@ class TestConsentOnboarding:
     def test_consent_absent_does_not_call_mark_complete(self):
         from src.rico_jotform_webhook import handle_jotform_submission
         db = _mock_db()
-        env = {k: v for k, v in os.environ.items() if k != "JOTFORM_FORM_ID"}
+        env = {k: v for k, v in os.environ.items() if k not in ("JOTFORM_FORM_ID", "JOTFORM_RICO_FORM_ID")}
         with patch("src.rico_jotform_webhook.RicoDB", return_value=db), \
              patch.dict(os.environ, env, clear=True), \
              patch("src.repositories.onboarding_repo.mark_onboarding_complete") as mock_complete:
@@ -226,7 +226,7 @@ class TestConsentOnboarding:
     def test_mark_complete_failure_does_not_abort_submission(self):
         from src.rico_jotform_webhook import handle_jotform_submission
         db = _mock_db()
-        env = {k: v for k, v in os.environ.items() if k != "JOTFORM_FORM_ID"}
+        env = {k: v for k, v in os.environ.items() if k not in ("JOTFORM_FORM_ID", "JOTFORM_RICO_FORM_ID")}
         with patch("src.rico_jotform_webhook.RicoDB", return_value=db), \
              patch.dict(os.environ, env, clear=True), \
              patch("src.repositories.onboarding_repo.mark_onboarding_complete",
@@ -240,7 +240,7 @@ class TestConsentOnboarding:
 class TestDbFailureIsolation:
     def _run_with_db(self, db):
         from src.rico_jotform_webhook import handle_jotform_submission
-        env = {k: v for k, v in os.environ.items() if k != "JOTFORM_FORM_ID"}
+        env = {k: v for k, v in os.environ.items() if k not in ("JOTFORM_FORM_ID", "JOTFORM_RICO_FORM_ID")}
         with patch("src.rico_jotform_webhook.RicoDB", return_value=db), \
              patch.dict(os.environ, env, clear=True), \
              patch("src.repositories.onboarding_repo.mark_onboarding_complete"):
@@ -263,7 +263,7 @@ class TestDbFailureIsolation:
         from src.rico_jotform_webhook import handle_jotform_submission
         db = _mock_db()
         db.upsert_user.side_effect = RuntimeError("connection lost")
-        env = {k: v for k, v in os.environ.items() if k != "JOTFORM_FORM_ID"}
+        env = {k: v for k, v in os.environ.items() if k not in ("JOTFORM_FORM_ID", "JOTFORM_RICO_FORM_ID")}
         with patch("src.rico_jotform_webhook.RicoDB", return_value=db), \
              patch.dict(os.environ, env, clear=True):
             with pytest.raises(RuntimeError, match="connection lost"):
@@ -354,7 +354,7 @@ def _mock_db_idempotent(first_delivery: bool = True) -> MagicMock:
 
 class TestSubmissionIdempotency:
     def _env(self):
-        return {k: v for k, v in os.environ.items() if k != "JOTFORM_FORM_ID"}
+        return {k: v for k, v in os.environ.items() if k not in ("JOTFORM_FORM_ID", "JOTFORM_RICO_FORM_ID")}
 
     def test_missing_submission_id_rejected(self):
         """Payload with no submissionID must be rejected immediately."""

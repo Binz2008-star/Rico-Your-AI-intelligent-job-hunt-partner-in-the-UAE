@@ -203,8 +203,10 @@ class TestFirstTimeOnboarding:
 class TestCompletedUserRouting:
     def _completed(self, message: str, user_id: str = "done-user") -> dict:
         api = _make_api()
+        profile = RicoProfile(user_id=user_id, target_roles=["Software Engineer"])
         with patch("src.rico_chat_api.is_onboarding_complete", return_value=True), \
-             patch("src.rico_chat_api.mark_onboarding_complete"):
+             patch("src.rico_chat_api.mark_onboarding_complete"), \
+             patch("src.rico_chat_api.get_profile", return_value=profile):
             return api.process_message(user_id, message)
 
     def test_whats_next_returns_options(self):

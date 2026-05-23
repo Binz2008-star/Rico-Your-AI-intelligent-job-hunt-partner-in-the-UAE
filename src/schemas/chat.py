@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class RicoChatResponse(BaseModel):
@@ -13,6 +13,8 @@ class RicoChatResponse(BaseModel):
     All fields are optional/defaulted so legacy response dicts pass through
     without validation errors during the migration period.
     """
+
+    model_config = ConfigDict(extra="allow")
 
     message: str = ""
     type: str = "response"
@@ -28,11 +30,9 @@ class RicoChatResponse(BaseModel):
     role: str | None = None
     success: bool = True
     error_ref: str | None = None
+    trace_id: str | None = None
     # Legacy alias — some response paths return "response" instead of "message"
     response: str | None = None
-
-    class Config:
-        extra = "allow"  # pass-through unknown fields during migration
 
 
 class RicoSessionContext(BaseModel):

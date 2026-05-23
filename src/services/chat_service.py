@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict
 
 from src.rico.intent import IntentRouter
+from src.schemas.chat import RicoSessionContext
 
 logger = logging.getLogger(__name__)
 _UTC = timezone.utc
@@ -88,39 +89,35 @@ def _has_user_data(payload: Dict[str, Any]) -> bool:
 
 # ── Public service functions ──────────────────────────────────────────────────
 
-def send_message(user_id: str, message: str) -> Dict[str, Any]:
+def send_message(ctx: RicoSessionContext, message: str) -> Dict[str, Any]:
     """Phase 1 routing: IntentRouter first, legacy classifier second."""
     from src.repositories.profile_repo import get_profile
 
-    profile = get_profile(user_id)
+    profile = get_profile(ctx.user_id)
     profile_present = profile is not None
 
     decision = _intent_router.route(
         message=message,
-        user_id=user_id,
+        user_id=ctx.user_id,
         profile_context_present=profile_present,
     )
 
     if decision.should_use_ai:
-        return _conversational_ai_reply(
-            user_id=user_id,
-            message=message,
-            profile=profile,
-        )
+        return _conversational_ai_reply(ctx=ctx, message=message, profile=profile)
 
-    return _legacy_send_message(user_id=user_id, message=message)
+    return _legacy_send_message(ctx=ctx, message=message)
 
 
-def _legacy_send_message(user_id: str, message: str) -> Dict[str, Any]:
+def _legacy_send_message(ctx: RicoSessionContext, message: str) -> Dict[str, Any]:
     """Run the existing Rico chat pipeline unchanged."""
     from src.rico_chat_api import RicoChatAPI
 
-    return RicoChatAPI().process_message(user_id=user_id, message=message)
+    return RicoChatAPI().process_message(user_id=ctx.user_id, message=message)
 
 
 def _conversational_ai_reply(
     *,
-    user_id: str,
+    ctx: RicoSessionContext,
     message: str,
     profile: Any,
 ) -> Dict[str, Any]:
@@ -128,7 +125,7 @@ def _conversational_ai_reply(
     from src.rico_chat_api import RicoChatAPI
 
     result = RicoChatAPI().answer_conversationally(
-        user_id=user_id,
+        user_id=ctx.user_id,
         message=message,
         profile=profile,
     )

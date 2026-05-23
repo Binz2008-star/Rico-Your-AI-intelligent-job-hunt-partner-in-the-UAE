@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from src.schemas.chat import RicoSessionContext
 from src.services import chat_service
+
+_CTX = RicoSessionContext.for_authenticated("test_user_phase1@example.com")
 
 
 def test_open_ended_question_routes_to_ai_boundary() -> None:
@@ -15,10 +18,7 @@ def test_open_ended_question_routes_to_ai_boundary() -> None:
              "src.rico_chat_api.RicoChatAPI.process_message",
              return_value={"message": "legacy", "type": "legacy"},
          ) as legacy_path:
-        result = chat_service.send_message(
-            user_id="test_user_phase1@example.com",
-            message="how can you help me",
-        )
+        result = chat_service.send_message(ctx=_CTX, message="how can you help me")
 
     ai_path.assert_called_once()
     legacy_path.assert_not_called()
@@ -35,10 +35,7 @@ def test_bare_role_routes_to_legacy_boundary() -> None:
              "src.rico_chat_api.RicoChatAPI.process_message",
              return_value={"message": "legacy", "type": "role_candidate"},
          ) as legacy_path:
-        chat_service.send_message(
-            user_id="test_user_phase1@example.com",
-            message="HSE Manager",
-        )
+        chat_service.send_message(ctx=_CTX, message="HSE Manager")
 
     legacy_path.assert_called_once()
     ai_path.assert_not_called()
@@ -54,10 +51,7 @@ def test_explicit_role_search_routes_to_legacy_boundary() -> None:
              "src.rico_chat_api.RicoChatAPI.process_message",
              return_value={"message": "legacy", "type": "explicit_search"},
          ) as legacy_path:
-        chat_service.send_message(
-            user_id="test_user_phase1@example.com",
-            message="find HSE Manager jobs",
-        )
+        chat_service.send_message(ctx=_CTX, message="find HSE Manager jobs")
 
     legacy_path.assert_called_once()
     ai_path.assert_not_called()

@@ -170,10 +170,10 @@ def upsert_profile(user_id: str, updates: dict[str, Any]) -> RicoProfile:
         updates.get("salary_expectation_aed") or 0,
     )
 
-    # Filter updates to valid fields
+    # Filter updates to valid fields (profile fields OR settings fields)
     filtered_updates = {
         k: v for k, v in updates.items()
-        if k in _PROFILE_FIELDS and v is not None
+        if (k in _PROFILE_FIELDS or k in _SETTINGS_FIELDS) and v is not None
     }
 
     # ── JSON mirror (always) — keeps existing code working ────────────────────
@@ -295,8 +295,7 @@ def get_preferences(user_id: str) -> dict[str, Any]:
     if profile:
         return asdict(profile.settings)
 
-    # Return defaults
-    return asdict(RicoAgentSettings())
+    return {}
 
 
 def save_preferences(user_id: str, prefs: dict[str, Any]) -> bool:

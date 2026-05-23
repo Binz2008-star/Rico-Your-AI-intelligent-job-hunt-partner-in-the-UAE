@@ -116,6 +116,8 @@ class TestFreeProviderMode:
     @patch('src.rico_chat_api.RicoChatAPI')
     def test_send_message_delegates_to_chat_api(self, mock_chat_api):
         """send_message always delegates to RicoChatAPI.process_message."""
+        from src.schemas.chat import RicoSessionContext
+        ctx = RicoSessionContext.for_authenticated("test@example.com")
         mock_api_instance = mock_chat_api.return_value
         mock_api_instance.process_message.return_value = {
             "message": "AI response",
@@ -125,7 +127,7 @@ class TestFreeProviderMode:
             "hf_available": False,
         }
 
-        result = send_message(user_id="test@example.com", message="Hello")
+        result = send_message(ctx=ctx, message="Hello")
 
         mock_api_instance.process_message.assert_called_once_with(
             user_id="test@example.com", message="Hello"

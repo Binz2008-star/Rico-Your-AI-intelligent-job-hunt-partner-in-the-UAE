@@ -172,20 +172,22 @@ class TestAIProviderHealthSecurity:
     """Test AI provider health endpoint security."""
 
     def test_ai_provider_health_requires_auth(self, client):
-        """AI provider health endpoint should require authentication."""
-        r = client.get("/api/v1/rico/health/ai-provider")
+        """Admin AI provider health endpoint requires authentication."""
+        r = client.get("/api/v1/rico/admin/health/ai-provider")
         assert r.status_code == 401
 
     def test_ai_provider_health_succeeds_with_auth(self, auth_client):
-        """AI provider health endpoint should succeed with valid auth."""
+        """Admin AI provider health endpoint returns full data with admin auth."""
         with patch("src.rico_openai_agent.RicoOpenAIAgent") as mock_agent_class, \
-             patch("src.rico_env.get_ai_provider", return_value="deepseek"):
+             patch("src.rico_env.get_ai_provider", return_value="deepseek"), \
+             patch("src.api.routers.rico_chat.require_admin_user", return_value={"email": "admin@x.com", "role": "admin"}):
             mock_agent = mock_agent_class.return_value
             mock_agent.provider_available = True
             mock_agent.openai_available = False
             mock_agent.hf_available = False
+            mock_agent.deepseek_available = True
 
-            r = auth_client.get("/api/v1/rico/health/ai-provider")
+            r = auth_client.get("/api/v1/rico/admin/health/ai-provider")
             assert r.status_code == 200
             data = r.json()
             assert "active_provider" in data

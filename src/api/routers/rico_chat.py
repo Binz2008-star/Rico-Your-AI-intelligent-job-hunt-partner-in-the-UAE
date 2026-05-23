@@ -51,6 +51,7 @@ from src.rico_env import get_ai_provider
 from src.rico_hf_client import generate_text, is_available as hf_ok
 from src.rico_openai_agent import RicoOpenAIAgent
 from src.rico_openai_runtime import call_openai_minimal
+from src.schemas.chat import RicoChatResponse, RicoSessionContext
 from src.services import chat_service
 from src.agent.responses.schema import build_error_response
 
@@ -115,29 +116,6 @@ class RicoPublicChatRequest(BaseModel):
         if not v or not v.strip():
             raise ValueError("Message cannot be empty")
         return v.strip()
-
-
-class PublicChatResponse(BaseModel):
-    """Typed response for public chat endpoint."""
-    message: str
-    type: str = "response"
-    matches: list[dict[str, Any]] | None = None
-    options: list[dict[str, Any]] | None = None
-    next_action: str | None = None
-    response_source: str | None = None
-    provider: str | None = None
-    provider_state: str | None = None
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "message": "I found 3 software engineer positions in Dubai",
-                "type": "response",
-                "matches": [{"title": "Senior Engineer", "company": "Tech Corp"}],
-                "options": None,
-                "next_action": None
-            }
-        }
 
 
 class SavedSearchRequest(BaseModel):
@@ -518,41 +496,41 @@ def rico_delete_saved_search(request: Request, search_id: str) -> None:
 # Chat Endpoints
 # ============================================================================
 
-@router.post("/chat")
+@router.post("/chat", response_model=RicoChatResponse)
 @limiter.limit(LIMIT_CHAT)
-def rico_chat(request: Request, payload: RicoChatRequest) -> dict[str, Any]:
+def rico_chat(request: Request, payload: RicoChatRequest) -> RicoChatResponse:
     """Authenticated chat endpoint."""
     start_time = time.time()
     request_ref = generate_error_ref()
     try:
         user = get_current_user(request)
-        user_id = user["email"]
+        ctx = RicoSessionContext.for_authenticated(user["email"])
 
         logger.info(
             "chat_request user=%s message_len=%d request_ref=%s",
-            user_id,
+            ctx.user_id,
             len(payload.message),
             request_ref,
         )
 
-        result = chat_service.send_message(user_id=user_id, message=payload.message)
+        result = chat_service.send_message(ctx=ctx, message=payload.message)
 
         logger.info(
             "chat_response user=%s intent=%s matches=%d request_ref=%s",
-            user_id,
+            ctx.user_id,
             result.get("intent", "unknown"),
             len(result.get("matches", [])),
             request_ref,
         )
 
         _metrics.record_request((time.time() - start_time) * 1000)
-        return result
+        return RicoChatResponse(**result, trace_id=request_ref)
     except HTTPException:
         raise
     except Exception as exc:
         logger.exception(
             "chat_error user=%s message_len=%d error=%s request_ref=%s",
-            user_id if "user_id" in locals() else "unknown",
+            ctx.user_id if "ctx" in locals() else "unknown",
             len(payload.message) if "payload" in locals() else 0,
             str(exc),
             request_ref,
@@ -561,15 +539,15 @@ def rico_chat(request: Request, payload: RicoChatRequest) -> dict[str, Any]:
         error_response = build_error_response(
             f"I couldn't process your request. Reference: {request_ref}. Please try again or rephrase your message.",
             log_exc=exc,
-            user_id=user_id if "user_id" in locals() else "unknown",
+            user_id=ctx.user_id if "ctx" in locals() else "unknown",
         )
         error_response["error_ref"] = request_ref
-        return error_response
+        return RicoChatResponse(**error_response, trace_id=request_ref)
 
 
-@router.post("/chat/public", response_model=PublicChatResponse)
+@router.post("/chat/public", response_model=RicoChatResponse)
 @limiter.limit("10/minute")
-def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> PublicChatResponse:
+def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> RicoChatResponse:
     """Unauthenticated chat for landing page visitors.
 
     Supports two user identification modes:
@@ -584,25 +562,30 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> Public
         raise HTTPException(status_code=422, detail="Either session_id or email must be provided")
 
     try:
-        # Determine user_id: email takes precedence over session_id
+        # Build session context: email-identified users can persist profile; anonymous cannot
         if payload.email:
-            user_id = payload.email
+            ctx = RicoSessionContext(
+                user_id=payload.email,
+                auth_type="public",
+                can_persist_profile=True,
+                can_view_private_jobs=False,
+                rate_limit_tier="standard",
+            )
         else:
-            safe_sid = payload.session_id[:64]
-            user_id = f"public:{safe_sid}"
+            ctx = RicoSessionContext.for_public(payload.session_id[:64])
 
         logger.info(
             "chat_public_request user=%s message_len=%d request_ref=%s",
-            user_id,
+            ctx.user_id,
             len(payload.message),
             request_ref,
         )
 
-        result = chat_service.send_message(user_id=user_id, message=payload.message)
+        result = chat_service.send_message(ctx=ctx, message=payload.message)
 
         logger.info(
             "chat_public_response user=%s intent=%s matches=%d request_ref=%s",
-            user_id,
+            ctx.user_id,
             result.get("intent", "unknown"),
             len(result.get("matches", [])),
             request_ref,
@@ -611,35 +594,21 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> Public
         # Strip internal diagnostics from unauthenticated responses
         stripped_result = _strip_internal_fields(result)
 
-        response = PublicChatResponse(
-            message=stripped_result.get("message", ""),
-            type=stripped_result.get("type", "response"),
-            matches=stripped_result.get("matches"),
-            options=stripped_result.get("options"),
-            next_action=stripped_result.get("next_action"),
-            response_source=stripped_result.get("response_source"),
-            provider=stripped_result.get("provider"),
-            provider_state=stripped_result.get("provider_state"),
-        )
-
         _metrics.record_request((time.time() - start_time) * 1000)
-        return response
+        return RicoChatResponse(**stripped_result, trace_id=request_ref)
     except Exception as exc:
         logger.exception(
             "chat_public_error user=%s message_len=%d error=%s request_ref=%s",
-            user_id if "user_id" in locals() else "unknown",
+            ctx.user_id if "ctx" in locals() else "unknown",
             len(payload.message) if "payload" in locals() else 0,
             str(exc),
             request_ref,
         )
         _metrics.record_request((time.time() - start_time) * 1000)
-        # Return a simple error for public users without exposing details
-        return PublicChatResponse(
+        return RicoChatResponse(
             message=f"I couldn't process your request. Reference: {request_ref}. Please try again or rephrase your message.",
             type="error",
-            matches=None,
-            options=None,
-            next_action=None,
+            trace_id=request_ref,
         )
 
 
