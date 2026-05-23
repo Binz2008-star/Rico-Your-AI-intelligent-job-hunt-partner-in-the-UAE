@@ -146,8 +146,8 @@ class TestRicoChatRouteExists:
         """user_id in body must never override the identity from the JWT."""
         captured = {}
 
-        def spy(user_id, message):
-            captured["user_id"] = user_id
+        def spy(ctx, message):
+            captured["user_id"] = ctx.user_id
             return _CHAT_RESPONSE
 
         with patch("src.services.chat_service.send_message", side_effect=spy):
@@ -422,9 +422,9 @@ class TestRicoCVUploadSecurity:
                 json={"message": "Find jobs", "session_id": public_session_id.replace("public:", "")},
             )
         assert r.status_code == 200
-        # Verify the chat service received the correct user_id
+        # Verify the chat service received the correct user_id via SessionContext
         call_kwargs = mock_send.call_args[1]
-        assert call_kwargs["user_id"] == public_session_id
+        assert call_kwargs["ctx"].user_id == public_session_id
 
 class TestRicoConfirmCVProfileRoute:
     def test_confirm_cv_profile_flat_body_accepted(self, client):
