@@ -939,7 +939,7 @@ async def rico_upload_cv(
         # Parse CV with defensive handling for dataclass vs dict return
         # CVParser is synchronous/CPU-bound — offload to thread pool to avoid blocking the event loop
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             parsed_raw = await loop.run_in_executor(
                 None, chat_service.parse_cv, data, safe_name
             )

@@ -6,7 +6,7 @@ import { StatusCard } from "@/components/StatusCard";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
-import { ApiError, getHealth, getSettings, updateSettings } from "@/lib/api";
+import { ApiError, fetchMe, getHealth, getSettings, updateSettings } from "@/lib/api";
 import type { HealthResponse, SettingsResponse } from "@/types";
 import { useCallback, useEffect, useState } from "react";
 
@@ -33,10 +33,13 @@ export default function SettingsPage() {
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<"auth" | "other" | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
-  // TODO: Implement proper admin role check via fetchMe when available
-  // For now, hide backend diagnostics from all users
-  const isAdmin = false;
+  useEffect(() => {
+    fetchMe()
+      .then((me) => setIsAdmin(me.authenticated && me.role === "admin"))
+      .catch(() => setIsAdmin(false));
+  }, []);
 
   useEffect(() => {
     getHealth()
