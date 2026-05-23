@@ -103,11 +103,8 @@ The repo combines three layers:
 - `apps/web/app/signup/page.tsx` — self-signup UI
 - `apps/web/app/login/page.tsx` — login UI
 - `apps/web/app/onboarding/page.tsx` — guided onboarding / CV-first flow
-- `apps/web/lib/api.ts` — newer canonical frontend API helper for auth/chat/CV/profile/onboarding
-- `apps/web/lib/client.ts` — older client still used by some dashboard/jobs/applications/settings services
-- `apps/web/services/*` — older service wrappers still partly active
-
-Prefer consolidating toward `apps/web/lib/api.ts`, but do not delete `lib/client.ts` until all live imports are migrated.
+- `apps/web/lib/api.ts` — canonical frontend API helper for auth/chat/CV/profile/onboarding
+- `apps/web/services/*` — older service wrappers (dashboard stats, jobs, applications, settings, health)
 
 ## Auth Rules
 
@@ -288,23 +285,7 @@ Do not invent new env var names unless the code is being intentionally migrated.
 
 ## Migration Status: `lib/client.ts` → `lib/api.ts`
 
-Migrated to `apps/web/lib/api.ts`:
-
-- auth/register/login-style newer flows
-- public chat
-- CV upload
-- onboarding
-- Rico profile
-
-Still pending or partly using older service wrappers:
-
-- dashboard stats
-- jobs
-- applications
-- settings
-- health
-
-Do not delete `apps/web/lib/client.ts` until all remaining imports are migrated and `npm run build` passes.
+Migration is complete. `apps/web/lib/client.ts` has been deleted. All API calls now go through `apps/web/lib/api.ts`. Do not reintroduce `lib/client.ts`.
 
 ## Agent Runtime Rules
 
