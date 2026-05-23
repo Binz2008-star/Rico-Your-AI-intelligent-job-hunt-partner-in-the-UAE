@@ -1,0 +1,311 @@
+"use client";
+
+import { DashboardShell } from "@/components/DashboardShell";
+import { ToastContainer } from "@/components/ui/Toast";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/useToast";
+import {
+    ApiError,
+    createCheckoutSession,
+    getMySubscription,
+    getSubscriptionPlans,
+    type SubscriptionMeResponse,
+    type SubscriptionPlan,
+} from "@/lib/api";
+import { useCallback, useEffect, useState } from "react";
+
+function PlanCard({
+    plan,
+    currentPlan,
+    isActive,
+    isLoggedIn,
+    loading,
+    onUpgrade,
+}: {
+    plan: SubscriptionPlan;
+    currentPlan: string | null;
+    isActive: boolean;
+    isLoggedIn: boolean;
+    loading: boolean;
+    onUpgrade: (plan: "pro" | "premium") => void;
+}) {
+    const isCurrent = currentPlan === plan.plan && isActive;
+    const isProPlan = plan.plan === "pro";
+
+    return (
+        <div
+            className={`relative flex flex-col rounded-2xl border p-6 backdrop-blur-md overflow-hidden transition-all ${
+                plan.is_popular
+                    ? "border-[rgba(255,45,142,0.4)] bg-[#13132a]/60 shadow-[0_0_40px_rgba(255,45,142,0.08)]"
+                    : "border-white/[0.06] bg-[#13132a]/40"
+            }`}
+        >
+            {/* Glow */}
+            <div
+                className={`absolute -top-10 -right-10 w-36 h-36 blur-3xl rounded-full pointer-events-none ${
+                    plan.is_popular ? "bg-[#ff2d8e]/8" : "bg-[#5b4fff]/5"
+                }`}
+            />
+
+            {/* Popular badge */}
+            {plan.is_popular && (
+                <div className="absolute top-4 right-4">
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em] px-2 py-1 rounded-full bg-[rgba(255,45,142,0.15)] text-[#ff2d8e] border border-[rgba(255,45,142,0.3)]">
+                        Most Popular
+                    </span>
+                </div>
+            )}
+
+            {/* Current plan badge */}
+            {isCurrent && (
+                <div className="absolute top-4 left-4">
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em] px-2 py-1 rounded-full bg-[rgba(0,229,255,0.12)] text-[#00e5ff] border border-[rgba(0,229,255,0.3)]">
+                        Current Plan
+                    </span>
+                </div>
+            )}
+
+            <div className={`mt-${isCurrent ? "8" : plan.is_popular ? "6" : "0"}`}>
+                <h2 className="text-[22px] font-bold text-white font-['Cabinet_Grotesk',sans-serif]">
+                    {plan.name}
+                </h2>
+                {plan.description && (
+                    <p className="mt-1 text-[13px] text-[#8080a0]">{plan.description}</p>
+                )}
+            </div>
+
+            <div className="mt-5 flex items-baseline gap-1">
+                <span className="text-[38px] font-black text-white leading-none">
+                    {plan.price_monthly}
+                </span>
+                <span className="text-[13px] text-[#5a5a7a] font-medium">
+                    {plan.currency}/mo
+                </span>
+            </div>
+
+            <ul className="mt-6 flex flex-col gap-2.5 flex-1">
+                {plan.features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-2.5 text-[13px] text-[#c0c0d8]">
+                        <span
+                            className={`mt-0.5 w-4 h-4 flex-shrink-0 rounded-full flex items-center justify-center text-[10px] font-black ${
+                                isProPlan
+                                    ? "bg-[rgba(91,79,255,0.2)] text-[#7b6fff]"
+                                    : "bg-[rgba(255,45,142,0.2)] text-[#ff2d8e]"
+                            }`}
+                        >
+                            ✓
+                        </span>
+                        {feature}
+                    </li>
+                ))}
+            </ul>
+
+            <div className="mt-8">
+                {isCurrent ? (
+                    <div className="w-full py-3 rounded-xl text-center text-[13px] font-semibold text-[#00e5ff] bg-[rgba(0,229,255,0.06)] border border-[rgba(0,229,255,0.2)]">
+                        Active subscription
+                    </div>
+                ) : isLoggedIn ? (
+                    <button
+                        onClick={() => onUpgrade(plan.plan)}
+                        disabled={loading}
+                        className={`w-full py-3 rounded-xl text-[13px] font-bold transition-all disabled:opacity-40 ${
+                            plan.is_popular
+                                ? "bg-[#ff2d8e] text-white hover:bg-[#ff4a9e] shadow-[0_0_20px_rgba(255,45,142,0.3)]"
+                                : "bg-[rgba(91,79,255,0.15)] text-[#7b6fff] border border-[rgba(91,79,255,0.35)] hover:bg-[rgba(91,79,255,0.25)]"
+                        }`}
+                    >
+                        {loading ? (
+                            <span className="flex items-center justify-center gap-2">
+                                <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                Connecting…
+                            </span>
+                        ) : (
+                            `Upgrade to ${plan.name}`
+                        )}
+                    </button>
+                ) : (
+                    <a
+                        href="/login"
+                        className={`block w-full py-3 rounded-xl text-center text-[13px] font-bold transition-all ${
+                            plan.is_popular
+                                ? "bg-[rgba(255,45,142,0.15)] text-[#ff2d8e] border border-[rgba(255,45,142,0.35)] hover:bg-[rgba(255,45,142,0.25)]"
+                                : "bg-[rgba(91,79,255,0.1)] text-[#7b6fff] border border-[rgba(91,79,255,0.25)] hover:bg-[rgba(91,79,255,0.2)]"
+                        }`}
+                    >
+                        Log in to upgrade
+                    </a>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function FreePlanRow({ currentPlan }: { currentPlan: string | null }) {
+    const isCurrent = currentPlan === "free" || currentPlan === null;
+    return (
+        <div className="flex items-center justify-between rounded-xl border border-white/[0.05] bg-[#0d0d1f]/60 px-5 py-4">
+            <div>
+                <span className="text-[13px] font-semibold text-[#c0c0d8]">Free</span>
+                <span className="ml-3 text-[12px] text-[#5a5a7a]">
+                    50 AI messages · 10 saved jobs · 1 profile optimisation/mo
+                </span>
+            </div>
+            {isCurrent && (
+                <span className="text-[11px] font-bold uppercase tracking-widest text-[#5a5a7a] border border-white/[0.08] rounded-full px-3 py-1">
+                    Current
+                </span>
+            )}
+        </div>
+    );
+}
+
+export default function SubscriptionPage() {
+    const { user, ready } = useAuth();
+    const { toasts, toast } = useToast();
+
+    const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+    const [sub, setSub] = useState<SubscriptionMeResponse | null>(null);
+    const [loadingPlans, setLoadingPlans] = useState(true);
+    const [checkingOut, setCheckingOut] = useState<"pro" | "premium" | null>(null);
+    const [mockNotice, setMockNotice] = useState<"pro" | "premium" | null>(null);
+
+    useEffect(() => {
+        getSubscriptionPlans()
+            .then((r) => setPlans(r.plans))
+            .catch(() => toast("Could not load plans", "error"))
+            .finally(() => setLoadingPlans(false));
+    }, [toast]);
+
+    useEffect(() => {
+        if (!user) return;
+        getMySubscription()
+            .then(setSub)
+            .catch(() => {
+                // Non-critical — subscription status is optional display
+            });
+    }, [user]);
+
+    const handleUpgrade = useCallback(
+        async (plan: "pro" | "premium") => {
+            setCheckingOut(plan);
+            setMockNotice(null);
+            try {
+                const result = await createCheckoutSession(plan);
+                if (result.provider === "mock") {
+                    setMockNotice(plan);
+                } else {
+                    window.location.href = result.checkout_url;
+                }
+            } catch (err) {
+                const msg =
+                    err instanceof ApiError
+                        ? err.message
+                        : "Checkout failed. Please try again.";
+                toast(msg, "error");
+            } finally {
+                setCheckingOut(null);
+            }
+        },
+        [toast]
+    );
+
+    const currentPlan = sub?.subscription?.plan ?? null;
+    const isActive = sub?.is_active ?? false;
+    const isLoggedIn = Boolean(user);
+
+    return (
+        <DashboardShell
+            title="Subscription"
+            subtitle="Upgrade your Rico AI plan"
+        >
+            <div className="max-w-3xl flex flex-col gap-8">
+
+                {/* Mock checkout notice */}
+                {mockNotice && (
+                    <div className="flex items-start gap-3 rounded-xl border border-[rgba(245,166,35,0.35)] bg-[rgba(245,166,35,0.08)] px-5 py-4">
+                        <span className="text-[#f5a623] text-[18px] mt-0.5">⚠</span>
+                        <div>
+                            <p className="text-[13px] font-semibold text-[#f5a623]">
+                                Stripe Checkout not yet active
+                            </p>
+                            <p className="mt-0.5 text-[12px] text-[#a08040]">
+                                The payment provider is running in mock mode. Real checkout
+                                sessions will be available once the backend is updated with
+                                Stripe credentials. No charge has been made.
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => setMockNotice(null)}
+                            className="ml-auto text-[#a08040] hover:text-[#f5a623] text-[18px] leading-none flex-shrink-0"
+                            aria-label="Dismiss"
+                        >
+                            ×
+                        </button>
+                    </div>
+                )}
+
+                {/* Current plan banner for active paid subscribers */}
+                {sub && isActive && currentPlan && currentPlan !== "free" && (
+                    <div className="flex items-center gap-3 rounded-xl border border-[rgba(0,229,255,0.3)] bg-[rgba(0,229,255,0.06)] px-5 py-4">
+                        <span className="text-[#00e5ff] text-[20px]">✦</span>
+                        <div>
+                            <p className="text-[13px] font-semibold text-[#00e5ff]">
+                                Active {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} Plan
+                            </p>
+                            {sub.subscription.current_period_end && (
+                                <p className="mt-0.5 text-[12px] text-[#5a8a8a]">
+                                    Renews{" "}
+                                    {new Date(sub.subscription.current_period_end).toLocaleDateString(
+                                        "en-AE",
+                                        { day: "numeric", month: "long", year: "numeric" }
+                                    )}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Plan cards */}
+                {loadingPlans ? (
+                    <div className="grid gap-5 sm:grid-cols-2">
+                        {[0, 1].map((i) => (
+                            <div
+                                key={i}
+                                className="h-72 rounded-2xl bg-[#13132a]/40 border border-white/[0.04] animate-pulse"
+                            />
+                        ))}
+                    </div>
+                ) : plans.length > 0 ? (
+                    <div className="grid gap-5 sm:grid-cols-2">
+                        {plans.map((plan) => (
+                            <PlanCard
+                                key={plan.id}
+                                plan={plan}
+                                currentPlan={currentPlan}
+                                isActive={isActive}
+                                isLoggedIn={ready ? isLoggedIn : false}
+                                loading={checkingOut === plan.plan}
+                                onUpgrade={handleUpgrade}
+                            />
+                        ))}
+                    </div>
+                ) : (
+                    <p className="text-[13px] text-[#5a5a7a]">
+                        Could not load plans. Please refresh the page.
+                    </p>
+                )}
+
+                {/* Free tier row */}
+                <FreePlanRow currentPlan={currentPlan} />
+
+                {/* Footer note */}
+                <p className="text-[11px] text-[#5a5a7a] text-center">
+                    Prices in AED. Billed monthly. Cancel any time.
+                </p>
+            </div>
+
+            <ToastContainer toasts={toasts} />
+        </DashboardShell>
+    );
+}
