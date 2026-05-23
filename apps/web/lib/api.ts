@@ -1053,3 +1053,73 @@ export async function fetchChatHistory(limit = 20, before?: string): Promise<Cha
     );
     return validateShape(RicoChatHistoryResponseSchema, data, "Rico chat history");
 }
+
+// ── Subscription ──────────────────────────────────────────────────────────────
+
+export interface SubscriptionEntitlements {
+    monthly_ai_message_limit: number | null;
+    saved_jobs_limit: number | null;
+    profile_optimization_limit: number | null;
+    premium_recommendations_enabled: boolean;
+    application_automation_enabled: boolean;
+}
+
+export interface SubscriptionPlan {
+    id: string;
+    plan: "pro" | "premium";
+    name: string;
+    price_monthly: number;
+    currency: string;
+    features: string[];
+    entitlements: SubscriptionEntitlements;
+    is_popular: boolean;
+    description?: string | null;
+}
+
+export interface PlansResponse {
+    plans: SubscriptionPlan[];
+}
+
+export interface UserSubscription {
+    user_id: string;
+    plan: "free" | "pro" | "premium";
+    subscription_status: "active" | "inactive" | "past_due" | "canceled";
+    stripe_customer_id: string | null;
+    stripe_subscription_id: string | null;
+    current_period_start: string | null;
+    current_period_end: string | null;
+    cancel_at: string | null;
+    canceled_at: string | null;
+    entitlements: SubscriptionEntitlements;
+    updated_at: string;
+}
+
+export interface SubscriptionMeResponse {
+    subscription: UserSubscription;
+    plan: SubscriptionPlan | null;
+    is_active: boolean;
+}
+
+export interface CheckoutResponse {
+    checkout_url: string;
+    provider: "stripe" | "mock";
+    plan: "pro" | "premium";
+    status: "ready" | "mock";
+}
+
+export async function getSubscriptionPlans(): Promise<PlansResponse> {
+    return requestJson<PlansResponse>("/api/v1/subscription/plans", { method: "GET" });
+}
+
+export async function getMySubscription(): Promise<SubscriptionMeResponse> {
+    return requestJson<SubscriptionMeResponse>("/api/v1/subscription/me", { method: "GET" });
+}
+
+export async function createCheckoutSession(
+    plan: "pro" | "premium"
+): Promise<CheckoutResponse> {
+    return requestJson<CheckoutResponse>("/api/v1/subscription/checkout", {
+        method: "POST",
+        body: JSON.stringify({ plan }),
+    });
+}
