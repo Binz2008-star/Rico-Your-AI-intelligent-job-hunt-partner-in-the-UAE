@@ -513,7 +513,7 @@ def rico_chat(request: Request, payload: RicoChatRequest) -> RicoChatResponse:
             request_ref,
         )
 
-        result = chat_service.send_message(user_id=ctx.user_id, message=payload.message)
+        result = chat_service.send_message(ctx=ctx, message=payload.message)
 
         logger.info(
             "chat_response user=%s intent=%s matches=%d request_ref=%s",
@@ -581,7 +581,7 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> RicoCh
             request_ref,
         )
 
-        result = chat_service.send_message(user_id=ctx.user_id, message=payload.message)
+        result = chat_service.send_message(ctx=ctx, message=payload.message)
 
         logger.info(
             "chat_public_response user=%s intent=%s matches=%d request_ref=%s",
