@@ -1,8 +1,10 @@
 """Rico Hunt subscription plans and entitlement helpers."""
 from __future__ import annotations
 
+import importlib
 import os
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from src.schemas.subscription import (
     CheckoutResponse,
@@ -77,6 +79,11 @@ PAID_PLANS = {
     SubscriptionTier.PREMIUM: PREMIUM_PLAN,
 }
 
+PRICE_ENV_BY_PLAN = {
+    SubscriptionTier.PRO: ("STRIPE_PRO_PRICE_ID", "STRIPE_PRICE_PRO"),
+    SubscriptionTier.PREMIUM: ("STRIPE_PREMIUM_PRICE_ID", "STRIPE_PRICE_PREMIUM"),
+}
+
 
 def resolve_effective_user_plan(user_id: str) -> SubscriptionResponse:
     now = datetime.now(timezone.utc)
@@ -101,15 +108,37 @@ def get_paid_plan(plan: SubscriptionTier) -> SubscriptionPlan:
     return PAID_PLANS[plan]
 
 
+def _load_stripe() -> Any:
+    return importlib.import_module("stripe")
+
+
+def _frontend_url() -> str:
+    return os.getenv("FRONTEND_URL", "https://ricohunt.com").strip().rstrip("/") or "https://ricohunt.com"
+
+
+def _checkout_urls(request: SubscriptionCreateRequest) -> tuple[str, str]:
+    frontend = _frontend_url()
+    return (
+        request.success_url or f"{frontend}/subscription/success?session_id={{CHECKOUT_SESSION_ID}}",
+        request.cancel_url or f"{frontend}/subscription?checkout=cancelled",
+    )
+
+
+def _stripe_price_id(plan: SubscriptionTier) -> str:
+    for env_name in PRICE_ENV_BY_PLAN[plan]:
+        price_id = os.getenv(env_name, "").strip()
+        if price_id:
+            return price_id
+    return ""
+
+
 def build_checkout_response(
     user_id: str,
     request: SubscriptionCreateRequest,
 ) -> CheckoutResponse:
-    _ = user_id
     plan = get_paid_plan(request.plan)
     stripe_key = os.getenv("STRIPE_SECRET_KEY", "").strip()
-    price_env = f"STRIPE_PRICE_{plan.plan.value.upper()}_MONTHLY"
-    stripe_price = os.getenv(price_env, "").strip()
+    stripe_price = _stripe_price_id(plan.plan)
 
     if not stripe_key or not stripe_price:
         return CheckoutResponse(
@@ -122,25 +151,57 @@ def build_checkout_response(
             status="mock",
         )
 
+    stripe = _load_stripe()
+    stripe.api_key = stripe_key
+    success_url, cancel_url = _checkout_urls(request)
+    session = stripe.checkout.Session.create(
+        mode="subscription",
+        line_items=[{"price": stripe_price, "quantity": 1}],
+        success_url=success_url,
+        cancel_url=cancel_url,
+        customer_email=user_id,
+        metadata={"user_id": user_id, "plan": plan.plan.value},
+        subscription_data={"metadata": {"user_id": user_id, "plan": plan.plan.value}},
+    )
+    checkout_url = getattr(session, "url", None)
+    if not checkout_url and isinstance(session, dict):
+        checkout_url = session.get("url")
+    if not checkout_url:
+        raise RuntimeError("Stripe checkout session did not include a URL")
+
     return CheckoutResponse(
-        checkout_url=(
-            f"https://checkout.stripe.com/c/pay/mock-session?"
-            f"plan={plan.plan.value}"
-        ),
+        checkout_url=checkout_url,
         provider="stripe",
         plan=plan.plan,
         status="ready",
     )
 
 
-def handle_subscription_webhook(event: WebhookEvent) -> SubscriptionWebhookResponse:
-    stripe_secret = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()
+def _webhook_response(event: Any, *, mock: bool) -> SubscriptionWebhookResponse:
+    event_type = event.get("type") if isinstance(event, dict) else event.type
     return SubscriptionWebhookResponse(
         received=True,
-        event_type=event.type,
-        processed=event.type.startswith("checkout.") or event.type.startswith("customer.subscription."),
-        mock=not bool(stripe_secret),
+        event_type=event_type,
+        processed=event_type.startswith("checkout.") or event_type.startswith("customer.subscription."),
+        mock=mock,
     )
+
+
+def handle_subscription_webhook(
+    event: WebhookEvent,
+    *,
+    payload: bytes | None = None,
+    signature: str | None = None,
+) -> SubscriptionWebhookResponse:
+    stripe_secret = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()
+    if not stripe_secret:
+        return _webhook_response(event, mock=True)
+    if not payload or not signature:
+        raise ValueError("Stripe webhook signature is required")
+
+    stripe = _load_stripe()
+    verified_event = stripe.Webhook.construct_event(payload, signature, stripe_secret)
+    return _webhook_response(verified_event, mock=False)
 
 
 def check_usage_allowed(user_id: str, feature: str, current_usage: int) -> UsageCheckResponse:
