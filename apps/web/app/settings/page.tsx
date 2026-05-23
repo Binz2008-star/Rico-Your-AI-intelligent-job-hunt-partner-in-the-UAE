@@ -69,19 +69,28 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!user) {
-      const timeoutId = window.setTimeout(() => {
-        setUserRole(null);
-      }, 0);
-      return () => window.clearTimeout(timeoutId);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setUserRole(null);
+      return;
     }
+
+    let active = true;
+
     fetchMe()
       .then((me) => {
-        setUserRole(me.role || null);
+        if (active) {
+          setUserRole(me.role || null);
+        }
       })
       .catch(() => {
-        // If fetchMe fails, treat as non-admin
-        setUserRole(null);
+        if (active) {
+          setUserRole(null);
+        }
       });
+
+    return () => {
+      active = false;
+    };
   }, [user]);
 
   const handleRetrySettings = useCallback(() => {
