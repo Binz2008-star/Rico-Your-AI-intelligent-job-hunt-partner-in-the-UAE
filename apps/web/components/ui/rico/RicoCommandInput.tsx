@@ -1,49 +1,68 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { TextareaHTMLAttributes, forwardRef } from "react";
+import { TextareaHTMLAttributes, forwardRef, useCallback, useEffect, useRef } from "react";
 
 interface RicoCommandInputProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   placeholder?: string;
 }
 
-/**
- * RicoCommandInput — Design system command input
- *
- * Uses the new --rico-* design tokens for consistent input styling.
- * Implements the design system's boxed glass input pattern.
- * Rendered as a textarea (rows=1, resize-none) so Shift+Enter works for new lines.
- */
 export const RicoCommandInput = forwardRef<HTMLTextAreaElement, RicoCommandInputProps>(
-  ({ placeholder = "Type a command...", className, ...props }, ref) => {
+  ({ placeholder = "Type a command...", className, onChange, ...props }, ref) => {
+    const innerRef = useRef<HTMLTextAreaElement>(null);
+
+    // Merge forwarded ref with inner ref so we can read scrollHeight
+    const setRefs = useCallback(
+      (node: HTMLTextAreaElement | null) => {
+        (innerRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = node;
+        if (typeof ref === "function") {
+          ref(node);
+        } else if (ref) {
+          (ref as React.MutableRefObject<HTMLTextAreaElement | null>).current = node;
+        }
+      },
+      [ref]
+    );
+
+    const autoResize = useCallback(() => {
+      const el = innerRef.current;
+      if (!el) return;
+      el.style.height = "auto";
+      el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+    }, []);
+
+    // Resize whenever the controlled value changes (e.g. cleared after send)
+    useEffect(() => {
+      autoResize();
+    }, [props.value, autoResize]);
+
+    const handleChange = useCallback(
+      (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        autoResize();
+        onChange?.(e);
+      },
+      [autoResize, onChange]
+    );
+
     return (
       <textarea
-        ref={ref}
+        ref={setRefs}
         rows={1}
         placeholder={placeholder}
+        onChange={handleChange}
         className={cn(
-          // Base input styles
           "w-full",
-          // Single-line appearance, multiline capable
-          "resize-none min-h-[46px]",
-          // Background and border from design system
+          "resize-none min-h-[46px] max-h-[200px]",
           "bg-[rgba(255,255,255,0.04)]",
           "border border-[var(--rico-border-soft)]",
-          // Border radius from design system
           "rounded-[var(--r-lg)]",
-          // Typography from design system
           "text-[14px]",
-          // Padding
           "px-3.5 py-3",
-          // Color
           "text-[var(--rico-fg-1)]",
-          // Placeholder color
           "placeholder:text-[var(--rico-fg-4)]",
-          // Outline
           "outline-none",
-          // Transition from design system
-          "transition-all duration-[var(--dur-state)] ease-[var(--ease-out)]",
-          // Focus state
+          "overflow-y-auto",
+          "transition-colors duration-[var(--dur-state)] ease-[var(--ease-out)]",
           "focus:border-[var(--rico-primary-container)]",
           className
         )}
