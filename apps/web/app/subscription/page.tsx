@@ -20,6 +20,7 @@ function PlanCard({
     isActive,
     isLoggedIn,
     loading,
+    anyCheckoutPending,
     onUpgrade,
 }: {
     plan: SubscriptionPlan;
@@ -27,6 +28,7 @@ function PlanCard({
     isActive: boolean;
     isLoggedIn: boolean;
     loading: boolean;
+    anyCheckoutPending: boolean;
     onUpgrade: (plan: "pro" | "premium") => void;
 }) {
     const isCurrent = currentPlan === plan.plan && isActive;
@@ -108,7 +110,7 @@ function PlanCard({
                 ) : isLoggedIn ? (
                     <button
                         onClick={() => onUpgrade(plan.plan)}
-                        disabled={loading}
+                        disabled={anyCheckoutPending}
                         className={`w-full py-3 rounded-xl text-[13px] font-bold transition-all disabled:opacity-40 ${
                             plan.is_popular
                                 ? "bg-[#ff2d8e] text-white hover:bg-[#ff4a9e] shadow-[0_0_20px_rgba(255,45,142,0.3)]"
@@ -142,7 +144,7 @@ function PlanCard({
 }
 
 function FreePlanRow({ currentPlan }: { currentPlan: string | null }) {
-    const isCurrent = currentPlan === "free" || currentPlan === null;
+    const isCurrent = currentPlan === "free";
     return (
         <div className="flex items-center justify-between rounded-xl border border-white/[0.05] bg-[#0d0d1f]/60 px-5 py-4">
             <div>
@@ -286,6 +288,7 @@ export default function SubscriptionPage() {
                                 isActive={isActive}
                                 isLoggedIn={ready ? isLoggedIn : false}
                                 loading={checkingOut === plan.plan}
+                                anyCheckoutPending={checkingOut !== null}
                                 onUpgrade={handleUpgrade}
                             />
                         ))}
