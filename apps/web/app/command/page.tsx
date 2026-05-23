@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RicoMessageBubble } from "@/components/ui/rico/RicoMessageBubble";
+import { RicoMarkdownContent } from "@/components/ui/rico/RicoMarkdownContent";
 import { RicoJobMatchCard, type JobMatchData } from "@/components/ui/rico/RicoJobMatchCard";
 import { RicoButton } from "@/components/ui/rico/RicoButton";
 import { RicoCommandInput } from "@/components/ui/rico/RicoCommandInput";
@@ -561,7 +562,7 @@ export default function CommandV2Page() {
                                             variant="assistant"
                                             useGlassWrap={m.text.length > 120}
                                         >
-                                            {m.text}
+                                            <RicoMarkdownContent>{m.text}</RicoMarkdownContent>
                                         </RicoMessageBubble>
                                     )
                                 )}
