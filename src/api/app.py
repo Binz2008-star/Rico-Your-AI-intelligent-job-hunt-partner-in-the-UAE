@@ -154,12 +154,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Job Automation Platform",
+    title="Rico API",
     version="1.0.0",
     lifespan=lifespan,
     description=(
-        "REST API for the autonomous job search pipeline. "
-        "All mutating endpoints require JWT authentication (httpOnly cookie)."
+        "Rico AI — UAE career intelligence platform. "
+        "Authenticated endpoints require a JWT in an httpOnly cookie. "
+        "Public endpoints are session-based and rate-limited."
     ),
     docs_url="/api/docs",
     redoc_url="/api/redoc",
