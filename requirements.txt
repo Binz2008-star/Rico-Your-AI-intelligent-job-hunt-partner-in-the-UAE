@@ -27,6 +27,7 @@ passlib[bcrypt]
 alembic
 httpx
 openai>=1.0.0
+stripe>=11.0.0,<12.0.0
 # diskcache is used by llm_scorer and telegram UI for local caching.
 # CVE-2025-69872: cache data is internally generated (not from untrusted sources),
 # which mitigates the deserialization risk. Upgrade when a patched release is available.

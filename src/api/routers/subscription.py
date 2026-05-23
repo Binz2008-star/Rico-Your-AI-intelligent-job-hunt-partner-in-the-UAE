@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+import json
+import os
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from pydantic import ValidationError
 
 from src.api.deps import get_current_user_id
 from src.schemas.subscription import (
@@ -43,5 +47,24 @@ def create_subscription_checkout(
 
 
 @router.post("/webhook", response_model=SubscriptionWebhookResponse)
-def subscription_webhook(event: WebhookEvent) -> SubscriptionWebhookResponse:
-    return handle_subscription_webhook(event)
+async def subscription_webhook(
+    request: Request,
+    stripe_signature: str | None = Header(default=None, alias="stripe-signature"),
+) -> SubscriptionWebhookResponse:
+    payload = await request.body()
+    try:
+        body = json.loads(payload or b"{}")
+        event = WebhookEvent.model_validate(body)
+        return handle_subscription_webhook(event, payload=payload, signature=stripe_signature)
+    except ValidationError as exc:
+        if os.getenv("STRIPE_WEBHOOK_SECRET", "").strip():
+            try:
+                event = WebhookEvent(id="stripe_signed_event", type="stripe.signed", data={})
+                return handle_subscription_webhook(event, payload=payload, signature=stripe_signature)
+            except ValueError as inner_exc:
+                raise HTTPException(status_code=400, detail=str(inner_exc))
+        raise HTTPException(status_code=422, detail=exc.errors())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid Stripe webhook")
