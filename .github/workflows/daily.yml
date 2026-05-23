@@ -1,10 +1,5 @@
 name: Daily Job Bot Full
 
-permissions:
-  contents: write
-  pages: write
-  id-token: write
-
 on:
   schedule:
     - cron: '0 6 * * *'   # 6:00 AM UTC
@@ -26,6 +21,8 @@ jobs:
     name: Intelligence Pipeline
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout

@@ -9,6 +9,8 @@ jobs:
   deploy:
     name: Deploy & Verify Production
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
