@@ -12,7 +12,9 @@ import {
     type SubscriptionMeResponse,
     type SubscriptionPlan,
 } from "@/lib/api";
-import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
 
 function PlanCard({
     plan,
@@ -143,6 +145,36 @@ function PlanCard({
     );
 }
 
+function CancelBanner() {
+  const params = useSearchParams();
+  const router = useRouter();
+  const [dismissed, setDismissed] = useState(false);
+
+  if (dismissed || params.get("checkout") !== "cancelled") return null;
+
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-[rgba(245,166,35,0.35)] bg-[rgba(245,166,35,0.08)] px-5 py-4">
+      <span className="text-[#f5a623] text-[18px] mt-0.5">⚠</span>
+      <div>
+        <p className="text-[13px] font-semibold text-[#f5a623]">Checkout cancelled</p>
+        <p className="mt-0.5 text-[12px] text-[#a08040]">
+          No payment was made. You can try again whenever you&apos;re ready.
+        </p>
+      </div>
+      <button
+        onClick={() => {
+          setDismissed(true);
+          router.replace("/subscription");
+        }}
+        className="ml-auto text-[#a08040] hover:text-[#f5a623] text-[18px] leading-none flex-shrink-0"
+        aria-label="Dismiss"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
 function FreePlanRow({ currentPlan }: { currentPlan: string | null }) {
     const isCurrent = currentPlan === "free";
     return (
@@ -222,6 +254,11 @@ export default function SubscriptionPage() {
             subtitle="Upgrade your Rico AI plan"
         >
             <div className="max-w-3xl flex flex-col gap-8">
+
+                {/* Stripe cancel redirect banner */}
+                <Suspense>
+                  <CancelBanner />
+                </Suspense>
 
                 {/* Mock checkout notice */}
                 {mockNotice && (
