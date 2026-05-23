@@ -680,11 +680,13 @@ class TestRicoGithubWebhookRouteExists:
 
 class TestChatService:
     def test_send_message_delegates_to_rico_chat_api(self):
+        from src.schemas.chat import RicoSessionContext
         from src.services.chat_service import send_message
+        ctx = RicoSessionContext.for_authenticated("u1")
         mock_api = type("API", (), {"process_message": lambda self, user_id, message: _CHAT_RESPONSE})()
         with patch("src.rico_env.get_ai_provider", return_value="openai"), \
              patch("src.rico_chat_api.RicoChatAPI", return_value=mock_api):
-            result = send_message("u1", "hi")
+            result = send_message(ctx=ctx, message="hi")
         assert result == _CHAT_RESPONSE
 
     def test_parse_cv_delegates_to_cv_parser(self):
