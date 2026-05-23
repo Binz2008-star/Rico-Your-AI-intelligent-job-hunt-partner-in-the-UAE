@@ -12,6 +12,7 @@ import hashlib
 import json
 import logging
 import math
+import os
 import re
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -19,6 +20,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+# When RICO_MEMORY_BACKEND=postgres, skip all JSON file writes so ephemeral
+# Render disk state never diverges from Neon (the production source of truth).
+_JSON_WRITE_ENABLED = os.getenv("RICO_MEMORY_BACKEND", "json").lower().strip() != "postgres"
 
 from src.rico_agent import RicoAgentSettings, RicoProfile
 
@@ -80,6 +85,8 @@ class RicoMemoryStore:
         return _assert_contained(RICO_MEMORY_DIR / f"memories_{_safe_key(user_id)}.json")
 
     def save_profile(self, profile: RicoProfile) -> None:
+        if not _JSON_WRITE_ENABLED:
+            return
         payload = asdict(profile)
         payload["updated_at"] = datetime.now(timezone.utc).isoformat()
         self._profile_path(profile.user_id).write_text(
@@ -117,6 +124,8 @@ class RicoMemoryStore:
         return profile
 
     def append_chat_message(self, user_id: str, role: str, message: str) -> None:
+        if not _JSON_WRITE_ENABLED:
+            return
         history = self.load_chat_history(user_id)
         history.append({
             "role": role,
@@ -157,6 +166,8 @@ class RicoMemoryStore:
         return self.load_chat_history(user_id, limit=limit)
 
     def record_learning_signal(self, user_id: str, job_id: str, action: str) -> None:
+        if not _JSON_WRITE_ENABLED:
+            return
         signals = self.load_learning_signals(user_id)
         signals.append({
             "job_id": job_id,
@@ -198,6 +209,8 @@ class RicoMemoryStore:
             return []
 
     def save_memories(self, user_id: str, memories: List[Dict[str, Any]]) -> None:
+        if not _JSON_WRITE_ENABLED:
+            return
         self._memories_path(user_id).write_text(
             json.dumps(memories[-1000:], indent=2, ensure_ascii=False),
             encoding="utf-8",
