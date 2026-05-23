@@ -882,9 +882,16 @@ _SAVED_SEARCHES  = [{"id": 1, "query": "HSE Dubai", "filters": {}, "created_at":
 
 
 class TestMeRoute:
-    def test_unauthenticated_returns_401(self, client):
+    def test_unauthenticated_returns_guest_identity(self, client):
         r = client.get("/api/v1/me")
-        assert r.status_code == 401
+        assert r.status_code == 200
+        body = r.json()
+        assert body == {
+            "email": None,
+            "role": "guest",
+            "authenticated": False,
+            "guest": True,
+        }
 
     def test_authenticated_returns_200(self, auth_client):
         r = auth_client.get("/api/v1/me")
@@ -900,6 +907,24 @@ class TestMeRoute:
     def test_authenticated_returns_role(self, auth_client):
         r = auth_client.get("/api/v1/me")
         assert "role" in r.json()
+
+
+class TestVersionRoute:
+    def test_versioned_route_returns_deployment_metadata(self, client, monkeypatch):
+        monkeypatch.setenv("GIT_COMMIT", "abc123")
+        monkeypatch.setenv("RICO_ENV", "test")
+        monkeypatch.setenv("DEPLOYED_AT", "2026-05-23T00:00:00Z")
+
+        r = client.get("/api/v1/version")
+
+        assert r.status_code == 200
+        assert r.json() == {
+            "app": "ricohunt",
+            "version": "1.0.0",
+            "commit": "abc123",
+            "environment": "test",
+            "deployed_at": "2026-05-23T00:00:00Z",
+        }
 
 
 class TestRicoProfileRoute:

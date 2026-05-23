@@ -43,7 +43,9 @@ export function ProcessingOverlay({ active, onComplete }: ProcessingOverlayProps
                 return next;
             });
         }, 1800);
-        return () => clearInterval(interval);
+        return () => {
+            clearInterval(interval);
+        };
     }, [active, onComplete]);
 
     if (!active) return null;

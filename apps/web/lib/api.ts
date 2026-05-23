@@ -146,6 +146,7 @@ export async function getHealth(): Promise<ClientHealthResponse> {
 
 export interface VersionResponse {
     app: string;
+    version: string;
     commit: string;
     environment: string;
     deployed_at: string;
@@ -169,7 +170,13 @@ export async function fetchMe(signal?: AbortSignal): Promise<MeResponse> {
         credentials: "include",
         signal,
     });
-    if (!res.ok) throw new Error(`/me failed: ${res.status}`);
+    if (!res.ok) {
+        // For 401, return guest response instead of throwing to avoid console noise
+        if (res.status === 401) {
+            return { email: null, role: "guest", authenticated: false, guest: true };
+        }
+        throw new Error(`/me failed: ${res.status}`);
+    }
     return validateShape(MeResponseSchema, await res.json(), "auth /me");
 }
 
