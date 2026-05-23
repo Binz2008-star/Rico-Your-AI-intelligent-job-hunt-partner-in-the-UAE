@@ -23,25 +23,28 @@ const spaceMono = Space_Mono({
     display: "swap",
 });
 
+const projectTitle = "Rico: Your AI-intelligent job hunt partner in the UAE";
+const projectDescription = "Rico helps UAE job seekers turn their CV into smarter job matches, clearer next steps, and a more focused job hunt.";
+
 export const metadata: Metadata = {
     metadataBase: new URL(
         process.env.NEXT_PUBLIC_APP_URL ||
         process.env.NEXT_PUBLIC_SITE_URL ||
         "http://localhost:3000"
     ),
-    title: "Rico AI — Autonomous Career Trajectory Intelligence",
-    description: "Cinematic career intelligence system. Memory-weighted trajectory mapping, command-centered orchestration, and opportunity momentum analysis for autonomous career evolution.",
+    title: projectTitle,
+    description: projectDescription,
     alternates: { canonical: "/" },
     openGraph: {
-        title: "Rico AI — Autonomous Career Trajectory Intelligence",
-        description: "The future of career intelligence. Memory-weighted trajectory mapping, command-centered orchestration, and opportunity momentum analysis.",
+        title: projectTitle,
+        description: projectDescription,
         type: "website",
-        siteName: "Rico AI",
+        siteName: "Rico",
     },
     twitter: {
         card: "summary",
-        title: "Rico AI — Autonomous Career Trajectory Intelligence",
-        description: "The future of career intelligence. Memory-weighted trajectory mapping, command-centered orchestration, and opportunity momentum analysis.",
+        title: projectTitle,
+        description: projectDescription,
     },
 };
 
