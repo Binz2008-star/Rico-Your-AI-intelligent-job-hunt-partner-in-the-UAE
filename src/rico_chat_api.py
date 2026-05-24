@@ -138,11 +138,12 @@ class RicoChatAPI:
         "keep everything",
     })
 
-    def __init__(self) -> None:
+    def __init__(self, *, persist: bool = True) -> None:
         self.memory = RicoMemoryStore()
         self.agent = RicoAgent(profile_store=self.memory)
         self.system = RicoSystem()
         self.openai_agent = RicoOpenAIAgent()
+        self._persist = persist
 
     def _append_chat(self, user_id: str, role: str, message: str | dict[str, Any]) -> None:
         """Append chat message to memory (sync) and DB (async fire-and-forget).
@@ -153,6 +154,8 @@ class RicoChatAPI:
         """
         payload = json.dumps(message) if isinstance(message, dict) else message
         self.memory.append_chat_message(user_id, role, payload)
+        if not self._persist:
+            return
         # Async DB persistence — non-blocking, daemon so worker shutdown is
         # not stalled by a slow or unreachable Postgres during deploys.
         import threading

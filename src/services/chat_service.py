@@ -112,7 +112,7 @@ def _legacy_send_message(ctx: RicoSessionContext, message: str) -> Dict[str, Any
     """Run the existing Rico chat pipeline unchanged."""
     from src.rico_chat_api import RicoChatAPI
 
-    return RicoChatAPI().process_message(user_id=ctx.user_id, message=message)
+    return RicoChatAPI(persist=ctx.can_persist_profile).process_message(user_id=ctx.user_id, message=message)
 
 
 def _conversational_ai_reply(
@@ -124,7 +124,7 @@ def _conversational_ai_reply(
     """Use the existing Rico conversational AI fallback path directly."""
     from src.rico_chat_api import RicoChatAPI
 
-    result = RicoChatAPI().answer_conversationally(
+    result = RicoChatAPI(persist=ctx.can_persist_profile).answer_conversationally(
         user_id=ctx.user_id,
         message=message,
         profile=profile,

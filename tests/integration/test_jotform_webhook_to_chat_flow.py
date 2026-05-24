@@ -46,10 +46,10 @@ class TestPublicChatWithEmail:
             assert data["type"] == "assistant"
             assert data["message"] == "Hello!"
 
-            # Verify the chat service received the email as user_id
+            # Verify the chat service received the email as user_id via SessionContext
             mock_send_message.assert_called_once()
             call_kwargs = mock_send_message.call_args[1]
-            assert call_kwargs["user_id"] == "test@example.com"
+            assert call_kwargs["ctx"].user_id == "test@example.com"
 
     def test_public_chat_uses_session_id_when_no_email_provided(self, client):
         """Verify that public chat still works with session_id for anonymous users."""
@@ -71,10 +71,10 @@ class TestPublicChatWithEmail:
             data = response.json()
             assert data["message"] == "Hello anonymous user"
 
-            # Verify the chat service received the session-based user_id
+            # Verify the chat service received the session-based user_id via SessionContext
             mock_send_message.assert_called_once()
             call_kwargs = mock_send_message.call_args[1]
-            assert call_kwargs["user_id"] == "public:public-session-123"
+            assert call_kwargs["ctx"].user_id == "public:public-session-123"
 
     def test_public_chat_requires_either_session_id_or_email(self, client):
         """Verify that public chat rejects requests without session_id or email."""
@@ -122,10 +122,10 @@ class TestPublicChatWithEmail:
             )
             assert response.status_code == 200
 
-            # Verify the chat service received lowercase email
+            # Verify the chat service received lowercase email via SessionContext
             mock_send_message.assert_called_once()
             call_kwargs = mock_send_message.call_args[1]
-            assert call_kwargs["user_id"] == "test@example.com"
+            assert call_kwargs["ctx"].user_id == "test@example.com"
 
     def test_public_chat_email_takes_precedence_over_session_id(self, client):
         """Verify that email takes precedence when both are provided."""
@@ -149,8 +149,8 @@ class TestPublicChatWithEmail:
             # Verify email was used, not session_id
             mock_send_message.assert_called_once()
             call_kwargs = mock_send_message.call_args[1]
-            assert call_kwargs["user_id"] == "user@example.com"
-            assert call_kwargs["user_id"] != "public:ignored-session"
+            assert call_kwargs["ctx"].user_id == "user@example.com"
+            assert call_kwargs["ctx"].user_id != "public:ignored-session"
 
     def test_public_chat_returns_safe_provider_metadata_only(self, client):
         """Public chat may expose provider metadata, but must not leak internal diagnostics."""

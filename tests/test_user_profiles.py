@@ -280,6 +280,7 @@ class TestRicoChatAPIUsesProfileRepo:
         api.agent = MagicMock()
         api.system = MagicMock()
         api.system.run_for_profile.return_value = {"matches": []}
+        api._persist = True
         return api
 
     def test_new_user_calls_upsert_profile_not_memory(self):
