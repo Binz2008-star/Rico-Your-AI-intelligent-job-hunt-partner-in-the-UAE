@@ -17,7 +17,7 @@ import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 
-const SUBSCRIPTION_MAINTENANCE_MODE = true;
+const SUBSCRIPTION_MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === 'true';
 
 const FALLBACK_PLANS: SubscriptionPlan[] = [
     {
