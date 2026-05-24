@@ -200,8 +200,14 @@ def record_subscription_event(
     user_id: str | None = None,
     payload: dict[str, Any] | None = None,
 ) -> bool:
-    """Idempotently record a Stripe webhook event. Returns True on success."""
+    """Idempotently record a Stripe webhook event.
+
+    Returns True if the event was newly inserted, False if it already existed
+    (duplicate) or if the DB is unavailable/failed. Callers use this to decide
+    whether to run side effects — only the worker that gets True should proceed.
+    """
     try:
+        inserted = False
         with _db_transaction() as conn:
             if conn is None:
                 return False
@@ -216,7 +222,8 @@ def record_subscription_event(
                     """,
                     (stripe_event_id, event_type, user_id, Json(payload or {})),
                 )
-        return True
+                inserted = cur.rowcount > 0
+        return inserted
     except Exception:
         logger.exception(
             "subscription_repo: record_subscription_event failed event_id=%s", stripe_event_id

@@ -116,7 +116,9 @@ def resolve_effective_user_plan(user_id: str) -> SubscriptionResponse:
 
     is_active = plan_recognized and status == SubscriptionStatus.ACTIVE
     plan_obj = PAID_PLANS.get(tier)
-    entitlements = plan_obj.entitlements if plan_obj else FREE_ENTITLEMENTS
+    # Only grant paid entitlements to active subscriptions — canceled/past_due
+    # must not expose paid limits even while the tier label is retained.
+    entitlements = plan_obj.entitlements if (plan_obj and is_active) else FREE_ENTITLEMENTS
 
     sub = UserSubscription(
         user_id=user_id,
