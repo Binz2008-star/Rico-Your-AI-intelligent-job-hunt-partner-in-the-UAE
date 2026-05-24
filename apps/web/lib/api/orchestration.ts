@@ -33,6 +33,10 @@ export interface OpportunitySignal {
   momentum: 'high' | 'medium' | 'low';
   location: string;
   timestamp: string;
+  applyUrl?: string;
+  whyItFits?: string;
+  missingFacts?: string[];
+  source?: string;
 }
 
 const EMPTY_TRAJECTORY: TrajectoryForecast = {
@@ -182,6 +186,10 @@ export const orchestrationApi = {
       momentum: deriveMomentum(job),
       location: job.location,
       timestamp: job.posted_at || '',
+      applyUrl: job.apply_url,
+      whyItFits: job.reason || job.match_explanation?.summary || 'Rico matched this job against your profile and saved preferences.',
+      missingFacts: job.match_explanation?.worth_checking?.slice(0, 2) ?? [],
+      source: 'Rico job search',
     }));
   },
 

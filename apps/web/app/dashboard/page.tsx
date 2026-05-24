@@ -5,6 +5,7 @@ import { SavedSearchesList } from "@/components/SavedSearchesList";
 import { StatusCard } from "@/components/StatusCard";
 import { fetchHealth, type HealthResponse } from "@/lib/api";
 import { cookies } from "next/headers";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -52,15 +53,24 @@ async function SystemStatus() {
     );
   }
 
+  const normalizedStatus = String(health.status || "").toLowerCase();
+  const healthOk = ["ok", "healthy", "live", "up"].includes(normalizedStatus);
   const dbOk = health.db === "connected";
+  const version = health.version && health.version !== "undefined" ? `v${health.version}` : "Unknown";
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       <StatusCard
         title="API status"
-        badge={health.status === "healthy" ? "live" : "error"}
-        value={health.status === "healthy" ? "Healthy" : "Degraded"}
-      />
+        badge={healthOk ? "live" : "error"}
+        value={healthOk ? "Healthy" : "Needs review"}
+      >
+        {!healthOk && (
+          <Link href="/dashboard?skip=1" className="text-cyan hover:text-white">
+            Retry health check
+          </Link>
+        )}
+      </StatusCard>
       <StatusCard
         title="Database"
         badge={dbOk ? "live" : "error"}
@@ -68,8 +78,8 @@ async function SystemStatus() {
       />
       <StatusCard
         title="Backend version"
-        badge="live"
-        value={`v${health.version}`}
+        badge={version === "Unknown" ? "placeholder" : "live"}
+        value={version}
       />
     </div>
   );
@@ -106,7 +116,7 @@ export default async function DashboardPage({
           </h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <ProfileSummaryCard />
-            <StatusCard title="CV status" badge="placeholder">
+            <StatusCard title="CV status" badge="placeholder" href="/upload">
               <p className="text-sm text-zinc-500">
                 Upload a CV to enable profile-based job matching.
               </p>

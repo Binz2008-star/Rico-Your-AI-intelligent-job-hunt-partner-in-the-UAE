@@ -97,9 +97,10 @@ describe("Dashboard overview cards", () => {
     });
 
     expect(screen.getByText("Jobs request timed out after 5s.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry jobs" })).toBeInTheDocument();
     expect(screen.getByText("Applications tracked")).toBeInTheDocument();
     expect(screen.getByText("No tracked applications yet.")).toBeInTheDocument();
-    expect(screen.getByText("Daily limit")).toBeInTheDocument();
-    expect(screen.getByText("Auto-apply limit not set.")).toBeInTheDocument();
+    expect(screen.getByText("Daily reviewed actions")).toBeInTheDocument();
+    expect(screen.getByText("Daily reviewed actions limit not set.")).toBeInTheDocument();
   }, 10000);
 });

@@ -18,6 +18,10 @@ interface OpportunitySignal {
   momentum: 'high' | 'medium' | 'low';
   location: string;
   timestamp: string;
+  applyUrl?: string;
+  whyItFits?: string;
+  missingFacts?: string[];
+  source?: string;
 }
 
 interface OrchestrationState {

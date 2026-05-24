@@ -116,8 +116,8 @@ function getApplicationsCopy(stats: Stats): string {
 function getDailyLimitCopy(stats: Stats): string {
   if (stats.settingsError) return stats.settingsError;
   if (!stats.settingsAvailable) return "Daily limit unavailable right now.";
-  if (stats.maxDaily > 0) return `Max ${stats.maxDaily} auto-applies per day`;
-  return "Auto-apply limit not set.";
+  if (stats.maxDaily > 0) return `Daily reviewed actions limit: ${stats.maxDaily}`;
+  return "Daily reviewed actions limit not set.";
 }
 
 export function DashboardStats() {
@@ -201,11 +201,27 @@ export function DashboardStats() {
         title="Job matches"
         badge={stats.jobsAvailable ? "live" : "placeholder"}
         value={String(stats.jobsTotal)}
-        href="/jobs"
+        href={stats.jobsError ? undefined : "/jobs"}
       >
         <p className="text-sm text-on-surface-variant">
           {getJobsCopy(stats)}
         </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {stats.jobsError ? (
+            <button
+              type="button"
+              onClick={() => {
+                setLoading(true);
+                void loadData();
+              }}
+              className="rounded-full border border-cyan/25 bg-cyan/10 px-3 py-1.5 text-[12px] font-semibold text-cyan transition-colors hover:bg-cyan/15"
+            >
+              Retry jobs
+            </button>
+          ) : (
+            <span className="text-[12px] font-semibold text-cyan">Review matches</span>
+          )}
+        </div>
       </StatusCard>
       <StatusCard
         title="Applications tracked"
@@ -216,14 +232,16 @@ export function DashboardStats() {
         <p className="text-sm text-on-surface-variant">
           {getApplicationsCopy(stats)}
         </p>
+        <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">Open Flow</span>
       </StatusCard>
       <StatusCard
-        title="Daily limit"
+        title="Daily reviewed actions"
         badge={stats.settingsAvailable && stats.maxDaily > 0 ? "live" : "placeholder"}
-        value={String(stats.maxDaily)}
+        value={stats.maxDaily > 0 ? String(stats.maxDaily) : "—"}
         href="/settings"
       >
         <p className="text-sm text-on-surface-variant">{getDailyLimitCopy(stats)}</p>
+        <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">Review settings</span>
       </StatusCard>
     </div>
   );
