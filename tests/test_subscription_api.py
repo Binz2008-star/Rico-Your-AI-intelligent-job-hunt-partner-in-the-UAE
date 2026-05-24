@@ -216,6 +216,21 @@ class TestSubscriptionCheckout:
         assert r.status_code == 422
 
 
+class TestCustomerPortal:
+    def test_portal_returns_mock_without_stripe_secret(self, auth_client, monkeypatch):
+        monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
+
+        r = auth_client.post("/api/v1/subscription/portal")
+
+        assert r.status_code == 200
+        assert r.json() == {
+            "checkout_url": "",
+            "provider": "mock",
+            "plan": "free",
+            "status": "mock",
+        }
+
+
 class TestSubscriptionWebhook:
     def test_webhook_basic_handling_without_stripe_secret(self, client, monkeypatch):
         monkeypatch.delenv("STRIPE_WEBHOOK_SECRET", raising=False)
@@ -299,3 +314,22 @@ class TestSubscriptionWebhook:
         r = client.post("/api/v1/subscription/webhook", json={"type": "checkout.session.completed"})
 
         assert r.status_code == 422
+
+    def test_webhook_processing_error_returns_retryable_500(self, client, monkeypatch):
+        monkeypatch.delenv("STRIPE_WEBHOOK_SECRET", raising=False)
+        monkeypatch.setattr(
+            "src.api.routers.subscription.handle_subscription_webhook",
+            lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("DB unavailable")),
+        )
+
+        r = client.post(
+            "/api/v1/subscription/webhook",
+            json={
+                "id": "evt_retryable",
+                "type": "checkout.session.completed",
+                "data": {"object": {"id": "cs_test"}},
+            },
+        )
+
+        assert r.status_code == 500
+        assert r.json()["detail"] == "Stripe webhook processing failed"

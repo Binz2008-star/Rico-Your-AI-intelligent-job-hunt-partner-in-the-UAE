@@ -496,6 +496,20 @@ class TestRetryOnFailure:
         assert result is True
         assert status_updates == [("evt_ok", "processed", {})]
 
+    def test_handler_success_returns_false_when_processed_status_update_fails(self, monkeypatch):
+        import src.services.subscription_webhook_service as svc
+        monkeypatch.setattr(svc, "record_subscription_event", lambda *a, **kw: True)
+        monkeypatch.setattr(svc, "update_subscription_event_status", lambda *a, **kw: False)
+        monkeypatch.setattr(svc, "upsert_subscription", lambda *a, **kw: _existing_row())
+
+        result = svc.process_stripe_event(
+            "evt_status_fail", "checkout.session.completed",
+            {"object": {"metadata": {"user_id": "u@t.com", "plan": "pro"},
+                        "customer": "cus_1", "subscription": "sub_1"}},
+        )
+
+        assert result is False
+
     def test_handler_false_marks_event_as_failed(self, monkeypatch):
         import src.services.subscription_webhook_service as svc
         status_updates: list = []

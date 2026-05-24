@@ -59,8 +59,12 @@ def create_reset_token(email: str) -> str:
 
 def consume_reset_token(token: str) -> Optional[str]:
     """
-    Validate the token and mark it used in a single round-trip.
+    Atomically validate and mark the token used in one UPDATE … RETURNING.
     Returns the associated email on success, None if invalid / expired / already used.
+
+    A single UPDATE WHERE used_at IS NULL AND expires_at > now eliminates the
+    SELECT-then-UPDATE TOCTOU window where two concurrent callers could both
+    read the token as valid before either marks it used.
     """
     from src.db import get_db_connection
     token_hash = _hash_token(token)
@@ -73,31 +77,18 @@ def consume_reset_token(token: str) -> Optional[str]:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, user_email, expires_at, used_at
-                FROM password_reset_tokens
-                WHERE token_hash = %s
-                LIMIT 1
+                UPDATE password_reset_tokens
+                   SET used_at = %s
+                 WHERE token_hash = %s
+                   AND used_at IS NULL
+                   AND expires_at > %s
+                RETURNING user_email
                 """,
-                (token_hash,),
+                (now, token_hash, now),
             )
             row = cur.fetchone()
-            if row is None:
-                return None
-
-            row_id, email, expires_at, used_at = row
-            if used_at is not None:
-                return None  # already consumed
-            if expires_at.tzinfo is None:
-                expires_at = expires_at.replace(tzinfo=_UTC)
-            if expires_at < now:
-                return None  # expired
-
-            cur.execute(
-                "UPDATE password_reset_tokens SET used_at = %s WHERE id = %s",
-                (now, row_id),
-            )
         conn.commit()
-        return email
+        return row[0] if row else None
     except Exception:
         logger.exception("password_reset_repo_consume_failed")
         try:
