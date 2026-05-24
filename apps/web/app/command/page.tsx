@@ -93,6 +93,7 @@ const QUICK_ACTIONS = [
 ];
 const COMMAND_LOGIN_HREF = buildAuthHref("/login", "/command");
 const COMMAND_SIGNUP_HREF = buildAuthHref("/signup", "/command");
+const BACKEND_MAINTENANCE_MODE = true;
 
 // ─── Rico primitives: thinking + operation state ──────────────────────────────
 
@@ -220,6 +221,7 @@ export default function CommandV2Page() {
 
     // ── sendMessage (verbatim from /command) ──
     const sendMessage = useCallback(async (text: string) => {
+        if (BACKEND_MAINTENANCE_MODE) return;
         if (chatAudience === "checking") return;
         if (text === "__cv_upload__") {
             fileInputRef.current?.click();
@@ -329,6 +331,10 @@ export default function CommandV2Page() {
     // ── CV upload (verbatim from /command) ──
     async function handleCVUpload(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
+        if (BACKEND_MAINTENANCE_MODE) {
+            e.target.value = "";
+            return;
+        }
         if (!file || chatAudience === "checking") return;
         e.target.value = "";
         setUploadError("");
@@ -507,6 +513,7 @@ export default function CommandV2Page() {
                 title="Upload CV PDF"
                 className="hidden"
                 onChange={handleCVUpload}
+                disabled={BACKEND_MAINTENANCE_MODE}
             />
 
             {/* Chat area */}
@@ -520,8 +527,19 @@ export default function CommandV2Page() {
                     aria-atomic="false"
                     aria-busy={thinking}
                 >
+                    {BACKEND_MAINTENANCE_MODE && (
+                        <div className="rounded-[var(--r-xl)] border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-amber-100">
+                            <p className="text-sm font-semibold text-amber-300">Backend maintenance in progress.</p>
+                            <p className="mt-1 text-xs leading-relaxed text-amber-100/80">
+                                Rico&apos;s backend service is temporarily offline while hosting is being restored.
+                                Subscription, login, Telegram, and Stripe webhook features are paused.
+                                No payment validation should be attempted until the backend is back online.
+                            </p>
+                        </div>
+                    )}
+
                     {/* Quick actions (shown before first real exchange) */}
-                    {messages.length <= 1 && !thinking && (
+                    {messages.length <= 1 && !thinking && !BACKEND_MAINTENANCE_MODE && (
                         <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:justify-center gap-2 pb-4">
                             {QUICK_ACTIONS.map((qa) => (
                                 <button
@@ -738,7 +756,7 @@ export default function CommandV2Page() {
                         <button
                             type="button"
                             onClick={() => fileInputRef.current?.click()}
-                            disabled={thinking || chatAudience === "checking"}
+                            disabled={thinking || chatAudience === "checking" || BACKEND_MAINTENANCE_MODE}
                             title="Upload your CV (PDF)"
                             aria-label="Upload CV"
                             className="w-10 h-10 rounded-[var(--r-xl)] border border-[var(--rico-border-soft)] bg-[rgba(255,255,255,0.03)] text-[var(--rico-fg-3)] flex items-center justify-center hover:border-[var(--rico-primary-container)] hover:text-[var(--rico-fg-1)] transition-all disabled:opacity-30 shrink-0"
@@ -755,9 +773,11 @@ export default function CommandV2Page() {
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
                                 onKeyDown={handleKeyDown}
-                                disabled={thinking || chatAudience === "checking"}
+                                disabled={thinking || chatAudience === "checking" || BACKEND_MAINTENANCE_MODE}
                                 placeholder={
-                                    chatAudience === "checking"
+                                    BACKEND_MAINTENANCE_MODE
+                                        ? "Backend maintenance in progress"
+                                        : chatAudience === "checking"
                                         ? "Checking your session…"
                                         : "Ask Rico anything — jobs, CV, applications, interviews…"
                                 }
@@ -768,7 +788,7 @@ export default function CommandV2Page() {
                             <button
                                 type="button"
                                 onClick={handleSend}
-                                disabled={thinking || chatAudience === "checking" || !input.trim()}
+                                disabled={thinking || chatAudience === "checking" || BACKEND_MAINTENANCE_MODE || !input.trim()}
                                 aria-label={thinking ? "Sending…" : "Send"}
                                 className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-[var(--r-lg)] bg-[var(--rico-primary)] text-white flex items-center justify-center hover:bg-[rgba(255,177,200,0.9)] transition-all disabled:opacity-30 disabled:grayscale"
                             >
