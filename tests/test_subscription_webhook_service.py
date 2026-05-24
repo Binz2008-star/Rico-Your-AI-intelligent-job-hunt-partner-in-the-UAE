@@ -22,10 +22,22 @@ os.environ.setdefault("JWT_SECRET", "ricosecret" + "x" * 21)
 
 # ── Patch targets (module-level imports in the service) ───────────────────────
 _SVC = "src.services.subscription_webhook_service"
-_RECORD = f"{_SVC}.record_subscription_event"
-_UPSERT = f"{_SVC}.upsert_subscription"
-_GET_SUB = f"{_SVC}.get_subscription"
-_GET_CUS = f"{_SVC}.get_subscription_by_stripe_customer"
+_RECORD        = f"{_SVC}.record_subscription_event"
+_UPDATE_STATUS = f"{_SVC}.update_subscription_event_status"
+_UPSERT        = f"{_SVC}.upsert_subscription"
+_GET_SUB       = f"{_SVC}.get_subscription"
+_GET_CUS       = f"{_SVC}.get_subscription_by_stripe_customer"
+
+
+# ── Autouse: silence update_subscription_event_status in all tests ────────────
+# process_stripe_event now calls update_subscription_event_status after every
+# handler. Tests that don't explicitly care about the status update get a no-op
+# via this autouse fixture so they don't need to patch it individually.
+
+@pytest.fixture(autouse=True)
+def _noop_update_status(monkeypatch):
+    import src.services.subscription_webhook_service as svc
+    monkeypatch.setattr(svc, "update_subscription_event_status", lambda *a, **kw: None)
 
 
 # ── Stripe event payload builders ─────────────────────────────────────────────
@@ -145,13 +157,16 @@ class TestCheckoutCompleted:
                 "evt_co_1", "checkout.session.completed", _checkout_event(plan="pro")
             )
         assert result is True
-        mock_upsert.assert_called_once_with(
-            "alice@rico.ai",
-            plan="pro",
-            status="active",
-            stripe_customer_id="cus_test",
-            stripe_subscription_id="sub_test",
-        )
+        mock_upsert.assert_called_once()
+        kw = mock_upsert.call_args
+        assert kw.args[0] == "alice@rico.ai"
+        assert kw.kwargs["plan"] == "pro"
+        assert kw.kwargs["status"] == "active"
+        assert kw.kwargs["stripe_customer_id"] == "cus_test"
+        assert kw.kwargs["stripe_subscription_id"] == "sub_test"
+        assert kw.kwargs["monthly_ai_message_limit"] == 300
+        assert kw.kwargs["saved_jobs_limit"] == 100
+        assert kw.kwargs["premium_recommendations_enabled"] is False
 
     def test_creates_active_premium_subscription(self):
         from src.services.subscription_webhook_service import process_stripe_event
@@ -386,6 +401,75 @@ class TestInvoicePaymentFailed:
             result = process_stripe_event("evt_fail_2", "invoice.payment_failed", _invoice_event())
         assert result is False
         mock_upsert.assert_not_called()
+
+
+# ── Retry / failure status tracking ──────────────────────────────────────────
+#
+# Core invariant: a claimed event must transition out of 'pending' regardless
+# of handler outcome. 'failed' events are re-claimable; 'processed' are not.
+
+class TestRetryOnFailure:
+    def test_handler_failure_marks_event_as_failed(self, monkeypatch):
+        import src.services.subscription_webhook_service as svc
+        status_updates: list = []
+        monkeypatch.setattr(svc, "record_subscription_event", lambda *a, **kw: True)
+        monkeypatch.setattr(svc, "update_subscription_event_status",
+                            lambda event_id, status, **kw: status_updates.append((event_id, status, kw)))
+        monkeypatch.setattr(svc, "upsert_subscription",
+                            MagicMock(side_effect=RuntimeError("DB crash")))
+
+        result = svc.process_stripe_event(
+            "evt_crash", "checkout.session.completed",
+            {"object": {"metadata": {"user_id": "u@t.com", "plan": "pro"},
+                        "customer": "cus_1", "subscription": "sub_1"}},
+        )
+
+        assert result is False
+        assert len(status_updates) == 1
+        event_id, status, kw = status_updates[0]
+        assert event_id == "evt_crash"
+        assert status == "failed"
+        assert kw.get("error_detail") == "DB crash"
+
+    def test_handler_success_marks_event_as_processed(self, monkeypatch):
+        import src.services.subscription_webhook_service as svc
+        status_updates: list = []
+        monkeypatch.setattr(svc, "record_subscription_event", lambda *a, **kw: True)
+        monkeypatch.setattr(svc, "update_subscription_event_status",
+                            lambda event_id, status, **kw: status_updates.append((event_id, status, kw)))
+        monkeypatch.setattr(svc, "upsert_subscription", lambda *a, **kw: None)
+
+        result = svc.process_stripe_event(
+            "evt_ok", "checkout.session.completed",
+            {"object": {"metadata": {"user_id": "u@t.com", "plan": "pro"},
+                        "customer": "cus_1", "subscription": "sub_1"}},
+        )
+
+        assert result is True
+        assert status_updates == [("evt_ok", "processed", {})]
+
+    def test_unhandled_event_marks_as_processed_not_failed(self, monkeypatch):
+        import src.services.subscription_webhook_service as svc
+        status_updates: list = []
+        monkeypatch.setattr(svc, "record_subscription_event", lambda *a, **kw: True)
+        monkeypatch.setattr(svc, "update_subscription_event_status",
+                            lambda event_id, status, **kw: status_updates.append((event_id, status, kw)))
+
+        result = svc.process_stripe_event("evt_unk", "payment.intent.created", {"object": {}})
+
+        assert result is False
+        assert status_updates == [("evt_unk", "processed", {})]
+
+    def test_duplicate_event_skips_status_update(self, monkeypatch):
+        import src.services.subscription_webhook_service as svc
+        status_updates: list = []
+        monkeypatch.setattr(svc, "record_subscription_event", lambda *a, **kw: False)
+        monkeypatch.setattr(svc, "update_subscription_event_status",
+                            lambda event_id, status, **kw: status_updates.append((event_id, status, kw)))
+
+        svc.process_stripe_event("evt_dup", "checkout.session.completed", _checkout_event())
+
+        assert status_updates == []
 
 
 # ── _price_id_to_plan unit tests ──────────────────────────────────────────────

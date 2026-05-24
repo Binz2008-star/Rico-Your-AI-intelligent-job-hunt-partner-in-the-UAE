@@ -2,9 +2,14 @@
 
 Stripe webhook event processing for subscription lifecycle management.
 
-Idempotency boundary: record_subscription_event() atomically claims each
-event via INSERT ON CONFLICT DO NOTHING. Only the process that gets True
-back runs the DB side-effects. Concurrent retries get False and short-circuit.
+Idempotency flow:
+  1. record_subscription_event() atomically claims the event with status='pending'
+     via INSERT ON CONFLICT DO UPDATE WHERE status='failed'.
+     - Returns True  → caller is the designated processor.
+     - Returns False → skip (already 'processed', another worker is 'pending', or DB down).
+  2. Handler runs.
+  3. update_subscription_event_status() closes the event as 'processed' or 'failed'.
+     Failed events are re-claimable by the next Stripe retry or internal replay.
 
 Price ID → Rico plan mapping reads env vars at call time so no restart is
 needed when price IDs are rotated.
@@ -28,8 +33,10 @@ from src.repositories.subscription_repo import (
     get_subscription,
     get_subscription_by_stripe_customer,
     record_subscription_event,
+    update_subscription_event_status,
     upsert_subscription,
 )
+from src.subscription_plans import FREE_ENTITLEMENTS, PAID_PLANS
 
 logger = logging.getLogger(__name__)
 
@@ -120,12 +127,22 @@ def _handle_checkout_completed(obj: dict[str, Any]) -> bool:
         logger.warning("webhook: checkout.session.completed unknown plan=%r user_id=%s", plan, user_id)
         return False
 
+    plan_obj = PAID_PLANS.get(plan)
+    if not plan_obj:
+        logger.warning("webhook: checkout.session.completed plan not found=%r user_id=%s", plan, user_id)
+        return False
+
     upsert_subscription(
         user_id,
         plan=plan,
         status="active",
         stripe_customer_id=obj.get("customer"),
         stripe_subscription_id=obj.get("subscription"),
+        monthly_ai_message_limit=plan_obj.entitlements.monthly_ai_message_limit,
+        saved_jobs_limit=plan_obj.entitlements.saved_jobs_limit,
+        profile_optimization_limit=plan_obj.entitlements.profile_optimization_limit,
+        premium_recommendations_enabled=plan_obj.entitlements.premium_recommendations_enabled,
+        application_automation_enabled=plan_obj.entitlements.application_automation_enabled,
     )
     logger.info("webhook: checkout completed user_id=%s plan=%s", user_id, plan)
     return True
@@ -149,6 +166,9 @@ def _handle_subscription_upsert(obj: dict[str, Any]) -> bool:
 
     status = _stripe_status(obj.get("status", ""))
     period_start, period_end = _extract_period(obj)
+    
+    plan_obj = PAID_PLANS.get(plan)
+    entitlements = plan_obj.entitlements if plan_obj else FREE_ENTITLEMENTS
 
     upsert_subscription(
         user_id,
@@ -158,6 +178,11 @@ def _handle_subscription_upsert(obj: dict[str, Any]) -> bool:
         stripe_subscription_id=obj.get("id"),
         current_period_start=period_start,
         current_period_end=period_end,
+        monthly_ai_message_limit=entitlements.monthly_ai_message_limit,
+        saved_jobs_limit=entitlements.saved_jobs_limit,
+        profile_optimization_limit=entitlements.profile_optimization_limit,
+        premium_recommendations_enabled=entitlements.premium_recommendations_enabled,
+        application_automation_enabled=entitlements.application_automation_enabled,
     )
     logger.info("webhook: subscription upserted user_id=%s plan=%s status=%s", user_id, plan, status)
     return True
@@ -173,7 +198,16 @@ def _handle_subscription_deleted(obj: dict[str, Any]) -> bool:
     existing = get_subscription(user_id)
     plan = existing["plan"] if existing else "free"
 
-    upsert_subscription(user_id, plan=plan, status="canceled")
+    upsert_subscription(
+        user_id,
+        plan=plan,
+        status="canceled",
+        monthly_ai_message_limit=FREE_ENTITLEMENTS.monthly_ai_message_limit,
+        saved_jobs_limit=FREE_ENTITLEMENTS.saved_jobs_limit,
+        profile_optimization_limit=FREE_ENTITLEMENTS.profile_optimization_limit,
+        premium_recommendations_enabled=FREE_ENTITLEMENTS.premium_recommendations_enabled,
+        application_automation_enabled=FREE_ENTITLEMENTS.application_automation_enabled,
+    )
     logger.info("webhook: subscription canceled user_id=%s", user_id)
     return True
 
@@ -248,14 +282,17 @@ def process_stripe_event(
 ) -> bool:
     """Idempotently process a verified Stripe webhook event.
 
-    Atomically claims the event via record_subscription_event (INSERT ON CONFLICT
-    DO NOTHING). Returns True when the event was newly processed, False when it
-    was a duplicate, the DB was unreachable, or the event type is unhandled.
+    Returns True when the event was newly claimed and the handler succeeded.
+    Returns False when skipped (duplicate/processed/in-flight), unhandled, or
+    handler raised an exception.
+
+    On handler failure the event is marked 'failed' so the next Stripe retry
+    (or an internal replay) can re-claim and re-run it. Stripe always gets 200;
+    retries are driven by our internal failed-event state, not HTTP status.
     """
     obj = event_data.get("object", {})
     user_id = _extract_user_id(obj)
 
-    # Atomic claim — only the first caller for this event_id proceeds.
     claimed = record_subscription_event(
         event_id, event_type, user_id=user_id, payload=event_data
     )
@@ -265,11 +302,15 @@ def process_stripe_event(
 
     handler = _HANDLERS.get(event_type)
     if handler is None:
+        update_subscription_event_status(event_id, "processed")
         logger.info("webhook: unhandled event_type=%s event_id=%s", event_type, event_id)
         return False
 
     try:
-        return handler(obj)
-    except Exception:
+        result = handler(obj)
+        update_subscription_event_status(event_id, "processed")
+        return result
+    except Exception as exc:
         logger.exception("webhook: handler failed event_id=%s type=%s", event_id, event_type)
+        update_subscription_event_status(event_id, "failed", error_detail=str(exc))
         return False
