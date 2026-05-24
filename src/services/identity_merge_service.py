@@ -14,6 +14,7 @@ Design rules:
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from datetime import datetime, timezone
@@ -62,6 +63,12 @@ MERGEABLE_PROFILE_KEYS = {
 
 # Tables confirmed to have a user_id column and be safe to migrate.
 CONFIRMED_USER_SCOPED_TABLES = ["rico_saved_searches"]
+
+
+def _merge_lock_key(public_user_id: str, auth_user_id: str) -> int:
+    """Deterministic 63-bit positive integer for PostgreSQL advisory xact lock."""
+    h = hashlib.sha256(f"{public_user_id}:{auth_user_id}".encode()).hexdigest()
+    return int(h[:16], 16) % (2**63 - 1)
 
 
 def is_empty_value(value: Any) -> bool:
@@ -301,6 +308,19 @@ def merge_public_identity_into_auth(
     conn = db.connect()
     try:
         with conn.cursor() as cur:
+            # Serialize concurrent merges for the same pair via advisory xact lock.
+            # Transaction-scoped: released automatically on commit or rollback.
+            lock_key = _merge_lock_key(public_user_id, auth_user_id)
+            cur.execute("SELECT pg_try_advisory_xact_lock(%s)", (lock_key,))
+            got_lock = cur.fetchone()[0]
+            if not got_lock:
+                logger.warning(
+                    "merge_rejected reason=concurrent_merge_in_progress "
+                    "public_user_id=%s auth_user_id=%s lock_key=%s",
+                    public_user_id, auth_user_id, lock_key,
+                )
+                return False
+
             # Resolve external IDs to internal UUIDs
             guest_db_id = _get_db_user_id(cur, public_user_id)
             auth_db_id = _get_db_user_id(cur, auth_user_id)
