@@ -75,6 +75,11 @@ async def subscription_webhook(
         return handle_subscription_webhook(event, payload=payload, signature=stripe_signature)
     except ValidationError as exc:
         if os.getenv("STRIPE_WEBHOOK_SECRET", "").strip():
+            # Stripe signed events carry a raw body that fails Pydantic validation because
+            # the actual event object is reconstructed by stripe.Webhook.construct_event()
+            # from the raw bytes + signature — not from the JSON we parse here. Pass a
+            # sentinel placeholder; handle_subscription_webhook() discards it and lets the
+            # Stripe SDK verify + reconstruct the real event from payload+signature.
             try:
                 event = WebhookEvent(id="stripe_signed_event", type="stripe.signed", data={})
                 return handle_subscription_webhook(event, payload=payload, signature=stripe_signature)

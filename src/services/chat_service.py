@@ -222,8 +222,8 @@ def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
     try:
         return _handle(normalized)
     except Exception as exc:
-        logger.warning(
-            "jotform_webhook: DB write failed (%s: %s) — returning accepted",
+        logger.error(
+            "jotform_webhook: DB write failed (%s: %s) — data loss risk, returning accepted to prevent Jotform retry",
             type(exc).__name__, exc,
         )
         return {
@@ -242,7 +242,8 @@ def _resolve_db_user_id(user_id: str):
         db = RicoDB()
         if not db.available:
             return None
-        with db.connect() as conn:
+        conn = db.connect()
+        try:
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -253,7 +254,9 @@ def _resolve_db_user_id(user_id: str):
                     (user_id, user_id, user_id),
                 )
                 row = cur.fetchone()
-        return row["id"] if row else None
+            return row["id"] if row else None
+        finally:
+            conn.close()
     except Exception as exc:
         logger.debug("chat_service: _resolve_db_user_id failed: %s", exc)
         return None
@@ -274,7 +277,8 @@ def _db_get_chat_history(
             where += " AND created_at < %s"
             params.append(before)
         params.append(limit)
-        with db.connect() as conn:
+        conn = db.connect()
+        try:
             with conn.cursor() as cur:
                 cur.execute(
                     f"SELECT role, message, metadata, created_at "
@@ -283,6 +287,8 @@ def _db_get_chat_history(
                     params,
                 )
                 rows = cur.fetchall()
+        finally:
+            conn.close()
         # Reverse so oldest-first (chat order)
         rows.reverse()
         return [

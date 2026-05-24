@@ -243,7 +243,7 @@ def _resolve_upload_user_id(
     try:
         return get_current_user_id(request)
     except HTTPException as auth_exc:
-        if getattr(request.state, "access_token_present", False) or request.cookies.get("access_token"):
+        if getattr(request.state, "access_token_present", False):
             logger.warning(
                 "upload_identity_auth_failed path=%s detail=%s",
                 request.url.path,
@@ -353,6 +353,13 @@ def _webhook_handler(event_name: str):
                 raise
             except Exception as e:
                 logger.exception(f"{event_name}_webhook_error: {e}")
+                try:
+                    import psycopg2
+                    if isinstance(e, psycopg2.Error):
+                        # DB infrastructure failure: let the webhook provider retry.
+                        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+                except ImportError:
+                    pass
                 return {"ok": True, "status": "accepted", "message": "Webhook received, processing error logged"}
         return wrapper
     return decorator
@@ -1141,7 +1148,7 @@ async def confirm_cv_profile(
         upsert_profile(user_id=resolved_user_id, updates=profile_updates)
 
         # Only mark onboarding complete for authenticated users (not public sessions)
-        if not resolved_user_id.startswith("public:"):
+        if not is_valid_public_user_id(resolved_user_id):
             mark_onboarding_complete(resolved_user_id)
 
         _metrics.record_request((time.time() - start_time) * 1000)

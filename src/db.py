@@ -3,6 +3,7 @@ Neon Postgres Database Integration
 Provides database functions with JSON fallback for reliability.
 """
 
+import logging
 import os
 import psycopg2
 from psycopg2 import sql, OperationalError
@@ -10,6 +11,8 @@ from dotenv import load_dotenv
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 import json
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -150,6 +153,14 @@ def init_db():
             conn.close()
 
 
+def _truncate_description(description: Any, link: Any, max_len: int = 1000) -> str:
+    text = str(description) if description else ''
+    if len(text) > max_len:
+        logger.warning("save_job: description truncated to %d chars link=%s", max_len, link)
+        return text[:max_len]
+    return text
+
+
 def save_job(job: Dict[str, Any], score: int) -> bool:
     """Save a job to the database."""
     conn = get_db_connection()
@@ -170,7 +181,7 @@ def save_job(job: Dict[str, Any], score: int) -> bool:
                 job.get('company', '') or '',
                 job.get('location', '') or '',
                 job.get('link', '') or '',
-                str(job.get('description', ''))[:1000] if job.get('description') else '',  # Limit description length
+                _truncate_description(job.get('description'), job.get('link')),
                 score,
                 job.get('profile_explanation', '') or '',
                 job.get('source', 'jobspy') or 'jobspy'
