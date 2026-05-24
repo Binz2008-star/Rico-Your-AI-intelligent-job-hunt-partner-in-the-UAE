@@ -90,6 +90,21 @@ gmail_dryrun_output.txt
 *_dryrun_output.txt
 subjects.txt
 
+# Design assets (binary)
+*.zip
+
+# Claude Code internals
+.agents/
+skills-lock.json
+
+# Frontend secrets and test output
+apps/web/.env.local
+apps/web/playwright-report/
+apps/web/test-results/
+
+# npm install artifacts (e.g. =11.0.0)
+=*
+
 # Debug outputs
 debug_outputs/
 
