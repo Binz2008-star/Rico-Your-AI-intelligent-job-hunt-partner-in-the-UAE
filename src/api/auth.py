@@ -170,7 +170,16 @@ def verify_credentials(email: str, password: str) -> Optional[Dict[str, Any]]:
                 update_last_login(user.id)
                 return {"email": user.email, "role": user.role}
             return None
-    except Exception:
+    except Exception as exc:
+        # Only treat infrastructure/connection failures as a fallback trigger.
+        # Re-raise logic errors (AttributeError, TypeError, etc.) immediately.
+        try:
+            import psycopg2
+            _is_db_exc = isinstance(exc, psycopg2.Error)
+        except ImportError:
+            _is_db_exc = True  # psycopg2 unavailable — treat any error as DB failure
+        if not _is_db_exc:
+            raise
         _db_error = True
         logger.exception("db_auth_error falling_back_to_env_vars")
 

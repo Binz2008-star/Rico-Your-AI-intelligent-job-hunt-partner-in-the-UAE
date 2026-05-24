@@ -28,6 +28,7 @@ import logging
 import os
 import re
 import secrets
+import threading
 import time
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -63,7 +64,7 @@ logger = logging.getLogger(__name__)
 _UTC = timezone.utc
 
 # Constants
-_UNSAFE_CHARS_RE = re.compile(r"[<>\"']")
+_UNSAFE_CHARS_RE = re.compile(r'[<>"\';\x00-\x1f\x7f‪-‮⁦-⁩]')
 _PDF_MAGIC = b"%PDF"
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
@@ -373,6 +374,7 @@ def _strip_internal_fields(data: dict[str, Any]) -> dict[str, Any]:
 class MetricsCollector:
     """Simple metrics collector - replace with Prometheus in production."""
     def __init__(self):
+        self._lock = threading.Lock()
         self.start_time = time.time()
         self.request_count = 0
         self.total_response_time = 0.0
@@ -380,14 +382,17 @@ class MetricsCollector:
         self.cache_misses = 0
 
     def record_request(self, duration_ms: float):
-        self.request_count += 1
-        self.total_response_time += duration_ms
+        with self._lock:
+            self.request_count += 1
+            self.total_response_time += duration_ms
 
     def record_cache_hit(self):
-        self.cache_hits += 1
+        with self._lock:
+            self.cache_hits += 1
 
     def record_cache_miss(self):
-        self.cache_misses += 1
+        with self._lock:
+            self.cache_misses += 1
 
     @property
     def avg_response_time_ms(self) -> float:

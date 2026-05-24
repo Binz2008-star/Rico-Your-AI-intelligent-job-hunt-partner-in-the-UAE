@@ -295,15 +295,16 @@ export default function SubscriptionPage() {
         return () => window.clearTimeout(timeoutId);
     }, [loadPlans, maintenanceMode]);
 
+    const userEmail = user?.email ?? null;
     useEffect(() => {
-        if (!user || maintenanceMode) return;
+        if (!userEmail || maintenanceMode) return;
         getMySubscription()
             .then(setSub)
             .catch(() => {
                 setSubscriptionError(true);
                 toast("Could not load subscription status", "error");
             });
-    }, [maintenanceMode, toast, user]);
+    }, [maintenanceMode, toast, userEmail]);
 
     const handleUpgrade = useCallback(
         async (plan: "pro" | "premium") => {
@@ -438,6 +439,19 @@ export default function SubscriptionPage() {
                     </div>
                 )}
 
+                {/* Past-due payment warning */}
+                {!maintenanceMode && sub && sub.subscription.subscription_status === "past_due" && (
+                    <div className="flex items-start gap-3 rounded-xl border border-[rgba(255,94,91,0.35)] bg-[rgba(255,94,91,0.08)] px-5 py-4">
+                        <span className="text-[#ff5e5b] text-[18px] mt-0.5">⚠</span>
+                        <div>
+                            <p className="text-[13px] font-semibold text-[#ff5e5b]">Payment failed</p>
+                            <p className="mt-0.5 text-[12px] text-[#ffaaaa]">
+                                Your last payment did not go through. Please update your payment method to keep your plan active.
+                            </p>
+                        </div>
+                    </div>
+                )}
+
                 {/* Current plan banner for active paid subscribers */}
                 {!maintenanceMode && sub && isActive && currentPlan && currentPlan !== "free" && (
                     <div className="flex items-center gap-3 rounded-xl border border-[rgba(0,229,255,0.3)] bg-[rgba(0,229,255,0.06)] px-5 py-4">
@@ -448,11 +462,14 @@ export default function SubscriptionPage() {
                             </p>
                             {sub.subscription.current_period_end && (
                                 <p className="mt-0.5 text-[12px] text-[#5a8a8a]">
-                                    Renews{" "}
-                                    {new Date(sub.subscription.current_period_end).toLocaleDateString(
-                                        "en-AE",
-                                        { day: "numeric", month: "long", year: "numeric" }
-                                    )}
+                                    {sub.subscription.cancel_at
+                                        ? "Cancels on "
+                                        : "Renews "}
+                                    {new Date(
+                                        sub.subscription.cancel_at ?? sub.subscription.current_period_end
+                                    ).toLocaleDateString("en-AE", {
+                                        day: "numeric", month: "long", year: "numeric",
+                                    })}
                                 </p>
                             )}
                         </div>

@@ -50,53 +50,61 @@ def get_subscription(user_id: str) -> dict[str, Any] | None:
     db = _db()
     if not db:
         return None
+    conn = db.connect()
     try:
-        with db.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT user_id, plan, status,
-                           stripe_customer_id, stripe_subscription_id,
-                           current_period_start, current_period_end,
-                           cancel_at, canceled_at,
-                           monthly_ai_message_limit, saved_jobs_limit, profile_optimization_limit,
-                           premium_recommendations_enabled, application_automation_enabled,
-                           created_at, updated_at
-                    FROM user_subscriptions
-                    WHERE user_id = %s
-                    """,
-                    (user_id,),
-                )
-                row = cur.fetchone()
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT user_id, plan, status,
+                       stripe_customer_id, stripe_subscription_id,
+                       current_period_start, current_period_end,
+                       cancel_at, canceled_at,
+                       monthly_ai_message_limit, saved_jobs_limit, profile_optimization_limit,
+                       premium_recommendations_enabled, application_automation_enabled,
+                       created_at, updated_at
+                FROM user_subscriptions
+                WHERE user_id = %s
+                """,
+                (user_id,),
+            )
+            row = cur.fetchone()
         return dict(row) if row else None
     except Exception:
         logger.exception("subscription_repo: get_subscription failed user_id=%s", user_id)
         return None
+    finally:
+        conn.close()
 
 
 def get_subscription_by_stripe_customer(stripe_customer_id: str) -> dict[str, Any] | None:
-    """Look up a subscription by Stripe customer ID (for webhook processing)."""
+    """Look up a subscription by Stripe customer ID (for webhook processing).
+
+    Returns the most-recently-updated row when multiple records share the same
+    customer ID (e.g. after a plan migration that left stale rows).
+    """
     db = _db()
     if not db:
         return None
+    conn = db.connect()
     try:
-        with db.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT user_id, plan, status,
-                           stripe_customer_id, stripe_subscription_id,
-                           current_period_start, current_period_end,
-                           cancel_at, canceled_at,
-                           monthly_ai_message_limit, saved_jobs_limit, profile_optimization_limit,
-                           premium_recommendations_enabled, application_automation_enabled,
-                           created_at, updated_at
-                    FROM user_subscriptions
-                    WHERE stripe_customer_id = %s
-                    """,
-                    (stripe_customer_id,),
-                )
-                row = cur.fetchone()
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT user_id, plan, status,
+                       stripe_customer_id, stripe_subscription_id,
+                       current_period_start, current_period_end,
+                       cancel_at, canceled_at,
+                       monthly_ai_message_limit, saved_jobs_limit, profile_optimization_limit,
+                       premium_recommendations_enabled, application_automation_enabled,
+                       created_at, updated_at
+                FROM user_subscriptions
+                WHERE stripe_customer_id = %s
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """,
+                (stripe_customer_id,),
+            )
+            row = cur.fetchone()
         return dict(row) if row else None
     except Exception:
         logger.exception(
@@ -104,6 +112,8 @@ def get_subscription_by_stripe_customer(stripe_customer_id: str) -> dict[str, An
             stripe_customer_id,
         )
         return None
+    finally:
+        conn.close()
 
 
 # ── Write ─────────────────────────────────────────────────────────────────────
@@ -233,24 +243,26 @@ def get_subscription_event_status(stripe_event_id: str) -> str | None:
     db = _db()
     if not db:
         return None
+    conn = db.connect()
     try:
-        with db.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT status
-                      FROM subscription_events
-                     WHERE stripe_event_id = %s
-                    """,
-                    (stripe_event_id,),
-                )
-                row = cur.fetchone()
-                return row["status"] if row and row.get("status") else None
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT status
+                  FROM subscription_events
+                 WHERE stripe_event_id = %s
+                """,
+                (stripe_event_id,),
+            )
+            row = cur.fetchone()
+            return row["status"] if row and row.get("status") else None
     except Exception:
         logger.exception(
             "subscription_repo: get_subscription_event_status failed event_id=%s", stripe_event_id
         )
         return None
+    finally:
+        conn.close()
 
 
 def record_subscription_event(

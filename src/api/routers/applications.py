@@ -5,6 +5,7 @@ All data access goes through src.repositories.applications_repo.
 """
 from __future__ import annotations
 
+import hashlib
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -77,7 +78,6 @@ def create_manual_application(
         raise HTTPException(status_code=500, detail="Failed to create manual application record")
 
     # Generate job_id for response
-    import hashlib
     raw = f"{req.title}|{req.company}|{req.location}".lower().strip()
     job_id = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 

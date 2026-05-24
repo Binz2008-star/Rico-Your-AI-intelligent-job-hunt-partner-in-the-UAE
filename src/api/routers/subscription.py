@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import ValidationError
+
+logger = logging.getLogger(__name__)
 
 from src.api.deps import get_current_user_id
 from src.schemas.subscription import (
@@ -55,6 +58,9 @@ def create_customer_portal(
         return create_customer_portal_session(user_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    except RuntimeError as exc:
+        logger.error("stripe_portal_session_failed user=%s error=%s", user_id, exc)
+        raise HTTPException(status_code=502, detail="Could not create billing portal session")
 
 
 @router.post("/webhook", response_model=SubscriptionWebhookResponse)
@@ -78,4 +84,5 @@ async def subscription_webhook(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception:
+        logger.exception("stripe_webhook_error")
         raise HTTPException(status_code=500, detail="Stripe webhook processing failed")

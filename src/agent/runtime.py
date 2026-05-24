@@ -112,10 +112,10 @@ class AgentRuntime:
         if action in _IDEMPOTENT and is_duplicate(action_id):
             logger.info("runtime_duplicate_skipped action=%s user=%s", action, user_id)
             return RuntimeResult(
-                ok=False,
+                ok=True,  # duplicate = already done = success; callers must not surface as error
                 message="This action was already executed for this job.",
                 action=action, job_key=job_key, source=source, user_id=user_id,
-                error="duplicate_action",
+                error=None,
                 duration_ms=int((time.monotonic() - wall_start) * 1000),
             )
 

@@ -236,8 +236,12 @@ def mark_applied(job_link: str, notes: str = None) -> bool:
                 ON CONFLICT (job_link) DO UPDATE SET
                     status = EXCLUDED.status,
                     applied_at = CURRENT_TIMESTAMP,
-                    notes = COALESCE(applications.notes, '') || ' | ' || COALESCE(%s, '')
-            """, (job_link, notes or '', notes or ''))
+                    notes = CASE
+                               WHEN %s IS NULL OR %s = '' THEN applications.notes
+                               WHEN applications.notes IS NULL OR applications.notes = '' THEN %s
+                               ELSE applications.notes || ' | ' || %s
+                           END
+            """, (job_link, notes, notes, notes, notes, notes))
 
         _commit(conn)
         return True
