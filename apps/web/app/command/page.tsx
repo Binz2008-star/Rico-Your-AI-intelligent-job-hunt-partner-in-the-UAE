@@ -1,7 +1,7 @@
 "use client";
 
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, RicoOption, UploadCVResponse } from "@/lib/api";
-import { ApiError, confirmCVProfile, fetchMe, logout, sendChat, sendChatPublic, uploadCV } from "@/lib/api";
+import { ApiError, confirmCVProfile, fetchMe, getMySubscription, logout, sendChat, sendChatPublic, uploadCV } from "@/lib/api";
 import { buildAuthHref } from "@/lib/redirect";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -168,6 +168,7 @@ export default function CommandV2Page() {
     const [operationState, setOperationState] = useState<{ state: string; message: string } | null>(null);
     const [editingProfileId, setEditingProfileId] = useState<number | null>(null);
     const [draftProfile, setDraftProfile] = useState<ProfilePreview | null>(null);
+    const [userPlan, setUserPlan] = useState<"free" | "pro" | "premium" | null>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -206,6 +207,14 @@ export default function CommandV2Page() {
             controller.abort();
         };
     }, [useMock]);
+
+    // ── Subscription plan fetch (non-blocking, authenticated only) ──
+    useEffect(() => {
+        if (chatAudience !== "authenticated") return;
+        getMySubscription()
+            .then((r) => setUserPlan(r.subscription.plan))
+            .catch(() => {}); // non-critical
+    }, [chatAudience]);
 
     // ── Scroll (verbatim from /command) ──
     const scrollBottom = useCallback(() => {
@@ -484,6 +493,26 @@ export default function CommandV2Page() {
                 <nav className="flex items-center gap-2 sm:gap-3">
                     {chatAudience === "authenticated" ? (
                         <>
+                            {userPlan && userPlan !== "free" && (
+                                <Link
+                                    href="/subscription"
+                                    className={`hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-widest border transition-colors ${
+                                        userPlan === "premium"
+                                            ? "border-[rgba(255,45,142,0.4)] bg-[rgba(255,45,142,0.1)] text-[#ff2d8e] hover:bg-[rgba(255,45,142,0.18)]"
+                                            : "border-[rgba(91,79,255,0.4)] bg-[rgba(91,79,255,0.1)] text-[#7b6fff] hover:bg-[rgba(91,79,255,0.18)]"
+                                    }`}
+                                >
+                                    {userPlan}
+                                </Link>
+                            )}
+                            {userPlan === "free" && (
+                                <Link
+                                    href="/subscription"
+                                    className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold border border-white/[0.08] bg-white/[0.03] text-[var(--rico-fg-4)] hover:text-[var(--rico-fg-2)] transition-colors"
+                                >
+                                    Free
+                                </Link>
+                            )}
                             <Link href="/dashboard" className="hidden sm:block text-[13px] text-[var(--rico-fg-3)] hover:text-[var(--rico-fg-1)] transition-colors">
                                 Dashboard
                             </Link>
@@ -726,6 +755,19 @@ export default function CommandV2Page() {
                             )}
                         </div>
                     ))}
+
+                    {/* Free plan upsell nudge — shown after 4 messages for free-tier authenticated users */}
+                    {chatAudience === "authenticated" && userPlan === "free" && messages.length >= 5 && messages.length % 6 === 5 && !thinking && (
+                        <div className="flex items-center gap-3 rounded-[var(--r-xl)] border border-[rgba(91,79,255,0.25)] bg-[rgba(91,79,255,0.06)] px-4 py-3 text-[12px]">
+                            <span className="text-[#7b6fff] shrink-0">✦</span>
+                            <span className="text-[var(--rico-fg-3)]">
+                                You&apos;re on the Free plan — <span className="text-[var(--rico-fg-2)]">50 AI messages/mo.</span> Pro gives you 300.
+                            </span>
+                            <Link href="/subscription" className="ml-auto shrink-0 text-[#7b6fff] font-semibold hover:underline whitespace-nowrap">
+                                Upgrade →
+                            </Link>
+                        </div>
+                    )}
 
                     {/* Thinking / operation state */}
                     {thinking && (
