@@ -553,7 +553,7 @@ export default function SubscriptionPage() {
                 )}
 
                 {/* Free tier row */}
-                <FreePlanRow currentPlan={currentPlan} isLoggedIn={isLoggedIn} />
+                <FreePlanRow currentPlan={currentPlan} isLoggedIn={ready ? isLoggedIn : false} />
 
                 {/* FAQ Section */}
                 <div className="mt-12">

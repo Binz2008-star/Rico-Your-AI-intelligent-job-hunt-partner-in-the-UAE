@@ -121,7 +121,7 @@ Actions offered:
 
 When a job card action (Prepare application, Track this job, Mark as applied, Open apply link) is triggered, the front end **must** pass the job context (`job_key`, `title`, `company`) in the chat payload. Rico's response must reference that specific job, not a generic response.
 
-This is enforced in `src/rico_chat_api.py` by checking for a `job_context` field in the incoming message payload and including it in the intent classification and response generation step.
+This is a required pending implementation. The frontend must pass job_context in the chat payload and Rico must use it for intent classification and response generation.
 
 ---
 

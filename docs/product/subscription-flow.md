@@ -6,9 +6,9 @@ This document defines the correct routing and data flow for subscription package
 
 | Package | Action on click | Expected route |
 |---|---|---|
-| Free | Activate free plan immediately | `POST /api/v1/subscriptions/activate-free` → redirect to `/command` |
-| Pro | Create Stripe Checkout session | `POST /api/v1/subscriptions/checkout` with `plan=pro` → redirect to Stripe Checkout URL |
-| Premium | Create Stripe Checkout session | `POST /api/v1/subscriptions/checkout` with `plan=premium` → redirect to Stripe Checkout URL |
+| Free | Auto-enrolled at registration | No explicit activation endpoint needed; users start on Free plan |
+| Pro | Create Stripe Checkout session | `POST /api/v1/subscription/checkout` with `plan=pro` → redirect to Stripe Checkout URL |
+| Premium | Create Stripe Checkout session | `POST /api/v1/subscription/checkout` with `plan=premium` → redirect to Stripe Checkout URL |
 
 **Package selection must never route the user directly to `/command` or Rico chat without completing checkout for paid plans.**
 
@@ -30,14 +30,13 @@ Both fixed in PR #207:
 User on /subscription
     ↓
 Selects Free
-    ↓ POST /api/v1/subscriptions/activate-free
-    ↓ 200 OK — plan: free activated
-    → redirect /command (plan badge: Free)
+    → Redirect /command (plan badge: Free)
+    (Free plan is auto-enrolled at registration; no activation endpoint needed)
 
 User on /subscription
     ↓
 Selects Pro or Premium
-    ↓ POST /api/v1/subscriptions/checkout { plan: "pro" | "premium" }
+    ↓ POST /api/v1/subscription/checkout { plan: "pro" | "premium" }
     ↓ Backend creates Stripe Checkout Session
     ↓ Returns { checkout_url: "https://checkout.stripe.com/..." }
     → frontend redirect to checkout_url
@@ -48,13 +47,13 @@ Payment success
     → Stripe redirect to /subscription/success?session_id=...
 
 /subscription/success
-    ↓ GET /api/v1/subscriptions/status (or /api/v1/me with plan field)
+    ↓ GET /api/v1/subscription/me
     ↓ Confirm plan is now active
     → Display "You're on Pro/Premium"
     → CTA: "Start chatting with Rico" → /command
 
 /command
-    ↓ Reads active plan from /api/v1/me or subscription endpoint
+    ↓ Reads active plan from /api/v1/subscription/me
     → Displays confirmed plan badge (Free / Pro / Premium)
 ```
 
@@ -64,7 +63,7 @@ If the user asks Rico about subscription mid-chat:
 
 > You selected Pro. I'll take you to secure checkout now. After payment, I'll activate your Pro workspace and bring you back here.
 
-Rico must not claim the subscription is active until the backend confirms it via `/api/v1/me` or the subscription status endpoint.
+Rico must not claim the subscription is active until the backend confirms it via `/api/v1/subscription/me`.
 
 If the user is on Free and asks about upgrading:
 
@@ -82,7 +81,7 @@ The upsell CTA must route to `/subscription`, not to generic chat.
 
 ## /command Plan Badge
 
-- Fetch plan on mount via `/api/v1/me` or dedicated subscription endpoint.
+- Fetch plan on mount via `/api/v1/subscription/me`.
 - Display badge next to user avatar or in header: `Free`, `Pro`, or `Premium`.
 - Do not hard-code the plan in frontend state from the package selection click — always confirm from backend.
 
@@ -101,5 +100,4 @@ The upsell CTA must route to `/subscription`, not to generic chat.
 
 1. **Subscription routing fix** — `apps/web/app/command/page.tsx` package selection must route Pro/Premium to Stripe Checkout, not `/command`.
 2. **`/subscription/success` page** — must fetch confirmed plan from backend; show processing state if webhook not yet processed.
-3. **Plan badge on `/command`** — must read from backend, not from local state.
-4. **Free plan activation endpoint** — verify `POST /api/v1/subscriptions/activate-free` exists and is wired up.
+3. **Plan badge on `/command`** — must read from `/api/v1/subscription/me`, not from local state.
