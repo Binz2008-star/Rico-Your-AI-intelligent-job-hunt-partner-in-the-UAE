@@ -11,8 +11,52 @@ This document records the current production-readiness state after the deploymen
 
 Notes:
 
+- Current status: PR #191 merged. Backend deployment is blocked by the Render subscription being stopped. Do not deploy or validate Stripe or Telegram production flows until Render is restored.
 - Vercel preview or deployment URLs such as `web-*.vercel.app` do not share `.ricohunt.com` cookies. They may show guest mode or `Sign in` / `Sign up` even when the production domain is already authenticated.
 - The repo-root Vercel project `job-automation-system-1-main` is not the frontend deployment target.
+
+## Temporary Render Outage Status
+
+Render currently requires subscription restoration before backend validation can continue. Keep Vercel/frontend online, but treat backend-dependent features as unavailable. Anything that depends on the backend can fail or produce misleading results while Render is stopped.
+
+Safe work while Render is stopped:
+
+- Keep PR #191 merged and documented
+- Keep migration files ready
+- Prepare manual Neon SQL steps
+- Keep the temporary frontend maintenance message for subscription/backend features
+- Disable or hide paid subscription checkout buttons until the backend is back
+- Prepare the exact Render environment variables needed
+
+Blocked until Render is restored:
+
+- Neon migration validation against the live backend
+- `TELEGRAM_WEBHOOK_SECRET` production verification
+- Telegram webhook production test
+- Stripe webhook test events
+- `/health` backend verification
+- `/api/docs` backend verification
+- `/subscription/plans` backend verification
+- `/subscription/me` backend verification
+- Render deploy
+
+Do not do these yet:
+
+- Do not run Stripe test events.
+- Do not advertise subscription checkout as live.
+- Do not validate Telegram webhook production behavior.
+- Do not mark deployment complete.
+
+Resume in this order when Render is back:
+
+1. Restore Render service/subscription.
+2. Set `TELEGRAM_WEBHOOK_SECRET` in Render.
+3. Apply migrations 015 and 016 to Neon.
+4. Deploy latest `main` to Render.
+5. Verify `/health`, `/api/docs`, `/subscription/plans`, and `/subscription/me`.
+6. Configure Telegram webhook secret.
+7. Run Stripe test events.
+8. Only then mark backend/subscription flow operational.
 
 ## Required Frontend Vercel Environment Variables
 

@@ -309,9 +309,14 @@ def create_customer_portal_session(user_id: str) -> CheckoutResponse:
         return_url=f"{frontend}/subscription",
     )
     
+    try:
+        plan = SubscriptionTier(sub.get("plan", "free"))
+    except ValueError:
+        plan = SubscriptionTier.FREE
+
     return CheckoutResponse(
         checkout_url=session.url,
         provider="stripe",
-        plan=SubscriptionTier(sub.get("plan", "free")),
+        plan=plan,
         status="ready",
     )

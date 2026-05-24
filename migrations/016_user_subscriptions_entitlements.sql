@@ -25,7 +25,8 @@ DO $$
 BEGIN
     IF EXISTS (
         SELECT 1 FROM information_schema.columns
-         WHERE table_name  = 'user_subscriptions'
+         WHERE table_schema = current_schema()
+           AND table_name  = 'user_subscriptions'
            AND column_name = 'premium_recommendations_enabled'
            AND column_default IS NOT NULL
     ) THEN
@@ -35,7 +36,8 @@ BEGIN
 
     IF EXISTS (
         SELECT 1 FROM information_schema.columns
-         WHERE table_name  = 'user_subscriptions'
+         WHERE table_schema = current_schema()
+           AND table_name  = 'user_subscriptions'
            AND column_name = 'premium_recommendations_enabled'
            AND is_nullable = 'NO'
     ) THEN
@@ -45,7 +47,8 @@ BEGIN
 
     IF EXISTS (
         SELECT 1 FROM information_schema.columns
-         WHERE table_name  = 'user_subscriptions'
+         WHERE table_schema = current_schema()
+           AND table_name  = 'user_subscriptions'
            AND column_name = 'application_automation_enabled'
            AND column_default IS NOT NULL
     ) THEN
@@ -55,7 +58,8 @@ BEGIN
 
     IF EXISTS (
         SELECT 1 FROM information_schema.columns
-         WHERE table_name  = 'user_subscriptions'
+         WHERE table_schema = current_schema()
+           AND table_name  = 'user_subscriptions'
            AND column_name = 'application_automation_enabled'
            AND is_nullable = 'NO'
     ) THEN
