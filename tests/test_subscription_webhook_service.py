@@ -501,6 +501,7 @@ class TestRetryOnFailure:
         monkeypatch.setattr(svc, "record_subscription_event", lambda *a, **kw: True)
         monkeypatch.setattr(svc, "update_subscription_event_status", lambda *a, **kw: False)
         monkeypatch.setattr(svc, "upsert_subscription", lambda *a, **kw: _existing_row())
+        monkeypatch.setattr(svc, "get_subscription_by_stripe_customer", lambda *a, **kw: None)
 
         result = svc.process_stripe_event(
             "evt_status_fail", "checkout.session.completed",

@@ -357,7 +357,9 @@ def process_stripe_event(
     try:
         result = handler(obj)
         if result:
-            update_subscription_event_status(event_id, "processed")
+            if not update_subscription_event_status(event_id, "processed"):
+                logger.warning("webhook: failed to mark event processed event_id=%s", event_id)
+                return False
         else:
             update_subscription_event_status(event_id, "failed", error_detail="handler returned false")
         return result
