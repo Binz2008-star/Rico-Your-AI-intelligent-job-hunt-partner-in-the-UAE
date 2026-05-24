@@ -289,10 +289,7 @@ export default function SubscriptionPage() {
 
     useEffect(() => {
         if (maintenanceMode) return;
-        const timeoutId = window.setTimeout(() => {
-            loadPlans();
-        }, 0);
-        return () => window.clearTimeout(timeoutId);
+        loadPlans();
     }, [loadPlans, maintenanceMode]);
 
     const userEmail = user?.email ?? null;

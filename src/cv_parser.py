@@ -8,10 +8,13 @@ optional dependencies: pymupdf and python-docx.
 from __future__ import annotations
 
 import io
+import logging
 import re
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -257,7 +260,8 @@ class CVParser:
             import fitz  # PyMuPDF
             doc = fitz.open(stream=data, filetype="pdf")
             return "\n".join(page.get_text() for page in doc)
-        except Exception:
+        except Exception as exc:
+            logger.warning("cv_parser: PyMuPDF failed, falling back to raw UTF-8 decode: %s", exc)
             return data.decode("utf-8", errors="ignore")
 
     def _parse_docx(self, data: bytes) -> str:
@@ -265,5 +269,6 @@ class CVParser:
             from docx import Document
             doc = Document(io.BytesIO(data))
             return "\n".join(p.text for p in doc.paragraphs)
-        except Exception:
+        except Exception as exc:
+            logger.warning("cv_parser: python-docx failed, falling back to raw UTF-8 decode: %s", exc)
             return data.decode("utf-8", errors="ignore")

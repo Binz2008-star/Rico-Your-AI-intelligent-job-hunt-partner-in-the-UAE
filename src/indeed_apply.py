@@ -843,8 +843,8 @@ class IndeedApplyEngine:
             inp = frame.query_selector(sel)
             if inp and not inp.input_value():
                 inp.fill(value)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("indeed_fill_field_failed sel=%r error=%s", sel, exc)
 
     def _fill_by_label(self, frame: Any, label_text: str, value: str) -> None:
         """Fill the input associated with a label whose text contains label_text."""

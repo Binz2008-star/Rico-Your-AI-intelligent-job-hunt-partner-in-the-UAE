@@ -69,25 +69,25 @@ async def subscription_webhook(
     stripe_signature: str | None = Header(default=None, alias="stripe-signature"),
 ) -> SubscriptionWebhookResponse:
     payload = await request.body()
+    stripe_secret = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()
     try:
+        if stripe_secret:
+            # Signature-verified path: skip Pydantic entirely. Stripe's own payload
+            # format may not match our schema, so we hand raw bytes + signature to
+            # stripe.Webhook.construct_event() which is the authoritative decoder.
+            # The sentinel is never inspected by handle_subscription_webhook here.
+            sentinel = WebhookEvent(id="stripe_signed_event", type="stripe.signed", data={})
+            return handle_subscription_webhook(sentinel, payload=payload, signature=stripe_signature)
+        # No webhook secret: mock/dev mode — validate body with Pydantic normally.
         body = json.loads(payload or b"{}")
         event = WebhookEvent.model_validate(body)
-        return handle_subscription_webhook(event, payload=payload, signature=stripe_signature)
+        return handle_subscription_webhook(event, payload=payload, signature=None)
     except ValidationError as exc:
-        if os.getenv("STRIPE_WEBHOOK_SECRET", "").strip():
-            # Stripe signed events carry a raw body that fails Pydantic validation because
-            # the actual event object is reconstructed by stripe.Webhook.construct_event()
-            # from the raw bytes + signature — not from the JSON we parse here. Pass a
-            # sentinel placeholder; handle_subscription_webhook() discards it and lets the
-            # Stripe SDK verify + reconstruct the real event from payload+signature.
-            try:
-                event = WebhookEvent(id="stripe_signed_event", type="stripe.signed", data={})
-                return handle_subscription_webhook(event, payload=payload, signature=stripe_signature)
-            except ValueError as inner_exc:
-                raise HTTPException(status_code=400, detail=str(inner_exc))
         raise HTTPException(status_code=422, detail=exc.errors())
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("stripe_webhook_error")
         raise HTTPException(status_code=500, detail="Stripe webhook processing failed")

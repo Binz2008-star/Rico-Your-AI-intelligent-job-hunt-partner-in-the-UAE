@@ -343,7 +343,11 @@ def _extract_roles_from_cv_text(cv_text: str) -> list[str]:
 
 
 def _webhook_handler(event_name: str):
-    """Decorator to standardize webhook error handling."""
+    """Decorator to standardize webhook error handling.
+
+    All unhandled exceptions return 500 so the webhook provider retries.
+    HTTPException is re-raised as-is (auth 403, validation 422, etc.).
+    """
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
@@ -352,15 +356,8 @@ def _webhook_handler(event_name: str):
             except HTTPException:
                 raise
             except Exception as e:
-                logger.exception(f"{event_name}_webhook_error: {e}")
-                try:
-                    import psycopg2
-                    if isinstance(e, psycopg2.Error):
-                        # DB infrastructure failure: let the webhook provider retry.
-                        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
-                except ImportError:
-                    pass
-                return {"ok": True, "status": "accepted", "message": "Webhook received, processing error logged"}
+                logger.exception("%s_webhook_error: %s", event_name, e)
+                raise HTTPException(status_code=500, detail="Webhook processing error")
         return wrapper
     return decorator
 
