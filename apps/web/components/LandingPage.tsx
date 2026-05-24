@@ -351,6 +351,75 @@ export default function LandingPage() {
                         </div>
                     </section>
 
+                    <section className="px-5 py-16 md:px-10 lg:px-16">
+                        <SectionHeading
+                            eyebrow="Pricing"
+                            title="Simple plans for serious career moves"
+                            body="Start free with 50 AI messages and 10 saved jobs. Upgrade when you need more."
+                        />
+                        <div className="mx-auto grid max-w-5xl gap-4 md:grid-cols-3">
+                            <RicoCardPanel>
+                                <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-text-tertiary">
+                                    Free
+                                </p>
+                                <h3 className="mt-4 text-4xl font-semibold text-white">AED 0</h3>
+                                <p className="mt-2 text-sm text-text-secondary">/month</p>
+                                <ul className="mt-6 space-y-3 text-sm text-text-secondary">
+                                    <li>50 AI messages per month</li>
+                                    <li>10 saved jobs</li>
+                                    <li>1 profile optimisation</li>
+                                </ul>
+                                <Link
+                                    href="/signup"
+                                    className="mt-8 inline-flex w-full items-center justify-center rounded-full border border-white/10 bg-white/[0.04] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/[0.08]"
+                                >
+                                    Get started
+                                </Link>
+                            </RicoCardPanel>
+                            <RicoCardPanel delay={0.08}>
+                                <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-text-tertiary">
+                                    Pro
+                                </p>
+                                <h3 className="mt-4 text-4xl font-semibold text-white">AED 50</h3>
+                                <p className="mt-2 text-sm text-text-secondary">/month</p>
+                                <ul className="mt-6 space-y-3 text-sm text-text-secondary">
+                                    <li>300 AI messages per month</li>
+                                    <li>100 saved jobs</li>
+                                    <li>20 profile optimisations per month</li>
+                                </ul>
+                                <Link
+                                    href="/subscription"
+                                    className="mt-8 inline-flex w-full items-center justify-center rounded-full border border-white/10 bg-white/[0.04] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/[0.08]"
+                                >
+                                    Upgrade to Pro
+                                </Link>
+                            </RicoCardPanel>
+                            <RicoCardPanel delay={0.16} className="border-magenta/30 bg-magenta/[0.03]">
+                                <div className="mb-4 inline-flex rounded-full border border-magenta/30 bg-magenta/10 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-magenta">
+                                    Popular
+                                </div>
+                                <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-text-tertiary">
+                                    Premium
+                                </p>
+                                <h3 className="mt-4 text-4xl font-semibold text-white">AED 150</h3>
+                                <p className="mt-2 text-sm text-text-secondary">/month</p>
+                                <ul className="mt-6 space-y-3 text-sm text-text-secondary">
+                                    <li>1500 AI messages per month</li>
+                                    <li>Unlimited saved jobs</li>
+                                    <li>100 profile optimisations per month</li>
+                                    <li>Premium recommendations</li>
+                                    <li>Application automation</li>
+                                </ul>
+                                <Link
+                                    href="/subscription"
+                                    className="mt-8 inline-flex w-full items-center justify-center rounded-full bg-gradient-to-r from-magenta to-cyan px-6 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90"
+                                >
+                                    Upgrade to Premium
+                                </Link>
+                            </RicoCardPanel>
+                        </div>
+                    </section>
+
                     <section className="px-5 pb-20 pt-10 md:px-10 lg:px-16">
                         <RicoCardPanel className="mx-auto max-w-5xl text-center">
                             <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-magenta">

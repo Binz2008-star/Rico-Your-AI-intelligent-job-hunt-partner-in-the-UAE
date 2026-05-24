@@ -258,6 +258,11 @@ function ProfileDetail({
     onSaveMinSalary,
     onSaveCurrentCompany,
     onSaveLinkedin,
+    onSaveTargetRoles,
+    onSaveCities,
+    onSaveSalaryTarget,
+    onSaveExperience,
+    onSaveSkills,
 }: {
     profile: ProfileResponse;
     onSaveName: (nextName: string) => Promise<void>;
@@ -268,6 +273,11 @@ function ProfileDetail({
     onSaveMinSalary: (nextMinSalary: number) => Promise<void>;
     onSaveCurrentCompany: (nextCompany: string) => Promise<void>;
     onSaveLinkedin: (nextLinkedin: string) => Promise<void>;
+    onSaveTargetRoles: (nextRoles: string) => Promise<void>;
+    onSaveCities: (nextCities: string) => Promise<void>;
+    onSaveSalaryTarget: (nextSalary: string) => Promise<void>;
+    onSaveExperience: (nextExperience: string) => Promise<void>;
+    onSaveSkills: (nextSkills: string) => Promise<void>;
 }) {
     const hasJobPrefs =
         (profile.target_roles?.length ?? 0) > 0 ||
@@ -344,30 +354,28 @@ function ProfileDetail({
                 {hasJobPrefs ? (
                     <dl className="grid grid-cols-1 gap-y-3 text-sm sm:grid-cols-2 sm:gap-x-6">
                         <Row label="Target roles">
-                            {(profile.target_roles?.length ?? 0) > 0 ? (
-                                <div className="flex flex-wrap gap-1">
-                                    {profile.target_roles!.map((r) => <Tag key={r} label={r} />)}
-                                </div>
-                            ) : (
-                                <span className="text-[#eeeef5]">—</span>
-                            )}
-                            <ChatEditCTA prompt="Update my target roles" />
+                            <EditableTextField
+                                value={profile.target_roles?.join(', ') || null}
+                                onSave={onSaveTargetRoles}
+                                placeholder="Enter target roles (comma-separated)"
+                                label="target-roles"
+                            />
                         </Row>
                         <Row label="Cities">
-                            {(profile.preferred_cities?.length ?? 0) > 0 ? (
-                                <div className="flex flex-wrap gap-1">
-                                    {profile.preferred_cities!.map((c) => <Tag key={c} label={c} />)}
-                                </div>
-                            ) : (
-                                <span className="text-[#eeeef5]">—</span>
-                            )}
-                            <ChatEditCTA prompt="Update my preferred cities" />
+                            <EditableTextField
+                                value={profile.preferred_cities?.join(', ') || null}
+                                onSave={onSaveCities}
+                                placeholder="Enter preferred cities (comma-separated)"
+                                label="cities"
+                            />
                         </Row>
                         <Row label="Salary target">
-                            <span className="text-[#eeeef5]">
-                                {profile.salary_expectation_aed != null ? `AED ${profile.salary_expectation_aed.toLocaleString()}` : "—"}
-                            </span>
-                            <ChatEditCTA prompt="Update my salary target" />
+                            <EditableTextField
+                                value={profile.salary_expectation_aed != null ? String(profile.salary_expectation_aed) : null}
+                                onSave={onSaveSalaryTarget}
+                                placeholder="Enter salary target (AED)"
+                                label="salary-target"
+                            />
                         </Row>
                         <Row label="Minimum salary">
                             <EditableTextField
@@ -384,10 +392,12 @@ function ProfileDetail({
                             />
                         </Row>
                         <Row label="Experience">
-                            <span className="text-[#eeeef5]">
-                                {profile.years_experience != null ? `${profile.years_experience} yrs` : "—"}
-                            </span>
-                            <ChatEditCTA prompt="Update my years of experience" />
+                            <EditableTextField
+                                value={profile.years_experience != null ? String(profile.years_experience) : null}
+                                onSave={onSaveExperience}
+                                placeholder="Enter years of experience"
+                                label="experience"
+                            />
                         </Row>
                     </dl>
                 ) : (
@@ -398,10 +408,12 @@ function ProfileDetail({
             {/* Skills */}
             <StatusCard title="Skills" badge={hasSkills ? "live" : "pending"}>
                 {hasSkills ? (
-                    <div className="flex flex-wrap gap-1.5">
-                        {(profile.skills ?? []).map((s) => <Tag key={s} label={s} />)}
-                        <ChatEditCTA prompt="Update my skills" />
-                    </div>
+                    <EditableTextField
+                        value={profile.skills?.join(', ') || null}
+                        onSave={onSaveSkills}
+                        placeholder="Enter skills (comma-separated)"
+                        label="skills"
+                    />
                 ) : (
                     <ChatCTA message="Share your skills with Rico to improve job matching accuracy." />
                 )}
@@ -537,6 +549,77 @@ export default function ProfilePage() {
         }
     }, []);
 
+    const handleSaveTargetRoles = useCallback(async (nextRoles: string) => {
+        const roles = nextRoles.split(',').map(r => r.trim()).filter(Boolean);
+        await updateProfile({ target_roles: roles });
+        setProfile((current) => (current ? { ...current, target_roles: roles } : current));
+
+        try {
+            const refreshed = await fetchProfile();
+            setProfile(refreshed);
+        } catch {
+            // Keep the optimistic value if the follow-up read fails.
+        }
+    }, []);
+
+    const handleSaveCities = useCallback(async (nextCities: string) => {
+        const cities = nextCities.split(',').map(c => c.trim()).filter(Boolean);
+        await updateProfile({ preferred_cities: cities });
+        setProfile((current) => (current ? { ...current, preferred_cities: cities } : current));
+
+        try {
+            const refreshed = await fetchProfile();
+            setProfile(refreshed);
+        } catch {
+            // Keep the optimistic value if the follow-up read fails.
+        }
+    }, []);
+
+    const handleSaveSalaryTarget = useCallback(async (nextSalary: string) => {
+        const parsed = Number(nextSalary);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+            throw new Error("Enter a valid salary amount.");
+        }
+        await updateProfile({ salary_expectation_aed: parsed });
+        setProfile((current) => (current ? { ...current, salary_expectation_aed: parsed } : current));
+
+        try {
+            const refreshed = await fetchProfile();
+            setProfile(refreshed);
+        } catch {
+            // Keep the optimistic value if the follow-up read fails.
+        }
+    }, []);
+
+    const handleSaveExperience = useCallback(async (nextExperience: string) => {
+        const parsed = Number(nextExperience);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+            throw new Error("Enter a valid number of years.");
+        }
+        await updateProfile({ years_experience: parsed });
+        setProfile((current) => (current ? { ...current, years_experience: parsed } : current));
+
+        try {
+            const refreshed = await fetchProfile();
+            setProfile(refreshed);
+        } catch {
+            // Keep the optimistic value if the follow-up read fails.
+        }
+    }, []);
+
+    const handleSaveSkills = useCallback(async (nextSkills: string) => {
+        const skills = nextSkills.split(',').map(s => s.trim()).filter(Boolean);
+        await updateProfile({ skills });
+        setProfile((current) => (current ? { ...current, skills } : current));
+
+        try {
+            const refreshed = await fetchProfile();
+            setProfile(refreshed);
+        } catch {
+            // Keep the optimistic value if the follow-up read fails.
+        }
+    }, []);
+
     return (
         <DashboardShell title="Profile">
             <div className="max-w-2xl">
@@ -591,6 +674,11 @@ export default function ProfilePage() {
                         onSaveMinSalary={handleSaveMinSalary}
                         onSaveCurrentCompany={handleSaveCurrentCompany}
                         onSaveLinkedin={handleSaveLinkedin}
+                        onSaveTargetRoles={handleSaveTargetRoles}
+                        onSaveCities={handleSaveCities}
+                        onSaveSalaryTarget={handleSaveSalaryTarget}
+                        onSaveExperience={handleSaveExperience}
+                        onSaveSkills={handleSaveSkills}
                     />
                 )}
             </div>

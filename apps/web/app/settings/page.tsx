@@ -247,9 +247,7 @@ export default function SettingsPage() {
                 <p className="text-sm font-bold text-[#eeeef5] group-hover:text-white transition-colors">Telegram Notifications</p>
                 <p className="text-xs text-[#5a5a7a]">Rico sends cards to your mobile for instant approval.</p>
               </div>
-              <div className="w-10 h-5 rounded-full bg-[#5b4fff]/20 border border-[#5b4fff]/40 relative">
-                <div className="absolute right-1 top-0.5 bottom-0.5 w-3.5 h-3.5 bg-[#5b4fff] rounded-full shadow-[0_0_10px_rgba(91,79,255,0.5)]" />
-              </div>
+              <span className="text-xs text-[#5b4fff] font-medium">Enabled</span>
             </div>
 
             <div className="pt-6 border-t border-white/5 flex items-center justify-between">
