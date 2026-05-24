@@ -54,8 +54,8 @@ async function SystemStatus() {
   }
 
   const normalizedStatus = String(health.status || "").toLowerCase();
+  const healthOk = ["ok", "healthy", "live", "up"].includes(normalizedStatus);
   const dbOk = health.db === "connected";
-  const healthOk = ["ok", "healthy", "live", "up"].includes(normalizedStatus) || dbOk;
   const version = health.version && health.version !== "undefined" ? `v${health.version}` : "Unknown";
 
   return (
