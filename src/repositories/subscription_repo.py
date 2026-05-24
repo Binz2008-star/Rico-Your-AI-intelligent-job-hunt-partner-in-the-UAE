@@ -58,6 +58,9 @@ def get_subscription(user_id: str) -> dict[str, Any] | None:
                     SELECT user_id, plan, status,
                            stripe_customer_id, stripe_subscription_id,
                            current_period_start, current_period_end,
+                           cancel_at, canceled_at,
+                           monthly_ai_message_limit, saved_jobs_limit, profile_optimization_limit,
+                           premium_recommendations_enabled, application_automation_enabled,
                            created_at, updated_at
                     FROM user_subscriptions
                     WHERE user_id = %s
@@ -84,6 +87,9 @@ def get_subscription_by_stripe_customer(stripe_customer_id: str) -> dict[str, An
                     SELECT user_id, plan, status,
                            stripe_customer_id, stripe_subscription_id,
                            current_period_start, current_period_end,
+                           cancel_at, canceled_at,
+                           monthly_ai_message_limit, saved_jobs_limit, profile_optimization_limit,
+                           premium_recommendations_enabled, application_automation_enabled,
                            created_at, updated_at
                     FROM user_subscriptions
                     WHERE stripe_customer_id = %s
@@ -111,6 +117,13 @@ def upsert_subscription(
     stripe_subscription_id: str | None = None,
     current_period_start: datetime | None = None,
     current_period_end: datetime | None = None,
+    cancel_at: datetime | None = None,
+    canceled_at: datetime | None = None,
+    monthly_ai_message_limit: int | None = None,
+    saved_jobs_limit: int | None = None,
+    profile_optimization_limit: int | None = None,
+    premium_recommendations_enabled: bool = False,
+    application_automation_enabled: bool = False,
 ) -> dict[str, Any] | None:
     """Create or update a subscription record.
 
@@ -131,37 +144,74 @@ def upsert_subscription(
                     INSERT INTO user_subscriptions
                         (user_id, plan, status,
                          stripe_customer_id, stripe_subscription_id,
-                         current_period_start, current_period_end)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                         current_period_start, current_period_end,
+                         cancel_at, canceled_at,
+                         monthly_ai_message_limit, saved_jobs_limit, profile_optimization_limit,
+                         premium_recommendations_enabled, application_automation_enabled)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (user_id) DO UPDATE SET
-                        plan                   = EXCLUDED.plan,
-                        status                 = EXCLUDED.status,
-                        stripe_customer_id     = COALESCE(
+                        plan                           = EXCLUDED.plan,
+                        status                         = EXCLUDED.status,
+                        stripe_customer_id             = COALESCE(
                             EXCLUDED.stripe_customer_id,
                             user_subscriptions.stripe_customer_id
                         ),
-                        stripe_subscription_id = COALESCE(
+                        stripe_subscription_id         = COALESCE(
                             EXCLUDED.stripe_subscription_id,
                             user_subscriptions.stripe_subscription_id
                         ),
-                        current_period_start   = COALESCE(
+                        current_period_start           = COALESCE(
                             EXCLUDED.current_period_start,
                             user_subscriptions.current_period_start
                         ),
-                        current_period_end     = COALESCE(
+                        current_period_end             = COALESCE(
                             EXCLUDED.current_period_end,
                             user_subscriptions.current_period_end
                         ),
-                        updated_at             = NOW()
+                        cancel_at                      = COALESCE(
+                            EXCLUDED.cancel_at,
+                            user_subscriptions.cancel_at
+                        ),
+                        canceled_at                    = COALESCE(
+                            EXCLUDED.canceled_at,
+                            user_subscriptions.canceled_at
+                        ),
+                        monthly_ai_message_limit        = COALESCE(
+                            EXCLUDED.monthly_ai_message_limit,
+                            user_subscriptions.monthly_ai_message_limit
+                        ),
+                        saved_jobs_limit               = COALESCE(
+                            EXCLUDED.saved_jobs_limit,
+                            user_subscriptions.saved_jobs_limit
+                        ),
+                        profile_optimization_limit     = COALESCE(
+                            EXCLUDED.profile_optimization_limit,
+                            user_subscriptions.profile_optimization_limit
+                        ),
+                        premium_recommendations_enabled = COALESCE(
+                            EXCLUDED.premium_recommendations_enabled,
+                            user_subscriptions.premium_recommendations_enabled
+                        ),
+                        application_automation_enabled = COALESCE(
+                            EXCLUDED.application_automation_enabled,
+                            user_subscriptions.application_automation_enabled
+                        ),
+                        updated_at                     = NOW()
                     RETURNING user_id, plan, status,
                               stripe_customer_id, stripe_subscription_id,
                               current_period_start, current_period_end,
+                              cancel_at, canceled_at,
+                              monthly_ai_message_limit, saved_jobs_limit, profile_optimization_limit,
+                              premium_recommendations_enabled, application_automation_enabled,
                               created_at, updated_at
                     """,
                     (
                         user_id, plan, status,
                         stripe_customer_id, stripe_subscription_id,
                         current_period_start, current_period_end,
+                        cancel_at, canceled_at,
+                        monthly_ai_message_limit, saved_jobs_limit, profile_optimization_limit,
+                        premium_recommendations_enabled, application_automation_enabled,
                     ),
                 )
                 row = cur.fetchone()
@@ -200,11 +250,20 @@ def record_subscription_event(
     user_id: str | None = None,
     payload: dict[str, Any] | None = None,
 ) -> bool:
-    """Idempotently record a Stripe webhook event.
+    """Atomically claim a Stripe webhook event for processing.
 
-    Returns True if the event was newly inserted, False if it already existed
-    (duplicate) or if the DB is unavailable/failed. Callers use this to decide
-    whether to run side effects — only the worker that gets True should proceed.
+    Returns True when the caller should proceed with side effects:
+      - newly inserted (first time we've seen this event_id), OR
+      - re-claimed from 'failed' (previous attempt errored; eligible for retry).
+
+    Returns False (skip) when:
+      - existing status is 'processed' — already handled successfully.
+      - existing status is 'pending' — another worker is in-flight.
+      - DB is unavailable or an exception occurred.
+
+    After processing, callers MUST call update_subscription_event_status() to
+    transition from 'pending' to 'processed' or 'failed'. An event left as
+    'pending' permanently blocks retries for that event_id.
     """
     try:
         inserted = False
@@ -216,9 +275,12 @@ def record_subscription_event(
                 cur.execute(
                     """
                     INSERT INTO subscription_events
-                        (stripe_event_id, event_type, user_id, payload)
-                    VALUES (%s, %s, %s, %s)
-                    ON CONFLICT (stripe_event_id) DO NOTHING
+                        (stripe_event_id, event_type, user_id, payload, status)
+                    VALUES (%s, %s, %s, %s, 'pending')
+                    ON CONFLICT (stripe_event_id) DO UPDATE
+                        SET status       = 'pending',
+                            error_detail = NULL
+                      WHERE subscription_events.status = 'failed'
                     """,
                     (stripe_event_id, event_type, user_id, Json(payload or {})),
                 )
@@ -229,3 +291,33 @@ def record_subscription_event(
             "subscription_repo: record_subscription_event failed event_id=%s", stripe_event_id
         )
         return False
+
+
+def update_subscription_event_status(
+    stripe_event_id: str,
+    status: str,
+    *,
+    error_detail: str | None = None,
+) -> None:
+    """Close out a claimed event with its final status.
+
+    Call with status='processed' on handler success, 'failed' on exception.
+    Failed events are re-claimable by record_subscription_event on the next retry.
+    """
+    try:
+        with _db_transaction() as conn:
+            if conn is None:
+                return
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE subscription_events
+                       SET status = %s, error_detail = %s
+                     WHERE stripe_event_id = %s
+                    """,
+                    (status, error_detail, stripe_event_id),
+                )
+    except Exception:
+        logger.exception(
+            "subscription_repo: update_subscription_event_status failed event_id=%s", stripe_event_id
+        )

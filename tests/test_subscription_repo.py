@@ -347,3 +347,77 @@ class TestRecordSubscriptionEvent:
         monkeypatch.setattr(repo, "_db_transaction", exploding)
         result = repo.record_subscription_event("evt_err", "checkout.session.completed")
         assert result is False
+
+    def test_returns_true_when_reclaiming_failed_event(self, monkeypatch):
+        # ON CONFLICT DO UPDATE WHERE status='failed' fires → rowcount=1 → re-claim succeeds
+        import src.repositories.subscription_repo as repo
+        monkeypatch.setattr(repo, "_db_transaction", self._make_transaction_mock(rowcount=1))
+        result = repo.record_subscription_event("evt_retry", "checkout.session.completed")
+        assert result is True
+
+    def test_returns_false_when_event_is_in_progress(self, monkeypatch):
+        # Another worker holds status='pending' → DO UPDATE WHERE condition is false → rowcount=0
+        import src.repositories.subscription_repo as repo
+        monkeypatch.setattr(repo, "_db_transaction", self._make_transaction_mock(rowcount=0))
+        result = repo.record_subscription_event("evt_inprog", "checkout.session.completed")
+        assert result is False
+
+
+# ── update_subscription_event_status ─────────────────────────────────────────
+
+class TestUpdateSubscriptionEventStatus:
+    def _make_capture_mock(self):
+        """Return (fake_transaction, executed_params_list)."""
+        executed: list = []
+
+        mock_cursor = MagicMock()
+        mock_cursor.execute.side_effect = lambda sql, params: executed.append(params)
+
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value.__enter__ = lambda s: mock_cursor
+        mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def fake_transaction():
+            yield mock_conn
+
+        return fake_transaction, executed
+
+    def test_updates_to_processed(self, monkeypatch):
+        import src.repositories.subscription_repo as repo
+        txn, executed = self._make_capture_mock()
+        monkeypatch.setattr(repo, "_db_transaction", txn)
+        repo.update_subscription_event_status("evt_123", "processed")
+        assert executed[0] == ("processed", None, "evt_123")
+
+    def test_updates_to_failed_with_error_detail(self, monkeypatch):
+        import src.repositories.subscription_repo as repo
+        txn, executed = self._make_capture_mock()
+        monkeypatch.setattr(repo, "_db_transaction", txn)
+        repo.update_subscription_event_status("evt_err", "failed", error_detail="DB timeout")
+        assert executed[0] == ("failed", "DB timeout", "evt_err")
+
+    def test_no_op_when_db_unavailable(self, monkeypatch):
+        import src.repositories.subscription_repo as repo
+        from contextlib import contextmanager
+
+        @contextmanager
+        def no_db():
+            yield None
+
+        monkeypatch.setattr(repo, "_db_transaction", no_db)
+        repo.update_subscription_event_status("evt_any", "processed")  # must not raise
+
+    def test_no_op_on_db_exception(self, monkeypatch):
+        import src.repositories.subscription_repo as repo
+        from contextlib import contextmanager
+
+        @contextmanager
+        def exploding():
+            raise Exception("network error")
+            yield  # noqa: unreachable
+
+        monkeypatch.setattr(repo, "_db_transaction", exploding)
+        repo.update_subscription_event_status("evt_any", "processed")  # must not raise
