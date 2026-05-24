@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
+from contextlib import contextmanager
 from datetime import datetime
 from threading import Lock
 from typing import Any, Dict, List, Optional
@@ -182,12 +183,27 @@ class RicoDB:
             raise
         return conn
 
+    @contextmanager
+    def _transaction(self, *, ensure_schema: bool = True):
+        """Open a connection, yield it, commit on success, always close."""
+        conn = self.connect(ensure_schema=ensure_schema)
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            raise
+        finally:
+            conn.close()
+
     def init(self) -> None:
         """Create Rico tables in the existing Neon database."""
-        with self.connect(ensure_schema=False) as conn:
+        with self._transaction(ensure_schema=False) as conn:
             with conn.cursor() as cur:
                 cur.execute(_RICO_SCHEMA_DDL)
-            conn.commit()
         if self.database_url:
             self._schema_ready_urls.add(self.database_url)
 
@@ -208,7 +224,7 @@ class RicoDB:
         """
         if not submission_id or submission_id == "?":
             return True
-        with self.connect() as conn:
+        with self._transaction() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -220,7 +236,6 @@ class RicoDB:
                     (provider, form_id, submission_id, external_user_id, Json(metadata or {})),
                 )
                 row = cur.fetchone()
-            conn.commit()
         return row is not None
 
     def mark_webhook_event_processed(
@@ -234,7 +249,7 @@ class RicoDB:
     ) -> None:
         if not submission_id or submission_id == "?":
             return
-        with self.connect() as conn:
+        with self._transaction() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -247,168 +262,175 @@ class RicoDB:
                     """,
                     (user_id, status, Json(metadata or {}), provider, submission_id),
                 )
-            conn.commit()
 
     def upsert_user(self, payload: Dict[str, Any], conn=None) -> Dict[str, Any]:
         external_user_id = payload.get("external_user_id") or payload.get("email") or payload.get("telegram_username") or str(uuid.uuid4())
 
-        # Use provided connection or create new one
         should_close = conn is None
         if conn is None:
             conn = self.connect()
 
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO rico_users (external_user_id, name, email, phone, telegram_username, telegram_chat_id, source)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (external_user_id) DO UPDATE SET
-                    name = COALESCE(EXCLUDED.name, rico_users.name),
-                    email = COALESCE(EXCLUDED.email, rico_users.email),
-                    phone = COALESCE(EXCLUDED.phone, rico_users.phone),
-                    telegram_username = COALESCE(EXCLUDED.telegram_username, rico_users.telegram_username),
-                    telegram_chat_id = COALESCE(EXCLUDED.telegram_chat_id, rico_users.telegram_chat_id),
-                    updated_at = now()
-                RETURNING *
-                """,
-                (
-                    external_user_id,
-                    payload.get("name"),
-                    payload.get("email"),
-                    payload.get("phone"),
-                    payload.get("telegram_username"),
-                    payload.get("telegram_chat_id"),
-                    payload.get("source", "rico"),
-                ),
-            )
-            row = dict(cur.fetchone())
-
-        if should_close:
-            conn.commit()
-            conn.close()
-
-        return row
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO rico_users (external_user_id, name, email, phone, telegram_username, telegram_chat_id, source)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (external_user_id) DO UPDATE SET
+                        name = COALESCE(EXCLUDED.name, rico_users.name),
+                        email = COALESCE(EXCLUDED.email, rico_users.email),
+                        phone = COALESCE(EXCLUDED.phone, rico_users.phone),
+                        telegram_username = COALESCE(EXCLUDED.telegram_username, rico_users.telegram_username),
+                        telegram_chat_id = COALESCE(EXCLUDED.telegram_chat_id, rico_users.telegram_chat_id),
+                        updated_at = now()
+                    RETURNING *
+                    """,
+                    (
+                        external_user_id,
+                        payload.get("name"),
+                        payload.get("email"),
+                        payload.get("phone"),
+                        payload.get("telegram_username"),
+                        payload.get("telegram_chat_id"),
+                        payload.get("source", "rico"),
+                    ),
+                )
+                row = dict(cur.fetchone())
+            if should_close:
+                conn.commit()
+            return row
+        except Exception:
+            if should_close:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            raise
+        finally:
+            if should_close:
+                conn.close()
 
     def upsert_profile(self, user_id: str, profile: Dict[str, Any], cv_file_url: Optional[str] = None, cv_text: Optional[str] = None, cv_structured: Optional[Dict[str, Any]] = None, conn=None) -> Dict[str, Any]:
-        # Use provided connection or create new one
         should_close = conn is None
         if conn is None:
             conn = self.connect()
 
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO rico_profiles (user_id, profile, cv_file_url, cv_text, cv_structured)
-                VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (user_id) DO UPDATE SET
-                    profile = rico_profiles.profile || EXCLUDED.profile,
-                    cv_file_url = COALESCE(EXCLUDED.cv_file_url, rico_profiles.cv_file_url),
-                    cv_text = COALESCE(EXCLUDED.cv_text, rico_profiles.cv_text),
-                    cv_structured = rico_profiles.cv_structured || EXCLUDED.cv_structured,
-                    updated_at = now()
-                RETURNING *
-                """,
-                (user_id, Json(profile), cv_file_url, cv_text, Json(cv_structured or {})),
-            )
-            row = dict(cur.fetchone())
-
-        if should_close:
-            conn.commit()
-            conn.close()
-
-        return row
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO rico_profiles (user_id, profile, cv_file_url, cv_text, cv_structured)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (user_id) DO UPDATE SET
+                        profile = rico_profiles.profile || EXCLUDED.profile,
+                        cv_file_url = COALESCE(EXCLUDED.cv_file_url, rico_profiles.cv_file_url),
+                        cv_text = COALESCE(EXCLUDED.cv_text, rico_profiles.cv_text),
+                        cv_structured = rico_profiles.cv_structured || EXCLUDED.cv_structured,
+                        updated_at = now()
+                    RETURNING *
+                    """,
+                    (user_id, Json(profile), cv_file_url, cv_text, Json(cv_structured or {})),
+                )
+                row = dict(cur.fetchone())
+            if should_close:
+                conn.commit()
+            return row
+        except Exception:
+            if should_close:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            raise
+        finally:
+            if should_close:
+                conn.close()
 
     def upsert_settings(self, user_id: str, settings: Dict[str, Any], conn=None) -> Dict[str, Any]:
-        # Use provided connection or create new one
         should_close = conn is None
         if conn is None:
             conn = self.connect()
 
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO rico_agent_settings (user_id, settings)
-                VALUES (%s, %s)
-                ON CONFLICT (user_id) DO UPDATE SET
-                    settings = rico_agent_settings.settings || EXCLUDED.settings,
-                    updated_at = now()
-                RETURNING *
-                """,
-                (user_id, Json(settings)),
-            )
-            row = dict(cur.fetchone())
-
-        if should_close:
-            conn.commit()
-            conn.close()
-
-        return row
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO rico_agent_settings (user_id, settings)
+                    VALUES (%s, %s)
+                    ON CONFLICT (user_id) DO UPDATE SET
+                        settings = rico_agent_settings.settings || EXCLUDED.settings,
+                        updated_at = now()
+                    RETURNING *
+                    """,
+                    (user_id, Json(settings)),
+                )
+                row = dict(cur.fetchone())
+            if should_close:
+                conn.commit()
+            return row
+        except Exception:
+            if should_close:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            raise
+        finally:
+            if should_close:
+                conn.close()
 
     def get_user_bundle(self, user_id: str, conn=None) -> Optional[Dict[str, Any]]:
-        # Use provided connection or create new one
         should_close = conn is None
         if conn is None:
             conn = self.connect()
 
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT u.*, p.profile, p.cv_file_url, p.cv_text, p.cv_structured, s.settings
-                FROM rico_users u
-                LEFT JOIN rico_profiles p ON p.user_id = u.id
-                LEFT JOIN rico_agent_settings s ON s.user_id = u.id
-                WHERE u.id::text = %s OR u.external_user_id = %s OR u.email = %s OR u.telegram_username = %s
-                LIMIT 1
-                """,
-                (user_id, user_id, user_id, user_id),
-            )
-            row = cur.fetchone()
-
-        if should_close:
-            conn.close()
-
-        return dict(row) if row else None
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT u.*, p.profile, p.cv_file_url, p.cv_text, p.cv_structured, s.settings
+                    FROM rico_users u
+                    LEFT JOIN rico_profiles p ON p.user_id = u.id
+                    LEFT JOIN rico_agent_settings s ON s.user_id = u.id
+                    WHERE u.id::text = %s OR u.external_user_id = %s OR u.email = %s OR u.telegram_username = %s
+                    LIMIT 1
+                    """,
+                    (user_id, user_id, user_id, user_id),
+                )
+                row = cur.fetchone()
+            return dict(row) if row else None
+        finally:
+            if should_close:
+                conn.close()
 
     def append_chat(self, user_id: str, role: str, message: str, metadata: Optional[Dict[str, Any]] = None) -> None:
-        with self.connect() as conn:
+        with self._transaction() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "INSERT INTO rico_chat_history (user_id, role, message, metadata) VALUES (%s, %s, %s, %s)",
                     (user_id, role, message, Json(metadata or {})),
                 )
-            conn.commit()
 
     def record_signal(self, user_id: str, job_id: Optional[str], action: str, metadata: Optional[Dict[str, Any]] = None) -> None:
-        with self.connect() as conn:
+        with self._transaction() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "INSERT INTO rico_learning_signals (user_id, job_id, action, metadata) VALUES (%s, %s, %s, %s)",
                     (user_id, job_id, action, Json(metadata or {})),
                 )
-            conn.commit()
 
     def save_recommendations(self, user_id: str, matches: List[Dict[str, Any]]) -> None:
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                for item in matches:
-                    job = item.get("job") or item
-                    job_key = item.get("job_key") or job.get("id") or job.get("url") or job.get("job_url") or f"{job.get('title')}::{job.get('company')}"
-                    cur.execute(
-                        """
-                        INSERT INTO rico_job_recommendations (user_id, job_key, job, repo_score, rico_score, explanation, status)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
-                        """,
-                        (
-                            user_id,
-                            job_key,
-                            Json(job),
-                            item.get("repo_score"),
-                            item.get("rico_score") or item.get("score"),
-                            item.get("explanation") or item.get("rico_explanation"),
-                            item.get("status", "found"),
-                        ),
-                    )
-            conn.commit()
+        for item in matches:
+            job = item.get("job") or item
+            job_key = item.get("job_key") or job.get("id") or job.get("url") or job.get("job_url") or f"{job.get('title')}::{job.get('company')}"
+            self.upsert_recommendation(
+                user_id=user_id,
+                job_key=job_key,
+                job_data=job,
+                status=item.get("status", "found"),
+                score=item.get("rico_score") or item.get("score"),
+                explanation=item.get("explanation") or item.get("rico_explanation"),
+            )
 
     def get_recommendations(
         self,
@@ -430,7 +452,7 @@ class RicoDB:
             "ORDER BY updated_at DESC "
             "LIMIT %s OFFSET %s"
         )
-        with self.connect() as conn:
+        with self._transaction() as conn:
             with conn.cursor() as cur:
                 cur.execute(sql, params + [limit, offset])
                 rows = cur.fetchall()
@@ -462,7 +484,7 @@ class RicoDB:
     ) -> bool:
         """Insert or update a recommendation row. Uses SELECT+INSERT/UPDATE for
         portability since there is no UNIQUE(user_id, job_key) constraint yet."""
-        with self.connect() as conn:
+        with self._transaction() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT id FROM rico_job_recommendations WHERE user_id = %s AND job_key = %s LIMIT 1",
@@ -483,7 +505,6 @@ class RicoDB:
                         """,
                         (user_id, job_key, Json(job_data), score, explanation, status),
                     )
-            conn.commit()
         return True
 
     def update_recommendation_status(
@@ -493,7 +514,7 @@ class RicoDB:
         status: str,
         notes: Optional[str] = None,
     ) -> bool:
-        with self.connect() as conn:
+        with self._transaction() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -504,11 +525,10 @@ class RicoDB:
                     (status, user_id, job_key),
                 )
                 affected = cur.rowcount
-            conn.commit()
         return affected > 0
 
     def get_recommendation_stats(self, user_id: str) -> Dict[str, Any]:
-        with self.connect() as conn:
+        with self._transaction() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """

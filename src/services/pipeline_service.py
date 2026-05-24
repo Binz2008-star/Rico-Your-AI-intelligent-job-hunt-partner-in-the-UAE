@@ -27,6 +27,8 @@ _mem: Dict[str, Any] = {
     "error": None,
 }
 _mem_lock = threading.Lock()
+# Serialises the status-check + run-insert sequence to prevent concurrent triggers
+_trigger_lock = threading.Lock()
 
 
 def get_status() -> Dict[str, Any]:
@@ -44,24 +46,25 @@ def trigger() -> None:
     Start the pipeline in a background thread.
     Raises RuntimeError if a run is already in progress.
     """
-    if is_db_available():
-        run = pipeline_repo.get_latest()
-        if run and run.get("status") == "running":
-            raise RuntimeError("A pipeline run is already in progress")
-        run_id = pipeline_repo.insert_run()
-    else:
-        with _mem_lock:
-            if _mem["status"] == "running":
+    with _trigger_lock:
+        if is_db_available():
+            run = pipeline_repo.get_latest()
+            if run and run.get("status") == "running":
                 raise RuntimeError("A pipeline run is already in progress")
-            _mem.update(
-                {
-                    "status": "running",
-                    "started_at": datetime.now(_UTC).isoformat(),
-                    "finished_at": None,
-                    "error": None,
-                }
-            )
-        run_id = None
+            run_id = pipeline_repo.insert_run()
+        else:
+            with _mem_lock:
+                if _mem["status"] == "running":
+                    raise RuntimeError("A pipeline run is already in progress")
+                _mem.update(
+                    {
+                        "status": "running",
+                        "started_at": datetime.now(_UTC).isoformat(),
+                        "finished_at": None,
+                        "error": None,
+                    }
+                )
+            run_id = None
 
     thread = threading.Thread(
         target=_run_bg,

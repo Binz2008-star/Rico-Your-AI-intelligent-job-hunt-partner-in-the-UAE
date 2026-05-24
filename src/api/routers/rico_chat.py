@@ -28,6 +28,7 @@ import logging
 import os
 import re
 import secrets
+import threading
 import time
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -63,7 +64,7 @@ logger = logging.getLogger(__name__)
 _UTC = timezone.utc
 
 # Constants
-_UNSAFE_CHARS_RE = re.compile(r"[<>\"']")
+_UNSAFE_CHARS_RE = re.compile(r'[<>"\';\x00-\x1f\x7f‪-‮⁦-⁩]')
 _PDF_MAGIC = b"%PDF"
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
@@ -242,7 +243,7 @@ def _resolve_upload_user_id(
     try:
         return get_current_user_id(request)
     except HTTPException as auth_exc:
-        if getattr(request.state, "access_token_present", False) or request.cookies.get("access_token"):
+        if getattr(request.state, "access_token_present", False):
             logger.warning(
                 "upload_identity_auth_failed path=%s detail=%s",
                 request.url.path,
@@ -342,7 +343,11 @@ def _extract_roles_from_cv_text(cv_text: str) -> list[str]:
 
 
 def _webhook_handler(event_name: str):
-    """Decorator to standardize webhook error handling."""
+    """Decorator to standardize webhook error handling.
+
+    All unhandled exceptions return 500 so the webhook provider retries.
+    HTTPException is re-raised as-is (auth 403, validation 422, etc.).
+    """
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
@@ -351,8 +356,8 @@ def _webhook_handler(event_name: str):
             except HTTPException:
                 raise
             except Exception as e:
-                logger.exception(f"{event_name}_webhook_error: {e}")
-                return {"ok": True, "status": "accepted", "message": "Webhook received, processing error logged"}
+                logger.exception("%s_webhook_error: %s", event_name, e)
+                raise HTTPException(status_code=500, detail="Webhook processing error")
         return wrapper
     return decorator
 
@@ -373,6 +378,7 @@ def _strip_internal_fields(data: dict[str, Any]) -> dict[str, Any]:
 class MetricsCollector:
     """Simple metrics collector - replace with Prometheus in production."""
     def __init__(self):
+        self._lock = threading.Lock()
         self.start_time = time.time()
         self.request_count = 0
         self.total_response_time = 0.0
@@ -380,14 +386,17 @@ class MetricsCollector:
         self.cache_misses = 0
 
     def record_request(self, duration_ms: float):
-        self.request_count += 1
-        self.total_response_time += duration_ms
+        with self._lock:
+            self.request_count += 1
+            self.total_response_time += duration_ms
 
     def record_cache_hit(self):
-        self.cache_hits += 1
+        with self._lock:
+            self.cache_hits += 1
 
     def record_cache_miss(self):
-        self.cache_misses += 1
+        with self._lock:
+            self.cache_misses += 1
 
     @property
     def avg_response_time_ms(self) -> float:
@@ -1136,7 +1145,7 @@ async def confirm_cv_profile(
         upsert_profile(user_id=resolved_user_id, updates=profile_updates)
 
         # Only mark onboarding complete for authenticated users (not public sessions)
-        if not resolved_user_id.startswith("public:"):
+        if not is_valid_public_user_id(resolved_user_id):
             mark_onboarding_complete(resolved_user_id)
 
         _metrics.record_request((time.time() - start_time) * 1000)

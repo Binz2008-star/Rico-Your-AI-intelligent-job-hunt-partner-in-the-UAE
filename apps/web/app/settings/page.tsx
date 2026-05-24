@@ -10,7 +10,7 @@ import { ApiError, fetchMe, getHealth, getSettings, updateSettings } from "@/lib
 import type { HealthResponse, SettingsResponse } from "@/types";
 import { useCallback, useEffect, useState } from "react";
 
-const SETTINGS_BACKEND_MAINTENANCE_MODE = true;
+const SETTINGS_BACKEND_MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === "true";
 
 function Row({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
   return (

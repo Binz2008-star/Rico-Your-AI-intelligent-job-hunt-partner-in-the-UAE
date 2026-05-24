@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
 _EMAIL_RE = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+_PUBLIC_USER_ID_RE = re.compile(r"^public:[A-Za-z0-9_-]{8,64}$")
 
 
 class LoginRequest(BaseModel):
@@ -14,6 +16,13 @@ class LoginRequest(BaseModel):
         None,
         description="Optional public guest user ID to merge profile data from after login",
     )
+
+    @field_validator("public_user_id_to_merge", mode="before")
+    @classmethod
+    def validate_public_user_id(cls, v: object) -> object:
+        if v is not None and not _PUBLIC_USER_ID_RE.match(str(v)):
+            raise ValueError("public_user_id_to_merge must match format public:<8-64 alphanumeric chars>")
+        return v
 
 
 class LoginResponse(BaseModel):
@@ -30,6 +39,13 @@ class RegisterRequest(BaseModel):
         None,
         description="Optional public guest user ID to merge profile data from after signup",
     )
+
+    @field_validator("public_user_id_to_merge", mode="before")
+    @classmethod
+    def validate_public_user_id(cls, v: object) -> object:
+        if v is not None and not _PUBLIC_USER_ID_RE.match(str(v)):
+            raise ValueError("public_user_id_to_merge must match format public:<8-64 alphanumeric chars>")
+        return v
 
 
 class RegisterResponse(BaseModel):

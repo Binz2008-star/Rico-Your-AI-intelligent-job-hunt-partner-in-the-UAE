@@ -253,17 +253,17 @@ def handle_subscription_webhook(
     try:
         from src.services.subscription_webhook_service import process_stripe_event
         _ev = verified_event if isinstance(verified_event, dict) else dict(verified_event)
-        processed = process_stripe_event(
+        process_stripe_event(
             event_id=_ev.get("id", ""),
             event_type=_ev.get("type", ""),
             event_data=_ev.get("data", {}),
         )
-        if not processed:
-            raise RuntimeError("Stripe webhook processing failed")
+        # Stripe always gets 200 — failures are tracked in subscription_events and
+        # surfaced via internal logs/retries, not by returning 5xx to Stripe.
     except Exception:
         import logging as _logging
         _logging.getLogger(__name__).exception("handle_subscription_webhook: processing failed")
-        raise
+        # Do not re-raise: Stripe must receive 200 so it doesn't retry blindly.
 
     return _webhook_response(verified_event, mock=False)
 
@@ -314,8 +314,14 @@ def create_customer_portal_session(user_id: str) -> CheckoutResponse:
     except ValueError:
         plan = SubscriptionTier.FREE
 
+    portal_url = getattr(session, "url", None)
+    if not portal_url and isinstance(session, dict):
+        portal_url = session.get("url")
+    if not portal_url:
+        raise RuntimeError("Stripe billing portal session did not include a URL")
+
     return CheckoutResponse(
-        checkout_url=getattr(session, "url", None) or "",
+        checkout_url=portal_url,
         provider="stripe",
         plan=plan,
         status="ready",

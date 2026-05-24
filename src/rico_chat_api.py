@@ -900,7 +900,7 @@ class RicoChatAPI:
         try:
             from src.applications import is_applied_batch, get_job_id
             if all_matches:
-                applied_map = is_applied_batch(all_matches)
+                applied_map = is_applied_batch(all_matches, user_id=user_id)
                 all_matches = [m for m in all_matches if not applied_map.get(get_job_id(m), False)]
         except Exception as e:
             logger.debug("Applied-job filter unavailable: %s", e)
@@ -1477,7 +1477,7 @@ class RicoChatAPI:
             try:
                 from src.applications import is_applied_batch, get_job_id
                 if all_explicit:
-                    app_map = is_applied_batch(all_explicit)
+                    app_map = is_applied_batch(all_explicit, user_id=user_id)
                     all_explicit = [m for m in all_explicit if not app_map.get(get_job_id(m), False)]
             except Exception:
                 pass

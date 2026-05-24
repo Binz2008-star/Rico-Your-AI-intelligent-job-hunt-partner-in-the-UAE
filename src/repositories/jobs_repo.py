@@ -31,18 +31,23 @@ def list_from_db(
         filters = ["score >= %s", "date_found >= now() - interval '14 days'"]
         params: list = [min_score]
 
+        # Allow-list for source parameter to prevent SQL injection
+        _ALLOWED_SOURCES = {"indeed", "linkedin", "naukrigulf", "reed", "bayt", "monster"}
         if source:
+            if source.lower() not in _ALLOWED_SOURCES:
+                logger.warning("jobs_repo_invalid_source source=%s", source)
+                return None
             filters.append("source = %s")
             params.append(source)
 
         where = " AND ".join(filters)
 
         with conn.cursor() as cur:
-            cur.execute(f"SELECT COUNT(*) FROM jobs WHERE {where}", params)  # nosec B608
+            cur.execute("SELECT COUNT(*) FROM jobs WHERE " + where, params)
             total = cur.fetchone()[0]
 
             query = (
-                "SELECT id, title, company, location, link, score,"  # nosec B608
+                "SELECT id, title, company, location, link, score,"
                 " match_reason, source, date_found, seen"
                 " FROM jobs WHERE " + where +
                 " ORDER BY score DESC, date_found DESC LIMIT %s OFFSET %s"

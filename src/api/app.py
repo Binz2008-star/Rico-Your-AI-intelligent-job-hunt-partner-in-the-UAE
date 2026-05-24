@@ -72,7 +72,7 @@ def version_metadata() -> Dict[str, Any]:
             "ENV",
             "ENVIRONMENT",
             "VERCEL_ENV",
-            default="development",
+            default="production" if os.getenv("RENDER") else "development",
         ),
         "deployed_at": _first_env("DEPLOYED_AT", "BUILD_TIME", "BUILD_TIMESTAMP"),
     }

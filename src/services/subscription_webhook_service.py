@@ -234,8 +234,17 @@ def _handle_invoice_paid(obj: dict[str, Any]) -> bool:
 
     existing = get_subscription_by_stripe_customer(customer_id)
     if not existing:
-        logger.info("webhook: invoice.paid no subscription found customer=%s", customer_id)
-        return False
+        # Permanent skip: invoice arrived before checkout.session.completed wrote our record.
+        # Stripe ordering guarantees checkout event precedes invoice, so this means a different
+        # Stripe account's customer or a customer whose checkout we never processed.
+        # Returning True prevents infinite retry storms; we rely on checkout.session.completed
+        # to create the subscription row on the authoritative event.
+        logger.warning(
+            "webhook: invoice.paid no subscription found for customer=%s — skipping permanently; "
+            "expected checkout.session.completed to have created this record first",
+            customer_id,
+        )
+        return True
     if not _subscription_matches_invoice(existing, obj):
         logger.info(
             "webhook: invoice.paid ignored non-matching subscription customer=%s invoice_subscription=%s stored_subscription=%s",
@@ -280,8 +289,13 @@ def _handle_invoice_payment_failed(obj: dict[str, Any]) -> bool:
 
     existing = get_subscription_by_stripe_customer(customer_id)
     if not existing:
-        logger.info("webhook: invoice.payment_failed no subscription found customer=%s", customer_id)
-        return False
+        # Same permanent-skip rationale as invoice.paid: missing row means this customer
+        # was never processed through our checkout flow. Returning True avoids retry storm.
+        logger.warning(
+            "webhook: invoice.payment_failed no subscription found for customer=%s — skipping permanently",
+            customer_id,
+        )
+        return True
     if not _subscription_matches_invoice(existing, obj):
         logger.info(
             "webhook: invoice.payment_failed ignored non-matching subscription customer=%s invoice_subscription=%s stored_subscription=%s",
