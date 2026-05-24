@@ -230,12 +230,27 @@ def handle_subscription_webhook(
 ) -> SubscriptionWebhookResponse:
     stripe_secret = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()
     if not stripe_secret:
+        # Mock mode — no signature verification, no DB writes.
         return _webhook_response(event, mock=True)
     if not payload or not signature:
         raise ValueError("Stripe webhook signature is required")
 
     stripe = _load_stripe()
     verified_event = stripe.Webhook.construct_event(payload, signature, stripe_secret)
+
+    # Process the verified event (idempotent, DB-backed).
+    try:
+        from src.services.subscription_webhook_service import process_stripe_event
+        _ev = verified_event if isinstance(verified_event, dict) else dict(verified_event)
+        process_stripe_event(
+            event_id=_ev.get("id", ""),
+            event_type=_ev.get("type", ""),
+            event_data=_ev.get("data", {}),
+        )
+    except Exception:
+        import logging as _logging
+        _logging.getLogger(__name__).exception("handle_subscription_webhook: processing failed")
+
     return _webhook_response(verified_event, mock=False)
 
 
