@@ -116,7 +116,12 @@ def _resolve_user_id(obj: dict[str, Any]) -> str | None:
 def _subscription_matches_invoice(existing: dict[str, Any], obj: dict[str, Any]) -> bool:
     invoice_subscription_id = obj.get("subscription")
     stored_subscription_id = existing.get("stripe_subscription_id")
-    return bool(invoice_subscription_id and stored_subscription_id and invoice_subscription_id == stored_subscription_id)
+    # If both IDs are present, require exact match to prevent cross-subscription confusion
+    if invoice_subscription_id and stored_subscription_id:
+        return invoice_subscription_id == stored_subscription_id
+    # Backward-compatible fallback: if stored ID is missing, rely on customer match only
+    # This handles legacy/partially populated rows where stripe_subscription_id is NULL
+    return True
 
 
 # ── Event handlers ────────────────────────────────────────────────────────────
@@ -181,6 +186,10 @@ def _handle_subscription_upsert(obj: dict[str, Any]) -> bool:
     plan = _price_id_to_plan(_extract_price_id(obj) or "")
     if plan not in ("pro", "premium"):
         plan = meta.get("plan")
+        # Validate fallback metadata plan to prevent persisting unknown values
+        if plan not in ("pro", "premium"):
+            logger.warning("webhook: invalid plan from metadata=%s user_id=%s", plan, user_id)
+            return False
     if not plan:
         logger.warning("webhook: cannot determine plan user_id=%s", user_id)
         return False
@@ -350,14 +359,18 @@ def process_stripe_event(
 
     handler = _HANDLERS.get(event_type)
     if handler is None:
-        update_subscription_event_status(event_id, "processed")
+        if not update_subscription_event_status(event_id, "processed"):
+            logger.warning("webhook: failed to close unhandled event event_id=%s", event_id)
+            return False
         logger.info("webhook: unhandled event_type=%s event_id=%s", event_type, event_id)
         return True
 
     try:
         result = handler(obj)
         if result:
-            update_subscription_event_status(event_id, "processed")
+            if not update_subscription_event_status(event_id, "processed"):
+                logger.warning("webhook: failed to mark event processed event_id=%s", event_id)
+                return False
         else:
             update_subscription_event_status(event_id, "failed", error_detail="handler returned false")
         return result
