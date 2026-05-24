@@ -30,7 +30,8 @@ DO $$
 BEGIN
     IF EXISTS (
         SELECT 1 FROM information_schema.columns
-         WHERE table_name  = 'subscription_events'
+         WHERE table_schema = current_schema()
+           AND table_name  = 'subscription_events'
            AND column_name = 'processed_at'
            AND column_default IS NOT NULL
     ) THEN
@@ -40,7 +41,8 @@ BEGIN
 
     IF EXISTS (
         SELECT 1 FROM information_schema.columns
-         WHERE table_name  = 'subscription_events'
+         WHERE table_schema = current_schema()
+           AND table_name  = 'subscription_events'
            AND column_name = 'processed_at'
            AND is_nullable = 'NO'
     ) THEN

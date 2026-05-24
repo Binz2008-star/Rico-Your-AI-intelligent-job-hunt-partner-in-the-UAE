@@ -14,9 +14,11 @@ export function LoginForm() {
     const [error, setError] = useState('');
     const { login, isLoading } = useAuthStore();
     const router = useRouter();
+    const maintenanceMode = true;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (maintenanceMode) return;
         setError('');
         try {
             await login(email, password);
@@ -38,6 +40,17 @@ export function LoginForm() {
                         <h1 className="font-headline-xl text-headline-xl text-on-surface mb-2">Welcome Back</h1>
                         <p className="text-body-md text-on-surface-variant">Access your trajectory intelligence</p>
                     </StaggerChildren>
+
+                    {maintenanceMode && (
+                        <div className="mb-6 rounded-lg border border-amber-400/30 bg-amber-400/10 p-4 text-left">
+                            <p className="text-sm font-semibold text-amber-300">Backend maintenance in progress.</p>
+                            <p className="mt-1 text-xs leading-relaxed text-amber-100/80">
+                                Rico&apos;s backend service is temporarily offline while hosting is being restored.
+                                Subscription, login, Telegram, and Stripe webhook features are paused.
+                                No payment validation should be attempted until the backend is back online.
+                            </p>
+                        </div>
+                    )}
 
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div>
@@ -72,10 +85,12 @@ export function LoginForm() {
 
                         <button
                             type="submit"
-                            disabled={isLoading}
+                            disabled={isLoading || maintenanceMode}
                             className="w-full bg-primary/10 text-primary rounded-lg px-6 py-4 font-label-caps uppercase tracking-widest hover:bg-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                         >
-                            {isLoading ? (
+                            {maintenanceMode ? (
+                                <span>Backend maintenance</span>
+                            ) : isLoading ? (
                                 <>
                                     <MaterialIcon icon="hourglass_empty" className="animate-spin" />
                                     <span>Authenticating...</span>

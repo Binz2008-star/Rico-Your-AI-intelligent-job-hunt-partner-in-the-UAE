@@ -26,6 +26,7 @@ function PlanCard({
     anyCheckoutPending,
     onUpgrade,
     onManage,
+    maintenanceMode,
 }: {
     plan: SubscriptionPlan;
     currentPlan: string | null;
@@ -35,6 +36,7 @@ function PlanCard({
     anyCheckoutPending: boolean;
     onUpgrade: (plan: "pro" | "premium") => void;
     onManage: () => void;
+    maintenanceMode: boolean;
 }) {
     const isCurrent = currentPlan === plan.plan && isActive;
     const isProPlan = plan.plan === "pro";
@@ -111,14 +113,15 @@ function PlanCard({
                 {isCurrent ? (
                     <button
                         onClick={onManage}
-                        className="w-full py-3 rounded-xl text-center text-[13px] font-semibold text-[#00e5ff] bg-[rgba(0,229,255,0.06)] border border-[rgba(0,229,255,0.2)] hover:bg-[rgba(0,229,255,0.1)] transition-colors"
+                        disabled={maintenanceMode}
+                        className="w-full py-3 rounded-xl text-center text-[13px] font-semibold text-[#00e5ff] bg-[rgba(0,229,255,0.06)] border border-[rgba(0,229,255,0.2)] hover:bg-[rgba(0,229,255,0.1)] transition-colors disabled:opacity-40"
                     >
                         Manage Subscription
                     </button>
                 ) : isLoggedIn ? (
                     <button
                         onClick={() => onUpgrade(plan.plan)}
-                        disabled={anyCheckoutPending}
+                        disabled={anyCheckoutPending || maintenanceMode}
                         className={`w-full py-3 rounded-xl text-[13px] font-bold transition-all disabled:opacity-40 ${
                             plan.is_popular
                                 ? "bg-[#ff2d8e] text-white hover:bg-[#ff4a9e] shadow-[0_0_20px_rgba(255,45,142,0.3)]"
@@ -130,6 +133,8 @@ function PlanCard({
                                 <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
                                 Connecting…
                             </span>
+                        ) : maintenanceMode ? (
+                            "Backend maintenance"
                         ) : (
                             `Upgrade to ${plan.name}`
                         )}
@@ -203,6 +208,7 @@ function FreePlanRow({ currentPlan }: { currentPlan: string | null }) {
 export default function SubscriptionPage() {
     const { user, ready } = useAuth();
     const { toasts, toast } = useToast();
+    const maintenanceMode = true;
 
     const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
     const [sub, setSub] = useState<SubscriptionMeResponse | null>(null);
@@ -281,6 +287,19 @@ export default function SubscriptionPage() {
         >
             <div className="max-w-3xl flex flex-col gap-8">
 
+                {/* Backend maintenance banner */}
+                <div className="flex items-start gap-3 rounded-xl border border-[rgba(245,166,35,0.35)] bg-[rgba(245,166,35,0.08)] px-5 py-4">
+                    <span className="text-[#f5a623] text-[18px] mt-0.5">⚠</span>
+                    <div>
+                        <p className="text-[13px] font-semibold text-[#f5a623]">Backend maintenance in progress</p>
+                        <p className="mt-0.5 text-[12px] text-[#a08040]">
+                            Rico&apos;s backend service is temporarily offline while hosting is being restored.
+                            Subscription, login, Telegram, and Stripe webhook features are paused.
+                            Do not attempt payment validation until the backend is back online.
+                        </p>
+                    </div>
+                </div>
+
                 {/* Stripe cancel redirect banner */}
                 <Suspense>
                   <CancelBanner />
@@ -354,6 +373,7 @@ export default function SubscriptionPage() {
                                 anyCheckoutPending={checkingOut !== null}
                                 onUpgrade={handleUpgrade}
                                 onManage={handleManage}
+                                maintenanceMode={maintenanceMode}
                             />
                         ))}
                     </div>

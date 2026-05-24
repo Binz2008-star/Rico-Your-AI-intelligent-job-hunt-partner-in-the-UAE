@@ -230,6 +230,41 @@ class TestCustomerPortal:
             "status": "mock",
         }
 
+    def test_portal_tolerates_unknown_stored_plan(self, auth_client, monkeypatch):
+        calls: list[dict] = []
+
+        class FakePortalSession:
+            @staticmethod
+            def create(**kwargs):
+                calls.append(kwargs)
+                return SimpleNamespace(url="https://billing.stripe.test/session")
+
+        fake_stripe = SimpleNamespace(
+            api_key=None,
+            billing_portal=SimpleNamespace(Session=FakePortalSession),
+        )
+        monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_safe")
+        monkeypatch.setattr("src.subscription_plans._load_stripe", lambda: fake_stripe)
+        monkeypatch.setattr(
+            "src.repositories.subscription_repo.get_subscription",
+            lambda user_id: {
+                "user_id": user_id,
+                "stripe_customer_id": "cus_safe",
+                "plan": "legacy_unknown",
+            },
+        )
+
+        r = auth_client.post("/api/v1/subscription/portal")
+
+        assert r.status_code == 200
+        assert r.json() == {
+            "checkout_url": "https://billing.stripe.test/session",
+            "provider": "stripe",
+            "plan": "free",
+            "status": "ready",
+        }
+        assert calls == [{"customer": "cus_safe", "return_url": "https://ricohunt.com/subscription"}]
+
 
 class TestSubscriptionWebhook:
     def test_webhook_basic_handling_without_stripe_secret(self, client, monkeypatch):
