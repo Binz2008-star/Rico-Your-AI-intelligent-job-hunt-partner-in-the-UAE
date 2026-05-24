@@ -240,7 +240,7 @@ function CancelBanner() {
   );
 }
 
-function FreePlanRow({ currentPlan }: { currentPlan: string | null }) {
+function FreePlanRow({ currentPlan, isLoggedIn }: { currentPlan: string | null; isLoggedIn: boolean }) {
     const isCurrent = currentPlan === "free";
     return (
         <div className="flex items-center justify-between rounded-xl border border-white/[0.05] bg-[#0d0d1f]/60 px-5 py-4">
@@ -250,11 +250,28 @@ function FreePlanRow({ currentPlan }: { currentPlan: string | null }) {
                     50 AI messages · 10 saved jobs · 1 profile optimisation/mo
                 </span>
             </div>
-            {isCurrent && (
-                <span className="text-[11px] font-bold uppercase tracking-widest text-[#5a5a7a] border border-white/[0.08] rounded-full px-3 py-1">
-                    Current
-                </span>
-            )}
+            <div className="flex items-center gap-3">
+                {isCurrent && (
+                    <span className="text-[11px] font-bold uppercase tracking-widest text-[#5a5a7a] border border-white/[0.08] rounded-full px-3 py-1">
+                        Current
+                    </span>
+                )}
+                {isCurrent && isLoggedIn ? (
+                    <a
+                        href="/command"
+                        className="text-[12px] font-semibold text-[#7b6fff] hover:underline whitespace-nowrap"
+                    >
+                        Open Rico →
+                    </a>
+                ) : !isLoggedIn ? (
+                    <a
+                        href="/signup"
+                        className="text-[12px] font-semibold text-[#7b6fff] hover:underline whitespace-nowrap"
+                    >
+                        Sign up free →
+                    </a>
+                ) : null}
+            </div>
         </div>
     );
 }
@@ -330,9 +347,6 @@ export default function SubscriptionPage() {
                 const result = await createCheckoutSession(plan);
                 if (result.provider === "mock") {
                     setMockNotice(plan);
-                    if (process.env.NODE_ENV !== "development") {
-                        toast("Stripe Checkout is not configured", "error");
-                    }
                 } else {
                     window.location.href = result.checkout_url;
                 }
@@ -428,19 +442,24 @@ export default function SubscriptionPage() {
                   <CancelBanner />
                 </Suspense>
 
-                {/* Mock checkout notice - only show in development */}
-                {mockNotice && process.env.NODE_ENV === "development" && (
+                {/* Checkout not yet live notice */}
+                {mockNotice && (
                     <div className="flex items-start gap-3 rounded-xl border border-[rgba(245,166,35,0.35)] bg-[rgba(245,166,35,0.08)] px-5 py-4">
                         <span className="text-[#f5a623] text-[18px] mt-0.5">⚠</span>
-                        <div>
+                        <div className="flex-1">
                             <p className="text-[13px] font-semibold text-[#f5a623]">
-                                Stripe Checkout not yet active
+                                {mockNotice.charAt(0).toUpperCase() + mockNotice.slice(1)} checkout coming soon
                             </p>
                             <p className="mt-0.5 text-[12px] text-[#a08040]">
-                                The payment provider is running in mock mode. Real checkout
-                                sessions will be available once the backend is updated with
-                                Stripe credentials. No charge has been made.
+                                Stripe payment processing is being configured. No charge has been made.
+                                Once live, clicking Upgrade will take you directly to secure checkout.
                             </p>
+                            <a
+                                href="/command"
+                                className="mt-2 inline-block text-[12px] font-semibold text-[#7b6fff] hover:underline"
+                            >
+                                Continue with Free plan →
+                            </a>
                         </div>
                         <button
                             onClick={() => setMockNotice(null)}
@@ -534,7 +553,7 @@ export default function SubscriptionPage() {
                 )}
 
                 {/* Free tier row */}
-                <FreePlanRow currentPlan={currentPlan} />
+                <FreePlanRow currentPlan={currentPlan} isLoggedIn={ready ? isLoggedIn : false} />
 
                 {/* FAQ Section */}
                 <div className="mt-12">

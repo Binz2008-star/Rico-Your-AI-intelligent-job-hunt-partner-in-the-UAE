@@ -34,7 +34,7 @@ Required fields:
 - `source` — `manual`
 - `status` — defaults to `applied` unless user specifies
 
-**Implementation status: not yet implemented.** The backend endpoint and frontend form are pending. See Known Gaps.
+**Implementation status: backend endpoint exists.** POST /api/v1/applications/manual is implemented in src/api/routers/applications.py. Frontend form and chat wiring are pending. See Known Gaps.
 
 ### 3. Inbox / email import (source: `email_import`)
 

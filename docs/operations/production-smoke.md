@@ -45,7 +45,7 @@ Run only after Tier 1 passes. Do not print passwords, cookies, tokens, or sessio
 # Replace SMOKE_EMAIL and SMOKE_PASS with values from your secrets store — never hardcode here
 curl -s -X POST https://rico-job-automation-api.onrender.com/api/v1/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email": "$SMOKE_EMAIL", "password": "$SMOKE_PASS", "name": "Smoke Test"}' \
+  -d "{\"email\": \"$SMOKE_EMAIL\", \"password\": \"$SMOKE_PASS\", \"name\": \"Smoke Test\"}" \
   -c /tmp/smoke_cookies.txt | python -m json.tool
 # Expected: { "email": "...", "role": "user" }
 # role must be "user" — any other role value is a security failure
@@ -53,15 +53,15 @@ curl -s -X POST https://rico-job-automation-api.onrender.com/api/v1/auth/registe
 # Login (if account already exists)
 curl -s -X POST https://rico-job-automation-api.onrender.com/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email": "$SMOKE_EMAIL", "password": "$SMOKE_PASS"}' \
+  -d "{\"email\": \"$SMOKE_EMAIL\", \"password\": \"$SMOKE_PASS\"}" \
   -c /tmp/smoke_cookies.txt -b /tmp/smoke_cookies.txt | python -m json.tool
 # Expected: 200 with user object — cookie is set as httpOnly, not visible in response body
 
 # /me check
 curl -s https://rico-job-automation-api.onrender.com/api/v1/me \
   -b /tmp/smoke_cookies.txt | python -m json.tool
-# Expected: { "id": "...", "email": "$SMOKE_EMAIL", "role": "user" }
-# Fail condition: 401, or role != "user"
+# Expected: { "email": "...", "role": "user", "authenticated": true, "guest": false }
+# Fail condition: role != "user" or authenticated != true
 
 # Authenticated chat
 curl -s -X POST https://rico-job-automation-api.onrender.com/api/v1/rico/chat \
