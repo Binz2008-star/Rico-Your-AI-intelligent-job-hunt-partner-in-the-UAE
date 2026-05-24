@@ -219,29 +219,7 @@ def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     from src.rico_jotform_webhook import handle_jotform_submission as _handle
-    try:
-        return _handle(normalized)
-    except Exception as exc:
-        try:
-            import psycopg2
-            if isinstance(exc, psycopg2.Error):
-                # Infrastructure failure: re-raise so the HTTP layer returns 500/503
-                # and Jotform will retry the webhook, preserving the submission data.
-                logger.error(
-                    "jotform_webhook: DB infrastructure error (%s: %s) — raising for retry",
-                    type(exc).__name__, exc,
-                )
-                raise
-        except ImportError:
-            pass
-        logger.error(
-            "jotform_webhook: processing failed (%s: %s) — data loss risk; returning accepted to stop retry loop",
-            type(exc).__name__, exc,
-        )
-        return {
-            "status": "accepted",
-            "message": "Webhook received, profile processing pending",
-        }
+    return _handle(normalized)
 
 
 def _resolve_db_user_id(user_id: str):
