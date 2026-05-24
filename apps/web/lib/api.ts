@@ -1103,7 +1103,7 @@ export interface SubscriptionMeResponse {
 export interface CheckoutResponse {
     checkout_url: string;
     provider: "stripe" | "mock";
-    plan: "pro" | "premium";
+    plan: "free" | "pro" | "premium";
     status: "ready" | "mock";
 }
 
@@ -1122,4 +1122,10 @@ export async function createCheckoutSession(
         method: "POST",
         body: JSON.stringify({ plan }),
     });
+}
+
+export async function createCustomerPortalSession(): Promise<CheckoutResponse> {
+  return requestJson<CheckoutResponse>("/api/v1/subscription/portal", {
+    method: "POST",
+  });
 }

@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/useToast";
 import {
     ApiError,
     createCheckoutSession,
+    createCustomerPortalSession,
     getMySubscription,
     getSubscriptionPlans,
     type SubscriptionMeResponse,
@@ -24,6 +25,7 @@ function PlanCard({
     loading,
     anyCheckoutPending,
     onUpgrade,
+    onManage,
 }: {
     plan: SubscriptionPlan;
     currentPlan: string | null;
@@ -32,6 +34,7 @@ function PlanCard({
     loading: boolean;
     anyCheckoutPending: boolean;
     onUpgrade: (plan: "pro" | "premium") => void;
+    onManage: () => void;
 }) {
     const isCurrent = currentPlan === plan.plan && isActive;
     const isProPlan = plan.plan === "pro";
@@ -69,7 +72,7 @@ function PlanCard({
                 </div>
             )}
 
-            <div className={`mt-${isCurrent ? "8" : plan.is_popular ? "6" : "0"}`}>
+            <div className={isCurrent ? "mt-8" : plan.is_popular ? "mt-6" : "mt-0"}>
                 <h2 className="text-[22px] font-bold text-white font-['Cabinet_Grotesk',sans-serif]">
                     {plan.name}
                 </h2>
@@ -106,9 +109,12 @@ function PlanCard({
 
             <div className="mt-8">
                 {isCurrent ? (
-                    <div className="w-full py-3 rounded-xl text-center text-[13px] font-semibold text-[#00e5ff] bg-[rgba(0,229,255,0.06)] border border-[rgba(0,229,255,0.2)]">
-                        Active subscription
-                    </div>
+                    <button
+                        onClick={onManage}
+                        className="w-full py-3 rounded-xl text-center text-[13px] font-semibold text-[#00e5ff] bg-[rgba(0,229,255,0.06)] border border-[rgba(0,229,255,0.2)] hover:bg-[rgba(0,229,255,0.1)] transition-colors"
+                    >
+                        Manage Subscription
+                    </button>
                 ) : isLoggedIn ? (
                     <button
                         onClick={() => onUpgrade(plan.plan)}
@@ -228,6 +234,9 @@ export default function SubscriptionPage() {
                 const result = await createCheckoutSession(plan);
                 if (result.provider === "mock") {
                     setMockNotice(plan);
+                    if (process.env.NODE_ENV !== "development") {
+                        toast("Stripe Checkout is not configured", "error");
+                    }
                 } else {
                     window.location.href = result.checkout_url;
                 }
@@ -243,6 +252,23 @@ export default function SubscriptionPage() {
         },
         [toast]
     );
+
+    const handleManage = useCallback(async () => {
+        try {
+            const result = await createCustomerPortalSession();
+            if (result.provider === "mock") {
+                toast("Stripe Customer Portal is not configured", "error");
+            } else {
+                window.location.href = result.checkout_url;
+            }
+        } catch (err) {
+            const msg =
+                err instanceof ApiError
+                    ? err.message
+                    : "Failed to open customer portal. Please try again.";
+            toast(msg, "error");
+        }
+    }, [toast]);
 
     const currentPlan = sub?.subscription?.plan ?? null;
     const isActive = sub?.is_active ?? false;
@@ -260,8 +286,8 @@ export default function SubscriptionPage() {
                   <CancelBanner />
                 </Suspense>
 
-                {/* Mock checkout notice */}
-                {mockNotice && (
+                {/* Mock checkout notice - only show in development */}
+                {mockNotice && process.env.NODE_ENV === "development" && (
                     <div className="flex items-start gap-3 rounded-xl border border-[rgba(245,166,35,0.35)] bg-[rgba(245,166,35,0.08)] px-5 py-4">
                         <span className="text-[#f5a623] text-[18px] mt-0.5">⚠</span>
                         <div>
@@ -327,6 +353,7 @@ export default function SubscriptionPage() {
                                 loading={checkingOut === plan.plan}
                                 anyCheckoutPending={checkingOut !== null}
                                 onUpgrade={handleUpgrade}
+                                onManage={handleManage}
                             />
                         ))}
                     </div>
@@ -338,6 +365,37 @@ export default function SubscriptionPage() {
 
                 {/* Free tier row */}
                 <FreePlanRow currentPlan={currentPlan} />
+
+                {/* FAQ Section */}
+                <div className="mt-12">
+                    <h3 className="text-[18px] font-semibold text-white mb-6">Frequently Asked Questions</h3>
+                    <div className="space-y-4">
+                        <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 p-5">
+                            <h4 className="text-[14px] font-semibold text-white mb-2">How do I cancel my subscription?</h4>
+                            <p className="text-[13px] text-[#5a5a7a]">
+                                You can cancel or manage your subscription at any time by clicking the &quot;Manage Subscription&quot; button on your active plan. This will take you to the Stripe Customer Portal where you can cancel, change plans, or update payment methods.
+                            </p>
+                        </div>
+                        <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 p-5">
+                            <h4 className="text-[14px] font-semibold text-white mb-2">What happens when I cancel?</h4>
+                            <p className="text-[13px] text-[#5a5a7a]">
+                                Your subscription remains active until the end of your current billing period. You&apos;ll continue to have access to all features until then. After cancellation, your account will revert to the Free tier.
+                            </p>
+                        </div>
+                        <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 p-5">
+                            <h4 className="text-[14px] font-semibold text-white mb-2">Can I change my plan later?</h4>
+                            <p className="text-[13px] text-[#5a5a7a]">
+                                Yes, you can upgrade or downgrade your plan at any time through the Customer Portal. When upgrading, you&apos;ll be charged the prorated difference immediately. When downgrading, the new rate takes effect at the next billing cycle.
+                            </p>
+                        </div>
+                        <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 p-5">
+                            <h4 className="text-[14px] font-semibold text-white mb-2">What payment methods do you accept?</h4>
+                            <p className="text-[13px] text-[#5a5a7a]">
+                                We accept all major credit and debit cards through Stripe. Your payment information is securely processed and never stored on our servers.
+                            </p>
+                        </div>
+                    </div>
+                </div>
 
                 {/* Footer note */}
                 <p className="text-[11px] text-[#5a5a7a] text-center">

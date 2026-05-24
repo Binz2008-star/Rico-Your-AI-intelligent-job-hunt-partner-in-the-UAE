@@ -21,6 +21,7 @@ from typing import Any
 
 from psycopg2.extras import Json
 
+from src.api.public_identity import is_valid_public_user_id
 from src.rico_db import RicoDB
 
 logger = logging.getLogger(__name__)
@@ -271,7 +272,7 @@ def merge_public_identity_into_auth(
     Merge a public (guest) identity into an authenticated identity.
 
     Steps:
-    1. Validate inputs (public_user_id must start with "public:").
+    1. Validate inputs (public_user_id must be a canonical public session ID).
     2. Resolve both to internal DB UUIDs.
     3. Read guest profile JSONB.
     4. Read auth profile JSONB.
@@ -285,7 +286,7 @@ def merge_public_identity_into_auth(
     if not public_user_id or not auth_user_id:
         logger.warning("merge_rejected reason=missing_user_id")
         return False
-    if not public_user_id.startswith("public:"):
+    if not is_valid_public_user_id(public_user_id):
         logger.warning("merge_rejected reason=not_public_source public_user_id=%s", public_user_id)
         return False
     if public_user_id == auth_user_id:

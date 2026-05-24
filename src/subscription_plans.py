@@ -116,8 +116,13 @@ def resolve_effective_user_plan(user_id: str) -> SubscriptionResponse:
 
     is_active = plan_recognized and status == SubscriptionStatus.ACTIVE
     plan_obj = PAID_PLANS.get(tier)
-    # Only grant paid entitlements to active subscriptions — canceled/past_due
-    # must not expose paid limits even while the tier label is retained.
+    
+    # Check if subscription is expired
+    current_period_end = row.get("current_period_end")
+    if current_period_end and current_period_end < now:
+        is_active = False
+
+    # Entitlements come from plan definitions; DB columns are reserved for future per-user overrides.
     entitlements = plan_obj.entitlements if (plan_obj and is_active) else FREE_ENTITLEMENTS
 
     sub = UserSubscription(
@@ -127,7 +132,9 @@ def resolve_effective_user_plan(user_id: str) -> SubscriptionResponse:
         stripe_customer_id=row.get("stripe_customer_id"),
         stripe_subscription_id=row.get("stripe_subscription_id"),
         current_period_start=row.get("current_period_start"),
-        current_period_end=row.get("current_period_end"),
+        current_period_end=current_period_end,
+        cancel_at=row.get("cancel_at"),
+        canceled_at=row.get("canceled_at"),
         entitlements=entitlements,
     )
     return SubscriptionResponse(subscription=sub, plan=plan_obj, is_active=is_active)
@@ -217,7 +224,11 @@ def _webhook_response(event: Any, *, mock: bool) -> SubscriptionWebhookResponse:
     return SubscriptionWebhookResponse(
         received=True,
         event_type=event_type,
-        processed=event_type.startswith("checkout.") or event_type.startswith("customer.subscription."),
+        processed=(
+            event_type.startswith("checkout.")
+            or event_type.startswith("customer.subscription.")
+            or event_type.startswith("invoice.")
+        ),
         mock=mock,
     )
 
@@ -242,14 +253,17 @@ def handle_subscription_webhook(
     try:
         from src.services.subscription_webhook_service import process_stripe_event
         _ev = verified_event if isinstance(verified_event, dict) else dict(verified_event)
-        process_stripe_event(
+        processed = process_stripe_event(
             event_id=_ev.get("id", ""),
             event_type=_ev.get("type", ""),
             event_data=_ev.get("data", {}),
         )
+        if not processed:
+            raise RuntimeError("Stripe webhook processing failed")
     except Exception:
         import logging as _logging
         _logging.getLogger(__name__).exception("handle_subscription_webhook: processing failed")
+        raise
 
     return _webhook_response(verified_event, mock=False)
 
@@ -266,4 +280,38 @@ def check_usage_allowed(user_id: str, feature: str, current_usage: int) -> Usage
         remaining=remaining,
         limit=int(limit),
         message=None if allowed else f"Limit reached for {feature}",
+    )
+
+
+def create_customer_portal_session(user_id: str) -> CheckoutResponse:
+    """Create a Stripe Customer Portal session for subscription management."""
+    from src.repositories.subscription_repo import get_subscription
+    
+    stripe_key = os.getenv("STRIPE_SECRET_KEY", "").strip()
+    if not stripe_key:
+        return CheckoutResponse(
+            checkout_url="",
+            provider="mock",
+            plan=SubscriptionTier.FREE,
+            status="mock",
+        )
+    
+    sub = get_subscription(user_id)
+    if not sub or not sub.get("stripe_customer_id"):
+        raise ValueError("No active subscription found for user")
+    
+    stripe = _load_stripe()
+    stripe.api_key = stripe_key
+    frontend = _frontend_url()
+    
+    session = stripe.billing_portal.Session.create(
+        customer=sub["stripe_customer_id"],
+        return_url=f"{frontend}/subscription",
+    )
+    
+    return CheckoutResponse(
+        checkout_url=session.url,
+        provider="stripe",
+        plan=SubscriptionTier(sub.get("plan", "free")),
+        status="ready",
     )
