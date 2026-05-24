@@ -104,6 +104,7 @@ No `/command-v2` route exists in the current `apps/web/app` tree.
    - Settings Telegram status was misleading and is addressed in PR #193.
    - Subscription maintenance behavior is clearer in PR #193; live checkout remains paused.
    - Signup does not currently have the same maintenance framing as login.
+   - Live `/command` maintenance state is truthful: backend outage is disclosed and input/upload/send controls are disabled instead of pretending AI/chat is online.
 
 2. Broken or duplicate routes
    - `/chat` and `/orchestrate` are intentional redirects to `/command`.
@@ -126,6 +127,50 @@ No `/command-v2` route exists in the current `apps/web/app` tree.
    - Keep outage copy centralized if maintenance continues.
    - Avoid claiming live backend, Telegram, or subscription status while Render is unavailable.
 
+## Live `/command` Maintenance Audit
+
+Observed from the deployed Vercel frontend while Render is unavailable.
+
+What is working:
+
+- Honest outage state: the page clearly says "Backend maintenance in progress."
+- Disabled controls match reality: textarea, CV upload, and send are disabled.
+- No fake AI-online behavior is shown while backend chat is paused.
+- The outage message names the affected backend features: subscriptions, login, Telegram, and Stripe webhooks.
+- The visual language remains coherent with Rico's command-center positioning: dark background, magenta/cyan glow, glass surfaces, soft borders, and terminal-style interaction.
+
+Audit findings:
+
+| Area | Status | Follow-up |
+| --- | --- | --- |
+| Truthfulness | keep | Keep this pattern for other backend-dependent pages. |
+| Maintenance gating | keep | Keep controls disabled while backend is known unavailable. |
+| Visual consistency | keep | Reuse existing Rico command primitives rather than adding a separate outage design. |
+| Security posture | keep | Avoid local fake chat behavior during outage. |
+| UX usefulness during outage | fix | Add a maintenance utility panel with static/local-only actions. |
+| Recovery guidance | fix | Add a recovery CTA such as status/GitHub updates/waitlist/retry check. |
+| Dashboard link behavior | fix | Audit top-right Dashboard link while auth/backend is unavailable; disable or label if unavailable. |
+| Sign-out behavior | fix | Verify whether sign-out is backend-dependent or local-only during outage; explain limited auth state if needed. |
+| SEO metadata | fix | Canonical URL appears to point to `https://ricohunt.com/` on `/command`; route metadata should prefer `https://ricohunt.com/command`. |
+| Mobile validation | fix | Test iPhone SE, iPhone 14 Pro, Galaxy Fold narrow mode, and short laptop heights. |
+
+Suggested utility panel content for a follow-up PR:
+
+- Review locally available profile/CV guidance.
+- Explore static Rico feature overview.
+- Read roadmap/status updates.
+- Join waitlist for notifications.
+- Retry backend check only when a local/frontend-safe status endpoint exists or backend recovery is explicitly in progress.
+
+Mobile audit checklist for `/command`:
+
+- Bottom textarea/input area does not overlap content.
+- Keyboard open/close behavior does not hide controls.
+- Maintenance banner wraps cleanly on narrow screens.
+- Top navigation remains usable.
+- Disabled upload/send states remain obvious.
+- Small laptop heights keep the maintenance message and controls visible.
+
 ## Targeted Follow-up PRs
 
 1. `fix/frontend-signup-maintenance-copy`
@@ -134,16 +179,25 @@ No `/command-v2` route exists in the current `apps/web/app` tree.
 
 2. `fix/command-mobile-state-audit`
    - Test `/command` mobile input, disabled states, CV upload, and outage copy.
+   - Include Dashboard link/sign-out behavior while backend/auth is unavailable.
    - No backend validation; mock only.
 
-3. `fix/profile-flow-mobile-errors`
+3. `fix/command-maintenance-utility-panel`
+   - Add static/local-only utility content and recovery guidance to `/command`.
+   - Keep chat/upload/send disabled while Render is unavailable.
+
+4. `fix/frontend-route-metadata`
+   - Correct canonical metadata for route-specific pages, starting with `/command`.
+   - Frontend-only SEO/metadata PR.
+
+5. `fix/profile-flow-mobile-errors`
    - Review `/profile` and `/flow` loading/error/mutation states on mobile.
    - Keep changes targeted to visible state handling.
 
-4. `chore/sandbox-route-decision`
+6. `chore/sandbox-route-decision`
    - Decide whether `/sandbox/command-primitives` stays, redirects, or moves to dev-only docs.
 
-5. `chore/frontend-shell-dedupe-plan`
+7. `chore/frontend-shell-dedupe-plan`
    - Compare `DashboardShell`, `shared/AppShell`, and `layout/*`.
    - Produce a plan before refactoring.
 
