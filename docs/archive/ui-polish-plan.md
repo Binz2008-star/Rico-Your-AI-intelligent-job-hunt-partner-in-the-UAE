@@ -1,3 +1,8 @@
+> **Archived document.** This file is historical and not the current source of truth.
+> See [docs/PRODUCTION_READINESS.md](../PRODUCTION_READINESS.md) for current deployment status.
+
+---
+
 # Rico AI UI Polish Plan
 
 This note documents the non-breaking cosmetic and UX improvement scope for the Rico AI public landing page and Next.js frontend.

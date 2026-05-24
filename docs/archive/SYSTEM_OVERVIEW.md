@@ -1,3 +1,8 @@
+> **Archived document.** This file is historical and not the current source of truth.
+> See [docs/PRODUCTION_READINESS.md](../PRODUCTION_READINESS.md) for current deployment status.
+
+---
+
 # Job Automation System — Full Overview
 **Roben Edwan | ESG/HSE Job Hunter | UAE**
 *Last updated: May 5, 2026*

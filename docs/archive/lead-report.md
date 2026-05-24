@@ -1,3 +1,8 @@
+> **Archived document.** This file is historical and not the current source of truth.
+> See [docs/PRODUCTION_READINESS.md](../PRODUCTION_READINESS.md) for current deployment status.
+
+---
+
 # Rico Hunt — Weekly Lead Report
 *Generated: 2026-05-18 (Week of May 18, 2026)*
 
