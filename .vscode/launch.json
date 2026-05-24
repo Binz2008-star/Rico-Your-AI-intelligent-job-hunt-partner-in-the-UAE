@@ -5,15 +5,15 @@
       "name": "Locust: run_single_user (active file)",
       "type": "python",
       "request": "launch",
-      "python": "d:\\job-automation-system-1-main\\.locust_env\\Scripts\\python",
+      "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
       "program": "${file}",
       "cwd": "${fileDirname}",
       "console": "integratedTerminal",
       "justMyCode": false,
       "args": [],
       "env": {
-        "VIRTUAL_ENV": "d:\\job-automation-system-1-main\\.locust_env",
-        "PATH": "${workspaceFolder}\\.locust_env\\Scripts;${env:PATH}",
+        "VIRTUAL_ENV": "${workspaceFolder}\\.venv",
+        "PATH": "${workspaceFolder}\\.venv\\Scripts;${env:PATH}",
         "GEVENT_SUPPORT": "True"
       }
     },
@@ -21,7 +21,7 @@
       "name": "Pytest: all tests",
       "type": "python",
       "request": "launch",
-      "python": "d:\\job-automation-system-1-main\\.locust_env\\Scripts\\python",
+      "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
       "module": "pytest",
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
@@ -30,8 +30,8 @@
         "-q"
       ],
       "env": {
-        "VIRTUAL_ENV": "d:\\job-automation-system-1-main\\.locust_env",
-        "PATH": "${workspaceFolder}\\.locust_env\\Scripts;${env:PATH}",
+        "VIRTUAL_ENV": "${workspaceFolder}\\.venv",
+        "PATH": "${workspaceFolder}\\.venv\\Scripts;${env:PATH}",
         "GEVENT_SUPPORT": "True"
       }
     },
@@ -39,7 +39,7 @@
       "name": "Pytest: current file",
       "type": "python",
       "request": "launch",
-      "python": "d:\\job-automation-system-1-main\\.locust_env\\Scripts\\python",
+      "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
       "module": "pytest",
       "cwd": "${fileDirname}",
       "console": "integratedTerminal",
@@ -49,9 +49,45 @@
         "${file}"
       ],
       "env": {
-        "VIRTUAL_ENV": "d:\\job-automation-system-1-main\\.locust_env",
-        "PATH": "${workspaceFolder}\\.locust_env\\Scripts;${env:PATH}",
+        "VIRTUAL_ENV": "${workspaceFolder}\\.venv",
+        "PATH": "${workspaceFolder}\\.venv\\Scripts;${env:PATH}",
         "GEVENT_SUPPORT": "True"
+      }
+    },
+    {
+      "name": "Python: Current File",
+      "type": "python",
+      "request": "launch",
+      "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "program": "${file}",
+      "cwd": "${fileDirname}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "VIRTUAL_ENV": "${workspaceFolder}\\.venv",
+        "PATH": "${workspaceFolder}\\.venv\\Scripts;${env:PATH}"
+      }
+    },
+    {
+      "name": "FastAPI: Uvicorn (Backend)",
+      "type": "python",
+      "request": "launch",
+      "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "module": "uvicorn",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "args": [
+        "src.api.app:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload"
+      ],
+      "env": {
+        "VIRTUAL_ENV": "${workspaceFolder}\\.venv",
+        "PATH": "${workspaceFolder}\\.venv\\Scripts;${env:PATH}"
       }
     }
   ]
