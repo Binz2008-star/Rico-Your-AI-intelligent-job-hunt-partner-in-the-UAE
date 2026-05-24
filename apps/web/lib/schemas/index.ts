@@ -231,7 +231,7 @@ const StringArrayFromUnknownSchema = z.preprocess((value) => {
     if (value === null || value === undefined) return undefined;
     if (!Array.isArray(value)) return value;
     return value
-        .filter((item) => item !== null && item !== undefined)
+        .filter((item) => typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean')
         .map((item) => typeof item === 'string' ? item : String(item));
 }, z.array(z.string()).optional());
 
