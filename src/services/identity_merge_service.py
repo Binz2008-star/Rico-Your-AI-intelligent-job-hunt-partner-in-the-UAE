@@ -312,7 +312,7 @@ def merge_public_identity_into_auth(
             # Transaction-scoped: released automatically on commit or rollback.
             lock_key = _merge_lock_key(public_user_id, auth_user_id)
             cur.execute("SELECT pg_try_advisory_xact_lock(%s)", (lock_key,))
-            got_lock = cur.fetchone()[0]
+            got_lock = cur.fetchone()["pg_try_advisory_xact_lock"]
             if not got_lock:
                 logger.warning(
                     "merge_rejected reason=concurrent_merge_in_progress "

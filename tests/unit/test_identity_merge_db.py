@@ -181,8 +181,9 @@ class TestMergePublicIdentityIntoAuth:
         MockDB.return_value = db
 
         cur = conn.cursor.return_value.__enter__.return_value
-        # Sequence: guest id, auth id, guest profile, auth profile, table checks, update
+        # Sequence: advisory lock, guest id, auth id, guest profile, auth profile, table checks
         cur.fetchone.side_effect = [
+            {"pg_try_advisory_xact_lock": True},   # advisory xact lock
             {"id": "uuid-guest"},          # guest lookup
             {"id": "uuid-auth"},           # auth lookup
             {"profile": {"skills": ["hse"]}},  # guest profile
@@ -221,6 +222,7 @@ class TestMergePublicIdentityIntoAuth:
 
         cur = conn.cursor.return_value.__enter__.return_value
         cur.fetchone.side_effect = [
+            {"pg_try_advisory_xact_lock": True},   # advisory xact lock
             {"id": "uuid-guest"},
             {"id": "uuid-auth"},
             {"profile": {"profile_status": "merged", "merged_into_user_id": "uuid-auth"}},
