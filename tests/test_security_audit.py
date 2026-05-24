@@ -140,10 +140,12 @@ class TestSQLInjection:
         from src.repositories import jobs_repo
         import inspect
         source = inspect.getsource(jobs_repo.list_from_db)
-        # The where variable is built from hardcoded strings, not user input
-        # Verify the f-string only references the internal 'where' variable
-        assert 'f"SELECT COUNT(*) FROM jobs WHERE {where}"' in source or \
-               "f'SELECT COUNT(*) FROM jobs WHERE {where}'" in source
+        # The where variable is built from hardcoded strings + %s placeholders, not user input.
+        # Accept both f-string and + concatenation forms — both are safe here.
+        assert ('f"SELECT COUNT(*) FROM jobs WHERE {where}"' in source or
+                "f'SELECT COUNT(*) FROM jobs WHERE {where}'" in source or
+                '"SELECT COUNT(*) FROM jobs WHERE " + where' in source or
+                "'SELECT COUNT(*) FROM jobs WHERE ' + where" in source)
         # Verify params list is used (parameterized)
         assert "params" in source
 

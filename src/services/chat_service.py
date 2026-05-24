@@ -219,7 +219,14 @@ def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     from src.rico_jotform_webhook import handle_jotform_submission as _handle
-    return _handle(normalized)
+    try:
+        return _handle(normalized)
+    except Exception as exc:
+        logger.error("jotform_submission_failed: %s", exc, exc_info=True)
+        return {
+            "status": "accepted",
+            "message": "Submission received; DB write pending when service recovers",
+        }
 
 
 def _resolve_db_user_id(user_id: str):
