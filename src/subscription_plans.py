@@ -86,16 +86,49 @@ PRICE_ENV_BY_PLAN = {
 
 
 def resolve_effective_user_plan(user_id: str) -> SubscriptionResponse:
+    from src.repositories.subscription_repo import get_subscription  # deferred — avoids circular at import time
+
     now = datetime.now(timezone.utc)
+    row = get_subscription(user_id)
+
+    if row is None:
+        sub = UserSubscription(
+            user_id=user_id,
+            plan=SubscriptionTier.FREE,
+            subscription_status=SubscriptionStatus.INACTIVE,
+            current_period_start=None,
+            current_period_end=now + timedelta(days=30),
+            entitlements=FREE_ENTITLEMENTS,
+        )
+        return SubscriptionResponse(subscription=sub, plan=None, is_active=False)
+
+    try:
+        tier = SubscriptionTier(row["plan"])
+        plan_recognized = True
+    except ValueError:
+        tier = SubscriptionTier.FREE
+        plan_recognized = False
+
+    try:
+        status = SubscriptionStatus(row["status"])
+    except ValueError:
+        status = SubscriptionStatus.INACTIVE
+
+    is_active = plan_recognized and status == SubscriptionStatus.ACTIVE
+    plan_obj = PAID_PLANS.get(tier)
+    entitlements = plan_obj.entitlements if plan_obj else FREE_ENTITLEMENTS
+
     sub = UserSubscription(
         user_id=user_id,
-        plan=SubscriptionTier.FREE,
-        subscription_status=SubscriptionStatus.INACTIVE,
-        current_period_start=None,
-        current_period_end=now + timedelta(days=30),
-        entitlements=FREE_ENTITLEMENTS,
+        plan=tier,
+        subscription_status=status,
+        stripe_customer_id=row.get("stripe_customer_id"),
+        stripe_subscription_id=row.get("stripe_subscription_id"),
+        current_period_start=row.get("current_period_start"),
+        current_period_end=row.get("current_period_end"),
+        entitlements=entitlements,
     )
-    return SubscriptionResponse(subscription=sub, plan=None, is_active=False)
+    return SubscriptionResponse(subscription=sub, plan=plan_obj, is_active=is_active)
 
 
 def list_paid_plans() -> PlansResponse:
