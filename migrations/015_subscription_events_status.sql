@@ -11,7 +11,10 @@
 
 ALTER TABLE subscription_events
     ADD COLUMN IF NOT EXISTS status       TEXT NOT NULL DEFAULT 'pending',
-    ADD COLUMN IF NOT EXISTS error_detail TEXT;
+    ADD COLUMN IF NOT EXISTS error_detail TEXT,
+    ADD COLUMN IF NOT EXISTS processed_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS archived_at   TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS payload_redacted_at TIMESTAMPTZ;
 
 -- Treat all pre-migration events as successfully processed.
 UPDATE subscription_events
@@ -22,3 +25,8 @@ UPDATE subscription_events
 CREATE INDEX IF NOT EXISTS idx_subscription_events_failed
     ON subscription_events (status)
  WHERE status = 'failed';
+
+-- Index for archival cleanup (processed events older than retention window)
+CREATE INDEX IF NOT EXISTS idx_subscription_events_archive_cleanup
+    ON subscription_events (status, created_at)
+ WHERE archived_at IS NULL;

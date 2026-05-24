@@ -303,20 +303,31 @@ def update_subscription_event_status(
 
     Call with status='processed' on handler success, 'failed' on exception.
     Failed events are re-claimable by record_subscription_event on the next retry.
+    Sets processed_at timestamp when status='processed'.
     """
     try:
         with _db_transaction() as conn:
             if conn is None:
                 return
             with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    UPDATE subscription_events
-                       SET status = %s, error_detail = %s
-                     WHERE stripe_event_id = %s
-                    """,
-                    (status, error_detail, stripe_event_id),
-                )
+                if status == "processed":
+                    cur.execute(
+                        """
+                        UPDATE subscription_events
+                           SET status = %s, error_detail = %s, processed_at = NOW()
+                         WHERE stripe_event_id = %s
+                        """,
+                        (status, error_detail, stripe_event_id),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        UPDATE subscription_events
+                           SET status = %s, error_detail = %s
+                         WHERE stripe_event_id = %s
+                        """,
+                        (status, error_detail, stripe_event_id),
+                    )
     except Exception:
         logger.exception(
             "subscription_repo: update_subscription_event_status failed event_id=%s", stripe_event_id
