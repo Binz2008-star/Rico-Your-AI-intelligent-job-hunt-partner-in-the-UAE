@@ -5,7 +5,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { StatusCard } from "@/components/StatusCard";
-import { fetchProfile, updateProfile, type ProfileResponse } from "@/lib/api";
+import { ApiError, fetchProfile, updateProfile, type ProfileResponse } from "@/lib/api";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -433,7 +433,7 @@ export default function ProfilePage() {
             setProfile(data);
             setError(null);
         } catch (err: unknown) {
-            const is401 = err instanceof Error && err.message.includes("401");
+            const is401 = err instanceof ApiError && err.statusCode === 401;
             setError(is401 ? "auth" : "other");
         } finally {
             setLoading(false);

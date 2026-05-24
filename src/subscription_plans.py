@@ -315,7 +315,7 @@ def create_customer_portal_session(user_id: str) -> CheckoutResponse:
         plan = SubscriptionTier.FREE
 
     return CheckoutResponse(
-        checkout_url=session.url,
+        checkout_url=getattr(session, "url", None) or "",
         provider="stripe",
         plan=plan,
         status="ready",

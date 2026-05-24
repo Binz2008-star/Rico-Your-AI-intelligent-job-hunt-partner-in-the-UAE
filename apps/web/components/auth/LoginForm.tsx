@@ -14,7 +14,7 @@ export function LoginForm() {
     const [error, setError] = useState('');
     const { login, isLoading } = useAuthStore();
     const router = useRouter();
-    const maintenanceMode = true;
+    const maintenanceMode = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === 'true';
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
