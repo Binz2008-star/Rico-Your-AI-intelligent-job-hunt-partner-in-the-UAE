@@ -289,8 +289,23 @@ export default function SubscriptionPage() {
 
     useEffect(() => {
         if (maintenanceMode) return;
-        loadPlans();
-    }, [loadPlans, maintenanceMode]);
+        let cancelled = false;
+        getSubscriptionPlans()
+            .then((r) => {
+                if (!cancelled) setPlans(r.plans);
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setPlanError(true);
+                toast("Could not load plans", "error");
+            })
+            .finally(() => {
+                if (!cancelled) setLoadingPlans(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [maintenanceMode, toast]);
 
     const userEmail = user?.email ?? null;
     useEffect(() => {
@@ -366,27 +381,28 @@ export default function SubscriptionPage() {
         >
             <div className="max-w-3xl flex flex-col gap-8">
 
-                {/* Backend maintenance banner */}
-                <div className="flex items-start gap-3 rounded-xl border border-[rgba(245,166,35,0.35)] bg-[rgba(245,166,35,0.08)] px-5 py-4">
-                    <span className="text-[#f5a623] text-[18px] mt-0.5">⚠</span>
-                    <div>
-                        <p className="text-[13px] font-semibold text-[#f5a623]">Backend maintenance in progress</p>
-                        <p className="mt-0.5 text-[12px] text-[#a08040]">
-                            Rico&apos;s backend service is temporarily offline while hosting is being restored.
-                            Subscription, login, Telegram, and Stripe webhook features are paused.
-                            Do not attempt payment validation until the backend is back online.
-                        </p>
-                    </div>
-                </div>
-
+                {/* Backend maintenance banner — only shown when NEXT_PUBLIC_MAINTENANCE_MODE=true */}
                 {maintenanceMode && (
-                    <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 px-5 py-4">
-                        <p className="text-[13px] font-semibold text-white">Subscription status unavailable</p>
-                        <p className="mt-1 text-[12px] text-[#8080a0]">
-                            Plan cards below are static reference information. Checkout, current-plan lookup,
-                            renewal dates, and portal access are disabled until the backend returns.
-                        </p>
-                    </div>
+                    <>
+                        <div className="flex items-start gap-3 rounded-xl border border-[rgba(245,166,35,0.35)] bg-[rgba(245,166,35,0.08)] px-5 py-4">
+                            <span className="text-[#f5a623] text-[18px] mt-0.5">⚠</span>
+                            <div>
+                                <p className="text-[13px] font-semibold text-[#f5a623]">Backend maintenance in progress</p>
+                                <p className="mt-0.5 text-[12px] text-[#a08040]">
+                                    Rico&apos;s backend service is temporarily offline while hosting is being restored.
+                                    Subscription, login, Telegram, and Stripe webhook features are paused.
+                                    Do not attempt payment validation until the backend is back online.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 px-5 py-4">
+                            <p className="text-[13px] font-semibold text-white">Subscription status unavailable</p>
+                            <p className="mt-1 text-[12px] text-[#8080a0]">
+                                Plan cards below are static reference information. Checkout, current-plan lookup,
+                                renewal dates, and portal access are disabled until the backend returns.
+                            </p>
+                        </div>
+                    </>
                 )}
 
                 {!maintenanceMode && subscriptionError && (
