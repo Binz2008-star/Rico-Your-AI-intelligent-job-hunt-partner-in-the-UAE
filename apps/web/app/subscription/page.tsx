@@ -17,6 +17,55 @@ import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 
+const SUBSCRIPTION_MAINTENANCE_MODE = true;
+
+const FALLBACK_PLANS: SubscriptionPlan[] = [
+    {
+        id: "pro_monthly",
+        plan: "pro",
+        name: "Pro",
+        price_monthly: 50,
+        currency: "AED",
+        description: "Higher Rico usage for active job seekers.",
+        features: [
+            "300 AI messages per month",
+            "100 saved jobs",
+            "20 profile optimizations per month",
+        ],
+        entitlements: {
+            monthly_ai_message_limit: 300,
+            saved_jobs_limit: 100,
+            profile_optimization_limit: 20,
+            premium_recommendations_enabled: false,
+            application_automation_enabled: false,
+        },
+        is_popular: false,
+    },
+    {
+        id: "premium_monthly",
+        plan: "premium",
+        name: "Premium",
+        price_monthly: 150,
+        currency: "AED",
+        description: "Full Rico automation and premium recommendations.",
+        features: [
+            "1500 AI messages per month",
+            "Unlimited saved jobs",
+            "100 profile optimizations per month",
+            "Premium recommendations",
+            "Application automation",
+        ],
+        entitlements: {
+            monthly_ai_message_limit: 1500,
+            saved_jobs_limit: null,
+            profile_optimization_limit: 100,
+            premium_recommendations_enabled: true,
+            application_automation_enabled: true,
+        },
+        is_popular: true,
+    },
+];
+
 function PlanCard({
     plan,
     currentPlan,
@@ -110,18 +159,25 @@ function PlanCard({
             </ul>
 
             <div className="mt-8">
-                {isCurrent ? (
+                {maintenanceMode ? (
+                    <button
+                        type="button"
+                        disabled
+                        className="w-full py-3 rounded-xl text-[13px] font-bold transition-all opacity-50 bg-[rgba(245,166,35,0.08)] text-[#f5a623] border border-[rgba(245,166,35,0.25)]"
+                    >
+                        Backend maintenance
+                    </button>
+                ) : isCurrent ? (
                     <button
                         onClick={onManage}
-                        disabled={maintenanceMode}
-                        className="w-full py-3 rounded-xl text-center text-[13px] font-semibold text-[#00e5ff] bg-[rgba(0,229,255,0.06)] border border-[rgba(0,229,255,0.2)] hover:bg-[rgba(0,229,255,0.1)] transition-colors disabled:opacity-40"
+                        className="w-full py-3 rounded-xl text-center text-[13px] font-semibold text-[#00e5ff] bg-[rgba(0,229,255,0.06)] border border-[rgba(0,229,255,0.2)] hover:bg-[rgba(0,229,255,0.1)] transition-colors"
                     >
                         Manage Subscription
                     </button>
                 ) : isLoggedIn ? (
                     <button
                         onClick={() => onUpgrade(plan.plan)}
-                        disabled={anyCheckoutPending || maintenanceMode}
+                        disabled={anyCheckoutPending}
                         className={`w-full py-3 rounded-xl text-[13px] font-bold transition-all disabled:opacity-40 ${
                             plan.is_popular
                                 ? "bg-[#ff2d8e] text-white hover:bg-[#ff4a9e] shadow-[0_0_20px_rgba(255,45,142,0.3)]"
@@ -133,8 +189,6 @@ function PlanCard({
                                 <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
                                 Connecting…
                             </span>
-                        ) : maintenanceMode ? (
-                            "Backend maintenance"
                         ) : (
                             `Upgrade to ${plan.name}`
                         )}
@@ -208,32 +262,55 @@ function FreePlanRow({ currentPlan }: { currentPlan: string | null }) {
 export default function SubscriptionPage() {
     const { user, ready } = useAuth();
     const { toasts, toast } = useToast();
-    const maintenanceMode = true;
+    const maintenanceMode = SUBSCRIPTION_MAINTENANCE_MODE;
 
-    const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+    const [plans, setPlans] = useState<SubscriptionPlan[]>(maintenanceMode ? FALLBACK_PLANS : []);
     const [sub, setSub] = useState<SubscriptionMeResponse | null>(null);
-    const [loadingPlans, setLoadingPlans] = useState(true);
+    const [loadingPlans, setLoadingPlans] = useState(!maintenanceMode);
+    const [planError, setPlanError] = useState(false);
+    const [subscriptionError, setSubscriptionError] = useState(false);
     const [checkingOut, setCheckingOut] = useState<"pro" | "premium" | null>(null);
     const [mockNotice, setMockNotice] = useState<"pro" | "premium" | null>(null);
 
-    useEffect(() => {
+    const loadPlans = useCallback(() => {
+        if (maintenanceMode) {
+            return;
+        }
+        setLoadingPlans(true);
+        setPlanError(false);
         getSubscriptionPlans()
             .then((r) => setPlans(r.plans))
-            .catch(() => toast("Could not load plans", "error"))
+            .catch(() => {
+                setPlanError(true);
+                toast("Could not load plans", "error");
+            })
             .finally(() => setLoadingPlans(false));
-    }, [toast]);
+    }, [maintenanceMode, toast]);
 
     useEffect(() => {
-        if (!user) return;
+        if (maintenanceMode) return;
+        const timeoutId = window.setTimeout(() => {
+            loadPlans();
+        }, 0);
+        return () => window.clearTimeout(timeoutId);
+    }, [loadPlans, maintenanceMode]);
+
+    useEffect(() => {
+        if (!user || maintenanceMode) return;
         getMySubscription()
             .then(setSub)
             .catch(() => {
-                // Non-critical — subscription status is optional display
+                setSubscriptionError(true);
+                toast("Could not load subscription status", "error");
             });
-    }, [user]);
+    }, [maintenanceMode, toast, user]);
 
     const handleUpgrade = useCallback(
         async (plan: "pro" | "premium") => {
+            if (maintenanceMode) {
+                toast("Checkout is paused during backend maintenance", "error");
+                return;
+            }
             setCheckingOut(plan);
             setMockNotice(null);
             try {
@@ -256,10 +333,14 @@ export default function SubscriptionPage() {
                 setCheckingOut(null);
             }
         },
-        [toast]
+        [maintenanceMode, toast]
     );
 
     const handleManage = useCallback(async () => {
+        if (maintenanceMode) {
+            toast("Subscription management is paused during backend maintenance", "error");
+            return;
+        }
         try {
             const result = await createCustomerPortalSession();
             if (result.provider === "mock") {
@@ -274,10 +355,10 @@ export default function SubscriptionPage() {
                     : "Failed to open customer portal. Please try again.";
             toast(msg, "error");
         }
-    }, [toast]);
+    }, [maintenanceMode, toast]);
 
-    const currentPlan = sub?.subscription?.plan ?? null;
-    const isActive = sub?.is_active ?? false;
+    const currentPlan = user ? sub?.subscription?.plan ?? null : null;
+    const isActive = Boolean(sub?.is_active);
     const isLoggedIn = Boolean(user);
 
     return (
@@ -299,6 +380,34 @@ export default function SubscriptionPage() {
                         </p>
                     </div>
                 </div>
+
+                {maintenanceMode && (
+                    <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 px-5 py-4">
+                        <p className="text-[13px] font-semibold text-white">Subscription status unavailable</p>
+                        <p className="mt-1 text-[12px] text-[#8080a0]">
+                            Plan cards below are static reference information. Checkout, current-plan lookup,
+                            renewal dates, and portal access are disabled until the backend returns.
+                        </p>
+                    </div>
+                )}
+
+                {!maintenanceMode && subscriptionError && (
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-[rgba(255,94,91,0.35)] bg-[rgba(255,94,91,0.08)] px-5 py-4">
+                        <p className="text-[13px] text-[#ffaaaa]">Could not load your current subscription status.</p>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setSubscriptionError(false);
+                                void getMySubscription()
+                                    .then(setSub)
+                                    .catch(() => setSubscriptionError(true));
+                            }}
+                            className="rounded-lg border border-[rgba(255,94,91,0.3)] px-3 py-1.5 text-[12px] font-semibold text-[#ffaaaa] hover:bg-[rgba(255,94,91,0.12)]"
+                        >
+                            Retry
+                        </button>
+                    </div>
+                )}
 
                 {/* Stripe cancel redirect banner */}
                 <Suspense>
@@ -330,7 +439,7 @@ export default function SubscriptionPage() {
                 )}
 
                 {/* Current plan banner for active paid subscribers */}
-                {sub && isActive && currentPlan && currentPlan !== "free" && (
+                {!maintenanceMode && sub && isActive && currentPlan && currentPlan !== "free" && (
                     <div className="flex items-center gap-3 rounded-xl border border-[rgba(0,229,255,0.3)] bg-[rgba(0,229,255,0.06)] px-5 py-4">
                         <span className="text-[#00e5ff] text-[20px]">✦</span>
                         <div>
@@ -359,6 +468,17 @@ export default function SubscriptionPage() {
                                 className="h-72 rounded-2xl bg-[#13132a]/40 border border-white/[0.04] animate-pulse"
                             />
                         ))}
+                    </div>
+                ) : planError ? (
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-[rgba(255,94,91,0.35)] bg-[rgba(255,94,91,0.08)] px-5 py-4">
+                        <p className="text-[13px] text-[#ffaaaa]">Could not load subscription plans.</p>
+                        <button
+                            type="button"
+                            onClick={loadPlans}
+                            className="rounded-lg border border-[rgba(255,94,91,0.3)] px-3 py-1.5 text-[12px] font-semibold text-[#ffaaaa] hover:bg-[rgba(255,94,91,0.12)]"
+                        >
+                            Retry
+                        </button>
                     </div>
                 ) : plans.length > 0 ? (
                     <div className="grid gap-5 sm:grid-cols-2">
