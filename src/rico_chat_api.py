@@ -154,7 +154,7 @@ class RicoChatAPI:
         """
         payload = json.dumps(message) if isinstance(message, dict) else message
         self.memory.append_chat_message(user_id, role, payload)
-        if not self._persist:
+        if not getattr(self, "_persist", True):
             return
         # Async DB persistence — non-blocking, daemon so worker shutdown is
         # not stalled by a slow or unreachable Postgres during deploys.
@@ -1156,8 +1156,9 @@ class RicoChatAPI:
 
         profile = get_profile(user_id)
         if profile is None:
-            upsert_profile(user_id=user_id, updates={"name": user_id})
-            set_onboarding_status(user_id, ONBOARDING_IN_PROGRESS)
+            if getattr(self, "_persist", True):
+                upsert_profile(user_id=user_id, updates={"name": user_id})
+                set_onboarding_status(user_id, ONBOARDING_IN_PROGRESS)
             response = {
                 "type": "onboarding",
                 "message": (
