@@ -221,6 +221,17 @@ class TestCookieSessionSettings:
         assert "samesite=none" in set_cookie_lower
         assert "domain=.ricohunt.com" in set_cookie_lower
 
+    def test_cookie_secure_false_rejected_in_production(self):
+        from src.api.auth import _cookie_secure
+
+        env = {
+            "COOKIE_SECURE": "false",
+            "RICO_ENV": "production",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            with pytest.raises(RuntimeError, match="COOKIE_SECURE must be true"):
+                _cookie_secure()
+
 
 # ── require_admin dependency ──────────────────────────────────────────────────
 
