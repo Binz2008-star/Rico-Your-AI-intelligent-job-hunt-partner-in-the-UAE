@@ -262,7 +262,7 @@ def delete_profile(user_id: str) -> bool:
             with conn.cursor() as cur:
                 cur.execute("DELETE FROM rico_saved_searches WHERE user_id = %s", (db_user_id,))
                 cur.execute("DELETE FROM rico_profiles WHERE user_id = %s", (db_user_id,))
-                cur.execute("DELETE FROM rico_settings WHERE user_id = %s", (db_user_id,))
+                cur.execute("DELETE FROM rico_agent_settings WHERE user_id = %s", (db_user_id,))
                 cur.execute("DELETE FROM rico_users WHERE id = %s", (db_user_id,))
 
         # Also delete from memory store
@@ -537,11 +537,11 @@ def get_profiles_by_role(target_role: str, limit: int = 100) -> list[RicoProfile
                 # Use JSONB array contains operator for proper array matching
                 cur.execute(
                     """
-                    SELECT u.*, p.data as profile_data, s.data as settings_data
+                    SELECT u.*, p.profile as profile_data, s.settings as settings_data
                     FROM rico_users u
                     LEFT JOIN rico_profiles p ON p.user_id = u.id
-                    LEFT JOIN rico_settings s ON s.user_id = u.id
-                    WHERE p.data->'target_roles' ? %s
+                    LEFT JOIN rico_agent_settings s ON s.user_id = u.id
+                    WHERE p.profile->'target_roles' ? %s
                     LIMIT %s
                     """,
                     (target_role, limit)

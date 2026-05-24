@@ -196,12 +196,15 @@ def is_applied(job: Dict[str, Any], user_id: Optional[str] = None) -> bool:
     return _is_in_list(job, applied_jobs)
 
 
-def is_applied_batch(jobs: List[Dict[str, Any]]) -> Dict[str, bool]:
+def is_applied_batch(jobs: List[Dict[str, Any]], user_id: Optional[str] = None) -> Dict[str, bool]:
     """
     Batch version of is_applied() — reads the file ONCE for all jobs.
     Returns {job_id: bool} mapping.
+    When user_id is provided, only matches jobs for that user.
     """
     applied_jobs = load_applied_jobs()
+    if user_id:
+        applied_jobs = [j for j in applied_jobs if j.get("user_id") == user_id]
     return {get_job_id(j): _is_in_list(j, applied_jobs) for j in jobs}
 
 

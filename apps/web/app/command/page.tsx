@@ -93,7 +93,7 @@ const QUICK_ACTIONS = [
 ];
 const COMMAND_LOGIN_HREF = buildAuthHref("/login", "/command");
 const COMMAND_SIGNUP_HREF = buildAuthHref("/signup", "/command");
-const BACKEND_MAINTENANCE_MODE = true;
+const BACKEND_MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === "true";
 
 // ─── Rico primitives: thinking + operation state ──────────────────────────────
 
