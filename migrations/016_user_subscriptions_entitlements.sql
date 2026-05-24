@@ -18,11 +18,51 @@ ALTER TABLE user_subscriptions
     ADD COLUMN IF NOT EXISTS premium_recommendations_enabled    BOOLEAN,
     ADD COLUMN IF NOT EXISTS application_automation_enabled     BOOLEAN;
 
-ALTER TABLE user_subscriptions
-    ALTER COLUMN premium_recommendations_enabled DROP DEFAULT,
-    ALTER COLUMN premium_recommendations_enabled DROP NOT NULL,
-    ALTER COLUMN application_automation_enabled DROP DEFAULT,
-    ALTER COLUMN application_automation_enabled DROP NOT NULL;
+-- Idempotent constraint removal: ALTER COLUMN DROP DEFAULT/DROP NOT NULL
+-- errors on PostgreSQL < 14 when the constraint doesn't exist (e.g. columns
+-- were just added as nullable with no default, or migration runs twice).
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+         WHERE table_name  = 'user_subscriptions'
+           AND column_name = 'premium_recommendations_enabled'
+           AND column_default IS NOT NULL
+    ) THEN
+        ALTER TABLE user_subscriptions
+            ALTER COLUMN premium_recommendations_enabled DROP DEFAULT;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+         WHERE table_name  = 'user_subscriptions'
+           AND column_name = 'premium_recommendations_enabled'
+           AND is_nullable = 'NO'
+    ) THEN
+        ALTER TABLE user_subscriptions
+            ALTER COLUMN premium_recommendations_enabled DROP NOT NULL;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+         WHERE table_name  = 'user_subscriptions'
+           AND column_name = 'application_automation_enabled'
+           AND column_default IS NOT NULL
+    ) THEN
+        ALTER TABLE user_subscriptions
+            ALTER COLUMN application_automation_enabled DROP DEFAULT;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+         WHERE table_name  = 'user_subscriptions'
+           AND column_name = 'application_automation_enabled'
+           AND is_nullable = 'NO'
+    ) THEN
+        ALTER TABLE user_subscriptions
+            ALTER COLUMN application_automation_enabled DROP NOT NULL;
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_user_subscriptions_plan   ON user_subscriptions (plan);
 CREATE INDEX IF NOT EXISTS idx_user_subscriptions_status ON user_subscriptions (status);
