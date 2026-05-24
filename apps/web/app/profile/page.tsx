@@ -6,6 +6,8 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { StatusCard } from "@/components/StatusCard";
 import { ApiError, fetchProfile, updateProfile, type ProfileResponse } from "@/lib/api";
+import { useToast } from "@/hooks/useToast";
+import { ToastContainer } from "@/components/ui/Toast";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -423,9 +425,14 @@ function ProfileDetail({
 }
 
 export default function ProfilePage() {
+    const { toasts, toast } = useToast();
     const [profile, setProfile] = useState<ProfileResponse | null>(null);
     const [error, setError] = useState<"auth" | "other" | null>(null);
     const [loading, setLoading] = useState(true);
+
+    const warnRefreshFail = useCallback(() => {
+        toast("Saved, but profile refresh failed — reload the page to see latest values.", "error");
+    }, [toast]);
 
     const loadProfile = useCallback(async () => {
         try {
@@ -461,9 +468,9 @@ export default function ProfilePage() {
             const refreshed = await fetchProfile();
             setProfile(refreshed);
         } catch {
-            // Keep the optimistic value if the follow-up read fails.
+            warnRefreshFail();
         }
-    }, []);
+    }, [warnRefreshFail]);
 
     const handleSavePhone = useCallback(async (nextPhone: string) => {
         await updateProfile({ phone: nextPhone });
@@ -473,9 +480,9 @@ export default function ProfilePage() {
             const refreshed = await fetchProfile();
             setProfile(refreshed);
         } catch {
-            // Keep the optimistic value if the follow-up read fails.
+            warnRefreshFail();
         }
-    }, []);
+    }, [warnRefreshFail]);
 
     const handleSaveTelegram = useCallback(async (nextTelegram: string) => {
         await updateProfile({ telegram_username: nextTelegram });
@@ -485,9 +492,9 @@ export default function ProfilePage() {
             const refreshed = await fetchProfile();
             setProfile(refreshed);
         } catch {
-            // Keep the optimistic value if the follow-up read fails.
+            warnRefreshFail();
         }
-    }, []);
+    }, [warnRefreshFail]);
 
     const handleSaveVisa = useCallback(async (nextVisa: string) => {
         await updateProfile({ visa_status: nextVisa });
@@ -497,9 +504,9 @@ export default function ProfilePage() {
             const refreshed = await fetchProfile();
             setProfile(refreshed);
         } catch {
-            // Keep the optimistic value if the follow-up read fails.
+            warnRefreshFail();
         }
-    }, []);
+    }, [warnRefreshFail]);
 
     const handleSaveNotice = useCallback(async (nextNotice: string) => {
         await updateProfile({ notice_period: nextNotice });
@@ -509,9 +516,9 @@ export default function ProfilePage() {
             const refreshed = await fetchProfile();
             setProfile(refreshed);
         } catch {
-            // Keep the optimistic value if the follow-up read fails.
+            warnRefreshFail();
         }
-    }, []);
+    }, [warnRefreshFail]);
 
     const handleSaveMinSalary = useCallback(async (nextMinSalary: number) => {
         await updateProfile({ minimum_salary_aed: nextMinSalary });
@@ -521,9 +528,9 @@ export default function ProfilePage() {
             const refreshed = await fetchProfile();
             setProfile(refreshed);
         } catch {
-            // Keep the optimistic value if the follow-up read fails.
+            warnRefreshFail();
         }
-    }, []);
+    }, [warnRefreshFail]);
 
     const handleSaveCurrentCompany = useCallback(async (nextCompany: string) => {
         await updateProfile({ current_company: nextCompany });
@@ -533,9 +540,9 @@ export default function ProfilePage() {
             const refreshed = await fetchProfile();
             setProfile(refreshed);
         } catch {
-            // Keep the optimistic value if the follow-up read fails.
+            warnRefreshFail();
         }
-    }, []);
+    }, [warnRefreshFail]);
 
     const handleSaveLinkedin = useCallback(async (nextLinkedin: string) => {
         await updateProfile({ linkedin_url: nextLinkedin });
@@ -545,9 +552,9 @@ export default function ProfilePage() {
             const refreshed = await fetchProfile();
             setProfile(refreshed);
         } catch {
-            // Keep the optimistic value if the follow-up read fails.
+            warnRefreshFail();
         }
-    }, []);
+    }, [warnRefreshFail]);
 
     const handleSaveTargetRoles = useCallback(async (nextRoles: string) => {
         const roles = nextRoles.split(',').map(r => r.trim()).filter(Boolean);
@@ -558,9 +565,9 @@ export default function ProfilePage() {
             const refreshed = await fetchProfile();
             setProfile(refreshed);
         } catch {
-            // Keep the optimistic value if the follow-up read fails.
+            warnRefreshFail();
         }
-    }, []);
+    }, [warnRefreshFail]);
 
     const handleSaveCities = useCallback(async (nextCities: string) => {
         const cities = nextCities.split(',').map(c => c.trim()).filter(Boolean);
@@ -571,9 +578,9 @@ export default function ProfilePage() {
             const refreshed = await fetchProfile();
             setProfile(refreshed);
         } catch {
-            // Keep the optimistic value if the follow-up read fails.
+            warnRefreshFail();
         }
-    }, []);
+    }, [warnRefreshFail]);
 
     const handleSaveSalaryTarget = useCallback(async (nextSalary: string) => {
         const parsed = Number(nextSalary);
@@ -587,9 +594,9 @@ export default function ProfilePage() {
             const refreshed = await fetchProfile();
             setProfile(refreshed);
         } catch {
-            // Keep the optimistic value if the follow-up read fails.
+            warnRefreshFail();
         }
-    }, []);
+    }, [warnRefreshFail]);
 
     const handleSaveExperience = useCallback(async (nextExperience: string) => {
         const parsed = Number(nextExperience);
@@ -603,9 +610,9 @@ export default function ProfilePage() {
             const refreshed = await fetchProfile();
             setProfile(refreshed);
         } catch {
-            // Keep the optimistic value if the follow-up read fails.
+            warnRefreshFail();
         }
-    }, []);
+    }, [warnRefreshFail]);
 
     const handleSaveSkills = useCallback(async (nextSkills: string) => {
         const skills = nextSkills.split(',').map(s => s.trim()).filter(Boolean);
@@ -616,9 +623,9 @@ export default function ProfilePage() {
             const refreshed = await fetchProfile();
             setProfile(refreshed);
         } catch {
-            // Keep the optimistic value if the follow-up read fails.
+            warnRefreshFail();
         }
-    }, []);
+    }, [warnRefreshFail]);
 
     return (
         <DashboardShell title="Profile">
@@ -682,6 +689,7 @@ export default function ProfilePage() {
                     />
                 )}
             </div>
+            <ToastContainer toasts={toasts} />
         </DashboardShell>
     );
 }
