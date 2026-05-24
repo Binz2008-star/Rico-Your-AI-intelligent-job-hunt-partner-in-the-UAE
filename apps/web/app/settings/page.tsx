@@ -10,6 +10,8 @@ import { ApiError, fetchMe, getHealth, getSettings, updateSettings } from "@/lib
 import type { HealthResponse, SettingsResponse } from "@/types";
 import { useCallback, useEffect, useState } from "react";
 
+const SETTINGS_BACKEND_MAINTENANCE_MODE = true;
+
 function Row({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
   return (
     <div className="flex items-center justify-between py-3 border-b border-white/5 last:border-0">
@@ -29,15 +31,29 @@ export default function SettingsPage() {
   const { toasts, toast } = useToast();
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
-  const [loadingHealth, setLoadingHealth] = useState(true);
-  const [loadingSettings, setLoadingSettings] = useState(true);
+  const [loadingHealth, setLoadingHealth] = useState(!SETTINGS_BACKEND_MAINTENANCE_MODE);
+  const [loadingSettings, setLoadingSettings] = useState(!SETTINGS_BACKEND_MAINTENANCE_MODE);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<"auth" | "other" | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
 
   const isAdmin = userRole === "admin";
+  const telegramConfigured = Boolean(settings?.telegram_chat_id?.trim());
+  const telegramStatus = SETTINGS_BACKEND_MAINTENANCE_MODE
+    ? "Paused"
+    : telegramConfigured
+      ? "Configured"
+      : "Not configured";
+  const telegramDescription = telegramConfigured
+    ? "A Telegram chat ID is saved for job alerts."
+    : SETTINGS_BACKEND_MAINTENANCE_MODE
+      ? "Add a Telegram chat ID after backend service is restored."
+      : "Add a Telegram chat ID to enable job alerts.";
 
   useEffect(() => {
+    if (SETTINGS_BACKEND_MAINTENANCE_MODE) {
+      return;
+    }
     getHealth()
       .then(setHealth)
       .catch(() => toast("Backend unreachable", "error"))
@@ -45,6 +61,9 @@ export default function SettingsPage() {
   }, [toast]);
 
   const loadSettings = useCallback(async () => {
+    if (SETTINGS_BACKEND_MAINTENANCE_MODE) {
+      return;
+    }
     if (!user) return;
     try {
       const response = await getSettings();
@@ -60,6 +79,7 @@ export default function SettingsPage() {
   }, [toast, user]);
 
   useEffect(() => {
+    if (SETTINGS_BACKEND_MAINTENANCE_MODE) return;
     if (!user) return;
     const timeoutId = window.setTimeout(() => {
       void loadSettings();
@@ -68,7 +88,7 @@ export default function SettingsPage() {
   }, [loadSettings, user]);
 
   useEffect(() => {
-    if (!user) {
+    if (!user || SETTINGS_BACKEND_MAINTENANCE_MODE) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setUserRole(null);
       return;
@@ -94,10 +114,14 @@ export default function SettingsPage() {
   }, [user]);
 
   const handleRetrySettings = useCallback(() => {
+    if (SETTINGS_BACKEND_MAINTENANCE_MODE) {
+      toast("Settings sync is paused during backend maintenance", "error");
+      return;
+    }
     setError(null);
     setLoadingSettings(true);
     void loadSettings();
-  }, [loadSettings]);
+  }, [loadSettings, toast]);
 
   const handleSave = async () => {
     if (!settings) return;
@@ -130,6 +154,15 @@ export default function SettingsPage() {
       subtitle="System configuration and job matching preferences"
     >
       <div className="max-w-3xl flex flex-col gap-8">
+        {SETTINGS_BACKEND_MAINTENANCE_MODE && (
+          <section className="rounded-2xl border border-[rgba(245,166,35,0.35)] bg-[rgba(245,166,35,0.08)] px-5 py-4">
+            <p className="text-[13px] font-semibold text-[#f5a623]">Backend maintenance in progress</p>
+            <p className="mt-1 text-[12px] leading-relaxed text-[#a08040]">
+              Settings sync and Telegram delivery are paused while Render hosting is restored.
+              Existing frontend pages remain available, but backend-backed preferences cannot be changed.
+            </p>
+          </section>
+        )}
 
         {/* Automation Tuning — Rico Cards */}
         {settings && (
@@ -245,14 +278,18 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between group">
               <div className="space-y-1">
                 <p className="text-sm font-bold text-[#eeeef5] group-hover:text-white transition-colors">Telegram Notifications</p>
-                <p className="text-xs text-[#5a5a7a]">Rico sends cards to your mobile for instant approval.</p>
+                <p className="text-xs text-[#5a5a7a]">
+                  {telegramDescription}
+                </p>
               </div>
-              <span className="text-xs text-[#5b4fff] font-medium">Enabled</span>
+              <span className="text-xs text-[#5b4fff] font-medium">{telegramStatus}</span>
             </div>
 
             <div className="pt-6 border-t border-white/5 flex items-center justify-between">
               <span className="text-[11px] text-[#5a5a7a] font-medium uppercase tracking-widest">
-                {saving ? "Syncing with Rico…" : "Status: Cloud Synced"}
+                {SETTINGS_BACKEND_MAINTENANCE_MODE
+                  ? "Status: Paused during backend maintenance"
+                  : saving ? "Syncing with Rico..." : "Status: Cloud Synced"}
               </span>
               {saving && <div className="w-3 h-3 border-2 border-[#5b4fff] border-t-transparent rounded-full animate-spin" />}
             </div>
