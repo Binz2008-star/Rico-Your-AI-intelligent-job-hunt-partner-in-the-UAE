@@ -129,10 +129,15 @@ class TestEventIdempotency:
         monkeypatch.setattr(repo, "_db", lambda: _mock_db_with_row(None))
         assert repo.event_already_processed("evt_123") is False
 
-    def test_returns_true_when_event_found(self, monkeypatch):
+    def test_returns_true_when_event_processed(self, monkeypatch):
         import src.repositories.subscription_repo as repo
-        monkeypatch.setattr(repo, "_db", lambda: _mock_db_with_row({"1": 1}))
+        monkeypatch.setattr(repo, "_db", lambda: _mock_db_with_row({"status": "processed"}))
         assert repo.event_already_processed("evt_123") is True
+
+    def test_returns_false_when_event_pending(self, monkeypatch):
+        import src.repositories.subscription_repo as repo
+        monkeypatch.setattr(repo, "_db", lambda: _mock_db_with_row({"status": "pending"}))
+        assert repo.event_already_processed("evt_123") is False
 
     def test_returns_false_on_db_exception(self, monkeypatch):
         import src.repositories.subscription_repo as repo
@@ -141,6 +146,32 @@ class TestEventIdempotency:
         bad_db.connect.side_effect = Exception("timeout")
         monkeypatch.setattr(repo, "_db", lambda: bad_db)
         assert repo.event_already_processed("evt_123") is False
+
+
+class TestGetSubscriptionEventStatus:
+    def test_returns_none_when_db_unavailable(self, monkeypatch):
+        import src.repositories.subscription_repo as repo
+        monkeypatch.setattr(repo, "_db", lambda: None)
+        assert repo.get_subscription_event_status("evt_123") is None
+
+    def test_returns_none_when_event_missing(self, monkeypatch):
+        import src.repositories.subscription_repo as repo
+        monkeypatch.setattr(repo, "_db", lambda: _mock_db_with_row(None))
+        assert repo.get_subscription_event_status("evt_123") is None
+
+    @pytest.mark.parametrize("status", ["processed", "pending", "failed"])
+    def test_returns_existing_status(self, monkeypatch, status):
+        import src.repositories.subscription_repo as repo
+        monkeypatch.setattr(repo, "_db", lambda: _mock_db_with_row({"status": status}))
+        assert repo.get_subscription_event_status("evt_123") == status
+
+    def test_returns_none_on_db_exception(self, monkeypatch):
+        import src.repositories.subscription_repo as repo
+        bad_db = MagicMock()
+        bad_db.available = True
+        bad_db.connect.side_effect = Exception("timeout")
+        monkeypatch.setattr(repo, "_db", lambda: bad_db)
+        assert repo.get_subscription_event_status("evt_123") is None
 
 
 # ── /me endpoint: Free fallback ───────────────────────────────────────────────

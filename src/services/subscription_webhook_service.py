@@ -30,14 +30,14 @@ from datetime import datetime, timezone
 from typing import Any
 
 from src.repositories.subscription_repo import (
-    event_already_processed,
     get_subscription,
     get_subscription_by_stripe_customer,
+    get_subscription_event_status,
     record_subscription_event,
     update_subscription_event_status,
     upsert_subscription,
 )
-from src.subscription_plans import FREE_ENTITLEMENTS, PAID_PLANS
+from src.subscription_plans import PAID_PLANS
 
 logger = logging.getLogger(__name__)
 
@@ -161,11 +161,6 @@ def _handle_checkout_completed(obj: dict[str, Any]) -> bool:
         status="active",
         stripe_customer_id=customer_id,
         stripe_subscription_id=subscription_id,
-        monthly_ai_message_limit=plan_obj.entitlements.monthly_ai_message_limit,
-        saved_jobs_limit=plan_obj.entitlements.saved_jobs_limit,
-        profile_optimization_limit=plan_obj.entitlements.profile_optimization_limit,
-        premium_recommendations_enabled=plan_obj.entitlements.premium_recommendations_enabled,
-        application_automation_enabled=plan_obj.entitlements.application_automation_enabled,
     )
     if row is None:
         logger.warning("webhook: checkout completed upsert failed user_id=%s", user_id)
@@ -193,9 +188,6 @@ def _handle_subscription_upsert(obj: dict[str, Any]) -> bool:
     status = _stripe_status(obj.get("status", ""))
     period_start, period_end = _extract_period(obj)
     
-    plan_obj = PAID_PLANS.get(plan)
-    entitlements = plan_obj.entitlements if plan_obj else FREE_ENTITLEMENTS
-
     row = upsert_subscription(
         user_id,
         plan=plan,
@@ -204,11 +196,6 @@ def _handle_subscription_upsert(obj: dict[str, Any]) -> bool:
         stripe_subscription_id=obj.get("id"),
         current_period_start=period_start,
         current_period_end=period_end,
-        monthly_ai_message_limit=entitlements.monthly_ai_message_limit,
-        saved_jobs_limit=entitlements.saved_jobs_limit,
-        profile_optimization_limit=entitlements.profile_optimization_limit,
-        premium_recommendations_enabled=entitlements.premium_recommendations_enabled,
-        application_automation_enabled=entitlements.application_automation_enabled,
     )
     if row is None:
         logger.warning("webhook: subscription upsert failed user_id=%s", user_id)
@@ -231,11 +218,6 @@ def _handle_subscription_deleted(obj: dict[str, Any]) -> bool:
         user_id,
         plan=plan,
         status="canceled",
-        monthly_ai_message_limit=FREE_ENTITLEMENTS.monthly_ai_message_limit,
-        saved_jobs_limit=FREE_ENTITLEMENTS.saved_jobs_limit,
-        profile_optimization_limit=FREE_ENTITLEMENTS.profile_optimization_limit,
-        premium_recommendations_enabled=FREE_ENTITLEMENTS.premium_recommendations_enabled,
-        application_automation_enabled=FREE_ENTITLEMENTS.application_automation_enabled,
     )
     if row is None:
         logger.warning("webhook: subscription canceled upsert failed user_id=%s", user_id)
@@ -336,9 +318,11 @@ def process_stripe_event(
 ) -> bool:
     """Idempotently process a verified Stripe webhook event.
 
-    Returns True when the event was newly claimed and the handler succeeded.
-    Returns False when skipped (duplicate/processed/in-flight), unhandled, or
-    handler raised an exception.
+    Returns True  → event newly claimed and handler succeeded, OR event was
+                    already processed (idempotent ack), OR another worker is
+                    in-flight (avoid Stripe retry storm).
+    Returns False → handler failed/raised, event is 'failed' and re-claimable,
+                    or DB is unavailable.
 
     On handler failure the event is marked 'failed' so the next Stripe retry
     (or an internal replay) can re-claim and re-run it. Stripe always gets 200;
@@ -351,10 +335,17 @@ def process_stripe_event(
         event_id, event_type, user_id=user_id, payload=event_data
     )
     if not claimed:
-        if event_already_processed(event_id):
+        status = get_subscription_event_status(event_id)
+        if status == "processed":
             logger.info("webhook: event skipped (already processed) event_id=%s", event_id)
             return True
-        logger.info("webhook: event skipped (pending, failed, or DB unavailable) event_id=%s", event_id)
+        if status == "pending":
+            logger.info("webhook: event skipped (already in-flight) event_id=%s", event_id)
+            return True
+        if status == "failed":
+            logger.info("webhook: event skipped (failed, retryable) event_id=%s", event_id)
+            return False
+        logger.info("webhook: event skipped (DB unavailable or unknown status) event_id=%s status=%s", event_id, status)
         return False
 
     handler = _HANDLERS.get(event_type)
