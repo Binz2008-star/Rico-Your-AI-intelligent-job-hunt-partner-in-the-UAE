@@ -27,6 +27,7 @@ _UPDATE_STATUS = f"{_SVC}.update_subscription_event_status"
 _UPSERT        = f"{_SVC}.upsert_subscription"
 _GET_SUB       = f"{_SVC}.get_subscription"
 _GET_CUS       = f"{_SVC}.get_subscription_by_stripe_customer"
+_GET_EVENT_STATUS = f"{_SVC}.get_subscription_event_status"
 
 
 # ── Autouse: silence update_subscription_event_status in all tests ────────────
@@ -37,7 +38,7 @@ _GET_CUS       = f"{_SVC}.get_subscription_by_stripe_customer"
 @pytest.fixture(autouse=True)
 def _noop_update_status(monkeypatch):
     import src.services.subscription_webhook_service as svc
-    monkeypatch.setattr(svc, "update_subscription_event_status", lambda *a, **kw: None)
+    monkeypatch.setattr(svc, "update_subscription_event_status", lambda *a, **kw: True)
 
 
 # ── Stripe event payload builders ─────────────────────────────────────────────
@@ -94,10 +95,16 @@ def _deleted_event(user_id="alice@rico.ai", customer="cus_test", sub_id="sub_tes
     }
 
 
-def _invoice_event(customer="cus_test", period_start=1_716_000_000, period_end=1_718_592_000):
+def _invoice_event(
+    customer="cus_test",
+    subscription="sub_test",
+    period_start=1_716_000_000,
+    period_end=1_718_592_000,
+):
     return {
         "object": {
             "customer": customer,
+            "subscription": subscription,
             "lines": {
                 "data": [{"period": {"start": period_start, "end": period_end}}]
             },
@@ -116,21 +123,22 @@ def _existing_row(user_id="alice@rico.ai", plan="pro", status="active"):
 # ── Idempotency ───────────────────────────────────────────────────────────────
 
 class TestIdempotency:
-    def test_duplicate_event_skips_all_processing(self):
+    def test_processed_duplicate_skips_all_processing(self):
         from src.services.subscription_webhook_service import process_stripe_event
         with patch(_RECORD, return_value=False) as mock_record, \
+             patch(_GET_EVENT_STATUS, return_value="processed"), \
              patch(_UPSERT) as mock_upsert:
             result = process_stripe_event(
                 "evt_dup", "checkout.session.completed", _checkout_event()
             )
-        assert result is False
+        assert result is True
         mock_upsert.assert_not_called()
 
-    def test_unhandled_event_type_is_claimed_but_not_processed(self):
+    def test_unhandled_event_type_is_claimed_and_acknowledged(self):
         from src.services.subscription_webhook_service import process_stripe_event
         with patch(_RECORD, return_value=True), patch(_UPSERT) as mock_upsert:
             result = process_stripe_event("evt_x", "payment_intent.created", {"object": {}})
-        assert result is False
+        assert result is True
         mock_upsert.assert_not_called()
 
     def test_record_called_with_correct_args(self):
@@ -164,9 +172,9 @@ class TestCheckoutCompleted:
         assert kw.kwargs["status"] == "active"
         assert kw.kwargs["stripe_customer_id"] == "cus_test"
         assert kw.kwargs["stripe_subscription_id"] == "sub_test"
-        assert kw.kwargs["monthly_ai_message_limit"] == 300
-        assert kw.kwargs["saved_jobs_limit"] == 100
-        assert kw.kwargs["premium_recommendations_enabled"] is False
+        assert "monthly_ai_message_limit" not in kw.kwargs
+        assert "saved_jobs_limit" not in kw.kwargs
+        assert "premium_recommendations_enabled" not in kw.kwargs
 
     def test_creates_active_premium_subscription(self):
         from src.services.subscription_webhook_service import process_stripe_event
@@ -268,6 +276,16 @@ class TestSubscriptionUpsert:
         assert result is True
         assert mock_upsert.call_args.kwargs["plan"] == "pro"
 
+    def test_prefers_price_id_over_stale_metadata_plan(self, monkeypatch):
+        from src.services.subscription_webhook_service import process_stripe_event
+        monkeypatch.setenv("STRIPE_PREMIUM_PRICE_ID", "price_premium_live")
+        data = _subscription_event(plan="pro", price_id="price_premium_live")
+        with patch(_RECORD, return_value=True), \
+             patch(_UPSERT, return_value=_existing_row(plan="premium")) as mock_upsert:
+            result = process_stripe_event("evt_su_price", "customer.subscription.updated", data)
+        assert result is True
+        assert mock_upsert.call_args.kwargs["plan"] == "premium"
+
     def test_falls_back_to_customer_lookup_when_metadata_user_id_missing(self):
         from src.services.subscription_webhook_service import process_stripe_event
         data = {
@@ -324,6 +342,8 @@ class TestSubscriptionDeleted:
         kwargs = mock_upsert.call_args.kwargs
         assert kwargs["status"] == "canceled"
         assert kwargs["plan"] == "premium"
+        assert "monthly_ai_message_limit" not in kwargs
+        assert "premium_recommendations_enabled" not in kwargs
 
     def test_uses_free_plan_when_no_existing_subscription(self):
         from src.services.subscription_webhook_service import process_stripe_event
@@ -376,6 +396,17 @@ class TestInvoicePaid:
         assert result is False
         mock_upsert.assert_not_called()
 
+    def test_ignores_invoice_for_different_subscription(self):
+        from src.services.subscription_webhook_service import process_stripe_event
+        with patch(_RECORD, return_value=True), \
+             patch(_GET_CUS, return_value=_existing_row()), \
+             patch(_UPSERT) as mock_upsert:
+            result = process_stripe_event(
+                "evt_inv_other", "invoice.paid", _invoice_event(subscription="sub_other")
+            )
+        assert result is True
+        mock_upsert.assert_not_called()
+
 
 # ── invoice.payment_failed ────────────────────────────────────────────────────
 
@@ -402,6 +433,17 @@ class TestInvoicePaymentFailed:
         assert result is False
         mock_upsert.assert_not_called()
 
+    def test_ignores_failure_for_different_subscription(self):
+        from src.services.subscription_webhook_service import process_stripe_event
+        with patch(_RECORD, return_value=True), \
+             patch(_GET_CUS, return_value=_existing_row()), \
+             patch(_UPSERT) as mock_upsert:
+            result = process_stripe_event(
+                "evt_fail_other", "invoice.payment_failed", _invoice_event(subscription="sub_other")
+            )
+        assert result is True
+        mock_upsert.assert_not_called()
+
 
 # ── Retry / failure status tracking ──────────────────────────────────────────
 #
@@ -413,8 +455,11 @@ class TestRetryOnFailure:
         import src.services.subscription_webhook_service as svc
         status_updates: list = []
         monkeypatch.setattr(svc, "record_subscription_event", lambda *a, **kw: True)
-        monkeypatch.setattr(svc, "update_subscription_event_status",
-                            lambda event_id, status, **kw: status_updates.append((event_id, status, kw)))
+        monkeypatch.setattr(
+            svc,
+            "update_subscription_event_status",
+            lambda event_id, status, **kw: status_updates.append((event_id, status, kw)) or True,
+        )
         monkeypatch.setattr(svc, "upsert_subscription",
                             MagicMock(side_effect=RuntimeError("DB crash")))
 
@@ -435,9 +480,12 @@ class TestRetryOnFailure:
         import src.services.subscription_webhook_service as svc
         status_updates: list = []
         monkeypatch.setattr(svc, "record_subscription_event", lambda *a, **kw: True)
-        monkeypatch.setattr(svc, "update_subscription_event_status",
-                            lambda event_id, status, **kw: status_updates.append((event_id, status, kw)))
-        monkeypatch.setattr(svc, "upsert_subscription", lambda *a, **kw: None)
+        monkeypatch.setattr(
+            svc,
+            "update_subscription_event_status",
+            lambda event_id, status, **kw: status_updates.append((event_id, status, kw)) or True,
+        )
+        monkeypatch.setattr(svc, "upsert_subscription", lambda *a, **kw: _existing_row())
 
         result = svc.process_stripe_event(
             "evt_ok", "checkout.session.completed",
@@ -448,28 +496,98 @@ class TestRetryOnFailure:
         assert result is True
         assert status_updates == [("evt_ok", "processed", {})]
 
-    def test_unhandled_event_marks_as_processed_not_failed(self, monkeypatch):
+    def test_handler_false_marks_event_as_failed(self, monkeypatch):
         import src.services.subscription_webhook_service as svc
         status_updates: list = []
         monkeypatch.setattr(svc, "record_subscription_event", lambda *a, **kw: True)
-        monkeypatch.setattr(svc, "update_subscription_event_status",
-                            lambda event_id, status, **kw: status_updates.append((event_id, status, kw)))
+        monkeypatch.setattr(
+            svc,
+            "update_subscription_event_status",
+            lambda event_id, status, **kw: status_updates.append((event_id, status, kw)) or True,
+        )
+        monkeypatch.setattr(svc, "upsert_subscription", lambda *a, **kw: None)
+
+        result = svc.process_stripe_event(
+            "evt_write_fail", "checkout.session.completed",
+            {"object": {"metadata": {"user_id": "u@t.com", "plan": "pro"},
+                        "customer": "cus_1", "subscription": "sub_1"}},
+        )
+
+        assert result is False
+        assert status_updates == [
+            ("evt_write_fail", "failed", {"error_detail": "handler returned false"})
+        ]
+
+    def test_unhandled_event_marks_as_processed_and_acknowledged(self, monkeypatch):
+        import src.services.subscription_webhook_service as svc
+        status_updates: list = []
+        monkeypatch.setattr(svc, "record_subscription_event", lambda *a, **kw: True)
+        monkeypatch.setattr(
+            svc,
+            "update_subscription_event_status",
+            lambda event_id, status, **kw: status_updates.append((event_id, status, kw)) or True,
+        )
 
         result = svc.process_stripe_event("evt_unk", "payment.intent.created", {"object": {}})
 
-        assert result is False
+        assert result is True
         assert status_updates == [("evt_unk", "processed", {})]
 
-    def test_duplicate_event_skips_status_update(self, monkeypatch):
+    def test_processed_duplicate_returns_true_and_skips_status_update(self, monkeypatch):
         import src.services.subscription_webhook_service as svc
         status_updates: list = []
         monkeypatch.setattr(svc, "record_subscription_event", lambda *a, **kw: False)
-        monkeypatch.setattr(svc, "update_subscription_event_status",
-                            lambda event_id, status, **kw: status_updates.append((event_id, status, kw)))
+        monkeypatch.setattr(svc, "get_subscription_event_status", lambda *a, **kw: "processed")
+        monkeypatch.setattr(
+            svc,
+            "update_subscription_event_status",
+            lambda event_id, status, **kw: status_updates.append((event_id, status, kw)) or True,
+        )
 
-        svc.process_stripe_event("evt_dup", "checkout.session.completed", _checkout_event())
+        result = svc.process_stripe_event("evt_dup", "checkout.session.completed", _checkout_event())
 
+        assert result is True
         assert status_updates == []
+
+    def test_pending_in_flight_returns_true_and_skips_status_update(self, monkeypatch):
+        import src.services.subscription_webhook_service as svc
+        status_updates: list = []
+        monkeypatch.setattr(svc, "record_subscription_event", lambda *a, **kw: False)
+        monkeypatch.setattr(svc, "get_subscription_event_status", lambda *a, **kw: "pending")
+        monkeypatch.setattr(
+            svc,
+            "update_subscription_event_status",
+            lambda event_id, status, **kw: status_updates.append((event_id, status, kw)) or True,
+        )
+        monkeypatch.setattr(svc, "upsert_subscription", MagicMock())
+
+        result = svc.process_stripe_event("evt_pending", "checkout.session.completed", _checkout_event())
+
+        assert result is True
+        assert status_updates == []
+        svc.upsert_subscription.assert_not_called()
+
+    def test_failed_unclaimed_event_remains_retryable(self, monkeypatch):
+        import src.services.subscription_webhook_service as svc
+        monkeypatch.setattr(svc, "record_subscription_event", lambda *a, **kw: False)
+        monkeypatch.setattr(svc, "get_subscription_event_status", lambda *a, **kw: "failed")
+        monkeypatch.setattr(svc, "upsert_subscription", MagicMock())
+
+        result = svc.process_stripe_event("evt_failed", "checkout.session.completed", _checkout_event())
+
+        assert result is False
+        svc.upsert_subscription.assert_not_called()
+
+    def test_missing_or_db_error_unclaimed_event_returns_false(self, monkeypatch):
+        import src.services.subscription_webhook_service as svc
+        monkeypatch.setattr(svc, "record_subscription_event", lambda *a, **kw: False)
+        monkeypatch.setattr(svc, "get_subscription_event_status", lambda *a, **kw: None)
+        monkeypatch.setattr(svc, "upsert_subscription", MagicMock())
+
+        result = svc.process_stripe_event("evt_missing", "checkout.session.completed", _checkout_event())
+
+        assert result is False
+        svc.upsert_subscription.assert_not_called()
 
 
 # ── _price_id_to_plan unit tests ──────────────────────────────────────────────

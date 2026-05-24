@@ -122,8 +122,8 @@ def upsert_subscription(
     monthly_ai_message_limit: int | None = None,
     saved_jobs_limit: int | None = None,
     profile_optimization_limit: int | None = None,
-    premium_recommendations_enabled: bool = False,
-    application_automation_enabled: bool = False,
+    premium_recommendations_enabled: bool | None = None,
+    application_automation_enabled: bool | None = None,
 ) -> dict[str, Any] | None:
     """Create or update a subscription record.
 
@@ -224,23 +224,33 @@ def upsert_subscription(
 # ── Webhook idempotency ───────────────────────────────────────────────────────
 
 def event_already_processed(stripe_event_id: str) -> bool:
-    """Return True if this Stripe event has already been recorded."""
+    """Return True if this Stripe event has already completed successfully."""
+    return get_subscription_event_status(stripe_event_id) == "processed"
+
+
+def get_subscription_event_status(stripe_event_id: str) -> str | None:
+    """Return the current subscription_events status, or None if missing / DB unavailable."""
     db = _db()
     if not db:
-        return False
+        return None
     try:
         with db.connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT 1 FROM subscription_events WHERE stripe_event_id = %s",
+                    """
+                    SELECT status
+                      FROM subscription_events
+                     WHERE stripe_event_id = %s
+                    """,
                     (stripe_event_id,),
                 )
-                return cur.fetchone() is not None
+                row = cur.fetchone()
+                return row["status"] if row and row.get("status") else None
     except Exception:
         logger.exception(
-            "subscription_repo: event_already_processed failed event_id=%s", stripe_event_id
+            "subscription_repo: get_subscription_event_status failed event_id=%s", stripe_event_id
         )
-        return False
+        return None
 
 
 def record_subscription_event(
@@ -298,17 +308,18 @@ def update_subscription_event_status(
     status: str,
     *,
     error_detail: str | None = None,
-) -> None:
+) -> bool:
     """Close out a claimed event with its final status.
 
     Call with status='processed' on handler success, 'failed' on exception.
     Failed events are re-claimable by record_subscription_event on the next retry.
-    Sets processed_at timestamp when status='processed'.
+    Sets processed_at timestamp when status='processed'. Returns True when
+    the status row was updated, False when DB is unavailable/fails or no row matched.
     """
     try:
         with _db_transaction() as conn:
             if conn is None:
-                return
+                return False
             with conn.cursor() as cur:
                 if status == "processed":
                     cur.execute(
@@ -328,7 +339,9 @@ def update_subscription_event_status(
                         """,
                         (status, error_detail, stripe_event_id),
                     )
+                return cur.rowcount > 0
     except Exception:
         logger.exception(
             "subscription_repo: update_subscription_event_status failed event_id=%s", stripe_event_id
         )
+        return False

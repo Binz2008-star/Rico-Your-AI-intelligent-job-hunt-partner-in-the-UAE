@@ -28,5 +28,5 @@ CREATE INDEX IF NOT EXISTS idx_subscription_events_failed
 
 -- Index for archival cleanup (processed events older than retention window)
 CREATE INDEX IF NOT EXISTS idx_subscription_events_archive_cleanup
-    ON subscription_events (status, created_at)
+    ON subscription_events (status, processed_at)
  WHERE archived_at IS NULL;
