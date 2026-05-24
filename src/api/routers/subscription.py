@@ -17,6 +17,7 @@ from src.schemas.subscription import (
 )
 from src.subscription_plans import (
     build_checkout_response,
+    create_customer_portal_session,
     handle_subscription_webhook,
     list_paid_plans,
     resolve_effective_user_plan,
@@ -46,6 +47,16 @@ def create_subscription_checkout(
         raise HTTPException(status_code=422, detail=str(exc))
 
 
+@router.post("/portal", response_model=CheckoutResponse)
+def create_customer_portal(
+    user_id: str = Depends(get_current_user_id),
+) -> CheckoutResponse:
+    try:
+        return create_customer_portal_session(user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
 @router.post("/webhook", response_model=SubscriptionWebhookResponse)
 async def subscription_webhook(
     request: Request,
@@ -67,4 +78,4 @@ async def subscription_webhook(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid Stripe webhook")
+        raise HTTPException(status_code=500, detail="Stripe webhook processing failed")

@@ -50,6 +50,20 @@ def clear_jotform_webhook_secret():
 
 
 @pytest.fixture(autouse=True)
+def clear_telegram_webhook_secret():
+    """Keep Telegram route tests independent from any developer-local .env secret."""
+    original = os.environ.get("TELEGRAM_WEBHOOK_SECRET")
+    os.environ["TELEGRAM_WEBHOOK_SECRET"] = ""
+    try:
+        yield
+    finally:
+        if original is None:
+            os.environ.pop("TELEGRAM_WEBHOOK_SECRET", None)
+        else:
+            os.environ["TELEGRAM_WEBHOOK_SECRET"] = original
+
+
+@pytest.fixture(autouse=True)
 def reset_rate_limiter_storage():
     from src.api.rate_limit import limiter
     try:
@@ -365,6 +379,7 @@ class TestRicoCVUploadSecurity:
             "user-123",
             "public:invalid",
             "public:web-",
+            "public:" + ("a" * 65),
             "../../etc/passwd",
             "authenticated-user-id",
         ]
@@ -374,6 +389,14 @@ class TestRicoCVUploadSecurity:
                 files={"file": ("cv.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
             )
             assert r.status_code == 401, f"Expected 401 for user_id={invalid_id}, got {r.status_code}"
+
+    def test_public_chat_rejects_overlong_session_id(self, client):
+        """Public chat and CV upload must share the same public session bounds."""
+        r = client.post(
+            "/api/v1/rico/chat/public",
+            json={"message": "Find jobs", "session_id": "a" * 65},
+        )
+        assert r.status_code == 422
 
     def test_guest_cannot_write_arbitrary_user_id_email(self, client):
         """Guest users cannot use arbitrary email addresses as user_id."""
@@ -494,6 +517,32 @@ class TestRicoTelegramWebhookRouteExists:
             r = client.post("/api/v1/rico/webhooks/telegram", json=update)
         assert r.status_code == 200
         assert captured["update"] == update
+
+    def test_telegram_webhook_rejects_invalid_secret_when_configured(self, client, monkeypatch):
+        monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "telegram-secret")
+        with patch("src.services.chat_service.handle_telegram_update", return_value=_TELEGRAM_RESPONSE) as mock_handle:
+            r = client.post("/api/v1/rico/webhooks/telegram", json={})
+        assert r.status_code == 403
+        mock_handle.assert_not_called()
+
+    def test_telegram_webhook_accepts_valid_secret_when_configured(self, client, monkeypatch):
+        monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "telegram-secret")
+        with patch("src.services.chat_service.handle_telegram_update", return_value=_TELEGRAM_RESPONSE) as mock_handle:
+            r = client.post(
+                "/api/v1/rico/webhooks/telegram",
+                json={},
+                headers={"X-Telegram-Bot-Api-Secret-Token": "telegram-secret"},
+            )
+        assert r.status_code == 200
+        mock_handle.assert_called_once()
+
+    def test_telegram_webhook_fails_closed_in_production_without_secret(self, client, monkeypatch):
+        monkeypatch.setenv("APP_ENV", "production")
+        monkeypatch.delenv("TELEGRAM_WEBHOOK_SECRET", raising=False)
+        with patch("src.services.chat_service.handle_telegram_update", return_value=_TELEGRAM_RESPONSE) as mock_handle:
+            r = client.post("/api/v1/rico/webhooks/telegram", json={})
+        assert r.status_code == 503
+        mock_handle.assert_not_called()
 
 
 class TestRicoJotformWebhookRouteExists:

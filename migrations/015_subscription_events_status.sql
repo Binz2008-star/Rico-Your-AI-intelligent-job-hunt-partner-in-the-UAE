@@ -16,10 +16,25 @@ ALTER TABLE subscription_events
     ADD COLUMN IF NOT EXISTS archived_at   TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS payload_redacted_at TIMESTAMPTZ;
 
+-- Migration 013 defined processed_at as NOT NULL DEFAULT NOW(), so the
+-- ADD COLUMN IF NOT EXISTS above silently skipped it.  The column keeps its
+-- original NOT NULL DEFAULT NOW() constraint, which stamps every INSERT with
+-- the current time — making all events look processed before any handler runs.
+-- Fix: drop the default and the NOT NULL so processed_at is only set when
+-- update_subscription_event_status marks an event 'processed'.
+ALTER TABLE subscription_events
+    ALTER COLUMN processed_at DROP DEFAULT,
+    ALTER COLUMN processed_at DROP NOT NULL;
+
 -- Treat all pre-migration events as successfully processed.
 UPDATE subscription_events
    SET status = 'processed'
  WHERE status = 'pending';
+
+-- For pre-migration rows now marked processed, preserve their original
+-- processed_at (it was the INSERT time from 013, which is the best proxy
+-- for when the event was handled).  Only NULL-out rows that remain pending.
+UPDATE subscription_events SET processed_at = NULL WHERE status != 'processed';
 
 -- Index to quickly locate failed events for replay queries.
 CREATE INDEX IF NOT EXISTS idx_subscription_events_failed

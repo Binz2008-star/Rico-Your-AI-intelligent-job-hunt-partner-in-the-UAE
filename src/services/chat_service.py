@@ -313,6 +313,17 @@ def db_append_chat(user_id: str, role: str, message: str) -> None:
         logger.debug("chat_service: db_append_chat failed: %s", exc)
 
 
+def _message_is_before(message: Any, before: datetime) -> bool:
+    """Return True for fallback memory messages before the pagination cursor."""
+    if not isinstance(message, dict) or not message.get("timestamp"):
+        return False
+    try:
+        return datetime.fromisoformat(str(message["timestamp"]).replace("Z", "+00:00")) < before
+    except (TypeError, ValueError):
+        logger.debug("chat_service: skipping message with invalid timestamp")
+        return False
+
+
 def get_chat_history(user_id: str, limit: int = 50, before: datetime | None = None) -> list[Dict[str, Any]]:
     """
     Get conversation history for a user with pagination support.
@@ -342,7 +353,7 @@ def get_chat_history(user_id: str, limit: int = 50, before: datetime | None = No
     if before:
         messages = [
             m for m in messages
-            if isinstance(m, dict) and m.get("timestamp") and datetime.fromisoformat(m["timestamp"]) < before
+            if _message_is_before(m, before)
         ]
 
     # Normalise to dict format (messages may already be dicts from JSON)

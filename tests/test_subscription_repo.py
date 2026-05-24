@@ -401,6 +401,34 @@ class TestRecordSubscriptionEvent:
         assert result is False
 
 
+class TestUpsertSubscriptionOverrides:
+    def test_entitlement_override_params_default_to_none(self, monkeypatch):
+        import src.repositories.subscription_repo as repo
+
+        executed: list = []
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = _fake_row()
+        mock_cursor.execute.side_effect = lambda sql, params: executed.append(params)
+
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value.__enter__ = lambda s: mock_cursor
+        mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def fake_transaction():
+            yield mock_conn
+
+        monkeypatch.setattr(repo, "_db_transaction", fake_transaction)
+
+        result = repo.upsert_subscription("alice@rico.ai", plan="pro", status="active")
+
+        assert result is not None
+        params = executed[0]
+        assert params[-5:] == (None, None, None, None, None)
+
+
 # ── update_subscription_event_status ─────────────────────────────────────────
 
 class TestUpdateSubscriptionEventStatus:
@@ -409,6 +437,7 @@ class TestUpdateSubscriptionEventStatus:
         executed: list = []
 
         mock_cursor = MagicMock()
+        mock_cursor.rowcount = 1
         mock_cursor.execute.side_effect = lambda sql, params: executed.append(params)
 
         mock_conn = MagicMock()
@@ -427,14 +456,16 @@ class TestUpdateSubscriptionEventStatus:
         import src.repositories.subscription_repo as repo
         txn, executed = self._make_capture_mock()
         monkeypatch.setattr(repo, "_db_transaction", txn)
-        repo.update_subscription_event_status("evt_123", "processed")
+        result = repo.update_subscription_event_status("evt_123", "processed")
+        assert result is True
         assert executed[0] == ("processed", None, "evt_123")
 
     def test_updates_to_failed_with_error_detail(self, monkeypatch):
         import src.repositories.subscription_repo as repo
         txn, executed = self._make_capture_mock()
         monkeypatch.setattr(repo, "_db_transaction", txn)
-        repo.update_subscription_event_status("evt_err", "failed", error_detail="DB timeout")
+        result = repo.update_subscription_event_status("evt_err", "failed", error_detail="DB timeout")
+        assert result is True
         assert executed[0] == ("failed", "DB timeout", "evt_err")
 
     def test_no_op_when_db_unavailable(self, monkeypatch):
@@ -446,7 +477,7 @@ class TestUpdateSubscriptionEventStatus:
             yield None
 
         monkeypatch.setattr(repo, "_db_transaction", no_db)
-        repo.update_subscription_event_status("evt_any", "processed")  # must not raise
+        assert repo.update_subscription_event_status("evt_any", "processed") is False
 
     def test_no_op_on_db_exception(self, monkeypatch):
         import src.repositories.subscription_repo as repo
@@ -458,7 +489,24 @@ class TestUpdateSubscriptionEventStatus:
             yield  # noqa: unreachable
 
         monkeypatch.setattr(repo, "_db_transaction", exploding)
-        repo.update_subscription_event_status("evt_any", "processed")  # must not raise
+        assert repo.update_subscription_event_status("evt_any", "processed") is False
+
+    def test_returns_false_when_no_event_row_updated(self, monkeypatch):
+        import src.repositories.subscription_repo as repo
+        txn, _ = self._make_capture_mock()
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def fake_transaction():
+            with txn() as conn:
+                cur_cm = conn.cursor.return_value
+                cur = cur_cm.__enter__()
+                cur.rowcount = 0
+                yield conn
+
+        monkeypatch.setattr(repo, "_db_transaction", fake_transaction)
+        assert repo.update_subscription_event_status("evt_missing", "processed") is False
 
 
 # ── DB entitlement columns do not override plan definitions by default ─────────

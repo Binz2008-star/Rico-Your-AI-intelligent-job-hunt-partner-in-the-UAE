@@ -38,7 +38,11 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.api.admin_guard import require_admin_user
 from src.api.deps import get_current_user, get_current_user_id
-from src.api.public_identity import normalize_public_email
+from src.api.public_identity import (
+    is_safe_public_session_id,
+    is_valid_public_user_id,
+    normalize_public_email,
+)
 from src.api.rate_limit import LIMIT_CHAT, LIMIT_UPLOAD, LIMIT_WEBHOOK, limiter
 from src.repositories import onboarding_repo, profile_repo
 from src.repositories.learning_repo import get_learning_repository
@@ -62,8 +66,6 @@ _UTC = timezone.utc
 _UNSAFE_CHARS_RE = re.compile(r"[<>\"']")
 _PDF_MAGIC = b"%PDF"
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
-_PUBLIC_USER_ID_RE = re.compile(r"^public:[a-zA-Z0-9\-_]{8,80}$", re.I)
-_SAFE_SESSION_RE = re.compile(r"^[a-zA-Z0-9\-_]+$")
 
 router = APIRouter(prefix="/api/v1/rico", tags=["rico"])
 
@@ -101,8 +103,8 @@ class RicoPublicChatRequest(BaseModel):
     @field_validator("session_id")
     @classmethod
     def safe_session_id(cls, v: str) -> str:
-        if v and not _SAFE_SESSION_RE.match(v):
-            raise ValueError("Session ID must be alphanumeric, hyphen, or underscore")
+        if v and not is_safe_public_session_id(v):
+            raise ValueError("Session ID must be 8-64 chars: letters, numbers, hyphen, or underscore")
         return v
 
     @field_validator("email")
@@ -228,7 +230,7 @@ def mark_onboarding_complete(user_id: str) -> None:
 
 def _is_valid_public_user_id(value: str) -> bool:
     """Validate that a user_id matches the expected guest session format."""
-    return bool(_PUBLIC_USER_ID_RE.fullmatch(value or ""))
+    return is_valid_public_user_id(value)
 
 
 def _resolve_upload_user_id(
@@ -280,6 +282,23 @@ def _validate_jotform_secret(request: Request) -> None:
 
     if not provided or not secrets.compare_digest(provided, webhook_secret):
         logger.warning("jotform_webhook: missing or invalid secret")
+        raise HTTPException(status_code=403, detail="Invalid or missing webhook secret")
+
+
+def _validate_telegram_secret(request: Request) -> None:
+    """Validate Telegram webhook secret token; fail closed in production."""
+    webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET", "").strip()
+
+    if not webhook_secret:
+        if _is_production():
+            logger.error("telegram_webhook: TELEGRAM_WEBHOOK_SECRET missing in production")
+            raise HTTPException(status_code=503, detail="Webhook not configured")
+        logger.warning("telegram_webhook: TELEGRAM_WEBHOOK_SECRET missing; allowing dev request")
+        return
+
+    provided = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    if not provided or not secrets.compare_digest(provided, webhook_secret):
+        logger.warning("telegram_webhook: missing or invalid secret")
         raise HTTPException(status_code=403, detail="Invalid or missing webhook secret")
 
 
@@ -1158,6 +1177,7 @@ async def confirm_cv_profile(
 @_webhook_handler("telegram")
 async def rico_telegram_webhook(request: Request) -> dict[str, Any]:
     """Telegram bot webhook endpoint."""
+    _validate_telegram_secret(request)
     try:
         update = await request.json()
     except Exception:

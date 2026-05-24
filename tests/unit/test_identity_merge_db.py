@@ -147,6 +147,12 @@ class TestMergePublicIdentityIntoAuth:
         MockDB.assert_not_called()
 
     @patch("src.services.identity_merge_service.RicoDB")
+    def test_rejects_malformed_public_source(self, MockDB):
+        result = merge_public_identity_into_auth("public:has/slash", "bob@example.com")
+        assert result is False
+        MockDB.assert_not_called()
+
+    @patch("src.services.identity_merge_service.RicoDB")
     def test_rejects_same_user_id(self, MockDB):
         result = merge_public_identity_into_auth("public:same", "public:same")
         assert result is False
