@@ -241,3 +241,109 @@ class TestMeEndpointDbBacked:
         body = r.json()
         assert body["subscription"]["plan"] == "free"
         assert body["is_active"] is False
+
+    def test_canceled_pro_uses_free_entitlements(self, auth_client, monkeypatch):
+        import src.repositories.subscription_repo as repo
+        monkeypatch.setattr(
+            repo, "get_subscription",
+            lambda uid: _fake_row(plan="pro", status="canceled"),
+        )
+
+        r = auth_client.get("/api/v1/subscription/me")
+
+        assert r.status_code == 200
+        body = r.json()
+        assert body["is_active"] is False
+        ent = body["subscription"]["entitlements"]
+        assert ent["monthly_ai_message_limit"] == 50
+        assert ent["saved_jobs_limit"] == 10
+        assert ent["premium_recommendations_enabled"] is False
+
+    def test_past_due_pro_uses_free_entitlements(self, auth_client, monkeypatch):
+        import src.repositories.subscription_repo as repo
+        monkeypatch.setattr(
+            repo, "get_subscription",
+            lambda uid: _fake_row(plan="pro", status="past_due"),
+        )
+
+        r = auth_client.get("/api/v1/subscription/me")
+
+        assert r.status_code == 200
+        body = r.json()
+        assert body["is_active"] is False
+        ent = body["subscription"]["entitlements"]
+        assert ent["monthly_ai_message_limit"] == 50
+
+    def test_canceled_premium_uses_free_entitlements(self, auth_client, monkeypatch):
+        import src.repositories.subscription_repo as repo
+        monkeypatch.setattr(
+            repo, "get_subscription",
+            lambda uid: _fake_row(plan="premium", status="canceled"),
+        )
+
+        r = auth_client.get("/api/v1/subscription/me")
+
+        assert r.status_code == 200
+        body = r.json()
+        assert body["is_active"] is False
+        ent = body["subscription"]["entitlements"]
+        assert ent["monthly_ai_message_limit"] == 50
+        assert ent["application_automation_enabled"] is False
+
+
+# ── record_subscription_event: insert vs duplicate ───────────────────────────
+
+class TestRecordSubscriptionEvent:
+    def _make_transaction_mock(self, rowcount: int):
+        """Build a _db_transaction context manager mock that yields a conn with cursor rowcount."""
+        mock_cursor = MagicMock()
+        mock_cursor.rowcount = rowcount
+
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value.__enter__ = lambda s: mock_cursor
+        mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def fake_transaction():
+            yield mock_conn
+
+        return fake_transaction
+
+    def test_returns_true_on_fresh_insert(self, monkeypatch):
+        import src.repositories.subscription_repo as repo
+        monkeypatch.setattr(repo, "_db_transaction", self._make_transaction_mock(rowcount=1))
+        result = repo.record_subscription_event("evt_new", "checkout.session.completed")
+        assert result is True
+
+    def test_returns_false_on_duplicate(self, monkeypatch):
+        import src.repositories.subscription_repo as repo
+        monkeypatch.setattr(repo, "_db_transaction", self._make_transaction_mock(rowcount=0))
+        result = repo.record_subscription_event("evt_dup", "checkout.session.completed")
+        assert result is False
+
+    def test_returns_false_when_db_unavailable(self, monkeypatch):
+        import src.repositories.subscription_repo as repo
+        from contextlib import contextmanager
+
+        @contextmanager
+        def no_db():
+            yield None
+
+        monkeypatch.setattr(repo, "_db_transaction", no_db)
+        result = repo.record_subscription_event("evt_any", "checkout.session.completed")
+        assert result is False
+
+    def test_returns_false_on_db_exception(self, monkeypatch):
+        import src.repositories.subscription_repo as repo
+        from contextlib import contextmanager
+
+        @contextmanager
+        def exploding():
+            raise Exception("db down")
+            yield  # noqa: unreachable
+
+        monkeypatch.setattr(repo, "_db_transaction", exploding)
+        result = repo.record_subscription_event("evt_err", "checkout.session.completed")
+        assert result is False
