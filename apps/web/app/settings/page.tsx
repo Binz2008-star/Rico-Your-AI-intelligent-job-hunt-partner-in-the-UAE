@@ -44,6 +44,11 @@ export default function SettingsPage() {
     : telegramConfigured
       ? "Configured"
       : "Not configured";
+  const telegramDescription = telegramConfigured
+    ? "A Telegram chat ID is saved for job alerts."
+    : SETTINGS_BACKEND_MAINTENANCE_MODE
+      ? "Add a Telegram chat ID after backend service is restored."
+      : "Add a Telegram chat ID to enable job alerts.";
 
   useEffect(() => {
     if (SETTINGS_BACKEND_MAINTENANCE_MODE) {
@@ -274,9 +279,7 @@ export default function SettingsPage() {
               <div className="space-y-1">
                 <p className="text-sm font-bold text-[#eeeef5] group-hover:text-white transition-colors">Telegram Notifications</p>
                 <p className="text-xs text-[#5a5a7a]">
-                  {telegramConfigured
-                    ? "A Telegram chat ID is saved for job alerts."
-                    : "Add a Telegram chat ID after backend service is restored."}
+                  {telegramDescription}
                 </p>
               </div>
               <span className="text-xs text-[#5b4fff] font-medium">{telegramStatus}</span>
