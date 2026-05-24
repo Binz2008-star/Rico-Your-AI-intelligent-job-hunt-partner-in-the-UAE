@@ -12,11 +12,17 @@ This document defines the correct routing and data flow for subscription package
 
 **Package selection must never route the user directly to `/command` or Rico chat without completing checkout for paid plans.**
 
-## Current Bug
+## Current Bug (fixed in PR #207)
 
-`apps/web/app/command/page.tsx` currently handles package selection by routing all plans (including Pro and Premium) to `/command` without calling the checkout endpoint. This skips payment entirely and must be fixed.
+Two gaps existed in `apps/web/app/subscription/page.tsx`:
 
-Fix tracked in Known Gaps / Next PRs section below.
+1. **Mock mode dead-end**: When Stripe is not yet configured, `createCheckoutSession` returns `provider: "mock"`. The frontend was showing a toast "Stripe Checkout is not configured" in production and hiding the inline notice behind a `NODE_ENV === "development"` check. Users had no path forward.
+
+2. **Free plan row had no CTA**: `FreePlanRow` was purely informational — no button to continue to `/command` (logged-in users) or `/signup` (unauthenticated users).
+
+Both fixed in PR #207:
+- Mock notice is now shown in all environments with honest copy and a "Continue with Free plan →" link.
+- `FreePlanRow` now shows "Open Rico →" (logged-in free users) or "Sign up free →" (unauthenticated).
 
 ## Full Subscription Flow Diagram
 
