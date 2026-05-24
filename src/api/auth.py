@@ -85,6 +85,8 @@ def _cookie_secure() -> bool:
     if raw in {"1", "true", "yes", "on"}:
         return True
     if raw in {"0", "false", "no", "off"}:
+        if _is_production():
+            raise RuntimeError("COOKIE_SECURE must be true in production")
         return False
     return _is_production()
 

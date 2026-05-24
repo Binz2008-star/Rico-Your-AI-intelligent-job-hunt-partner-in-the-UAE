@@ -28,9 +28,7 @@ def get_db_connection():
         return None
 
     try:
-        conn = psycopg2.connect(DATABASE_URL)
-        conn.autocommit = True
-        return conn
+        return psycopg2.connect(DATABASE_URL)
     except OperationalError as e:
         print(f"⚠️ Database connection failed: {e}")
         print("🔄 Falling back to JSON storage")
@@ -38,6 +36,19 @@ def get_db_connection():
     except Exception as e:
         print(f"⚠️ Unexpected database error: {e}")
         return None
+
+
+def _commit(conn) -> None:
+    if conn:
+        conn.commit()
+
+
+def _rollback(conn) -> None:
+    if conn:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
 
 
 def init_db():
@@ -126,10 +137,12 @@ def init_db():
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_auto_apply_status ON auto_apply_attempts(status)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_auto_apply_timestamp ON auto_apply_attempts(timestamp DESC)")
 
+        _commit(conn)
         print("✅ Database initialized successfully")
         return True
 
     except Exception as e:
+        _rollback(conn)
         print(f"❌ Database initialization failed: {e}")
         return False
     finally:
@@ -163,9 +176,11 @@ def save_job(job: Dict[str, Any], score: int) -> bool:
                 job.get('source', 'jobspy') or 'jobspy'
             ))
 
+        _commit(conn)
         return True
 
     except Exception as e:
+        _rollback(conn)
         print(f"❌ Failed to save job: {e}")
         return False
     finally:
@@ -224,9 +239,11 @@ def mark_applied(job_link: str, notes: str = None) -> bool:
                     notes = COALESCE(applications.notes, '') || ' | ' || COALESCE(%s, '')
             """, (job_link, notes or '', notes or ''))
 
+        _commit(conn)
         return True
 
     except Exception as e:
+        _rollback(conn)
         print(f"❌ Failed to mark job as applied: {e}")
         return False
     finally:
@@ -260,9 +277,11 @@ def update_application_status(job_link: str, status: str, notes: str = None) -> 
             # rowcount MUST be read inside the with-block; psycopg2 resets it on cursor close
             affected = cursor.rowcount
 
+        _commit(conn)
         return affected > 0
 
     except Exception as e:
+        _rollback(conn)
         print(f"❌ Failed to update application status: {e}")
         return False
     finally:
