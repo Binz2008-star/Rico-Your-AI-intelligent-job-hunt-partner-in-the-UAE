@@ -36,6 +36,13 @@ def _fake_row(**overrides) -> dict:
         "current_period_end": None,
         "created_at": None,
         "updated_at": None,
+        "cancel_at": None,
+        "canceled_at": None,
+        "monthly_ai_message_limit": None,
+        "saved_jobs_limit": None,
+        "profile_optimization_limit": None,
+        "premium_recommendations_enabled": False,
+        "application_automation_enabled": False,
     }
     base.update(overrides)
     return base
@@ -421,3 +428,86 @@ class TestUpdateSubscriptionEventStatus:
 
         monkeypatch.setattr(repo, "_db_transaction", exploding)
         repo.update_subscription_event_status("evt_any", "processed")  # must not raise
+
+
+# ── DB entitlement columns do not override plan definitions by default ─────────
+
+class TestDbEntitlementsNotUsedByDefault:
+    def test_db_entitlements_ignored_for_active_pro(self, auth_client, monkeypatch):
+        """DB entitlement columns are ignored; plan definitions are used."""
+        import src.repositories.subscription_repo as repo
+        # Simulate DB having different entitlement values than plan definition
+        monkeypatch.setattr(
+            repo, "get_subscription",
+            lambda uid: _fake_row(
+                plan="pro",
+                status="active",
+                monthly_ai_message_limit=999,  # Different from plan definition (300)
+                saved_jobs_limit=888,  # Different from plan definition (100)
+            ),
+        )
+
+        r = auth_client.get("/api/v1/subscription/me")
+
+        assert r.status_code == 200
+        body = r.json()
+        # Should use plan definition values, not DB values
+        assert body["subscription"]["entitlements"]["monthly_ai_message_limit"] == 300
+        assert body["subscription"]["entitlements"]["saved_jobs_limit"] == 100
+
+    def test_db_entitlements_ignored_for_active_premium(self, auth_client, monkeypatch):
+        """DB entitlement columns are ignored; plan definitions are used."""
+        import src.repositories.subscription_repo as repo
+        monkeypatch.setattr(
+            repo, "get_subscription",
+            lambda uid: _fake_row(
+                plan="premium",
+                status="active",
+                monthly_ai_message_limit=5000,  # Different from plan definition (1500)
+                premium_recommendations_enabled=False,  # Different from plan definition (True)
+            ),
+        )
+
+        r = auth_client.get("/api/v1/subscription/me")
+
+        assert r.status_code == 200
+        body = r.json()
+        # Should use plan definition values, not DB values
+        assert body["subscription"]["entitlements"]["monthly_ai_message_limit"] == 1500
+        assert body["subscription"]["entitlements"]["premium_recommendations_enabled"] is True
+
+
+# ── subscription_events status defaults to pending ───────────────────────────────
+
+class TestSubscriptionEventsDefaultStatus:
+    def _make_capture_mock(self):
+        """Return (fake_transaction, executed_sql_list)."""
+        executed: list = []
+
+        mock_cursor = MagicMock()
+        mock_cursor.rowcount = 1  # Simulate successful insert
+        mock_cursor.execute.side_effect = lambda sql, params: executed.append(sql)
+
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value.__enter__ = lambda s: mock_cursor
+        mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def fake_transaction():
+            yield mock_conn
+
+        return fake_transaction, executed
+
+    def test_new_event_inserted_with_pending_status(self, monkeypatch):
+        """New subscription_events rows default to status='pending'."""
+        import src.repositories.subscription_repo as repo
+        txn, executed = self._make_capture_mock()
+        monkeypatch.setattr(repo, "_db_transaction", txn)
+        repo.record_subscription_event("evt_new", "checkout.session.completed")
+
+        # Check that the INSERT uses DEFAULT 'pending' for status column
+        insert_sql = executed[0]
+        assert "status" in insert_sql  # status column should be in the INSERT
+        assert "'pending'" in insert_sql  # default value should be 'pending'

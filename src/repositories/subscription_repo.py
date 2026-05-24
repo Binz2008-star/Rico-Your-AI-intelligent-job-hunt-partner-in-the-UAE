@@ -224,7 +224,7 @@ def upsert_subscription(
 # ── Webhook idempotency ───────────────────────────────────────────────────────
 
 def event_already_processed(stripe_event_id: str) -> bool:
-    """Return True if this Stripe event has already been recorded."""
+    """Return True if this Stripe event has already completed successfully."""
     db = _db()
     if not db:
         return False
@@ -232,7 +232,12 @@ def event_already_processed(stripe_event_id: str) -> bool:
         with db.connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT 1 FROM subscription_events WHERE stripe_event_id = %s",
+                    """
+                    SELECT 1
+                      FROM subscription_events
+                     WHERE stripe_event_id = %s
+                       AND status = 'processed'
+                    """,
                     (stripe_event_id,),
                 )
                 return cur.fetchone() is not None

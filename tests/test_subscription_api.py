@@ -254,6 +254,10 @@ class TestSubscriptionWebhook:
         fake_stripe = SimpleNamespace(Webhook=FakeWebhook)
         monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_safe")
         monkeypatch.setattr("src.subscription_plans._load_stripe", lambda: fake_stripe)
+        monkeypatch.setattr(
+            "src.services.subscription_webhook_service.process_stripe_event",
+            lambda **kwargs: True,
+        )
 
         r = client.post(
             "/api/v1/subscription/webhook",
