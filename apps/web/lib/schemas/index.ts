@@ -220,6 +220,21 @@ export const RicoFeedbackRequestSchema = z.object({
     comment: z.string().max(500).optional(),
 });
 
+const StringFromUnknownSchema = z.preprocess((value) => {
+    if (value === null || value === undefined) return undefined;
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    return value;
+}, z.string().optional());
+
+const StringArrayFromUnknownSchema = z.preprocess((value) => {
+    if (value === null || value === undefined) return undefined;
+    if (!Array.isArray(value)) return value;
+    return value
+        .filter((item) => item !== null && item !== undefined)
+        .map((item) => typeof item === 'string' ? item : String(item));
+}, z.array(z.string()).optional());
+
 export const MeResponseSchema = z.object({
     email: z.string().nullable(),
     role: z.string(),
@@ -228,75 +243,75 @@ export const MeResponseSchema = z.object({
 });
 
 export const JobMatchSchema = z.object({
-    title: z.string(),
-    company: z.string(),
-    location: z.string().optional(),
+    title: StringFromUnknownSchema.default('Untitled role'),
+    company: StringFromUnknownSchema.default('Unknown company'),
+    location: StringFromUnknownSchema,
     score: z.number().optional(),
-    why: z.string().optional(),
-    actions: z.array(z.string()).optional(),
+    why: StringFromUnknownSchema,
+    actions: StringArrayFromUnknownSchema,
     confidence: z.enum(['high', 'medium', 'low']).optional(),
-    match_reasons: z.array(z.string()).optional(),
-    match_concerns: z.array(z.string()).optional(),
-    missing_facts: z.array(z.string()).optional(),
-    recommended_action: z.string().optional(),
+    match_reasons: StringArrayFromUnknownSchema,
+    match_concerns: StringArrayFromUnknownSchema,
+    missing_facts: StringArrayFromUnknownSchema,
+    recommended_action: StringFromUnknownSchema,
 }).passthrough();
 
 export const RicoOptionSchema = z.object({
-    action: z.string(),
-    label: z.string(),
-    message: z.string().optional(),
-    role: z.string().optional(),
+    action: StringFromUnknownSchema.default('send_message'),
+    label: StringFromUnknownSchema.default('Continue'),
+    message: StringFromUnknownSchema,
+    role: StringFromUnknownSchema,
 }).passthrough();
 
 export const NextActionSchema = z.object({
-    action: z.string(),
-    label: z.string(),
-    message: z.string().optional(),
-    role: z.string().optional(),
+    action: StringFromUnknownSchema.default('send_message'),
+    label: StringFromUnknownSchema.default('Continue'),
+    message: StringFromUnknownSchema,
+    role: StringFromUnknownSchema,
 }).passthrough();
 
 export const RicoChatResponseSchema = z.object({
-    response: z.string().optional(),
-    reply: z.string().optional(),
-    message: z.string().optional(),
-    content: z.string().optional(),
-    answer: z.string().optional(),
-    text: z.string().optional(),
+    response: StringFromUnknownSchema,
+    reply: StringFromUnknownSchema,
+    message: StringFromUnknownSchema,
+    content: StringFromUnknownSchema,
+    answer: StringFromUnknownSchema,
+    text: StringFromUnknownSchema,
     data: z.object({
-        response: z.string().optional(),
-        reply: z.string().optional(),
-        message: z.string().optional(),
-        content: z.string().optional(),
-        text: z.string().optional(),
+        response: StringFromUnknownSchema,
+        reply: StringFromUnknownSchema,
+        message: StringFromUnknownSchema,
+        content: StringFromUnknownSchema,
+        text: StringFromUnknownSchema,
     }).passthrough().optional(),
-    type: z.string().optional(),
-    matches: z.array(JobMatchSchema).optional(),
-    options: z.array(RicoOptionSchema).optional(),
-    next_action: z.string().optional(),
-    response_source: z.string().optional(),
-    role: z.string().optional(),
-    reasons: z.array(z.string()).optional(),
-    next_actions: z.array(NextActionSchema).optional(),
+    type: StringFromUnknownSchema,
+    matches: z.array(JobMatchSchema).nullable().optional().transform((value) => value ?? undefined),
+    options: z.array(RicoOptionSchema).nullable().optional().transform((value) => value ?? undefined),
+    next_action: StringFromUnknownSchema,
+    response_source: StringFromUnknownSchema,
+    role: StringFromUnknownSchema,
+    reasons: StringArrayFromUnknownSchema,
+    next_actions: z.array(NextActionSchema).nullable().optional().transform((value) => value ?? undefined),
     success: z.boolean().optional(),
-    debug_id: z.string().optional(),
-    error: z.string().optional(),
-    error_ref: z.string().optional(),
-    provider: z.string().optional(),
-    model: z.string().optional(),
+    debug_id: StringFromUnknownSchema,
+    error: StringFromUnknownSchema,
+    error_ref: StringFromUnknownSchema,
+    provider: StringFromUnknownSchema,
+    model: StringFromUnknownSchema,
     profile_context_present: z.boolean().optional(),
-    intent: z.string().optional(),
+    intent: StringFromUnknownSchema,
     entities: z.record(z.string(), z.unknown()).optional(),
     tool_args: z.record(z.string(), z.unknown()).optional(),
-    field_status: z.string().optional(),
+    field_status: StringFromUnknownSchema,
     updated: z.record(z.string(), z.unknown()).optional(),
     profile: z.record(z.string(), z.unknown()).optional(),
-    target_roles: z.array(z.string()).optional(),
+    target_roles: StringArrayFromUnknownSchema,
     openai_available: z.boolean().optional(),
     deepseek_available: z.boolean().optional(),
     hf_available: z.boolean().optional(),
     provider_available: z.boolean().optional(),
-    openai_model: z.string().optional(),
-    jotform_form_id: z.string().nullable().optional(),
+    openai_model: StringFromUnknownSchema,
+    jotform_form_id: StringFromUnknownSchema.nullable(),
 }).passthrough();
 
 export const RicoProfileResponseSchema = z.object({
