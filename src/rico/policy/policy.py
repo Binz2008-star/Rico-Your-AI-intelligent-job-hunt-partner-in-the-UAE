@@ -184,8 +184,7 @@ class PolicyGateway:
         
         # Calendar patterns
         self._calendar_patterns = [
-            # English
-            r"\bcalendar\b",
+            # English — bare "calendar" excluded; "calendar interview question" must not block
             r"\bmy calendar\b",
             r"\bschedule (a|meeting|interview)\b",
             r"\bbook (a|time|slot)\b",
