@@ -95,7 +95,6 @@ def send_message(
     operation_id: str | None = None,
 ) -> Dict[str, Any]:
     """Policy Gateway → IntentRouter → legacy classifier."""
-    from src.repositories.profile_repo import get_profile
     from src.services.operation_state import build_status_response, is_status_followup
     from src.services.subscription_gating import check_ai_message_allowed
 
@@ -103,9 +102,6 @@ def send_message(
         status_response = build_status_response(ctx.user_id)
         if status_response is not None:
             return status_response
-
-    profile = get_profile(ctx.user_id)
-    profile_present = profile is not None
 
     # ── Policy Gateway pre-filter ─────────────────────────────────────────────
     # Handles unsupported external tools and subscription queries deterministically
@@ -128,6 +124,11 @@ def send_message(
     gate = check_ai_message_allowed(ctx)
     if gate and not gate.allowed:
         return gate.to_response()
+
+    # ── Profile fetch (deferred until past gate to avoid DB hit for capped users) ──
+    from src.repositories.profile_repo import get_profile
+    profile = get_profile(ctx.user_id)
+    profile_present = profile is not None
 
     # ── Existing routing unchanged ────────────────────────────────────────────
     decision = _intent_router.route(
