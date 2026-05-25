@@ -15,6 +15,135 @@ from typing import Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
+_ROLE_TOKEN_CASES: Dict[str, str] = {
+    # Core technology / product
+    "ai": "AI",
+    "api": "API",
+    "aws": "AWS",
+    "azure": "Azure",
+    "bi": "BI",
+    "crm": "CRM",
+    "cto": "CTO",
+    "dataops": "DataOps",
+    "devops": "DevOps",
+    "erp": "ERP",
+    "gcp": "GCP",
+    "ios": "iOS",
+    "it": "IT",
+    "ml": "ML",
+    "qa": "QA",
+    "sre": "SRE",
+    "ui": "UI",
+    "ux": "UX",
+
+    # Admin, sales, service, and operations
+    "b2b": "B2B",
+    "b2c": "B2C",
+    "bpo": "BPO",
+    "cx": "CX",
+    "ecommerce": "eCommerce",
+    "fb": "F&B",
+    "fmcg": "FMCG",
+    "fnb": "F&B",
+    "f&b": "F&B",
+    "gm": "GM",
+    "pa": "PA",
+    "pr": "PR",
+    "vip": "VIP",
+
+    # Healthcare / medical licensing
+    "acls": "ACLS",
+    "bls": "BLS",
+    "dha": "DHA",
+    "doh": "DOH",
+    "haad": "HAAD",
+    "hcpc": "HCPC",
+    "icu": "ICU",
+    "moh": "MOH",
+    "mohap": "MOHAP",
+    "nclex": "NCLEX",
+    "ot": "OT",
+    "pals": "PALS",
+    "rn": "RN",
+
+    # HSE / sustainability / compliance
+    "ehs": "EHS",
+    "esg": "ESG",
+    "hse": "HSE",
+    "hseq": "HSEQ",
+    "hsse": "HSSE",
+    "iso": "ISO",
+    "iosh": "IOSH",
+    "nebosh": "NEBOSH",
+    "osha": "OSHA",
+    "qhse": "QHSE",
+    "qc": "QC",
+
+    # Business, finance, people, projects
+    "acca": "ACCA",
+    "aml": "AML",
+    "ca": "CA",
+    "cfa": "CFA",
+    "cfo": "CFO",
+    "cma": "CMA",
+    "cpa": "CPA",
+    "cips": "CIPS",
+    "cipd": "CIPD",
+    "cisa": "CISA",
+    "cism": "CISM",
+    "cissp": "CISSP",
+    "cva": "CVA",
+    "fcpa": "FCPA",
+    "ifrs": "IFRS",
+    "hr": "HR",
+    "kpi": "KPI",
+    "kyc": "KYC",
+    "llb": "LLB",
+    "llm": "LLM",
+    "mba": "MBA",
+    "mcips": "MCIPS",
+    "pmp": "PMP",
+    "pmo": "PMO",
+    "supplychain": "Supply Chain",
+    "vat": "VAT",
+
+    # Engineering / built environment / UAE market
+    "adnoc": "ADNOC",
+    "ashrae": "ASHRAE",
+    "bim": "BIM",
+    "cad": "CAD",
+    "cctv": "CCTV",
+    "dewa": "DEWA",
+    "dm": "DM",
+    "elv": "ELV",
+    "feewa": "FEWA",
+    "gcc": "GCC",
+    "hvac": "HVAC",
+    "leed": "LEED",
+    "mep": "MEP",
+    "mro": "MRO",
+    "nakheel": "Nakheel",
+    "rera": "RERA",
+    "sewa": "SEWA",
+    "sira": "SIRA",
+    "uae": "UAE",
+
+    # Education, aviation, logistics, and language credentials
+    "celta": "CELTA",
+    "iata": "IATA",
+    "ielts": "IELTS",
+    "khda": "KHDA",
+    "lms": "LMS",
+    "pgce": "PGCE",
+    "sen": "SEN",
+    "scm": "SCM",
+    "stcw": "STCW",
+    "tefl": "TEFL",
+    "tesol": "TESOL",
+    "toefl": "TOEFL",
+    "wms": "WMS",
+}
+
 # Common role variants mapping to canonical forms
 _ROLE_VARIANTS: Dict[str, str] = {
     # Sales roles
@@ -231,9 +360,12 @@ class RoleNormalizer:
             words = role.split()
             capitalized = []
             for word in words:
-                # Capitalize first letter, lowercase rest
                 if word:
-                    capitalized.append(word[0].upper() + word[1:].lower())
+                    token_case = _ROLE_TOKEN_CASES.get(word.lower())
+                    if token_case:
+                        capitalized.append(token_case)
+                    else:
+                        capitalized.append(word[0].upper() + word[1:].lower())
             return " ".join(capitalized)
         except Exception as e:
             logger.warning(f"Capitalization failed for '{role}': {e}")

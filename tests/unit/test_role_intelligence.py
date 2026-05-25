@@ -34,6 +34,46 @@ def test_role_normalization_pm_to_product_manager():
     assert result == "Product Manager"
 
 
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("hse manager", "HSE Manager"),
+        ("qhse coordinator", "QHSE Coordinator"),
+        ("esg specialist", "ESG Specialist"),
+        ("iso compliance officer", "ISO Compliance Officer"),
+        ("uae operations manager", "UAE Operations Manager"),
+        ("hr manager", "HR Manager"),
+        ("it project manager", "IT Project Manager"),
+        ("qa qc inspector", "QA QC Inspector"),
+        ("mep engineer", "MEP Engineer"),
+        ("hvac technician", "HVAC Technician"),
+        ("bim coordinator", "BIM Coordinator"),
+        ("pmp certified pmo lead", "PMP Certified PMO Lead"),
+        ("cpa finance manager", "CPA Finance Manager"),
+        ("ios developer", "iOS Developer"),
+        ("devops engineer", "DevOps Engineer"),
+        ("ai ml engineer", "AI ML Engineer"),
+        ("dha registered nurse", "DHA Registered Nurse"),
+        ("rn icu nurse", "RN ICU Nurse"),
+        ("moh pharmacist", "MOH Pharmacist"),
+        ("rera property consultant", "RERA Property Consultant"),
+        ("khda teacher", "KHDA Teacher"),
+        ("iata travel consultant", "IATA Travel Consultant"),
+        ("stcw marine officer", "STCW Marine Officer"),
+        ("cips procurement specialist", "CIPS Procurement Specialist"),
+        ("vat accountant", "VAT Accountant"),
+        ("ifrs financial analyst", "IFRS Financial Analyst"),
+        ("sira security supervisor", "SIRA Security Supervisor"),
+        ("dewa approved engineer", "DEWA Approved Engineer"),
+        ("adnoc project coordinator", "ADNOC Project Coordinator"),
+        ("f&b supervisor", "F&B Supervisor"),
+        ("spa therapist", "Spa Therapist"),
+    ],
+)
+def test_role_normalization_preserves_known_acronyms(raw, expected):
+    assert normalize_role(raw) == expected
+
+
 def test_cv_fit_scoring_hse_skills():
     """Test CV-fit scoring for HSE/ESG skills profile."""
     profile = RicoProfile(
