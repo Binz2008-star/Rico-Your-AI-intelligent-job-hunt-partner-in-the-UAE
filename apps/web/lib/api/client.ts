@@ -94,8 +94,8 @@ apiClient.interceptors.response.use(
     (error) => {
         if (error.response?.status === 401 && typeof window !== 'undefined') {
             // Only redirect to /login on authenticated routes
-            const publicRoutes = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/chat', '/orchestrate'];
-            const isPublicRoute = publicRoutes.some(route => window.location.pathname.startsWith(route));
+            const publicRoutes = ['/login', '/signup', '/forgot-password', '/reset-password', '/chat', '/orchestrate'];
+            const isPublicRoute = publicRoutes.some(route => window.location.pathname.startsWith(route)) || window.location.pathname === '/';
             if (!isPublicRoute) {
                 window.location.href = '/login';
             }
