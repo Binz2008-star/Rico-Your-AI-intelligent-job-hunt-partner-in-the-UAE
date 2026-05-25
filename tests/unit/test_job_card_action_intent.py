@@ -2,7 +2,7 @@
 
 Verifies that job card action messages of the form
     "{action} — {title} at {company}"
-are correctly classified and that title/company are extracted.
+are correctly classified, and that title/company are extracted correctly.
 """
 from __future__ import annotations
 
@@ -48,6 +48,13 @@ from src.agent.intelligence.intent_classifier import classify_intent
         "Data Scientist",
         "Google",
     ),
+    # Job title containing " - " (greedy capture must split on last "at")
+    (
+        "Prepare application — Office Manager - Part time (UAE Nationals Only) at Akamai",
+        "prepare_application",
+        "Office Manager - Part time (UAE Nationals Only)",
+        "Akamai",
+    ),
 ])
 def test_job_card_action_intent(message, expected_intent, expected_title, expected_company):
     result = classify_intent(message)
@@ -79,3 +86,66 @@ def test_job_card_pattern_does_not_match_unrelated_messages():
 
     result = classify_intent("save Environmental Manager as target role")
     assert result.intent == "save_target_role"
+
+
+def test_application_tracking_phrases():
+    """Application tracking phrases should be classified as application_tracking."""
+    tracking_phrases = [
+        "show my tracked applications",
+        "show my applications",
+        "application status",
+        "applications status",
+        "tracked applications",
+        "my applications",
+        "show applications",
+        "show applied jobs",
+        "applied jobs",
+        "show my applied jobs",
+        "show interviews",
+        "interview status",
+        "my interviews",
+        "show offers",
+        "show rejections",
+        "follow up",
+        "remind me to follow up",
+        "where can i see it",
+        "where is it",
+        "what about the job i just applied to",
+        "what about the job i just tracked",
+        "open application flow",
+        "open applications",
+    ]
+    for phrase in tracking_phrases:
+        result = classify_intent(phrase)
+        assert result.intent == "application_tracking", (
+            f"Expected 'application_tracking' for phrase: {phrase!r}, got '{result.intent}'"
+        )
+
+
+def test_intent_result_v2_fields():
+    """IntentResult should have v2 fields for future use."""
+    result = classify_intent("find jobs for Software Engineer")
+    # Check that new v2 fields exist (even if not populated yet)
+    assert hasattr(result, "subintent")
+    assert hasattr(result, "entities")
+    assert hasattr(result, "context_required")
+    assert hasattr(result, "context_type")
+    assert hasattr(result, "action")
+    assert hasattr(result, "target_route")
+    assert hasattr(result, "legacy_intent")
+    # Legacy fields should still exist
+    assert hasattr(result, "extracted_role")
+    assert hasattr(result, "extracted_title")
+    assert hasattr(result, "extracted_company")
+
+
+def test_compatibility_mapper():
+    """The compatibility mapper should map v2 intents to legacy names."""
+    from src.agent.intelligence.intent_classifier import _map_intent_to_legacy
+    assert _map_intent_to_legacy("job_search.explicit_role") == "job_search_explicit"
+    assert _map_intent_to_legacy("job_action.prepare_application") == "prepare_application"
+    assert _map_intent_to_legacy("application.show_flow") == "application_tracking"
+    assert _map_intent_to_legacy("profile.show") == "profile_summary"
+    # Unmapped intents should return as-is
+    assert _map_intent_to_legacy("unknown") == "unknown"
+    assert _map_intent_to_legacy("help") == "help"

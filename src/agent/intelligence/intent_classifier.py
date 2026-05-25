@@ -1,6 +1,6 @@
 """src/agent/intelligence/intent_classifier.py
 
-Unified intent classifier for Rico chat messages.
+Unified intent classifier for Rico chat messages (Intent v2).
 
 Classifies every user message into a canonical intent BEFORE any action is
 taken.  Replaces the permissive short-text fallback that treated arbitrary
@@ -11,19 +11,115 @@ Classification pipeline:
   2. Regex pattern matching (zero cost, medium confidence)
   3. Fallback to ``unknown`` — never to job search
 
-Intent list (from Issue #110 blueprint):
-  - job_search_explicit          user names a role / asks to search
-  - job_search_profile_match     "find me one that matches", "use my CV"
-  - application_tracking         "show my tracked applications"
-  - role_change                  "switch to X", "what about X"
-  - profile_summary              "show my profile"
-  - profile_update               "update my salary", "change my city"
-  - cv_upload_or_parse           CV file reference or "use my CV"
-  - onboarding_answer            answering an onboarding question
-  - help                         "what can you do", "options"
-  - smalltalk                    greetings, thanks, etc.
-  - nonsense                     random/unrecognizable text
-  - unknown                      uncertain — ask for clarification
+Intent v2 Contract:
+------------------
+IntentResult shape:
+  - intent: str (canonical dotted notation, e.g., "job_search.explicit_role")
+  - subintent: Optional[str] (optional subintent for disambiguation)
+  - confidence: float (0.0 to 1.0)
+  - source: str ("exact", "regex", "fallback")
+  - extracted_role: Optional[str] (legacy field for backward compatibility)
+  - extracted_title: Optional[str] (legacy field for backward compatibility)
+  - extracted_company: Optional[str] (legacy field for backward compatibility)
+  - entities: dict (structured entity extraction)
+    - role: str
+    - job_title: str
+    - company: str
+    - location: str
+    - application_status: str
+    - plan: str
+    - source: str
+  - context_required: bool (whether this intent requires prior context)
+  - context_type: Optional[str] (type of context required, e.g., "recent_job", "recent_application")
+  - action: Optional[str] (action to perform, e.g., "search", "update", "show")
+  - target_route: Optional[str] (frontend route to navigate to)
+
+Intent groups (dotted notation):
+  Job search:
+    - job_search.explicit_role
+    - job_search.profile_match
+    - job_search.role_suggestions
+
+  Job card actions:
+    - job_action.prepare_application
+    - job_action.open_apply_link
+    - job_action.track_job
+    - job_action.mark_applied
+    - job_action.save_job
+    - job_action.dismiss_job
+    - job_action.explain_fit
+
+  Application tracking:
+    - application.show_flow
+    - application.recent_context
+    - application.mark_applied
+    - application.manual_add
+    - application.status_update
+
+  Profile:
+    - profile.upload_cv
+    - profile.show
+    - profile.update_target_roles
+    - profile.update_salary
+    - profile.update_location
+
+  Subscription:
+    - subscription.show_plans
+    - subscription.checkout
+    - subscription.portal
+    - subscription.status
+
+  Inbox import:
+    - inbox_import.explain
+    - inbox_import.connect
+    - inbox_import.scan
+    - inbox_import.coming_soon
+
+  Career prep:
+    - career_prep.interview
+    - career_prep.application_angle
+    - career_prep.cover_letter
+    - career_prep.recruiter_message
+
+Routing rules:
+  - "open apply link for X at Y" and "Open apply link — X at Y" must be open_apply_link, not mark_applied.
+  - "mark as applied — X at Y" must write/update Application Flow.
+  - "where?" after tracking must route to application.recent_context.
+  - "what about the job I just applied to?" must return the recent tracked application.
+  - "save Environmental Manager as target role" must update target_roles.
+  - "find live jobs for Environmental Compliance Officer" must search that exact role.
+  - "upgrade to Pro" must route to subscription checkout/plans, not generic chat.
+  - "why don't you have my past applications?" must explain Rico-tracked/manual/inbox import model.
+  - "import applications from inbox" must show honest coming-soon/connect state depending on implementation.
+
+Context memory requirements:
+  After any job action, persist recent context:
+    - recent_job
+    - recent_application
+    - recent_company
+    - recent_job_title
+    - recent_status
+    - recent_route
+
+  The next short follow-up must use this context:
+    - where?
+    - show it
+    - what about it?
+    - what about the job I just applied to?
+    - open flow
+    - show application
+
+Safety rules:
+  - Rico must not say an application is tracked unless DB write/update succeeded.
+  - Rico must not silently apply to jobs.
+  - Rico must not claim inbox import is live unless implemented.
+  - Rico must not claim subscription is active unless backend confirms it.
+  - Rico must not fall back to generic CV roles when explicit role exists.
+
+Backward compatibility:
+  - Legacy intent names are mapped via _LEGACY_INTENT_MAP in rico_chat_api.py
+  - Existing handlers that expect old intent names still work via the mapping
+  - Legacy fields (extracted_role, extracted_title, extracted_company) are preserved
 """
 from __future__ import annotations
 
@@ -35,15 +131,63 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+# ── Intent v2 backward compatibility mapping ────────────────────────────────
+
+_LEGACY_INTENT_MAP = {
+    # Job search
+    "job_search.explicit_role": "job_search_explicit",
+    "job_search.profile_match": "job_search_profile_match",
+    "job_search.role_suggestions": "profile_role_suggestions",
+    # Job actions
+    "job_action.prepare_application": "prepare_application",
+    "job_action.open_apply_link": "open_apply_link",
+    "job_action.track_job": "track_job",
+    "job_action.mark_applied": "mark_applied",
+    "job_action.save_job": "save_job",
+    "job_action.apply_job": "apply_job",
+    "job_action.explain_fit": "explain_match",
+    # Application tracking
+    "application.show_flow": "application_tracking",
+    "application.recent_context": "application_tracking",
+    # Profile
+    "profile.show": "profile_summary",
+    "profile.update": "profile_update",
+    "profile.update_target_roles": "save_target_role",
+    # Career prep
+    "career_prep.interview": "interview_prep",
+    "career_prep.application_angle": "draft_message",
+}
+
+
+def _map_intent_to_legacy(intent: str) -> str:
+    """Map Intent v2 dotted notation to legacy intent names for backward compatibility."""
+    return _LEGACY_INTENT_MAP.get(intent, intent)
+
+
 @dataclass(frozen=True)
 class IntentResult:
-    """Result of intent classification."""
-    intent: str
-    confidence: float
-    source: str  # "exact", "regex", "fallback"
+    """Result of intent classification (v2 with entities and context)."""
+    intent: str  # Canonical intent name (e.g., "job_search.explicit_role")
+    confidence: float = 1.0
+    source: str = "exact"  # "exact", "regex", "fallback"
+    subintent: Optional[str] = None  # Optional subintent for disambiguation
+    # Legacy fields for backward compatibility
     extracted_role: Optional[str] = None
     extracted_title: Optional[str] = None
     extracted_company: Optional[str] = None
+    legacy_intent: Optional[str] = None  # Mapped legacy intent name for existing handlers
+    # v2 entities
+    entities: dict = None  # Structured entity extraction
+    context_required: bool = False  # Whether this intent requires prior context
+    context_type: Optional[str] = None  # Type of context required (e.g., "recent_job", "recent_application")
+    action: Optional[str] = None  # Action to perform (e.g., "search", "update", "show")
+    target_route: Optional[str] = None  # Frontend route to navigate to
+
+    def __post_init__(self):
+        if self.entities is None:
+            object.__setattr__(self, "entities", {})
+        if self.legacy_intent is None:
+            object.__setattr__(self, "legacy_intent", _LEGACY_INTENT_MAP.get(self.intent, self.intent))
 
 
 # ── Exact-phrase sets ────────────────────────────────────────────────────────
@@ -84,6 +228,12 @@ _APPLICATION_TRACKING_PHRASES = frozenset([
     "show rejections",
     "follow up",
     "remind me to follow up",
+    "where can i see it",
+    "where is it",
+    "what about the job i just applied to",
+    "what about the job i just tracked",
+    "open application flow",
+    "open applications",
 ])
 
 _HELP_PHRASES = frozenset([
@@ -194,7 +344,7 @@ _JOB_SEARCH_FOR_ROLE_RE = re.compile(
 #   "{action} — {title} at {company}"
 # Must be checked BEFORE generic apply/save patterns.
 _JOB_CARD_ACTION_RE = re.compile(
-    r"^(Prepare application|Mark as applied|Track this job|Save job)\s*[—\-–]\s*(.+?)\s+at\s+(.+?)$",
+    r"^(Prepare application|Mark as applied|Track this job|Save job)\s*[—\-–]\s*(.+)\s+at\s+(.+?)$",
     re.IGNORECASE | re.DOTALL,
 )
 
@@ -347,7 +497,7 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         return IntentResult("onboarding_answer", 0.9, "exact")
 
     if lower in _PROFILE_UPDATE_PHRASES:
-        return IntentResult("profile_update", 1.0, "exact")
+        return IntentResult("profile_update", 0.9, "exact")
 
     if lower in _FOLLOW_UP_CONFIRMATION_PHRASES:
         return IntentResult("follow_up_confirmation", 1.0, "exact")
@@ -420,8 +570,7 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     # Role change — only if no explicit job-search keyword present
     role_match = _ROLE_CHANGE_RE.match(text)
     if role_match:
-        extracted = role_match.group(2).strip()
-        return IntentResult("role_change", 0.9, "regex", extracted_role=extracted)
+        return IntentResult("role_change", 0.9, "regex", extracted_role=role_match.group(2).strip())
 
     # ── 5. Profile-match inference (only if CV exists) ───────────────────
     # Generic short requests with CV profile → profile match, NOT job search

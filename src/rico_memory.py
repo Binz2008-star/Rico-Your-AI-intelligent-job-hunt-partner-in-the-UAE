@@ -273,6 +273,31 @@ class RicoMemoryStore:
             lines.append(f"- {memory.get('memory_type')}: {memory.get('content')}")
         return "\n".join(lines)
 
+    def _context_path(self, user_id: str) -> Path:
+        return _assert_contained(RICO_MEMORY_DIR / f"context_{_safe_key(user_id)}.json")
+
+    def set_context(self, user_id: str, key: str, value: Any) -> None:
+        if not _JSON_WRITE_ENABLED:
+            return
+        path = self._context_path(user_id)
+        try:
+            ctx = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        except (json.JSONDecodeError, OSError):
+            ctx = {}
+        ctx[key] = {"value": value, "updated_at": datetime.now(timezone.utc).isoformat()}
+        path.write_text(json.dumps(ctx, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    def get_context(self, user_id: str, key: str) -> Any:
+        path = self._context_path(user_id)
+        if not path.exists():
+            return None
+        try:
+            ctx = json.loads(path.read_text(encoding="utf-8"))
+            entry = ctx.get(key)
+            return entry.get("value") if entry else None
+        except (json.JSONDecodeError, OSError):
+            return None
+
     def list_profiles(self) -> List[str]:
         # Returns sha256-keyed stems; callers that need readable IDs must map externally.
         return [p.stem.replace("profile_", "") for p in RICO_MEMORY_DIR.glob("profile_*.json")]
