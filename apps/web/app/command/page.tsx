@@ -58,6 +58,7 @@ interface Message {
 }
 
 type ChatAudience = "checking" | "authenticated" | "public";
+type PendingOperation = { operationId: string; type: "job_search"; query: string };
 
 let _id = 0;
 function nextId() { return ++_id; }
@@ -79,6 +80,21 @@ function getSourceLabel(responseSource: string | undefined): string | null {
         default:
             return null;
     }
+}
+
+function createOperationId(): string {
+    return "op_web_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 10);
+}
+
+function looksLikeJobSearch(text: string): boolean {
+    const normalized = text.toLowerCase();
+    return (
+        normalized.includes("job") ||
+        normalized.includes("jobs") ||
+        normalized.includes("find") ||
+        normalized.includes("search") ||
+        normalized.includes("live roles")
+    );
 }
 
 // ─── Constants (verbatim from /command) ──────────────────────────────────────
@@ -174,6 +190,7 @@ export default function CommandV2Page() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const promptSentRef = useRef(false);
     const sessionIdRef = useRef<string | null>(null);
+    const pendingOperationRef = useRef<PendingOperation | null>(null);
 
     // ── Auth check (verbatim from /command) ──
     useEffect(() => {
@@ -241,7 +258,10 @@ export default function CommandV2Page() {
 
         setMessages((prev) => [...prev, { id: nextId(), role: "user", text: trimmed }]);
         setThinking(true);
-        if (trimmed.toLowerCase().includes("job") || trimmed.toLowerCase().includes("find") || trimmed.toLowerCase().includes("search")) {
+        const jobSearchRequest = looksLikeJobSearch(trimmed);
+        const operationId = jobSearchRequest ? createOperationId() : undefined;
+        if (operationId) {
+            pendingOperationRef.current = { operationId, type: "job_search", query: trimmed };
             setOperationState({ state: "searching", message: "Searching for jobs..." });
         }
         scrollBottom();
@@ -249,12 +269,29 @@ export default function CommandV2Page() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 45_000);
         const slowHintId = setTimeout(() => setSlowHint(true), 5_000);
+        let keepOperationVisible = false;
 
         try {
             const res: ChatApiResponse =
                 chatAudience === "authenticated"
-                    ? await sendChat(trimmed, controller.signal)
-                    : await sendChatPublic(trimmed, getSessionId(sessionIdRef), controller.signal);
+                    ? await sendChat(trimmed, controller.signal, operationId)
+                    : await sendChatPublic(trimmed, getSessionId(sessionIdRef), controller.signal, operationId);
+            if (res.operation_id) {
+                pendingOperationRef.current = {
+                    operationId: res.operation_id,
+                    type: "job_search",
+                    query: trimmed,
+                };
+            }
+            if (
+                res.operation_status === "completed" ||
+                res.operation_status === "failed" ||
+                (!res.operation_id && operationId) ||
+                res.type === "clarification" ||
+                res.type === "profile_incomplete"
+            ) {
+                pendingOperationRef.current = null;
+            }
             const reply =
                 res.response ??
                 res.reply ??
@@ -302,7 +339,14 @@ export default function CommandV2Page() {
         } catch (err) {
             if (err instanceof Error) {
                 if (err.name === "AbortError") {
-                    setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: "Rico is taking longer than usual — the server may be waking up. Please try again in 30 seconds." }]);
+                    keepOperationVisible = Boolean(pendingOperationRef.current);
+                    const timeoutMessage = pendingOperationRef.current
+                        ? "Still searching. Ask \"are you done?\" or \"check status\" and I will check the last job search."
+                        : "Rico is taking longer than usual - the server may be waking up. Please try again in 30 seconds.";
+                    if (pendingOperationRef.current) {
+                        setOperationState({ state: "searching", message: "Still searching. Check status when ready." });
+                    }
+                    setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: timeoutMessage }]);
                     return;
                 }
                 if ((err instanceof ApiError && err.statusCode === 401) || err.message.includes("401")) { setSessionExpired(true); return; }
@@ -317,7 +361,9 @@ export default function CommandV2Page() {
             clearTimeout(slowHintId);
             setSlowHint(false);
             setThinking(false);
-            setOperationState(null);
+            if (!keepOperationVisible && !pendingOperationRef.current) {
+                setOperationState(null);
+            }
             scrollBottom();
             inputRef.current?.focus();
         }
@@ -770,7 +816,7 @@ export default function CommandV2Page() {
                     )}
 
                     {/* Thinking / operation state */}
-                    {thinking && (
+                    {(thinking || operationState) && (
                         <div className="flex flex-col gap-2">
                             {operationState ? (
                                 <OperationStateIndicator state={operationState.state} message={operationState.message} />

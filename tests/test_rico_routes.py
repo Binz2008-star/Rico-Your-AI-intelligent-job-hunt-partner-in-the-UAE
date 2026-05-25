@@ -160,7 +160,7 @@ class TestRicoChatRouteExists:
         """user_id in body must never override the identity from the JWT."""
         captured = {}
 
-        def spy(ctx, message):
+        def spy(ctx, message, **kwargs):
             captured["user_id"] = ctx.user_id
             return _CHAT_RESPONSE
 
@@ -732,7 +732,7 @@ class TestChatService:
         from src.schemas.chat import RicoSessionContext
         from src.services.chat_service import send_message
         ctx = RicoSessionContext.for_authenticated("u1")
-        mock_api = type("API", (), {"process_message": lambda self, user_id, message: _CHAT_RESPONSE})()
+        mock_api = type("API", (), {"process_message": lambda self, user_id, message, **kwargs: _CHAT_RESPONSE})()
         with patch("src.rico_env.get_ai_provider", return_value="openai"), \
              patch("src.rico_chat_api.RicoChatAPI", return_value=mock_api):
             result = send_message(ctx=ctx, message="hi")

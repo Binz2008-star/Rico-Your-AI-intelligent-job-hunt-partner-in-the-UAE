@@ -45,6 +45,11 @@ from src.repositories.onboarding_repo import (
 )
 from src.repositories.profile_repo import get_profile, upsert_profile
 from src.services.profile_context_resolver import resolve_profile_context
+from src.services.operation_state import (
+    mark_completed,
+    mark_failed,
+    start_job_search_operation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -179,6 +184,48 @@ class RicoChatAPI:
         self.system = RicoSystem()
         self.openai_agent = RicoOpenAIAgent()
         self._persist = persist
+        self._current_operation_id: str | None = None
+
+    @staticmethod
+    def _is_broad_manager_role(role_text: str) -> bool:
+        text = re.sub(r"\s+", " ", (role_text or "").strip().lower())
+        text = re.sub(r"^(?:a|an|the)\s+", "", text)
+        return text in {"manager", "managers"}
+
+    def _broad_manager_clarification(self, user_id: str) -> dict[str, Any]:
+        suggestions = [
+            "HSE Manager",
+            "Operations Manager",
+            "HR Manager",
+            "Environmental Manager",
+            "General Manager",
+        ]
+        response = {
+            "type": "clarification",
+            "intent": "search_jobs",
+            "message": (
+                "Manager is too broad for a live job search. Which manager role should I search?"
+            ),
+            "options": [
+                {
+                    "action": "search_role",
+                    "label": role,
+                    "message": f"find live jobs for {role}",
+                    "role": role,
+                }
+                for role in suggestions
+            ],
+            "next_action": "narrow_job_search",
+        }
+        self._append_chat(user_id, "assistant", response["message"])
+        return response
+
+    def _begin_job_search_operation(self, user_id: str, role_or_query: str) -> dict[str, Any]:
+        return start_job_search_operation(
+            user_id=user_id,
+            role_or_query=role_or_query,
+            operation_id=self._current_operation_id,
+        )
 
     def _append_chat(self, user_id: str, role: str, message: str | dict[str, Any]) -> None:
         """Append chat message to memory (sync) and DB (async fire-and-forget).
@@ -918,18 +965,24 @@ class RicoChatAPI:
             profile = upsert_profile(user_id=user_id, updates={"target_roles": target_roles})
 
         search_role = normalized_role or role
+        operation = self._begin_job_search_operation(user_id, search_role)
+        operation_id = str(operation["operation_id"])
 
         # Primary path: live JSearch query for the exact requested role.
         # Falls back to the legacy scraper pipeline only when JSearch is unavailable.
-        all_matches = self._search_jsearch_direct(search_role)
-        if not all_matches:
-            search_profile = (
-                _dc_replace(profile, target_roles=[search_role])
-                if is_dataclass(profile)
-                else profile
-            )
-            workflow_result = self.system.run_for_profile(search_profile)
-            all_matches = workflow_result.get("matches", [])
+        try:
+            all_matches = self._search_jsearch_direct(search_role)
+            if not all_matches:
+                search_profile = (
+                    _dc_replace(profile, target_roles=[search_role])
+                    if is_dataclass(profile)
+                    else profile
+                )
+                workflow_result = self.system.run_for_profile(search_profile)
+                all_matches = workflow_result.get("matches", [])
+        except Exception as exc:
+            mark_failed(user_id, operation_id, str(exc))
+            raise
 
         # Filter out already-applied jobs
         try:
@@ -968,12 +1021,17 @@ class RicoChatAPI:
             "message": message,
             "matches": formatted,
             "entities": {"job_title": normalized_role, "from_cv_profile": True},
+            "operation_id": operation_id,
+            "operation_status": "completed",
+            "operation_type": "job_search",
+            "result_count": len(formatted),
         }
 
         if role_intelligence_data:
             response["role_intelligence"] = role_intelligence_data
 
         self._append_chat(user_id, "assistant", response)
+        mark_completed(user_id, operation_id, len(formatted))
         return response
 
     def _enrich_with_role_intelligence(
@@ -1041,8 +1099,14 @@ class RicoChatAPI:
 
         return base_message
 
-    def process_message(self, user_id: str, message: str) -> dict[str, Any]:
+    def process_message(
+        self,
+        user_id: str,
+        message: str,
+        operation_id: str | None = None,
+    ) -> dict[str, Any]:
         debug_id = _generate_debug_id()
+        self._current_operation_id = operation_id
         try:
             result = self._process_message_inner(user_id, message)
             # Guarantee debug_id on every response
@@ -1082,12 +1146,16 @@ class RicoChatAPI:
                 result.setdefault("success", True)
             return result
         except Exception as exc:
+            if self._current_operation_id:
+                mark_failed(user_id, self._current_operation_id, str(exc))
             return build_error_response(
                 "Something went wrong processing your message.",
                 debug_id=debug_id,
                 log_exc=exc,
                 user_id=user_id,
             )
+        finally:
+            self._current_operation_id = None
 
     def _answer_with_ai_fallback(
         self,
@@ -1498,10 +1566,21 @@ class RicoChatAPI:
             # Removed fast-path override to prevent intent interception
             # Previously: generic job searches without job_title were intercepted by profile suggestions
             # Now: all explicit job searches execute through the normal workflow
-            workflow_result = self.system.run_for_profile(profile)
+            operation = self._begin_job_search_operation(user_id, str(target_roles[0]))
+            operation_id = str(operation["operation_id"])
+            try:
+                workflow_result = self.system.run_for_profile(profile)
+            except Exception as exc:
+                mark_failed(user_id, operation_id, str(exc))
+                raise
 
             # Handle blocked status from job search
             if workflow_result.get("status") == "blocked":
+                mark_failed(
+                    user_id,
+                    operation_id,
+                    workflow_result.get("message", "Job search was blocked by incomplete profile."),
+                )
                 response = {
                     "type": "profile_incomplete",
                     "intent": "search_jobs",
@@ -1529,13 +1608,26 @@ class RicoChatAPI:
                     "message": job_msg,
                     "matches": formatted,
                     "entities": routed.entities,
+                    "operation_id": operation_id,
+                    "operation_status": "completed",
+                    "operation_type": "job_search",
+                    "result_count": len(formatted),
                 }
                 self._append_chat(user_id, "assistant", response)
+                mark_completed(user_id, operation_id, len(formatted))
                 return self._finalize(response, routed.source, profile=profile)
             else:
+                mark_completed(user_id, operation_id, 0)
                 if has_cv:
+                    response = self._handle_no_results_recovery(user_id, profile, target_roles)
+                    response.update({
+                        "operation_id": operation_id,
+                        "operation_status": "completed",
+                        "operation_type": "job_search",
+                        "result_count": 0,
+                    })
                     return self._finalize(
-                        self._handle_no_results_recovery(user_id, profile, target_roles),
+                        response,
                         self.SOURCE_KEYWORD,
                         profile=profile,
                     )
@@ -1549,6 +1641,10 @@ class RicoChatAPI:
                     ),
                     "matches": [],
                     "entities": routed.entities,
+                    "operation_id": operation_id,
+                    "operation_status": "completed",
+                    "operation_type": "job_search",
+                    "result_count": 0,
                 }
                 self._append_chat(user_id, "assistant", response)
                 return self._finalize(response, routed.source, profile=profile)
@@ -2074,6 +2170,9 @@ class RicoChatAPI:
         # Roles already in the user's target_roles are always profile_relevant.
         target_roles = self._as_list(self._profile_value(profile, "target_roles"))
         role_lower = role_text.strip().lower()
+        if self._is_broad_manager_role(role_text):
+            return self._broad_manager_clarification(user_id)
+
         for tr in target_roles:
             if _fuzz.ratio(role_lower, str(tr).lower()) >= 70:
                 return self._target_role_search_response(user_id, role_text.strip(), profile)

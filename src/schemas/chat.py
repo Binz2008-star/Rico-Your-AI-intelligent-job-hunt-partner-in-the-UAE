@@ -33,6 +33,10 @@ class RicoChatResponse(BaseModel):
     trace_id: str | None = None
     # Legacy alias — some response paths return "response" instead of "message"
     response: str | None = None
+    operation_id: str | None = None
+    operation_status: str | None = None
+    operation_type: str | None = None
+    result_count: int | None = None
 
 
 class RicoSessionContext(BaseModel):
