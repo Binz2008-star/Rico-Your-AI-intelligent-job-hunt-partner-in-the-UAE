@@ -152,6 +152,21 @@ def test_open_apply_link_intent():
         assert result.intent != "apply_job", f"Must not route to apply_job: {msg!r}"
 
 
+def test_open_apply_link_requires_link_word_boundary():
+    """Words that only start with 'link' must not trigger open_apply_link."""
+    for msg in ("open apply linkedin", "open apply links for HSE Manager at ADNOC"):
+        result = classify_intent(msg)
+        assert result.intent != "open_apply_link"
+
+
+def test_open_apply_link_trims_trailing_chatter_from_company():
+    result = classify_intent("open apply link for Senior Manager at ADNOC please")
+
+    assert result.intent == "open_apply_link"
+    assert result.extracted_title == "Senior Manager"
+    assert result.extracted_company == "ADNOC"
+
+
 def test_intent_result_v2_fields():
     """IntentResult should have v2 fields for future use."""
     result = classify_intent("find jobs for Software Engineer")
