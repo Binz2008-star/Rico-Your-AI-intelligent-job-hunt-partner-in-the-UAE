@@ -84,30 +84,31 @@ class TestBillingPayment:
     """Test billing and payment domain classification."""
     
     def test_billing_english(self):
-        """'billing' -> billing_payment"""
+        """'billing' -> billing_payment, falls through to AI (not intercepted)"""
         decision = classify_request("billing")
         assert decision.domain == RicoDomain.BILLING_PAYMENT
-        assert decision.route == "account_service"
-    
+        assert decision.route == "ai"
+
     def test_payment_history_english(self):
-        """'payment history' -> billing_payment"""
+        """'payment history' -> billing_payment, falls through to AI"""
         decision = classify_request("my payment history")
         assert decision.domain == RicoDomain.BILLING_PAYMENT
-        assert decision.route == "account_service"
-    
+        assert decision.route == "ai"
+
     def test_invoice_english(self):
-        """'invoice' -> billing_payment"""
+        """'invoice' -> billing_payment, falls through to AI"""
         decision = classify_request("where is my invoice?")
         assert decision.domain == RicoDomain.BILLING_PAYMENT
-    
+        assert decision.route == "ai"
+
     def test_refund_english(self):
-        """'refund' -> billing_payment"""
+        """'refund' -> billing_payment, falls through to AI"""
         decision = classify_request("I want a refund")
         assert decision.domain == RicoDomain.BILLING_PAYMENT
-        assert decision.route == "account_service"
-    
+        assert decision.route == "ai"
+
     def test_factoring_arabic(self):
-        """'الفاتورة' -> billing_payment"""
+        """'الفاتورة' -> billing_payment, falls through to AI"""
         decision = classify_request("أين فاتورتي؟")
         assert decision.domain == RicoDomain.BILLING_PAYMENT
         assert decision.language == "ar"

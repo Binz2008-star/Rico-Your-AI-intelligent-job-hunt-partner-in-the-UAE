@@ -116,7 +116,9 @@ class PolicyGateway:
             r"شو\s+اشتراكي",
             r"ما\s+هو\s+اشتراكي",
             r"أنا\s+على\s+أي\s+باقة",
+            r"انا\s+على\s+اي\s+باقة",
             r"على\s+أي\s+باقة",
+            r"على\s+اي\s+باقة",
             r"حالة\s+اشتراكي",
             r"الباقة\s+الحالية",
             r"حد\s+الرسائل",
@@ -124,8 +126,6 @@ class PolicyGateway:
             r"ترقية\s+الباقة",
             r"إلغاء\s+الاشتراك",
             r"خطة\s+الاشتراك",
-            r"خطة",  # Short for plan
-            r"باقة",  # Short for subscription tier
         ]
         
         # Billing & Payment patterns
@@ -154,7 +154,7 @@ class PolicyGateway:
         # Gmail/Email patterns
         self._gmail_patterns = [
             # English
-            r"\b(gmail|email|inbox|mailbox)\b",
+            r"\bgmail\b",
             r"\bcheck my (email|inbox)\b",
             r"\bfetch (emails|messages) from\b",
             r"\b(read|access) my (emails|gmail)\b",
@@ -171,15 +171,13 @@ class PolicyGateway:
         
         # LinkedIn patterns
         self._linkedin_patterns = [
-            # English
-            r"\blinkedin\b",
+            # English - integration-intent phrases only; bare "linkedin" excluded
             r"\bmy linkedin (profile|account)\b",
             r"\b(access|check|scan) linkedin\b",
             r"\b(import|fetch) from linkedin\b",
             r"\b(linkedin|connections) (messages|inbox)\b",
             # Arabic
             r"\bلينكد إن\b",
-            r"\blinkedin\b",
             r"ملفي على لينكد إن",
             r"رسائل لينكد إن",
         ]
@@ -192,7 +190,6 @@ class PolicyGateway:
             r"\bschedule (a|meeting|interview)\b",
             r"\bbook (a|time|slot)\b",
             r"\bcheck my availability\b",
-            r"\b(when am i|am i) free\b",
             r"\bgoogle calendar\b",
             r"\boutlook calendar\b",
             # Arabic
@@ -589,7 +586,8 @@ class PolicyGateway:
         """Determine the routing destination for a domain."""
         
         # Account/subscription -> always account_service; auth check is in the service layer
-        if domain in (RicoDomain.ACCOUNT_SUBSCRIPTION, RicoDomain.BILLING_PAYMENT):
+        # BILLING_PAYMENT falls through to AI so pricing/invoice queries reach the normal path
+        if domain == RicoDomain.ACCOUNT_SUBSCRIPTION:
             return self.ROUTE_ACCOUNT_SERVICE
         
         # External unsupported tools (Gmail, LinkedIn, Calendar, WhatsApp)
@@ -637,7 +635,7 @@ class PolicyGateway:
         """Determine the specific action for a domain/route combination."""
         action_map = {
             (RicoDomain.ACCOUNT_SUBSCRIPTION, self.ROUTE_ACCOUNT_SERVICE): "resolve_subscription_status",
-            (RicoDomain.BILLING_PAYMENT, self.ROUTE_ACCOUNT_SERVICE): "resolve_billing_info",
+            (RicoDomain.BILLING_PAYMENT, self.ROUTE_AI): "ai_billing_info",
             (RicoDomain.JOB_SEARCH, self.ROUTE_JOB_SEARCH): "execute_job_search",
             (RicoDomain.APPLICATIONS_TRACKING, self.ROUTE_APPLICATION_TRACKING): "get_application_status",
             (RicoDomain.CAREER_STRATEGY, self.ROUTE_AI): "ai_career_planning",

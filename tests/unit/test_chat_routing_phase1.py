@@ -193,15 +193,15 @@ class TestSubscriptionUnauthenticated:
         assert result["type"] == "login_required"
         assert "log in" in result["message"].lower() or "sign in" in result["message"].lower()
 
-    def test_public_billing_question_returns_login_required(self):
+    def test_public_billing_question_falls_through(self):
+        """Billing queries are not intercepted — they fall through to AI/legacy."""
         from src.services.chat_service import send_message
         with patch("src.repositories.profile_repo.get_profile", return_value=None), \
              patch("src.services.chat_service._legacy_send_message", return_value=_LEGACY_RESP), \
              patch("src.services.chat_service._conversational_ai_reply", return_value=_AI_RESP):
             result = send_message(_PUBLIC_CTX, "billing")
 
-        assert result["response_source"] == "policy_gateway"
-        assert result["type"] == "login_required"
+        assert result.get("response_source") != "policy_gateway"
 
 
 # ---------------------------------------------------------------------------
