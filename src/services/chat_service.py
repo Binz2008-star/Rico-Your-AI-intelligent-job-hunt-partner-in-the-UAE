@@ -115,6 +115,9 @@ def send_message(
     if policy.route == "unsupported":
         return _unsupported_tool_response(policy)
 
+    if policy.route == "clarification" and str(policy.reason).startswith("conflicting_domains:"):
+        return _mixed_tool_clarification_response(policy)
+
     if policy.route == "account_service":
         return _account_service_response(ctx)
 
@@ -133,15 +136,156 @@ def send_message(
 
 def _unsupported_tool_response(policy: Any) -> Dict[str, Any]:
     """Deterministic response for external integrations Rico doesn't support."""
-    msg = policy.alternative_suggestion or (
-        "I can't access that external integration from Rico. "
-        "You can upload or paste the relevant information and I'll organise it."
-    )
+    tool_name = str(getattr(policy, "tool", "") or "external_tool")
+    msg = _unsupported_tool_message(policy)
     return {
         "type": "unsupported_tool",
         "message": msg,
         "intent": "unsupported",
         "response_source": "policy_gateway",
+        "tool": tool_name,
+        "tool_available": False,
+        "domain": getattr(getattr(policy, "domain", None), "value", "unsupported_tool"),
+        "reason": getattr(policy, "reason", "unsupported_tool"),
+        "options": _unsupported_tool_options(policy),
+        "next_action": _unsupported_tool_next_action(policy),
+    }
+
+
+def _unsupported_tool_message(policy: Any) -> str:
+    domain_value = getattr(getattr(policy, "domain", None), "value", "")
+    fallback = policy.alternative_suggestion or (
+        "I can't access that external integration from Rico. "
+        "You can upload or paste the relevant information and I'll organise it."
+    )
+
+    messages = {
+        "email_gmail_request": (
+            "I can't access your Gmail or email inbox directly from Rico yet. "
+            "Paste a recruiter email, upload an export, or manually add the application details and I can organize the timeline, status, and follow-up."
+        ),
+        "linkedin_request": (
+            "I can't read your LinkedIn profile, messages, or inbox directly from Rico yet. "
+            "Paste the profile text, share a public profile URL, or paste a job/message and I can tailor your profile, draft a reply, or track the opportunity."
+        ),
+        "calendar_request": (
+            "I can't access your calendar or book meetings directly from Rico yet. "
+            "Tell me the interview time, deadline, or availability window and I can keep the application context and next step clear."
+        ),
+        "whatsapp_request": (
+            "I can't send or receive WhatsApp messages from Rico yet. "
+            "Use Telegram notifications if enabled, or paste the WhatsApp message here and I can draft a reply or update the application status."
+        ),
+    }
+    return messages.get(domain_value, fallback)
+
+
+def _unsupported_tool_options(policy: Any) -> list[Dict[str, Any]]:
+    domain_value = getattr(getattr(policy, "domain", None), "value", "")
+    common = [
+        {
+            "action": "show_applications",
+            "label": "Open Application Flow",
+            "message": "show my applications",
+        },
+        {
+            "action": "find_jobs",
+            "label": "Find UAE jobs",
+            "message": "find live jobs for my target role",
+        },
+    ]
+    by_domain: dict[str, list[Dict[str, Any]]] = {
+        "email_gmail_request": [
+            {
+                "action": "paste_email",
+                "label": "Paste email text",
+                "message": "I will paste the recruiter email here",
+            },
+            {
+                "action": "manual_add_application",
+                "label": "Add application manually",
+                "message": "I want to add an application manually",
+            },
+        ],
+        "linkedin_request": [
+            {
+                "action": "paste_linkedin_profile",
+                "label": "Paste LinkedIn text",
+                "message": "I will paste my LinkedIn profile text here",
+            },
+            {
+                "action": "draft_linkedin_reply",
+                "label": "Draft LinkedIn reply",
+                "message": "I will paste the LinkedIn message here",
+            },
+        ],
+        "calendar_request": [
+            {
+                "action": "record_interview_time",
+                "label": "Record interview time",
+                "message": "I want to record an interview time",
+            },
+            {
+                "action": "draft_availability",
+                "label": "Draft availability reply",
+                "message": "draft a reply with my availability",
+            },
+        ],
+        "whatsapp_request": [
+            {
+                "action": "paste_whatsapp_message",
+                "label": "Paste WhatsApp text",
+                "message": "I will paste the WhatsApp message here",
+            },
+            {
+                "action": "telegram_settings",
+                "label": "Use Telegram alerts",
+                "message": "enable telegram notifications",
+            },
+        ],
+    }
+    return by_domain.get(domain_value, []) + common
+
+
+def _unsupported_tool_next_action(policy: Any) -> str:
+    domain_value = getattr(getattr(policy, "domain", None), "value", "")
+    return {
+        "email_gmail_request": "paste_email_or_add_application",
+        "linkedin_request": "paste_linkedin_context",
+        "calendar_request": "provide_schedule_details",
+        "whatsapp_request": "paste_message_or_use_telegram",
+    }.get(domain_value, "provide_manual_context")
+
+
+def _mixed_tool_clarification_response(policy: Any) -> Dict[str, Any]:
+    """Clarify mixed requests that combine unsupported external access with a supported action."""
+    return {
+        "type": "clarification",
+        "message": (
+            "That request mixes an unavailable external tool with a Rico action. "
+            "I can't access the external account directly, but I can still help if you choose the path."
+        ),
+        "intent": "mixed_request",
+        "response_source": "policy_gateway",
+        "reason": getattr(policy, "reason", "conflicting_domains"),
+        "options": [
+            {
+                "action": "continue_without_external_tool",
+                "label": "Continue in Rico",
+                "message": "find live jobs for my target role",
+            },
+            {
+                "action": "paste_external_context",
+                "label": "Paste external details",
+                "message": "I will paste the email, LinkedIn, calendar, or WhatsApp details here",
+            },
+            {
+                "action": "show_applications",
+                "label": "Open Application Flow",
+                "message": "show my applications",
+            },
+        ],
+        "next_action": "choose_supported_path",
     }
 
 
