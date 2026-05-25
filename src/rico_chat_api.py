@@ -109,7 +109,7 @@ _NON_ROLE_STARTERS: frozenset[str] = frozenset({
     "explain", "describe", "compare", "help", "please",
     "want", "need", "looking",
     "hi", "hello", "hey", "greetings", "thanks", "thank", "ok", "okay",
-    "yes", "yeah", "yep", "no", "nope", "sure", "fine", "good", "great",
+    "yes", "yeah", "yep", "ya", "no", "nope", "sure", "fine", "good", "great",
     "cool", "nice", "wow", "oh", "ah",
     "i", "im", "i'm", "me", "my", "mine", "myself",
     "we", "our", "ours", "us",

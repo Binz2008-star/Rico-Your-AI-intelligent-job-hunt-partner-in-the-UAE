@@ -63,3 +63,22 @@ def test_show_me_routes_to_ai_by_phrase_opener() -> None:
     is_open, reason = is_open_ended_question("show me more details")
     assert is_open is True
     assert reason.startswith("phrase:")
+
+
+@pytest.mark.parametrize("msg", [
+    "what job i applied for so far?",
+    "what jobs i applied for?",
+    "what did i apply for?",
+    "which jobs have i applied to?",
+    "jobs i applied to?",
+    "what job i applied for",
+    "what jobs i applied for",
+    "what did i apply for",
+    "jobs i applied to",
+    "jobs i applied for",
+])
+def test_application_status_questions_bypass_ai_gate(msg: str) -> None:
+    """Application history questions must reach the legacy classifier (DB), not DeepSeek."""
+    is_open, reason = is_open_ended_question(msg)
+    assert is_open is False, f"Expected legacy route for {msg!r}, got reason={reason}"
+    assert reason == "ok"
