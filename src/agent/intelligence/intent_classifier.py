@@ -426,17 +426,34 @@ _ARABIC_SCRIPT_RE = re.compile(r"[؀-ۿ]")
 
 # Arabic job-related nouns (normalised: ta marbuta ة→ه, alef variants→bare alef, ى→ي)
 _ARABIC_JOB_TERMS = frozenset([
+    # Gulf / Levantine
     "وظيفه", "وظائف", "عمل", "شغل",
     "فرصه", "فرص", "مهنه", "مهن",
     "شاغر", "شواغر", "وضيفه",
     "منصب", "مناصب",
+    # MSA additions
+    "تعيين",      # appointment / hiring
+    "مسمى",       # job title / designation
+    "موظف",       # employee (used in "I want to be a موظف at …")
+    "توظيف",      # employment / recruitment
+    "مجال",       # field / sector ("أريد عمل في مجالي")
+    "فرصه عمل",   # job opportunity (phrase — substring match also fires on parts)
 ])
 
 # Arabic verbs / phrases expressing a job-search request
 _ARABIC_REQUEST_TERMS = frozenset([
+    # Gulf / Levantine
     "ابحث", "بحث", "دور", "اريد", "ابي", "ابغي",
     "احتاج", "محتاج", "شوف", "طلع", "جيب",
     "ساعدني", "ايجاد", "طلب",
+    # MSA formal verbs (all stored in normalised form — alef variants stripped)
+    "ارغب",   # أرغب — I wish / want
+    "اسعى",   # أسعى — I seek
+    "اطلب",   # أطلب — I request
+    "ابحث عن",  # أبحث عن — I am looking for (phrase)
+    "هل يوجد",  # are there any (MSA question opener)
+    "هل توجد",  # are there any (MSA question opener, feminine verb)
+    "هل هناك",  # is there any
 ])
 
 

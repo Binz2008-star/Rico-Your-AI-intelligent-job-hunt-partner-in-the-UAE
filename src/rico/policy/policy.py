@@ -28,6 +28,23 @@ from .capabilities import (
 logger = logging.getLogger(__name__)
 
 
+def _normalize_arabic(text: str) -> str:
+    """Remove diacritics and normalise Arabic letter variants for pattern matching.
+
+    Mirrors the same function in intent_classifier.py — kept local to avoid a
+    cross-package import between the policy layer and the agent intelligence layer.
+    """
+    # Strip tashkeel (fatha, kasra, damma, sukun, shadda, tanwin, tatweel)
+    text = re.sub(r"[ً-ٰٟـ]", "", text)
+    # Normalise alef variants (madda آ, hamza above أ, hamza below إ, wasla ٱ) → bare alef ا
+    text = re.sub(r"[آأإٱ]", "ا", text)
+    # Normalise alef maqsura ى → ya ي
+    text = re.sub(r"ى", "ي", text)
+    # Normalise ta marbuta ة → ha ه  (so وظيفة == وظيفه in lookups)
+    text = re.sub(r"ة", "ه", text)
+    return text
+
+
 @dataclass(frozen=True)
 class PolicyDecision:
     """Policy decision for a user request.
@@ -110,22 +127,24 @@ class PolicyGateway:
             r"\bhow many (messages|jobs) (left|remaining)\b",
             r"\bupgrade (plan|subscription)\b",
             r"\bcancel (plan|subscription)\b",
-            # Arabic - expanded with word boundaries and variations
-            r"اشتراكي",  # Bare form - most common
-            r"باقتي",  # Alternative word for plan
+            # Arabic (normalised: alef variants→ا, ة→ه, ى→ي — input is pre-normalised)
+            r"اشتراكي",
+            r"باقتي",
             r"شو\s+اشتراكي",
             r"ما\s+هو\s+اشتراكي",
-            r"أنا\s+على\s+أي\s+باقة",
-            r"انا\s+على\s+اي\s+باقة",
-            r"على\s+أي\s+باقة",
-            r"على\s+اي\s+باقة",
-            r"حالة\s+اشتراكي",
-            r"الباقة\s+الحالية",
+            r"انا\s+على\s+اي\s+باقه",   # أنا على أي باقة → normalised
+            r"على\s+اي\s+باقه",          # على أي باقة → normalised
+            r"حاله\s+اشتراكي",           # حالة اشتراكي → normalised
+            r"الباقه\s+الحاليه",         # الباقة الحالية → normalised
             r"حد\s+الرسائل",
-            r"كم\s+رسالة\s+باقي",
-            r"ترقية\s+الباقة",
-            r"إلغاء\s+الاشتراك",
-            r"خطة\s+الاشتراك",
+            r"كم\s+رساله\s+باقي",        # كم رسالة باقي → normalised
+            r"ترقيه\s+الباقه",           # ترقية الباقة → normalised
+            r"الغاء\s+الاشتراك",         # إلغاء الاشتراك → normalised
+            r"خطه\s+الاشتراك",           # خطة الاشتراك → normalised
+            # MSA additions
+            r"باقتي\s+ايه",              # باقتي إيه (Egyptian MSA — what's my plan?)
+            r"نوع\s+الاشتراك",           # type of subscription
+            r"تجديد\s+الاشتراك",         # subscription renewal
         ]
         
         # Billing & Payment patterns
@@ -139,14 +158,14 @@ class PolicyGateway:
             r"\bcredit card\b",
             r"\bhow much (do i pay|does it cost)\b",
             # Arabic - expanded
-            r"الفوترة",
+            r"الفوتره",       # الفوترة → normalised
             r"الدفع",
-            r"الفاتورة",
+            r"الفاتوره",     # الفاتورة → normalised
             r"فاتورتي",
             r"فواتيري",
             r"استرداد",
             r"رسوم",
-            r"بطاقة الائتمان",
+            r"بطاقه الائتمان",  # بطاقة الائتمان → normalised
             r"كم السعر",
             r"الدفعات",
         ]
@@ -162,11 +181,11 @@ class PolicyGateway:
             r"\bapplications? (from|in) (gmail|email)\b",
             r"\bimport from (gmail|email)\b",
             # Arabic
-            r"\b(جيميل|الإيميل|البريد|الصندوق)\b",
-            r"افحص إيميلي",
+            r"\b(جيميل|الايميل|البريد|الصندوق)\b",  # إ→ا in الإيميل
+            r"افحص ايميلي",      # افحص إيميلي → normalised
             r"تفقد بريدي",
-            r"جيب من الإيميل",
-            r"اقرأ رسايلي",
+            r"جيب من الايميل",   # الإيميل → normalised
+            r"اقرا رسايلي",      # اقرأ → normalised
         ]
         
         # LinkedIn patterns
@@ -177,9 +196,9 @@ class PolicyGateway:
             r"\b(import|fetch) from linkedin\b",
             r"\b(linkedin|connections) (messages|inbox)\b",
             # Arabic
-            r"\bلينكد إن\b",
-            r"ملفي على لينكد إن",
-            r"رسائل لينكد إن",
+            r"\bلينكد ان\b",          # لينكد إن → normalised
+            r"ملفي على لينكد ان",   # normalised
+            r"رسائل لينكد ان",      # normalised
         ]
         
         # Calendar patterns
@@ -196,7 +215,7 @@ class PolicyGateway:
             r"\bجدولة\b",
             r"\bموعد\b",
             r"\bاجتماع\b",
-            r"\bمتى أكون متفرج\b",
+            r"\bمتى اكون متفرج\b",   # أكون → normalised
         ]
         
         # WhatsApp patterns
@@ -208,7 +227,7 @@ class PolicyGateway:
             # Arabic
             r"\bواتساب\b",
             r"\bواتس\b",
-            r"رسالة واتساب",
+            r"رساله واتساب",   # رسالة → normalised
         ]
         
         # Telegram patterns - Note: Telegram is SUPPORTED (available if configured)
@@ -241,11 +260,18 @@ class PolicyGateway:
             r"\bany\s+(jobs?|openings?)\b",
             # Arabic
             r"\bدوري\b",
-            r"\bوظيفة\b",
+            r"\bوظيفه\b",              # وظيفة → normalised
             r"\bوظائف\b",
-            r"ابحث\s+لي\s+عن\s+وظيفة",
+            r"ابحث\s+لي\s+عن\s+وظيفه",  # normalised
             r"دورات\s+في\s+دبي",
-            r"وظائف\s+في\s+الإمارات",
+            r"وظائف\s+في\s+الامارات",   # الإمارات → normalised
+            # MSA additions
+            r"ارغب\s+في\s+(عمل|وظيفه)",  # أرغب في عمل / وظيفة
+            r"احتاج\s+وظيفه",            # أحتاج وظيفة
+            r"اسعى\s+ل(وظيفه|عمل)",      # أسعى لوظيفة / لعمل
+            r"هل\s+(يوجد|توجد)\s+وظائف", # are there jobs? (MSA question)
+            r"هل\s+هناك\s+وظائف",        # are there any jobs?
+            r"فرص\s+عمل",                # job opportunities
         ]
         
         # Career Strategy patterns
@@ -262,11 +288,14 @@ class PolicyGateway:
             r"\bcareer\s+advice\b",
             r"\bwhat\s+should\s+i\s+do\s+(for|with)\s+my\s+career\b",
             # Arabic
-            r"\bخطة\s+مهنية\b",
-            r"\bاستراتيجية\b",
-            r"\bنصيحة\s+مهنية\b",
-            r"\bكيف\s+أحصل\s+على\b",
+            r"\bخطه\s+مهنيه\b",     # خطة مهنية → normalised
+            r"\bاستراتيجيه\b",      # استراتيجية → normalised
+            r"\bنصيحه\s+مهنيه\b",   # نصيحة مهنية → normalised
+            r"\bكيف\s+احصل\s+على\b",  # كيف أحصل على → normalised
             r"\bماذا\s+يناسبني\b",
+            # MSA additions
+            r"\bمسار\s+مهني\b",      # career path
+            r"\bتطوير\s+مهني\b",     # professional development
         ]
         
         # CV/Profile patterns
@@ -279,7 +308,7 @@ class PolicyGateway:
             r"\bexperience\b",
             r"\bbackground\b",
             # Arabic
-            r"\bالسيرة الذاتية\b",
+            r"\bالسيره الذاتيه\b",  # السيرة الذاتية → normalised
             r"\bسي في\b",
             r"\bملفي\b",
             r"\bخبراتي\b",
@@ -298,9 +327,9 @@ class PolicyGateway:
             # Arabic
             r"\bتتبع طلباتي\b",
             r"\bطلباتي\b",
-            r"\bحالة التقديم\b",
+            r"\bحاله التقديم\b",   # حالة التقديم → normalised
             r"\bماذا تقدمت ل\b",
-            r"\bأين طلباتي\b",
+            r"\bاين طلباتي\b",     # أين طلباتي → normalised
         ]
         
         # File Upload patterns
@@ -380,10 +409,16 @@ class PolicyGateway:
         return "ar" if arabic_ratio > 0.3 else "en"
     
     def _match_patterns(self, message: str, patterns: List[str]) -> bool:
-        """Check if message matches any of the patterns."""
-        text_lower = message.lower()
+        """Check if message matches any of the patterns.
+
+        Both the message and the pattern strings are normalised before matching
+        so callers do not need to manually duplicate patterns for every hamza /
+        ta-marbuta / alef-maqsura variant.
+        """
+        text_lower = _normalize_arabic(message.lower())
         for pattern in patterns:
-            if re.search(pattern, text_lower, re.IGNORECASE | re.UNICODE):
+            norm_pattern = _normalize_arabic(pattern)
+            if re.search(norm_pattern, text_lower, re.IGNORECASE | re.UNICODE):
                 return True
         return False
     
