@@ -216,6 +216,13 @@ def update_status(
 ) -> bool:
     """Update application status for a specific user or fall back to legacy JSON."""
     if user_id:
+        if status == "saved":
+            # Enforce limit on transitions to "saved" — same guard as create()
+            from src.services.subscription_gating import enforce_saved_job_allowed
+
+            existing = find_by_job_id(job.get("job_id", ""), user_id=user_id)
+            if not existing or existing.get("status") != "saved":
+                enforce_saved_job_allowed(user_id)
         db = _db()
         if not db:
             raise HTTPException(status_code=503, detail="Database unavailable")

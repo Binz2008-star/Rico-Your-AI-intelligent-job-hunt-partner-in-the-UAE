@@ -104,10 +104,6 @@ def send_message(
         if status_response is not None:
             return status_response
 
-    gate = check_ai_message_allowed(ctx)
-    if gate and not gate.allowed:
-        return gate.to_response()
-
     profile = get_profile(ctx.user_id)
     profile_present = profile is not None
 
@@ -125,6 +121,13 @@ def send_message(
 
     if policy.route == "account_service":
         return _account_service_response(ctx)
+
+    # ── AI message-limit gate (only applies to AI-routed messages) ───────────
+    # Checked after deterministic policy routes so capped users can still reach
+    # unsupported-tool clarifications and account_service responses.
+    gate = check_ai_message_allowed(ctx)
+    if gate and not gate.allowed:
+        return gate.to_response()
 
     # ── Existing routing unchanged ────────────────────────────────────────────
     decision = _intent_router.route(
