@@ -783,10 +783,23 @@ class RicoChatAPI:
         raw_score = m.get("rico_score") or m.get("score") or 0
         normalized_score = max(0, min(100, int(raw_score))) if raw_score else 0
 
+        # Preserve URL fields so the frontend can surface apply links and distinguish
+        # verified live postings from leads that still need a working apply URL.
+        apply_url = str(
+            m.get("job_apply_link") or m.get("apply_link") or m.get("link") or ""
+        ).strip()
+        source_url = str(
+            m.get("job_google_link") or m.get("source_url") or apply_url
+        ).strip()
+        verification_status = "live" if apply_url else "lead_needs_verification"
+
         result = {
             "title": str(m.get("title") or "Untitled role"),
             "company": str(m.get("company") or "Unknown company"),
             "score": normalized_score,
+            "apply_url": apply_url,
+            "source_url": source_url,
+            "verification_status": verification_status,
             "actions": ["Prepare application", "Save", "Ask why", "Skip"],
             **explanation,
         }
@@ -1187,7 +1200,27 @@ class RicoChatAPI:
     ) -> str:
         """Build message for role search response."""
         if top_matches:
-            base_message = f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. I found {len(top_matches)} current strong matches."
+            def _has_url(m: Any) -> bool:
+                return bool(
+                    m.get("job_apply_link") or m.get("apply_link") or m.get("link")
+                )
+            live_count = sum(1 for m in top_matches if _has_url(m))
+            lead_count = len(top_matches) - live_count
+            if live_count and lead_count:
+                base_message = (
+                    f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
+                    f"I found {live_count} current live match(es) and {lead_count} lead(s) that need verification."
+                )
+            elif live_count:
+                base_message = (
+                    f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
+                    f"I found {live_count} current live match(es)."
+                )
+            else:
+                base_message = (
+                    f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
+                    f"I found {lead_count} lead(s) that need verification."
+                )
         else:
             base_message = f"Got it — I will target {normalized_role} roles{city_text}{basis_text}."
 
@@ -1833,6 +1866,54 @@ class RicoChatAPI:
             from src.repositories.applications_repo import create_manual as _create_manual_app
             title = getattr(intent_result, "extracted_title", None) or ""
             company = getattr(intent_result, "extracted_company", None) or ""
+
+            # Guard: require apply-link evidence or prior explicit confirmation.
+            # If neither exists, return a clarification and set the pending-confirm flag.
+            if not self._has_apply_evidence(user_id, title, company):
+                msg = (
+                    f"Before I mark **{title}** at **{company}** as applied, "
+                    "can you confirm you submitted your application? "
+                    "I don't have a record of you opening the apply link for this role."
+                )
+                # Store confirmation flag so the next "Mark as applied" for the same
+                # job is treated as explicit manual confirmation and proceeds.
+                try:
+                    ctx = self._get_recent_context(user_id)
+                    ctx["_pending_confirm_apply"] = {"title": title, "company": company}
+                    self._store_recent_context(user_id, ctx)
+                except Exception:
+                    pass
+                response = {
+                    "type": "clarification",
+                    "intent": "mark_applied",
+                    "message": msg,
+                    "job_title": title,
+                    "job_company": company,
+                    "options": [
+                        {
+                            "action": "confirm_mark_applied",
+                            "label": "Yes, I applied",
+                            "message": f"Mark as applied — {title} at {company}",
+                        },
+                        {
+                            "action": "open_apply_link",
+                            "label": "Show apply link first",
+                            "message": f"open apply link for {title} at {company}",
+                        },
+                    ],
+                    "next_action": "confirm_application",
+                }
+                self._append_chat(user_id, "assistant", msg)
+                return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+
+            # Evidence confirmed — clear the pending flag and write the record.
+            try:
+                ctx = self._get_recent_context(user_id)
+                ctx.pop("_pending_confirm_apply", None)
+                self._store_recent_context(user_id, ctx)
+            except Exception:
+                pass
+
             try:
                 _create_manual_app(title=title, company=company, status="applied", user_id=user_id)
                 msg = (
@@ -1872,12 +1953,22 @@ class RicoChatAPI:
             from src.repositories.applications_repo import create_manual as _create_manual_app
             title = getattr(intent_result, "extracted_title", None) or ""
             company = getattr(intent_result, "extracted_company", None) or ""
+            # Use URL evidence from recent context to distinguish a live posting
+            # (apply link was opened/verified) from a lead that still needs verification.
+            has_url = self._has_apply_evidence(user_id, title, company)
             try:
                 _create_manual_app(title=title, company=company, status="saved", user_id=user_id)
-                msg = (
-                    f"Saved — **{title}** at **{company}** added to Application Flow. "
-                    "View it at /applications. I will use this as your latest job context."
-                )
+                if has_url:
+                    msg = (
+                        f"Saved — **{title}** at **{company}** added to Application Flow. "
+                        "View it at /applications. I will use this as your latest job context."
+                    )
+                else:
+                    msg = (
+                        f"Saved as lead — **{title}** at **{company}** noted in Application Flow. "
+                        "This role hasn't been verified via an apply link yet. "
+                        "Open the apply link to confirm it's still live before applying."
+                    )
                 self._store_recent_context(
                     user_id,
                     self._build_recent_application_context(
@@ -1926,6 +2017,18 @@ class RicoChatAPI:
                     pass
             if apply_url:
                 msg = f"Apply link for **{title}** at **{company}**: {apply_url}"
+                # Store URL evidence so a subsequent "Mark as applied" can proceed
+                # without requiring a separate confirmation step.
+                self._store_recent_context(
+                    user_id,
+                    self._build_recent_application_context(
+                        title=title,
+                        company=company,
+                        status="opened",
+                        action="open_apply_link",
+                        link=apply_url,
+                    ),
+                )
             elif title and company:
                 msg = (
                     f"I don't have a saved apply link for **{title}** at **{company}**. "
@@ -2137,6 +2240,34 @@ class RicoChatAPI:
             return self.memory.get_context(user_id, "recent_context") or {}
         except Exception:
             return {}
+
+    def _has_apply_evidence(self, user_id: str, title: str, company: str) -> bool:
+        """Return True when there is evidence the user opened an apply link for title/company.
+
+        Evidence sources (checked in order):
+          1. Recent context: `_pending_confirm_apply` flag set by the clarification response.
+          2. Recent context: a recorded `link` for a matching job (set by open_apply_link handler).
+        """
+        try:
+            ctx = self._get_recent_context(user_id)
+            # Explicit manual-confirmation flag set when we returned a clarification
+            pending = ctx.get("_pending_confirm_apply") or {}
+            if (
+                pending.get("title", "").lower() == title.lower()
+                and pending.get("company", "").lower() == company.lower()
+            ):
+                return True
+            # URL evidence from a prior open_apply_link or application_tracking action
+            recent_app = ctx.get("recent_application") or {}
+            if (
+                title.lower() in (recent_app.get("title") or "").lower()
+                and company.lower() in (recent_app.get("company") or "").lower()
+                and recent_app.get("link")
+            ):
+                return True
+        except Exception:
+            pass
+        return False
 
     @staticmethod
     def _application_status_label(status: str | None) -> str:

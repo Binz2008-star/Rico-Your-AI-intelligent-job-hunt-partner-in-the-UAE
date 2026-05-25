@@ -19,6 +19,10 @@ export interface JobMatchData {
   recommended_action?: string;
   actions?: string[];
   why?: string; // Legacy fallback field for backward compatibility
+  // Job authenticity fields (optional — absent on older responses)
+  apply_url?: string;
+  source_url?: string;
+  verification_status?: "live" | "lead_needs_verification";
 }
 
 interface RicoJobMatchCardProps {
@@ -89,11 +93,14 @@ export function RicoJobMatchCard({ match, onActionClick, className }: RicoJobMat
             {match.location && ` · ${match.location}`}
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0 sm:mt-0">
+        <div className="flex items-center gap-2 shrink-0 sm:mt-0 flex-wrap justify-end">
           {boundedScore > 0 && (
             <RicoPill variant={getScoreVariant()}>{scoreLabel}</RicoPill>
           )}
           <RicoPill variant={confidenceBadge.variant}>{confidenceBadge.label}</RicoPill>
+          {match.verification_status === "lead_needs_verification" && (
+            <RicoPill variant="magenta">Lead — verify before applying</RicoPill>
+          )}
         </div>
       </div>
 
