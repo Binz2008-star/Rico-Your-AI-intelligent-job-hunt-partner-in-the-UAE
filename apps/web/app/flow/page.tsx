@@ -1,8 +1,9 @@
 'use client';
 
-import { Navigation } from '@/components/layout/Navigation';
-import { TopNav } from '@/components/layout/TopNav';
-import { AuraGlow } from '@/components/ui/AuraGlow';
+import { DashboardShell } from '@/components/DashboardShell';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { ErrorState } from '@/components/shared/ErrorState';
+import { LoadingState } from '@/components/shared/LoadingState';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { createManualApplication, getApplications } from '@/lib/api';
@@ -81,51 +82,26 @@ export default function FlowPage() {
     }, [loadApplications]);
 
     return (
-        <div className="relative min-h-screen overflow-x-hidden">
-            <AuraGlow aria-hidden="true" variant="cyan" position="top-left" />
-            <AuraGlow aria-hidden="true" variant="magenta" position="bottom-right" />
-            <TopNav />
-
-            <main className="relative z-10 pt-40 pb-60 px-container-padding-mobile md:px-container-padding-desktop max-w-7xl mx-auto">
-                <div className="mb-section-gap">
-                    <h1 className="font-headline-xl text-headline-xl text-on-surface mb-4">Application Flow</h1>
-                    <p className="font-body-lg text-body-lg text-on-surface-variant max-w-xl">
-                        Live application state from the backend pipeline, mapped into Rico&apos;s active flow view.
-                    </p>
-                </div>
-
-                {loading ? (
-                    <div className="space-y-8">
-                        {Array.from({ length: 3 }).map((_, index) => (
-                            <GlassPanel key={index} className="p-8 rounded-xl border border-white/10 animate-pulse motion-reduce:animate-none">
-                                <div className="h-5 w-32 rounded bg-white/5 mb-4" />
-                                <div className="h-4 w-44 rounded bg-white/5 mb-2" />
-                                <div className="h-4 w-28 rounded bg-white/5" />
-                            </GlassPanel>
-                        ))}
-                    </div>
-                ) : error ? (
-                    <GlassPanel className="p-6 rounded-xl border border-white/10">
-                        <p className="text-on-surface mb-2">Could not load the live pipeline.</p>
-                        <p className="text-body-md text-on-surface-variant">
-                            Rico&apos;s command interface is available, but this flow surface could not fetch current applications.
-                        </p>
-                    </GlassPanel>
-                ) : applications.length === 0 ? (
-                    <GlassPanel className="p-6 rounded-xl border border-white/10">
-                        <p className="text-on-surface mb-2">No applications tracked yet.</p>
-                        <p className="text-body-md text-on-surface-variant mb-4">
-                            Apply to jobs or mark openings as tracked to populate the live flow timeline.
-                        </p>
-                        <button
-                            onClick={() => setShowModal(true)}
-                            className="inline-flex items-center gap-2 rounded-lg bg-rico-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-rico-accent-hover"
-                        >
-                            <MaterialIcon icon="add" className="text-sm" />
-                            Track application
-                        </button>
-                    </GlassPanel>
-                ) : (
+        <DashboardShell
+            title="Application Flow"
+            subtitle="Live application state from the backend pipeline, mapped into Rico's active flow view."
+        >
+            {loading ? (
+                <LoadingState variant="card" message="Loading application flow..." />
+            ) : error ? (
+                <ErrorState
+                    variant="network"
+                    message="Could not load the live pipeline."
+                    onRetry={loadApplications}
+                />
+            ) : applications.length === 0 ? (
+                <EmptyState
+                    title="No applications tracked yet"
+                    description="Apply to jobs or mark openings as tracked to populate the live flow timeline."
+                    actionLabel="Track application"
+                    onAction={() => setShowModal(true)}
+                />
+            ) : (
                     <div className="space-y-8">
                         {applications.map((item, index) => (
                             <GlassPanel key={item.application_id} className="p-8 rounded-xl border border-white/10 hover:border-primary/30 transition-all">
@@ -154,8 +130,6 @@ export default function FlowPage() {
                         ))}
                     </div>
                 )}
-            </main>
-
             {/* Modal for manual application tracking */}
             {showModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" role="dialog" aria-label="Track application">
@@ -263,7 +237,6 @@ export default function FlowPage() {
                 </div>
             )}
 
-            <Navigation />
-        </div>
+        </DashboardShell>
     );
 }
