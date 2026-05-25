@@ -1694,8 +1694,12 @@ class RicoChatAPI:
                     for rec in _get_all_apps(user_id=user_id):
                         if (title.lower() in (rec.get("title") or "").lower() and
                                 company.lower() in (rec.get("company") or "").lower()):
-                            apply_url = rec.get("link") or ""
-                            break
+                            url = rec.get("link") or ""
+                            if url:
+                                apply_url = url
+                                break
+                            elif apply_url is None:
+                                apply_url = ""  # match found but no URL; keep searching
                 except Exception:
                     pass
             if apply_url:
@@ -1725,12 +1729,18 @@ class RicoChatAPI:
                     f"View it in Application Flow at {route}."
                 )
             else:
+                apps = None
                 try:
                     from src.repositories.applications_repo import get_all as _get_all_apps
                     apps = _get_all_apps(user_id=user_id)
                 except Exception:
-                    apps = []
-                if apps:
+                    apps = None
+                if apps is None:
+                    msg = (
+                        "I couldn't retrieve your application history right now. "
+                        "Please try again shortly."
+                    )
+                elif apps:
                     latest = apps[0]
                     job = (latest.get("title") or "Unknown")
                     company = (latest.get("company") or "Unknown")

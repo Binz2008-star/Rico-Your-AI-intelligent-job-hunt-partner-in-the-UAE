@@ -357,7 +357,7 @@ _JOB_CARD_ACTION_RE = re.compile(
 
 # Free-text "open apply link for <title> at <company>"
 _OPEN_APPLY_LINK_RE = re.compile(
-    r"\bopen\s+apply\s+link\b",
+    r"\bopen\s+apply\s+link(?:\s+for\s+(.+?)\s+at\s+(.+))?",
     re.IGNORECASE,
 )
 
@@ -540,8 +540,15 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         return IntentResult(matched_intent, 0.95, "regex", extracted_title=title, extracted_company=company)
 
     # Free-text open-apply-link must be caught before generic apply_job.
-    if _OPEN_APPLY_LINK_RE.search(text):
-        return IntentResult("open_apply_link", 0.95, "regex")
+    m = _OPEN_APPLY_LINK_RE.search(text)
+    if m:
+        extracted_title = (m.group(1) or "").strip() or None
+        extracted_company = (m.group(2) or "").strip() or None
+        return IntentResult(
+            "open_apply_link", 0.95, "regex",
+            extracted_title=extracted_title,
+            extracted_company=extracted_company,
+        )
 
     if _APPLY_JOB_RE.search(text):
         return IntentResult("apply_job", 0.95, "regex")
