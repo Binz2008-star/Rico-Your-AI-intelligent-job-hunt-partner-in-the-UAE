@@ -2007,7 +2007,7 @@ class RicoChatAPI:
                     for rec in _get_all_apps(user_id=user_id):
                         if (title.lower() in (rec.get("title") or "").lower() and
                                 company.lower() in (rec.get("company") or "").lower()):
-                            url = rec.get("link") or ""
+                            url = self._extract_rec_url(rec)
                             if url:
                                 apply_url = url
                                 break
@@ -2240,6 +2240,36 @@ class RicoChatAPI:
             return self.memory.get_context(user_id, "recent_context") or {}
         except Exception:
             return {}
+
+    @staticmethod
+    def _extract_rec_url(rec: dict[str, Any]) -> str:
+        """Return the best available apply URL from a recommendation record.
+
+        Checks top-level fields first (link, apply_url, job_apply_link, apply_link,
+        source_url), then falls back to the same keys inside a nested 'job_data' or
+        'job' sub-dict for records that were not fully flattened by get_recommendations.
+        """
+        top_level_url = (
+            rec.get("link")
+            or rec.get("apply_url")
+            or rec.get("job_apply_link")
+            or rec.get("apply_link")
+            or rec.get("source_url")
+            or ""
+        )
+        if top_level_url:
+            return str(top_level_url).strip()
+        nested = rec.get("job_data") or rec.get("job") or {}
+        if isinstance(nested, dict):
+            return str(
+                nested.get("link")
+                or nested.get("apply_url")
+                or nested.get("job_apply_link")
+                or nested.get("apply_link")
+                or nested.get("source_url")
+                or ""
+            ).strip()
+        return ""
 
     def _has_apply_evidence(self, user_id: str, title: str, company: str) -> bool:
         """Return True when there is evidence the user opened an apply link for title/company.
