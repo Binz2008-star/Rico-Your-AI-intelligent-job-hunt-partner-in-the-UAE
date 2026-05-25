@@ -4,7 +4,9 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
-from fastapi import HTTPException
+
+fastapi = pytest.importorskip("fastapi")
+HTTPException = fastapi.HTTPException
 
 from src.schemas.chat import RicoSessionContext
 

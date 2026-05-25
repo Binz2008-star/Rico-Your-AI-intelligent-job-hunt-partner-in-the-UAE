@@ -6,8 +6,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import HTTPException
-
 from src.schemas.chat import RicoSessionContext
 from src.subscription_plans import resolve_effective_user_plan
 
@@ -219,12 +217,14 @@ def check_ai_message_allowed(ctx: RicoSessionContext) -> GateCheck | None:
 
 
 def enforce_saved_job_allowed(user_id: str) -> None:
+    from fastapi import HTTPException
     check = _build_gate_check(user_id, "saved_jobs_limit", count_saved_jobs(user_id))
     if not check.allowed:
         raise HTTPException(status_code=402, detail=check.to_response())
 
 
 def enforce_profile_optimization_allowed(user_id: str) -> None:
+    from fastapi import HTTPException
     resolved = resolve_effective_user_plan(user_id)
     since = _usage_window_start(resolved)
     check = _build_gate_check(
