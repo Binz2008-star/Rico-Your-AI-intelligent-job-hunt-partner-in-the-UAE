@@ -136,7 +136,7 @@ def test_mixed_email_job_search_english_clarification():
     )
     result = _mixed_tool_clarification_response(p, "fetch my Gmail and find HSE jobs")
     assert "Gmail" in result["message"]
-    assert result["next_action"] == "confirm_job_search_without_gmail"
+    assert result["next_action"] == "choose_supported_path"
 
 
 def test_mixed_email_job_search_arabic_clarification():
@@ -146,4 +146,4 @@ def test_mixed_email_job_search_arabic_clarification():
     result = _mixed_tool_clarification_response(p, "افحص إيميلي وابحث عن وظيفة")
     assert "Gmail" in result["message"]  # product name stays
     assert "لا أستطيع" in result["message"]
-    assert result["next_action"] == "confirm_job_search_without_gmail"
+    assert result["next_action"] == "choose_supported_path"

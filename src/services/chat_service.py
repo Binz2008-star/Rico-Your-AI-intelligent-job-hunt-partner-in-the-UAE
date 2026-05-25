@@ -285,19 +285,10 @@ def _mixed_tool_clarification_response(policy: Any, message: str = "") -> Dict[s
     if "email_gmail_request" in reason and "job_search" in reason:
         role = _extract_requested_role(message)
         if lang == "ar":
-            msg = f"لا أستطيع الوصول إلى Gmail من ريكو حتى الآن. يمكنني البحث عن وظائف {role} إذا أردت."
+            clarification_msg = f"لا أستطيع الوصول إلى Gmail من ريكو حتى الآن. يمكنني البحث عن وظائف {role} إذا أردت."
         else:
-            msg = f"I can't access Gmail from Rico yet. I can search for {role} roles if you want."
-        return {
-            "type": "clarification",
-            "message": msg,
-            "intent": "mixed_request",
-            "response_source": "policy_gateway",
-            "reason": reason,
-            "next_action": "confirm_job_search_without_gmail",
-        }
-
-    if lang == "ar":
+            clarification_msg = f"I can't access Gmail from Rico yet. I can search for {role} roles if you want."
+    elif lang == "ar":
         clarification_msg = (
             "هذا الطلب يجمع بين أداة خارجية غير متاحة وإجراء ريكو. "
             "لا أستطيع الوصول إلى الحساب الخارجي مباشرة، لكنني أستطيع المساعدة إذا اخترت المسار."
