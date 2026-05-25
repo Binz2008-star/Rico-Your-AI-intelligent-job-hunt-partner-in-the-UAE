@@ -90,12 +90,25 @@ def _has_user_data(payload: Dict[str, Any]) -> bool:
 # ── Public service functions ──────────────────────────────────────────────────
 
 def send_message(ctx: RicoSessionContext, message: str) -> Dict[str, Any]:
-    """Phase 1 routing: IntentRouter first, legacy classifier second."""
+    """Policy Gateway → IntentRouter → legacy classifier."""
     from src.repositories.profile_repo import get_profile
 
     profile = get_profile(ctx.user_id)
     profile_present = profile is not None
 
+    # ── Policy Gateway pre-filter ─────────────────────────────────────────────
+    # Handles unsupported external tools and subscription queries deterministically
+    # before any AI or legacy routing touches the message.
+    from src.rico.policy import classify_request
+    policy = classify_request(message, has_auth=(ctx.auth_type == "authenticated"))
+
+    if policy.route == "unsupported":
+        return _unsupported_tool_response(policy)
+
+    if policy.route == "account_service":
+        return _account_service_response(ctx)
+
+    # ── Existing routing unchanged ────────────────────────────────────────────
     decision = _intent_router.route(
         message=message,
         user_id=ctx.user_id,
@@ -106,6 +119,75 @@ def send_message(ctx: RicoSessionContext, message: str) -> Dict[str, Any]:
         return _conversational_ai_reply(ctx=ctx, message=message, profile=profile)
 
     return _legacy_send_message(ctx=ctx, message=message)
+
+
+def _unsupported_tool_response(policy: Any) -> Dict[str, Any]:
+    """Deterministic response for external integrations Rico doesn't support."""
+    msg = policy.alternative_suggestion or (
+        "I can't access that external integration from Rico. "
+        "You can upload or paste the relevant information and I'll organise it."
+    )
+    return {
+        "type": "unsupported_tool",
+        "message": msg,
+        "intent": "unsupported",
+        "response_source": "policy_gateway",
+    }
+
+
+def _account_service_response(ctx: RicoSessionContext) -> Dict[str, Any]:
+    """Return subscription status (authenticated) or login prompt (public/unauthenticated)."""
+    if ctx.auth_type != "authenticated":
+        return {
+            "type": "login_required",
+            "message": "Please log in to view your subscription and account details.",
+            "intent": "account_service",
+            "response_source": "policy_gateway",
+        }
+
+    try:
+        from src.subscription_plans import resolve_effective_user_plan
+        resolved = resolve_effective_user_plan(ctx.user_id)
+        sub = resolved.subscription
+        is_active = resolved.is_active
+        limit = sub.entitlements.monthly_ai_message_limit
+
+        if is_active and resolved.plan:
+            name = resolved.plan.name
+            price = resolved.plan.price_monthly
+            currency = resolved.plan.currency
+            end = sub.current_period_end
+            end_str = f"{end.day} {end.strftime('%b %Y')}" if end else "—"
+            msg = (
+                f"You are on the **{name}** plan ({price} {currency}/mo) — active. "
+                f"Current period ends {end_str}. "
+                f"Monthly AI message limit: {limit:,}."
+            )
+        else:
+            msg = (
+                f"You are on the **Free** plan — {limit} AI messages per month. "
+                "Upgrade to Pro (50 AED/mo) or Premium (150 AED/mo) for higher limits."
+            )
+
+        return {
+            "type": "subscription_status",
+            "message": msg,
+            "intent": "account_service",
+            "response_source": "policy_gateway",
+            "plan": sub.plan.value,
+            "is_active": is_active,
+        }
+    except Exception:
+        logger.warning("policy_gateway: subscription lookup failed for user=%s", ctx.user_id[:8])
+        return {
+            "type": "subscription_status",
+            "message": (
+                "I couldn't retrieve your subscription status right now. "
+                "Please visit /subscription to check."
+            ),
+            "intent": "account_service",
+            "response_source": "policy_gateway",
+        }
 
 
 def _legacy_send_message(ctx: RicoSessionContext, message: str) -> Dict[str, Any]:
