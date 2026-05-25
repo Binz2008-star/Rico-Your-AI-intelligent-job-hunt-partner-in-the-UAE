@@ -254,6 +254,10 @@ export const JobMatchSchema = z.object({
     match_concerns: StringArrayFromUnknownSchema,
     missing_facts: StringArrayFromUnknownSchema,
     recommended_action: StringFromUnknownSchema,
+    // Job authenticity fields — optional so existing responses without them still parse.
+    apply_url: StringFromUnknownSchema,
+    source_url: StringFromUnknownSchema,
+    verification_status: z.enum(['live', 'lead_needs_verification']).optional(),
 }).passthrough();
 
 export const RicoOptionSchema = z.object({
@@ -605,6 +609,7 @@ export type RicoChatRequest = z.infer<typeof RicoChatRequestSchema>;
 export type RicoPublicChatRequest = z.infer<typeof RicoPublicChatRequestSchema>;
 export type RicoFeedbackRequest = z.infer<typeof RicoFeedbackRequestSchema>;
 export type MeResponse = z.infer<typeof MeResponseSchema>;
+export type JobMatch = z.infer<typeof JobMatchSchema>;
 export type RicoChatResponse = z.infer<typeof RicoChatResponseSchema>;
 export type RicoProfileResponse = z.infer<typeof RicoProfileResponseSchema>;
 export type SavedSearch = z.infer<typeof SavedSearchSchema>;
