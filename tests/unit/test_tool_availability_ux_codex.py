@@ -8,6 +8,7 @@ from src.services.chat_service import (
     _unsupported_tool_message,
     _mixed_tool_clarification_response,
     _continue_message_from_reason,
+    _extract_requested_role,
 )
 
 
@@ -79,9 +80,16 @@ def test_continue_action_job_search():
         == "find live jobs for my target role"
 
 
-def test_continue_action_application_tracking():
-    assert _continue_message_from_reason("conflicting_domains:email_gmail_request_vs_application_tracking") \
+def test_continue_action_applications_tracking_plural():
+    # domain value is APPLICATIONS_TRACKING = "applications_tracking" (plural)
+    assert _continue_message_from_reason("conflicting_domains:email_gmail_request_vs_applications_tracking") \
         == "show my applications"
+
+
+def test_continue_action_application_tracking_singular_no_match():
+    # singular "application_tracking" is NOT a real domain value — must not match
+    assert _continue_message_from_reason("conflicting_domains:email_gmail_request_vs_application_tracking") \
+        != "show my applications"
 
 
 def test_continue_action_cv_profile():
@@ -120,7 +128,7 @@ def test_arabic_mixed_clarification_message_is_arabic():
 
 def test_mixed_continue_option_uses_dynamic_action():
     p = _clarification_policy(
-        reason="conflicting_domains:email_gmail_request_vs_application_tracking", lang="en"
+        reason="conflicting_domains:email_gmail_request_vs_applications_tracking", lang="en"
     )
     result = _mixed_tool_clarification_response(p, "check Gmail for my application")
     continue_opt = next(
@@ -147,3 +155,17 @@ def test_mixed_email_job_search_arabic_clarification():
     assert "Gmail" in result["message"]  # product name stays
     assert "لا أستطيع" in result["message"]
     assert result["next_action"] == "choose_supported_path"
+    # Arabic fallback for role must not bleed English into the Arabic message
+    assert "that target role" not in result["message"]
+
+
+def test_extract_requested_role_english_fallback():
+    assert _extract_requested_role("no role here", lang="en") == "that target role"
+
+
+def test_extract_requested_role_arabic_fallback():
+    assert _extract_requested_role("لا يوجد دور هنا", lang="ar") == "وظيفتك المستهدفة"
+
+
+def test_extract_requested_role_extracts_english():
+    assert _extract_requested_role("find me HSE jobs", lang="en") == "HSE"

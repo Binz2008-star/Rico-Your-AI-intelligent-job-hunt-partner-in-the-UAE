@@ -270,7 +270,7 @@ def _unsupported_tool_next_action(policy: Any) -> str:
 
 def _continue_message_from_reason(reason: str) -> str:
     """Derive a Rico continue-action message from the supported side of a mixed-domain conflict."""
-    if "application_tracking" in reason:
+    if "applications_tracking" in reason:
         return "show my applications"
     if "cv_profile" in reason or "profile" in reason:
         return "show my profile"
@@ -283,7 +283,7 @@ def _mixed_tool_clarification_response(policy: Any, message: str = "") -> Dict[s
     lang = getattr(policy, "language", "en")
 
     if "email_gmail_request" in reason and "job_search" in reason:
-        role = _extract_requested_role(message)
+        role = _extract_requested_role(message, lang=lang)
         if lang == "ar":
             clarification_msg = f"لا أستطيع الوصول إلى Gmail من ريكو حتى الآن. يمكنني البحث عن وظائف {role} إذا أردت."
         else:
@@ -326,7 +326,7 @@ def _mixed_tool_clarification_response(policy: Any, message: str = "") -> Dict[s
     }
 
 
-def _extract_requested_role(message: str) -> str:
+def _extract_requested_role(message: str, lang: str = "en") -> str:
     """Best-effort role extraction for mixed Gmail + job-search clarification copy."""
     import re
 
@@ -342,7 +342,7 @@ def _extract_requested_role(message: str) -> str:
             role = re.sub(r"\s+", " ", match.group(1)).strip(" .,-")
             if role:
                 return role
-    return "that target role"
+    return "وظيفتك المستهدفة" if lang == "ar" else "that target role"
 
 
 def _account_service_response(ctx: RicoSessionContext) -> Dict[str, Any]:
