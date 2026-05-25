@@ -303,6 +303,7 @@ def test_phase2_chat_routing_eval_baseline(case: ChatRoutingEvalCase) -> None:
     ai_response = {"type": "ai_eval", "message": "ai", "response_source": "openai"}
 
     with patch("src.repositories.profile_repo.get_profile", return_value=None), \
+         patch("src.services.subscription_gating.check_ai_message_allowed", return_value=None), \
          patch("src.subscription_plans.resolve_effective_user_plan", return_value=_free_subscription_response()), \
          patch("src.services.chat_service._legacy_send_message", return_value=legacy_response), \
          patch("src.services.chat_service._conversational_ai_reply", return_value=ai_response):

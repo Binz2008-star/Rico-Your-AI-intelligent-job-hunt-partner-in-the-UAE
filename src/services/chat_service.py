@@ -105,7 +105,7 @@ def send_message(
             return status_response
 
     gate = check_ai_message_allowed(ctx)
-    if gate is not None and not gate.allowed:
+    if gate and not gate.allowed:
         return gate.to_response()
 
     profile = get_profile(ctx.user_id)

@@ -154,6 +154,12 @@ def create(
     Legacy path (no user_id): falls back to the JSON file via mark_applied().
     """
     if user_id:
+        if status == "saved":
+            from src.services.subscription_gating import enforce_saved_job_allowed
+
+            existing = find_by_job_id(job_id, user_id=user_id)
+            if not existing or existing.get("status") != "saved":
+                enforce_saved_job_allowed(user_id)
         db = _db()
         if not db:
             raise HTTPException(status_code=503, detail="Database unavailable")

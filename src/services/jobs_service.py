@@ -207,6 +207,9 @@ def save_job(job: Dict[str, Any], user_id: Optional[str] = None) -> bool:
 
     if is_applied(job, user_id=user_id):
         return False
+    from src.services.subscription_gating import enforce_saved_job_allowed
+
+    enforce_saved_job_allowed(user_id)
     return mark_applied(job, status="saved", notes="Saved via API", user_id=user_id)
 
 

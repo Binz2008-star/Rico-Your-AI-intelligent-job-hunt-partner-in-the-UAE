@@ -62,8 +62,8 @@ def _usage_window_start(resolved: Any) -> datetime:
     return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
 
-def _build_gate_check(user_id: str, feature: str, usage: int) -> GateCheck:
-    resolved = resolve_effective_user_plan(user_id)
+def _build_gate_check(user_id: str, feature: str, usage: int, resolved: Any | None = None) -> GateCheck:
+    resolved = resolved or resolve_effective_user_plan(user_id)
     entitlements = resolved.subscription.entitlements
     limit = getattr(entitlements, feature, None)
     plan = resolved.subscription.plan.value
@@ -72,7 +72,7 @@ def _build_gate_check(user_id: str, feature: str, usage: int) -> GateCheck:
         return GateCheck(
             allowed=True,
             feature=feature,
-            usage=usage,
+            usage=int(usage),
             limit=None,
             remaining=None,
             plan=plan,
@@ -80,19 +80,20 @@ def _build_gate_check(user_id: str, feature: str, usage: int) -> GateCheck:
         )
 
     limit_int = int(limit)
-    remaining = max(0, limit_int - int(usage))
-    allowed = int(usage) < limit_int
+    usage_int = int(usage)
+    remaining = max(0, limit_int - usage_int)
+    allowed = usage_int < limit_int
     feature_label = feature.replace("_", " ")
     message = (
         f"You have reached your {feature_label} limit on the {plan.title()} plan "
-        f"({usage}/{limit_int}). Upgrade to continue."
+        f"({usage_int}/{limit_int}). Upgrade to continue."
         if not allowed
         else f"{remaining} remaining for {feature_label}."
     )
     return GateCheck(
         allowed=allowed,
         feature=feature,
-        usage=int(usage),
+        usage=usage_int,
         limit=limit_int,
         remaining=remaining,
         plan=plan,
@@ -185,6 +186,8 @@ def count_profile_optimizations(user_id: str, since: datetime) -> int:
         if not is_db_available():
             return 0
         conn = get_db_connection()
+        if conn is None:
+            return 0
         try:
             with conn.cursor() as cur:
                 cur.execute(
@@ -212,7 +215,7 @@ def check_ai_message_allowed(ctx: RicoSessionContext) -> GateCheck | None:
     resolved = resolve_effective_user_plan(ctx.user_id)
     since = _usage_window_start(resolved)
     usage = count_monthly_ai_messages(ctx.user_id, since)
-    return _build_gate_check(ctx.user_id, "monthly_ai_message_limit", usage)
+    return _build_gate_check(ctx.user_id, "monthly_ai_message_limit", usage, resolved)
 
 
 def enforce_saved_job_allowed(user_id: str) -> None:
@@ -228,6 +231,7 @@ def enforce_profile_optimization_allowed(user_id: str) -> None:
         user_id,
         "profile_optimization_limit",
         count_profile_optimizations(user_id, since),
+        resolved,
     )
     if not check.allowed:
         raise HTTPException(status_code=402, detail=check.to_response())
