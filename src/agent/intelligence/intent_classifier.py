@@ -42,6 +42,8 @@ class IntentResult:
     confidence: float
     source: str  # "exact", "regex", "fallback"
     extracted_role: Optional[str] = None
+    extracted_title: Optional[str] = None
+    extracted_company: Optional[str] = None
 
 
 # ── Exact-phrase sets ────────────────────────────────────────────────────────
@@ -186,6 +188,14 @@ _JOB_SEARCH_FOR_ROLE_RE = re.compile(
     r"\b(?:find|search|show|get|look(?:ing)?\s+for|need|want)\b.{0,40}\b(?:jobs?|roles?|positions?|openings?|vacancies?)\b"
     r"\s+for\s+([A-Za-z][A-Za-z &/\-]{2,60}?)(?:\s+in\b|[?.!,\s]*$)",
     re.IGNORECASE,
+)
+
+# Matches job-card action messages sent from RicoJobMatchCard:
+#   "{action} — {title} at {company}"
+# Must be checked BEFORE generic apply/save patterns.
+_JOB_CARD_ACTION_RE = re.compile(
+    r"^(Prepare application|Mark as applied|Track this job|Save job)\s*[—\-–]\s*(.+?)\s+at\s+(.+?)$",
+    re.IGNORECASE | re.DOTALL,
 )
 
 _APPLY_JOB_RE = re.compile(
@@ -346,6 +356,21 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
 
     if _CV_UPLOAD_RE.search(text):
         return IntentResult("cv_upload_or_parse", 0.95, "regex")
+
+    # Job-card actions carry structured context — classify before generic patterns.
+    job_card_m = _JOB_CARD_ACTION_RE.match(text)
+    if job_card_m:
+        action_raw = job_card_m.group(1).lower()
+        title = job_card_m.group(2).strip()
+        company = job_card_m.group(3).strip()
+        intent_map = {
+            "prepare application": "prepare_application",
+            "mark as applied": "mark_applied",
+            "track this job": "track_job",
+            "save job": "save_job",
+        }
+        matched_intent = intent_map.get(action_raw, "job_action")
+        return IntentResult(matched_intent, 0.95, "regex", extracted_title=title, extracted_company=company)
 
     if _APPLY_JOB_RE.search(text):
         return IntentResult("apply_job", 0.95, "regex")

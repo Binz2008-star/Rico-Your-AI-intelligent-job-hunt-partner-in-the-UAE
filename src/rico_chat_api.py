@@ -1515,6 +1515,107 @@ class RicoChatAPI:
                 self._append_chat(user_id, "assistant", response)
                 return self._finalize(response, routed.source, profile=profile)
 
+        # Prepare application — from job card "Prepare application — {title} at {company}"
+        if intent == "prepare_application":
+            title = getattr(intent_result, "extracted_title", None) or "the role"
+            company = getattr(intent_result, "extracted_company", None) or "the company"
+            profile_skills = self._as_list(self._profile_value(profile, "skills"))
+            profile_roles = self._as_list(self._profile_value(profile, "target_roles"))
+
+            context_parts: list[str] = []
+            if profile_skills:
+                context_parts.append(f"Skills: {', '.join(str(s) for s in profile_skills[:8])}")
+            if profile_roles:
+                context_parts.append(f"Target roles: {', '.join(str(r) for r in profile_roles[:3])}")
+            context_str = ". ".join(context_parts) + ("." if context_parts else "")
+
+            system_prompt = (
+                "You are Rico, a UAE career intelligence system. "
+                "The user wants to prepare an application for a specific job. "
+                "Give a concise application angle: what from their background aligns, "
+                "what to lead with in their CV and cover note, and any key gap to address. "
+                "Keep it under 200 words."
+            )
+            ai_input = f"Prepare application for {title} at {company}. {context_str}"
+            ai_text = None
+            if hf_ok():
+                ai_text = generate_text(ai_input, system=system_prompt, max_new_tokens=400)
+
+            if ai_text:
+                msg = ai_text
+                src = self.SOURCE_HF
+            else:
+                skills_str = (
+                    ", ".join(str(s) for s in profile_skills[:4])
+                    if profile_skills else "your documented skills"
+                )
+                msg = (
+                    f"**{title} at {company}**\n\n"
+                    f"Lead with: {skills_str}\n\n"
+                    f"Angle: position your experience directly against this role. "
+                    f"Research {company} and reference specific work in your cover note.\n\n"
+                    f"Upload your CV for a full gap analysis against this role."
+                )
+                src = self.SOURCE_FALLBACK
+
+            response = {
+                "type": "prepare_application",
+                "intent": "prepare_application",
+                "message": msg,
+                "options": [
+                    {"action": "open_apply_link", "label": "Open apply link",
+                     "message": f"open apply link for {title} at {company}"},
+                    {"action": "track_job", "label": "Track this job",
+                     "message": f"Track this job — {title} at {company}"},
+                    {"action": "mark_applied", "label": "Mark as applied",
+                     "message": f"Mark as applied — {title} at {company}"},
+                    {"action": "save_job", "label": "Save job",
+                     "message": f"Save job — {title} at {company}"},
+                ],
+            }
+            self._append_chat(user_id, "assistant", msg)
+            return self._finalize(response, src, profile=profile)
+
+        # Mark as applied — from job card "Mark as applied — {title} at {company}"
+        if intent == "mark_applied":
+            from src.repositories.applications_repo import create_manual as _create_manual_app
+            title = getattr(intent_result, "extracted_title", None) or ""
+            company = getattr(intent_result, "extracted_company", None) or ""
+            try:
+                _create_manual_app(title=title, company=company, status="applied", user_id=user_id)
+                msg = (
+                    f"Tracked — **{title}** at **{company}** marked as applied. "
+                    "You can view it in Application Flow."
+                )
+            except Exception:
+                msg = (
+                    f"Noted — **{title}** at **{company}** marked as applied. "
+                    "(Could not write to Application Flow right now — please retry.)"
+                )
+            response = {"type": "mark_applied", "intent": "mark_applied", "message": msg}
+            self._append_chat(user_id, "assistant", msg)
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+
+        # Track this job — from job card "Track this job — {title} at {company}"
+        if intent == "track_job":
+            from src.repositories.applications_repo import create_manual as _create_manual_app
+            title = getattr(intent_result, "extracted_title", None) or ""
+            company = getattr(intent_result, "extracted_company", None) or ""
+            try:
+                _create_manual_app(title=title, company=company, status="tracking", user_id=user_id)
+                msg = (
+                    f"Saved — **{title}** at **{company}** added to Application Flow with status: Tracking. "
+                    "I'll remind you to follow up."
+                )
+            except Exception:
+                msg = (
+                    f"Noted — **{title}** at **{company}** added to your tracking list. "
+                    "(Could not write to Application Flow right now — please retry.)"
+                )
+            response = {"type": "track_job", "intent": "track_job", "message": msg}
+            self._append_chat(user_id, "assistant", msg)
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+
         # Apply job — confirmation gate
         if intent == "apply_job":
             context = self._build_router_context(user_id, profile)
