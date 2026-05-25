@@ -1,8 +1,12 @@
-"use client";
-
+import type { Metadata } from "next";
 import Link from "next/link";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { AuraGlow } from "@/components/ui/AuraGlow";
+
+export const metadata: Metadata = {
+  title: "Terms of Service | Rico Hunt",
+  description: "Terms of Service for Rico Hunt — the UAE-focused AI career execution platform.",
+};
 
 export default function TermsPage() {
   return (
@@ -132,9 +136,12 @@ export default function TermsPage() {
       </main>
 
       <footer className="relative z-10 border-t border-white/10 bg-black/30 px-5 py-8 text-center">
-        <p className="text-xs text-text-tertiary">
-          © 2026 Rico Hunt. All rights reserved.
-        </p>
+        <div className="mb-3 flex items-center justify-center gap-6">
+          <span className="text-xs font-medium text-white">Terms</span>
+          <Link href="/privacy" className="text-xs text-text-tertiary transition-colors hover:text-white">Privacy</Link>
+          <Link href="/refund-policy" className="text-xs text-text-tertiary transition-colors hover:text-white">Refunds</Link>
+        </div>
+        <p className="text-xs text-text-tertiary">© 2026 Rico Hunt. All rights reserved.</p>
       </footer>
     </div>
   );

@@ -1,8 +1,12 @@
-"use client";
-
+import type { Metadata } from "next";
 import Link from "next/link";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { AuraGlow } from "@/components/ui/AuraGlow";
+
+export const metadata: Metadata = {
+  title: "Privacy Policy | Rico Hunt",
+  description: "Privacy Policy for Rico Hunt — how we collect, use, and protect your personal data.",
+};
 
 export default function PrivacyPage() {
   return (
@@ -160,9 +164,12 @@ export default function PrivacyPage() {
       </main>
 
       <footer className="relative z-10 border-t border-white/10 bg-black/30 px-5 py-8 text-center">
-        <p className="text-xs text-text-tertiary">
-          © 2026 Rico Hunt. All rights reserved.
-        </p>
+        <div className="mb-3 flex items-center justify-center gap-6">
+          <Link href="/terms" className="text-xs text-text-tertiary transition-colors hover:text-white">Terms</Link>
+          <span className="text-xs font-medium text-white">Privacy</span>
+          <Link href="/refund-policy" className="text-xs text-text-tertiary transition-colors hover:text-white">Refunds</Link>
+        </div>
+        <p className="text-xs text-text-tertiary">© 2026 Rico Hunt. All rights reserved.</p>
       </footer>
     </div>
   );
