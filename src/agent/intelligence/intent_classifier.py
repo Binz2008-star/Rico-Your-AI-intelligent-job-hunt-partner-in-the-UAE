@@ -426,24 +426,47 @@ _ARABIC_SCRIPT_RE = re.compile(r"[؀-ۿ]")
 
 # Arabic job-related nouns (normalised: ta marbuta ة→ه, alef variants→bare alef, ى→ي)
 _ARABIC_JOB_TERMS = frozenset([
+    # Gulf / Levantine
     "وظيفه", "وظائف", "عمل", "شغل",
     "فرصه", "فرص", "مهنه", "مهن",
     "شاغر", "شواغر", "وضيفه",
     "منصب", "مناصب",
+    # MSA additions
+    "تعيين",      # appointment / hiring
+    "مسمي",       # job title / designation
+    "موظف",       # employee (used in "I want to be a موظف at …")
+    "توظيف",      # employment / recruitment
+    "فرصه عمل",   # job opportunity (phrase — substring match also fires on parts)
 ])
 
 # Arabic verbs / phrases expressing a job-search request
 _ARABIC_REQUEST_TERMS = frozenset([
+    # Gulf / Levantine
     "ابحث", "بحث", "دور", "اريد", "ابي", "ابغي",
     "احتاج", "محتاج", "شوف", "طلع", "جيب",
     "ساعدني", "ايجاد", "طلب",
+    # MSA formal verbs (all stored in normalised form — alef variants stripped)
+    "ارغب",   # أرغب — I wish / want
+    "اسعي",   # أسعى — I seek
+    "اطلب",   # أطلب — I request
+    "ابحث عن",  # أبحث عن — I am looking for (phrase)
+    "هل يوجد وظائف",  # are there jobs?
+    "هل توجد وظائف",  # are there jobs? (feminine verb)
+    "هل هناك وظائف",  # are there any jobs?
+])
+
+_ARABIC_STANDALONE_CV_JOB_REQUEST_TERMS = frozenset([
+    "ابحث",
+    "دور",
+    "شوف",
+    "جيب",
 ])
 
 
 def _normalize_arabic(text: str) -> str:
     """Remove diacritics and normalise Arabic letter variants before phrase lookup."""
     # Remove tashkeel (fatha, kasra, damma, sukun, shadda, tanwin, tatweel)
-    text = re.sub(r"[ً-ٰٟـ]", "", text)
+    text = re.sub(r"[\u064B-\u065F\u0670\u0640]", "", text)
     # Normalise alef variants (madda آ, hamza above أ, hamza below إ, wasla ٱ) → bare alef ا
     text = re.sub(r"[آأإٱ]", "ا", text)
     # Normalise alef maqsura ى → ya ي
@@ -461,9 +484,10 @@ def _is_arabic_job_search(normalized_lower: str, *, has_cv: bool = False) -> boo
     has_ar_job = any(t in normalized_lower for t in _ARABIC_JOB_TERMS)
     # Mixed-language: Arabic request verb + English role name (e.g. "دور لي safety officer")
     has_en_content = bool(re.search(r"[a-zA-Z]{2,}", normalized_lower))
-    # A standalone request verb from a user who has a CV is always a job-search request
+    # A standalone search command from a user who has a CV is a job-search request.
     # e.g. "ابحث" alone = "search [for jobs for me]"
-    return has_ar_job or has_en_content or has_cv
+    has_standalone_cv_request = normalized_lower.strip() in _ARABIC_STANDALONE_CV_JOB_REQUEST_TERMS
+    return has_ar_job or has_en_content or (has_cv and has_standalone_cv_request)
 
 
 def _extract_english_role_from_mixed(text: str) -> Optional[str]:
