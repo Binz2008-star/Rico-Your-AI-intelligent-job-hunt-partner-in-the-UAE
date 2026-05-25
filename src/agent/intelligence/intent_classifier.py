@@ -357,7 +357,10 @@ _JOB_CARD_ACTION_RE = re.compile(
 
 # Free-text "open apply link for <title> at <company>"
 _OPEN_APPLY_LINK_RE = re.compile(
-    r"\bopen\s+apply\s+link(?:\s+for\s+(.+?)\s+at\s+(.+))?",
+    r"\bopen\s+apply\s+link\b"
+    r"(?:\s+for\s+(.+?)\s+at\s+(.+?)"
+    r"(?:[\s,;:]+(?:please|pls|thanks|thank\s+you))?"
+    r")?\s*[.!?]*\s*$",
     re.IGNORECASE,
 )
 
