@@ -374,6 +374,16 @@ export default function SettingsPage() {
           <Row label="Mock mode" value={isMock ? "ENABLED — using dev fixtures" : "OFF — hitting real backend"} ok={!isMock} />
         </section>
 
+        {/* Legal */}
+        <section className="bg-[#13132a]/80 border border-white/[0.06] rounded-2xl p-6">
+          <h2 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[15px] mb-4 text-white">Legal</h2>
+          <div className="flex flex-wrap gap-4">
+            <a href="/terms" className="text-[13px] text-[#5a5a7a] hover:text-[#eeeef5] transition-colors">Terms of Service</a>
+            <a href="/privacy" className="text-[13px] text-[#5a5a7a] hover:text-[#eeeef5] transition-colors">Privacy Policy</a>
+            <a href="/refund-policy" className="text-[13px] text-[#5a5a7a] hover:text-[#eeeef5] transition-colors">Refund &amp; Cancellation</a>
+          </div>
+        </section>
+
       </div>
       <ToastContainer toasts={toasts} />
     </DashboardShell>

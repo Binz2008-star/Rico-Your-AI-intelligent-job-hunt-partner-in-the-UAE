@@ -449,6 +449,14 @@ export default function LandingPage() {
                         </RicoCardPanel>
                     </section>
                 </main>
+                <footer className="relative z-10 border-t border-white/10 bg-black/30 px-5 py-8 text-center">
+                    <div className="mb-3 flex items-center justify-center gap-6">
+                        <Link href="/terms" className="text-xs text-text-tertiary transition-colors hover:text-white">Terms</Link>
+                        <Link href="/privacy" className="text-xs text-text-tertiary transition-colors hover:text-white">Privacy</Link>
+                        <Link href="/refund-policy" className="text-xs text-text-tertiary transition-colors hover:text-white">Refunds</Link>
+                    </div>
+                    <p className="text-xs text-text-tertiary">© 2026 Rico Hunt. All rights reserved.</p>
+                </footer>
             </div>
         </MotionConfig>
     );
