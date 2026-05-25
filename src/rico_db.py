@@ -464,7 +464,20 @@ class RicoDB:
                 "title": job.get("title", ""),
                 "company": job.get("company", ""),
                 "location": job.get("location", ""),
-                "link": job.get("link", ""),
+                "link": (
+                    job.get("link")
+                    or job.get("apply_url")
+                    or job.get("job_apply_link")
+                    or job.get("apply_link")
+                    or ""
+                ),
+                "apply_url": (
+                    job.get("apply_url")
+                    or job.get("job_apply_link")
+                    or job.get("apply_link")
+                    or job.get("link")
+                    or ""
+                ),
                 "score": r["rico_score"] or r["repo_score"] or 0,
                 "status": r["status"],
                 "notes": r["explanation"] or "",
