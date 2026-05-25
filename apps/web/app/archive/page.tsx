@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import { DashboardShell } from '@/components/DashboardShell';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { ErrorState } from '@/components/shared/ErrorState';
+import { LoadingState } from '@/components/shared/LoadingState';
 import { fetchChatHistory, type ChatHistoryMessage } from '@/lib/api';
-import { TopNav } from '@/components/layout/TopNav';
-import { Navigation } from '@/components/layout/Navigation';
-import { AuraGlow } from '@/components/ui/AuraGlow';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import React, { useCallback, useEffect, useState } from 'react';
 
 type StructuredArchiveMessage = {
   type?: string;
@@ -77,44 +78,26 @@ export default function ArchivePage() {
   }, [loadArchive]);
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden">
-      <AuraGlow aria-hidden="true" variant="magenta" position="bottom-left" />
-      <AuraGlow aria-hidden="true" variant="cyan" position="top-right" />
-      <TopNav />
-
-      <main className="relative z-10 pt-40 pb-60 px-container-padding-mobile md:px-container-padding-desktop max-w-7xl mx-auto">
-        <div className="mb-section-gap">
-          <h1 className="font-headline-xl text-headline-xl text-on-surface mb-4">Memory Archive</h1>
-          <p className="font-body-lg text-body-lg text-on-surface-variant max-w-xl">
-            Live strategic memory from Rico&apos;s recent conversation history, preserved as operational context rather than decorative placeholders.
-          </p>
-        </div>
-
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <GlassPanel key={index} className="p-6 rounded-xl border border-white/10 animate-pulse motion-reduce:animate-none">
-                <div className="h-5 w-24 rounded bg-white/5 mb-4" />
-                <div className="h-4 w-full rounded bg-white/5 mb-2" />
-                <div className="h-4 w-2/3 rounded bg-white/5" />
-              </GlassPanel>
-            ))}
-          </div>
-        ) : error ? (
-          <GlassPanel className="p-6 rounded-xl border border-white/10">
-            <p className="text-on-surface mb-2">Could not load memory history.</p>
-            <p className="text-body-md text-on-surface-variant">
-              Rico&apos;s archive view is connected to the live chat history endpoint, but this request did not complete successfully.
-            </p>
-          </GlassPanel>
-        ) : messages.length === 0 ? (
-          <GlassPanel className="p-6 rounded-xl border border-white/10">
-            <p className="text-on-surface mb-2">No archived memory yet.</p>
-            <p className="text-body-md text-on-surface-variant">
-              Start a conversation in Command and Rico will begin building the live memory timeline shown here.
-            </p>
-          </GlassPanel>
-        ) : (
+    <DashboardShell
+      title="Memory Archive"
+      subtitle="Live strategic memory from Rico's recent conversation history, preserved as operational context rather than decorative placeholders."
+    >
+      {loading ? (
+        <LoadingState variant="card" message="Loading memory history..." />
+      ) : error ? (
+        <ErrorState
+          variant="network"
+          message="Could not load memory history."
+          onRetry={loadArchive}
+        />
+      ) : messages.length === 0 ? (
+        <EmptyState
+          title="No archived memory yet"
+          description="Start a conversation in Command and Rico will begin building the live memory timeline shown here."
+          actionLabel="Open Command"
+          actionHref="/command"
+        />
+      ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {messages.map((message, index) => {
               const structured = parseStructuredAssistantMessage(message);
@@ -158,9 +141,6 @@ export default function ArchivePage() {
             })}
           </div>
         )}
-      </main>
-
-      <Navigation />
-    </div>
+    </DashboardShell>
   );
 }
