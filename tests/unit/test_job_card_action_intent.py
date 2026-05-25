@@ -41,6 +41,12 @@ from src.agent.intelligence.intent_classifier import classify_intent
         "Project Manager",
         "Al Futtaim",
     ),
+    (
+        "Open apply link — Office Manager at Akamai",
+        "open_apply_link",
+        "Office Manager",
+        "Akamai",
+    ),
     # Em-dash variant
     (
         "Prepare application — Data Scientist at Google",
@@ -79,3 +85,22 @@ def test_job_card_pattern_does_not_match_unrelated_messages():
 
     result = classify_intent("save Environmental Manager as target role")
     assert result.intent == "save_target_role"
+
+
+def test_application_tracking_followup_phrases():
+    """Follow-up phrases should be classified as application_tracking intent."""
+    followup_phrases = [
+        "where",
+        "where can i see it",
+        "where is it",
+        "what about the job i just applied to",
+        "what about the job i just tracked",
+        "show it",
+        "open application flow",
+        "open applications",
+    ]
+    for phrase in followup_phrases:
+        result = classify_intent(phrase)
+        assert result.intent == "application_tracking", (
+            f"Expected 'application_tracking' for phrase: {phrase!r}, got '{result.intent}'"
+        )

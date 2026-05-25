@@ -1592,7 +1592,14 @@ class RicoChatAPI:
                     f"Noted — **{title}** at **{company}** marked as applied. "
                     "(Could not write to Application Flow right now — please retry.)"
                 )
-            response = {"type": "mark_applied", "intent": "mark_applied", "message": msg}
+            response = {
+                "type": "mark_applied",
+                "intent": "mark_applied",
+                "message": msg,
+                "job_title": title,
+                "job_company": company,
+                "job_status": "applied",
+            }
             self._append_chat(user_id, "assistant", msg)
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
@@ -1613,6 +1620,43 @@ class RicoChatAPI:
                     "(Could not write to Application Flow right now — please retry.)"
                 )
             response = {"type": "track_job", "intent": "track_job", "message": msg}
+            self._append_chat(user_id, "assistant", msg)
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+
+        # Open apply link — from job card "Open apply link — {title} at {company}"
+        if intent == "open_apply_link":
+            title = getattr(intent_result, "extracted_title", None) or ""
+            company = getattr(intent_result, "extracted_company", None) or ""
+            # Try to find the apply URL from job data
+            apply_url = None
+            try:
+                from src.repositories.jobs_repo import list_jobs as _list_jobs
+                jobs = _list_jobs(user_id=user_id, limit=50)
+                for job in jobs.jobs:
+                    if title.lower() in job.title.lower() and company.lower() in job.company.lower():
+                        apply_url = job.apply_url or job.job_apply_link or job.job_google_link
+                        break
+            except Exception:
+                pass
+
+            if apply_url:
+                msg = f"Opening apply link for **{title}** at **{company}**:\n{apply_url}"
+                response = {
+                    "type": "open_apply_link",
+                    "intent": "open_apply_link",
+                    "message": msg,
+                    "apply_url": apply_url,
+                }
+            else:
+                msg = (
+                    f"I couldn't find an apply URL for **{title}** at **{company}**. "
+                    "You may need to visit the company's careers page directly."
+                )
+                response = {
+                    "type": "open_apply_link",
+                    "intent": "open_apply_link",
+                    "message": msg,
+                }
             self._append_chat(user_id, "assistant", msg)
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
@@ -1784,6 +1828,25 @@ class RicoChatAPI:
                     "You can also say 'mark as applied' on any job."
                 ),
                 "applications": [],
+            }
+
+        # Check if this is a follow-up question about the most recent application
+        # Return the most recent application with context
+        if apps:
+            latest = apps[0] if isinstance(apps, list) else apps
+            title = latest.get("title", "Unknown")
+            company = latest.get("company", "Unknown")
+            status = latest.get("status", "Unknown")
+            return {
+                "type": "application_status",
+                "message": (
+                    f"Your most recent application is **{title}** at **{company}** "
+                    f"with status: **{status}**. "
+                    f"View all applications at /flow or /applications."
+                ),
+                "applications": apps,
+                "stats": stats,
+                "latest_application": latest,
             }
 
         return {

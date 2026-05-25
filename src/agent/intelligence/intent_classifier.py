@@ -84,6 +84,14 @@ _APPLICATION_TRACKING_PHRASES = frozenset([
     "show rejections",
     "follow up",
     "remind me to follow up",
+    "where",
+    "where can i see it",
+    "where is it",
+    "what about the job i just applied to",
+    "what about the job i just tracked",
+    "show it",
+    "open application flow",
+    "open applications",
 ])
 
 _HELP_PHRASES = frozenset([
@@ -194,7 +202,7 @@ _JOB_SEARCH_FOR_ROLE_RE = re.compile(
 #   "{action} — {title} at {company}"
 # Must be checked BEFORE generic apply/save patterns.
 _JOB_CARD_ACTION_RE = re.compile(
-    r"^(Prepare application|Mark as applied|Track this job|Save job)\s*[—\-–]\s*(.+?)\s+at\s+(.+?)$",
+    r"^(Prepare application|Mark as applied|Track this job|Save job|Open apply link)\s*[—\-–]\s*(.+?)\s+at\s+(.+?)$",
     re.IGNORECASE | re.DOTALL,
 )
 
@@ -368,6 +376,7 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
             "mark as applied": "mark_applied",
             "track this job": "track_job",
             "save job": "save_job",
+            "open apply link": "open_apply_link",
         }
         matched_intent = intent_map.get(action_raw, "job_action")
         return IntentResult(matched_intent, 0.95, "regex", extracted_title=title, extracted_company=company)
