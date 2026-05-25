@@ -14,6 +14,7 @@ from src.rico_memory import RicoMemoryStore
 OperationStatus = Literal["running", "timed_out", "failed", "completed"]
 
 CLIENT_TIMEOUT_SECONDS = 45
+MAX_IN_MEMORY_OPERATIONS = 500
 _LATEST_JOB_SEARCH_KEY = "latest_job_search_operation"
 _OPERATION_KEY_PREFIX = "operation:"
 _OPERATIONS: dict[str, dict[str, Any]] = {}
@@ -36,11 +37,26 @@ def _operation_key(operation_id: str) -> str:
 def _persist(user_id: str, operation: dict[str, Any]) -> None:
     _OPERATIONS[operation["operation_id"]] = dict(operation)
     _LATEST_BY_USER[user_id] = operation["operation_id"]
+    _prune_in_memory_operations()
     try:
         _memory.set_context(user_id, _operation_key(operation["operation_id"]), operation)
         _memory.set_context(user_id, _LATEST_JOB_SEARCH_KEY, operation["operation_id"])
     except Exception:
         pass
+
+
+def _prune_in_memory_operations() -> None:
+    if len(_OPERATIONS) <= MAX_IN_MEMORY_OPERATIONS:
+        return
+    ordered = sorted(
+        _OPERATIONS.items(),
+        key=lambda item: str(item[1].get("updated_at") or item[1].get("created_at") or ""),
+    )
+    for op_id, operation in ordered[: len(_OPERATIONS) - MAX_IN_MEMORY_OPERATIONS]:
+        _OPERATIONS.pop(op_id, None)
+        owner = str(operation.get("user_id") or "")
+        if _LATEST_BY_USER.get(owner) == op_id:
+            _LATEST_BY_USER.pop(owner, None)
 
 
 def start_job_search_operation(
@@ -71,12 +87,14 @@ def start_job_search_operation(
 def get_operation(user_id: str, operation_id: str) -> dict[str, Any] | None:
     operation = _OPERATIONS.get(operation_id)
     if operation:
-        return dict(operation)
+        return dict(operation) if operation.get("user_id") == user_id else None
     try:
         loaded = _memory.get_context(user_id, _operation_key(operation_id))
     except Exception:
         loaded = None
-    return dict(loaded) if isinstance(loaded, dict) else None
+    if not isinstance(loaded, dict) or loaded.get("user_id") != user_id:
+        return None
+    return dict(loaded)
 
 
 def get_latest_job_search_operation(user_id: str) -> dict[str, Any] | None:
@@ -125,6 +143,9 @@ def mark_completed(user_id: str, operation_id: str, result_count: int) -> dict[s
 
 
 def mark_failed(user_id: str, operation_id: str, error: str) -> dict[str, Any] | None:
+    operation = get_operation(user_id, operation_id)
+    if operation and operation.get("status") == "completed":
+        return operation
     return update_operation(
         user_id=user_id,
         operation_id=operation_id,
@@ -180,7 +201,7 @@ def build_status_response(user_id: str) -> dict[str, Any] | None:
     if status == "completed":
         message = f"The job search for {role} completed with {count or 0} result(s)."
     elif status == "failed":
-        message = f"The job search for {role} failed. {operation.get('error') or 'Please try a narrower search.'}"
+        message = f"The job search for {role} failed. Please try again or use a narrower role."
     elif status == "timed_out":
         message = f"The job search for {role} timed out. It may still finish if the server kept the request alive."
     else:
@@ -196,7 +217,7 @@ def build_status_response(user_id: str) -> dict[str, Any] | None:
         "operation_type": operation.get("type"),
         "role": role,
         "result_count": count,
-        "error": operation.get("error"),
+        "error": "job_search_failed" if status == "failed" else None,
     }
 
 
