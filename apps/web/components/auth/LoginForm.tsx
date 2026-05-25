@@ -12,6 +12,7 @@ export function LoginForm() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [failedAttempts, setFailedAttempts] = useState(0);
     const { login, isLoading } = useAuthStore();
     const router = useRouter();
     const maintenanceMode = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === 'true';
@@ -25,7 +26,9 @@ export function LoginForm() {
             router.push('/command');
             router.refresh();
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Authentication failed');
+            const errorMessage = err instanceof Error ? err.message : 'Authentication failed';
+            setError(errorMessage);
+            setFailedAttempts(prev => prev + 1);
         }
     };
 
@@ -69,9 +72,17 @@ export function LoginForm() {
                         </div>
 
                         <div>
-                            <label htmlFor="password" className="block text-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant mb-2">
-                                Password
-                            </label>
+                            <div className="flex items-center justify-between mb-2">
+                                <label htmlFor="password" className="block text-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">
+                                    Password
+                                </label>
+                                <a
+                                    href="/forgot-password"
+                                    className="text-xs text-primary hover:text-primary/80 transition-colors"
+                                >
+                                    Forgot password?
+                                </a>
+                            </div>
                             <input
                                 id="password"
                                 type="password"
@@ -107,6 +118,18 @@ export function LoginForm() {
                     {error && (
                         <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center animate-[fadeSlideIn_0.3s_ease-out]">
                             {error}
+                            {failedAttempts >= 2 && (
+                                <div className="mt-3 pt-3 border-t border-red-500/20">
+                                    <p className="text-xs text-red-300/80 mb-2">Still having trouble signing in?</p>
+                                    <a
+                                        href="/forgot-password"
+                                        className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+                                    >
+                                        <MaterialIcon icon="lock_reset" className="text-sm" />
+                                        Reset your password
+                                    </a>
+                                </div>
+                            )}
                         </div>
                     )}
 
