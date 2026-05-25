@@ -89,23 +89,43 @@ class TestUnsupportedToolsNeverReachPipeline:
         msg = result["message"].lower()
         assert any(w in msg for w in ["upload", "paste", "can't", "cannot", "لا أستطيع"])
 
+        assert result["tool_available"] is False
+        assert result["next_action"] == "paste_email_or_add_application"
+        assert any(option["action"] == "manual_add_application" for option in result["options"])
+
     def test_linkedin_bypasses_pipeline(self):
         result, ml, ma = self._send("check my LinkedIn profile")
         ma.assert_not_called()
         ml.assert_not_called()
         assert result["response_source"] == "policy_gateway"
+        assert result["next_action"] == "paste_linkedin_context"
+        assert any(option["action"] == "paste_linkedin_profile" for option in result["options"])
 
     def test_calendar_bypasses_pipeline(self):
         result, ml, ma = self._send("schedule a meeting in my calendar")
         ma.assert_not_called()
         ml.assert_not_called()
         assert result["response_source"] == "policy_gateway"
+        assert result["next_action"] == "provide_schedule_details"
+        assert any(option["action"] == "record_interview_time" for option in result["options"])
 
     def test_whatsapp_bypasses_pipeline(self):
         result, ml, ma = self._send("send me a WhatsApp message")
         ma.assert_not_called()
         ml.assert_not_called()
         assert result["response_source"] == "policy_gateway"
+        assert result["next_action"] == "paste_message_or_use_telegram"
+        assert any(option["action"] == "telegram_settings" for option in result["options"])
+
+    def test_mixed_unsupported_tool_and_job_search_gets_choice(self):
+        result, ml, ma = self._send("fetch my Gmail and find me HSE jobs")
+        ma.assert_not_called()
+        ml.assert_not_called()
+        assert result["response_source"] == "policy_gateway"
+        assert result["type"] == "clarification"
+        assert result["intent"] == "mixed_request"
+        assert result["next_action"] == "choose_supported_path"
+        assert any(option["action"] == "continue_without_external_tool" for option in result["options"])
 
     def test_gmail_arabic_bypasses_pipeline(self):
         result, ml, ma = self._send("افحص إيميلي")
