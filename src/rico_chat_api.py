@@ -1878,7 +1878,7 @@ class RicoChatAPI:
         """Store recent job/application context for follow-up questions."""
         try:
             memory = RicoMemoryStore()
-            memory.set(user_id, "recent_context", context)
+            memory.set_context(user_id, "recent_context", context)
         except Exception:
             logger.warning("Failed to store recent context for user=%s", user_id)
 
@@ -1886,7 +1886,7 @@ class RicoChatAPI:
         """Retrieve recent job/application context for follow-up questions."""
         try:
             memory = RicoMemoryStore()
-            return memory.get(user_id, "recent_context") or {}
+            return memory.get_context(user_id, "recent_context") or {}
         except Exception:
             return {}
 

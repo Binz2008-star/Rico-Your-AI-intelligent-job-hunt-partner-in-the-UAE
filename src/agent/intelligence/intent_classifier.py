@@ -131,6 +131,39 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+# ── Intent v2 backward compatibility mapping ────────────────────────────────
+
+_LEGACY_INTENT_MAP = {
+    # Job search
+    "job_search.explicit_role": "job_search_explicit",
+    "job_search.profile_match": "job_search_profile_match",
+    "job_search.role_suggestions": "profile_role_suggestions",
+    # Job actions
+    "job_action.prepare_application": "prepare_application",
+    "job_action.open_apply_link": "open_apply_link",
+    "job_action.track_job": "track_job",
+    "job_action.mark_applied": "mark_applied",
+    "job_action.save_job": "save_job",
+    "job_action.apply_job": "apply_job",
+    "job_action.explain_fit": "explain_match",
+    # Application tracking
+    "application.show_flow": "application_tracking",
+    "application.recent_context": "application_tracking",
+    # Profile
+    "profile.show": "profile_summary",
+    "profile.update": "profile_update",
+    "profile.update_target_roles": "save_target_role",
+    # Career prep
+    "career_prep.interview": "interview_prep",
+    "career_prep.application_angle": "draft_message",
+}
+
+
+def _map_intent_to_legacy(intent: str) -> str:
+    """Map Intent v2 dotted notation to legacy intent names for backward compatibility."""
+    return _LEGACY_INTENT_MAP.get(intent, intent)
+
+
 @dataclass(frozen=True)
 class IntentResult:
     """Result of intent classification (v2 with entities and context)."""
@@ -142,6 +175,7 @@ class IntentResult:
     extracted_role: Optional[str] = None
     extracted_title: Optional[str] = None
     extracted_company: Optional[str] = None
+    legacy_intent: Optional[str] = None  # Mapped legacy intent name for existing handlers
     # v2 entities
     entities: dict = None  # Structured entity extraction
     context_required: bool = False  # Whether this intent requires prior context
@@ -152,6 +186,8 @@ class IntentResult:
     def __post_init__(self):
         if self.entities is None:
             object.__setattr__(self, "entities", {})
+        if self.legacy_intent is None:
+            object.__setattr__(self, "legacy_intent", _LEGACY_INTENT_MAP.get(self.intent, self.intent))
 
 
 # ── Exact-phrase sets ────────────────────────────────────────────────────────
@@ -445,28 +481,25 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
 
     # ── 2. Exact-phrase fast paths (continued) ───────────────────────────
     if lower in _PROFILE_MATCH_PHRASES:
-        return IntentResult("job_search.profile_match", 1.0, "exact", action="search")
+        return IntentResult("job_search_profile_match", 1.0, "exact")
 
     if lower in _APPLICATION_TRACKING_PHRASES:
-        # Distinguish between "show flow" and "recent context" follow-ups
-        if lower in {"where", "where can i see it", "where is it", "what about the job i just applied to", "what about the job i just tracked", "show it"}:
-            return IntentResult("application.recent_context", 1.0, "exact", context_required=True, context_type="recent_application", action="show", target_route="/flow")
-        return IntentResult("application.show_flow", 1.0, "exact", action="show", target_route="/flow")
+        return IntentResult("application_tracking", 1.0, "exact")
 
     if lower in _HELP_PHRASES:
         return IntentResult("help", 1.0, "exact")
 
     if lower in _PROFILE_SUMMARY_PHRASES:
-        return IntentResult("profile.show", 1.0, "exact", action="show")
+        return IntentResult("profile_summary", 1.0, "exact")
 
     if lower in _PROFILE_ROLE_SUGGESTIONS_PHRASES:
-        return IntentResult("job_search.role_suggestions", 1.0, "exact", action="show")
+        return IntentResult("profile_role_suggestions", 1.0, "exact")
 
     if lower in _SKIP_PHRASES:
         return IntentResult("onboarding_answer", 0.9, "exact")
 
     if lower in _PROFILE_UPDATE_PHRASES:
-        return IntentResult("profile.update", 1.0, "exact", action="update")
+        return IntentResult("profile_update", 0.9, "exact")
 
     if lower in _FOLLOW_UP_CONFIRMATION_PHRASES:
         return IntentResult("follow_up_confirmation", 1.0, "exact")
@@ -483,59 +516,45 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         title = job_card_m.group(2).strip()
         company = job_card_m.group(3).strip()
         intent_map = {
-            "prepare application": "job_action.prepare_application",
-            "mark as applied": "job_action.mark_applied",
-            "track this job": "job_action.track_job",
-            "save job": "job_action.save_job",
-            "open apply link": "job_action.open_apply_link",
+            "prepare application": "prepare_application",
+            "mark as applied": "mark_applied",
+            "track this job": "track_job",
+            "save job": "save_job",
+            "open apply link": "open_apply_link",
         }
-        matched_intent = intent_map.get(action_raw, "job_action.unknown")
-        entities = {"job_title": title, "company": company}
-        return IntentResult(
-            matched_intent,
-            0.95,
-            "regex",
-            extracted_title=title,
-            extracted_company=company,
-            entities=entities,
-            action="update" if action_raw in ["mark as applied", "track this job", "save job"] else "show",
-        )
+        matched_intent = intent_map.get(action_raw, "job_action")
+        return IntentResult(matched_intent, 0.95, "regex", extracted_title=title, extracted_company=company)
 
     if _APPLY_JOB_RE.search(text):
-        return IntentResult("job_action.apply_job", 0.95, "regex", action="update")
+        return IntentResult("apply_job", 0.95, "regex")
 
     # Check save-target-role BEFORE save_job so "save X as target role" isn't
     # misclassified as a job-bookmark action.
     save_role_match = _SAVE_TARGET_ROLE_RE.search(text)
     if save_role_match:
-        role = save_role_match.group(1).strip()
         return IntentResult(
-            "profile.update_target_roles",
-            0.95,
-            "regex",
-            extracted_role=role,
-            entities={"role": role},
-            action="update",
+            "save_target_role", 0.95, "regex",
+            extracted_role=save_role_match.group(1).strip(),
         )
 
     if _SAVE_JOB_RE.search(text):
-        return IntentResult("job_action.save_job", 0.95, "regex", action="update")
+        return IntentResult("save_job", 0.95, "regex")
 
     if _EXPLAIN_MATCH_RE.search(text):
-        return IntentResult("job_action.explain_fit", 0.9, "regex", action="show")
+        return IntentResult("explain_match", 0.9, "regex")
 
     if _DRAFT_RE.search(text):
-        return IntentResult("career_prep.application_angle", 0.9, "regex", action="show")
+        return IntentResult("draft_message", 0.9, "regex")
 
     if _INTERVIEW_PREP_RE.search(text):
-        return IntentResult("career_prep.interview", 0.9, "regex", action="show")
+        return IntentResult("interview_prep", 0.9, "regex")
 
     if _PROFILE_UPDATE_RE.search(text):
-        return IntentResult("profile.update", 0.85, "regex", action="update")
+        return IntentResult("profile_update", 0.85, "regex")
 
     # Application tracking regex (looser than exact phrases)
     if _APPLICATION_TRACKING_RE.search(text) and not _JOB_SEARCH_EXPLICIT_RE.search(text):
-        return IntentResult("application.show_flow", 0.8, "regex", action="show", target_route="/flow")
+        return IntentResult("application_tracking", 0.8, "regex")
 
     # ── 4. Job search patterns ───────────────────────────────────────────
     # Check explicit job search FIRST (has job/role/position keyword)
@@ -544,47 +563,23 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         # can search for that role directly instead of falling back to profile roles.
         for_role_m = _JOB_SEARCH_FOR_ROLE_RE.search(text)
         extracted_role = for_role_m.group(1).strip() if for_role_m else None
-        entities = {"role": extracted_role} if extracted_role else {}
-        return IntentResult(
-            "job_search.explicit_role",
-            0.85,
-            "regex",
-            extracted_role=extracted_role,
-            entities=entities,
-            action="search",
-        )
+        return IntentResult("job_search_explicit", 0.85, "regex", extracted_role=extracted_role)
 
     # Arabic job search: request verb + job noun, or request verb + English role name
     if has_arabic and _is_arabic_job_search(lower, has_cv=has_cv_profile):
         role = _extract_english_role_from_mixed(text)
-        entities = {"role": role} if role else {}
-        return IntentResult(
-            "job_search.explicit_role",
-            0.85,
-            "regex",
-            extracted_role=role,
-            entities=entities,
-            action="search",
-        )
+        return IntentResult("job_search_explicit", 0.85, "regex", extracted_role=role)
 
     # Role change — only if no explicit job-search keyword present
     role_match = _ROLE_CHANGE_RE.match(text)
     if role_match:
-        extracted = role_match.group(2).strip()
-        return IntentResult(
-            "profile.update_target_roles",
-            0.9,
-            "regex",
-            extracted_role=extracted,
-            entities={"role": extracted},
-            action="update",
-        )
+        return IntentResult("role_change", 0.9, "regex", extracted_role=role_match.group(2).strip())
 
     # ── 5. Profile-match inference (only if CV exists) ───────────────────
     # Generic short requests with CV profile → profile match, NOT job search
     _GENERIC_MATCH_WORDS = {"match", "matches", "matching", "suitable", "fit", "recommend"}
     if has_cv_profile and any(w in lower.split() for w in _GENERIC_MATCH_WORDS):
-        return IntentResult("job_search.profile_match", 0.8, "regex", action="search")
+        return IntentResult("job_search_profile_match", 0.8, "regex")
 
     # ── 6. Unknown — DO NOT default to job search ────────────────────────
     return IntentResult("unknown", 0.0, "fallback")

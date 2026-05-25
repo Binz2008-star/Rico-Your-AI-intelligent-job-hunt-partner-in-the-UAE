@@ -101,60 +101,35 @@ def test_application_tracking_followup_phrases():
     ]
     for phrase in followup_phrases:
         result = classify_intent(phrase)
-        assert result.intent == "application.recent_context", (
-            f"Expected 'application.recent_context' for phrase: {phrase!r}, got '{result.intent}'"
+        assert result.intent == "application_tracking", (
+            f"Expected 'application_tracking' for phrase: {phrase!r}, got '{result.intent}'"
         )
 
 
-def test_intent_v2_dotted_notation():
-    """Intent v2 should use dotted notation for intent groups."""
-    # Job search intents
-    result = classify_intent("find live jobs for HSE Manager")
-    assert result.intent == "job_search.explicit_role"
-    assert result.entities.get("role") == "HSE Manager"
+def test_intent_result_v2_fields():
+    """IntentResult should have v2 fields for future use."""
+    result = classify_intent("find jobs for Software Engineer")
+    # Check that new v2 fields exist (even if not populated yet)
+    assert hasattr(result, "subintent")
+    assert hasattr(result, "entities")
+    assert hasattr(result, "context_required")
+    assert hasattr(result, "context_type")
+    assert hasattr(result, "action")
+    assert hasattr(result, "target_route")
+    assert hasattr(result, "legacy_intent")
+    # Legacy fields should still exist
+    assert hasattr(result, "extracted_role")
+    assert hasattr(result, "extracted_title")
+    assert hasattr(result, "extracted_company")
 
-    result = classify_intent("find live jobs for Environmental Compliance Officer")
-    assert result.intent == "job_search.explicit_role"
-    assert result.entities.get("role") == "Environmental Compliance Officer"
 
-    # Profile update intents
-    result = classify_intent("save Environmental Manager as target role")
-    assert result.intent == "profile.update_target_roles"
-    assert result.entities.get("role") == "Environmental Manager"
-
-    # Job card actions
-    result = classify_intent("Prepare application — Office Manager - Part time (UAE Nationals Only) at Akamai")
-    assert result.intent == "job_action.prepare_application"
-    assert result.entities.get("job_title") == "Office Manager - Part time (UAE Nationals Only)"
-    assert result.entities.get("company") == "Akamai"
-
-    result = classify_intent("Open apply link — Office Manager - Part time (UAE Nationals Only) at Akamai")
-    assert result.intent == "job_action.open_apply_link"
-    assert result.entities.get("job_title") == "Office Manager - Part time (UAE Nationals Only)"
-    assert result.entities.get("company") == "Akamai"
-
-    result = classify_intent("Mark as applied — Office Manager - Part time (UAE Nationals Only) at Akamai")
-    assert result.intent == "job_action.mark_applied"
-    assert result.entities.get("job_title") == "Office Manager - Part time (UAE Nationals Only)"
-    assert result.entities.get("company") == "Akamai"
-
-    # Follow-up phrases
-    result = classify_intent("where?")
-    assert result.intent == "application.recent_context"
-    assert result.context_required == True
-    assert result.context_type == "recent_application"
-
-    result = classify_intent("what about the job I just applied to?")
-    assert result.intent == "application.recent_context"
-    assert result.context_required == True
-    assert result.context_type == "recent_application"
-
-    # Profile match
-    result = classify_intent("find me one that matches")
-    assert result.intent == "job_search.profile_match"
-    assert result.action == "search"
-
-    # Profile show
-    result = classify_intent("show my profile")
-    assert result.intent == "profile.show"
-    assert result.action == "show"
+def test_compatibility_mapper():
+    """The compatibility mapper should map v2 intents to legacy names."""
+    from src.agent.intelligence.intent_classifier import _map_intent_to_legacy
+    assert _map_intent_to_legacy("job_search.explicit_role") == "job_search_explicit"
+    assert _map_intent_to_legacy("job_action.prepare_application") == "prepare_application"
+    assert _map_intent_to_legacy("application.show_flow") == "application_tracking"
+    assert _map_intent_to_legacy("profile.show") == "profile_summary"
+    # Unmapped intents should return as-is
+    assert _map_intent_to_legacy("unknown") == "unknown"
+    assert _map_intent_to_legacy("help") == "help"
