@@ -72,6 +72,7 @@ class TestUnsupportedToolsNeverReachPipeline:
     def _send(message: str):
         from src.services.chat_service import send_message
         with patch("src.repositories.profile_repo.get_profile", return_value=None), \
+             patch("src.services.subscription_gating.check_ai_message_allowed", return_value=None), \
              patch("src.services.chat_service._legacy_send_message", return_value=_LEGACY_RESP) as ml, \
              patch("src.services.chat_service._conversational_ai_reply", return_value=_AI_RESP) as ma:
             result = send_message(_AUTH_CTX, message)
@@ -150,6 +151,7 @@ class TestSubscriptionAuthenticated:
     def _send(message: str, resolved):
         from src.services.chat_service import send_message
         with patch("src.repositories.profile_repo.get_profile", return_value=None), \
+             patch("src.services.subscription_gating.check_ai_message_allowed", return_value=None), \
              patch("src.services.chat_service._legacy_send_message", return_value=_LEGACY_RESP) as ml, \
              patch("src.services.chat_service._conversational_ai_reply", return_value=_AI_RESP) as ma, \
              patch("src.subscription_plans.resolve_effective_user_plan", return_value=resolved):
@@ -203,6 +205,7 @@ class TestSubscriptionUnauthenticated:
     def test_public_subscription_question_returns_login_required(self):
         from src.services.chat_service import send_message
         with patch("src.repositories.profile_repo.get_profile", return_value=None), \
+             patch("src.services.subscription_gating.check_ai_message_allowed", return_value=None), \
              patch("src.services.chat_service._legacy_send_message", return_value=_LEGACY_RESP) as ml, \
              patch("src.services.chat_service._conversational_ai_reply", return_value=_AI_RESP) as ma:
             result = send_message(_PUBLIC_CTX, "what is my plan?")
@@ -217,6 +220,7 @@ class TestSubscriptionUnauthenticated:
         """Billing queries are not intercepted — they fall through to AI/legacy."""
         from src.services.chat_service import send_message
         with patch("src.repositories.profile_repo.get_profile", return_value=None), \
+             patch("src.services.subscription_gating.check_ai_message_allowed", return_value=None), \
              patch("src.services.chat_service._legacy_send_message", return_value=_LEGACY_RESP), \
              patch("src.services.chat_service._conversational_ai_reply", return_value=_AI_RESP):
             result = send_message(_PUBLIC_CTX, "billing")
@@ -233,6 +237,7 @@ class TestJobSearchPassthrough:
     def test_job_search_not_intercepted_by_gateway(self):
         from src.services.chat_service import send_message
         with patch("src.repositories.profile_repo.get_profile", return_value=None), \
+             patch("src.services.subscription_gating.check_ai_message_allowed", return_value=None), \
              patch("src.services.chat_service._legacy_send_message", return_value=_LEGACY_RESP) as ml, \
              patch("src.services.chat_service._conversational_ai_reply", return_value=_AI_RESP):
             result = send_message(_AUTH_CTX, "find me HSE jobs in Dubai")
@@ -242,6 +247,7 @@ class TestJobSearchPassthrough:
     def test_find_jobs_not_intercepted(self):
         from src.services.chat_service import send_message
         with patch("src.repositories.profile_repo.get_profile", return_value=None), \
+             patch("src.services.subscription_gating.check_ai_message_allowed", return_value=None), \
              patch("src.services.chat_service._legacy_send_message", return_value=_LEGACY_RESP), \
              patch("src.services.chat_service._conversational_ai_reply", return_value=_AI_RESP):
             result = send_message(_AUTH_CTX, "find me a job")
@@ -258,6 +264,7 @@ class TestCareerPlanningPassthrough:
     def test_career_plan_not_intercepted(self):
         from src.services.chat_service import send_message
         with patch("src.repositories.profile_repo.get_profile", return_value=None), \
+             patch("src.services.subscription_gating.check_ai_message_allowed", return_value=None), \
              patch("src.services.chat_service._legacy_send_message", return_value=_LEGACY_RESP), \
              patch("src.services.chat_service._conversational_ai_reply", return_value=_AI_RESP) as ma:
             result = send_message(_AUTH_CTX, "help me build a job search strategy")
@@ -267,6 +274,7 @@ class TestCareerPlanningPassthrough:
     def test_career_advice_not_intercepted(self):
         from src.services.chat_service import send_message
         with patch("src.repositories.profile_repo.get_profile", return_value=None), \
+             patch("src.services.subscription_gating.check_ai_message_allowed", return_value=None), \
              patch("src.services.chat_service._legacy_send_message", return_value=_LEGACY_RESP), \
              patch("src.services.chat_service._conversational_ai_reply", return_value=_AI_RESP):
             result = send_message(_AUTH_CTX, "what roles fit me?")
