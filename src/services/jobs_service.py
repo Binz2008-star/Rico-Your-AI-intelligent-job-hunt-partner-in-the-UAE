@@ -207,10 +207,21 @@ def save_job(job: Dict[str, Any], user_id: Optional[str] = None) -> bool:
 
     if is_applied(job, user_id=user_id):
         return False
-    from src.services.subscription_gating import enforce_saved_job_allowed
 
-    enforce_saved_job_allowed(user_id)
-    return mark_applied(job, status="saved", notes="Saved via API", user_id=user_id)
+    # Route through applications_repo so writes and count_saved_jobs reads use
+    # the same store (DB when available). The repo enforces the saved-jobs limit
+    # internally when status=="saved", so no separate gate call is needed here.
+    from src.repositories.applications_repo import create as _repo_create
+
+    return _repo_create(
+        job_id=job.get("job_id", ""),
+        title=job.get("title", ""),
+        company=job.get("company", ""),
+        location=job.get("location", ""),
+        url=job.get("link", ""),
+        status="saved",
+        user_id=user_id,
+    )
 
 
 def block_company(job: Dict[str, Any], user_id: Optional[str] = None) -> str:
