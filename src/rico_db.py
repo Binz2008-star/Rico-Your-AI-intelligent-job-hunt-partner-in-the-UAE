@@ -173,7 +173,7 @@ class RicoDB:
     def connect(self, *, ensure_schema: bool = True):
         if not self.available:
             raise RuntimeError("RicoDB unavailable: DATABASE_URL or psycopg2 missing")
-        conn = psycopg2.connect(self.database_url, cursor_factory=RealDictCursor)
+        conn = psycopg2.connect(self.database_url, cursor_factory=RealDictCursor, connect_timeout=5)
         if not ensure_schema:
             return conn
         try:

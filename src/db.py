@@ -31,7 +31,7 @@ def get_db_connection():
         return None
 
     try:
-        return psycopg2.connect(DATABASE_URL)
+        return psycopg2.connect(DATABASE_URL, connect_timeout=5)
     except OperationalError as e:
         print(f"⚠️ Database connection failed: {e}")
         print("🔄 Falling back to JSON storage")
