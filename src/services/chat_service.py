@@ -97,11 +97,16 @@ def send_message(
     """Policy Gateway → IntentRouter → legacy classifier."""
     from src.repositories.profile_repo import get_profile
     from src.services.operation_state import build_status_response, is_status_followup
+    from src.services.subscription_gating import check_ai_message_allowed
 
     if is_status_followup(message):
         status_response = build_status_response(ctx.user_id)
         if status_response is not None:
             return status_response
+
+    gate = check_ai_message_allowed(ctx)
+    if gate is not None and not gate.allowed:
+        return gate.to_response()
 
     profile = get_profile(ctx.user_id)
     profile_present = profile is not None
@@ -116,7 +121,7 @@ def send_message(
         return _unsupported_tool_response(policy)
 
     if policy.route == "clarification" and str(policy.reason).startswith("conflicting_domains:"):
-        return _mixed_tool_clarification_response(policy)
+        return _mixed_tool_clarification_response(policy, message)
 
     if policy.route == "account_service":
         return _account_service_response(ctx)
@@ -153,12 +158,18 @@ def _unsupported_tool_response(policy: Any) -> Dict[str, Any]:
 
 
 def _unsupported_tool_message(policy: Any) -> str:
+    lang = getattr(policy, "language", "en")
+    if lang == "ar":
+        # Policy layer already computed a localized Arabic message via get_unsupported_message()
+        return policy.alternative_suggestion or (
+            "لا أستطيع الوصول إلى هذه الخدمة الخارجية من ريكو. "
+            "يمكنك رفع أو لصق المعلومات ذات الصلة وسأقوم بتنظيمها."
+        )
     domain_value = getattr(getattr(policy, "domain", None), "value", "")
     fallback = policy.alternative_suggestion or (
         "I can't access that external integration from Rico. "
         "You can upload or paste the relevant information and I'll organise it."
     )
-
     messages = {
         "email_gmail_request": (
             "I can't access your Gmail or email inbox directly from Rico yet. "
@@ -257,22 +268,57 @@ def _unsupported_tool_next_action(policy: Any) -> str:
     }.get(domain_value, "provide_manual_context")
 
 
-def _mixed_tool_clarification_response(policy: Any) -> Dict[str, Any]:
+def _continue_message_from_reason(reason: str) -> str:
+    """Derive a Rico continue-action message from the supported side of a mixed-domain conflict."""
+    if "application_tracking" in reason:
+        return "show my applications"
+    if "cv_profile" in reason or "profile" in reason:
+        return "show my profile"
+    return "find live jobs for my target role"
+
+
+def _mixed_tool_clarification_response(policy: Any, message: str = "") -> Dict[str, Any]:
     """Clarify mixed requests that combine unsupported external access with a supported action."""
-    return {
-        "type": "clarification",
-        "message": (
+    reason = str(getattr(policy, "reason", "conflicting_domains"))
+    lang = getattr(policy, "language", "en")
+
+    if "email_gmail_request" in reason and "job_search" in reason:
+        role = _extract_requested_role(message)
+        if lang == "ar":
+            msg = f"لا أستطيع الوصول إلى Gmail من ريكو حتى الآن. يمكنني البحث عن وظائف {role} إذا أردت."
+        else:
+            msg = f"I can't access Gmail from Rico yet. I can search for {role} roles if you want."
+        return {
+            "type": "clarification",
+            "message": msg,
+            "intent": "mixed_request",
+            "response_source": "policy_gateway",
+            "reason": reason,
+            "next_action": "confirm_job_search_without_gmail",
+        }
+
+    if lang == "ar":
+        clarification_msg = (
+            "هذا الطلب يجمع بين أداة خارجية غير متاحة وإجراء ريكو. "
+            "لا أستطيع الوصول إلى الحساب الخارجي مباشرة، لكنني أستطيع المساعدة إذا اخترت المسار."
+        )
+    else:
+        clarification_msg = (
             "That request mixes an unavailable external tool with a Rico action. "
             "I can't access the external account directly, but I can still help if you choose the path."
-        ),
+        )
+
+    return {
+        "type": "clarification",
+        "message": clarification_msg,
         "intent": "mixed_request",
         "response_source": "policy_gateway",
-        "reason": getattr(policy, "reason", "conflicting_domains"),
+        "reason": reason,
         "options": [
             {
                 "action": "continue_without_external_tool",
                 "label": "Continue in Rico",
-                "message": "find live jobs for my target role",
+                "message": _continue_message_from_reason(reason),
             },
             {
                 "action": "paste_external_context",
@@ -287,6 +333,25 @@ def _mixed_tool_clarification_response(policy: Any) -> Dict[str, Any]:
         ],
         "next_action": "choose_supported_path",
     }
+
+
+def _extract_requested_role(message: str) -> str:
+    """Best-effort role extraction for mixed Gmail + job-search clarification copy."""
+    import re
+
+    text = (message or "").strip()
+    patterns = [
+        r"\bfind\s+(?:me\s+)?(?:a\s+)?job\s+as\s+(.+?)(?:\s+you\s+can\b|\s+and\b|\s+with\b|[.!?]?$)",
+        r"\bfind\s+(?:me\s+)?(.+?)\s+jobs?\b",
+        r"\bsearch\s+(?:for\s+)?(.+?)\s+jobs?\b",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            role = re.sub(r"\s+", " ", match.group(1)).strip(" .,-")
+            if role:
+                return role
+    return "that target role"
 
 
 def _account_service_response(ctx: RicoSessionContext) -> Dict[str, Any]:
