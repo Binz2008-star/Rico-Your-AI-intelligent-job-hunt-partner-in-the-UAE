@@ -14,7 +14,14 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import HTTPException
+try:
+    from fastapi import HTTPException
+except ImportError:
+    class HTTPException(Exception):  # type: ignore[misc]
+        def __init__(self, status_code: int = 500, detail: Any = None):
+            self.status_code = status_code
+            self.detail = detail
+            super().__init__(str(detail))
 
 from src.applications import (
     get_applied_jobs as _get_applied,
