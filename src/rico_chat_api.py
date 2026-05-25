@@ -67,6 +67,8 @@ _LEGACY_INTENT_MAP = {
     # Application tracking
     "application.show_flow": "application_tracking",
     "application.recent_context": "application_tracking",
+    # Recent context follow-up (native legacy name, pass through)
+    "recent_context": "recent_context",
     # Profile
     "profile.show": "profile_summary",
     "profile.update": "profile_update",
@@ -1681,6 +1683,71 @@ class RicoChatAPI:
             self._append_chat(user_id, "assistant", msg)
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
+        # Open apply link — show URL only; never triggers apply confirmation
+        if legacy_intent == "open_apply_link":
+            title = getattr(intent_result, "extracted_title", None) or ""
+            company = getattr(intent_result, "extracted_company", None) or ""
+            apply_url = None
+            if title and company:
+                try:
+                    from src.repositories.applications_repo import get_all as _get_all_apps
+                    for rec in _get_all_apps(user_id=user_id):
+                        if (title.lower() in (rec.get("title") or "").lower() and
+                                company.lower() in (rec.get("company") or "").lower()):
+                            apply_url = rec.get("link") or ""
+                            break
+                except Exception:
+                    pass
+            if apply_url:
+                msg = f"Apply link for **{title}** at **{company}**: {apply_url}"
+            elif title and company:
+                msg = (
+                    f"I don't have a saved apply link for **{title}** at **{company}**. "
+                    "Search for the role on the company website or LinkedIn."
+                )
+            else:
+                msg = "Please specify the job title and company so I can look up the apply link."
+            response = {"type": "open_apply_link", "intent": "open_apply_link",
+                        "message": msg, "apply_url": apply_url}
+            self._append_chat(user_id, "assistant", msg)
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+
+        # Recent context follow-up — "where?", "show it", "what about the job I just applied to?"
+        if legacy_intent == "recent_context":
+            ctx = self._get_recent_context(user_id)
+            if ctx:
+                job = ctx.get("recent_job", "Unknown")
+                company = ctx.get("recent_company", "Unknown")
+                status = ctx.get("recent_status", "tracked")
+                route = ctx.get("recent_route", "/applications")
+                msg = (
+                    f"Your most recent: **{job}** at **{company}** — status: {status}. "
+                    f"View it in Application Flow at {route}."
+                )
+            else:
+                try:
+                    from src.repositories.applications_repo import get_all as _get_all_apps
+                    apps = _get_all_apps(user_id=user_id)
+                except Exception:
+                    apps = []
+                if apps:
+                    latest = apps[0]
+                    job = (latest.get("title") or "Unknown")
+                    company = (latest.get("company") or "Unknown")
+                    status = (latest.get("status") or "tracked")
+                    msg = (
+                        f"Most recent: **{job}** at **{company}** — status: {status}. "
+                        "View your full list in Application Flow."
+                    )
+                else:
+                    msg = (
+                        "You don't have any tracked applications yet. "
+                        "Say 'Mark as applied' on any job to start tracking."
+                    )
+            response = {"type": "recent_context", "intent": "recent_context", "message": msg}
+            self._append_chat(user_id, "assistant", msg)
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+
         # Apply job — confirmation gate
         if intent == "apply_job":
             context = self._build_router_context(user_id, profile)
@@ -1828,7 +1895,19 @@ class RicoChatAPI:
 
     # ── New intent-specific handlers ─────────────────────────────────────────
 
-    def _handle_application_tracking(self, user_id: str) -> dict[str, Any]:
+    def _store_recent_context(self, user_id: str, context: dict[str, Any]) -> None:
+        try:
+            self.memory.set_context(user_id, "recent_context", context)
+        except Exception:
+            logger.warning("rico_chat: failed to store recent context for user=%s", user_id)
+
+    def _get_recent_context(self, user_id: str) -> dict[str, Any]:
+        try:
+            return self.memory.get_context(user_id, "recent_context") or {}
+        except Exception:
+            return {}
+
+    def _handle_application_tracking(self, user_id: str, intent: str = "application_tracking") -> dict[str, Any]:
         """Route application tracking requests to the applications repository."""
         try:
             from src.repositories.applications_repo import get_all, get_stats

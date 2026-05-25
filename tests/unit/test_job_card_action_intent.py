@@ -89,7 +89,7 @@ def test_job_card_pattern_does_not_match_unrelated_messages():
 
 
 def test_application_tracking_phrases():
-    """Application tracking phrases should be classified as application_tracking."""
+    """List/navigation phrases must route to application_tracking."""
     tracking_phrases = [
         "show my tracked applications",
         "show my applications",
@@ -108,10 +108,6 @@ def test_application_tracking_phrases():
         "show rejections",
         "follow up",
         "remind me to follow up",
-        "where can i see it",
-        "where is it",
-        "what about the job i just applied to",
-        "what about the job i just tracked",
         "open application flow",
         "open applications",
     ]
@@ -120,6 +116,40 @@ def test_application_tracking_phrases():
         assert result.intent == "application_tracking", (
             f"Expected 'application_tracking' for phrase: {phrase!r}, got '{result.intent}'"
         )
+
+
+def test_recent_context_phrases():
+    """Short follow-up phrases must route to recent_context."""
+    recent_context_phrases = [
+        "where",
+        "where?",
+        "where can i see it",
+        "where is it",
+        "show it",
+        "what about the job i just applied to",
+        "what about the job i just applied to?",
+        "what about the job i just tracked",
+    ]
+    for phrase in recent_context_phrases:
+        result = classify_intent(phrase)
+        assert result.intent == "recent_context", (
+            f"Expected 'recent_context' for: {phrase!r}, got '{result.intent}'"
+        )
+
+
+def test_open_apply_link_intent():
+    """Open apply link messages must not trigger the apply confirmation gate."""
+    cases = [
+        "Open apply link -- HSE Manager at ADNOC",
+        "open apply link for Software Engineer at Google",
+        "Open apply link -- Office Manager - Part time (UAE Nationals Only) at Akamai",
+    ]
+    for msg in cases:
+        result = classify_intent(msg)
+        assert result.intent == "open_apply_link", (
+            f"Expected 'open_apply_link', got '{result.intent}' for: {msg!r}"
+        )
+        assert result.intent != "apply_job", f"Must not route to apply_job: {msg!r}"
 
 
 def test_intent_result_v2_fields():

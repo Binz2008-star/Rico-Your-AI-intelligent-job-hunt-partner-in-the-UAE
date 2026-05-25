@@ -210,6 +210,17 @@ _PROFILE_MATCH_PHRASES = frozenset([
     "jobs for me",
 ])
 
+_RECENT_CONTEXT_PHRASES = frozenset([
+    "where",
+    "where?",
+    "where can i see it",
+    "where is it",
+    "show it",
+    "what about the job i just applied to",
+    "what about the job i just applied to?",
+    "what about the job i just tracked",
+])
+
 _APPLICATION_TRACKING_PHRASES = frozenset([
     "show my tracked applications",
     "show my applications",
@@ -228,10 +239,6 @@ _APPLICATION_TRACKING_PHRASES = frozenset([
     "show rejections",
     "follow up",
     "remind me to follow up",
-    "where can i see it",
-    "where is it",
-    "what about the job i just applied to",
-    "what about the job i just tracked",
     "open application flow",
     "open applications",
 ])
@@ -344,8 +351,14 @@ _JOB_SEARCH_FOR_ROLE_RE = re.compile(
 #   "{action} — {title} at {company}"
 # Must be checked BEFORE generic apply/save patterns.
 _JOB_CARD_ACTION_RE = re.compile(
-    r"^(Prepare application|Mark as applied|Track this job|Save job)\s*[—\-–]\s*(.+)\s+at\s+(.+?)$",
+    r"^(Prepare application|Mark as applied|Track this job|Save job|Open apply link)\s*[—\-–]\s*(.+)\s+at\s+(.+?)$",
     re.IGNORECASE | re.DOTALL,
+)
+
+# Free-text "open apply link for <title> at <company>"
+_OPEN_APPLY_LINK_RE = re.compile(
+    r"\bopen\s+apply\s+link\b",
+    re.IGNORECASE,
 )
 
 _APPLY_JOB_RE = re.compile(
@@ -481,6 +494,9 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     if lower in _PROFILE_MATCH_PHRASES:
         return IntentResult("job_search_profile_match", 1.0, "exact")
 
+    if lower in _RECENT_CONTEXT_PHRASES:
+        return IntentResult("recent_context", 1.0, "exact")
+
     if lower in _APPLICATION_TRACKING_PHRASES:
         return IntentResult("application_tracking", 1.0, "exact")
 
@@ -518,9 +534,14 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
             "mark as applied": "mark_applied",
             "track this job": "track_job",
             "save job": "save_job",
+            "open apply link": "open_apply_link",
         }
         matched_intent = intent_map.get(action_raw, "job_action")
         return IntentResult(matched_intent, 0.95, "regex", extracted_title=title, extracted_company=company)
+
+    # Free-text open-apply-link must be caught before generic apply_job.
+    if _OPEN_APPLY_LINK_RE.search(text):
+        return IntentResult("open_apply_link", 0.95, "regex")
 
     if _APPLY_JOB_RE.search(text):
         return IntentResult("apply_job", 0.95, "regex")
