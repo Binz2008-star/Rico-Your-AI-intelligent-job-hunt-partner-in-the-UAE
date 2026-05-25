@@ -221,11 +221,13 @@ class RicoChatAPI:
         return response
 
     def _begin_job_search_operation(self, user_id: str, role_or_query: str) -> dict[str, Any]:
-        return start_job_search_operation(
+        operation = start_job_search_operation(
             user_id=user_id,
             role_or_query=role_or_query,
             operation_id=self._current_operation_id,
         )
+        self._current_operation_id = str(operation["operation_id"])
+        return operation
 
     def _append_chat(self, user_id: str, role: str, message: str | dict[str, Any]) -> None:
         """Append chat message to memory (sync) and DB (async fire-and-forget).

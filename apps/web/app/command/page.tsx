@@ -349,12 +349,16 @@ export default function CommandV2Page() {
                     setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: timeoutMessage }]);
                     return;
                 }
+                pendingOperationRef.current = null;
+                setOperationState(null);
                 if ((err instanceof ApiError && err.statusCode === 401) || err.message.includes("401")) { setSessionExpired(true); return; }
                 if (err.name === "TypeError" || err.message === "Failed to fetch" || err.message.includes("network")) {
                     setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: "Could not reach Rico. Check your connection or try again." }]);
                     return;
                 }
             }
+            pendingOperationRef.current = null;
+            setOperationState(null);
             setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: "Something went wrong. Please try again." }]);
         } finally {
             clearTimeout(timeoutId);

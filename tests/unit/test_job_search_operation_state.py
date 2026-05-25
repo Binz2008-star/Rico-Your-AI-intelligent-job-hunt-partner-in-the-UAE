@@ -6,7 +6,11 @@ from src.rico_chat_api import RicoChatAPI
 from src.schemas.chat import RicoSessionContext
 from src.services import chat_service
 from src.services.operation_state import (
+    build_status_response,
     get_latest_job_search_operation,
+    get_operation,
+    mark_completed,
+    mark_failed,
     reset_for_tests,
     start_job_search_operation,
 )
@@ -127,7 +131,6 @@ def test_completed_operation_status_is_reported():
     api = RicoChatAPI(persist=False)
     api._current_operation_id = "op_done"
     operation = api._begin_job_search_operation("user-done", "HSE Manager")
-    from src.services.operation_state import mark_completed
 
     mark_completed("user-done", operation["operation_id"], 3)
     ctx = RicoSessionContext.for_authenticated("user-done")
@@ -137,3 +140,50 @@ def test_completed_operation_status_is_reported():
     assert response["operation_status"] == "completed"
     assert response["result_count"] == 3
     assert "completed with 3 result" in response["message"]
+
+
+def test_operation_read_requires_matching_user():
+    reset_for_tests()
+    start_job_search_operation(
+        user_id="owner-user",
+        role_or_query="HSE Manager",
+        operation_id="op_shared_client_id",
+    )
+
+    assert get_operation("other-user", "op_shared_client_id") is None
+    assert build_status_response("other-user") is None
+
+
+def test_failed_status_response_is_sanitized():
+    reset_for_tests()
+    operation = start_job_search_operation(
+        user_id="user-failed",
+        role_or_query="HSE Manager",
+        operation_id="op_failed",
+    )
+
+    mark_failed("user-failed", operation["operation_id"], "postgres://secret-host internal stack")
+    response = build_status_response("user-failed")
+
+    assert response is not None
+    assert response["operation_status"] == "failed"
+    assert response["error"] == "job_search_failed"
+    assert "postgres" not in response["message"]
+    assert "secret-host" not in response["message"]
+
+
+def test_mark_failed_does_not_overwrite_completed_operation():
+    reset_for_tests()
+    operation = start_job_search_operation(
+        user_id="user-complete",
+        role_or_query="HSE Manager",
+        operation_id="op_complete_then_error",
+    )
+
+    mark_completed("user-complete", operation["operation_id"], 2)
+    mark_failed("user-complete", operation["operation_id"], "late formatting error")
+    latest = get_latest_job_search_operation("user-complete")
+
+    assert latest is not None
+    assert latest["status"] == "completed"
+    assert latest["result_count"] == 2
