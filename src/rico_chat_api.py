@@ -48,6 +48,39 @@ from src.services.profile_context_resolver import resolve_profile_context
 
 logger = logging.getLogger(__name__)
 
+
+# ── Intent v2 backward compatibility mapping ────────────────────────────────
+
+_LEGACY_INTENT_MAP = {
+    # Job search
+    "job_search.explicit_role": "job_search_explicit",
+    "job_search.profile_match": "job_search_profile_match",
+    "job_search.role_suggestions": "profile_role_suggestions",
+    # Job actions
+    "job_action.prepare_application": "prepare_application",
+    "job_action.open_apply_link": "open_apply_link",
+    "job_action.track_job": "track_job",
+    "job_action.mark_applied": "mark_applied",
+    "job_action.save_job": "save_job",
+    "job_action.apply_job": "apply_job",
+    "job_action.explain_fit": "explain_match",
+    # Application tracking
+    "application.show_flow": "application_tracking",
+    "application.recent_context": "application_tracking",
+    # Profile
+    "profile.show": "profile_summary",
+    "profile.update": "profile_update",
+    "profile.update_target_roles": "save_target_role",
+    # Career prep
+    "career_prep.interview": "interview_prep",
+    "career_prep.application_angle": "draft_message",
+}
+
+
+def _map_intent_to_legacy(intent: str) -> str:
+    """Map Intent v2 dotted notation to legacy intent names for backward compatibility."""
+    return _LEGACY_INTENT_MAP.get(intent, intent)
+
 # Constants
 CV_FILE_RE = re.compile(r"\b[\w .()_-]+\.(?:pdf|docx?|txt)\b", re.IGNORECASE)
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
@@ -1260,20 +1293,23 @@ class RicoChatAPI:
         intent_result = classify_intent(message, has_cv_profile=has_cv)
         intent = intent_result.intent
 
+        # Map Intent v2 dotted notation to legacy intent names for backward compatibility
+        legacy_intent = _map_intent_to_legacy(intent)
+
         logger.info(
-            "rico_intent user=%s intent=%s confidence=%.2f source=%s",
-            user_id, intent, intent_result.confidence, intent_result.source,
+            "rico_intent user=%s intent=%s legacy_intent=%s confidence=%.2f source=%s",
+            user_id, intent, legacy_intent, intent_result.confidence, intent_result.source,
         )
 
         # ── Step 2: Route by intent ──────────────────────────────────────────
 
         # Help / menu
-        if intent == "help":
+        if legacy_intent == "help":
             self._append_chat(user_id, "assistant", self._JOB_SEARCH_OPTIONS)
             return self._finalize(self._JOB_SEARCH_OPTIONS, self.SOURCE_KEYWORD, profile=profile)
 
         # Smalltalk
-        if intent == "smalltalk":
+        if legacy_intent == "smalltalk":
             response = {
                 "type": "clarification",
                 "message": "Hi! I am Rico, your job search assistant. Tell me a role to search, upload your CV, or say 'help' for options.",
@@ -1282,7 +1318,7 @@ class RicoChatAPI:
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # Onboarding skip
-        if intent == "onboarding_answer":
+        if legacy_intent == "onboarding_answer":
             response = {
                 "type": "profile_skip",
                 "message": (
@@ -1295,7 +1331,7 @@ class RicoChatAPI:
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # CV upload / parse — but if CV is already parsed, don't restart wizard
-        if intent == "cv_upload_or_parse":
+        if legacy_intent == "cv_upload_or_parse":
             cv_status = self._profile_value(profile, "cv_status")
             if cv_status == "parsed" or self._profile_value(profile, "manual_profile_wizard_disabled"):
                 response = {
@@ -1314,7 +1350,7 @@ class RicoChatAPI:
             )
 
         # Profile summary
-        if intent == "profile_summary":
+        if legacy_intent == "profile_summary":
             from src.agent.context.resolver import resolve_profile_context
             try:
                 ctx = resolve_profile_context(user_id)
@@ -1330,7 +1366,7 @@ class RicoChatAPI:
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # Profile role suggestions - deterministic fast path based on CV skills/certifications
-        if intent == "profile_role_suggestions":
+        if legacy_intent == "profile_role_suggestions":
             return self._finalize(
                 self._handle_profile_role_suggestions(profile),
                 self.SOURCE_KEYWORD,
@@ -1338,7 +1374,7 @@ class RicoChatAPI:
             )
 
         # Generic follow-up confirmations should never fall into role classification.
-        if intent == "follow_up_confirmation":
+        if legacy_intent == "follow_up_confirmation":
             if text == "all":
                 return self._finalize(
                     self._handle_keep_all_target_roles(user_id, profile),
@@ -1362,15 +1398,15 @@ class RicoChatAPI:
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # Application tracking — route to applications repo, NOT job search
-        if intent == "application_tracking":
+        if legacy_intent == "application_tracking":
             return self._finalize(
-                self._handle_application_tracking(user_id),
+                self._handle_application_tracking(user_id, intent=intent),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
 
         # Profile-match job search (use CV/profile, not a named role)
-        if intent == "job_search_profile_match":
+        if legacy_intent == "job_search_profile_match":
             if not has_cv:
                 response = {
                     "type": "clarification",
@@ -1395,7 +1431,7 @@ class RicoChatAPI:
             )
 
         # Profile update — route BEFORE role-change fallback
-        if intent == "profile_update":
+        if legacy_intent == "profile_update":
             context = self._build_router_context(user_id, profile)
             routed = _route(message, user_id=user_id, context=context)
             prefs = routed.tool_args.get("preferences", {})
@@ -1410,7 +1446,7 @@ class RicoChatAPI:
             return self._finalize(response, routed.source, profile=profile)
 
         # Role change — extract role and classify
-        if intent == "role_change" and intent_result.extracted_role:
+        if legacy_intent == "role_change" and intent_result.extracted_role:
             return self._finalize(
                 self._classified_role_search(user_id, intent_result.extracted_role, profile),
                 self.SOURCE_KEYWORD,
@@ -1418,7 +1454,7 @@ class RicoChatAPI:
             )
 
         # Explicit job search (regex-matched "find ... jobs" etc.)
-        if intent == "job_search_explicit":
+        if legacy_intent == "job_search_explicit":
             # If the message names an explicit role ("find jobs for Environmental
             # Compliance Officer"), honour it and bypass profile target_roles fallback.
             if intent_result.extracted_role:
@@ -1516,11 +1552,19 @@ class RicoChatAPI:
                 return self._finalize(response, routed.source, profile=profile)
 
         # Prepare application — from job card "Prepare application — {title} at {company}"
-        if intent == "prepare_application":
+        if legacy_intent == "prepare_application":
             title = getattr(intent_result, "extracted_title", None) or "the role"
             company = getattr(intent_result, "extracted_company", None) or "the company"
             profile_skills = self._as_list(self._profile_value(profile, "skills"))
             profile_roles = self._as_list(self._profile_value(profile, "target_roles"))
+
+            # Store recent job context for follow-up questions
+            self._store_recent_context(user_id, {
+                "recent_job": title,
+                "recent_company": company,
+                "recent_status": "preparing",
+                "recent_route": "/command",
+            })
 
             context_parts: list[str] = []
             if profile_skills:
@@ -1577,7 +1621,7 @@ class RicoChatAPI:
             return self._finalize(response, src, profile=profile)
 
         # Mark as applied — from job card "Mark as applied — {title} at {company}"
-        if intent == "mark_applied":
+        if legacy_intent == "mark_applied":
             from src.repositories.applications_repo import create_manual as _create_manual_app
             title = getattr(intent_result, "extracted_title", None) or ""
             company = getattr(intent_result, "extracted_company", None) or ""
@@ -1587,6 +1631,13 @@ class RicoChatAPI:
                     f"Tracked — **{title}** at **{company}** marked as applied. "
                     "You can view it in Application Flow."
                 )
+                # Store recent application context for follow-up questions
+                self._store_recent_context(user_id, {
+                    "recent_job": title,
+                    "recent_company": company,
+                    "recent_status": "applied",
+                    "recent_route": "/flow",
+                })
             except Exception:
                 msg = (
                     f"Noted — **{title}** at **{company}** marked as applied. "
@@ -1604,16 +1655,23 @@ class RicoChatAPI:
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # Track this job — from job card "Track this job — {title} at {company}"
-        if intent == "track_job":
+        if legacy_intent == "track_job":
             from src.repositories.applications_repo import create_manual as _create_manual_app
             title = getattr(intent_result, "extracted_title", None) or ""
             company = getattr(intent_result, "extracted_company", None) or ""
             try:
-                _create_manual_app(title=title, company=company, status="tracking", user_id=user_id)
+                _create_manual_app(title=title, company=company, status="saved", user_id=user_id)
                 msg = (
-                    f"Saved — **{title}** at **{company}** added to Application Flow with status: Tracking. "
-                    "I'll remind you to follow up."
+                    f"Saved — **{title}** at **{company}** added to Application Flow. "
+                    "View it at /applications."
                 )
+                # Store recent application context for follow-up questions
+                self._store_recent_context(user_id, {
+                    "recent_job": title,
+                    "recent_company": company,
+                    "recent_status": "saved",
+                    "recent_route": "/flow",
+                })
             except Exception:
                 msg = (
                     f"Noted — **{title}** at **{company}** added to your tracking list. "
@@ -1624,23 +1682,26 @@ class RicoChatAPI:
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # Open apply link — from job card "Open apply link — {title} at {company}"
-        if intent == "open_apply_link":
+        if legacy_intent == "open_apply_link":
             title = getattr(intent_result, "extracted_title", None) or ""
             company = getattr(intent_result, "extracted_company", None) or ""
-            # Try to find the apply URL from job data
             apply_url = None
             try:
-                from src.repositories.jobs_repo import list_jobs as _list_jobs
-                jobs = _list_jobs(user_id=user_id, limit=50)
-                for job in jobs.jobs:
-                    if title.lower() in job.title.lower() and company.lower() in job.company.lower():
-                        apply_url = job.apply_url or job.job_apply_link or job.job_google_link
+                from src.repositories.applications_repo import get_all as _get_all_apps
+                saved = _get_all_apps(user_id=user_id)
+                for rec in saved:
+                    if (title.lower() in (rec.get("title") or "").lower() and
+                            company.lower() in (rec.get("company") or "").lower()):
+                        apply_url = rec.get("link") or ""
                         break
             except Exception:
                 pass
 
             if apply_url:
-                msg = f"Opening apply link for **{title}** at **{company}**:\n{apply_url}"
+                msg = (
+                    f"Apply link for **{title}** at **{company}**: {apply_url}\n\n"
+                    "After applying, say 'Mark as applied' to track it."
+                )
                 response = {
                     "type": "open_apply_link",
                     "intent": "open_apply_link",
@@ -1649,19 +1710,25 @@ class RicoChatAPI:
                 }
             else:
                 msg = (
-                    f"I couldn't find an apply URL for **{title}** at **{company}**. "
-                    "You may need to visit the company's careers page directly."
+                    f"I don't have a saved apply URL for **{title}** at **{company}**. "
+                    "Visit the company careers page directly, then say 'Mark as applied' when done."
                 )
                 response = {
                     "type": "open_apply_link",
                     "intent": "open_apply_link",
                     "message": msg,
+                    "options": [
+                        {"action": "mark_applied", "label": "Mark as applied",
+                         "message": f"Mark as applied — {title} at {company}"},
+                        {"action": "track_job", "label": "Track this job",
+                         "message": f"Track this job — {title} at {company}"},
+                    ],
                 }
             self._append_chat(user_id, "assistant", msg)
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # Apply job — confirmation gate
-        if intent == "apply_job":
+        if legacy_intent == "apply_job":
             context = self._build_router_context(user_id, profile)
             routed = _route(message, user_id=user_id, context=context)
             response = {
@@ -1677,7 +1744,7 @@ class RicoChatAPI:
             return self._finalize(response, routed.source, profile=profile)
 
         # Save target role — "save X as target role" / "set X as target role"
-        if intent == "save_target_role" and intent_result.extracted_role:
+        if legacy_intent == "save_target_role" and intent_result.extracted_role:
             role = intent_result.extracted_role.strip()
             target_roles = self._as_list(self._profile_value(profile, "target_roles"))
             if role.lower() not in {str(r).lower() for r in target_roles}:
@@ -1696,7 +1763,7 @@ class RicoChatAPI:
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # Save job
-        if intent == "save_job":
+        if legacy_intent == "save_job":
             context = self._build_router_context(user_id, profile)
             routed = _route(message, user_id=user_id, context=context)
             if routed.tool_name:
@@ -1714,7 +1781,7 @@ class RicoChatAPI:
                 return self._finalize(response, routed.source, profile=profile)
 
         # Explain match
-        if intent == "explain_match":
+        if legacy_intent == "explain_match":
             context = self._build_router_context(user_id, profile)
             routed = _route(message, user_id=user_id, context=context)
             if routed.tool_name:
@@ -1731,7 +1798,7 @@ class RicoChatAPI:
                 return self._finalize(response, routed.source, profile=profile)
 
         # Draft message
-        if intent == "draft_message":
+        if legacy_intent == "draft_message":
             context = self._build_router_context(user_id, profile)
             routed = _route(message, user_id=user_id, context=context)
             if routed.tool_name:
@@ -1748,7 +1815,7 @@ class RicoChatAPI:
                 return self._finalize(response, routed.source, profile=profile)
 
         # Interview prep
-        if intent == "interview_prep":
+        if legacy_intent == "interview_prep":
             user_context = self._build_openai_context(profile)
             system_prompt = (
                 "You are Rico, a UAE career coach. Give concise, practical interview preparation "
@@ -1767,7 +1834,7 @@ class RicoChatAPI:
             return self._finalize(response, src, profile=profile)
 
         # Nonsense — do NOT search
-        if intent == "nonsense":
+        if legacy_intent == "nonsense":
             response = {
                 "type": "clarification",
                 "message": (
@@ -1805,10 +1872,46 @@ class RicoChatAPI:
             save_user_message=False,
         )
 
+    # ── Context memory persistence ───────────────────────────────────────────
+
+    def _store_recent_context(self, user_id: str, context: dict[str, Any]) -> None:
+        """Store recent job/application context for follow-up questions."""
+        try:
+            memory = RicoMemoryStore()
+            memory.set(user_id, "recent_context", context)
+        except Exception:
+            logger.warning("Failed to store recent context for user=%s", user_id)
+
+    def _get_recent_context(self, user_id: str) -> dict[str, Any]:
+        """Retrieve recent job/application context for follow-up questions."""
+        try:
+            memory = RicoMemoryStore()
+            return memory.get(user_id, "recent_context") or {}
+        except Exception:
+            return {}
+
     # ── New intent-specific handlers ─────────────────────────────────────────
 
-    def _handle_application_tracking(self, user_id: str) -> dict[str, Any]:
+    def _handle_application_tracking(self, user_id: str, intent: str = "application.show_flow") -> dict[str, Any]:
         """Route application tracking requests to the applications repository."""
+        # For recent context follow-up, use stored context first
+        if intent == "application.recent_context":
+            recent = self._get_recent_context(user_id)
+            if recent:
+                title = recent.get("recent_job", "Unknown")
+                company = recent.get("recent_company", "Unknown")
+                status = recent.get("recent_status", "Unknown")
+                route = recent.get("recent_route", "/flow")
+                return {
+                    "type": "application_status",
+                    "message": (
+                        f"Your most recent application is **{title}** at **{company}** "
+                        f"with status: **{status}**. "
+                        f"View all applications at {route} or /applications."
+                    ),
+                    "recent_context": recent,
+                }
+
         try:
             from src.repositories.applications_repo import get_all, get_stats
             apps = get_all(user_id=user_id)
@@ -1830,10 +1933,9 @@ class RicoChatAPI:
                 "applications": [],
             }
 
-        # Check if this is a follow-up question about the most recent application
-        # Return the most recent application with context
-        if apps:
-            latest = apps[0] if isinstance(apps, list) else apps
+        # For follow-up context queries: return most recent application prominently
+        if intent == "application.recent_context" and apps:
+            latest = apps[0]
             title = latest.get("title", "Unknown")
             company = latest.get("company", "Unknown")
             status = latest.get("status", "Unknown")

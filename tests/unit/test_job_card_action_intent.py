@@ -101,6 +101,60 @@ def test_application_tracking_followup_phrases():
     ]
     for phrase in followup_phrases:
         result = classify_intent(phrase)
-        assert result.intent == "application_tracking", (
-            f"Expected 'application_tracking' for phrase: {phrase!r}, got '{result.intent}'"
+        assert result.intent == "application.recent_context", (
+            f"Expected 'application.recent_context' for phrase: {phrase!r}, got '{result.intent}'"
         )
+
+
+def test_intent_v2_dotted_notation():
+    """Intent v2 should use dotted notation for intent groups."""
+    # Job search intents
+    result = classify_intent("find live jobs for HSE Manager")
+    assert result.intent == "job_search.explicit_role"
+    assert result.entities.get("role") == "HSE Manager"
+
+    result = classify_intent("find live jobs for Environmental Compliance Officer")
+    assert result.intent == "job_search.explicit_role"
+    assert result.entities.get("role") == "Environmental Compliance Officer"
+
+    # Profile update intents
+    result = classify_intent("save Environmental Manager as target role")
+    assert result.intent == "profile.update_target_roles"
+    assert result.entities.get("role") == "Environmental Manager"
+
+    # Job card actions
+    result = classify_intent("Prepare application — Office Manager - Part time (UAE Nationals Only) at Akamai")
+    assert result.intent == "job_action.prepare_application"
+    assert result.entities.get("job_title") == "Office Manager - Part time (UAE Nationals Only)"
+    assert result.entities.get("company") == "Akamai"
+
+    result = classify_intent("Open apply link — Office Manager - Part time (UAE Nationals Only) at Akamai")
+    assert result.intent == "job_action.open_apply_link"
+    assert result.entities.get("job_title") == "Office Manager - Part time (UAE Nationals Only)"
+    assert result.entities.get("company") == "Akamai"
+
+    result = classify_intent("Mark as applied — Office Manager - Part time (UAE Nationals Only) at Akamai")
+    assert result.intent == "job_action.mark_applied"
+    assert result.entities.get("job_title") == "Office Manager - Part time (UAE Nationals Only)"
+    assert result.entities.get("company") == "Akamai"
+
+    # Follow-up phrases
+    result = classify_intent("where?")
+    assert result.intent == "application.recent_context"
+    assert result.context_required == True
+    assert result.context_type == "recent_application"
+
+    result = classify_intent("what about the job I just applied to?")
+    assert result.intent == "application.recent_context"
+    assert result.context_required == True
+    assert result.context_type == "recent_application"
+
+    # Profile match
+    result = classify_intent("find me one that matches")
+    assert result.intent == "job_search.profile_match"
+    assert result.action == "search"
+
+    # Profile show
+    result = classify_intent("show my profile")
+    assert result.intent == "profile.show"
+    assert result.action == "show"
