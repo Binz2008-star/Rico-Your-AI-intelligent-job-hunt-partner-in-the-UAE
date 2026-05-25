@@ -217,6 +217,16 @@ class TestJobSearch:
         assert decision.domain == RicoDomain.JOB_SEARCH
         assert decision.language == "ar"
 
+    def test_arabic_policy_normalization_preserves_digits(self):
+        from src.rico.policy.policy import _normalize_arabic
+
+        assert _normalize_arabic("وظيفة 123") == "وظيفه 123"
+
+    def test_msa_seek_job_arabic(self):
+        decision = classify_request("أسعى لوظيفة")
+        assert decision.domain == RicoDomain.JOB_SEARCH
+        assert decision.route == "job_search"
+
 
 class TestCareerStrategy:
     """Test career strategy domain classification."""

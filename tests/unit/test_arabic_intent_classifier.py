@@ -39,6 +39,23 @@ class TestArabicJobSearch:
         result = classify_intent("إبحث لي عن وظيفة")
         assert result.intent != "unknown"
 
+    @pytest.mark.parametrize("msg", [
+        "أسعى لوظيفة",
+        "أرغب في مسمى وظيفي",
+        "هل هناك وظائف",
+    ])
+    def test_msa_job_search_forms(self, msg):
+        result = classify_intent(msg)
+        assert result.intent == "job_search_explicit"
+
+    @pytest.mark.parametrize("msg", [
+        "هل يوجد تحديث للتطبيق",
+        "اريد مجال تعلم اللغات",
+    ])
+    def test_generic_arabic_questions_are_not_job_search_with_cv(self, msg):
+        result = classify_intent(msg, has_cv_profile=True)
+        assert result.intent != "job_search_explicit"
+
 
 class TestMixedArabicEnglishJobSearch:
     """Mixed Arabic+English messages should yield job_search_explicit with extracted_role."""

@@ -35,7 +35,7 @@ def _normalize_arabic(text: str) -> str:
     cross-package import between the policy layer and the agent intelligence layer.
     """
     # Strip tashkeel (fatha, kasra, damma, sukun, shadda, tanwin, tatweel)
-    text = re.sub(r"[ً-ٰٟـ]", "", text)
+    text = re.sub(r"[\u064B-\u065F\u0670\u0640]", "", text)
     # Normalise alef variants (madda آ, hamza above أ, hamza below إ, wasla ٱ) → bare alef ا
     text = re.sub(r"[آأإٱ]", "ا", text)
     # Normalise alef maqsura ى → ya ي
@@ -268,7 +268,7 @@ class PolicyGateway:
             # MSA additions
             r"ارغب\s+في\s+(عمل|وظيفه)",  # أرغب في عمل / وظيفة
             r"احتاج\s+وظيفه",            # أحتاج وظيفة
-            r"اسعى\s+ل(وظيفه|عمل)",      # أسعى لوظيفة / لعمل
+            r"اسعي\s+ل(وظيفه|عمل)",      # أسعى لوظيفة / لعمل
             r"هل\s+(يوجد|توجد)\s+وظائف", # are there jobs? (MSA question)
             r"هل\s+هناك\s+وظائف",        # are there any jobs?
             r"فرص\s+عمل",                # job opportunities
