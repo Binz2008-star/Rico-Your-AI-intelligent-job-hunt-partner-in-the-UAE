@@ -755,6 +755,10 @@ export interface ChatApiResponse {
     role?: string;
     reasons?: string[];
     next_actions?: NextAction[];
+    operation_id?: string;
+    operation_status?: string;
+    operation_type?: string;
+    result_count?: number | null;
 }
 
 export interface ParsedCV {
@@ -1009,12 +1013,13 @@ export async function register(
 export async function sendChatPublic(
     message: string,
     sessionId: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    operationId?: string
 ): Promise<ChatApiResponse> {
     const data = await requestJson<unknown>("/api/v1/rico/chat/public", {
         method: "POST",
         signal,
-        body: JSON.stringify({ message, session_id: sessionId }),
+        body: JSON.stringify({ message, session_id: sessionId, operation_id: operationId }),
     });
     return validateShape(RicoChatResponseSchema, data, "public Rico chat");
 }
@@ -1022,13 +1027,14 @@ export async function sendChatPublic(
 // No user_id field — identity comes exclusively from the session cookie.
 export async function sendChat(
     message: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    operationId?: string
 ): Promise<ChatApiResponse> {
     const data = await requestJson<unknown>("/api/v1/rico/chat", {
         method: "POST",
         credentials: "include",
         signal,
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, operation_id: operationId }),
     });
     return validateShape(RicoChatResponseSchema, data, "authenticated Rico chat");
 }

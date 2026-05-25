@@ -89,9 +89,19 @@ def _has_user_data(payload: Dict[str, Any]) -> bool:
 
 # ── Public service functions ──────────────────────────────────────────────────
 
-def send_message(ctx: RicoSessionContext, message: str) -> Dict[str, Any]:
+def send_message(
+    ctx: RicoSessionContext,
+    message: str,
+    operation_id: str | None = None,
+) -> Dict[str, Any]:
     """Policy Gateway → IntentRouter → legacy classifier."""
     from src.repositories.profile_repo import get_profile
+    from src.services.operation_state import build_status_response, is_status_followup
+
+    if is_status_followup(message):
+        status_response = build_status_response(ctx.user_id)
+        if status_response is not None:
+            return status_response
 
     profile = get_profile(ctx.user_id)
     profile_present = profile is not None
@@ -118,7 +128,7 @@ def send_message(ctx: RicoSessionContext, message: str) -> Dict[str, Any]:
     if decision.should_use_ai:
         return _conversational_ai_reply(ctx=ctx, message=message, profile=profile)
 
-    return _legacy_send_message(ctx=ctx, message=message)
+    return _legacy_send_message(ctx=ctx, message=message, operation_id=operation_id)
 
 
 def _unsupported_tool_response(policy: Any) -> Dict[str, Any]:
@@ -190,11 +200,19 @@ def _account_service_response(ctx: RicoSessionContext) -> Dict[str, Any]:
         }
 
 
-def _legacy_send_message(ctx: RicoSessionContext, message: str) -> Dict[str, Any]:
+def _legacy_send_message(
+    ctx: RicoSessionContext,
+    message: str,
+    operation_id: str | None = None,
+) -> Dict[str, Any]:
     """Run the existing Rico chat pipeline unchanged."""
     from src.rico_chat_api import RicoChatAPI
 
-    return RicoChatAPI(persist=ctx.can_persist_profile).process_message(user_id=ctx.user_id, message=message)
+    return RicoChatAPI(persist=ctx.can_persist_profile).process_message(
+        user_id=ctx.user_id,
+        message=message,
+        operation_id=operation_id,
+    )
 
 
 def _conversational_ai_reply(

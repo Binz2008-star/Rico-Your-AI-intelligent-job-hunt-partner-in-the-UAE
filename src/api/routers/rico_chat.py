@@ -86,6 +86,7 @@ def _is_production() -> bool:
 class RicoChatRequest(BaseModel):
     """Authenticated chat request - user_id derived from JWT."""
     message: str = Field(..., max_length=4096)
+    operation_id: str | None = Field(None, min_length=8, max_length=80)
 
     @field_validator("message")
     @classmethod
@@ -100,6 +101,7 @@ class RicoPublicChatRequest(BaseModel):
     message: str = Field(..., max_length=2048)
     session_id: str | None = Field(None, min_length=8, max_length=64)
     email: str | None = Field(None)
+    operation_id: str | None = Field(None, min_length=8, max_length=80)
 
     @field_validator("session_id")
     @classmethod
@@ -541,7 +543,11 @@ def rico_chat(request: Request, payload: RicoChatRequest) -> RicoChatResponse:
             request_ref,
         )
 
-        result = chat_service.send_message(ctx=ctx, message=payload.message)
+        result = chat_service.send_message(
+            ctx=ctx,
+            message=payload.message,
+            operation_id=payload.operation_id,
+        )
 
         logger.info(
             "chat_response user=%s intent=%s matches=%d request_ref=%s",
@@ -609,7 +615,11 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> RicoCh
             request_ref,
         )
 
-        result = chat_service.send_message(ctx=ctx, message=payload.message)
+        result = chat_service.send_message(
+            ctx=ctx,
+            message=payload.message,
+            operation_id=payload.operation_id,
+        )
 
         logger.info(
             "chat_public_response user=%s intent=%s matches=%d request_ref=%s",
