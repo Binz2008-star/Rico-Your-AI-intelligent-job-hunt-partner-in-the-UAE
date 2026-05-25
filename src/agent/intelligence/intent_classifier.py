@@ -241,6 +241,21 @@ _APPLICATION_TRACKING_PHRASES = frozenset([
     "remind me to follow up",
     "open application flow",
     "open applications",
+    # Natural-language application history queries
+    "what job i applied for",
+    "what jobs i applied for",
+    "what have i applied for",
+    "what did i apply for",
+    "jobs i applied to",
+    "jobs i applied for",
+    "which jobs did i apply for",
+    "which jobs have i applied to",
+    # Colloquial affirmative + check (e.g. reply to "would you like me to check?")
+    "ya check",
+    "yes check",
+    "yeah check",
+    "ya please check",
+    "yes please check",
 ])
 
 _HELP_PHRASES = frozenset([

@@ -37,10 +37,26 @@ _DIRECT_JOB_REQUEST_RE: Final[re.Pattern[str]] = re.compile(
     re.IGNORECASE,
 )
 
+# Carve-out: application-status questions that start with "what"/"which" or end in "?"
+# must route to the legacy classifier (which calls _handle_application_tracking),
+# not to the conversational AI handler which has no DB access.
+_APPLICATION_STATUS_RE: Final[re.Pattern[str]] = re.compile(
+    r"\bjobs?\s+i\s+(?:have\s+)?appl(?:ied|y)\b"
+    r"|\bwhat\s+(?:did\s+i|have\s+i|i)\s+appl(?:ied|y)\b"
+    r"|\b(?:what|which|how\s+many)\b.{0,50}\b(?:jobs?|applications?|roles?)\b.{0,30}\b(?:applied|tracked)\b"
+    r"|\b(?:applied|tracked)\b.{0,30}\b(?:jobs?|applications?|roles?)\b",
+    re.IGNORECASE,
+)
+
 
 def _is_imperative_job_request(lowered: str) -> bool:
     """Return True for explicit search commands that should stay off the AI path."""
     return bool(_DIRECT_JOB_REQUEST_RE.search(lowered))
+
+
+def _is_application_status_question(lowered: str) -> bool:
+    """Return True for application-history queries that must reach the DB, not the AI."""
+    return bool(_APPLICATION_STATUS_RE.search(lowered))
 
 
 def is_open_ended_question(message: str) -> tuple[bool, str]:
@@ -59,6 +75,8 @@ def is_open_ended_question(message: str) -> tuple[bool, str]:
     lowered = text.lower()
 
     if any(ch in text for ch in _QUESTION_CHARS):
+        if _is_application_status_question(lowered):
+            return False, "ok"
         return True, "question_mark"
 
     if _is_imperative_job_request(lowered):
@@ -74,6 +92,8 @@ def is_open_ended_question(message: str) -> tuple[bool, str]:
 
     first = tokens[0].strip(_FIRST_TOKEN_STRIP)
     if first in _OPENING_TOKENS:
+        if _is_application_status_question(lowered):
+            return False, "ok"
         return True, f"token:{first}"
 
     return False, "ok"
