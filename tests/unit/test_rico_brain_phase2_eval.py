@@ -185,6 +185,21 @@ POLICY_EVAL_CASES: tuple[PolicyEvalCase, ...] = (
     PolicyEvalCase("mixed_010", "unclear/mixed", "mixed", "شو jobs and Gmail", RicoDomain.EMAIL_GMAIL_REQUEST, "unsupported"),
 )
 
+EXPECTED_POLICY_EVAL_CASE_COUNT = 133
+_MIXED_CLASSIFIER_LANGUAGE_BASELINE = {
+    "account_mixed_001": "ar",
+    "job_mixed_001": "en",
+    "career_mixed_001": "ar",
+    "cv_mixed_001": "ar",
+    "mixed_010": "en",
+}
+
+
+def _expected_classifier_language(case: PolicyEvalCase) -> str:
+    if case.case_id in _MIXED_CLASSIFIER_LANGUAGE_BASELINE:
+        return _MIXED_CLASSIFIER_LANGUAGE_BASELINE[case.case_id]
+    return "ar" if case.language == "ar" else "en"
+
 
 @pytest.mark.parametrize("case", POLICY_EVAL_CASES, ids=lambda case: case.case_id)
 def test_phase2_policy_gateway_eval_baseline(case: PolicyEvalCase) -> None:
@@ -192,10 +207,11 @@ def test_phase2_policy_gateway_eval_baseline(case: PolicyEvalCase) -> None:
 
     assert decision.domain == case.domain
     assert decision.route == case.route
+    assert decision.language == _expected_classifier_language(case)
 
 
 def test_phase2_policy_eval_matrix_size_and_coverage() -> None:
-    assert 100 <= len(POLICY_EVAL_CASES) <= 200
+    assert len(POLICY_EVAL_CASES) == EXPECTED_POLICY_EVAL_CASE_COUNT
 
     categories = {case.category for case in POLICY_EVAL_CASES}
     languages = {case.language for case in POLICY_EVAL_CASES}
@@ -224,6 +240,7 @@ class ChatRoutingEvalCase:
     auth: str
     expected_source: str
     expected_type: str | None = None
+    expected_passthrough_source: str | None = None
 
 
 CHAT_ROUTING_EVAL_CASES: tuple[ChatRoutingEvalCase, ...] = (
@@ -235,16 +252,16 @@ CHAT_ROUTING_EVAL_CASES: tuple[ChatRoutingEvalCase, ...] = (
     ChatRoutingEvalCase("chat_linkedin_001", "linkedin unsupported", "read my LinkedIn messages", "authenticated", "policy_gateway", "unsupported_tool"),
     ChatRoutingEvalCase("chat_calendar_001", "calendar unsupported", "check my availability", "authenticated", "policy_gateway", "unsupported_tool"),
     ChatRoutingEvalCase("chat_whatsapp_001", "whatsapp unsupported", "send me a WhatsApp message", "authenticated", "policy_gateway", "unsupported_tool"),
-    ChatRoutingEvalCase("chat_billing_001", "billing/payment", "where is my invoice?", "authenticated", "passthrough"),
-    ChatRoutingEvalCase("chat_job_001", "job search", "find me HSE jobs in Dubai", "authenticated", "passthrough"),
-    ChatRoutingEvalCase("chat_job_002", "job search", "I'm looking for a manager role", "authenticated", "passthrough"),
-    ChatRoutingEvalCase("chat_career_001", "career planning", "make me a job search plan", "authenticated", "passthrough"),
-    ChatRoutingEvalCase("chat_cv_001", "cv/profile", "upload my CV", "authenticated", "passthrough"),
-    ChatRoutingEvalCase("chat_apps_001", "application tracking", "track my applications", "authenticated", "passthrough"),
-    ChatRoutingEvalCase("chat_telegram_001", "telegram/settings", "enable telegram notifications", "authenticated", "passthrough"),
-    ChatRoutingEvalCase("chat_settings_001", "telegram/settings", "my settings", "authenticated", "passthrough"),
-    ChatRoutingEvalCase("chat_unclear_001", "unclear/mixed", "hi", "authenticated", "passthrough"),
-    ChatRoutingEvalCase("chat_unclear_002", "unclear/mixed", "HSE Manager", "authenticated", "passthrough"),
+    ChatRoutingEvalCase("chat_billing_001", "billing/payment", "where is my invoice?", "authenticated", "passthrough", expected_passthrough_source="openai"),
+    ChatRoutingEvalCase("chat_job_001", "job search", "find me HSE jobs in Dubai", "authenticated", "passthrough", expected_passthrough_source="legacy"),
+    ChatRoutingEvalCase("chat_job_002", "job search", "I'm looking for a manager role", "authenticated", "passthrough", expected_passthrough_source="legacy"),
+    ChatRoutingEvalCase("chat_career_001", "career planning", "make me a job search plan", "authenticated", "passthrough", expected_passthrough_source="legacy"),
+    ChatRoutingEvalCase("chat_cv_001", "cv/profile", "upload my CV", "authenticated", "passthrough", expected_passthrough_source="legacy"),
+    ChatRoutingEvalCase("chat_apps_001", "application tracking", "track my applications", "authenticated", "passthrough", expected_passthrough_source="legacy"),
+    ChatRoutingEvalCase("chat_telegram_001", "telegram/settings", "enable telegram notifications", "authenticated", "passthrough", expected_passthrough_source="legacy"),
+    ChatRoutingEvalCase("chat_settings_001", "telegram/settings", "my settings", "authenticated", "passthrough", expected_passthrough_source="legacy"),
+    ChatRoutingEvalCase("chat_unclear_001", "unclear/mixed", "hi", "authenticated", "passthrough", expected_passthrough_source="legacy"),
+    ChatRoutingEvalCase("chat_unclear_002", "unclear/mixed", "HSE Manager", "authenticated", "passthrough", expected_passthrough_source="legacy"),
 )
 
 
@@ -295,7 +312,7 @@ def test_phase2_chat_routing_eval_baseline(case: ChatRoutingEvalCase) -> None:
         assert result.get("response_source") == "policy_gateway"
         assert result.get("type") == case.expected_type
     else:
-        assert result.get("response_source") != "policy_gateway"
+        assert result.get("response_source") == case.expected_passthrough_source
 
 
 def test_phase2_chat_eval_matrix_size_and_coverage() -> None:
