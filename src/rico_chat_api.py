@@ -1764,13 +1764,15 @@ class RicoChatAPI:
             profile_skills = self._as_list(self._profile_value(profile, "skills"))
             profile_roles = self._as_list(self._profile_value(profile, "target_roles"))
 
-            # Store recent job context for follow-up questions
-            self._store_recent_context(user_id, {
-                "recent_job": title,
-                "recent_company": company,
-                "recent_status": "preparing",
-                "recent_route": "/command",
-            })
+            self._store_recent_context(
+                user_id,
+                self._build_recent_application_context(
+                    title=title,
+                    company=company,
+                    status="opened",
+                    action="prepare_application",
+                ),
+            )
 
             context_parts: list[str] = []
             if profile_skills:
@@ -1835,15 +1837,18 @@ class RicoChatAPI:
                 _create_manual_app(title=title, company=company, status="applied", user_id=user_id)
                 msg = (
                     f"Tracked — **{title}** at **{company}** marked as applied. "
-                    "You can view it in Application Flow."
+                    "It is now in Application Flow at /applications. "
+                    "I will treat this as your latest application context for follow-ups."
                 )
-                # Store recent application context for follow-up questions
-                self._store_recent_context(user_id, {
-                    "recent_job": title,
-                    "recent_company": company,
-                    "recent_status": "applied",
-                    "recent_route": "/flow",
-                })
+                self._store_recent_context(
+                    user_id,
+                    self._build_recent_application_context(
+                        title=title,
+                        company=company,
+                        status="applied",
+                        action="mark_applied",
+                    ),
+                )
             except Exception:
                 msg = (
                     f"Noted — **{title}** at **{company}** marked as applied. "
@@ -1856,6 +1861,8 @@ class RicoChatAPI:
                 "job_title": title,
                 "job_company": company,
                 "job_status": "applied",
+                "application_route": "/applications",
+                "next_action": "follow_up_after_7_days",
             }
             self._append_chat(user_id, "assistant", msg)
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
@@ -1869,21 +1876,32 @@ class RicoChatAPI:
                 _create_manual_app(title=title, company=company, status="saved", user_id=user_id)
                 msg = (
                     f"Saved — **{title}** at **{company}** added to Application Flow. "
-                    "View it at /applications."
+                    "View it at /applications. I will use this as your latest job context."
                 )
-                # Store recent application context for follow-up questions
-                self._store_recent_context(user_id, {
-                    "recent_job": title,
-                    "recent_company": company,
-                    "recent_status": "saved",
-                    "recent_route": "/flow",
-                })
+                self._store_recent_context(
+                    user_id,
+                    self._build_recent_application_context(
+                        title=title,
+                        company=company,
+                        status="saved",
+                        action="track_job",
+                    ),
+                )
             except Exception:
                 msg = (
                     f"Noted — **{title}** at **{company}** added to your tracking list. "
                     "(Could not write to Application Flow right now — please retry.)"
                 )
-            response = {"type": "track_job", "intent": "track_job", "message": msg}
+            response = {
+                "type": "track_job",
+                "intent": "track_job",
+                "message": msg,
+                "job_title": title,
+                "job_company": company,
+                "job_status": "saved",
+                "application_route": "/applications",
+                "next_action": "review_or_mark_applied",
+            }
             self._append_chat(user_id, "assistant", msg)
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
@@ -1924,14 +1942,7 @@ class RicoChatAPI:
         if legacy_intent == "recent_context":
             ctx = self._get_recent_context(user_id)
             if ctx:
-                job = ctx.get("recent_job", "Unknown")
-                company = ctx.get("recent_company", "Unknown")
-                status = ctx.get("recent_status", "tracked")
-                route = ctx.get("recent_route", "/applications")
-                msg = (
-                    f"Your most recent: **{job}** at **{company}** — status: {status}. "
-                    f"View it in Application Flow at {route}."
-                )
+                msg = self._build_recent_context_message(ctx)
             else:
                 apps = None
                 try:
@@ -1945,13 +1956,19 @@ class RicoChatAPI:
                         "Please try again shortly."
                     )
                 elif apps:
-                    latest = apps[0]
+                    latest = self._enrich_applications([self._sort_applications_recent(apps)[0]])[0]
                     job = (latest.get("title") or "Unknown")
                     company = (latest.get("company") or "Unknown")
-                    status = (latest.get("status") or "tracked")
+                    status = latest.get("status_label") or latest.get("status") or "tracked"
+                    days = latest.get("days_since_applied")
+                    days_str = (
+                        f", applied {days} day{'s' if days != 1 else ''} ago"
+                        if days is not None else ""
+                    )
+                    fu_hint = " Consider following up now." if latest.get("needs_follow_up") else " Keep tracking it here."
                     msg = (
-                        f"Most recent: **{job}** at **{company}** — status: {status}. "
-                        "View your full list in Application Flow."
+                        f"Most recent: **{job}** at **{company}** — status: **{status}**{days_str}. "
+                        f"View it in Application Flow at /applications. {fu_hint}"
                     )
                 else:
                     msg = (
@@ -2121,6 +2138,211 @@ class RicoChatAPI:
         except Exception:
             return {}
 
+    @staticmethod
+    def _application_status_label(status: str | None) -> str:
+        labels = {
+            "saved": "saved for review",
+            "opened": "opened",
+            "opened_external": "opened externally",
+            "applied": "applied",
+            "interview": "interview stage",
+            "rejected": "rejected",
+            "offer": "offer stage",
+            "decision_made": "closed",
+        }
+        return labels.get((status or "").strip().lower(), status or "tracked")
+
+    def _build_recent_application_context(
+        self,
+        *,
+        title: str,
+        company: str,
+        status: str,
+        action: str,
+        route: str = "/applications",
+        job_id: str | None = None,
+        link: str | None = None,
+    ) -> dict[str, Any]:
+        now = datetime.now(timezone.utc).isoformat()
+        status_label = self._application_status_label(status)
+        return {
+            "type": "application",
+            "recent_job": title,
+            "recent_company": company,
+            "recent_application": {
+                "job_id": job_id,
+                "title": title,
+                "company": company,
+                "status": status,
+                "status_label": status_label,
+                "link": link or "",
+                "route": route,
+                "last_action": action,
+                "updated_at": now,
+            },
+            "recent_status": status,
+            "recent_status_label": status_label,
+            "recent_route": route,
+            "recent_action": action,
+            "timeline": [
+                {
+                    "status": status,
+                    "label": status_label,
+                    "action": action,
+                    "at": now,
+                }
+            ],
+        }
+
+    @staticmethod
+    def _parse_application_dt(app: dict[str, Any]) -> datetime:
+        raw = app.get("date_updated") or app.get("date_applied") or ""
+        if raw:
+            try:
+                dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt
+            except (TypeError, ValueError):
+                pass
+        return datetime.min.replace(tzinfo=timezone.utc)
+
+    def _sort_applications_recent(self, apps: list[dict]) -> list[dict]:
+        return sorted(apps, key=self._parse_application_dt, reverse=True)
+
+    def _enrich_applications(self, apps: list[dict]) -> list[dict]:
+        """Add days_since_applied, days_since_update, needs_follow_up to each app dict."""
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        result = []
+        for app in apps:
+            enriched = dict(app)
+            days_applied: int | None = None
+            raw_applied = app.get("date_applied")
+            if raw_applied:
+                try:
+                    dt = datetime.fromisoformat(raw_applied.replace("Z", "+00:00"))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    days_applied = (now - dt).days
+                except (ValueError, TypeError):
+                    pass
+            days_updated: int | None = None
+            raw_updated = app.get("date_updated")
+            if raw_updated:
+                try:
+                    dt = datetime.fromisoformat(raw_updated.replace("Z", "+00:00"))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    days_updated = (now - dt).days
+                except (ValueError, TypeError):
+                    pass
+            enriched["days_since_applied"] = days_applied
+            enriched["days_since_update"] = days_updated
+            # Follow-up needed: applied/opened status with no update for 7+ days
+            enriched["needs_follow_up"] = (
+                app.get("status") in ("applied", "opened")
+                and days_updated is not None
+                and days_updated >= 7
+            )
+            enriched["status_label"] = self._application_status_label(app.get("status"))
+            result.append(enriched)
+        return result
+
+    def _build_recent_context_message(self, ctx: dict[str, Any]) -> str:
+        app = ctx.get("recent_application") if isinstance(ctx.get("recent_application"), dict) else {}
+        job = app.get("title") or ctx.get("recent_job") or "Unknown"
+        company = app.get("company") or ctx.get("recent_company") or "Unknown"
+        status = app.get("status_label") or ctx.get("recent_status_label") or self._application_status_label(ctx.get("recent_status"))
+        route = app.get("route") or ctx.get("recent_route") or "/applications"
+        action = app.get("last_action") or ctx.get("recent_action") or "tracked"
+        updated_at = app.get("updated_at")
+
+        time_hint = ""
+        if updated_at:
+            try:
+                dt = datetime.fromisoformat(str(updated_at).replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                days = (datetime.now(timezone.utc) - dt).days
+                if days == 0:
+                    time_hint = " Updated today."
+                elif days > 0:
+                    time_hint = f" Updated {days} day{'s' if days != 1 else ''} ago."
+            except (TypeError, ValueError):
+                pass
+
+        next_step = "Next step: keep it in Application Flow and update the status when you get a reply."
+        if (app.get("status") or ctx.get("recent_status")) == "applied":
+            next_step = "Next step: follow up if there is no response after 7 days."
+        elif (app.get("status") or ctx.get("recent_status")) == "saved":
+            next_step = "Next step: review the role and mark it as applied when you submit."
+
+        return (
+            f"Your latest application context is **{job}** at **{company}**. "
+            f"It is currently **{status}** from the last action: {action}.{time_hint} "
+            f"View it in Application Flow at {route}. {next_step}"
+        )
+
+    def _build_tracking_message(self, apps: list[dict], stats: dict) -> str:
+        """Build an actionable prose summary of application pipeline state."""
+        total = len(apps)
+        if total == 0:
+            return (
+                "You have no tracked applications yet. "
+                "When you apply to a job through Rico, I will track it here. "
+                "You can also say 'mark as applied' on any job."
+            )
+
+        by_status: dict[str, list[dict]] = {}
+        for app in apps:
+            by_status.setdefault(app.get("status", "unknown"), []).append(app)
+
+        offers = by_status.get("offer", [])
+        interviews = by_status.get("interview", [])
+        applied = by_status.get("applied", []) + by_status.get("opened", [])
+        saved = by_status.get("saved", [])
+        rejected = by_status.get("rejected", [])
+        follow_up = [a for a in apps if a.get("needs_follow_up")]
+
+        stage_parts = []
+        if offers:
+            stage_parts.append(f"{len(offers)} offer")
+        if interviews:
+            stage_parts.append(f"{len(interviews)} interview")
+        if applied:
+            stage_parts.append(f"{len(applied)} applied")
+        if saved:
+            stage_parts.append(f"{len(saved)} saved")
+        if rejected:
+            stage_parts.append(f"{len(rejected)} rejected")
+        stage_line = ", ".join(stage_parts) if stage_parts else f"{total} tracked"
+
+        sentences = [
+            f"You have {total} tracked application{'s' if total != 1 else ''}: {stage_line}."
+        ]
+
+        active = offers + interviews
+        if active:
+            names = [
+                f"**{a.get('title', 'Unknown')}** at **{a.get('company', 'Unknown')}**"
+                for a in active[:3]
+            ]
+            sentences.append(f"Active: {', '.join(names)}.")
+
+        if follow_up:
+            fu_companies = [f"**{a.get('company', 'Unknown')}**" for a in follow_up[:3]]
+            suffix = f" (+{len(follow_up) - 3} more)" if len(follow_up) > 3 else ""
+            sentences.append(
+                f"{len(follow_up)} application{'s' if len(follow_up) != 1 else ''} "
+                f"may need a follow-up (no update in 7+ days): "
+                f"{', '.join(fu_companies)}{suffix}."
+            )
+
+        sentences.append("Full list in Application Flow at /applications.")
+        return " ".join(sentences)
+
     def _handle_application_tracking(self, user_id: str, intent: str = "application_tracking") -> dict[str, Any]:
         """Route application tracking requests to the applications repository."""
         try:
@@ -2133,22 +2355,28 @@ class RicoChatAPI:
             apps = get_applied_jobs()
             stats = get_application_stats()
 
-        if not apps:
-            return {
-                "type": "application_status",
-                "message": (
-                    "You have no tracked applications yet. "
-                    "When you apply to a job through Rico, I will track it here. "
-                    "You can also say 'mark as applied' on any job."
+        enriched = self._enrich_applications(self._sort_applications_recent(apps))
+        follow_up_needed = [a for a in enriched if a.get("needs_follow_up")]
+        msg = self._build_tracking_message(enriched, stats)
+        if enriched:
+            latest = enriched[0]
+            self._store_recent_context(
+                user_id,
+                self._build_recent_application_context(
+                    title=latest.get("title") or "Unknown",
+                    company=latest.get("company") or "Unknown",
+                    status=latest.get("status") or "tracked",
+                    action="application_tracking",
+                    job_id=latest.get("job_id"),
+                    link=latest.get("link"),
                 ),
-                "applications": [],
-            }
-
+            )
         return {
             "type": "application_status",
-            "message": f"Tracking {len(apps)} application(s).",
-            "applications": apps,
+            "message": msg,
+            "applications": enriched,
             "stats": stats,
+            "follow_up_needed": follow_up_needed,
         }
 
     def _handle_profile_role_suggestions(self, profile: Any) -> dict[str, Any]:
