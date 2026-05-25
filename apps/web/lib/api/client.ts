@@ -93,7 +93,12 @@ apiClient.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response?.status === 401 && typeof window !== 'undefined') {
-            window.location.href = '/login';
+            // Only redirect to /login on authenticated routes
+            const publicRoutes = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/chat', '/orchestrate'];
+            const isPublicRoute = publicRoutes.some(route => window.location.pathname.startsWith(route));
+            if (!isPublicRoute) {
+                window.location.href = '/login';
+            }
         }
         return Promise.reject(error);
     }
@@ -313,8 +318,15 @@ export const ricoChatApi = {
     },
 
     me: async (): Promise<MeResponse> => {
-        const response = await apiClient.get('/api/v1/me');
-        return validateResponse(MeResponseSchema, response.data, 'auth /me');
+        try {
+            const response = await apiClient.get('/api/v1/me');
+            return validateResponse(MeResponseSchema, response.data, 'auth /me');
+        } catch (error) {
+            if (axios.isAxiosError(error) && error.response?.status === 401) {
+                return { email: null, role: 'guest', authenticated: false, guest: true };
+            }
+            throw error;
+        }
     },
 
     savedSearches: async (): Promise<SavedSearchesResponse> => {
