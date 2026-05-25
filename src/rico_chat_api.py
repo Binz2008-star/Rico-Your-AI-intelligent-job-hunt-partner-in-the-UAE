@@ -405,6 +405,105 @@ class RicoChatAPI:
         return bool(RicoChatAPI._GENERIC_JOB_REQUEST_RE.search(message))
 
     @staticmethod
+    def _looks_like_career_execution_request(message: str) -> bool:
+        """True when the user expects Rico to execute career discovery/search."""
+        text = (message or "").strip().lower()
+        if not text:
+            return False
+        return (
+            "find me a career" in text
+            or "find a career" in text
+            or "career in " in text
+            or "cannot find me a career" in text
+            or ("why should i search" in text and "career" in text)
+        )
+
+    @staticmethod
+    def _extract_career_industry_targets(message: str, profile: Any) -> list[str]:
+        """Extract the user's requested industry, with profile industries as fallback."""
+        text = (message or "").strip()
+        targets: list[str] = []
+        match = re.search(r"\bcareer\s+in\s+([a-zA-Z][a-zA-Z &/-]{2,40})", text, re.IGNORECASE)
+        if not match:
+            match = re.search(r"\bin\s+([a-zA-Z][a-zA-Z &/-]{2,40})", text, re.IGNORECASE)
+        if match:
+            industry = re.split(r"[.?!,;:]", match.group(1).strip())[0].strip()
+            if industry:
+                targets.append(industry.lower())
+
+        for item in RicoChatAPI._as_list(RicoChatAPI._profile_value(profile, "industries")):
+            industry = str(item).strip().lower()
+            if industry and industry not in targets:
+                targets.append(industry)
+
+        return targets or ["uae"]
+
+    @staticmethod
+    def _career_execution_roles(profile: Any, industry_targets: list[str]) -> list[str]:
+        roles: list[str] = []
+        for item in RicoChatAPI._as_list(RicoChatAPI._profile_value(profile, "target_roles")):
+            role = str(item).strip()
+            if role and role not in roles:
+                roles.append(role)
+
+        skills = {str(item).strip().lower() for item in RicoChatAPI._as_list(RicoChatAPI._profile_value(profile, "skills"))}
+        industries = set(industry_targets)
+        if "banking" in industries:
+            for role in ("Compliance Manager", "ESG Manager", "Operational Risk Manager"):
+                if role not in roles:
+                    roles.append(role)
+        if {"compliance", "risk"} & skills and "Compliance Manager" not in roles:
+            roles.append("Compliance Manager")
+        if {"esg", "sustainability"} & skills and "ESG Manager" not in roles:
+            roles.append("ESG Manager")
+        if {"hse", "safety"} & skills and "HSE Manager" not in roles:
+            roles.append("HSE Manager")
+
+        return roles[:5] or ["Career Manager"]
+
+    def _handle_career_execution(self, user_id: str, message: str, profile: Any) -> dict[str, Any]:
+        """Turn career-discovery requests into concrete executable searches."""
+        industry_targets = self._extract_career_industry_targets(message, profile)
+        primary_industry = industry_targets[0]
+        industry_label = primary_industry.title()
+        roles = self._career_execution_roles(profile, industry_targets)
+        queries = [f"{role} {industry_label} UAE" for role in roles]
+
+        all_matches: list[dict[str, Any]] = []
+        for query in queries:
+            try:
+                all_matches.extend(self._search_jsearch_direct(query))
+            except Exception as exc:
+                logger.debug("career_execution_search_failed query=%r error=%s", query, exc)
+
+        top_matches = all_matches[:5]
+        formatted = [self._format_match(m, profile) for m in top_matches]
+        execution_state = "MATCHES_SCORED" if formatted else "SEARCH_RUNNING"
+        role_text = ", ".join(roles[:3])
+        msg = (
+            f"I will use your CV profile to search concrete {industry_label} career paths in the UAE. "
+            f"I am starting with: {role_text}."
+        )
+        if formatted:
+            msg += f" I found {len(formatted)} current match(es)."
+        else:
+            msg += " I did not find scored matches yet, so these searches are ready to refine."
+
+        response = {
+            "type": "job_matches",
+            "intent": "career_execution",
+            "execution_state": execution_state,
+            "active_profile": bool(profile),
+            "message": msg,
+            "matches": formatted,
+            "next_action": "search_jobs",
+            "industry_targets": industry_targets,
+            "last_search_queries": queries,
+        }
+        self._append_chat(user_id, "assistant", response)
+        return response
+
+    @staticmethod
     def _looks_like_next_step_followup(message: str) -> bool:
         """True for short post-confirmation follow-ups like 'so?' or 'what now?'."""
         text = RicoChatAPI._normalize_followup_phrase(message)
@@ -1362,6 +1461,13 @@ class RicoChatAPI:
             )
 
         # ── Step 1: Unified intent classification ────────────────────────────
+        if has_cv and self._looks_like_career_execution_request(message):
+            return self._finalize(
+                self._handle_career_execution(user_id, message, profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
         intent_result = classify_intent(message, has_cv_profile=has_cv)
         intent = intent_result.intent
 
