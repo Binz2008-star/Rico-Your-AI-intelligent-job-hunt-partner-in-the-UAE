@@ -13,7 +13,7 @@ import {
     type SubscriptionMeResponse,
     type SubscriptionPlan,
 } from "@/lib/api";
-import { buildWhatsAppUpgradeUrl, isManualBillingMode } from "@/lib/billing";
+import { buildWhatsAppManageUrl, buildWhatsAppUpgradeUrl, isManualBillingMode } from "@/lib/billing";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
@@ -405,7 +405,7 @@ export default function SubscriptionPage() {
         }
         if (MANUAL_BILLING) {
             // In manual mode direct to WhatsApp for plan changes
-            window.open(buildWhatsAppUpgradeUrl(), "_blank", "noopener,noreferrer");
+            window.open(buildWhatsAppManageUrl(), "_blank", "noopener,noreferrer");
             return;
         }
         try {

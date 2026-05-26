@@ -31,11 +31,23 @@ FREE_ENTITLEMENTS = SubscriptionEntitlements(
     application_automation_enabled=False,
 )
 
+
+def _price_from_env(env_name: str, default: int) -> int:
+    raw_value = os.getenv(env_name, "").strip()
+    if not raw_value:
+        return default
+    try:
+        price = int(raw_value)
+    except ValueError:
+        return default
+    return price if price > 0 else default
+
+
 PRO_PLAN = SubscriptionPlan(
     id="pro_monthly",
     plan=SubscriptionTier.PRO,
     name="Pro",
-    price_monthly=int(os.getenv("RICO_PRO_PRICE_AED", "29")),
+    price_monthly=_price_from_env("RICO_PRO_PRICE_AED", 29),
     currency="AED",
     description="Smart AI job hunting for active UAE professionals.",
     features=[
@@ -60,7 +72,7 @@ PREMIUM_PLAN = SubscriptionPlan(
     id="premium_monthly",
     plan=SubscriptionTier.PREMIUM,
     name="Premium",
-    price_monthly=int(os.getenv("RICO_PREMIUM_PRICE_AED", "49")),
+    price_monthly=_price_from_env("RICO_PREMIUM_PRICE_AED", 49),
     currency="AED",
     description="Full automation and premium AI recommendations.",
     features=[
