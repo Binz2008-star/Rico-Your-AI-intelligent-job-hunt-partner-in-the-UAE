@@ -3,7 +3,6 @@ import { DashboardStats } from "@/components/DashboardStats";
 import { ProfileSummaryCard } from "@/components/ProfileSummaryCard";
 import { SavedSearchesList } from "@/components/SavedSearchesList";
 import { StatusCard } from "@/components/StatusCard";
-import { fetchHealth, type HealthResponse } from "@/lib/api";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -32,59 +31,6 @@ async function checkProfileExists(): Promise<boolean | null> {
   }
 }
 
-async function SystemStatus() {
-  let health: HealthResponse | null = null;
-  let fetchError = false;
-
-  try {
-    health = await fetchHealth();
-  } catch {
-    fetchError = true;
-  }
-
-  if (fetchError || !health) {
-    return (
-      <StatusCard title="API status" badge="error">
-        <p className="text-sm text-rico-text-muted">
-          Could not reach the backend. Check{" "}
-          <code className="text-rico-text">NEXT_PUBLIC_API_BASE_URL</code>.
-        </p>
-      </StatusCard>
-    );
-  }
-
-  const normalizedStatus = String(health.status || "").toLowerCase();
-  const healthOk = ["ok", "healthy", "live", "up"].includes(normalizedStatus);
-  const dbOk = health.db === "connected";
-  const version = health.version && health.version !== "undefined" ? `v${health.version}` : "Unknown";
-
-  return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <StatusCard
-        title="API status"
-        badge={healthOk ? "live" : "error"}
-        value={healthOk ? "Healthy" : "Needs review"}
-      >
-        {!healthOk && (
-          <Link href="/dashboard?skip=1" className="text-cyan hover:text-white">
-            Retry health check
-          </Link>
-        )}
-      </StatusCard>
-      <StatusCard
-        title="Database"
-        badge={dbOk ? "live" : "error"}
-        value={dbOk ? "Connected" : health.db}
-      />
-      <StatusCard
-        title="Backend version"
-        badge={version === "Unknown" ? "placeholder" : "live"}
-        value={version}
-      />
-    </div>
-  );
-}
-
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -99,48 +45,128 @@ export default async function DashboardPage({
   }
 
   return (
-    <DashboardShell title="Dashboard">
+    <DashboardShell title="Overview" subtitle="Your career execution progress and next actions">
       <div className="flex flex-col gap-10">
-        {/* Live — system status from /health */}
+        {/* Career Mission Header */}
         <section>
           <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
-            System status
+            Career Mission
           </h2>
-          <SystemStatus />
+          <StatusCard title="Career Mission Header" badge="live" href="/command">
+            <p className="text-sm text-zinc-500">
+              Rico keeps your search moving across matches, profile readiness, and active applications.
+            </p>
+            <Link
+              href="/command"
+              className="mt-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-xs font-semibold text-primary transition-all hover:bg-primary/15"
+            >
+              Open Command Center
+            </Link>
+          </StatusCard>
         </section>
 
-        {/* Live — profile from /api/v1/rico/profile */}
+        {/* Job Pipeline Summary */}
         <section>
           <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
-            Your profile
-          </h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <ProfileSummaryCard />
-            <StatusCard title="CV status" badge="placeholder" href="/upload">
-              <p className="text-sm text-zinc-500">
-                Upload a CV to enable profile-based job matching.
-              </p>
-            </StatusCard>
-          </div>
-        </section>
-
-        {/* Live — dashboard stats from /api/v1/jobs, /api/v1/applications, /api/v1/settings */}
-        <section>
-          <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
-            Overview
+            Job Pipeline
           </h2>
           <DashboardStats />
         </section>
 
-        {/* Live — saved searches from /api/v1/rico/settings/saved-searches */}
+        {/* Next Best Actions */}
         <section>
           <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
-            Job search
+            Next Best Actions
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <StatusCard title="Search with Rico" badge="live" href="/command">
+              <p className="text-sm text-zinc-500">
+                Ask Rico to find matches, prepare an application, or explain what to do next.
+              </p>
+              <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">
+                Open Command Center
+              </span>
+            </StatusCard>
+            <StatusCard title="Review matches" badge="placeholder" href="/jobs">
+              <p className="text-sm text-zinc-500">
+                Check scored opportunities and decide which leads should move into your flow.
+              </p>
+              <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">
+                View Matches
+              </span>
+            </StatusCard>
+            <StatusCard title="Tune preferences" badge="placeholder" href="/settings">
+              <p className="text-sm text-zinc-500">
+                Adjust match thresholds, apply pacing, and alert preferences.
+              </p>
+              <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">
+                Review Settings
+              </span>
+            </StatusCard>
+          </div>
+        </section>
+
+        {/* Profile Readiness */}
+        <section>
+          <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Profile Readiness
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <ProfileSummaryCard />
+            <StatusCard title="Profile gaps" badge="placeholder" href="/profile">
+              <p className="text-sm text-zinc-500">
+                Keep your target roles, seniority, locations, and CV details current so Rico can rank jobs accurately.
+              </p>
+              <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">
+                Update Career Profile
+              </span>
+            </StatusCard>
+          </div>
+        </section>
+
+        {/* Application Momentum */}
+        <section>
+          <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Application Momentum
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <StatusCard title="Application flow" badge="live" href="/flow">
+              <p className="text-sm text-zinc-500">
+                Track active applications, interviews, offers, and decisions in one pipeline view.
+              </p>
+              <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">
+                Open Flow
+              </span>
+            </StatusCard>
+            <StatusCard title="Apply pacing" badge="placeholder" href="/settings">
+              <p className="text-sm text-zinc-500">
+                Use your daily apply limit to keep automation controlled and reviewable.
+              </p>
+              <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">
+                Adjust Pacing
+              </span>
+            </StatusCard>
+          </div>
+        </section>
+
+        {/* Rico Activity */}
+        <section>
+          <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Rico Activity
           </h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <SavedSearchesList />
+            <StatusCard title="Saved leads" badge="placeholder" href="/saved-searches">
+              <p className="text-sm text-zinc-500">
+                Saved searches and leads help Rico keep future scans aligned with your priorities.
+              </p>
+              <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">
+                View Saved Leads
+              </span>
+            </StatusCard>
           </div>
         </section>
+
       </div>
     </DashboardShell>
   );

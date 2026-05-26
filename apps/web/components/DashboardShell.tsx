@@ -25,11 +25,11 @@ type DashboardRoute = {
 };
 
 const APP_ROUTES: readonly DashboardRoute[] = [
-    { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
-    { href: "/jobs", label: "Jobs", icon: "work" },
-    { href: "/applications", label: "Applications", icon: "fact_check" },
-    { href: "/profile", label: "Profile", icon: "account_circle" },
-    { href: "/saved-searches", label: "Saved" },
+    { href: "/dashboard", label: "Overview", icon: "dashboard" },
+    { href: "/jobs", label: "Matches", icon: "work" },
+    { href: "/flow", label: "Flow", icon: "fact_check" },
+    { href: "/profile", label: "Career Profile", icon: "account_circle" },
+    { href: "/saved-searches", label: "Saved Leads" },
     { href: "/settings", label: "Settings", icon: "settings" },
 ];
 

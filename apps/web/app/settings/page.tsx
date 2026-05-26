@@ -150,8 +150,8 @@ export default function SettingsPage() {
 
   return (
     <DashboardShell
-      title="System Logic"
-      subtitle="System configuration and job matching preferences"
+      title="Settings"
+      subtitle="Account, preferences, and integrations"
     >
       <div className="max-w-3xl flex flex-col gap-8">
         {SETTINGS_BACKEND_MAINTENANCE_MODE && (
@@ -164,12 +164,12 @@ export default function SettingsPage() {
           </section>
         )}
 
-        {/* Automation Tuning — Rico Cards */}
+        {/* Job Matching Preferences */}
         {settings && (
           <section className="space-y-4">
-            <h2 className="text-[11px] font-black text-[#5a5a7a] uppercase tracking-[0.2em] ml-1">Automation Tuning</h2>
+            <h2 className="text-[11px] font-black text-[#5a5a7a] uppercase tracking-[0.2em] ml-1">Job Matching Preferences</h2>
             <div className="grid gap-4 sm:grid-cols-2">
-              <StatusCard title="Daily Apply Limit" value={String(settings.max_daily_applies)}>
+              <StatusCard title="Apply pacing" value={String(settings.max_daily_applies)}>
                 <div className="mt-2">
                   <input
                     type="range" min={0} max={50} step={1}
@@ -185,7 +185,7 @@ export default function SettingsPage() {
                 </div>
               </StatusCard>
 
-              <StatusCard title="Min Fit Score" value={`${settings.min_score}%`}>
+              <StatusCard title="Minimum fit score" value={`${settings.min_score}%`}>
                 <div className="mt-2">
                   <input
                     type="range" min={50} max={95} step={5}
@@ -204,11 +204,11 @@ export default function SettingsPage() {
           </section>
         )}
 
-        {/* Job Matching — Full Form */}
+        {/* Match Thresholds */}
         <section className="bg-[#13132a]/40 border border-white/5 rounded-2xl p-6 backdrop-blur-md relative overflow-hidden">
           <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#5b4fff]/5 blur-3xl rounded-full pointer-events-none" />
 
-          <h3 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[17px] text-white mb-6">Job Matching</h3>
+          <h3 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[17px] text-white mb-6">Match thresholds</h3>
 
           {loadingSettings ? (
             <div className="flex flex-col gap-3">
@@ -368,11 +368,13 @@ export default function SettingsPage() {
           </section>
         )}
 
-        {/* Frontend Config */}
-        <section className="bg-[#13132a]/80 border border-white/[0.06] rounded-2xl p-6">
-          <h2 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[15px] mb-4 text-white">Frontend Config</h2>
-          <Row label="Mock mode" value={isMock ? "ENABLED — using dev fixtures" : "OFF — hitting real backend"} ok={!isMock} />
-        </section>
+        {/* Frontend Config — Admin Only */}
+        {isAdmin && (
+          <section className="bg-[#13132a]/80 border border-white/[0.06] rounded-2xl p-6">
+            <h2 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[15px] mb-4 text-white">Frontend Config</h2>
+            <Row label="Mock mode" value={isMock ? "ENABLED — using dev fixtures" : "OFF — hitting real backend"} ok={!isMock} />
+          </section>
+        )}
 
         {/* Legal */}
         <section className="bg-[#13132a]/80 border border-white/[0.06] rounded-2xl p-6">
