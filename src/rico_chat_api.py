@@ -109,7 +109,8 @@ _NON_ROLE_STARTERS: frozenset[str] = frozenset({
     "explain", "describe", "compare", "help", "please",
     "want", "need", "looking",
     # Gerunds of action verbs — never start a job title
-    "finding", "searching", "showing", "getting", "fetching", "listing",
+    # "listing" excluded: "Listing Agent" is a real UAE/real-estate role title
+    "finding", "searching", "showing", "getting", "fetching",
     "tailoring", "improving", "updating", "tracking",
     "hi", "hello", "hey", "greetings", "thanks", "thank", "ok", "okay",
     "yes", "yeah", "yep", "ya", "no", "nope", "sure", "fine", "good", "great",
@@ -2028,6 +2029,8 @@ class RicoChatAPI:
 
             # 1. Recent search matches (same session) — checked first so a job returned
             #    by a search can be acted on immediately without saving it first.
+            #    Scan all matches for this title/company: prefer a live URL over a lead.
+            #    Do NOT set apply_url="" on a lead match — that would skip Application Flow.
             if title and company:
                 try:
                     ctx = self._get_recent_context(user_id)
@@ -2037,12 +2040,12 @@ class RicoChatAPI:
                             url = (m.get("apply_url") or m.get("link") or "").strip()
                             if url:
                                 apply_url = url
+                                break  # Found a live URL — stop scanning
                             else:
-                                apply_url = ""
+                                # Lead match — note it, but keep scanning for a live URL entry
                                 source_was_lead = (
                                     m.get("verification_status") == "lead_needs_verification"
                                 )
-                            break
                 except Exception:
                     pass
 
@@ -2056,6 +2059,7 @@ class RicoChatAPI:
                             url = self._extract_rec_url(rec)
                             if url:
                                 apply_url = url
+                                source_was_lead = False  # Real URL found — clear lead flag
                                 break
                             elif apply_url is None:
                                 apply_url = ""

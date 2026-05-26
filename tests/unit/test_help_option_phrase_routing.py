@@ -117,6 +117,11 @@ class TestBareRoleGerundGuard:
         # (but classified correctly by classify_intent as interview_prep)
         assert RicoChatAPI._looks_like_bare_target_role("interview prep")
 
+    def test_listing_agent_still_bare_role(self):
+        # "listing" must NOT be in _NON_ROLE_STARTERS — "Listing Agent" is a real
+        # real-estate job title; blocking it would send the user to AI fallback
+        assert RicoChatAPI._looks_like_bare_target_role("Listing Agent")
+
 
 # ---------------------------------------------------------------------------
 # 2. _JOB_SEARCH_HELP_PHRASES membership
