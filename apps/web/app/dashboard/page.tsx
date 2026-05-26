@@ -4,7 +4,6 @@ import { ProfileSummaryCard } from "@/components/ProfileSummaryCard";
 import { SavedSearchesList } from "@/components/SavedSearchesList";
 import { StatusCard } from "@/components/StatusCard";
 import { cookies } from "next/headers";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -56,12 +55,11 @@ export default async function DashboardPage({
             <p className="text-sm text-zinc-500">
               Rico keeps your search moving across matches, profile readiness, and active applications.
             </p>
-            <Link
-              href="/command"
+            <span
               className="mt-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-xs font-semibold text-primary transition-all hover:bg-primary/15"
             >
               Open Command Center
-            </Link>
+            </span>
           </StatusCard>
         </section>
 
