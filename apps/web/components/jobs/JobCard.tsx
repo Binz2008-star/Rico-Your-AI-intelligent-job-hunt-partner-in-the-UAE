@@ -145,8 +145,13 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
 
   const companyIdentity = useMemo(() => getCompanyIdentity(job.company), [job.company]);
   const isBusy = Boolean(localAction || isSubmitting);
-  const hasApplyLink = hasUsableUrl(job.apply_url) || hasUsableUrl(job.source_url);
-  const verificationBadge = hasApplyLink
+  const isLive =
+    job.verification_status === "live"
+      ? true
+      : job.verification_status === "lead_needs_verification"
+        ? false
+        : hasUsableUrl(job.apply_url) || hasUsableUrl(job.source_url);
+  const verificationBadge = isLive
     ? {
       label: "Live / apply link available",
       className: "border-emerald-400/20 bg-emerald-500/10 text-emerald-100",
