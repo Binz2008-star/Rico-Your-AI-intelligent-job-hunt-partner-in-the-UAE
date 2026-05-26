@@ -108,6 +108,9 @@ _NON_ROLE_STARTERS: frozenset[str] = frozenset({
     "tell", "show", "give", "find", "search", "get", "fetch", "list",
     "explain", "describe", "compare", "help", "please",
     "want", "need", "looking",
+    # Gerunds of action verbs — never start a job title
+    "finding", "searching", "showing", "getting", "fetching", "listing",
+    "tailoring", "improving", "updating", "tracking",
     "hi", "hello", "hey", "greetings", "thanks", "thank", "ok", "okay",
     "yes", "yeah", "yep", "ya", "no", "nope", "sure", "fine", "good", "great",
     "cool", "nice", "wow", "oh", "ah",
@@ -501,6 +504,8 @@ class RicoChatAPI:
             "last_search_queries": queries,
         }
         self._append_chat(user_id, "assistant", response)
+        if formatted:
+            self._store_search_matches_context(user_id, formatted)
         return response
 
     @staticmethod
@@ -962,6 +967,20 @@ class RicoChatAPI:
         "show options", "show menu", "next steps",
     ])
 
+    # Phrases users type when selecting a help-menu option or expressing generic
+    # job-search intent — must NEVER be classified as job role titles.
+    _JOB_SEARCH_HELP_PHRASES: frozenset[str] = frozenset({
+        "finding jobs",
+        "finding jobs matching my target roles",
+        "find matching uae jobs",
+        "find me matching jobs",
+        "job search",
+        "job searching",
+        "search for jobs",
+        "help me find jobs",
+        "help me search for jobs",
+    })
+
     _ACTION_WORDS = frozenset({
         "find", "search", "show", "get", "apply", "save",
         "prepare", "draft", "update", "track",
@@ -1146,6 +1165,8 @@ class RicoChatAPI:
 
         self._append_chat(user_id, "assistant", response)
         mark_completed(user_id, operation_id, len(formatted))
+        if formatted:
+            self._store_search_matches_context(user_id, formatted)
         return response
 
     def _enrich_with_role_intelligence(
@@ -1756,6 +1777,8 @@ class RicoChatAPI:
                 }
                 self._append_chat(user_id, "assistant", response)
                 mark_completed(user_id, operation_id, len(formatted))
+                if formatted:
+                    self._store_search_matches_context(user_id, formatted)
                 return self._finalize(response, routed.source, profile=profile)
             else:
                 mark_completed(user_id, operation_id, 0)
@@ -2001,7 +2024,30 @@ class RicoChatAPI:
             title = getattr(intent_result, "extracted_title", None) or ""
             company = getattr(intent_result, "extracted_company", None) or ""
             apply_url = None
+            source_was_lead = False
+
+            # 1. Recent search matches (same session) — checked first so a job returned
+            #    by a search can be acted on immediately without saving it first.
             if title and company:
+                try:
+                    ctx = self._get_recent_context(user_id)
+                    for m in ctx.get("recent_search_matches", []):
+                        if (title.lower() in (m.get("title") or "").lower() and
+                                company.lower() in (m.get("company") or "").lower()):
+                            url = (m.get("apply_url") or m.get("link") or "").strip()
+                            if url:
+                                apply_url = url
+                            else:
+                                apply_url = ""
+                                source_was_lead = (
+                                    m.get("verification_status") == "lead_needs_verification"
+                                )
+                            break
+                except Exception:
+                    pass
+
+            # 2. Application Flow records (saved / previously applied jobs)
+            if apply_url is None and title and company:
                 try:
                     from src.repositories.applications_repo import get_all as _get_all_apps
                     for rec in _get_all_apps(user_id=user_id):
@@ -2012,9 +2058,10 @@ class RicoChatAPI:
                                 apply_url = url
                                 break
                             elif apply_url is None:
-                                apply_url = ""  # match found but no URL; keep searching
+                                apply_url = ""
                 except Exception:
                     pass
+
             if apply_url:
                 msg = f"Apply link for **{title}** at **{company}**: {apply_url}"
                 # Store URL evidence so a subsequent "Mark as applied" can proceed
@@ -2030,10 +2077,18 @@ class RicoChatAPI:
                     ),
                 )
             elif title and company:
-                msg = (
-                    f"I don't have a saved apply link for **{title}** at **{company}**. "
-                    "Search for the role on the company website or LinkedIn."
-                )
+                if source_was_lead:
+                    msg = (
+                        f"**{title}** at **{company}** was returned as a lead — "
+                        "it has no verified apply link yet. "
+                        "Check the company website or LinkedIn to confirm the role is still live "
+                        "before applying."
+                    )
+                else:
+                    msg = (
+                        f"I don't have a saved apply link for **{title}** at **{company}**. "
+                        "Search for the role on the company website or LinkedIn."
+                    )
             else:
                 msg = "Please specify the job title and company so I can look up the apply link."
             response = {"type": "open_apply_link", "intent": "open_apply_link",
@@ -2201,6 +2256,29 @@ class RicoChatAPI:
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # ── Step 3: Unknown intent — try role classification, then clarify ───
+
+        # Help-option phrase guard: phrases from the help menu ("Finding jobs",
+        # "job search", etc.) are action selections, not job role titles.
+        # Route them to a role-prompt so the user can name a concrete role.
+        if message.strip().lower() in self._JOB_SEARCH_HELP_PHRASES:
+            if has_cv:
+                return self._finalize(
+                    self._handle_profile_role_suggestions(profile),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
+            response = {
+                "type": "clarification",
+                "intent": "search_jobs",
+                "message": (
+                    "Sure — which role should I search for? "
+                    "Tell me a specific role like 'HSE Manager' or "
+                    "'Environmental Engineer', or upload your CV and I'll suggest roles from your background."
+                ),
+            }
+            self._append_chat(user_id, "assistant", response["message"])
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+
         # Only attempt role search if message looks like a plausible role (short text, no digits)
         if has_cv and self._looks_like_bare_target_role(message):
             logger.info(
@@ -2228,6 +2306,26 @@ class RicoChatAPI:
         )
 
     # ── New intent-specific handlers ─────────────────────────────────────────
+
+    def _store_search_matches_context(self, user_id: str, formatted: list[dict[str, Any]]) -> None:
+        """Merge recent search results into context so open_apply_link can find URLs."""
+        try:
+            ctx = self._get_recent_context(user_id)
+            ctx["recent_search_matches"] = [
+                {
+                    "title": m.get("title", ""),
+                    "company": m.get("company", ""),
+                    "location": m.get("location", ""),
+                    "apply_url": m.get("apply_url", ""),
+                    "source_url": m.get("source_url", ""),
+                    "link": m.get("apply_url", ""),
+                    "verification_status": m.get("verification_status", "lead_needs_verification"),
+                }
+                for m in formatted
+            ]
+            self._store_recent_context(user_id, ctx)
+        except Exception:
+            logger.debug("rico_chat: failed to store search matches context user=%s", user_id)
 
     def _store_recent_context(self, user_id: str, context: dict[str, Any]) -> None:
         try:
