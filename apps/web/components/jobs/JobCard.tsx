@@ -60,6 +60,11 @@ function getJobMeta(job: Job) {
   return [job.company || "Unknown", job.location || "Remote"].filter(Boolean).join(" · ");
 }
 
+function hasUsableUrl(value?: string): boolean {
+  const normalized = value?.trim();
+  return Boolean(normalized && normalized !== "#");
+}
+
 function BulletList({ items, tone }: { items: string[]; tone: "cyan" | "fuchsia" }) {
   if (items.length === 0) return null;
 
@@ -140,6 +145,16 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
 
   const companyIdentity = useMemo(() => getCompanyIdentity(job.company), [job.company]);
   const isBusy = Boolean(localAction || isSubmitting);
+  const hasApplyLink = hasUsableUrl(job.apply_url) || hasUsableUrl(job.source_url);
+  const verificationBadge = hasApplyLink
+    ? {
+      label: "Live / apply link available",
+      className: "border-emerald-400/20 bg-emerald-500/10 text-emerald-100",
+    }
+    : {
+      label: "Lead / verify before applying",
+      className: "border-amber-400/25 bg-amber-500/10 text-amber-100",
+    };
 
   const handleActionClick = async (action: JobAction) => {
     if (!onAction || isBusy) return;
@@ -192,7 +207,17 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
                 {getJobMeta(job)}
               </p>
             </div>
-            <ScoreBadge score={job.score} />
+            <div className="flex shrink-0 flex-col items-end gap-2">
+              <ScoreBadge score={job.score} />
+              <span
+                className={cn(
+                  "max-w-[150px] rounded-full border px-2.5 py-1 text-right text-[10px] font-bold uppercase leading-snug tracking-[0.12em]",
+                  verificationBadge.className
+                )}
+              >
+                {verificationBadge.label}
+              </span>
+            </div>
           </div>
         </div>
       </div>
