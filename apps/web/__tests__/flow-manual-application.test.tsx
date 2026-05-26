@@ -4,9 +4,17 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fetchApplicationsMock, createManualApplicationMock } = vi.hoisted(() => ({
+const { fetchApplicationsMock, createManualApplicationMock, updateApplicationStatusMock } = vi.hoisted(() => ({
     fetchApplicationsMock: vi.fn(),
     createManualApplicationMock: vi.fn(),
+    updateApplicationStatusMock: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({
+    useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+    usePathname: () => "/flow",
+    useSearchParams: () => new URLSearchParams(),
+    redirect: vi.fn(),
 }));
 
 vi.mock("next/link", () => ({
@@ -36,6 +44,7 @@ vi.mock("@/components/ui/MaterialIcon", () => ({
 vi.mock("@/lib/api", () => ({
     getApplications: fetchApplicationsMock,
     createManualApplication: createManualApplicationMock,
+    updateApplicationStatus: updateApplicationStatusMock,
 }));
 
 import FlowPage from "@/app/flow/page";
@@ -43,6 +52,7 @@ import FlowPage from "@/app/flow/page";
 beforeEach(() => {
     fetchApplicationsMock.mockReset();
     createManualApplicationMock.mockReset();
+    updateApplicationStatusMock.mockReset();
 });
 
 describe("Flow manual application tracking", () => {
