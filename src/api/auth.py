@@ -23,7 +23,7 @@ from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
 import bcrypt as _bcrypt
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
 from jose import JWTError, jwt
 
 from src.api.rate_limit import LIMIT_LOGIN, LIMIT_PASSWORD_RESET, LIMIT_REGISTER, limiter
@@ -383,7 +383,12 @@ def reset_password(request: Request, req: ResetPasswordRequest) -> ResetPassword
 
 @router.post("/register", response_model=RegisterResponse, status_code=201)
 @limiter.limit(LIMIT_REGISTER)
-def register(request: Request, req: RegisterRequest, response: Response) -> RegisterResponse:
+def register(
+    request: Request,
+    req: RegisterRequest,
+    response: Response,
+    background_tasks: BackgroundTasks,
+) -> RegisterResponse:
     """
     Self-signup: create a new user account (public, no auth required).
 
@@ -424,6 +429,15 @@ def register(request: Request, req: RegisterRequest, response: Response) -> Regi
                 logger.warning("public_profile_merge_skipped public_user_id=%s", req.public_user_id_to_merge)
         except Exception:
             logger.exception("public_profile_merge_failed public_user_id=%s", req.public_user_id_to_merge)
+
+    try:
+        from src.services.signup_notifications import send_admin_signup_notification
+        background_tasks.add_task(send_admin_signup_notification, user=user, name=None, plan="free")
+    except Exception:
+        logger.exception(
+            "signup_notification_schedule_failed user_id=%s",
+            getattr(user, "id", "unknown"),
+        )
 
     logger.info("register_success email=%r", user.email)
     return RegisterResponse(email=user.email, role=user.role, created=True)
