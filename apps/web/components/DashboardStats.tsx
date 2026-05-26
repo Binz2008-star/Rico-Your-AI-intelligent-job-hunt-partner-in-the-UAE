@@ -99,7 +99,7 @@ function getApplicationsCopy(stats: Stats): string {
     return stats.applicationsError;
   }
   if (!stats.applicationsAvailable && !stats.applicationStatsAvailable) {
-    return "Application data unavailable right now.";
+    return "Application flow unavailable right now.";
   }
   if (stats.appsTotal === 0) return "No tracked applications yet.";
 
@@ -115,9 +115,9 @@ function getApplicationsCopy(stats: Stats): string {
 
 function getDailyLimitCopy(stats: Stats): string {
   if (stats.settingsError) return stats.settingsError;
-  if (!stats.settingsAvailable) return "Daily limit unavailable right now.";
-  if (stats.maxDaily > 0) return `Daily reviewed actions limit: ${stats.maxDaily}`;
-  return "Daily reviewed actions limit not set.";
+  if (!stats.settingsAvailable) return "Apply pacing unavailable right now.";
+  if (stats.maxDaily > 0) return `Apply pacing limit: ${stats.maxDaily}`;
+  return "Apply pacing not set yet.";
 }
 
 export function DashboardStats() {
@@ -198,7 +198,7 @@ export function DashboardStats() {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       <StatusCard
-        title="Job matches"
+        title="Scored opportunities"
         badge={stats.jobsAvailable ? "live" : "placeholder"}
         value={String(stats.jobsTotal)}
         href={stats.jobsError ? undefined : "/jobs"}
@@ -224,10 +224,10 @@ export function DashboardStats() {
         </div>
       </StatusCard>
       <StatusCard
-        title="Applications tracked"
+        title="Applications in flow"
         badge={stats.applicationsAvailable || stats.applicationStatsAvailable ? "live" : "placeholder"}
         value={String(stats.appsTotal)}
-        href="/applications"
+        href="/flow"
       >
         <p className="text-sm text-on-surface-variant">
           {getApplicationsCopy(stats)}
@@ -235,7 +235,7 @@ export function DashboardStats() {
         <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">Open Flow</span>
       </StatusCard>
       <StatusCard
-        title="Daily reviewed actions"
+        title="Apply pacing"
         badge={stats.settingsAvailable && stats.maxDaily > 0 ? "live" : "placeholder"}
         value={stats.maxDaily > 0 ? String(stats.maxDaily) : "—"}
         href="/settings"
