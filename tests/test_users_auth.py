@@ -11,6 +11,8 @@ import sys
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
+import psycopg2
+
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -148,7 +150,7 @@ class TestVerifyCredentials:
         from src.api.auth import verify_credentials
         env = {"ADMIN_EMAIL": "admin@test.com", "ADMIN_PASSWORD": "TestPass123", "ADMIN_PASSWORD_HASH": ""}
         with patch("src.repositories.users_repo.get_user_by_email",
-                   side_effect=Exception("db down")), \
+                   side_effect=psycopg2.OperationalError("db down")), \
              patch.dict(os.environ, env, clear=False):
             result = verify_credentials("admin@test.com", "TestPass123")
         assert result is not None
@@ -404,7 +406,7 @@ class TestProductionFallbackGuard:
             "ALLOW_ENV_AUTH_FALLBACK": "",
         }
         with patch("src.repositories.users_repo.get_user_by_email",
-                   side_effect=Exception("db down")), \
+                   side_effect=psycopg2.OperationalError("db down")), \
              patch.dict(os.environ, env, clear=False):
             result = verify_credentials("admin@test.com", "TestPass123")
         assert result is None
@@ -420,7 +422,7 @@ class TestProductionFallbackGuard:
             "ALLOW_ENV_AUTH_FALLBACK": "true",
         }
         with patch("src.repositories.users_repo.get_user_by_email",
-                   side_effect=Exception("db down")), \
+                   side_effect=psycopg2.OperationalError("db down")), \
              patch.dict(os.environ, env, clear=False):
             result = verify_credentials("admin@test.com", "TestPass123")
         assert result is not None
@@ -437,7 +439,7 @@ class TestProductionFallbackGuard:
             "ALLOW_ENV_AUTH_FALLBACK": "",
         }
         with patch("src.repositories.users_repo.get_user_by_email",
-                   side_effect=Exception("db down")), \
+                   side_effect=psycopg2.OperationalError("db down")), \
              patch.dict(os.environ, env, clear=False):
             result = verify_credentials("admin@test.com", "TestPass123")
         assert result is not None

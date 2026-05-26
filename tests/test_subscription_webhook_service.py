@@ -386,7 +386,7 @@ class TestInvoicePaid:
              patch(_GET_CUS, return_value=None), \
              patch(_UPSERT) as mock_upsert:
             result = process_stripe_event("evt_inv_2", "invoice.paid", _invoice_event())
-        assert result is False
+        assert result is True  # permanent skip returns True to prevent Stripe retry storm
         mock_upsert.assert_not_called()
 
     def test_skips_when_customer_missing(self):
@@ -430,7 +430,7 @@ class TestInvoicePaymentFailed:
              patch(_GET_CUS, return_value=None), \
              patch(_UPSERT) as mock_upsert:
             result = process_stripe_event("evt_fail_2", "invoice.payment_failed", _invoice_event())
-        assert result is False
+        assert result is True  # permanent skip returns True to prevent Stripe retry storm
         mock_upsert.assert_not_called()
 
     def test_ignores_failure_for_different_subscription(self):
