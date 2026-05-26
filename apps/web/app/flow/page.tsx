@@ -8,6 +8,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import {
+    ApiError,
     createManualApplication,
     getApplications,
     updateApplicationStatus,
@@ -56,8 +57,9 @@ function fmtDate(iso?: string) {
 
 export default function FlowPage() {
     const [applications, setApplications] = useState<Application[]>([]);
+    const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(false);
+    const [error, setError] = useState<'auth' | 'network' | false>(false);
     const [showModal, setShowModal] = useState(false);
     const [saving, setSaving] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
@@ -74,9 +76,11 @@ export default function FlowPage() {
         try {
             const response = await getApplications(undefined, 1, 50);
             setApplications(response.applications);
+            setTotal(response.total);
             setError(false);
-        } catch {
-            setError(true);
+        } catch (err: unknown) {
+            const is401 = err instanceof ApiError && err.statusCode === 401;
+            setError(is401 ? 'auth' : 'network');
         } finally {
             setLoading(false);
         }
@@ -137,7 +141,7 @@ export default function FlowPage() {
     return (
         <DashboardShell
             title="Application Flow"
-            subtitle={loading ? 'Loading…' : `${applications.length} tracked across all stages`}
+            subtitle={loading ? 'Loading…' : `${total} tracked across all stages${total > applications.length ? ` (showing first ${applications.length})` : ''}`}
         >
             {/* Page header action — always visible */}
             {!loading && (
@@ -156,9 +160,9 @@ export default function FlowPage() {
                 <LoadingState variant="card" message="Loading application flow..." />
             ) : error ? (
                 <ErrorState
-                    variant="network"
-                    message="Could not load the live pipeline."
-                    onRetry={loadApplications}
+                    variant={error === 'auth' ? 'auth' : 'network'}
+                    message={error === 'auth' ? 'Session expired — please log in again.' : 'Could not load the live pipeline.'}
+                    onRetry={error === 'auth' ? undefined : loadApplications}
                 />
             ) : (
                 <div className="space-y-8">
@@ -234,7 +238,7 @@ export default function FlowPage() {
                                         <select
                                             value={item.status}
                                             onChange={(e) => changeStatus(item, e.target.value as ApplicationStatus)}
-                                            disabled={updating === item.application_id}
+                                            disabled={!!updating}
                                             aria-label={`Change status for ${item.title}`}
                                             className="bg-surface/60 border border-white/[0.08] rounded-lg px-2 py-1 text-[11px] text-on-surface-variant outline-none focus:border-primary/40 cursor-pointer disabled:opacity-40 transition-opacity"
                                         >
