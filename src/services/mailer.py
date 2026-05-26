@@ -32,7 +32,7 @@ def send_email(*, to_email: str, subject: str, body: str) -> bool:
 
     try:
         context = ssl.create_default_context()
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context, timeout=10) as server:
             server.login(email_user, email_pass)
             server.send_message(msg)
         return True
