@@ -37,6 +37,7 @@ from src.api.routers.pipeline import router as pipeline_router
 from src.api.routers.settings import router as settings_router
 from src.api.routers.stats import router as stats_router
 from src.api.routers.subscription import router as subscription_router
+from src.api.routers.admin_subscriptions import router as admin_subscriptions_router
 from src.api.routers.user import router as user_router
 
 logging.basicConfig(
@@ -234,6 +235,7 @@ app.include_router(settings_router)
 app.include_router(onboarding_router)
 app.include_router(pipeline_router)
 app.include_router(subscription_router)
+app.include_router(admin_subscriptions_router)
 
 
 @app.get("/health")

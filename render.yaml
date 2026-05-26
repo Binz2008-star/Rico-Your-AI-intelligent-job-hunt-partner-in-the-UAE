@@ -7,57 +7,197 @@ services:
     startCommand: python -m uvicorn src.api.app:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
+
+      # ── Auth / admin (secrets — set in Render dashboard) ─────────────────────
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_PASSWORD_HASH
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ALLOW_ENV_AUTH_FALLBACK
+        value: "false"
+
+      # ── Database ──────────────────────────────────────────────────────────────
       - key: DATABASE_URL
         sync: false
-      - key: RAPIDAPI_KEY
-        sync: false
+
+      # ── Email / SMTP (secrets) ────────────────────────────────────────────────
       - key: EMAIL_USER
         sync: false
       - key: EMAIL_PASS
         sync: false
       - key: EMAIL_TO
         sync: false
+
+      # ── Public contact addresses ──────────────────────────────────────────────
+      - key: APP_PUBLIC_EMAIL
+        value: "info@ricohunt.com"
+      - key: SUPPORT_EMAIL
+        value: "info@ricohunt.com"
+
+      # ── Telegram (secrets) ────────────────────────────────────────────────────
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_CHAT_ID
         sync: false
-      - key: ADMIN_EMAIL
+      - key: TELEGRAM_WEBHOOK_SECRET
         sync: false
-      - key: ADMIN_PASSWORD_HASH
+
+      # ── AI providers (secrets) ────────────────────────────────────────────────
+      - key: OPENAI_API_KEY
         sync: false
-      - key: JWT_SECRET
+      - key: DEEPSEEK_API_KEY
         sync: false
-      - key: JWT_TTL_HOURS
-        value: "24"
+      - key: HF_TOKEN
+        sync: false
+      - key: HF_API_TOKEN
+        sync: false
+
+      # ── AI provider routing (config) ──────────────────────────────────────────
+      - key: RICO_AI_PROVIDER
+        value: "deepseek"
+      - key: RICO_OPENAI_MODEL
+        value: "gpt-4.1-mini"
+      - key: DEEPSEEK_MODEL
+        value: "deepseek-v4-flash"
+
+      # ── Jotform (secrets) ─────────────────────────────────────────────────────
+      - key: JOTFORM_FORM_ID
+        sync: false
+      - key: JOTFORM_RICO_FORM_ID
+        sync: false
+      - key: JOTFORM_API_KEY
+        sync: false
+      - key: JOTFORM_WEBHOOK_SECRET
+        sync: false
+
+      # ── GitHub webhook (secret) ───────────────────────────────────────────────
+      - key: GITHUB_WEBHOOK_SECRET
+        sync: false
+
+      # ── Billing mode ─────────────────────────────────────────────────────────
+      - key: BILLING_MODE
+        value: "manual"
+      - key: RICO_PRO_PRICE_AED
+        value: "29"
+      - key: RICO_PREMIUM_PRICE_AED
+        value: "49"
+
+      # ── Stripe (dormant in manual mode; activate by setting BILLING_MODE=stripe)
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRO_PRICE_ID
+        sync: false
+      - key: STRIPE_PREMIUM_PRICE_ID
+        sync: false
+
+      # ── Job search API (secret) ───────────────────────────────────────────────
+      - key: RAPIDAPI_KEY
+        sync: false
+
+      # ── Environment / URLs ────────────────────────────────────────────────────
+      - key: RICO_ENV
+        value: "production"
+      - key: APP_ENV
+        value: "production"
+      - key: FRONTEND_URL
+        value: "https://ricohunt.com"
+      - key: APP_URL
+        value: "https://ricohunt.com"
+      - key: RESET_BASE_URL
+        value: "https://ricohunt.com"
+      - key: DEPLOYED_AT
+        value: "2026-05-23T15:21:00Z"
+
+      # ── Cookies / CORS ────────────────────────────────────────────────────────
       - key: COOKIE_SECURE
         value: "true"
       - key: COOKIE_DOMAIN
         value: ".ricohunt.com"
       - key: CORS_ORIGINS
-        value: "https://ricohunt.com,https://www.ricohunt.com"
-      - key: APP_URL
-        value: "https://ricohunt.com"
-      - key: RICO_ENV
-        value: "production"
+        value: "https://ricohunt.com,https://www.ricohunt.com,https://web-rose-phi-35.vercel.app,http://localhost:3000"
+      - key: JWT_TTL_HOURS
+        value: "24"
+
+      # ── Safety / automation gates ─────────────────────────────────────────────
+      - key: RICO_ENABLE_AUTO_APPLY
+        value: "false"
+      - key: RICO_INTERACTIVE_APPLY
+        value: "false"
+      - key: RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS
+        value: "true"
+      - key: RICO_TELEGRAM_PUBLIC_ALERTS
+        value: "true"
+      - key: ALLOW_CI_APPLY
+        value: "false"
+
+      # ── Auto-apply config ─────────────────────────────────────────────────────
+      - key: AUTO_APPLY_ENABLED
+        value: "false"
+      - key: AUTO_APPLY_DRY_RUN
+        value: "true"
+      - key: AUTO_APPLY_MAX_PER_RUN
+        value: "3"
+      - key: AUTO_APPLY_DAILY_LIMIT
+        value: "30"
+      - key: AUTO_APPLY_COOLDOWN_SECONDS
+        value: "90"
+      - key: AUTO_APPLY_SCORE_THRESHOLD
+        value: "75"
+      - key: AUTO_APPLY_SCORE
+        value: "85"
+      - key: MANUAL_APPROVAL_SCORE
+        value: "65"
+      - key: AUTO_APPLY_EXCLUDE_KEYWORDS
+        value: "uae national,uae nationals only,uae national only,emirati only,graduate uae national only,quantity surveyor,surveyor,civil engineer,estimator,site engineer,co-founder,owner,founding partner,intern,internship"
+
+      # ── NaukriGulf config ─────────────────────────────────────────────────────
+      - key: NG_ENABLED
+        value: "true"
+      - key: NG_DRY_RUN
+        value: "true"
+      - key: NG_MAX_PER_RUN
+        value: "2"
+      - key: NG_DAILY_LIMIT
+        value: "5"
+      - key: NG_COOLDOWN_SECONDS
+        value: "180"
+      - key: NG_SCORE_THRESHOLD
+        value: "45"
+      - key: NG_MAX_SESSION_FAILURES
+        value: "3"
+      - key: NAUKRIGULF_EXCLUDE_KEYWORDS
+        value: "consultancy,pay fee,visa fee,commission only,whatsapp only,recruitment agency,placement agency,manpower supply,walk in interview,uae national,emirati only,quantity surveyor,civil engineer,site engineer,driver,technician"
+
+      # ── Indeed config ─────────────────────────────────────────────────────────
+      - key: INDEED_ENABLED
+        value: "false"
+      - key: INDEED_DRY_RUN
+        value: "false"
+      - key: INDEED_MAX_PER_RUN
+        value: "3"
+      - key: INDEED_DAILY_LIMIT
+        value: "15"
+      - key: INDEED_COOLDOWN_SECONDS
+        value: "120"
+      - key: INDEED_SCORE_THRESHOLD
+        value: "50"
+      - key: INDEED_STREET_ADDRESS
+        value: "Ajman, UAE"
+      - key: INDEED_RELEVANT_JOB_TITLE
+        value: "Sustainability & Environmental Operations Leader"
+      - key: INDEED_RELEVANT_COMPANY
+        value: "ECO Environmental Services"
+
+      # ── Job filtering ─────────────────────────────────────────────────────────
       - key: EXCLUDE_KEYWORDS
-        value: ""
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: RICO_OPENAI_MODEL
-        value: "gpt-4.1-mini"
-      - key: DEEPSEEK_API_KEY
-        sync: false
-      - key: DEEPSEEK_MODEL
-        value: "deepseek-v4-flash"
-      - key: HF_TOKEN
-        sync: false
-      - key: JOTFORM_FORM_ID
-        sync: false
-      - key: JOTFORM_WEBHOOK_SECRET
-        sync: false
-      - key: JOTFORM_API_KEY
-        sync: false
-      - key: HF_API_TOKEN
-        sync: false
-      - key: GITHUB_WEBHOOK_SECRET
-        sync: false
+        value: "surveyor,purchasing,procurement,interior,joinery,project engineer,hr officer,catering,accommodation,cad supervisor,technician,driver,consultant,recruitment agency,admin officer,secretary,personal assistant,uae national,emirati only,general manager,executive assistant,store manager,sales manager,marketing manager,business development manager"
+      - key: CV_PATH
+        value: "data/cv.pdf"
+      - key: PYTHON_VERSION
+        value: "3.11.9"

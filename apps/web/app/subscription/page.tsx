@@ -13,24 +13,29 @@ import {
     type SubscriptionMeResponse,
     type SubscriptionPlan,
 } from "@/lib/api";
+import { buildWhatsAppManageUrl, buildWhatsAppUpgradeUrl, isManualBillingMode } from "@/lib/billing";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 
-const SUBSCRIPTION_MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === 'true';
+const SUBSCRIPTION_MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === "true";
+const MANUAL_BILLING = isManualBillingMode();
 
 const FALLBACK_PLANS: SubscriptionPlan[] = [
     {
         id: "pro_monthly",
         plan: "pro",
         name: "Pro",
-        price_monthly: 50,
+        price_monthly: 29,
         currency: "AED",
-        description: "Higher Rico usage for active job seekers.",
+        description: "Smart AI job hunting for active UAE professionals.",
         features: [
-            "300 AI messages per month",
-            "100 saved jobs",
-            "20 profile optimizations per month",
+            "Unlimited CV analysis",
+            "Smart AI role recommendations",
+            "Advanced match scoring",
+            "Saved searches",
+            "Priority support",
+            "Higher daily job limits",
         ],
         entitlements: {
             monthly_ai_message_limit: 300,
@@ -39,21 +44,22 @@ const FALLBACK_PLANS: SubscriptionPlan[] = [
             premium_recommendations_enabled: false,
             application_automation_enabled: false,
         },
-        is_popular: false,
+        is_popular: true,
     },
     {
         id: "premium_monthly",
         plan: "premium",
         name: "Premium",
-        price_monthly: 150,
+        price_monthly: 49,
         currency: "AED",
-        description: "Full Rico automation and premium recommendations.",
+        description: "Full automation and premium AI recommendations.",
         features: [
-            "1500 AI messages per month",
-            "Unlimited saved jobs",
-            "100 profile optimizations per month",
-            "Premium recommendations",
-            "Application automation",
+            "Everything in Pro",
+            "Auto-apply system",
+            "Priority AI ranking",
+            "Advanced job automation",
+            "Premium job pipelines",
+            "Recruiter visibility (coming soon)",
         ],
         entitlements: {
             monthly_ai_message_limit: 1500,
@@ -62,7 +68,7 @@ const FALLBACK_PLANS: SubscriptionPlan[] = [
             premium_recommendations_enabled: true,
             application_automation_enabled: true,
         },
-        is_popular: true,
+        is_popular: false,
     },
 ];
 
@@ -76,6 +82,7 @@ function PlanCard({
     onUpgrade,
     onManage,
     maintenanceMode,
+    manualBilling,
 }: {
     plan: SubscriptionPlan;
     currentPlan: string | null;
@@ -86,6 +93,7 @@ function PlanCard({
     onUpgrade: (plan: "pro" | "premium") => void;
     onManage: () => void;
     maintenanceMode: boolean;
+    manualBilling: boolean;
 }) {
     const isCurrent = currentPlan === plan.plan && isActive;
     const isProPlan = plan.plan === "pro";
@@ -147,8 +155,8 @@ function PlanCard({
                         <span
                             className={`mt-0.5 w-4 h-4 flex-shrink-0 rounded-full flex items-center justify-center text-[10px] font-black ${
                                 isProPlan
-                                    ? "bg-[rgba(91,79,255,0.2)] text-[#7b6fff]"
-                                    : "bg-[rgba(255,45,142,0.2)] text-[#ff2d8e]"
+                                    ? "bg-[rgba(255,45,142,0.2)] text-[#ff2d8e]"
+                                    : "bg-[rgba(91,79,255,0.2)] text-[#7b6fff]"
                             }`}
                         >
                             ✓
@@ -165,7 +173,7 @@ function PlanCard({
                         disabled
                         className="w-full py-3 rounded-xl text-[13px] font-bold transition-all opacity-50 bg-[rgba(245,166,35,0.08)] text-[#f5a623] border border-[rgba(245,166,35,0.25)]"
                     >
-                        Backend maintenance
+                        Temporarily unavailable
                     </button>
                 ) : isCurrent ? (
                     <button
@@ -175,24 +183,42 @@ function PlanCard({
                         Manage Subscription
                     </button>
                 ) : isLoggedIn ? (
-                    <button
-                        onClick={() => onUpgrade(plan.plan)}
-                        disabled={anyCheckoutPending}
-                        className={`w-full py-3 rounded-xl text-[13px] font-bold transition-all disabled:opacity-40 ${
-                            plan.is_popular
-                                ? "bg-[#ff2d8e] text-white hover:bg-[#ff4a9e] shadow-[0_0_20px_rgba(255,45,142,0.3)]"
-                                : "bg-[rgba(91,79,255,0.15)] text-[#7b6fff] border border-[rgba(91,79,255,0.35)] hover:bg-[rgba(91,79,255,0.25)]"
-                        }`}
-                    >
-                        {loading ? (
-                            <span className="flex items-center justify-center gap-2">
-                                <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                Connecting…
-                            </span>
-                        ) : (
-                            `Upgrade to ${plan.name}`
-                        )}
-                    </button>
+                    manualBilling ? (
+                        <a
+                            href={buildWhatsAppUpgradeUrl(plan.plan)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-[13px] font-bold transition-all ${
+                                plan.is_popular
+                                    ? "bg-[#ff2d8e] text-white hover:bg-[#ff4a9e] shadow-[0_0_20px_rgba(255,45,142,0.3)]"
+                                    : "bg-[rgba(91,79,255,0.15)] text-[#7b6fff] border border-[rgba(91,79,255,0.35)] hover:bg-[rgba(91,79,255,0.25)]"
+                            }`}
+                        >
+                            <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                            </svg>
+                            Continue on WhatsApp
+                        </a>
+                    ) : (
+                        <button
+                            onClick={() => onUpgrade(plan.plan)}
+                            disabled={anyCheckoutPending}
+                            className={`w-full py-3 rounded-xl text-[13px] font-bold transition-all disabled:opacity-40 ${
+                                plan.is_popular
+                                    ? "bg-[#ff2d8e] text-white hover:bg-[#ff4a9e] shadow-[0_0_20px_rgba(255,45,142,0.3)]"
+                                    : "bg-[rgba(91,79,255,0.15)] text-[#7b6fff] border border-[rgba(91,79,255,0.35)] hover:bg-[rgba(91,79,255,0.25)]"
+                            }`}
+                        >
+                            {loading ? (
+                                <span className="flex items-center justify-center gap-2">
+                                    <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                    Connecting…
+                                </span>
+                            ) : (
+                                `Upgrade to ${plan.name}`
+                            )}
+                        </button>
+                    )
                 ) : (
                     <a
                         href="/login"
@@ -206,6 +232,15 @@ function PlanCard({
                     </a>
                 )}
             </div>
+
+            {/* WhatsApp sub-copy in manual mode */}
+            {manualBilling && isLoggedIn && !isCurrent && !maintenanceMode && (
+                <p className="mt-3 text-[11px] text-[#5a5a7a] text-center leading-snug">
+                    We&apos;ll confirm payment and activate your account manually.
+                    <br />
+                    Use your Rico account email in the message.
+                </p>
+            )}
         </div>
     );
 }
@@ -287,7 +322,6 @@ export default function SubscriptionPage() {
     const [planError, setPlanError] = useState(false);
     const [subscriptionError, setSubscriptionError] = useState(false);
     const [checkingOut, setCheckingOut] = useState<"pro" | "premium" | null>(null);
-    const [mockNotice, setMockNotice] = useState<"pro" | "premium" | null>(null);
 
     const loadPlans = useCallback(() => {
         if (maintenanceMode) {
@@ -341,12 +375,13 @@ export default function SubscriptionPage() {
                 toast("Checkout is paused during backend maintenance", "error");
                 return;
             }
+            // In manual mode the CTA is a direct WhatsApp link — this handler is only
+            // reached in Stripe mode.
             setCheckingOut(plan);
-            setMockNotice(null);
             try {
                 const result = await createCheckoutSession(plan);
                 if (result.provider === "mock") {
-                    setMockNotice(plan);
+                    toast("Payment processing is being configured. No charge has been made.", "error");
                 } else {
                     window.location.href = result.checkout_url;
                 }
@@ -368,10 +403,15 @@ export default function SubscriptionPage() {
             toast("Subscription management is paused during backend maintenance", "error");
             return;
         }
+        if (MANUAL_BILLING) {
+            // In manual mode direct to WhatsApp for plan changes
+            window.open(buildWhatsAppManageUrl(), "_blank", "noopener,noreferrer");
+            return;
+        }
         try {
             const result = await createCustomerPortalSession();
             if (result.provider === "mock") {
-                toast("Stripe Customer Portal is not configured", "error");
+                toast("Subscription portal is not configured", "error");
             } else {
                 window.location.href = result.checkout_url;
             }
@@ -379,7 +419,7 @@ export default function SubscriptionPage() {
             const msg =
                 err instanceof ApiError
                     ? err.message
-                    : "Failed to open customer portal. Please try again.";
+                    : "Failed to open subscription portal. Please try again.";
             toast(msg, "error");
         }
     }, [maintenanceMode, toast]);
@@ -395,7 +435,6 @@ export default function SubscriptionPage() {
         >
             <div className="max-w-3xl flex flex-col gap-8">
 
-                {/* Backend maintenance banner — only shown when NEXT_PUBLIC_MAINTENANCE_MODE=true */}
                 {maintenanceMode && (
                     <>
                         <div className="flex items-start gap-3 rounded-xl border border-[rgba(245,166,35,0.35)] bg-[rgba(245,166,35,0.08)] px-5 py-4">
@@ -403,17 +442,15 @@ export default function SubscriptionPage() {
                             <div>
                                 <p className="text-[13px] font-semibold text-[#f5a623]">Backend maintenance in progress</p>
                                 <p className="mt-0.5 text-[12px] text-[#a08040]">
-                                    Rico&apos;s backend service is temporarily offline while hosting is being restored.
-                                    Subscription, login, Telegram, and Stripe webhook features are paused.
-                                    Do not attempt payment validation until the backend is back online.
+                                    Rico&apos;s backend service is temporarily offline.
+                                    Subscription features are paused until the backend returns.
                                 </p>
                             </div>
                         </div>
                         <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 px-5 py-4">
                             <p className="text-[13px] font-semibold text-white">Subscription status unavailable</p>
                             <p className="mt-1 text-[12px] text-[#8080a0]">
-                                Plan cards below are static reference information. Checkout, current-plan lookup,
-                                renewal dates, and portal access are disabled until the backend returns.
+                                Plan cards below are static reference information. Activation is disabled until the backend returns.
                             </p>
                         </div>
                     </>
@@ -437,38 +474,11 @@ export default function SubscriptionPage() {
                     </div>
                 )}
 
-                {/* Stripe cancel redirect banner */}
-                <Suspense>
-                  <CancelBanner />
-                </Suspense>
-
-                {/* Checkout not yet live notice */}
-                {mockNotice && (
-                    <div className="flex items-start gap-3 rounded-xl border border-[rgba(245,166,35,0.35)] bg-[rgba(245,166,35,0.08)] px-5 py-4">
-                        <span className="text-[#f5a623] text-[18px] mt-0.5">⚠</span>
-                        <div className="flex-1">
-                            <p className="text-[13px] font-semibold text-[#f5a623]">
-                                {mockNotice.charAt(0).toUpperCase() + mockNotice.slice(1)} checkout coming soon
-                            </p>
-                            <p className="mt-0.5 text-[12px] text-[#a08040]">
-                                Stripe payment processing is being configured. No charge has been made.
-                                Once live, clicking Upgrade will take you directly to secure checkout.
-                            </p>
-                            <a
-                                href="/command"
-                                className="mt-2 inline-block text-[12px] font-semibold text-[#7b6fff] hover:underline"
-                            >
-                                Continue with Free plan →
-                            </a>
-                        </div>
-                        <button
-                            onClick={() => setMockNotice(null)}
-                            className="ml-auto text-[#a08040] hover:text-[#f5a623] text-[18px] leading-none flex-shrink-0"
-                            aria-label="Dismiss"
-                        >
-                            ×
-                        </button>
-                    </div>
+                {/* Stripe cancel redirect banner (only relevant in Stripe mode) */}
+                {!MANUAL_BILLING && (
+                    <Suspense>
+                        <CancelBanner />
+                    </Suspense>
                 )}
 
                 {/* Past-due payment warning */}
@@ -476,9 +486,10 @@ export default function SubscriptionPage() {
                     <div className="flex items-start gap-3 rounded-xl border border-[rgba(255,94,91,0.35)] bg-[rgba(255,94,91,0.08)] px-5 py-4">
                         <span className="text-[#ff5e5b] text-[18px] mt-0.5">⚠</span>
                         <div>
-                            <p className="text-[13px] font-semibold text-[#ff5e5b]">Payment failed</p>
+                            <p className="text-[13px] font-semibold text-[#ff5e5b]">Payment issue</p>
                             <p className="mt-0.5 text-[12px] text-[#ffaaaa]">
-                                Your last payment did not go through. Please update your payment method to keep your plan active.
+                                There was an issue with your subscription.
+                                Please contact Rico support to resolve this.
                             </p>
                         </div>
                     </div>
@@ -495,7 +506,7 @@ export default function SubscriptionPage() {
                             {sub.subscription.current_period_end && (
                                 <p className="mt-0.5 text-[12px] text-[#5a8a8a]">
                                     {sub.subscription.cancel_at
-                                        ? "Cancels on "
+                                        ? "Expires on "
                                         : "Renews "}
                                     {new Date(
                                         sub.subscription.cancel_at ?? sub.subscription.current_period_end
@@ -543,6 +554,7 @@ export default function SubscriptionPage() {
                                 onUpgrade={handleUpgrade}
                                 onManage={handleManage}
                                 maintenanceMode={maintenanceMode}
+                                manualBilling={MANUAL_BILLING}
                             />
                         ))}
                     </div>
@@ -560,27 +572,35 @@ export default function SubscriptionPage() {
                     <h3 className="text-[18px] font-semibold text-white mb-6">Frequently Asked Questions</h3>
                     <div className="space-y-4">
                         <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 p-5">
-                            <h4 className="text-[14px] font-semibold text-white mb-2">How do I cancel my subscription?</h4>
+                            <h4 className="text-[14px] font-semibold text-white mb-2">How does upgrading work?</h4>
                             <p className="text-[13px] text-[#5a5a7a]">
-                                You can cancel or manage your subscription at any time by clicking the &quot;Manage Subscription&quot; button on your active plan. This will take you to the Stripe Customer Portal where you can cancel, change plans, or update payment methods.
+                                {MANUAL_BILLING
+                                    ? "Click the WhatsApp button on your chosen plan. Send us your Rico account email and preferred plan. We'll confirm your payment and activate your account within a few hours."
+                                    : "Click Upgrade to be taken to secure checkout. After payment your plan activates immediately."}
                             </p>
                         </div>
                         <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 p-5">
-                            <h4 className="text-[14px] font-semibold text-white mb-2">What happens when I cancel?</h4>
+                            <h4 className="text-[14px] font-semibold text-white mb-2">What payment methods are accepted?</h4>
                             <p className="text-[13px] text-[#5a5a7a]">
-                                Your subscription remains active until the end of your current billing period. You&apos;ll continue to have access to all features until then. After cancellation, your account will revert to the Free tier.
+                                {MANUAL_BILLING
+                                    ? "We accept bank transfer, Ziina, and Mamo. After payment, send the receipt and your Rico account email via WhatsApp for activation."
+                                    : "We accept all major credit and debit cards. Your payment is securely processed and card details are never stored on our servers."}
                             </p>
                         </div>
                         <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 p-5">
-                            <h4 className="text-[14px] font-semibold text-white mb-2">Can I change my plan later?</h4>
+                            <h4 className="text-[14px] font-semibold text-white mb-2">How quickly is my account activated?</h4>
                             <p className="text-[13px] text-[#5a5a7a]">
-                                Yes, you can upgrade or downgrade your plan at any time through the Customer Portal. When upgrading, you&apos;ll be charged the prorated difference immediately. When downgrading, the new rate takes effect at the next billing cycle.
+                                {MANUAL_BILLING
+                                    ? "After we receive your payment confirmation via WhatsApp, your Rico account is activated within a few hours. You will need to logout and log back in if premium access does not appear immediately."
+                                    : "Activation is immediate after successful payment."}
                             </p>
                         </div>
                         <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 p-5">
-                            <h4 className="text-[14px] font-semibold text-white mb-2">What payment methods do you accept?</h4>
+                            <h4 className="text-[14px] font-semibold text-white mb-2">Can I change or cancel my plan?</h4>
                             <p className="text-[13px] text-[#5a5a7a]">
-                                We accept all major credit and debit cards through Stripe. Your payment information is securely processed and never stored on our servers.
+                                {MANUAL_BILLING
+                                    ? "Contact Rico support via WhatsApp to adjust or cancel your subscription. Your access continues until the end of your current period."
+                                    : "You can upgrade, downgrade, or cancel at any time through the subscription management portal. When cancelling, access continues until the end of the billing period."}
                             </p>
                         </div>
                     </div>
