@@ -54,7 +54,7 @@ class TestSubscriptionPlans:
         assert r.status_code == 200
         plans = r.json()["plans"]
         assert [plan["plan"] for plan in plans] == ["pro", "premium"]
-        assert [plan["price_monthly"] for plan in plans] == [50, 150]
+        assert [plan["price_monthly"] for plan in plans] == [29, 49]
         assert all(plan["currency"] == "AED" for plan in plans)
 
     def test_pro_entitlement_shape(self, client):
@@ -98,6 +98,10 @@ class TestCurrentSubscription:
 
 
 class TestSubscriptionCheckout:
+    @pytest.fixture(autouse=True)
+    def stripe_mode(self, monkeypatch):
+        monkeypatch.setenv("BILLING_MODE", "stripe")
+
     def test_checkout_returns_503_without_stripe_env(self, auth_client, monkeypatch):
         monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
         monkeypatch.delenv("STRIPE_PRO_PRICE_ID", raising=False)
@@ -209,6 +213,10 @@ class TestSubscriptionCheckout:
 
 
 class TestCustomerPortal:
+    @pytest.fixture(autouse=True)
+    def stripe_mode(self, monkeypatch):
+        monkeypatch.setenv("BILLING_MODE", "stripe")
+
     def test_portal_returns_mock_without_stripe_secret(self, auth_client, monkeypatch):
         monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
 

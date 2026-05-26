@@ -79,7 +79,7 @@ function PlanActivatedContent() {
         <p className="mt-2 text-[13px] text-[#8080a0] leading-relaxed max-w-sm mx-auto">
           {planLabel
             ? `Your ${planLabel} plan is active. Start using Rico with your new limits right now.`
-            : "Your payment is being processed by Stripe. Plan activation may take a moment to reflect in your account."}
+            : "Your plan activation may take a moment to reflect in your account. Refresh or contact support if your plan has not updated."}
         </p>
         <Suspense>
           <SessionHint />

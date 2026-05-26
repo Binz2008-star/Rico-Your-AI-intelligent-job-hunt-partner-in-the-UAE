@@ -35,13 +35,16 @@ PRO_PLAN = SubscriptionPlan(
     id="pro_monthly",
     plan=SubscriptionTier.PRO,
     name="Pro",
-    price_monthly=50,
+    price_monthly=int(os.getenv("RICO_PRO_PRICE_AED", "29")),
     currency="AED",
-    description="Higher Rico usage for active job seekers.",
+    description="Smart AI job hunting for active UAE professionals.",
     features=[
-        "300 AI messages per month",
-        "100 saved jobs",
-        "20 profile optimizations per month",
+        "Unlimited CV analysis",
+        "Smart AI role recommendations",
+        "Advanced match scoring",
+        "Saved searches",
+        "Priority support",
+        "Higher daily job limits",
     ],
     entitlements=SubscriptionEntitlements(
         monthly_ai_message_limit=300,
@@ -50,21 +53,23 @@ PRO_PLAN = SubscriptionPlan(
         premium_recommendations_enabled=False,
         application_automation_enabled=False,
     ),
+    is_popular=True,
 )
 
 PREMIUM_PLAN = SubscriptionPlan(
     id="premium_monthly",
     plan=SubscriptionTier.PREMIUM,
     name="Premium",
-    price_monthly=150,
+    price_monthly=int(os.getenv("RICO_PREMIUM_PRICE_AED", "49")),
     currency="AED",
-    description="Full Rico automation and premium recommendations.",
+    description="Full automation and premium AI recommendations.",
     features=[
-        "1500 AI messages per month",
-        "Unlimited saved jobs",
-        "100 profile optimizations per month",
-        "Premium recommendations",
-        "Application automation",
+        "Everything in Pro",
+        "Auto-apply system",
+        "Priority AI ranking",
+        "Advanced job automation",
+        "Premium job pipelines",
+        "Recruiter visibility (coming soon)",
     ],
     entitlements=SubscriptionEntitlements(
         monthly_ai_message_limit=1500,
@@ -73,7 +78,7 @@ PREMIUM_PLAN = SubscriptionPlan(
         premium_recommendations_enabled=True,
         application_automation_enabled=True,
     ),
-    is_popular=True,
+    is_popular=False,
 )
 
 PAID_PLANS = {
@@ -180,6 +185,12 @@ def build_checkout_response(
     user_id: str,
     request: SubscriptionCreateRequest,
 ) -> CheckoutResponse:
+    from src.billing_mode import is_manual_billing_mode
+    if is_manual_billing_mode():
+        raise HTTPException(
+            status_code=403,
+            detail="Online checkout is not enabled. Please use manual payment activation.",
+        )
     plan = get_paid_plan(request.plan)
     stripe_key = os.getenv("STRIPE_SECRET_KEY", "").strip()
     stripe_price = _stripe_price_id(plan.plan)
@@ -282,8 +293,14 @@ def check_usage_allowed(user_id: str, feature: str, current_usage: int) -> Usage
 
 def create_customer_portal_session(user_id: str) -> CheckoutResponse:
     """Create a Stripe Customer Portal session for subscription management."""
+    from src.billing_mode import is_manual_billing_mode
+    if is_manual_billing_mode():
+        raise HTTPException(
+            status_code=403,
+            detail="Online checkout is not enabled. Please use manual payment activation.",
+        )
     from src.repositories.subscription_repo import get_subscription
-    
+
     stripe_key = os.getenv("STRIPE_SECRET_KEY", "").strip()
     if not stripe_key:
         return CheckoutResponse(
