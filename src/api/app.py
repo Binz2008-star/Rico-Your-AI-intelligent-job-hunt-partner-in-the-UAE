@@ -100,7 +100,14 @@ def init_sentry() -> None:
 
 init_sentry()
 
-_CRITICAL_TABLES = frozenset({"users", "action_audit_log", "password_reset_tokens"})
+_CRITICAL_TABLES = frozenset({
+    "users",
+    "action_audit_log",
+    "password_reset_tokens",
+    "user_subscriptions",
+    "subscription_events",
+    "rico_users",
+})
 
 
 def _check_critical_tables() -> None:

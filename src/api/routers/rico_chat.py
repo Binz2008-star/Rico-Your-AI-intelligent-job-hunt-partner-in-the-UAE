@@ -1182,6 +1182,8 @@ async def confirm_cv_profile(
             "message": "Profile confirmed. I can now use it for job matching.",
             "profile": profile_updates,
         }
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception(
             "cv_profile_confirm_error user=%s filename=%s error=%s request_ref=%s",

@@ -98,22 +98,15 @@ class TestCurrentSubscription:
 
 
 class TestSubscriptionCheckout:
-    def test_checkout_returns_mock_url_without_stripe_env(self, auth_client, monkeypatch):
+    def test_checkout_returns_503_without_stripe_env(self, auth_client, monkeypatch):
         monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
         monkeypatch.delenv("STRIPE_PRO_PRICE_ID", raising=False)
         monkeypatch.delenv("STRIPE_PRICE_PRO", raising=False)
 
         r = auth_client.post("/api/v1/subscription/checkout", json={"plan": "pro"})
 
-        assert r.status_code == 200
-        body = r.json()
-        assert body["provider"] == "mock"
-        assert body["status"] == "mock"
-        assert body["plan"] == "pro"
-        assert "checkout_url" in body
-        assert "plan=pro" in body["checkout_url"]
-        assert "alice@rico.ai" not in body["checkout_url"]
-        assert "STRIPE" not in body["checkout_url"]
+        assert r.status_code == 503
+        assert "not available" in r.json()["detail"].lower()
 
     def test_checkout_creates_real_stripe_session_when_env_exists(self, auth_client, monkeypatch):
         calls = []
@@ -199,16 +192,15 @@ class TestSubscriptionCheckout:
         assert r.status_code == 200
         assert calls[0]["line_items"] == [{"price": "price_new_pro", "quantity": 1}]
 
-    def test_checkout_returns_mock_when_secret_exists_but_price_missing(self, auth_client, monkeypatch):
+    def test_checkout_returns_503_when_secret_exists_but_price_missing(self, auth_client, monkeypatch):
         monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_safe")
         monkeypatch.delenv("STRIPE_PRO_PRICE_ID", raising=False)
         monkeypatch.delenv("STRIPE_PRICE_PRO", raising=False)
 
         r = auth_client.post("/api/v1/subscription/checkout", json={"plan": "pro"})
 
-        assert r.status_code == 200
-        assert r.json()["provider"] == "mock"
-        assert r.json()["checkout_url"] == "https://checkout.ricohunt.com/mock?plan=pro"
+        assert r.status_code == 503
+        assert "not available" in r.json()["detail"].lower()
 
     def test_checkout_rejects_free_plan(self, auth_client):
         r = auth_client.post("/api/v1/subscription/checkout", json={"plan": "free"})
