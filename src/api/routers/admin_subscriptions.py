@@ -44,16 +44,20 @@ def admin_activate_subscription(
     Finds the user, sets their subscription to active with the requested plan
     and expiry. Logs payment_reference; DB column reserved for future schema.
     """
+    from src.db import is_db_available
     from src.repositories.users_repo import get_user_by_email
     from src.repositories.subscription_repo import upsert_subscription
 
     email = body.email.strip().lower()
-    user = get_user_by_email(email)
-    if not user:
-        raise HTTPException(status_code=404, detail=f"No active user found with email: {email}")
 
     if body.duration_days < 1 or body.duration_days > 3650:
         raise HTTPException(status_code=422, detail="duration_days must be between 1 and 3650")
+
+    if not is_db_available():
+        raise HTTPException(status_code=503, detail="Database unavailable. Please retry.")
+    user = get_user_by_email(email)
+    if not user:
+        raise HTTPException(status_code=404, detail=f"No active user found with email: {email}")
 
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(days=body.duration_days)
@@ -77,6 +81,7 @@ def admin_activate_subscription(
         current_period_end=expires_at,
         cancel_at=None,
         canceled_at=None,
+        clear_cancellation=True,
     )
 
     if result is None:

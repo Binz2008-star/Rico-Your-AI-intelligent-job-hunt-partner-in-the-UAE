@@ -138,6 +138,7 @@ def upsert_subscription(
     profile_optimization_limit: int | None = None,
     premium_recommendations_enabled: bool | None = None,
     application_automation_enabled: bool | None = None,
+    clear_cancellation: bool = False,
 ) -> dict[str, Any] | None:
     """Create or update a subscription record.
 
@@ -145,8 +146,19 @@ def upsert_subscription(
     an existing customer/subscription ID — only an explicit non-None value
     will overwrite.
 
+    Pass clear_cancellation=True (admin reactivation) to unconditionally NULL
+    out cancel_at and canceled_at rather than COALESCE-preserving the old values.
+
     Returns the persisted row dict, or None if DB is unavailable/fails.
     """
+    # cancel_at / canceled_at SQL fragment: COALESCE by default; direct NULL when clearing.
+    if clear_cancellation:
+        cancel_sql = "NULL"
+        canceled_sql = "NULL"
+    else:
+        cancel_sql = "COALESCE(EXCLUDED.cancel_at, user_subscriptions.cancel_at)"
+        canceled_sql = "COALESCE(EXCLUDED.canceled_at, user_subscriptions.canceled_at)"
+
     try:
         with _db_transaction() as conn:
             if conn is None:
@@ -154,7 +166,7 @@ def upsert_subscription(
             with conn.cursor() as cur:
                 from psycopg2.extras import Json  # noqa: PLC0415 — deferred to avoid eager psycopg2 dep
                 cur.execute(
-                    """
+                    f"""
                     INSERT INTO user_subscriptions
                         (user_id, plan, status,
                          stripe_customer_id, stripe_subscription_id,
@@ -182,14 +194,8 @@ def upsert_subscription(
                             EXCLUDED.current_period_end,
                             user_subscriptions.current_period_end
                         ),
-                        cancel_at                      = COALESCE(
-                            EXCLUDED.cancel_at,
-                            user_subscriptions.cancel_at
-                        ),
-                        canceled_at                    = COALESCE(
-                            EXCLUDED.canceled_at,
-                            user_subscriptions.canceled_at
-                        ),
+                        cancel_at                      = {cancel_sql},
+                        canceled_at                    = {canceled_sql},
                         monthly_ai_message_limit        = COALESCE(
                             EXCLUDED.monthly_ai_message_limit,
                             user_subscriptions.monthly_ai_message_limit
