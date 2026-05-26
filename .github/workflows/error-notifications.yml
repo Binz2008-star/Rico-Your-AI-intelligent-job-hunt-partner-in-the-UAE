@@ -72,7 +72,7 @@ jobs:
 
       - name: Send Telegram Alert
         if: ${{ github.event.workflow_run.conclusion == 'failure' && env.TELEGRAM_CONFIGURED == 'true' }}
-        uses: appleboy/telegram-action@b0a4cd5ac71f9b5a832aca7bf7fd66af5e93e625
+        uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_TO }}
           token: ${{ secrets.TELEGRAM_TOKEN }}
@@ -88,7 +88,7 @@ jobs:
 
       - name: Send Discord Alert
         if: ${{ github.event.workflow_run.conclusion == 'failure' && env.DISCORD_CONFIGURED == 'true' }}
-        uses: appleboy/discord-action@f9e2c8a91a6e9a31ddde7c95db55a39e9b65a7cf
+        uses: appleboy/discord-action@master
         with:
           webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
           message: |
