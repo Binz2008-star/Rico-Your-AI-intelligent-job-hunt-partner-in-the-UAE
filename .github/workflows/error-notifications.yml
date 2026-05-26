@@ -15,26 +15,41 @@ jobs:
       DISCORD_CONFIGURED: ${{ secrets.DISCORD_WEBHOOK_URL != '' }}
 
     steps:
-      - name: 🚨 Create PagerDuty Incident on Failure
+      - name: Create PagerDuty Incident on Failure
         if: ${{ github.event.workflow_run.conclusion == 'failure' && env.PAGERDUTY_CONFIGURED == 'true' }}
-        uses: Entle/action-pagerduty-alert@1.0.5
-        with:
-          pagerduty-integration-key: ${{ secrets.PAGERDUTY_INTEGRATION_KEY }}
-          pagerduty-dedup-key: "github-workflow-${{ github.event.workflow_run.name }}-${{ github.repository }}"
-          severity: critical
-          runbook-url: "https://github.com/Binz2008-star/job-automation-system-1/wiki/Runbook"
+        run: |
+          curl -s --fail -X POST https://events.pagerduty.com/v2/enqueue \
+            -H "Content-Type: application/json" \
+            -d '{
+              "routing_key": "${{ secrets.PAGERDUTY_INTEGRATION_KEY }}",
+              "event_action": "trigger",
+              "dedup_key": "github-workflow-${{ github.event.workflow_run.name }}-${{ github.repository }}",
+              "payload": {
+                "summary": "GitHub workflow failed: ${{ github.event.workflow_run.name }} on ${{ github.repository }}",
+                "severity": "critical",
+                "source": "github-actions",
+                "custom_details": {
+                  "branch": "${{ github.event.workflow_run.head_branch }}",
+                  "commit": "${{ github.event.workflow_run.head_sha }}",
+                  "run_url": "${{ github.event.workflow_run.html_url }}"
+                }
+              }
+            }'
 
-      - name: ✅ Resolve PagerDuty Incident on Success
+      - name: Resolve PagerDuty Incident on Success
         if: ${{ github.event.workflow_run.conclusion == 'success' && env.PAGERDUTY_CONFIGURED == 'true' }}
-        uses: Entle/action-pagerduty-alert@1.0.5
-        with:
-          pagerduty-integration-key: ${{ secrets.PAGERDUTY_INTEGRATION_KEY }}
-          resolve: true
-          pagerduty-dedup-key: "github-workflow-${{ github.event.workflow_run.name }}-${{ github.repository }}"
+        run: |
+          curl -s --fail -X POST https://events.pagerduty.com/v2/enqueue \
+            -H "Content-Type: application/json" \
+            -d '{
+              "routing_key": "${{ secrets.PAGERDUTY_INTEGRATION_KEY }}",
+              "event_action": "resolve",
+              "dedup_key": "github-workflow-${{ github.event.workflow_run.name }}-${{ github.repository }}"
+            }'
 
       - name: Send Telegram Alert
         if: ${{ github.event.workflow_run.conclusion == 'failure' && env.TELEGRAM_CONFIGURED == 'true' }}
-        uses: appleboy/telegram-action@master
+        uses: appleboy/telegram-action@b0a4cd5ac71f9b5a832aca7bf7fd66af5e93e625
         with:
           to: ${{ secrets.TELEGRAM_TO }}
           token: ${{ secrets.TELEGRAM_TOKEN }}
@@ -50,7 +65,7 @@ jobs:
 
       - name: Send Discord Alert
         if: ${{ github.event.workflow_run.conclusion == 'failure' && env.DISCORD_CONFIGURED == 'true' }}
-        uses: appleboy/discord-action@master
+        uses: appleboy/discord-action@f9e2c8a91a6e9a31ddde7c95db55a39e9b65a7cf
         with:
           webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
           message: |
