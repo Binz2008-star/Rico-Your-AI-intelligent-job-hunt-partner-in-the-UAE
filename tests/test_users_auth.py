@@ -294,6 +294,113 @@ class TestRegisterEndpoint:
         assert data["role"] == "user"
         assert data["created"] is True
 
+    def test_register_attempts_admin_signup_notification(self, user_client):
+        _reset_limiter()
+        created = User(
+            id=12, email="notify@rico.ai", password_hash="$2b$12$fakehash",
+            role="user", is_active=True,
+            created_at=datetime(2026, 1, 2, 3, 4, tzinfo=timezone.utc),
+            last_login_at=None,
+        )
+        env = {
+            "ENABLE_SIGNUP_EMAIL_NOTIFICATIONS": "true",
+            "ADMIN_SIGNUP_NOTIFICATION_EMAIL": "info@ricohunt.com",
+        }
+        with patch("src.repositories.users_repo.get_user_by_email", return_value=None), \
+             patch("src.api.auth._hash_password", return_value="$2b$12$fakehash"), \
+             patch("src.repositories.users_repo.create_user", return_value=created), \
+             patch("src.services.signup_notifications.send_email", return_value=True) as send_email, \
+             patch.dict(os.environ, env, clear=False):
+            r = user_client.post(
+                "/api/v1/auth/register",
+                json={"email": "notify@rico.ai", "password": "SecurePass1"},
+            )
+
+        assert r.status_code == 201
+        send_email.assert_called_once()
+        kwargs = send_email.call_args.kwargs
+        assert kwargs["to_email"] == "info@ricohunt.com"
+        assert kwargs["subject"] == "New RicoHunt signup"
+        assert "Email: notify@rico.ai" in kwargs["body"]
+        assert "User ID: 12" in kwargs["body"]
+        assert "Plan: free" in kwargs["body"]
+        assert "Source: website" in kwargs["body"]
+
+    def test_register_succeeds_when_signup_notification_fails(self, user_client):
+        _reset_limiter()
+        created = User(
+            id=13, email="mailfail@rico.ai", password_hash="$2b$12$fakehash",
+            role="user", is_active=True,
+            created_at=datetime(2026, 1, 2, 3, 4, tzinfo=timezone.utc),
+            last_login_at=None,
+        )
+        with patch("src.repositories.users_repo.get_user_by_email", return_value=None), \
+             patch("src.api.auth._hash_password", return_value="$2b$12$fakehash"), \
+             patch("src.repositories.users_repo.create_user", return_value=created), \
+             patch("src.services.signup_notifications.send_email", side_effect=RuntimeError("provider down")), \
+             patch.dict(os.environ, {"ENABLE_SIGNUP_EMAIL_NOTIFICATIONS": "true"}, clear=False):
+            r = user_client.post(
+                "/api/v1/auth/register",
+                json={"email": "mailfail@rico.ai", "password": "SecurePass1"},
+            )
+
+        assert r.status_code == 201
+        assert r.json()["email"] == "mailfail@rico.ai"
+
+    def test_signup_notification_payload_excludes_sensitive_fields(self, user_client):
+        _reset_limiter()
+        created = User(
+            id=14, email="safe@rico.ai", password_hash="$2b$12$fakehash",
+            role="user", is_active=True,
+            created_at=datetime(2026, 1, 2, 3, 4, tzinfo=timezone.utc),
+            last_login_at=None,
+        )
+        with patch("src.repositories.users_repo.get_user_by_email", return_value=None), \
+             patch("src.api.auth._hash_password", return_value="$2b$12$fakehash"), \
+             patch("src.repositories.users_repo.create_user", return_value=created), \
+             patch("src.services.signup_notifications.send_email", return_value=True) as send_email, \
+             patch.dict(os.environ, {"ENABLE_SIGNUP_EMAIL_NOTIFICATIONS": "true"}, clear=False):
+            r = user_client.post(
+                "/api/v1/auth/register",
+                json={
+                    "email": "safe@rico.ai",
+                    "password": "DoNotLeakPass123",
+                    "role": "admin",
+                    "public_user_id_to_merge": "public:abc12345",
+                },
+            )
+
+        assert r.status_code == 201
+        body = send_email.call_args.kwargs["body"]
+        assert "DoNotLeakPass123" not in body
+        assert "password" not in body.lower()
+        assert "access_token" not in body
+        assert "session" not in body.lower()
+        assert "cookie" not in body.lower()
+        assert "reset" not in body.lower()
+        assert "public:abc12345" not in body
+
+    def test_signup_notification_can_be_disabled(self, user_client):
+        _reset_limiter()
+        created = User(
+            id=15, email="disabled@rico.ai", password_hash="$2b$12$fakehash",
+            role="user", is_active=True,
+            created_at=datetime(2026, 1, 2, 3, 4, tzinfo=timezone.utc),
+            last_login_at=None,
+        )
+        with patch("src.repositories.users_repo.get_user_by_email", return_value=None), \
+             patch("src.api.auth._hash_password", return_value="$2b$12$fakehash"), \
+             patch("src.repositories.users_repo.create_user", return_value=created), \
+             patch("src.services.signup_notifications.send_email", return_value=True) as send_email, \
+             patch.dict(os.environ, {"ENABLE_SIGNUP_EMAIL_NOTIFICATIONS": "false"}, clear=False):
+            r = user_client.post(
+                "/api/v1/auth/register",
+                json={"email": "disabled@rico.ai", "password": "SecurePass1"},
+            )
+
+        assert r.status_code == 201
+        send_email.assert_not_called()
+
     def test_register_duplicate_returns_409(self, admin_client):
         _reset_limiter()
         with patch("src.repositories.users_repo.get_user_by_email", return_value=_DB_USER):
