@@ -119,7 +119,7 @@ export default function PrivacyPage() {
                 <li>Withdraw consent where processing is consent-based</li>
               </ul>
               <p className="mt-3">
-                To exercise these rights, contact us at privacy@ricohunt.com
+                To exercise these rights, contact us at info@ricohunt.com
               </p>
             </section>
 
@@ -154,7 +154,7 @@ export default function PrivacyPage() {
               <p>
                 For privacy-related questions or to exercise your rights, contact:
                 <br />
-                Email: privacy@ricohunt.com
+                Email: info@ricohunt.com
                 <br />
                 Address: Dubai, United Arab Emirates
               </p>
@@ -169,6 +169,7 @@ export default function PrivacyPage() {
           <span className="text-xs font-medium text-white">Privacy</span>
           <Link href="/refund-policy" className="text-xs text-text-tertiary transition-colors hover:text-white">Refunds</Link>
         </div>
+        <p className="mb-2 text-xs text-text-tertiary">For inquiries, support, and business communication: <a href="mailto:info@ricohunt.com" className="text-cyan transition-colors hover:text-white">info@ricohunt.com</a></p>
         <p className="text-xs text-text-tertiary">© 2026 Rico Hunt. All rights reserved.</p>
       </footer>
     </div>
