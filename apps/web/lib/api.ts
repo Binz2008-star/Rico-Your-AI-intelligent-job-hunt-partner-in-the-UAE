@@ -386,6 +386,8 @@ function normalizeJob(raw: unknown): Job {
         tags: Array.isArray(item.tags) ? (item.tags as string[]) : [],
         posted_at: String(item.posted_at ?? item.date_found ?? ""),
         apply_url: String(item.apply_url ?? item.link ?? ""),
+        source_url: String(item.source_url ?? item.url ?? ""),
+        verification_status: String(item.verification_status ?? ""),
         match_explanation: matchExplanation,
     };
 }

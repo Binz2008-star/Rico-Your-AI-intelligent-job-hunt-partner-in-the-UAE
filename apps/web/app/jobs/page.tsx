@@ -25,6 +25,16 @@ const FILTER_LABELS: Record<Filter, string> = {
     mid: "65–84%",
 };
 
+function getJobLink(job: Job): string {
+    const applyUrl = job.apply_url?.trim();
+    if (applyUrl && applyUrl !== "#") return applyUrl;
+
+    const sourceUrl = job.source_url?.trim();
+    if (sourceUrl && sourceUrl !== "#") return sourceUrl;
+
+    return "";
+}
+
 export default function JobsPage() {
     const { user } = useAuth();
     const { toasts, toast } = useToast();
@@ -80,10 +90,11 @@ export default function JobsPage() {
         const job = jobs.find((j) => j.job_id === jobId);
         if (!job) return;
         setSubmittingId(jobId);
+        const jobLink = getJobLink(job);
 
         const payload = {
             job: {
-                link: job.apply_url,
+                link: jobLink,
                 title: job.title,
                 company: job.company,
                 location: job.location,
@@ -99,17 +110,17 @@ export default function JobsPage() {
                     title: job.title,
                     company: job.company,
                     location: job.location,
-                    url: job.apply_url,
+                    url: jobLink,
                     status: "opened",
                     source: "manual",
                 });
 
                 // Open external URL
-                if (job.apply_url) {
-                    window.open(job.apply_url, "_blank");
+                if (jobLink) {
+                    window.open(jobLink, "_blank");
                     toast("Application opened. Click 'Mark as applied' after submitting.", "success");
                 } else {
-                    toast("Job opened. Mark as applied when you submit externally.", "success");
+                    toast("Lead saved. Verify the posting before applying.", "success");
                 }
                 return;
             }

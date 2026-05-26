@@ -100,12 +100,22 @@ function looksLikeJobSearch(text: string): boolean {
 // ─── Constants (verbatim from /command) ──────────────────────────────────────
 
 const QUICK_ACTIONS = [
-    { label: "Analyze my trajectory", prompt: "Analyze my current career trajectory." },
-    { label: "Map my next move", prompt: "Map my best next career move based on my profile." },
-    { label: "Upload my CV", prompt: "__cv_upload__" },
-    { label: "Evaluate an opportunity", prompt: "Evaluate an opportunity against my long-term trajectory." },
-    { label: "Improve compensation path", prompt: "Find moves that improve my compensation trajectory." },
-    { label: "Prepare for an interview", prompt: "Help me prepare strategically for an interview." },
+    {
+        label: "Find jobs for my target role",
+        prompt: "Find matching jobs using my saved target role. If I do not have one saved, ask me which role to search for.",
+    },
+    {
+        label: "Improve my CV for better matches",
+        prompt: "Review my CV and profile for better job matches, then tell me the highest-impact improvements.",
+    },
+    {
+        label: "Prepare application for strongest match",
+        prompt: "Prepare an application plan for my strongest current job match.",
+    },
+    {
+        label: "Check my application follow-ups",
+        prompt: "Check my application follow-ups and tell me what needs attention next.",
+    },
 ];
 const COMMAND_LOGIN_HREF = buildAuthHref("/login", "/command");
 const COMMAND_SIGNUP_HREF = buildAuthHref("/signup", "/command");

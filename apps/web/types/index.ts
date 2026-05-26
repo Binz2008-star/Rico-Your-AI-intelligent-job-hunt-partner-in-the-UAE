@@ -61,6 +61,8 @@ export interface Job {
   apply_url: string;
   tags: string[];
   posted_at?: string;
+  source_url?: string;
+  verification_status?: "live" | "lead_needs_verification" | string;
   match_explanation?: MatchExplanation;
 }
 
@@ -160,4 +162,3 @@ export interface SettingsUpdateRequest {
   score_threshold_apply?: number;
   score_threshold_watch?: number;
 }
-
