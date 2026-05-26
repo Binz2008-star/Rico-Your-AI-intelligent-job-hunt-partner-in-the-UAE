@@ -163,6 +163,7 @@ class TestAdminSubscriptionActivation:
         return calls
 
     def test_admin_can_activate_pro_subscription(self, admin_client, monkeypatch):
+        monkeypatch.setattr("src.db.is_db_available", lambda: True)
         self._mock_user(monkeypatch)
         calls = self._mock_upsert(monkeypatch)
 
@@ -188,6 +189,7 @@ class TestAdminSubscriptionActivation:
         assert calls[0]["status"] == "active"
 
     def test_admin_can_activate_premium_subscription(self, admin_client, monkeypatch):
+        monkeypatch.setattr("src.db.is_db_available", lambda: True)
         self._mock_user(monkeypatch)
         self._mock_upsert(monkeypatch)
 
@@ -218,6 +220,7 @@ class TestAdminSubscriptionActivation:
         assert r.status_code == 401
 
     def test_unknown_user_returns_404(self, admin_client, monkeypatch):
+        monkeypatch.setattr("src.db.is_db_available", lambda: True)
         monkeypatch.setattr(
             "src.repositories.users_repo.get_user_by_email",
             lambda e: None,
@@ -241,6 +244,18 @@ class TestAdminSubscriptionActivation:
         assert r.status_code == 422
 
     def test_db_unavailable_returns_503(self, admin_client, monkeypatch):
+        monkeypatch.setattr("src.db.is_db_available", lambda: False)
+
+        r = admin_client.post(
+            "/api/v1/admin/subscriptions/activate",
+            json={"email": "target@rico.ai", "plan": "pro", "duration_days": 30},
+        )
+
+        assert r.status_code == 503
+        assert "database unavailable" in r.json()["detail"].lower()
+
+    def test_upsert_failure_returns_503(self, admin_client, monkeypatch):
+        monkeypatch.setattr("src.db.is_db_available", lambda: True)
         self._mock_user(monkeypatch)
         monkeypatch.setattr(
             "src.repositories.subscription_repo.upsert_subscription",
