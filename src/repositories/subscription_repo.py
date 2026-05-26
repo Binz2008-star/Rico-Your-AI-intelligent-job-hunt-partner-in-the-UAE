@@ -50,8 +50,9 @@ def get_subscription(user_id: str) -> dict[str, Any] | None:
     db = _db()
     if not db:
         return None
-    conn = db.connect()
+    conn = None
     try:
+        conn = db.connect()
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -73,7 +74,8 @@ def get_subscription(user_id: str) -> dict[str, Any] | None:
         logger.exception("subscription_repo: get_subscription failed user_id=%s", user_id)
         return None
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
 
 
 def get_subscription_by_stripe_customer(stripe_customer_id: str) -> dict[str, Any] | None:
@@ -85,8 +87,9 @@ def get_subscription_by_stripe_customer(stripe_customer_id: str) -> dict[str, An
     db = _db()
     if not db:
         return None
-    conn = db.connect()
+    conn = None
     try:
+        conn = db.connect()
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -113,7 +116,8 @@ def get_subscription_by_stripe_customer(stripe_customer_id: str) -> dict[str, An
         )
         return None
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
 
 
 # ── Write ─────────────────────────────────────────────────────────────────────
@@ -243,8 +247,9 @@ def get_subscription_event_status(stripe_event_id: str) -> str | None:
     db = _db()
     if not db:
         return None
-    conn = db.connect()
+    conn = None
     try:
+        conn = db.connect()
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -262,7 +267,8 @@ def get_subscription_event_status(stripe_event_id: str) -> str | None:
         )
         return None
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
 
 
 def record_subscription_event(

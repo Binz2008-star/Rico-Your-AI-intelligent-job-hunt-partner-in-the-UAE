@@ -49,7 +49,7 @@ def _fake_row(**overrides) -> dict:
 
 
 def _mock_db_with_row(row):
-    """Return a RicoDB mock whose connect() context manager yields a cursor returning `row`."""
+    """Return a RicoDB mock for the conn = db.connect() / with conn.cursor() as cur: pattern."""
     mock_cursor = MagicMock()
     mock_cursor.fetchone.return_value = row
 
@@ -59,8 +59,7 @@ def _mock_db_with_row(row):
 
     mock_db = MagicMock()
     mock_db.available = True
-    mock_db.connect.return_value.__enter__ = lambda s: mock_conn
-    mock_db.connect.return_value.__exit__ = MagicMock(return_value=False)
+    mock_db.connect.return_value = mock_conn
     return mock_db
 
 
