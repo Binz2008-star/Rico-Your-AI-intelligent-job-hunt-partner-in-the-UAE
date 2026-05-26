@@ -6,6 +6,8 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from fastapi import HTTPException
+
 from src.schemas.subscription import (
     CheckoutResponse,
     PlansResponse,
@@ -183,14 +185,9 @@ def build_checkout_response(
     stripe_price = _stripe_price_id(plan.plan)
 
     if not stripe_key or not stripe_price:
-        return CheckoutResponse(
-            checkout_url=(
-                f"https://checkout.ricohunt.com/mock?"
-                f"plan={plan.plan.value}"
-            ),
-            provider="mock",
-            plan=plan.plan,
-            status="mock",
+        raise HTTPException(
+            status_code=503,
+            detail="Checkout is not available at this time. Please try again later or contact support.",
         )
 
     stripe = _load_stripe()

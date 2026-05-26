@@ -468,7 +468,9 @@ class TestRicoConfirmCVProfileRoute:
         }
 
         with patch("src.api.routers.rico_chat.upsert_profile") as mock_upsert, \
-             patch("src.api.routers.rico_chat.mark_onboarding_complete") as mock_mark:
+             patch("src.api.routers.rico_chat.mark_onboarding_complete") as mock_mark, \
+             patch("src.services.subscription_gating.enforce_profile_optimization_allowed"), \
+             patch("src.services.subscription_gating.record_profile_optimization_usage"):
             r = client.post(
                 f"/api/v1/rico/confirm-cv-profile?user_id={public_session_id}",
                 json=payload,
