@@ -108,6 +108,9 @@ _NON_ROLE_STARTERS: frozenset[str] = frozenset({
     "tell", "show", "give", "find", "search", "get", "fetch", "list",
     "explain", "describe", "compare", "help", "please",
     "want", "need", "looking",
+    # Gerunds of action verbs — never start a job title
+    "finding", "searching", "showing", "getting", "fetching", "listing",
+    "tailoring", "improving", "updating", "tracking",
     "hi", "hello", "hey", "greetings", "thanks", "thank", "ok", "okay",
     "yes", "yeah", "yep", "ya", "no", "nope", "sure", "fine", "good", "great",
     "cool", "nice", "wow", "oh", "ah",
@@ -963,6 +966,20 @@ class RicoChatAPI:
         "what can you do", "what can i do", "help", "options", "menu",
         "show options", "show menu", "next steps",
     ])
+
+    # Phrases users type when selecting a help-menu option or expressing generic
+    # job-search intent — must NEVER be classified as job role titles.
+    _JOB_SEARCH_HELP_PHRASES: frozenset[str] = frozenset({
+        "finding jobs",
+        "finding jobs matching my target roles",
+        "find matching uae jobs",
+        "find me matching jobs",
+        "job search",
+        "job searching",
+        "search for jobs",
+        "help me find jobs",
+        "help me search for jobs",
+    })
 
     _ACTION_WORDS = frozenset({
         "find", "search", "show", "get", "apply", "save",
@@ -2239,6 +2256,29 @@ class RicoChatAPI:
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # ── Step 3: Unknown intent — try role classification, then clarify ───
+
+        # Help-option phrase guard: phrases from the help menu ("Finding jobs",
+        # "job search", etc.) are action selections, not job role titles.
+        # Route them to a role-prompt so the user can name a concrete role.
+        if message.strip().lower() in self._JOB_SEARCH_HELP_PHRASES:
+            if has_cv:
+                return self._finalize(
+                    self._handle_profile_role_suggestions(profile),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
+            response = {
+                "type": "clarification",
+                "intent": "search_jobs",
+                "message": (
+                    "Sure — which role should I search for? "
+                    "Tell me a specific role like 'HSE Manager' or "
+                    "'Environmental Engineer', or upload your CV and I'll suggest roles from your background."
+                ),
+            }
+            self._append_chat(user_id, "assistant", response["message"])
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+
         # Only attempt role search if message looks like a plausible role (short text, no digits)
         if has_cv and self._looks_like_bare_target_role(message):
             logger.info(
