@@ -17,35 +17,58 @@ jobs:
     steps:
       - name: Create PagerDuty Incident on Failure
         if: ${{ github.event.workflow_run.conclusion == 'failure' && env.PAGERDUTY_CONFIGURED == 'true' }}
+        env:
+          PD_ROUTING_KEY: ${{ secrets.PAGERDUTY_INTEGRATION_KEY }}
+          PD_WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          PD_REPO: ${{ github.repository }}
+          PD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          PD_COMMIT: ${{ github.event.workflow_run.head_sha }}
+          PD_RUN_URL: ${{ github.event.workflow_run.html_url }}
         run: |
-          curl -s --fail -X POST https://events.pagerduty.com/v2/enqueue \
-            -H "Content-Type: application/json" \
-            -d '{
-              "routing_key": "${{ secrets.PAGERDUTY_INTEGRATION_KEY }}",
-              "event_action": "trigger",
-              "dedup_key": "github-workflow-${{ github.event.workflow_run.name }}-${{ github.repository }}",
-              "payload": {
-                "summary": "GitHub workflow failed: ${{ github.event.workflow_run.name }} on ${{ github.repository }}",
-                "severity": "critical",
-                "source": "github-actions",
-                "custom_details": {
-                  "branch": "${{ github.event.workflow_run.head_branch }}",
-                  "commit": "${{ github.event.workflow_run.head_sha }}",
-                  "run_url": "${{ github.event.workflow_run.html_url }}"
+          PAYLOAD=$(jq -n \
+            --arg routing_key "$PD_ROUTING_KEY" \
+            --arg dedup_key "github-workflow-${PD_WORKFLOW_NAME}-${PD_REPO}" \
+            --arg summary "GitHub workflow failed: ${PD_WORKFLOW_NAME} on ${PD_REPO}" \
+            --arg branch "$PD_BRANCH" \
+            --arg commit "$PD_COMMIT" \
+            --arg run_url "$PD_RUN_URL" \
+            '{
+              routing_key: $routing_key,
+              event_action: "trigger",
+              dedup_key: $dedup_key,
+              payload: {
+                summary: $summary,
+                severity: "critical",
+                source: "github-actions",
+                custom_details: {
+                  branch: $branch,
+                  commit: $commit,
+                  run_url: $run_url
                 }
               }
-            }'
+            }')
+          curl -s --fail -X POST https://events.pagerduty.com/v2/enqueue \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD"
 
       - name: Resolve PagerDuty Incident on Success
         if: ${{ github.event.workflow_run.conclusion == 'success' && env.PAGERDUTY_CONFIGURED == 'true' }}
+        env:
+          PD_ROUTING_KEY: ${{ secrets.PAGERDUTY_INTEGRATION_KEY }}
+          PD_WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          PD_REPO: ${{ github.repository }}
         run: |
+          PAYLOAD=$(jq -n \
+            --arg routing_key "$PD_ROUTING_KEY" \
+            --arg dedup_key "github-workflow-${PD_WORKFLOW_NAME}-${PD_REPO}" \
+            '{
+              routing_key: $routing_key,
+              event_action: "resolve",
+              dedup_key: $dedup_key
+            }')
           curl -s --fail -X POST https://events.pagerduty.com/v2/enqueue \
             -H "Content-Type: application/json" \
-            -d '{
-              "routing_key": "${{ secrets.PAGERDUTY_INTEGRATION_KEY }}",
-              "event_action": "resolve",
-              "dedup_key": "github-workflow-${{ github.event.workflow_run.name }}-${{ github.repository }}"
-            }'
+            -d "$PAYLOAD"
 
       - name: Send Telegram Alert
         if: ${{ github.event.workflow_run.conclusion == 'failure' && env.TELEGRAM_CONFIGURED == 'true' }}
