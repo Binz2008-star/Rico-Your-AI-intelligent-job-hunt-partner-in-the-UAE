@@ -15,26 +15,64 @@ jobs:
       DISCORD_CONFIGURED: ${{ secrets.DISCORD_WEBHOOK_URL != '' }}
 
     steps:
-      - name: 🚨 Create PagerDuty Incident on Failure
+      - name: Create PagerDuty Incident on Failure
         if: ${{ github.event.workflow_run.conclusion == 'failure' && env.PAGERDUTY_CONFIGURED == 'true' }}
-        uses: Entle/action-pagerduty-alert@1.0.5
-        with:
-          pagerduty-integration-key: ${{ secrets.PAGERDUTY_INTEGRATION_KEY }}
-          pagerduty-dedup-key: "github-workflow-${{ github.event.workflow_run.name }}-${{ github.repository }}"
-          severity: critical
-          runbook-url: "https://github.com/Binz2008-star/job-automation-system-1/wiki/Runbook"
+        env:
+          PD_ROUTING_KEY: ${{ secrets.PAGERDUTY_INTEGRATION_KEY }}
+          PD_WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          PD_REPO: ${{ github.repository }}
+          PD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          PD_COMMIT: ${{ github.event.workflow_run.head_sha }}
+          PD_RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg routing_key "$PD_ROUTING_KEY" \
+            --arg dedup_key "github-workflow-${PD_WORKFLOW_NAME}-${PD_REPO}" \
+            --arg summary "GitHub workflow failed: ${PD_WORKFLOW_NAME} on ${PD_REPO}" \
+            --arg branch "$PD_BRANCH" \
+            --arg commit "$PD_COMMIT" \
+            --arg run_url "$PD_RUN_URL" \
+            '{
+              routing_key: $routing_key,
+              event_action: "trigger",
+              dedup_key: $dedup_key,
+              payload: {
+                summary: $summary,
+                severity: "critical",
+                source: "github-actions",
+                custom_details: {
+                  branch: $branch,
+                  commit: $commit,
+                  run_url: $run_url
+                }
+              }
+            }')
+          curl -s --fail -X POST https://events.pagerduty.com/v2/enqueue \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD"
 
-      - name: ✅ Resolve PagerDuty Incident on Success
+      - name: Resolve PagerDuty Incident on Success
         if: ${{ github.event.workflow_run.conclusion == 'success' && env.PAGERDUTY_CONFIGURED == 'true' }}
-        uses: Entle/action-pagerduty-alert@1.0.5
-        with:
-          pagerduty-integration-key: ${{ secrets.PAGERDUTY_INTEGRATION_KEY }}
-          resolve: true
-          pagerduty-dedup-key: "github-workflow-${{ github.event.workflow_run.name }}-${{ github.repository }}"
+        env:
+          PD_ROUTING_KEY: ${{ secrets.PAGERDUTY_INTEGRATION_KEY }}
+          PD_WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          PD_REPO: ${{ github.repository }}
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg routing_key "$PD_ROUTING_KEY" \
+            --arg dedup_key "github-workflow-${PD_WORKFLOW_NAME}-${PD_REPO}" \
+            '{
+              routing_key: $routing_key,
+              event_action: "resolve",
+              dedup_key: $dedup_key
+            }')
+          curl -s --fail -X POST https://events.pagerduty.com/v2/enqueue \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD"
 
       - name: Send Telegram Alert
         if: ${{ github.event.workflow_run.conclusion == 'failure' && env.TELEGRAM_CONFIGURED == 'true' }}
-        uses: appleboy/telegram-action@master
+        uses: appleboy/telegram-action@b0a4cd5ac71f9b5a832aca7bf7fd66af5e93e625
         with:
           to: ${{ secrets.TELEGRAM_TO }}
           token: ${{ secrets.TELEGRAM_TOKEN }}
@@ -50,7 +88,7 @@ jobs:
 
       - name: Send Discord Alert
         if: ${{ github.event.workflow_run.conclusion == 'failure' && env.DISCORD_CONFIGURED == 'true' }}
-        uses: appleboy/discord-action@master
+        uses: appleboy/discord-action@f9e2c8a91a6e9a31ddde7c95db55a39e9b65a7cf
         with:
           webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
           message: |
