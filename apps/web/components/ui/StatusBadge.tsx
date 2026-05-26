@@ -44,8 +44,8 @@ const config: Record<
     className: "text-white/50 bg-white/4 border-white/10",
   },
   opened: {
-    label: "Opened",
-    className: "text-[#5a5a7a] bg-white/4 border-white/10",
+    label: "Link opened",
+    className: "text-amber-400 bg-amber-400/10 border-amber-400/20",
   },
   decision_made: {
     label: "Decision",
