@@ -4,8 +4,7 @@ import pytest
 from datetime import datetime
 from unittest.mock import AsyncMock, patch, MagicMock
 
-from src.services.link_verifier import LinkVerifier, LinkStatus, VerificationResult, get_link_verifier
-from src.api.routers.link_verification import is_safe_url
+from src.services.link_verifier import LinkVerifier, LinkStatus, VerificationResult, get_link_verifier, _is_safe_url
 
 
 @pytest.fixture
@@ -216,36 +215,55 @@ async def test_close_client(verifier):
 
 def test_is_safe_url_blocks_localhost():
     """Test that localhost URLs are blocked."""
-    assert not is_safe_url("http://localhost:8080")
-    assert not is_safe_url("http://127.0.0.1")
-    assert not is_safe_url("http://127.0.0.1:3000")
-    assert not is_safe_url("http://0.0.0.0")
+    assert not _is_safe_url("http://localhost:8080")
+    assert not _is_safe_url("http://127.0.0.1")
+    assert not _is_safe_url("http://127.0.0.1:3000")
+    assert not _is_safe_url("http://0.0.0.0")
 
 
 def test_is_safe_url_blocks_private_ips():
     """Test that private IP ranges are blocked."""
-    assert not is_safe_url("http://10.0.0.1")
-    assert not is_safe_url("http://172.16.0.1")
-    assert not is_safe_url("http://192.168.1.1")
-    assert not is_safe_url("http://169.254.169.254")  # AWS metadata
+    assert not _is_safe_url("http://10.0.0.1")
+    assert not _is_safe_url("http://172.16.0.1")
+    assert not _is_safe_url("http://192.168.1.1")
+    assert not _is_safe_url("http://169.254.169.254")  # AWS metadata
 
 
 def test_is_safe_url_blocks_metadata_ips():
     """Test that cloud metadata IPs are blocked."""
-    assert not is_safe_url("http://169.254.169.254")
-    assert not is_safe_url("http://metadata.google.internal")
+    assert not _is_safe_url("http://169.254.169.254")
+    assert not _is_safe_url("http://metadata.google.internal")
 
 
 def test_is_safe_url_blocks_non_http_schemes():
     """Test that non-HTTP schemes are blocked."""
-    assert not is_safe_url("file:///etc/passwd")
-    assert not is_safe_url("ftp://example.com")
-    assert not is_safe_url("gopher://example.com")
+    assert not _is_safe_url("file:///etc/passwd")
+    assert not _is_safe_url("ftp://example.com")
+    assert not _is_safe_url("gopher://example.com")
 
 
 def test_is_safe_url_allows_public_urls():
     """Test that public URLs are allowed."""
-    assert is_safe_url("https://example.com")
-    assert is_safe_url("https://jobted.ae/job")
-    assert is_safe_url("https://indeed.com/job")
-    assert is_safe_url("http://example.com")
+    assert _is_safe_url("https://example.com")
+    assert _is_safe_url("https://jobted.ae/job")
+    assert _is_safe_url("https://indeed.com/job")
+    assert _is_safe_url("http://example.com")
+
+
+@pytest.mark.asyncio
+async def test_verify_link_blocks_redirect_to_private_ip(verifier):
+    """Test that redirects to private IPs are blocked."""
+    with patch.object(verifier, '_get_client') as mock_get_client:
+        mock_client = AsyncMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 302
+        mock_response.headers = {"location": "http://192.168.1.1/internal"}
+        mock_client.get.return_value = mock_response
+        mock_get_client.return_value = mock_client
+        
+        result = await verifier.verify_link("https://example.com/job")
+        
+        assert result.status == LinkStatus.BLOCKED
+        assert result.http_status == 302
+        assert "SSRF protection" in result.error_message
+        assert result.redirect_url == "http://192.168.1.1/internal"
