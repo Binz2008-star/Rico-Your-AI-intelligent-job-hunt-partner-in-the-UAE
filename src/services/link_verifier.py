@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Optional
 import httpx
-from bs4 import BeautifulSoup
 import ipaddress
 
 
@@ -62,6 +61,7 @@ def _is_safe_url(url: str) -> bool:
     """
     try:
         from urllib.parse import urlparse
+        import socket
         
         parsed = urlparse(url)
         
@@ -78,15 +78,30 @@ def _is_safe_url(url: str) -> bool:
         if hostname in METADATA_IPS:
             return False
         
-        # Block private IP ranges
+        # Block private IP ranges (including resolved hostnames)
         try:
+            # First check if it's a literal IP
             ip = ipaddress.ip_address(hostname)
             for private_range in PRIVATE_IP_RANGES:
                 if ip in private_range:
                     return False
         except ValueError:
-            # Not an IP address, might be a hostname
-            pass
+            # Not a literal IP, resolve hostname to check resolved IP
+            try:
+                # Resolve hostname to IP addresses
+                resolved_ips = socket.getaddrinfo(hostname, None)
+                for addrinfo in resolved_ips:
+                    ip_str = addrinfo[4][0]  # Get IP from sockaddr
+                    try:
+                        ip = ipaddress.ip_address(ip_str)
+                        for private_range in PRIVATE_IP_RANGES:
+                            if ip in private_range:
+                                return False
+                    except ValueError:
+                        continue
+            except (socket.gaierror, socket.error, OSError):
+                # DNS resolution failed, treat as unsafe
+                return False
         
         return True
     except Exception:
@@ -108,6 +123,12 @@ class LinkVerifier:
     
     # Dead HTTP status codes
     DEAD_STATUS_CODES = {404, 410, 451}
+    
+    # Server error status codes (5xx)
+    SERVER_ERROR_CODES = {500, 502, 503, 504}
+    
+    # Client error status codes that indicate issues (non-dead)
+    CLIENT_ERROR_CODES = {403, 429}
     
     # Verification timeout in seconds
     TIMEOUT = 10
@@ -174,6 +195,24 @@ class LinkVerifier:
                         verified_at=datetime.utcnow(),
                     )
                 
+                # Check for server errors
+                if response.status_code in self.SERVER_ERROR_CODES:
+                    return VerificationResult(
+                        status=LinkStatus.NEEDS_REVIEW,
+                        http_status=response.status_code,
+                        error_message=f"Server error: HTTP {response.status_code}",
+                        verified_at=datetime.utcnow(),
+                    )
+                
+                # Check for client errors that indicate issues
+                if response.status_code in self.CLIENT_ERROR_CODES:
+                    return VerificationResult(
+                        status=LinkStatus.NEEDS_REVIEW,
+                        http_status=response.status_code,
+                        error_message=f"Client error: HTTP {response.status_code}",
+                        verified_at=datetime.utcnow(),
+                    )
+                
                 # Check for redirects
                 if 300 <= response.status_code < 400:
                     redirect_url = response.headers.get("location")
@@ -185,6 +224,10 @@ class LinkVerifier:
                             verified_at=datetime.utcnow(),
                         )
                     
+                    # Resolve relative redirects before SSRF validation
+                    from urllib.parse import urljoin
+                    redirect_url = urljoin(current_url, redirect_url)
+                    
                     # Validate redirect URL for SSRF
                     if not _is_safe_url(redirect_url):
                         return VerificationResult(
@@ -195,9 +238,6 @@ class LinkVerifier:
                             redirect_url=redirect_url,
                         )
                     
-                    # Resolve relative redirects
-                    from urllib.parse import urljoin
-                    redirect_url = urljoin(current_url, redirect_url)
                     current_url = redirect_url
                     redirect_count += 1
                     continue
