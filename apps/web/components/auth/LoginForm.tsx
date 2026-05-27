@@ -26,8 +26,14 @@ export function LoginForm() {
             router.push('/command');
             router.refresh();
         } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Authentication failed';
-            setError(errorMessage);
+            if (process.env.NODE_ENV === 'development') {
+                console.error('[login]', err);
+            }
+            const isNetworkFailure = err instanceof TypeError;
+            const message = isNetworkFailure
+                ? "We couldn't log you in right now. Please try again in a moment."
+                : 'The email or password is incorrect.';
+            setError(message);
             setFailedAttempts(prev => prev + 1);
         }
     };
