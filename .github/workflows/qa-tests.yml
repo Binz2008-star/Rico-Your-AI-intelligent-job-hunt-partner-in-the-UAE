@@ -17,7 +17,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
@@ -29,6 +29,11 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE
           PYTHONPATH=$GITHUB_WORKSPACE pytest tests/unit/ -v --tb=short
+
+      - name: Run link verifier tests
+        run: |
+          cd $GITHUB_WORKSPACE
+          PYTHONPATH=$GITHUB_WORKSPACE pytest tests/test_link_verifier.py -v --tb=short
 
       - name: Run core route and security tests
         run: |

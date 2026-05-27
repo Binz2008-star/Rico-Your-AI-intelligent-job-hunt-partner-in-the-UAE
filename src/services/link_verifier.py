@@ -223,6 +223,11 @@ class LinkVerifier:
     
     INDEED_DEAD_PATTERNS = [
         "We can't find this page",
+        "This job has expired on Indeed",
+        "job has expired",
+        "employer is not accepting applications",
+        "not actively hiring",
+        "position has been filled",
     ]
     
     # Dead HTTP status codes

@@ -299,3 +299,27 @@ async def test_verify_link_blocks_redirect_to_private_ip(verifier):
         assert result.http_status == 302
         assert "SSRF protection" in result.error_message
         assert result.redirect_url == "http://192.168.1.1/internal"
+
+
+@pytest.mark.asyncio
+async def test_verify_indeed_expired_job_page_200(verifier):
+    """Test Indeed job page that returns HTTP 200 but body says expired."""
+    with patch.object(verifier, '_get_client') as mock_get_client:
+        mock_client = AsyncMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = (
+            "<html><body>"
+            "<h1>This job has expired on Indeed</h1>"
+            "<p>Reasons could include: the employer is not accepting applications,</p>"
+            "<p>is not actively hiring, or is reviewing applications</p>"
+            "</body></html>"
+        )
+        mock_client.get.return_value = mock_response
+        mock_get_client.return_value = mock_client
+
+        result = await verifier.verify_link("https://indeed.com/job/abc123")
+
+        assert result.status == LinkStatus.EXPIRED
+        assert result.http_status == 200
+        assert "Dead page pattern detected" in result.error_message
