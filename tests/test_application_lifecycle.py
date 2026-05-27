@@ -311,3 +311,38 @@ def test_persist_lifecycle_creates_when_no_existing():
     # Should have called create (no existing record)
     assert len(create_calls) == 1
     assert create_calls[0]["status"] == "opened_external"
+
+
+def test_mark_applied_then_open_link_preserves_applied():
+    """Verify mark_applied first then open_apply_link later preserves applied status.
+
+    Manual scenario: user marks as applied before opening apply link.
+    System should keep one record with status=applied, not downgrade to opened_external.
+    """
+    from src.rico_chat_api import RicoChatAPI
+
+    api = RicoChatAPI()
+    create_calls = []
+
+    def mock_create(**kwargs):
+        create_calls.append(kwargs)
+        return True
+
+    def mock_find_by_job_id(job_key, user_id):
+        # Simulate existing record with applied status (from mark_applied)
+        return {"status": "applied"}
+
+    with patch("src.repositories.applications_repo.create", side_effect=mock_create):
+        with patch("src.repositories.applications_repo.find_by_job_id", side_effect=mock_find_by_job_id):
+            # User opens apply link after already marking as applied
+            api._persist_application_lifecycle_event(
+                user_id="test@example.com",
+                title="HSE Manager",
+                company="Archirodon Group N.V",
+                status="opened_external",
+                url="https://example.com/apply",
+            )
+
+    # Should not have called create (skipped due to regression prevention)
+    # Status stays applied, does not downgrade to opened_external
+    assert len(create_calls) == 0
