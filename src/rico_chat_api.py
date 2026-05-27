@@ -1085,7 +1085,9 @@ class RicoChatAPI:
         logger.info("jsearch_direct role=%r results=%d", role, len(jobs))
         return jobs
 
-    def _target_role_search_response(self, user_id: str, role: str, profile: Any) -> dict[str, Any]:
+    def _target_role_search_response(
+        self, user_id: str, role: str, profile: Any, from_saved_profile: bool = False
+    ) -> dict[str, Any]:
         """Handle target role search with role intelligence integration."""
         try:
             normalized_role = normalize_role(role)
@@ -1146,7 +1148,8 @@ class RicoChatAPI:
         )
 
         message = self._build_role_search_message(
-            normalized_role, city_text, basis_text, top_matches, role_intelligence_data
+            normalized_role, city_text, basis_text, top_matches, role_intelligence_data,
+            from_saved_profile=from_saved_profile,
         )
 
         response = {
@@ -1219,8 +1222,13 @@ class RicoChatAPI:
         basis_text: str,
         top_matches: list[Any],
         role_intelligence_data: dict[str, Any] | None,
+        from_saved_profile: bool = False,
     ) -> str:
         """Build message for role search response."""
+        if from_saved_profile:
+            prefix = f"Searching based on your saved target role: {normalized_role}. "
+        else:
+            prefix = ""
         if top_matches:
             def _has_url(m: Any) -> bool:
                 return bool(
@@ -1253,7 +1261,7 @@ class RicoChatAPI:
         elif not top_matches:
             base_message += " I did not find strong matches yet, so I will keep scanning and use this profile for future matches."
 
-        return base_message
+        return prefix + base_message
 
     def process_message(
         self,
@@ -1658,7 +1666,9 @@ class RicoChatAPI:
             )
             role = target_roles[0] if target_roles else "your profile"
             return self._finalize(
-                self._target_role_search_response(user_id, role, profile),
+                self._target_role_search_response(
+                    user_id, role, profile, from_saved_profile=bool(target_roles)
+                ),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -2066,6 +2076,24 @@ class RicoChatAPI:
                 except Exception:
                     pass
 
+            # 3. Neon user_job_context — survives restarts and postgres memory mode
+            db_source_url = None
+            if apply_url is None and title and company:
+                try:
+                    from src.repositories.user_job_context_repo import find_by_title_company
+                    row = find_by_title_company(user_id, title, company)
+                    if row:
+                        if row.get("apply_url"):
+                            apply_url = row["apply_url"]
+                            source_was_lead = False
+                        elif row.get("source_url"):
+                            db_source_url = row["source_url"]
+                            source_was_lead = (
+                                row.get("verification_status") == "lead_needs_verification"
+                            )
+                except Exception:
+                    pass
+
             if apply_url:
                 msg = f"Apply link for **{title}** at **{company}**: {apply_url}"
                 # Store URL evidence so a subsequent "Mark as applied" can proceed
@@ -2080,6 +2108,12 @@ class RicoChatAPI:
                         link=apply_url,
                     ),
                 )
+            elif db_source_url:
+                msg = (
+                    f"I don't have a direct apply link saved for **{title}** at **{company}**, "
+                    f"but I found the source job listing: {db_source_url}\n\n"
+                    "Open it to apply from the official listing."
+                )
             elif title and company:
                 if source_was_lead:
                     msg = (
@@ -2090,8 +2124,8 @@ class RicoChatAPI:
                     )
                 else:
                     msg = (
-                        f"I don't have a saved apply link for **{title}** at **{company}**. "
-                        "Search for the role on the company website or LinkedIn."
+                        f"I don't have the official apply link saved yet for **{title}** at **{company}**. "
+                        "I'll keep this role marked as needs source verification and continue with verified matches."
                     )
             else:
                 msg = "Please specify the job title and company so I can look up the apply link."
@@ -2312,7 +2346,7 @@ class RicoChatAPI:
     # ── New intent-specific handlers ─────────────────────────────────────────
 
     def _store_search_matches_context(self, user_id: str, formatted: list[dict[str, Any]]) -> None:
-        """Merge recent search results into context so open_apply_link can find URLs."""
+        """Merge recent search results into context and persist to Neon."""
         try:
             ctx = self._get_recent_context(user_id)
             ctx["recent_search_matches"] = [
@@ -2330,6 +2364,13 @@ class RicoChatAPI:
             self._store_recent_context(user_id, ctx)
         except Exception:
             logger.debug("rico_chat: failed to store search matches context user=%s", user_id)
+
+        # Persist to Neon so links survive restarts and postgres memory mode.
+        try:
+            from src.repositories.user_job_context_repo import upsert_matches
+            upsert_matches(user_id, formatted)
+        except Exception:
+            logger.debug("rico_chat: failed to persist search matches to DB user=%s", user_id)
 
     def _store_recent_context(self, user_id: str, context: dict[str, Any]) -> None:
         try:
