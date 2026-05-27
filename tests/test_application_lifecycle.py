@@ -346,3 +346,170 @@ def test_mark_applied_then_open_link_preserves_applied():
     # Should not have called create (skipped due to regression prevention)
     # Status stays applied, does not downgrade to opened_external
     assert len(create_calls) == 0
+
+
+def test_upsert_recommendation_merges_job_data_for_existing_rows():
+    """Verify upsert_recommendation merges job_data for existing rows to preserve metadata while filling missing fields."""
+    from src.rico_db import RicoDB
+    from unittest.mock import MagicMock, patch
+
+    db = RicoDB()
+    
+    # Mock transaction context manager
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    
+    # Mock the transaction to return a context manager that yields mock_conn
+    mock_transaction = MagicMock()
+    mock_transaction.__enter__ = MagicMock(return_value=mock_conn)
+    mock_transaction.__exit__ = MagicMock(return_value=None)
+    
+    # Mock the cursor to return a context manager that yields mock_cur
+    mock_cursor_cm = MagicMock()
+    mock_cursor_cm.__enter__ = MagicMock(return_value=mock_cur)
+    mock_cursor_cm.__exit__ = MagicMock(return_value=None)
+    mock_conn.cursor = MagicMock(return_value=mock_cursor_cm)
+    
+    # Simulate existing row with partial job_data
+    existing_row = {
+        "id": "test-id",
+        "job": {"title": "Engineer", "company": "Google"}  # Missing apply_url, source_url, etc.
+    }
+    mock_cur.fetchone.return_value = existing_row
+    
+    with patch.object(db, "_transaction", return_value=mock_transaction):
+        db.upsert_recommendation(
+            user_id="test-user-id",
+            job_key="test-job-key",
+            job_data={
+                "title": "Engineer",
+                "company": "Google",
+                "apply_url": "https://google.com/apply",  # New field to add
+                "source_url": "https://google.com/jobs/123"
+            },
+            status="opened_external",
+        )
+    
+    # Verify SELECT was called (fetches existing row)
+    assert mock_cur.execute.call_count >= 2
+    
+    # Get the UPDATE call (second execute call)
+    update_call = mock_cur.execute.call_args_list[1]
+    sql = update_call[0][0]
+    assert "UPDATE rico_job_recommendations" in sql
+    # Verify that job field is being updated (not just status)
+    assert "job = %s" in sql
+    assert "status = %s" in sql
+
+
+def test_find_by_job_id_uses_direct_lookup_without_limit():
+    """Verify find_by_job_id uses direct DB lookup without 200-row limit."""
+    from src.repositories.applications_repo import find_by_job_id
+    from unittest.mock import MagicMock, patch
+
+    mock_db = MagicMock()
+    mock_db.get_recommendation_by_job_key.return_value = {
+        "job_id": "test-key",
+        "status": "applied",
+        "title": "Engineer",
+        "company": "Google"
+    }
+    
+    with patch("src.repositories.applications_repo._db", return_value=mock_db):
+        with patch("src.repositories.applications_repo._provision_db_user_id", return_value="db-user-id"):
+            result = find_by_job_id("test-key", user_id="test@example.com")
+    
+    # Should call get_recommendation_by_job_key (direct lookup) not get_recommendations (with limit)
+    mock_db.get_recommendation_by_job_key.assert_called_once_with("db-user-id", "test-key")
+    assert result is not None
+    assert result["status"] == "applied"
+
+
+def test_canonical_job_key_uses_provider_job_id():
+    """Verify canonical job key uses provider_job_id when available."""
+    from src.rico_chat_api import RicoChatAPI
+
+    key1 = RicoChatAPI._derive_lifecycle_job_key(
+        title="Engineer",
+        company="Google",
+        url="https://google.com/jobs/123",
+        provider_job_id="prov-12345"
+    )
+    
+    key2 = RicoChatAPI._derive_lifecycle_job_key(
+        title="Engineer",
+        company="Google",
+        url="https://google.com/jobs/456",  # Different URL
+        provider_job_id="prov-12345"  # Same provider_job_id
+    )
+    
+    # Should use provider_job_id, so keys should be the same
+    assert key1 == key2
+
+
+def test_canonical_job_key_uses_indeed_jk():
+    """Verify canonical job key uses Indeed jk when available."""
+    from src.rico_chat_api import RicoChatAPI
+
+    key1 = RicoChatAPI._derive_lifecycle_job_key(
+        title="Engineer",
+        company="Google",
+        url="https://indeed.com/jobs?jk=abc123",
+        indeed_jk="abc123"
+    )
+    
+    key2 = RicoChatAPI._derive_lifecycle_job_key(
+        title="Engineer",
+        company="Google",
+        url="https://indeed.com/jobs?jk=abc123&from=serp",
+        indeed_jk="abc123"
+    )
+    
+    # Should use indeed_jk, so keys should be the same
+    assert key1 == key2
+
+
+def test_canonical_job_key_distinct_same_title_different_jk():
+    """Verify same title/company with different Indeed jk produce different keys."""
+    from src.rico_chat_api import RicoChatAPI
+
+    key1 = RicoChatAPI._derive_lifecycle_job_key(
+        title="Engineer",
+        company="Google",
+        url="https://indeed.com/jobs?jk=abc123",
+        indeed_jk="abc123"
+    )
+    
+    key2 = RicoChatAPI._derive_lifecycle_job_key(
+        title="Engineer",
+        company="Google",
+        url="https://indeed.com/jobs?jk=def456",
+        indeed_jk="def456"
+    )
+    
+    # Different jk should produce different keys
+    assert key1 != key2
+
+
+def test_canonical_job_key_fallback_to_title_company():
+    """Verify canonical job key falls back to title+company when no stable ID."""
+    from src.rico_chat_api import RicoChatAPI
+
+    key1 = RicoChatAPI._derive_lifecycle_job_key(
+        title="Engineer",
+        company="Google",
+        url="",  # No URL
+        provider_job_id="",  # No provider ID
+        indeed_jk=""  # No Indeed jk
+    )
+    
+    key2 = RicoChatAPI._derive_lifecycle_job_key(
+        title="Engineer",
+        company="Google",
+        url="https://different-url.com",
+        provider_job_id="",
+        indeed_jk=""
+    )
+    
+    # Should use title+company fallback, so keys should be the same
+    assert key1 == key2

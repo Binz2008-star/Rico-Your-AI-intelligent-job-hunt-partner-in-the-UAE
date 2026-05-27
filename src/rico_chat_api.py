@@ -2421,20 +2421,54 @@ class RicoChatAPI:
         return new_rank >= current_rank
 
     @staticmethod
-    def _derive_lifecycle_job_key(title: str, company: str, url: str = "") -> str:
-        """Derive stable job key for lifecycle events.
+    def _derive_lifecycle_job_key(
+        title: str = "",
+        company: str = "",
+        url: str = "",
+        provider_job_id: str = "",
+        indeed_jk: str = "",
+    ) -> str:
+        """Derive stable job key for lifecycle events using canonical strategy.
 
-        Prefers title + company fallback to match mark_applied/create_manual behavior.
-        Only uses URL if title/company are not available.
+        Priority order for canonical key:
+        1. provider_job_id / backend job id (most stable)
+        2. Indeed jk= key from URL
+        3. Stable identifier in apply_url/source_url
+        4. Fallback: title + company (if both present)
+        5. Last resort: URL-based hash (if URL present)
+        6. Ultimate fallback: title-only hash
+
+        This ensures:
+        - Same real job across open → prepare → mark_applied uses same key
+        - Different postings with same title/company but different stable IDs don't collapse
+        - If no stable ID exists, title+company fallback is acceptable
         """
         from src.applications import get_job_id
-        # Prefer title/company fallback to match mark_applied behavior
+
+        # 1. Provider job ID / backend job ID (most stable)
+        if provider_job_id:
+            return get_job_id({"link": provider_job_id})
+
+        # 2. Indeed jk= key from URL
+        if indeed_jk:
+            return get_job_id({"link": f"jk={indeed_jk}"})
+
+        # 3. Extract Indeed jk from URL if not provided directly
+        if url:
+            import re
+            jk_match = re.search(r"jk=([^&]+)", url)
+            if jk_match:
+                return get_job_id({"link": f"jk={jk_match.group(1)}"})
+
+        # 4. Fallback to title + company (if both present)
         if title and company:
             return get_job_id({"title": title, "company": company})
-        # Fallback to URL if title/company missing
+
+        # 5. URL-based hash (if URL present)
         if url:
             return get_job_id({"link": url})
-        # Last resort: title only
+
+        # 6. Ultimate fallback: title-only hash
         return get_job_id({"title": title or "", "company": ""})
 
     def _get_existing_application_status(
@@ -2461,6 +2495,8 @@ class RicoChatAPI:
         status: str,
         url: str = "",
         location: str = "",
+        provider_job_id: str = "",
+        indeed_jk: str = "",
     ) -> None:
         """Persist application lifecycle event to rico_job_recommendations.
 
@@ -2471,8 +2507,14 @@ class RicoChatAPI:
         try:
             from src.repositories.applications_repo import create as _create_app
 
-            # Derive stable job key (prefer title/company to match mark_applied)
-            job_key = self._derive_lifecycle_job_key(title, company, url)
+            # Derive stable job key with canonical strategy
+            job_key = self._derive_lifecycle_job_key(
+                title=title,
+                company=company,
+                url=url,
+                provider_job_id=provider_job_id,
+                indeed_jk=indeed_jk,
+            )
 
             # Check existing status to prevent regression
             existing_status = self._get_existing_application_status(user_id, job_key)

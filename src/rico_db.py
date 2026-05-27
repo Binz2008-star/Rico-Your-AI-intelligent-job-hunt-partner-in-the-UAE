@@ -432,6 +432,56 @@ class RicoDB:
                 explanation=item.get("explanation") or item.get("rico_explanation"),
             )
 
+    def get_recommendation_by_job_key(
+        self,
+        user_id: str,
+        job_key: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Get a single recommendation by user_id and job_key without arbitrary limit.
+        
+        Used for direct status lookup to avoid 200-row limited scans in regression guards.
+        """
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT job_key, job, repo_score, rico_score, explanation, status, created_at, updated_at
+                    FROM rico_job_recommendations
+                    WHERE user_id = %s AND job_key = %s
+                    LIMIT 1
+                    """,
+                    (user_id, job_key),
+                )
+                row = cur.fetchone()
+        if not row:
+            return None
+        job = dict(row["job"]) if isinstance(row["job"], dict) else {}
+        return {
+            "job_id": row["job_key"],
+            "title": job.get("title", ""),
+            "company": job.get("company", ""),
+            "location": job.get("location", ""),
+            "link": (
+                job.get("link")
+                or job.get("apply_url")
+                or job.get("job_apply_link")
+                or job.get("apply_link")
+                or ""
+            ),
+            "apply_url": (
+                job.get("apply_url")
+                or job.get("job_apply_link")
+                or job.get("apply_link")
+                or job.get("link")
+                or ""
+            ),
+            "score": row["rico_score"] or row["repo_score"] or 0,
+            "status": row["status"],
+            "notes": row["explanation"] or "",
+            "date_applied": row["created_at"].isoformat() if row["created_at"] else None,
+            "date_updated": row["updated_at"].isoformat() if row["updated_at"] else None,
+        }
+
     def get_recommendations(
         self,
         user_id: str,
@@ -496,18 +546,33 @@ class RicoDB:
         explanation: Optional[str] = None,
     ) -> bool:
         """Insert or update a recommendation row. Uses SELECT+INSERT/UPDATE for
-        portability since there is no UNIQUE(user_id, job_key) constraint yet."""
+        portability since there is no UNIQUE(user_id, job_key) constraint yet.
+        
+        For existing rows, merges job_data fields to preserve metadata while
+        filling missing/new fields (apply_url, url, link, source_url, source, etc.).
+        """
         with self._transaction() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT id FROM rico_job_recommendations WHERE user_id = %s AND job_key = %s LIMIT 1",
+                    "SELECT id, job FROM rico_job_recommendations WHERE user_id = %s AND job_key = %s LIMIT 1",
                     (user_id, job_key),
                 )
                 row = cur.fetchone()
                 if row:
+                    # Existing row: merge job_data to preserve old metadata while filling missing fields
+                    existing_job = dict(row["job"]) if isinstance(row["job"], dict) else {}
+                    merged_job = dict(existing_job)
+                    # Fill missing/new fields from job_data
+                    for key, value in job_data.items():
+                        if value not in (None, "", []):
+                            merged_job[key] = value
                     cur.execute(
-                        "UPDATE rico_job_recommendations SET status = %s, updated_at = now() WHERE user_id = %s AND job_key = %s",
-                        (status, user_id, job_key),
+                        """
+                        UPDATE rico_job_recommendations 
+                        SET job = %s, status = %s, updated_at = now()
+                        WHERE user_id = %s AND job_key = %s
+                        """,
+                        (Json(merged_job), status, user_id, job_key),
                     )
                 else:
                     cur.execute(

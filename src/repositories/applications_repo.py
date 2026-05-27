@@ -120,17 +120,18 @@ def get_stats(user_id: Optional[str] = None) -> Dict[str, Any]:
 
 
 def find_by_job_id(job_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """Find a single application record by job_id for a user or in legacy JSON."""
+    """Find a single application record by job_id for a user or in legacy JSON.
+    
+    Uses direct DB lookup by user_id + job_key without arbitrary 200-row limit
+    to avoid missing older records in status regression guards.
+    """
     if user_id:
         db = _db()
         if not db:
             raise HTTPException(status_code=503, detail="Database unavailable")
         db_user_id = _provision_db_user_id(db, user_id)
-        apps = db.get_recommendations(db_user_id, limit=200)
-        return next(
-            (a for a in apps if isinstance(a, dict) and a.get("job_id") == job_id),
-            None,
-        )
+        # Use direct lookup without limit to find older records
+        return db.get_recommendation_by_job_key(db_user_id, job_id)
 
     # Legacy fallback
     _warn_legacy_fallback("find_by_job_id")
