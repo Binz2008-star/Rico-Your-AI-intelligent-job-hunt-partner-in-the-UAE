@@ -50,3 +50,32 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE
           PYTHONPATH=$GITHUB_WORKSPACE pytest tests/test_rico_routes.py tests/test_security_audit.py tests/test_rico_memory_safety.py tests/test_rico_hardening.py -v --tb=short
+
+  playwright:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install frontend dependencies
+        run: |
+          cd apps/web
+          npm ci
+
+      - name: Install Playwright browsers
+        run: |
+          cd apps/web
+          npx playwright install --with-deps chromium
+
+      - name: Run Playwright E2E tests
+        run: |
+          cd apps/web
+          npx playwright test --project=chromium
