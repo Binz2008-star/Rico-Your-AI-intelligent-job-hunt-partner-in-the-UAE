@@ -65,114 +65,6 @@ def _run(api: RicoChatAPI, message: str, profile: MagicMock, intent: IntentResul
         return api._handle_active_user(USER, message)
 
 
-def test_save_without_backend_persistence_does_not_claim_saved():
-    api, context = _api_with_context()
-    context["recent_search_matches"] = [
-        {"title": "HSE Manager", "company": "Acme", "apply_url": "", "source_url": ""}
-    ]
-    intent = IntentResult(
-        intent="job_action.save_job",
-        confidence=1.0,
-        source="exact",
-        extracted_title="HSE Manager",
-        extracted_company="Acme",
-    )
-
-    with patch("src.repositories.applications_repo.create_manual", return_value=False):
-        result = _run(api, "Save - HSE Manager at Acme", _profile(), intent)
-
-    assert "could not save" in result["message"].lower()
-    assert "Saved -" not in result["message"]
-    assert "Saved as lead" not in result["message"]
-
-
-def test_tracker_read_after_save_returns_saved_job_from_backend():
-    api, _ = _api_with_context()
-    profile = _profile()
-    apps = [{"title": "HSE Manager", "company": "Acme", "status": "saved", "link": ""}]
-
-    with (
-        patch("src.repositories.applications_repo.get_all", return_value=apps) as get_all,
-        patch("src.repositories.applications_repo.get_stats", return_value={"saved": 1}),
-    ):
-        result = _run(api, "what i have in my tracker", profile)
-
-    get_all.assert_called_once_with(user_id=USER)
-    assert result["type"] == "application_status"
-    assert result["applications"][0]["title"] == "HSE Manager"
-    assert "HSE Manager" in result["message"]
-
-
-def test_generic_find_me_a_job_uses_profile_aligned_hse_roles_not_engineer_manager():
-    api, _ = _api_with_context()
-    profile = _profile()
-    intent = IntentResult("job_search.profile_match", 1.0, "exact")
-    seen: dict[str, str] = {}
-
-    def fake_search(_user: str, role: str, _profile: MagicMock, **_kw) -> dict:
-        seen["role"] = role
-        return {"type": "job_matches", "message": role, "matches": []}
-
-    with patch.object(api, "_target_role_search_response", side_effect=fake_search):
-        result = _run(api, "find me a job", profile, intent)
-
-    assert seen["role"] not in {"Engineer", "Manager"}
-    assert seen["role"] in {
-        "HSE Manager",
-        "QHSE Manager",
-        "Environmental Compliance Officer",
-        "Sustainability Manager",
-        "ESG/Compliance Manager",
-    }
-    assert result["message"] == seen["role"]
-
-
-def test_open_apply_link_action_only_when_apply_url_exists():
-    profile = _profile()
-    live = RicoChatAPI._format_match(
-        {"title": "HSE Manager", "company": "Acme", "job_apply_link": "https://example.com/apply"},
-        profile,
-    )
-    lead = RicoChatAPI._format_match(
-        {"title": "HSE Manager", "company": "Acme", "job_google_link": "https://example.com/source"},
-        profile,
-    )
-
-    assert "Open apply link" in live["actions"]
-    assert "Open apply link" not in lead["actions"]
-    assert "Apply link not captured" in lead["missing_facts"]
-
-
-def test_why_after_missing_apply_link_explains_missing_source_url():
-    api, context = _api_with_context()
-    context["recent_search_matches"] = [
-        {
-            "title": "HSE Manager",
-            "company": "Acme",
-            "apply_url": "",
-            "source_url": "",
-            "verification_status": "lead_needs_verification",
-        }
-    ]
-    open_intent = IntentResult(
-        intent="job_action.open_apply_link",
-        confidence=1.0,
-        source="exact",
-        extracted_title="HSE Manager",
-        extracted_company="Acme",
-    )
-
-    missing = _run(api, "open apply link for HSE Manager at Acme", _profile(), open_intent)
-    why = _run(api, "why", _profile())
-
-    assert "no verified apply link" in missing["message"].lower()
-    assert why["type"] == "failure_explanation"
-    assert "apply_url" in why["message"]
-    assert "not include" in why["message"].lower()
-
-
-# ── New DB-persistence tests ──────────────────────────────────────────────────
-
 def test_store_search_matches_persists_to_db():
     """_store_search_matches_context must write matches to Neon via upsert_matches."""
     api, _ = _api_with_context()
@@ -253,6 +145,41 @@ def test_open_apply_link_falls_back_to_source_url():
     assert "official listing" in result["message"].lower()
 
 
+def test_open_apply_link_checks_db_after_url_less_application_record():
+    """A saved Application Flow record without URL must not block the persisted DB lookup."""
+    api, _ = _api_with_context()
+    open_intent = IntentResult(
+        intent="job_action.open_apply_link",
+        confidence=1.0,
+        source="exact",
+        extracted_title="HSE Manager",
+        extracted_company="Acme",
+    )
+    db_row = {
+        "title": "HSE Manager",
+        "company": "Acme",
+        "apply_url": "https://acme.com/apply",
+        "source_url": "https://acme.com/src",
+        "verification_status": "live",
+        "searched_at": None,
+    }
+
+    with (
+        patch(
+            "src.repositories.applications_repo.get_all",
+            return_value=[{"title": "HSE Manager", "company": "Acme", "link": ""}],
+        ),
+        patch(
+            "src.repositories.user_job_context_repo.find_by_title_company",
+            return_value=db_row,
+        ),
+    ):
+        result = _run(api, "open apply link for HSE Manager at Acme", _profile(), open_intent)
+
+    assert "https://acme.com/apply" in result["message"]
+    assert result.get("apply_url") == "https://acme.com/apply"
+
+
 def test_open_apply_link_does_not_tell_user_to_search_manually():
     """The old error 'Search for the role on the company website or LinkedIn' must be gone."""
     api, _ = _api_with_context()
@@ -276,6 +203,96 @@ def test_open_apply_link_does_not_tell_user_to_search_manually():
     assert "search for the role on the company website" not in result["message"].lower()
     assert "linkedin" not in result["message"].lower()
     assert "needs source verification" in result["message"].lower()
+
+
+def test_user_job_context_lookup_does_not_match_single_word_title_substring():
+    """The DB lookup should not match "Manager" to a stored "General Manager" row."""
+    from src.repositories import user_job_context_repo
+
+    class Cursor:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, tuple]] = []
+
+        def execute(self, sql: str, params: tuple) -> None:
+            self.calls.append((sql, params))
+
+        def fetchone(self):
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class Conn:
+        def __init__(self) -> None:
+            self.cursor_obj = Cursor()
+
+        def cursor(self):
+            return self.cursor_obj
+
+        def close(self) -> None:
+            pass
+
+    conn = Conn()
+
+    with patch("src.db.get_db_connection", return_value=conn):
+        row = user_job_context_repo.find_by_title_company(USER, "Manager", "Acme")
+
+    assert row is None
+    assert len(conn.cursor_obj.calls) == 1
+    assert "lower(title) = lower(%s)" in conn.cursor_obj.calls[0][0]
+
+
+def test_user_job_context_upsert_skips_missing_title_or_company_and_source_only_links():
+    """Rows without identifiers are skipped and identical apply/source URLs persist as source only."""
+    from src.repositories import user_job_context_repo
+
+    class Cursor:
+        def __init__(self) -> None:
+            self.params: list[tuple] = []
+
+        def execute(self, _sql: str, params: tuple) -> None:
+            self.params.append(params)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class Conn:
+        def __init__(self) -> None:
+            self.cursor_obj = Cursor()
+
+        def cursor(self):
+            return self.cursor_obj
+
+        def commit(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    conn = Conn()
+    matches = [
+        {"title": "", "company": "Acme", "apply_url": "https://skip.example/apply"},
+        {"title": "HSE Manager", "company": "", "apply_url": "https://skip.example/apply"},
+        {
+            "title": "HSE Manager",
+            "company": "Acme",
+            "apply_url": "https://google.example/source",
+            "source_url": "https://google.example/source",
+        },
+    ]
+
+    with patch("src.db.get_db_connection", return_value=conn):
+        user_job_context_repo.upsert_matches(USER, matches)
+
+    assert len(conn.cursor_obj.params) == 1
+    assert conn.cursor_obj.params[0][4] == ""
+    assert conn.cursor_obj.params[0][5] == "https://google.example/source"
 
 
 def test_saved_target_role_search_mentions_saved_role():

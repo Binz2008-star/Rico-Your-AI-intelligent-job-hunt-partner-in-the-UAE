@@ -26,7 +26,7 @@ def upsert_matches(user_id: str, matches: list[dict]) -> None:
     Never raises — failures are logged and swallowed so the chat response
     is not affected by a transient DB error.
     """
-    if not matches:
+    if not user_id or not matches:
         return
     from src.db import get_db_connection
 
@@ -37,6 +37,19 @@ def upsert_matches(user_id: str, matches: list[dict]) -> None:
     try:
         with conn.cursor() as cur:
             for m in matches:
+                t = (m.get("title") or "").strip()
+                c = (m.get("company") or "").strip()
+                if not t or not c:
+                    continue  # cannot uniquely identify; skip rather than clobber
+                au = (m.get("apply_url") or "").strip()
+                su = (m.get("source_url") or "").strip()
+                # When _format_match promotes a source listing URL (job_google_link)
+                # into apply_url with no actual direct apply link, both fields end up
+                # identical. Store it as source_url only so the DB lookup returns the
+                # correct source-URL fallback instead of a Google link as apply_url.
+                if au and su and au == su:
+                    au = ""
+                vs = m.get("verification_status") or "lead_needs_verification"
                 cur.execute(
                     """
                     INSERT INTO user_job_context
@@ -45,19 +58,26 @@ def upsert_matches(user_id: str, matches: list[dict]) -> None:
                     VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
                     ON CONFLICT (user_id, lower(title), lower(company))
                     DO UPDATE SET
-                        apply_url           = EXCLUDED.apply_url,
-                        source_url          = EXCLUDED.source_url,
+                        apply_url           = CASE
+                                                WHEN EXCLUDED.apply_url <> ''
+                                                THEN EXCLUDED.apply_url
+                                                ELSE user_job_context.apply_url
+                                              END,
+                        source_url          = COALESCE(
+                                                NULLIF(EXCLUDED.source_url, ''),
+                                                user_job_context.source_url
+                                              ),
                         verification_status = EXCLUDED.verification_status,
                         searched_at         = NOW()
                     """,
                     (
                         user_id,
-                        (m.get("title") or "").strip(),
-                        (m.get("company") or "").strip(),
+                        t,
+                        c,
                         (m.get("location") or "").strip() or None,
-                        (m.get("apply_url") or "").strip(),
-                        (m.get("source_url") or "").strip(),
-                        m.get("verification_status") or "lead_needs_verification",
+                        au,
+                        su,
+                        vs,
                     ),
                 )
         conn.commit()
@@ -81,8 +101,9 @@ def find_by_title_company(
     """
     Return the most recent match for (user_id, title, company) within max_age_days.
 
-    Comparison is case-insensitive and uses substring matching so "Acme Corp" in
-    the DB matches "Acme" from the intent extractor.
+    Comparison is case-insensitive. Exact normalized title/company matches are
+    preferred; substring fallback is limited to multi-word titles so a generic
+    title like "Manager" does not match "General Manager".
 
     Returns None when no row is found or the DB is unavailable.
     Never raises.
@@ -94,6 +115,11 @@ def find_by_title_company(
         return None
     cutoff = datetime.now(_UTC) - timedelta(days=max_age_days)
     try:
+        normalized_title = (title or "").strip()
+        normalized_company = (company or "").strip()
+        if not user_id or not normalized_title or not normalized_company:
+            return None
+
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -101,15 +127,31 @@ def find_by_title_company(
                        verification_status, searched_at
                   FROM user_job_context
                  WHERE user_id = %s
-                   AND lower(title)   LIKE lower(%s)
-                   AND lower(company) LIKE lower(%s)
+                   AND lower(title) = lower(%s)
+                   AND lower(company) = lower(%s)
                    AND searched_at >= %s
                  ORDER BY searched_at DESC
                  LIMIT 1
                 """,
-                (user_id, f"%{title}%", f"%{company}%", cutoff),
+                (user_id, normalized_title, normalized_company, cutoff),
             )
             row = cur.fetchone()
+            if not row and len(normalized_title.split()) >= 2:
+                cur.execute(
+                    """
+                    SELECT title, company, location, apply_url, source_url,
+                           verification_status, searched_at
+                      FROM user_job_context
+                     WHERE user_id = %s
+                       AND lower(title) LIKE lower(%s)
+                       AND lower(company) LIKE lower(%s)
+                       AND searched_at >= %s
+                     ORDER BY searched_at DESC
+                     LIMIT 1
+                    """,
+                    (user_id, f"%{normalized_title}%", f"%{normalized_company}%", cutoff),
+                )
+                row = cur.fetchone()
         if not row:
             return None
         return {

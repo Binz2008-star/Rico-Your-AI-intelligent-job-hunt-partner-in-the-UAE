@@ -2060,7 +2060,7 @@ class RicoChatAPI:
                     pass
 
             # 2. Application Flow records (saved / previously applied jobs)
-            if apply_url is None and title and company:
+            if not apply_url and title and company:
                 try:
                     from src.repositories.applications_repo import get_all as _get_all_apps
                     for rec in _get_all_apps(user_id=user_id):
@@ -2078,7 +2078,7 @@ class RicoChatAPI:
 
             # 3. Neon user_job_context — survives restarts and postgres memory mode
             db_source_url = None
-            if apply_url is None and title and company:
+            if not apply_url and title and company:
                 try:
                     from src.repositories.user_job_context_repo import find_by_title_company
                     row = find_by_title_company(user_id, title, company)
