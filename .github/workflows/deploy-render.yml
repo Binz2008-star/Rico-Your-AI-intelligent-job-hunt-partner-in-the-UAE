@@ -1,0 +1,34 @@
+name: Manual Render Deploy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Trigger Render Deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Trigger Render deploy hook
+        run: |
+          curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          echo "Render deploy triggered"
+
+      - name: Wait for Render deploy propagation
+        run: sleep 30
+
+      - name: Verify backend health
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://rico-job-automation-api.onrender.com/health)
+          if [ "$STATUS" != "200" ]; then
+            echo "Backend health check failed (HTTP $STATUS)"
+            exit 1
+          fi
+          echo "Backend health: OK ($STATUS)"
+          curl -s https://rico-job-automation-api.onrender.com/health | python3 -m json.tool
+
+      - name: Verify version
+        run: |
+          curl -s https://rico-job-automation-api.onrender.com/version
