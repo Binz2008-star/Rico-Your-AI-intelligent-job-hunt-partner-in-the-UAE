@@ -2388,6 +2388,71 @@ class RicoChatAPI:
         except Exception:
             logger.debug("rico_chat: failed to persist search matches to DB user=%s", user_id)
 
+    @staticmethod
+    def _get_status_rank(status: str) -> int:
+        """Return numeric rank for application status to prevent regression.
+
+        Higher rank = more advanced status.
+        """
+        STATUS_RANK = {
+            "saved": 10,
+            "opened": 20,
+            "opened_external": 20,
+            "prepared": 30,
+            "applied": 40,
+            "follow_up_due": 50,
+            "interview": 60,
+            "offer": 70,
+            "rejected": 70,
+            "decision_made": 80,
+            "archived": 90,
+        }
+        return STATUS_RANK.get(status, 0)
+
+    @staticmethod
+    def _should_update_status(current_status: str, new_status: str) -> bool:
+        """Return True if new_status should replace current_status.
+
+        Only update if new status is equal or more advanced than current.
+        Never downgrade from applied/interview/offer/rejected/decision_made.
+        """
+        current_rank = RicoChatAPI._get_status_rank(current_status)
+        new_rank = RicoChatAPI._get_status_rank(new_status)
+        return new_rank >= current_rank
+
+    @staticmethod
+    def _derive_lifecycle_job_key(title: str, company: str, url: str = "") -> str:
+        """Derive stable job key for lifecycle events.
+
+        Prefers title + company fallback to match mark_applied/create_manual behavior.
+        Only uses URL if title/company are not available.
+        """
+        from src.applications import get_job_id
+        # Prefer title/company fallback to match mark_applied behavior
+        if title and company:
+            return get_job_id({"title": title, "company": company})
+        # Fallback to URL if title/company missing
+        if url:
+            return get_job_id({"link": url})
+        # Last resort: title only
+        return get_job_id({"title": title or "", "company": ""})
+
+    def _get_existing_application_status(
+        self, user_id: str, job_key: str
+    ) -> Optional[str]:
+        """Get current status for user/job from rico_job_recommendations.
+
+        Returns None if no record exists.
+        """
+        try:
+            from src.repositories.applications_repo import find_by_job_id
+            existing = find_by_job_id(job_key, user_id)
+            if existing:
+                return existing.get("status")
+        except Exception:
+            pass
+        return None
+
     def _persist_application_lifecycle_event(
         self,
         user_id: str,
@@ -2400,22 +2465,36 @@ class RicoChatAPI:
         """Persist application lifecycle event to rico_job_recommendations.
 
         Safely wraps DB write so response flow is not blocked on failure.
-        Uses upsert pattern via applications_repo.create to handle duplicates.
+        Uses stable job key to match mark_applied/create_manual behavior.
+        Prevents status regression by checking existing status before upsert.
         """
         try:
             from src.repositories.applications_repo import create as _create_app
-            from src.applications import get_job_id
-            job_key = get_job_id({"title": title, "company": company, "link": url})
-            _create_app(
-                job_id=job_key,
-                title=title,
-                company=company,
-                location=location,
-                url=url,
-                status=status,
-                source="chat",
-                user_id=user_id,
-            )
+
+            # Derive stable job key (prefer title/company to match mark_applied)
+            job_key = self._derive_lifecycle_job_key(title, company, url)
+
+            # Check existing status to prevent regression
+            existing_status = self._get_existing_application_status(user_id, job_key)
+
+            # Only update if no record exists or new status is equal/more advanced
+            if existing_status is None or self._should_update_status(existing_status, status):
+                _create_app(
+                    job_id=job_key,
+                    title=title,
+                    company=company,
+                    location=location,
+                    url=url,
+                    status=status,
+                    source="chat",
+                    user_id=user_id,
+                )
+            else:
+                logger.debug(
+                    "rico_chat: skipped lifecycle status update user=%s title=%s company=%s "
+                    "existing_status=%s new_status=%s (would regress)",
+                    user_id, title, company, existing_status, status
+                )
         except Exception:
             # DB write failure should not block the response
             logger.debug(
