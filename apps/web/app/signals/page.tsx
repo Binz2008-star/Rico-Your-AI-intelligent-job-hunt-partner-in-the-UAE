@@ -27,6 +27,24 @@ function MomentumLabel({ momentum }: { momentum: "high" | "medium" | "low" }) {
   );
 }
 
+function MatchScoreBadge({ score }: { score: number }) {
+  const color =
+    score >= 75
+      ? "text-[#5dcaa5] bg-[#5dcaa5]/10 border-[#5dcaa5]/20"
+      : score >= 50
+        ? "text-[#facc15] bg-[#facc15]/10 border-[#facc15]/20"
+        : "text-[#f87171] bg-[#f87171]/10 border-[#f87171]/20";
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${color}`}
+    >
+      <MaterialIcon icon="auto_awesome" size={12} />
+      {score}%
+    </span>
+  );
+}
+
 function LinkStatusBadge({
   status,
 }: {
@@ -77,6 +95,58 @@ function commandHref(message: string) {
   return `/command?prompt=${encodeURIComponent(message)}`;
 }
 
+function PrimaryAction({
+  signal,
+  linkStatus,
+}: {
+  signal: OpportunitySignal;
+  linkStatus?: OpportunitySignal["linkStatus"];
+}) {
+  const titleCompany = `${signal.role} at ${signal.company}`;
+
+  const showViewJob =
+    linkStatus === undefined ||
+    linkStatus === "checking" ||
+    ["live", "redirect", "needs_review", "source_only"].includes(linkStatus);
+
+  if (linkStatus === "expired") {
+    return (
+      <Link
+        href={commandHref(`Find similar live jobs — ${titleCompany}`)}
+        className="inline-flex items-center gap-1.5 rounded-full border border-cyan/25 bg-cyan/10 px-4 py-2 text-[13px] font-semibold text-cyan hover:bg-cyan/15"
+      >
+        <MaterialIcon icon="rocket_launch" size={14} />
+        Find similar live jobs
+      </Link>
+    );
+  }
+
+  if (linkStatus === "blocked") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-red/25 bg-red/10 px-4 py-2 text-[13px] font-semibold text-red">
+        <MaterialIcon icon="lock" size={14} />
+        Needs review
+      </span>
+    );
+  }
+
+  if (signal.applyUrl && showViewJob) {
+    return (
+      <a
+        href={signal.applyUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1.5 rounded-full border border-cyan/25 bg-cyan/10 px-4 py-2 text-[13px] font-semibold text-cyan hover:bg-cyan/15"
+      >
+        <MaterialIcon icon="arrow_forward" size={14} />
+        View job
+      </a>
+    );
+  }
+
+  return null;
+}
+
 function SignalActions({
   signal,
   onDismiss,
@@ -87,98 +157,198 @@ function SignalActions({
   linkStatus?: OpportunitySignal["linkStatus"];
 }) {
   const titleCompany = `${signal.role} at ${signal.company}`;
-
-  const showViewJob =
-    linkStatus === undefined ||
-    linkStatus === "checking" ||
-    ["live", "redirect", "needs_review", "source_only"].includes(linkStatus);
-
   const showCaution =
     linkStatus === "needs_review" || linkStatus === "source_only";
 
+  const secondaryClass =
+    "rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-medium text-on-surface hover:text-white hover:bg-white/[0.06]";
+
   return (
-    <div className="mt-5 flex flex-wrap gap-2">
-      {linkStatus === "expired" ? (
+    <div className="mt-4 flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <PrimaryAction signal={signal} linkStatus={linkStatus} />
+        {showCaution && (
+          <span className="text-[11px] text-on-surface-variant/60">
+            Caution: link status uncertain
+          </span>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
         <Link
-          href={commandHref(`Find similar live jobs — ${titleCompany}`)}
-          className="rounded-full border border-cyan/25 bg-cyan/10 px-3 py-1.5 text-[12px] font-semibold text-cyan hover:bg-cyan/15"
+          href={commandHref(`Explain fit — ${titleCompany}`)}
+          className={secondaryClass}
         >
-          Find similar live jobs
+          Explain fit
         </Link>
-      ) : linkStatus === "blocked" ? (
-        <span className="rounded-full border border-red/25 bg-red/10 px-3 py-1.5 text-[12px] font-semibold text-red">
-          Needs review — link could not be safely verified
-        </span>
-      ) : signal.applyUrl && showViewJob ? (
-        <a
-          href={signal.applyUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="rounded-full border border-cyan/25 bg-cyan/10 px-3 py-1.5 text-[12px] font-semibold text-cyan hover:bg-cyan/15"
+        <Link
+          href={commandHref(`Track this job — ${titleCompany}`)}
+          className={secondaryClass}
         >
-          View job
-        </a>
-      ) : null}
-      {showCaution && (
-        <span className="text-[10px] text-on-surface-variant/60 self-center">
-          Caution: link status uncertain
-        </span>
-      )}
-      <Link
-        href={commandHref(`Explain fit — ${titleCompany}`)}
-        className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[12px] font-semibold text-on-surface hover:text-white"
-      >
-        Explain fit
-      </Link>
-      <Link
-        href={commandHref(`Track this job — ${titleCompany}`)}
-        className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[12px] font-semibold text-on-surface hover:text-white"
-      >
-        Track this job
-      </Link>
-      <Link
-        href={commandHref(`Prepare application — ${titleCompany}`)}
-        className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[12px] font-semibold text-on-surface hover:text-white"
-      >
-        Prepare application
-      </Link>
-      <Link
-        href={commandHref(`Mark as applied — ${titleCompany}`)}
-        className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[12px] font-semibold text-on-surface hover:text-white"
-      >
-        Mark as applied
-      </Link>
-      <Link
-        href={commandHref(`Save job — ${titleCompany}`)}
-        className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[12px] font-semibold text-on-surface hover:text-white"
-      >
-        Save
-      </Link>
+          Track
+        </Link>
+        <Link
+          href={commandHref(`Prepare application — ${titleCompany}`)}
+          className={secondaryClass}
+        >
+          Prepare
+        </Link>
+        <Link
+          href={commandHref(`Mark as applied — ${titleCompany}`)}
+          className={secondaryClass}
+        >
+          Applied
+        </Link>
+        <Link
+          href={commandHref(`Save job — ${titleCompany}`)}
+          className={secondaryClass}
+        >
+          Save
+        </Link>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="rounded-full border border-white/10 bg-white/[0.02] px-2.5 py-1 text-[11px] font-medium text-on-surface-variant hover:text-white hover:bg-white/[0.04]"
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SignalCard({
+  signal,
+  linkStatus,
+  onSelect,
+  onDismiss,
+  viewMode,
+}: {
+  signal: OpportunitySignal;
+  linkStatus?: OpportunitySignal["linkStatus"];
+  onSelect: (s: OpportunitySignal) => void;
+  onDismiss: () => void;
+  viewMode: "card" | "list";
+}) {
+  const isList = viewMode === "list";
+
+  return (
+    <GlassPanel
+      className={`rounded-xl border border-white/10 hover:border-primary/30 transition-all group ${isList ? "p-4" : "p-5"}`}
+    >
       <button
         type="button"
-        onClick={onDismiss}
-        className="rounded-full border border-white/10 bg-white/[0.02] px-3 py-1.5 text-[12px] font-semibold text-on-surface-variant hover:text-white"
+        onClick={() => onSelect(signal)}
+        className="block w-full text-left"
       >
-        Dismiss
+        {/* Header row */}
+        <div
+          className={`flex items-start justify-between gap-3 ${isList ? "mb-2" : "mb-3"}`}
+        >
+          <div className="min-w-0 flex-1">
+            <h3
+              className={`font-semibold text-on-surface break-normal ${isList ? "text-base line-clamp-1" : "text-lg line-clamp-2"}`}
+            >
+              {signal.role}
+            </h3>
+            <p className="mt-0.5 text-on-surface-variant text-sm break-normal line-clamp-1">
+              {signal.company}
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-1.5 shrink-0">
+            <MatchScoreBadge score={signal.matchScore} />
+            <LinkStatusBadge status={linkStatus} />
+          </div>
+        </div>
+
+        {/* Meta row */}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-on-surface-variant/60 mb-3">
+          <span>{signal.location || "Location unavailable"}</span>
+          <span>·</span>
+          <span>{signal.source || "Rico job search"}</span>
+          <span>·</span>
+          <span>{signalDate(signal)}</span>
+          <span>·</span>
+          <MomentumLabel momentum={signal.momentum} />
+        </div>
+
+        {/* Body */}
+        <p className="text-sm text-on-surface-variant/80 line-clamp-2 mb-3">
+          {signal.whyItFits || "Rico matched this role against your profile."}
+        </p>
+
+        {/* Footer hint */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <div
+              className={`w-1.5 h-1.5 rounded-full ${signal.momentum === "high" ? "bg-secondary" : signal.momentum === "medium" ? "bg-[#facc15]" : "bg-primary"}`}
+            />
+            <span className="text-label-caps text-[10px] text-on-surface-variant">
+              Open details
+            </span>
+          </div>
+          <MaterialIcon
+            icon="arrow_forward"
+            className="text-on-surface-variant/40 group-hover:text-primary transition-colors"
+            size={18}
+          />
+        </div>
       </button>
-    </div>
+
+      <SignalActions
+        signal={signal}
+        linkStatus={linkStatus}
+        onDismiss={onDismiss}
+      />
+    </GlassPanel>
   );
 }
 
 export default function SignalsPage() {
   const { signals, isLoading, error, refetchSignals } = useOrchestration();
-  const { getLinkStatus, isChecking } = useLinkVerification(signals);
+  const { getLinkStatus } = useLinkVerification(signals);
   const [selectedSignal, setSelectedSignal] =
     useState<OpportunitySignal | null>(null);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<"card" | "list">("card");
+
   const visibleSignals = useMemo(
     () => signals.filter((signal) => !dismissedIds.has(signal.id)),
     [dismissedIds, signals],
   );
+
+  // Sort by match score descending
+  const sortedSignals = useMemo(
+    () => [...visibleSignals].sort((a, b) => b.matchScore - a.matchScore),
+    [visibleSignals],
+  );
+
+  const highConfidence = sortedSignals.filter((s) => s.matchScore >= 50);
+  const lowConfidence = sortedSignals.filter((s) => s.matchScore < 50);
+
   const dismissSignal = (id: string) => {
     setDismissedIds((current) => new Set([...current, id]));
     if (selectedSignal?.id === id) setSelectedSignal(null);
   };
+
+  const gridClass =
+    viewMode === "list"
+      ? "grid grid-cols-1 gap-4"
+      : "grid grid-cols-1 xl:grid-cols-2 gap-5";
+
+  const renderSignalGrid = (items: OpportunitySignal[]) => (
+    <div className={gridClass}>
+      {items.map((signal) => (
+        <SignalCard
+          key={signal.id}
+          signal={signal}
+          linkStatus={getLinkStatus(signal.id)}
+          onSelect={setSelectedSignal}
+          onDismiss={() => dismissSignal(signal.id)}
+          viewMode={viewMode}
+        />
+      ))}
+    </div>
+  );
 
   return (
     <div className="relative min-h-screen overflow-x-hidden">
@@ -186,26 +356,48 @@ export default function SignalsPage() {
       <AuraGlow aria-hidden="true" variant="cyan" position="bottom-right" />
       <TopNav />
 
-      <main className="relative z-10 pt-40 pb-60 px-container-padding-mobile md:px-container-padding-desktop max-w-7xl mx-auto">
-        <div className="mb-section-gap">
-          <h1 className="font-headline-xl text-headline-xl text-on-surface mb-4">
-            Opportunity Signals
-          </h1>
-          <p className="font-body-lg text-body-lg text-on-surface-variant max-w-xl">
-            Live market signals sourced from your matched jobs feed and scored
-            against current opportunity momentum.
-          </p>
+      <main className="relative z-10 pt-32 pb-40 px-container-padding-mobile md:px-container-padding-desktop max-w-6xl mx-auto">
+        <div className="mb-10 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+          <div>
+            <h1 className="font-headline-xl text-headline-xl text-on-surface mb-3">
+              Opportunity Radar
+            </h1>
+            <p className="font-body-lg text-body-lg text-on-surface-variant max-w-xl">
+              Live market signals scored against your profile. Links are
+              verified before you apply.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setViewMode("card")}
+              className={`rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${viewMode === "card" ? "bg-white/10 text-white" : "text-on-surface-variant hover:text-white"}`}
+              aria-label="Card view"
+              title="Card view"
+            >
+              Cards
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("list")}
+              className={`rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${viewMode === "list" ? "bg-white/10 text-white" : "text-on-surface-variant hover:text-white"}`}
+              aria-label="List view"
+              title="List view"
+            >
+              Focus list
+            </button>
+          </div>
         </div>
 
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {Array.from({ length: 3 }).map((_, index) => (
+          <div className={gridClass}>
+            {Array.from({ length: 4 }).map((_, index) => (
               <GlassPanel
                 key={index}
-                className="p-6 rounded-xl border border-white/10 animate-pulse motion-reduce:animate-none"
+                className="p-5 rounded-xl border border-white/10 animate-pulse motion-reduce:animate-none"
               >
-                <div className="h-5 w-32 rounded bg-white/5 mb-4" />
-                <div className="h-4 w-40 rounded bg-white/5 mb-2" />
+                <div className="h-5 w-40 rounded bg-white/5 mb-3" />
+                <div className="h-4 w-32 rounded bg-white/5 mb-2" />
                 <div className="h-4 w-24 rounded bg-white/5" />
               </GlassPanel>
             ))}
@@ -234,82 +426,21 @@ export default function SignalsPage() {
             </p>
           </GlassPanel>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {visibleSignals.map((signal) => (
-              <GlassPanel
-                key={signal.id}
-                className="p-6 rounded-xl border border-white/10 hover:border-primary/30 transition-all group"
-              >
-                <button
-                  type="button"
-                  onClick={() => setSelectedSignal(signal)}
-                  className="block w-full text-left"
-                >
-                  <div className="flex items-start justify-between mb-4 gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                        <MaterialIcon
-                          icon="business"
-                          className="text-primary"
-                        />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h3 className="font-headline-lg text-headline-lg text-on-surface break-words">
-                          {signal.role}
-                        </h3>
-                        <p className="mt-1 text-on-surface-variant text-sm break-words">
-                          {signal.company}
-                        </p>
-                        <p className="mt-1 text-on-surface-variant text-sm">
-                          {signal.location || "Location unavailable"}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-2">
-                      <MomentumLabel momentum={signal.momentum} />
-                      <LinkStatusBadge status={getLinkStatus(signal.id)} />
-                    </div>
-                  </div>
-                  <div className="mb-4">
-                    <p className="text-body-md text-on-surface-variant mb-2 line-clamp-3">
-                      {signal.whyItFits ||
-                        "Rico matched this role against your profile."}
-                    </p>
-                    <div className="flex gap-2 items-center">
-                      <span className="text-[10px] text-on-surface-variant/60">
-                        Match score {signal.matchScore}%
-                      </span>
-                      <span className="text-[10px] text-on-surface-variant/60">
-                        •
-                      </span>
-                      <span className="text-[10px] text-on-surface-variant/60">
-                        {signal.source || "Rico job search"} ·{" "}
-                        {signalDate(signal)}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`w-1.5 h-1.5 rounded-full ${signal.momentum === "high" ? "bg-secondary" : signal.momentum === "medium" ? "bg-[#facc15]" : "bg-primary"}`}
-                      />
-                      <span className="text-label-caps text-[10px] text-on-surface-variant">
-                        Open details
-                      </span>
-                    </div>
-                    <MaterialIcon
-                      icon="arrow_forward"
-                      className="text-on-surface-variant/40 group-hover:text-primary transition-colors"
-                    />
-                  </div>
-                </button>
-                <SignalActions
-                  signal={signal}
-                  linkStatus={getLinkStatus(signal.id)}
-                  onDismiss={() => dismissSignal(signal.id)}
-                />
-              </GlassPanel>
-            ))}
+          <div className="space-y-8">
+            {highConfidence.length > 0 && renderSignalGrid(highConfidence)}
+
+            {lowConfidence.length > 0 && (
+              <>
+                <div className="flex items-center gap-3 pt-2">
+                  <div className="h-px flex-1 bg-white/10" />
+                  <span className="text-[11px] font-medium text-on-surface-variant/50 uppercase tracking-wider">
+                    Below 50% match — review with caution
+                  </span>
+                  <div className="h-px flex-1 bg-white/10" />
+                </div>
+                {renderSignalGrid(lowConfidence)}
+              </>
+            )}
           </div>
         )}
       </main>
@@ -318,12 +449,12 @@ export default function SignalsPage() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-4 py-6 backdrop-blur-sm md:items-center">
           <GlassPanel className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/10 p-6">
             <div className="flex items-start justify-between gap-4">
-              <div>
+              <div className="min-w-0">
                 <p className="text-label-caps text-[10px] text-cyan">
                   {selectedSignal.source || "Rico job search"} ·{" "}
                   {signalDate(selectedSignal)}
                 </p>
-                <h2 className="mt-3 text-2xl font-semibold text-on-surface">
+                <h2 className="mt-3 text-2xl font-semibold text-on-surface break-normal">
                   {selectedSignal.role}
                 </h2>
                 <p className="mt-2 text-body-md text-on-surface-variant">
@@ -334,11 +465,18 @@ export default function SignalsPage() {
               <button
                 type="button"
                 onClick={() => setSelectedSignal(null)}
-                className="rounded-full border border-white/10 px-3 py-1 text-sm text-on-surface-variant hover:text-white"
+                className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-sm text-on-surface-variant hover:text-white"
               >
                 Close
               </button>
             </div>
+
+            <div className="mt-5 flex flex-wrap items-center gap-2">
+              <MatchScoreBadge score={selectedSignal.matchScore} />
+              <MomentumLabel momentum={selectedSignal.momentum} />
+              <LinkStatusBadge status={getLinkStatus(selectedSignal.id)} />
+            </div>
+
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                 <p className="text-label-caps text-[10px] text-on-surface-variant">
