@@ -4,6 +4,7 @@ import { AuraGlow } from '@/components/ui/AuraGlow';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { PageTransition, StaggerChildren } from '@/components/ui/PageTransition';
+import { ApiError } from '@/lib/api';
 import { useAuthStore } from '@/lib/store/useAuthStore';
 import { useRouter } from 'next/navigation';
 import React, { useState } from 'react';
@@ -29,10 +30,10 @@ export function LoginForm() {
             if (process.env.NODE_ENV === 'development') {
                 console.error('[login]', err);
             }
-            const isNetworkFailure = err instanceof TypeError;
-            const message = isNetworkFailure
-                ? "We couldn't log you in right now. Please try again in a moment."
-                : 'The email or password is incorrect.';
+            const isCredentialError = err instanceof ApiError && err.statusCode === 401;
+            const message = isCredentialError
+                ? 'The email or password is incorrect.'
+                : "We couldn't log you in right now. Please try again in a moment.";
             setError(message);
             setFailedAttempts(prev => prev + 1);
         }

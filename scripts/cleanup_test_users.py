@@ -66,15 +66,15 @@ def is_test_email(email: str, extra_email: Optional[str] = None) -> bool:
 
 def find_test_users(conn, extra_email: Optional[str]) -> list[dict]:
     with conn.cursor() as cur:
-        cur.execute("SELECT user_id, email, created_at, role FROM users ORDER BY created_at")
+        cur.execute("SELECT id, email, created_at, role FROM users ORDER BY created_at")
         rows = cur.fetchall()
 
     test_users = []
     for row in rows:
-        user_id, email, created_at, role = row[0], row[1], row[2], row[3]
+        row_id, email, created_at, role = row[0], row[1], row[2], row[3]
         if is_test_email(email, extra_email):
             test_users.append({
-                "user_id": user_id,
+                "id": row_id,
                 "email": email,
                 "created_at": created_at,
                 "role": role,
@@ -82,13 +82,13 @@ def find_test_users(conn, extra_email: Optional[str]) -> list[dict]:
     return test_users
 
 
-def delete_users(conn, user_ids: list[str]) -> int:
-    if not user_ids:
+def delete_users(conn, ids: list[int]) -> int:
+    if not ids:
         return 0
     with conn.cursor() as cur:
         cur.execute(
-            "DELETE FROM users WHERE user_id = ANY(%s)",
-            (user_ids,),
+            "DELETE FROM users WHERE id = ANY(%s)",
+            (ids,),
         )
         deleted = cur.rowcount
     conn.commit()
@@ -120,6 +120,13 @@ def main() -> None:
     if not database_url:
         print("ERROR: DATABASE_URL is not set.")
         sys.exit(1)
+
+    if args.email and not is_test_email(args.email):
+        print(f"WARNING: --email '{args.email}' does not match any test-account pattern.")
+        print("         This email looks like a real user account.")
+        print("         Proceeding only because --email was explicitly provided.")
+        print("         Double-check the address before using --confirm-delete-test-users.")
+        print()
 
     prod = is_production_db(database_url)
     if prod:
@@ -170,9 +177,9 @@ def main() -> None:
         conn.close()
         return
 
-    user_ids = [u["user_id"] for u in test_users]
+    ids = [u["id"] for u in test_users]
     try:
-        deleted = delete_users(conn, user_ids)
+        deleted = delete_users(conn, ids)
     except Exception as exc:
         print(f"ERROR: Deletion failed: {exc}")
         conn.close()

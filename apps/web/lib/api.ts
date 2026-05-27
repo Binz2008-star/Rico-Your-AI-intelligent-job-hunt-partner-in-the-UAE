@@ -202,7 +202,7 @@ export async function login(
     });
     if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as { detail?: string };
-        throw new Error(err.detail ?? "Login failed");
+        throw new ApiError(err.detail ?? "Login failed", res.status, err);
     }
     return res.json() as Promise<LoginResponse>;
 }
