@@ -130,6 +130,16 @@ def init_db():
                 ADD COLUMN IF NOT EXISTS score_threshold_watch INTEGER DEFAULT 50
             """)
 
+            # Add link verification columns to jobs table
+            cursor.execute("""
+                ALTER TABLE jobs
+                ADD COLUMN IF NOT EXISTS link_status VARCHAR(20) DEFAULT 'needs_review'
+            """)
+            cursor.execute("""
+                ALTER TABLE jobs
+                ADD COLUMN IF NOT EXISTS link_verified_at TIMESTAMP
+            """)
+
             # Create indexes for better performance
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_link ON jobs(link)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_score ON jobs(score DESC)")

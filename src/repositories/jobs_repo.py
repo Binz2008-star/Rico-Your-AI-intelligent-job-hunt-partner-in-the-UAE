@@ -48,7 +48,7 @@ def list_from_db(
 
             query = (
                 "SELECT id, title, company, location, link, score,"
-                " match_reason, source, date_found, seen"
+                " match_reason, source, date_found, seen, link_status, link_verified_at"
                 " FROM jobs WHERE " + where +
                 " ORDER BY score DESC, date_found DESC LIMIT %s OFFSET %s"
             )
@@ -79,7 +79,7 @@ def get_by_db_id(db_id: int) -> Optional[Dict[str, Any]]:
         with conn.cursor() as cur:
             cur.execute(
                 """SELECT id, title, company, location, link, score,
-                          match_reason, source, date_found, seen
+                          match_reason, source, date_found, seen, link_status, link_verified_at
                    FROM jobs WHERE id = %s""",
                 (db_id,),
             )
@@ -104,4 +104,6 @@ def _row_to_job(row: tuple) -> Dict[str, Any]:
         "source": row[7] or "",
         "date_found": row[8].isoformat() if row[8] else None,
         "seen": bool(row[9]),
+        "link_status": row[10] if len(row) > 10 else "needs_review",
+        "link_verified_at": row[11].isoformat() if len(row) > 11 and row[11] else None,
     }
