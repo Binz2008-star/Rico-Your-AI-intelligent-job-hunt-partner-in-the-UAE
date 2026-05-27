@@ -41,6 +41,11 @@ jobs:
           cd $GITHUB_WORKSPACE
           PYTHONPATH=$GITHUB_WORKSPACE pytest tests/test_rico_product_behavior.py -v --tb=short
 
+      - name: Run CV extraction tests
+        run: |
+          cd $GITHUB_WORKSPACE
+          PYTHONPATH=$GITHUB_WORKSPACE pytest tests/test_cv_profile_extraction.py -v --tb=short
+
       - name: Run core route and security tests
         run: |
           cd $GITHUB_WORKSPACE
