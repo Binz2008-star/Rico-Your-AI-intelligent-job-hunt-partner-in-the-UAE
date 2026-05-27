@@ -5,12 +5,27 @@ import { GlassPanel } from '@/components/ui/GlassPanel';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { PageTransition, StaggerChildren } from '@/components/ui/PageTransition';
 import { authApi } from '@/lib/api/auth';
+import { resendVerification } from '@/lib/api';
+import { ApiError } from '@/lib/api';
 import axios from 'axios';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import React, { useState } from 'react';
 
 function mapSignupError(err: unknown): { message: string; showLoginLink: boolean } {
+    if (err instanceof ApiError) {
+        if (err.statusCode === 409) {
+            return {
+                message: 'This email is already registered. Please log in instead.',
+                showLoginLink: true,
+            };
+        }
+        if (err.statusCode === 400 || err.statusCode === 422) {
+            return {
+                message: 'Please check your details and try again.',
+                showLoginLink: false,
+            };
+        }
+    }
     if (axios.isAxiosError(err)) {
         const status = err.response?.status;
         if (status === 409) {
@@ -39,7 +54,10 @@ export function SignupForm() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [showLoginLink, setShowLoginLink] = useState(false);
-    const router = useRouter();
+    const [verificationSent, setVerificationSent] = useState(false);
+    const [registeredEmail, setRegisteredEmail] = useState('');
+    const [resendLoading, setResendLoading] = useState(false);
+    const [resendMessage, setResendMessage] = useState('');
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -47,9 +65,11 @@ export function SignupForm() {
         setError('');
         setShowLoginLink(false);
         try {
-            await authApi.register({ email, password, name });
-            router.push('/upload');
-            router.refresh();
+            const result = await authApi.register({ email, password, name });
+            if (result.email_verification_required) {
+                setRegisteredEmail(result.email);
+                setVerificationSent(true);
+            }
         } catch (err) {
             if (process.env.NODE_ENV === 'development') {
                 console.error('[signup]', err);
@@ -61,6 +81,79 @@ export function SignupForm() {
             setIsLoading(false);
         }
     };
+
+    const handleResend = async () => {
+        if (!registeredEmail) return;
+        setResendLoading(true);
+        setResendMessage('');
+        try {
+            await resendVerification(registeredEmail);
+            setResendMessage('Verification email sent. Please check your inbox.');
+        } catch {
+            setResendMessage("Couldn't resend right now. Please try again in a moment.");
+        } finally {
+            setResendLoading(false);
+        }
+    };
+
+    if (verificationSent) {
+        return (
+            <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
+                <AuraGlow variant="cyan" position="top-right" className="animate-pulse-magenta" />
+                <AuraGlow variant="magenta" position="bottom-left" className="animate-pulse-magenta" style={{ animationDelay: '-2s' }} />
+
+                <PageTransition>
+                    <GlassPanel className="w-full max-w-md p-8 rounded-2xl border border-white/10 text-center">
+                        <div className="mb-6">
+                            <div className="w-16 h-16 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4">
+                                <MaterialIcon icon="mark_email_unread" className="text-primary text-3xl" />
+                            </div>
+                            <h1 className="font-headline-xl text-headline-xl text-on-surface mb-2">Check your email</h1>
+                            <p className="text-body-md text-on-surface-variant">
+                                Account created. We sent a verification link to{' '}
+                                <span className="text-primary">{registeredEmail}</span>.
+                            </p>
+                            <p className="mt-2 text-sm text-on-surface-variant">
+                                Click the link in the email to activate your account.
+                            </p>
+                        </div>
+
+                        {resendMessage && (
+                            <p className="mb-4 text-sm text-primary/80">{resendMessage}</p>
+                        )}
+
+                        <button
+                            onClick={handleResend}
+                            disabled={resendLoading}
+                            className="w-full bg-surface-container border border-white/10 rounded-lg px-4 py-3 text-sm text-on-surface-variant hover:text-on-surface hover:border-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                            {resendLoading ? (
+                                <>
+                                    <MaterialIcon icon="hourglass_empty" className="animate-spin text-sm" />
+                                    <span>Sending...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <MaterialIcon icon="refresh" className="text-sm" />
+                                    <span>Resend verification email</span>
+                                </>
+                            )}
+                        </button>
+
+                        <div className="mt-6 text-center">
+                            <Link href="/login" className="text-sm text-on-surface-variant hover:text-primary transition-colors">
+                                Back to login
+                            </Link>
+                        </div>
+                    </GlassPanel>
+                </PageTransition>
+
+                <div className="fixed top-0 left-0 w-full h-full pointer-events-none">
+                    <div className="absolute inset-0 opacity-[0.04] bg-[url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27%3E%3Cfilter id=%27n%27%3E%3CfeTurbulence type=%27fractalNoise%27 baseFrequency=%27.85%27 numOctaves=%274%27 stitchTiles=%27stitch%27/%3E%3C/filter%3E%3Crect width=%27100%25%27 height=%27100%25%27 filter=%27url(%23n)%27 opacity=%27.025%27/%3E%3C/svg%3E')]" />
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="relative min-h-screen flex items-center justify-center overflow-hidden">

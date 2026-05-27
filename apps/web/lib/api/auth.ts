@@ -23,7 +23,7 @@ export const authApi = {
     await ricoAuthApi.logout();
   },
 
-  register: async (data: RegisterPayload): Promise<RegisterResponse> => {
+  register: async (data: RegisterPayload): Promise<RegisterResponse & { email_verification_required?: boolean }> => {
     return ricoAuthApi.register({
       email: data.email,
       password: data.password,

@@ -551,3 +551,224 @@ class TestProductionFallbackGuard:
             result = verify_credentials("admin@test.com", "TestPass123")
         assert result is not None
         assert result["role"] == "admin"
+
+
+# ── Email verification flow ────────────────────────────────────────────────────
+
+class TestEmailVerificationFlow:
+    def _verified_user(self) -> "User":
+        return User(
+            id=20, email="verified@rico.ai", password_hash="$2b$12$hash",
+            role="user", is_active=True,
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            last_login_at=None,
+            email_verified=True,
+        )
+
+    def _unverified_user(self) -> "User":
+        return User(
+            id=21, email="unverified@rico.ai", password_hash="$2b$12$hash",
+            role="user", is_active=True,
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            last_login_at=None,
+            email_verified=False,
+        )
+
+    def test_register_returns_email_verification_required(self):
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+        _reset_limiter()
+        tc = TestClient(app, raise_server_exceptions=False)
+        new_user = User(
+            id=22, email="newver@rico.ai", password_hash="$2b$12$hash",
+            role="user", is_active=True,
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            last_login_at=None,
+            email_verified=False,
+        )
+        with patch("src.repositories.users_repo.get_user_by_email", return_value=None), \
+             patch("src.api.auth._hash_password", return_value="$2b$12$hash"), \
+             patch("src.repositories.users_repo.create_user", return_value=new_user), \
+             patch("src.repositories.email_verification_repo.create_verification_token",
+                   return_value="raw-token-abc"), \
+             patch("src.services.verification_email.send_email", return_value=True):
+            r = tc.post("/api/v1/auth/register",
+                        json={"email": "newver@rico.ai", "password": "SecurePass1"})
+        assert r.status_code == 201
+        data = r.json()
+        assert data["email_verification_required"] is True
+
+    def test_register_does_not_set_jwt_cookie(self):
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+        _reset_limiter()
+        tc = TestClient(app, raise_server_exceptions=False)
+        new_user = User(
+            id=23, email="nocookie@rico.ai", password_hash="$2b$12$hash",
+            role="user", is_active=True,
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            last_login_at=None,
+            email_verified=False,
+        )
+        with patch("src.repositories.users_repo.get_user_by_email", return_value=None), \
+             patch("src.api.auth._hash_password", return_value="$2b$12$hash"), \
+             patch("src.repositories.users_repo.create_user", return_value=new_user), \
+             patch("src.repositories.email_verification_repo.create_verification_token",
+                   return_value="tok"), \
+             patch("src.services.verification_email.send_email", return_value=True):
+            r = tc.post("/api/v1/auth/register",
+                        json={"email": "nocookie@rico.ai", "password": "SecurePass1"})
+        assert r.status_code == 201
+        assert "access_token" not in r.cookies
+
+    def test_register_schedules_verification_email_to_user(self):
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+        _reset_limiter()
+        tc = TestClient(app, raise_server_exceptions=False)
+        new_user = User(
+            id=24, email="vermail@rico.ai", password_hash="$2b$12$hash",
+            role="user", is_active=True,
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            last_login_at=None,
+            email_verified=False,
+        )
+        with patch("src.repositories.users_repo.get_user_by_email", return_value=None), \
+             patch("src.api.auth._hash_password", return_value="$2b$12$hash"), \
+             patch("src.repositories.users_repo.create_user", return_value=new_user), \
+             patch("src.repositories.email_verification_repo.create_verification_token",
+                   return_value="raw-abc"), \
+             patch("src.services.verification_email.send_email", return_value=True) as mock_send:
+            r = tc.post("/api/v1/auth/register",
+                        json={"email": "vermail@rico.ai", "password": "SecurePass1"})
+        assert r.status_code == 201
+        mock_send.assert_called_once()
+        assert mock_send.call_args.kwargs["to_email"] == "vermail@rico.ai"
+        body = mock_send.call_args.kwargs["body"]
+        assert "raw-abc" in body
+        assert "24h" in body or "24 hours" in body
+
+    def test_verification_email_subject_does_not_contain_token(self):
+        from src.services.verification_email import send_verification_email
+        with patch("src.services.verification_email.send_email", return_value=True) as mock_send:
+            send_verification_email("user@example.com", "super-secret-tok")
+        kwargs = mock_send.call_args.kwargs
+        assert "super-secret-tok" not in kwargs["subject"]
+        assert "super-secret-tok" in kwargs["body"]
+
+    def test_login_blocked_when_email_not_verified(self):
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+        _reset_limiter()
+        tc = TestClient(app, raise_server_exceptions=False)
+        with patch("src.api.auth.verify_credentials",
+                   return_value={"email": "unverified@rico.ai", "role": "user",
+                                 "email_verified": False}):
+            r = tc.post("/api/v1/auth/login",
+                        json={"email": "unverified@rico.ai", "password": "pass"})
+        assert r.status_code == 403
+        assert "verify" in r.json()["detail"].lower()
+
+    def test_login_succeeds_when_email_verified(self):
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+        _reset_limiter()
+        tc = TestClient(app, raise_server_exceptions=False)
+        with patch("src.api.auth.verify_credentials",
+                   return_value={"email": "verified@rico.ai", "role": "user",
+                                 "email_verified": True}):
+            r = tc.post("/api/v1/auth/login",
+                        json={"email": "verified@rico.ai", "password": "pass"})
+        assert r.status_code == 200
+
+    def test_verify_email_valid_token_marks_verified_and_sets_cookie(self):
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+        _reset_limiter()
+        tc = TestClient(app, raise_server_exceptions=False)
+        with patch("src.repositories.email_verification_repo.consume_verification_token",
+                   return_value="verified@rico.ai"), \
+             patch("src.repositories.users_repo.mark_email_verified", return_value=True), \
+             patch("src.repositories.users_repo.get_user_by_email",
+                   return_value=self._verified_user()):
+            r = tc.get("/api/v1/auth/verify-email?token=valid-tok-abc")
+        assert r.status_code == 200
+        assert r.json()["email"] == "verified@rico.ai"
+        assert "access_token" in r.cookies
+
+    def test_verify_email_invalid_token_returns_400(self):
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+        _reset_limiter()
+        tc = TestClient(app, raise_server_exceptions=False)
+        with patch("src.repositories.email_verification_repo.consume_verification_token",
+                   return_value=None):
+            r = tc.get("/api/v1/auth/verify-email?token=bad-token")
+        assert r.status_code == 400
+
+    def test_verify_email_reused_token_returns_400(self):
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+        _reset_limiter()
+        tc = TestClient(app, raise_server_exceptions=False)
+        with patch("src.repositories.email_verification_repo.consume_verification_token",
+                   return_value=None):
+            r = tc.get("/api/v1/auth/verify-email?token=used-token")
+        assert r.status_code == 400
+
+    def test_resend_verification_returns_generic_response(self):
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+        _reset_limiter()
+        tc = TestClient(app, raise_server_exceptions=False)
+        with patch("src.repositories.users_repo.get_user_by_email",
+                   return_value=self._unverified_user()), \
+             patch("src.repositories.email_verification_repo.create_verification_token",
+                   return_value="tok"), \
+             patch("src.services.verification_email.send_email", return_value=True):
+            r = tc.post("/api/v1/auth/resend-verification",
+                        json={"email": "unverified@rico.ai"})
+        assert r.status_code == 200
+        assert "message" in r.json()
+
+    def test_resend_verification_unknown_email_returns_generic(self):
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+        _reset_limiter()
+        tc = TestClient(app, raise_server_exceptions=False)
+        with patch("src.repositories.users_repo.get_user_by_email", return_value=None):
+            r = tc.post("/api/v1/auth/resend-verification",
+                        json={"email": "ghost@nobody.com"})
+        assert r.status_code == 200
+
+    def test_resend_verification_already_verified_returns_generic(self):
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+        _reset_limiter()
+        tc = TestClient(app, raise_server_exceptions=False)
+        with patch("src.repositories.users_repo.get_user_by_email",
+                   return_value=self._verified_user()):
+            r = tc.post("/api/v1/auth/resend-verification",
+                        json={"email": "verified@rico.ai"})
+        assert r.status_code == 200
+
+    def test_verify_credentials_returns_email_verified_field(self):
+        from src.api.auth import verify_credentials
+        verified = self._verified_user()
+        with patch("src.repositories.users_repo.get_user_by_email", return_value=verified), \
+             patch("src.repositories.users_repo.update_last_login"), \
+             patch("src.api.auth._verify_password", return_value=True):
+            result = verify_credentials("verified@rico.ai", "pass")
+        assert result is not None
+        assert "email_verified" in result
+        assert result["email_verified"] is True
+
+    def test_existing_user_migration_defaults_to_verified(self):
+        u = User(
+            id=99, email="legacy@rico.ai", password_hash="$2b$12$hash",
+            role="user", is_active=True,
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            last_login_at=None,
+            email_verified=True,
+        )
+        assert u.email_verified is True

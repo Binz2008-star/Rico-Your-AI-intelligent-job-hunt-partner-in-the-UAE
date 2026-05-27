@@ -26,7 +26,7 @@ import bcrypt as _bcrypt
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
 from jose import JWTError, jwt
 
-from src.api.rate_limit import LIMIT_LOGIN, LIMIT_PASSWORD_RESET, LIMIT_REGISTER, limiter
+from src.api.rate_limit import LIMIT_LOGIN, LIMIT_PASSWORD_RESET, LIMIT_REGISTER, LIMIT_VERIFY_EMAIL, limiter
 from src.schemas.auth import (
     ForgotPasswordRequest,
     ForgotPasswordResponse,
@@ -34,8 +34,11 @@ from src.schemas.auth import (
     LoginResponse,
     RegisterRequest,
     RegisterResponse,
+    ResendVerificationRequest,
+    ResendVerificationResponse,
     ResetPasswordRequest,
     ResetPasswordResponse,
+    VerifyEmailResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -168,7 +171,11 @@ def verify_credentials(email: str, password: str) -> Optional[Dict[str, Any]]:
             if _verify_password(password, user.password_hash):
                 from src.repositories.users_repo import update_last_login
                 update_last_login(user.id)
-                return {"email": user.email, "role": user.role}
+                return {
+                    "email": user.email,
+                    "role": user.role,
+                    "email_verified": user.email_verified,
+                }
             return None
     except Exception as exc:
         # Only treat infrastructure/connection failures as a fallback trigger.
@@ -240,6 +247,12 @@ def login(request: Request, req: LoginRequest, response: Response) -> LoginRespo
     user_info = verify_credentials(req.email, req.password)
     if user_info is None:
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    if not user_info.get("email_verified", True):
+        raise HTTPException(
+            status_code=403,
+            detail="Please verify your email before continuing. Check your inbox.",
+        )
 
     token = create_access_token({"sub": user_info["email"], "role": user_info["role"]})
     response.set_cookie(
@@ -409,12 +422,20 @@ def register(
             detail="Registration unavailable — please try again shortly",
         )
 
-    token = create_access_token({"sub": user.email, "role": user.role})
-    response.set_cookie(
-        key=_COOKIE_NAME,
-        value=token,
-        **_cookie_set_kwargs(max_age=_ttl_hours() * 3600),
-    )
+    # No cookie set — user must verify email before logging in.
+
+    # Schedule verification email (best-effort, never fails registration)
+    try:
+        from src.repositories.email_verification_repo import create_verification_token
+        from src.services.verification_email import send_verification_email
+        verification_token = create_verification_token(user.email)
+        background_tasks.add_task(send_verification_email, user.email, verification_token)
+    except Exception:
+        logger.exception(
+            "verification_email_schedule_failed user_id=%s",
+            getattr(user, "id", "unknown"),
+        )
+
     # Merge guest profile into authenticated account if requested
     if req.public_user_id_to_merge:
         try:
@@ -440,4 +461,77 @@ def register(
         )
 
     logger.info("register_success email=%r", user.email)
-    return RegisterResponse(email=user.email, role=user.role, created=True)
+    return RegisterResponse(
+        email=user.email,
+        role=user.role,
+        created=True,
+        email_verification_required=True,
+    )
+
+
+@router.get("/verify-email", response_model=VerifyEmailResponse)
+@limiter.limit(LIMIT_VERIFY_EMAIL)
+def verify_email(request: Request, token: str, response: Response) -> VerifyEmailResponse:
+    """Validate a verification token and mark the user's email as verified."""
+    from src.repositories.email_verification_repo import consume_verification_token
+    from src.repositories.users_repo import mark_email_verified
+
+    email = consume_verification_token(token)
+    if email is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid, expired, or already used verification link.",
+        )
+
+    ok = mark_email_verified(email)
+    if not ok:
+        logger.error("email_verification_mark_failed email=%r", email)
+        raise HTTPException(
+            status_code=503,
+            detail="Verification failed — please try again.",
+        )
+
+    # Auto-login: set JWT cookie so user lands directly in the app.
+    from src.repositories.users_repo import get_user_by_email
+    user = get_user_by_email(email)
+    if user:
+        jwt_token = create_access_token({"sub": user.email, "role": user.role})
+        response.set_cookie(
+            key=_COOKIE_NAME,
+            value=jwt_token,
+            **_cookie_set_kwargs(max_age=_ttl_hours() * 3600),
+        )
+
+    logger.info("email_verified email=%r", email)
+    return VerifyEmailResponse(message="Email verified. Welcome to RicoHunt!", email=email)
+
+
+@router.post("/resend-verification", response_model=ResendVerificationResponse)
+@limiter.limit(LIMIT_VERIFY_EMAIL)
+def resend_verification(
+    request: Request,
+    req: ResendVerificationRequest,
+    background_tasks: BackgroundTasks,
+) -> ResendVerificationResponse:
+    """Resend verification email. Always returns generic success to prevent enumeration."""
+    from src.repositories.email_verification_repo import create_verification_token
+    from src.repositories.users_repo import get_user_by_email
+    from src.services.verification_email import send_verification_email
+
+    _generic = ResendVerificationResponse(
+        message="If that email is registered and unverified, a new verification link has been sent."
+    )
+
+    email = req.email.strip().lower()
+    user = get_user_by_email(email)
+    if user is None or user.email_verified:
+        # User not found or already verified — don't reveal which
+        return _generic
+
+    try:
+        verification_token = create_verification_token(email)
+        background_tasks.add_task(send_verification_email, email, verification_token)
+    except Exception:
+        logger.exception("resend_verification_failed email=%r", email)
+
+    return _generic

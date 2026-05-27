@@ -4,7 +4,9 @@ import { AuraGlow } from '@/components/ui/AuraGlow';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { PageTransition, StaggerChildren } from '@/components/ui/PageTransition';
+import { ApiError, resendVerification } from '@/lib/api';
 import { useAuthStore } from '@/lib/store/useAuthStore';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import React, { useState } from 'react';
 
@@ -13,6 +15,9 @@ export function LoginForm() {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [failedAttempts, setFailedAttempts] = useState(0);
+    const [showUnverified, setShowUnverified] = useState(false);
+    const [resendLoading, setResendLoading] = useState(false);
+    const [resendMessage, setResendMessage] = useState('');
     const { login, isLoading } = useAuthStore();
     const router = useRouter();
     const maintenanceMode = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === 'true';
@@ -21,6 +26,8 @@ export function LoginForm() {
         e.preventDefault();
         if (maintenanceMode) return;
         setError('');
+        setShowUnverified(false);
+        setResendMessage('');
         try {
             await login(email, password);
             router.push('/command');
@@ -29,12 +36,30 @@ export function LoginForm() {
             if (process.env.NODE_ENV === 'development') {
                 console.error('[login]', err);
             }
-            const isNetworkFailure = err instanceof TypeError;
-            const message = isNetworkFailure
-                ? "We couldn't log you in right now. Please try again in a moment."
-                : 'The email or password is incorrect.';
-            setError(message);
-            setFailedAttempts(prev => prev + 1);
+            if (err instanceof ApiError && err.statusCode === 403) {
+                setShowUnverified(true);
+                setError('Please verify your email before continuing. Check your inbox.');
+            } else if (err instanceof ApiError && err.statusCode === 401) {
+                setError('The email or password is incorrect.');
+                setFailedAttempts(prev => prev + 1);
+            } else {
+                setError("We couldn't log you in right now. Please try again in a moment.");
+                setFailedAttempts(prev => prev + 1);
+            }
+        }
+    };
+
+    const handleResend = async () => {
+        if (!email) return;
+        setResendLoading(true);
+        setResendMessage('');
+        try {
+            await resendVerification(email);
+            setResendMessage('Verification email sent. Please check your inbox.');
+        } catch {
+            setResendMessage("Couldn't resend right now. Please try again in a moment.");
+        } finally {
+            setResendLoading(false);
         }
     };
 
@@ -124,16 +149,38 @@ export function LoginForm() {
                     {error && (
                         <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center animate-[fadeSlideIn_0.3s_ease-out]">
                             {error}
-                            {failedAttempts >= 2 && (
+
+                            {showUnverified && (
+                                <div className="mt-3 pt-3 border-t border-red-500/20 space-y-2">
+                                    {resendMessage ? (
+                                        <p className="text-xs text-primary/80">{resendMessage}</p>
+                                    ) : (
+                                        <button
+                                            onClick={handleResend}
+                                            disabled={resendLoading || !email}
+                                            className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
+                                        >
+                                            {resendLoading ? (
+                                                <MaterialIcon icon="hourglass_empty" className="text-sm animate-spin" />
+                                            ) : (
+                                                <MaterialIcon icon="refresh" className="text-sm" />
+                                            )}
+                                            Resend verification email
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+
+                            {!showUnverified && failedAttempts >= 2 && (
                                 <div className="mt-3 pt-3 border-t border-red-500/20">
                                     <p className="text-xs text-red-300/80 mb-2">Still having trouble signing in?</p>
-                                    <a
+                                    <Link
                                         href="/forgot-password"
                                         className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
                                     >
                                         <MaterialIcon icon="lock_reset" className="text-sm" />
                                         Reset your password
-                                    </a>
+                                    </Link>
                                 </div>
                             )}
                         </div>

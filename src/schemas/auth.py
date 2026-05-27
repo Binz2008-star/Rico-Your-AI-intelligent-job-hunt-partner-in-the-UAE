@@ -52,6 +52,20 @@ class RegisterResponse(BaseModel):
     email: str
     role: str
     created: bool
+    email_verification_required: bool = False
+
+
+class VerifyEmailResponse(BaseModel):
+    message: str
+    email: str
+
+
+class ResendVerificationRequest(BaseModel):
+    email: str = Field(..., min_length=1, max_length=256, pattern=_EMAIL_RE)
+
+
+class ResendVerificationResponse(BaseModel):
+    message: str
 
 
 class ForgotPasswordRequest(BaseModel):
