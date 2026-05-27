@@ -28,8 +28,8 @@ _THREAD_LOCK = threading.RLock()
 
 # Valid application statuses — enforced on every write
 VALID_STATUSES: Set[str] = {
-    "saved", "opened", "opened_external", "applied", "interview",
-    "rejected", "offer", "decision_made",
+    "saved", "opened", "opened_external", "prepared", "applied", "interview",
+    "rejected", "offer", "decision_made", "follow_up_due",
 }
 
 _LOCK_TIMEOUT_S = 10  # max wait for file lock before raising

@@ -1831,12 +1831,20 @@ class RicoChatAPI:
             profile_skills = self._as_list(self._profile_value(profile, "skills"))
             profile_roles = self._as_list(self._profile_value(profile, "target_roles"))
 
+            # Persist to Application Flow so prepared state survives session/restart
+            self._persist_application_lifecycle_event(
+                user_id=user_id,
+                title=title,
+                company=company,
+                status="prepared",
+            )
+
             self._store_recent_context(
                 user_id,
                 self._build_recent_application_context(
                     title=title,
                     company=company,
-                    status="opened",
+                    status="prepared",
                     action="prepare_application",
                 ),
             )
@@ -2096,6 +2104,14 @@ class RicoChatAPI:
 
             if apply_url:
                 msg = f"Apply link for **{title}** at **{company}**: {apply_url}"
+                # Persist to Application Flow so opened state survives session/restart
+                self._persist_application_lifecycle_event(
+                    user_id=user_id,
+                    title=title,
+                    company=company,
+                    status="opened_external",
+                    url=apply_url,
+                )
                 # Store URL evidence so a subsequent "Mark as applied" can proceed
                 # without requiring a separate confirmation step.
                 self._store_recent_context(
@@ -2103,7 +2119,7 @@ class RicoChatAPI:
                     self._build_recent_application_context(
                         title=title,
                         company=company,
-                        status="opened",
+                        status="opened_external",
                         action="open_apply_link",
                         link=apply_url,
                     ),
@@ -2371,6 +2387,41 @@ class RicoChatAPI:
             upsert_matches(user_id, formatted)
         except Exception:
             logger.debug("rico_chat: failed to persist search matches to DB user=%s", user_id)
+
+    def _persist_application_lifecycle_event(
+        self,
+        user_id: str,
+        title: str,
+        company: str,
+        status: str,
+        url: str = "",
+        location: str = "",
+    ) -> None:
+        """Persist application lifecycle event to rico_job_recommendations.
+
+        Safely wraps DB write so response flow is not blocked on failure.
+        Uses upsert pattern via applications_repo.create to handle duplicates.
+        """
+        try:
+            from src.repositories.applications_repo import create as _create_app
+            from src.applications import get_job_id
+            job_key = get_job_id({"title": title, "company": company, "link": url})
+            _create_app(
+                job_id=job_key,
+                title=title,
+                company=company,
+                location=location,
+                url=url,
+                status=status,
+                source="chat",
+                user_id=user_id,
+            )
+        except Exception:
+            # DB write failure should not block the response
+            logger.debug(
+                "rico_chat: failed to persist lifecycle event user=%s title=%s company=%s status=%s",
+                user_id, title, company, status
+            )
 
     def _store_recent_context(self, user_id: str, context: dict[str, Any]) -> None:
         try:
