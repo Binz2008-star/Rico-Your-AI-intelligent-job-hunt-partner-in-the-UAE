@@ -66,21 +66,53 @@ async def test_verify_link_410(verifier):
 
 
 @pytest.mark.asyncio
-async def test_verify_link_redirect(verifier):
-    """Test redirect detection."""
+async def test_verify_link_redirect_to_404(verifier):
+    """Test redirect to 404 page (should follow and return expired)."""
     with patch.object(verifier, '_get_client') as mock_get_client:
         mock_client = AsyncMock()
-        mock_response = MagicMock()
-        mock_response.status_code = 302
-        mock_response.headers = {"location": "https://example.com/new-location"}
-        mock_client.get.return_value = mock_response
+        
+        # First call returns redirect
+        mock_response_1 = MagicMock()
+        mock_response_1.status_code = 301
+        mock_response_1.headers = {"location": "https://www.jobted.ae/job/12345"}
+        
+        # Second call returns 404
+        mock_response_2 = MagicMock()
+        mock_response_2.status_code = 404
+        
+        mock_client.get.side_effect = [mock_response_1, mock_response_2]
         mock_get_client.return_value = mock_client
         
-        result = await verifier.verify_link("https://example.com/job")
+        result = await verifier.verify_link("https://jobted.ae/job/12345")
         
-        assert result.status == LinkStatus.REDIRECT
-        assert result.http_status == 302
-        assert result.redirect_url == "https://example.com/new-location"
+        assert result.status == LinkStatus.EXPIRED
+        assert result.http_status == 404
+
+
+@pytest.mark.asyncio
+async def test_verify_link_redirect_to_dead_page_pattern(verifier):
+    """Test redirect to page with dead pattern (should follow and return expired)."""
+    with patch.object(verifier, '_get_client') as mock_get_client:
+        mock_client = AsyncMock()
+        
+        # First call returns redirect
+        mock_response_1 = MagicMock()
+        mock_response_1.status_code = 301
+        mock_response_1.headers = {"location": "https://www.jobted.ae/job/12345"}
+        
+        # Second call returns 200 with dead pattern
+        mock_response_2 = MagicMock()
+        mock_response_2.status_code = 200
+        mock_response_2.text = "<html><body>404 Not Found - The requested page could not be found</body></html>"
+        
+        mock_client.get.side_effect = [mock_response_1, mock_response_2]
+        mock_get_client.return_value = mock_client
+        
+        result = await verifier.verify_link("https://jobted.ae/job/12345")
+        
+        assert result.status == LinkStatus.EXPIRED
+        assert result.http_status == 200
+        assert "Dead page pattern detected" in result.error_message
 
 
 @pytest.mark.asyncio

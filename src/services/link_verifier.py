@@ -112,6 +112,9 @@ class LinkVerifier:
     # Verification timeout in seconds
     TIMEOUT = 10
     
+    # Maximum redirects to follow
+    MAX_REDIRECTS = 5
+    
     # User agents for rotation
     USER_AGENTS = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
@@ -155,53 +158,74 @@ class LinkVerifier:
             client = await self._get_client()
             headers = {"User-Agent": self.USER_AGENTS[0]}
             
-            response = await client.get(url, headers=headers, follow_redirects=False)
+            # Manually follow redirects with SSRF validation at each step
+            current_url = url
+            redirect_count = 0
             
-            # Check for dead status codes
-            if response.status_code in self.DEAD_STATUS_CODES:
-                return VerificationResult(
-                    status=LinkStatus.EXPIRED,
-                    http_status=response.status_code,
-                    error_message=f"HTTP {response.status_code}",
-                    verified_at=datetime.utcnow(),
-                )
-            
-            # Check for redirects
-            if 300 <= response.status_code < 400:
-                redirect_url = response.headers.get("location")
-                # Validate redirect URL for SSRF
-                if redirect_url and not _is_safe_url(redirect_url):
-                    return VerificationResult(
-                        status=LinkStatus.BLOCKED,
-                        http_status=response.status_code,
-                        error_message="Redirect to blocked URL (SSRF protection)",
-                        verified_at=datetime.utcnow(),
-                        redirect_url=redirect_url,
-                    )
-                return VerificationResult(
-                    status=LinkStatus.REDIRECT,
-                    http_status=response.status_code,
-                    error_message=None,
-                    verified_at=datetime.utcnow(),
-                    redirect_url=redirect_url,
-                )
-            
-            # Check for dead page patterns in content
-            if response.status_code == 200:
-                content = response.text
-                if self._is_dead_page(content, url):
+            while redirect_count <= self.MAX_REDIRECTS:
+                response = await client.get(current_url, headers=headers, follow_redirects=False)
+                
+                # Check for dead status codes
+                if response.status_code in self.DEAD_STATUS_CODES:
                     return VerificationResult(
                         status=LinkStatus.EXPIRED,
                         http_status=response.status_code,
-                        error_message="Dead page pattern detected",
+                        error_message=f"HTTP {response.status_code}",
                         verified_at=datetime.utcnow(),
                     )
+                
+                # Check for redirects
+                if 300 <= response.status_code < 400:
+                    redirect_url = response.headers.get("location")
+                    if not redirect_url:
+                        return VerificationResult(
+                            status=LinkStatus.NEEDS_REVIEW,
+                            http_status=response.status_code,
+                            error_message="Redirect without location header",
+                            verified_at=datetime.utcnow(),
+                        )
+                    
+                    # Validate redirect URL for SSRF
+                    if not _is_safe_url(redirect_url):
+                        return VerificationResult(
+                            status=LinkStatus.BLOCKED,
+                            http_status=response.status_code,
+                            error_message="Redirect to blocked URL (SSRF protection)",
+                            verified_at=datetime.utcnow(),
+                            redirect_url=redirect_url,
+                        )
+                    
+                    # Resolve relative redirects
+                    from urllib.parse import urljoin
+                    redirect_url = urljoin(current_url, redirect_url)
+                    current_url = redirect_url
+                    redirect_count += 1
+                    continue
+                
+                # Not a redirect, check content
+                if response.status_code == 200:
+                    content = response.text
+                    if self._is_dead_page(content, url):
+                        return VerificationResult(
+                            status=LinkStatus.EXPIRED,
+                            http_status=response.status_code,
+                            error_message="Dead page pattern detected",
+                            verified_at=datetime.utcnow(),
+                        )
+                
+                # Link is live
+                return VerificationResult(
+                    status=LinkStatus.LIVE,
+                    http_status=response.status_code,
+                    error_message=None,
+                    verified_at=datetime.utcnow(),
+                )
             
-            # Link is live
+            # Too many redirects
             return VerificationResult(
-                status=LinkStatus.LIVE,
-                http_status=response.status_code,
-                error_message=None,
+                status=LinkStatus.BLOCKED,
+                http_status=None,
+                error_message="Too many redirects (possible redirect loop)",
                 verified_at=datetime.utcnow(),
             )
             
