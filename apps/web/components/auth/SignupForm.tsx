@@ -5,8 +5,32 @@ import { GlassPanel } from '@/components/ui/GlassPanel';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { PageTransition, StaggerChildren } from '@/components/ui/PageTransition';
 import { authApi } from '@/lib/api/auth';
+import axios from 'axios';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import React, { useState } from 'react';
+
+function mapSignupError(err: unknown): { message: string; showLoginLink: boolean } {
+    if (axios.isAxiosError(err)) {
+        const status = err.response?.status;
+        if (status === 409) {
+            return {
+                message: 'This email is already registered. Please log in instead.',
+                showLoginLink: true,
+            };
+        }
+        if (status === 400 || status === 422) {
+            return {
+                message: 'Please check your details and try again.',
+                showLoginLink: false,
+            };
+        }
+    }
+    return {
+        message: "We couldn't create your account right now. Please try again in a moment.",
+        showLoginLink: false,
+    };
+}
 
 export function SignupForm() {
     const [name, setName] = useState('');
@@ -14,18 +38,25 @@ export function SignupForm() {
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+    const [showLoginLink, setShowLoginLink] = useState(false);
     const router = useRouter();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
         setError('');
+        setShowLoginLink(false);
         try {
             await authApi.register({ email, password, name });
             router.push('/upload');
             router.refresh();
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Registration failed');
+            if (process.env.NODE_ENV === 'development') {
+                console.error('[signup]', err);
+            }
+            const mapped = mapSignupError(err);
+            setError(mapped.message);
+            setShowLoginLink(mapped.showLoginLink);
         } finally {
             setIsLoading(false);
         }
@@ -111,6 +142,17 @@ export function SignupForm() {
                     {error && (
                         <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center animate-[fadeSlideIn_0.3s_ease-out]">
                             {error}
+                            {showLoginLink && (
+                                <div className="mt-2">
+                                    <Link
+                                        href="/login"
+                                        className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+                                    >
+                                        <MaterialIcon icon="login" className="text-sm" />
+                                        Go to login
+                                    </Link>
+                                </div>
+                            )}
                         </div>
                     )}
 
