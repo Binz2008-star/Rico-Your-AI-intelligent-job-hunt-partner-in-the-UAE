@@ -7,6 +7,7 @@ from pydantic import BaseModel, HttpUrl, validator
 
 from src.services.link_verifier import LinkVerifier, LinkStatus, VerificationResult, get_link_verifier, _is_safe_url
 from src.api.rate_limit import limiter
+from src.api.deps import get_current_user
 
 
 router = APIRouter(prefix="/api/v1/links", tags=["link-verification"])
@@ -39,12 +40,13 @@ class VerifyLinkResponse(BaseModel):
 
 @router.post("/verify", response_model=VerifyLinkResponse)
 @limiter.limit("10/minute")  # Rate limit to prevent abuse
-async def verify_link(request: Request, link_request: VerifyLinkRequest) -> VerifyLinkResponse:
+async def verify_link(request: Request, link_request: VerifyLinkRequest, _user: dict = Depends(get_current_user)) -> VerifyLinkResponse:
     """Verify a single job link.
     
     Args:
         request: FastAPI request object
         link_request: Link verification request with URL
+        _user: Authenticated user (required)
         
     Returns:
         Verification result with status and details
@@ -85,12 +87,13 @@ class BatchVerifyResponse(BaseModel):
 
 @router.post("/verify-batch", response_model=BatchVerifyResponse)
 @limiter.limit("5/minute")  # Stricter rate limit for batch
-async def verify_links_batch(request: Request, batch_request: BatchVerifyRequest) -> BatchVerifyResponse:
+async def verify_links_batch(request: Request, batch_request: BatchVerifyRequest, _user: dict = Depends(get_current_user)) -> BatchVerifyResponse:
     """Verify multiple links in parallel.
     
     Args:
         request: FastAPI request object
         batch_request: Batch verification request with URLs
+        _user: Authenticated user (required)
         
     Returns:
         Dictionary mapping URL to verification result
