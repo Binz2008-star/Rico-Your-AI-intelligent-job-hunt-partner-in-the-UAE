@@ -5,6 +5,7 @@ import { TopNav } from "@/components/layout/TopNav";
 import { AuraGlow } from "@/components/ui/AuraGlow";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
+import { useLinkVerification } from "@/hooks/useLinkVerification";
 import { useOrchestration } from "@/hooks/useOrchestration";
 import type { OpportunitySignal } from "@/lib/api/orchestration";
 import Link from "next/link";
@@ -26,6 +27,42 @@ function MomentumLabel({ momentum }: { momentum: "high" | "medium" | "low" }) {
   );
 }
 
+function LinkStatusBadge({
+  status,
+}: {
+  status: OpportunitySignal["linkStatus"];
+}) {
+  if (!status) return null;
+
+  const palette = {
+    live: "text-[#5dcaa5] border-[#5dcaa5]/30",
+    expired: "text-[#f87171] border-[#f87171]/30",
+    blocked: "text-[#f87171] border-[#f87171]/30",
+    redirect: "text-[#facc15] border-[#facc15]/30",
+    source_only: "text-[#a78bfa] border-[#a78bfa]/30",
+    needs_review: "text-[#facc15] border-[#facc15]/30",
+    checking: "text-[#94a3b8] border-[#94a3b8]/30",
+  } as const;
+
+  const labels = {
+    live: "Verified live",
+    expired: "Link unavailable",
+    blocked: "Blocked",
+    redirect: "Redirects",
+    source_only: "Source only",
+    needs_review: "Needs review",
+    checking: "Checking link...",
+  } as const;
+
+  return (
+    <span
+      className={`text-label-caps text-[10px] px-2 py-1 border rounded ${palette[status]}`}
+    >
+      {labels[status]}
+    </span>
+  );
+}
+
 function signalDate(signal: OpportunitySignal) {
   return signal.timestamp
     ? new Date(signal.timestamp).toLocaleDateString("en-GB", {
@@ -43,26 +80,35 @@ function commandHref(message: string) {
 function SignalActions({
   signal,
   onDismiss,
+  linkStatus,
 }: {
   signal: OpportunitySignal;
   onDismiss: () => void;
+  linkStatus?: OpportunitySignal["linkStatus"];
 }) {
   const titleCompany = `${signal.role} at ${signal.company}`;
+
   const showViewJob =
-    signal.linkStatus === undefined ||
-    ["verified", "needs_review", "source_only", "unknown"].includes(
-      signal.linkStatus,
-    );
+    linkStatus === undefined ||
+    linkStatus === "checking" ||
+    ["live", "redirect", "needs_review", "source_only"].includes(linkStatus);
+
+  const showCaution =
+    linkStatus === "needs_review" || linkStatus === "source_only";
 
   return (
     <div className="mt-5 flex flex-wrap gap-2">
-      {signal.linkStatus === "link_unavailable" ? (
+      {linkStatus === "expired" ? (
         <Link
           href={commandHref(`Find similar live jobs — ${titleCompany}`)}
           className="rounded-full border border-cyan/25 bg-cyan/10 px-3 py-1.5 text-[12px] font-semibold text-cyan hover:bg-cyan/15"
         >
           Find similar live jobs
         </Link>
+      ) : linkStatus === "blocked" ? (
+        <span className="rounded-full border border-red/25 bg-red/10 px-3 py-1.5 text-[12px] font-semibold text-red">
+          Needs review — link could not be safely verified
+        </span>
       ) : signal.applyUrl && showViewJob ? (
         <a
           href={signal.applyUrl}
@@ -73,6 +119,11 @@ function SignalActions({
           View job
         </a>
       ) : null}
+      {showCaution && (
+        <span className="text-[10px] text-on-surface-variant/60 self-center">
+          Caution: link status uncertain
+        </span>
+      )}
       <Link
         href={commandHref(`Explain fit — ${titleCompany}`)}
         className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[12px] font-semibold text-on-surface hover:text-white"
@@ -116,6 +167,7 @@ function SignalActions({
 
 export default function SignalsPage() {
   const { signals, isLoading, error, refetchSignals } = useOrchestration();
+  const { getLinkStatus, isChecking } = useLinkVerification(signals);
   const [selectedSignal, setSelectedSignal] =
     useState<OpportunitySignal | null>(null);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
@@ -213,7 +265,10 @@ export default function SignalsPage() {
                         </p>
                       </div>
                     </div>
-                    <MomentumLabel momentum={signal.momentum} />
+                    <div className="flex flex-col items-end gap-2">
+                      <MomentumLabel momentum={signal.momentum} />
+                      <LinkStatusBadge status={getLinkStatus(signal.id)} />
+                    </div>
                   </div>
                   <div className="mb-4">
                     <p className="text-body-md text-on-surface-variant mb-2 line-clamp-3">
@@ -250,6 +305,7 @@ export default function SignalsPage() {
                 </button>
                 <SignalActions
                   signal={signal}
+                  linkStatus={getLinkStatus(signal.id)}
                   onDismiss={() => dismissSignal(signal.id)}
                 />
               </GlassPanel>
@@ -331,6 +387,7 @@ export default function SignalsPage() {
             </div>
             <SignalActions
               signal={selectedSignal}
+              linkStatus={getLinkStatus(selectedSignal.id)}
               onDismiss={() => dismissSignal(selectedSignal.id)}
             />
           </GlassPanel>

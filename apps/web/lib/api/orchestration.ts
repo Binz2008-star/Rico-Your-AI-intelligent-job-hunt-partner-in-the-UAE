@@ -34,12 +34,15 @@ export interface OpportunitySignal {
   location: string;
   timestamp: string;
   applyUrl?: string;
+  sourceUrl?: string;
   linkStatus?:
-    | "verified"
-    | "needs_review"
+    | "live"
+    | "expired"
+    | "blocked"
+    | "redirect"
     | "source_only"
-    | "unknown"
-    | "link_unavailable";
+    | "needs_review"
+    | "checking";
   whyItFits?: string;
   missingFacts?: string[];
   source?: string;
@@ -212,9 +215,8 @@ export const orchestrationApi = {
       location: job.location,
       timestamp: job.posted_at || "",
       applyUrl: job.apply_url,
-      linkStatus:
-        (job.verification_status as OpportunitySignal["linkStatus"]) ||
-        undefined,
+      sourceUrl: job.source_url,
+      linkStatus: undefined,
       whyItFits:
         job.reason ||
         job.match_explanation?.summary ||
