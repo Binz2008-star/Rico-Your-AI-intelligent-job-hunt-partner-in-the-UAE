@@ -6,3 +6,4 @@ pip-audit
 safety
 locust
 httpx
+pytest-asyncio
