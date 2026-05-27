@@ -202,7 +202,7 @@ export async function login(
     });
     if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as { detail?: string };
-        throw new Error(err.detail ?? "Login failed");
+        throw new ApiError(err.detail ?? "Login failed", res.status, err);
     }
     return res.json() as Promise<LoginResponse>;
 }
@@ -993,7 +993,7 @@ export async function register(
     email: string,
     password: string,
     publicUserIdToMerge?: string | null
-): Promise<{ email: string; role: string }> {
+): Promise<{ email: string; role: string; email_verification_required?: boolean }> {
     const body: Record<string, unknown> = { email, password };
     if (publicUserIdToMerge) {
         body.public_user_id_to_merge = publicUserIdToMerge;
@@ -1006,9 +1006,34 @@ export async function register(
     });
     if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as { detail?: string };
-        throw new Error(err.detail ?? `Registration failed: ${res.status}`);
+        throw new ApiError(err.detail ?? `Registration failed: ${res.status}`, res.status, err);
     }
-    return res.json() as Promise<{ email: string; role: string }>;
+    return res.json() as Promise<{ email: string; role: string; email_verification_required?: boolean }>;
+}
+
+export async function verifyEmail(token: string): Promise<{ message: string; email: string }> {
+    const res = await fetch(
+        buildProxyUrl("/api/v1/auth/verify-email", { token }),
+        { method: "GET", credentials: "include" }
+    );
+    if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { detail?: string };
+        throw new ApiError(err.detail ?? "Verification failed", res.status, err);
+    }
+    return res.json() as Promise<{ message: string; email: string }>;
+}
+
+export async function resendVerification(email: string): Promise<{ message: string }> {
+    const res = await fetch(`${PROXY}/api/v1/auth/resend-verification`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+    });
+    if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { detail?: string };
+        throw new ApiError(err.detail ?? "Resend failed", res.status, err);
+    }
+    return res.json() as Promise<{ message: string }>;
 }
 
 // Public chat — no auth required. Uses session_id stored in localStorage.

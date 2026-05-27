@@ -22,6 +22,7 @@ class User:
     is_active: bool
     created_at: datetime
     last_login_at: Optional[datetime]
+    email_verified: bool = True
 
 
 def get_user_by_email(email: str) -> Optional[User]:
@@ -36,7 +37,8 @@ def get_user_by_email(email: str) -> Optional[User]:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, email, password_hash, role, is_active, created_at, last_login_at
+                SELECT id, email, password_hash, role, is_active, created_at, last_login_at,
+                       COALESCE(email_verified, TRUE)
                 FROM users
                 WHERE email = %s AND is_active = TRUE
                 LIMIT 1
@@ -54,6 +56,7 @@ def get_user_by_email(email: str) -> Optional[User]:
                 is_active=row[4],
                 created_at=row[5],
                 last_login_at=row[6],
+                email_verified=row[7],
             )
     except Exception:
         logger.exception("users_repo_get_failed email=%s", email)
@@ -74,9 +77,10 @@ def create_user(email: str, password_hash: str, role: str = "user") -> Optional[
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO users (email, password_hash, role)
-                VALUES (%s, %s, %s)
-                RETURNING id, email, password_hash, role, is_active, created_at, last_login_at
+                INSERT INTO users (email, password_hash, role, email_verified)
+                VALUES (%s, %s, %s, FALSE)
+                RETURNING id, email, password_hash, role, is_active, created_at, last_login_at,
+                          email_verified
                 """,
                 (email.strip().lower(), password_hash, role),
             )
@@ -90,6 +94,7 @@ def create_user(email: str, password_hash: str, role: str = "user") -> Optional[
                 is_active=row[4],
                 created_at=row[5],
                 last_login_at=row[6],
+                email_verified=row[7],
             )
     except Exception:
         logger.exception("users_repo_create_failed email=%s", email)
@@ -147,6 +152,34 @@ def update_last_login(user_id: int) -> None:
         conn.commit()
     except Exception:
         logger.exception("users_repo_update_last_login_failed user_id=%s", user_id)
+    finally:
+        conn.close()
+
+
+def mark_email_verified(email: str) -> bool:
+    """Mark the user's email as verified. Returns True on success."""
+    from src.db import get_db_connection, is_db_available
+    if not is_db_available():
+        return False
+    conn = get_db_connection()
+    if not conn:
+        return False
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE users SET email_verified = TRUE WHERE email = %s AND is_active = TRUE",
+                (email.strip().lower(),),
+            )
+            updated = cur.rowcount
+        conn.commit()
+        return updated > 0
+    except Exception:
+        logger.exception("users_repo_mark_verified_failed email=%s", email)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
     finally:
         conn.close()
 
