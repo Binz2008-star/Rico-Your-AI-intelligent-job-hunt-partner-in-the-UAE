@@ -105,7 +105,6 @@ class TestVerifyCredentials:
     def test_db_path_success(self):
         from src.api.auth import verify_credentials
         with patch("src.repositories.users_repo.get_user_by_email", return_value=_DB_USER), \
-             patch("src.repositories.users_repo.update_last_login"), \
              patch("src.api.auth._verify_password", return_value=True):
             result = verify_credentials("alice@rico.ai", "correctpass")
         assert result is not None
@@ -115,7 +114,6 @@ class TestVerifyCredentials:
     def test_db_path_wrong_password(self):
         from src.api.auth import verify_credentials
         with patch("src.repositories.users_repo.get_user_by_email", return_value=_DB_USER), \
-             patch("src.repositories.users_repo.update_last_login"), \
              patch("src.api.auth._verify_password", return_value=False):
             result = verify_credentials("alice@rico.ai", "wrongpass")
         assert result is None
@@ -662,12 +660,14 @@ class TestEmailVerificationFlow:
         _reset_limiter()
         tc = TestClient(app, raise_server_exceptions=False)
         with patch("src.api.auth.verify_credentials",
-                   return_value={"email": "unverified@rico.ai", "role": "user",
-                                 "email_verified": False}):
+                   return_value={"id": 21, "email": "unverified@rico.ai", "role": "user",
+                                 "email_verified": False}), \
+             patch("src.repositories.users_repo.update_last_login") as mock_ull:
             r = tc.post("/api/v1/auth/login",
                         json={"email": "unverified@rico.ai", "password": "pass"})
         assert r.status_code == 403
         assert "verify" in r.json()["detail"].lower()
+        mock_ull.assert_not_called()
 
     def test_login_succeeds_when_email_verified(self):
         from fastapi.testclient import TestClient
@@ -675,26 +675,28 @@ class TestEmailVerificationFlow:
         _reset_limiter()
         tc = TestClient(app, raise_server_exceptions=False)
         with patch("src.api.auth.verify_credentials",
-                   return_value={"email": "verified@rico.ai", "role": "user",
-                                 "email_verified": True}):
+                   return_value={"id": 20, "email": "verified@rico.ai", "role": "user",
+                                 "email_verified": True}), \
+             patch("src.repositories.users_repo.update_last_login") as mock_ull:
             r = tc.post("/api/v1/auth/login",
                         json={"email": "verified@rico.ai", "password": "pass"})
         assert r.status_code == 200
+        mock_ull.assert_called_once_with(20)
 
-    def test_verify_email_valid_token_marks_verified_and_sets_cookie(self):
+    def test_verify_email_valid_token_marks_verified_no_cookie(self):
         from fastapi.testclient import TestClient
         from src.api.app import app
         _reset_limiter()
         tc = TestClient(app, raise_server_exceptions=False)
         with patch("src.repositories.email_verification_repo.consume_verification_token",
                    return_value="verified@rico.ai"), \
-             patch("src.repositories.users_repo.mark_email_verified", return_value=True), \
-             patch("src.repositories.users_repo.get_user_by_email",
-                   return_value=self._verified_user()):
+             patch("src.repositories.users_repo.mark_email_verified", return_value=True):
             r = tc.get("/api/v1/auth/verify-email?token=valid-tok-abc")
         assert r.status_code == 200
         assert r.json()["email"] == "verified@rico.ai"
-        assert "access_token" in r.cookies
+        # GET /verify-email intentionally does not set a session cookie —
+        # user must sign in explicitly after verification.
+        assert "access_token" not in r.cookies
 
     def test_verify_email_invalid_token_returns_400(self):
         from fastapi.testclient import TestClient
@@ -756,12 +758,12 @@ class TestEmailVerificationFlow:
         from src.api.auth import verify_credentials
         verified = self._verified_user()
         with patch("src.repositories.users_repo.get_user_by_email", return_value=verified), \
-             patch("src.repositories.users_repo.update_last_login"), \
              patch("src.api.auth._verify_password", return_value=True):
             result = verify_credentials("verified@rico.ai", "pass")
         assert result is not None
         assert "email_verified" in result
         assert result["email_verified"] is True
+        assert "id" in result  # needed by login() to call update_last_login after email check
 
     def test_existing_user_migration_defaults_to_verified(self):
         u = User(

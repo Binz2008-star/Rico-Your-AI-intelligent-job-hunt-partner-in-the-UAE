@@ -32,8 +32,7 @@ function VerifyEmailContent() {
         verifyEmail(token)
             .then(() => {
                 setStatus("success");
-                // Auto-redirect after 2s — cookie is set by backend
-                setTimeout(() => router.push("/upload"), 2000);
+                setTimeout(() => router.push("/login"), 2000);
             })
             .catch(() => {
                 setStatus("error");
@@ -77,14 +76,14 @@ function VerifyEmailContent() {
                                 </div>
                                 <h1 className="font-headline-xl text-headline-xl text-on-surface mb-2">Email verified!</h1>
                                 <p className="text-on-surface-variant text-sm mb-6">
-                                    Welcome to RicoHunt. Redirecting you to the app…
+                                    Welcome to RicoHunt. You can now sign in.
                                 </p>
                                 <Link
-                                    href="/upload"
+                                    href="/login"
                                     className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors"
                                 >
                                     <MaterialIcon icon="arrow_forward" className="text-sm" />
-                                    Continue now
+                                    Sign in now
                                 </Link>
                             </>
                         )}

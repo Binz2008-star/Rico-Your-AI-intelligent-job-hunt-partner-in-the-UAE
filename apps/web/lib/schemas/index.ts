@@ -32,6 +32,7 @@ export const RegisterResponseSchema = z.object({
     email: z.string(),
     role: z.string(),
     created: z.boolean(),
+    email_verification_required: z.boolean().optional(),
 });
 
 // ============================================================================

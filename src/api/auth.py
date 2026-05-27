@@ -169,9 +169,8 @@ def verify_credentials(email: str, password: str) -> Optional[Dict[str, Any]]:
         user = get_user_by_email(email)
         if user is not None:
             if _verify_password(password, user.password_hash):
-                from src.repositories.users_repo import update_last_login
-                update_last_login(user.id)
                 return {
+                    "id": user.id,
                     "email": user.email,
                     "role": user.role,
                     "email_verified": user.email_verified,
@@ -253,6 +252,11 @@ def login(request: Request, req: LoginRequest, response: Response) -> LoginRespo
             status_code=403,
             detail="Please verify your email before continuing. Check your inbox.",
         )
+
+    # Only record the login timestamp once the account is fully cleared to log in.
+    if user_info.get("id"):
+        from src.repositories.users_repo import update_last_login
+        update_last_login(user_info["id"])
 
     token = create_access_token({"sub": user_info["email"], "role": user_info["role"]})
     response.set_cookie(
@@ -471,8 +475,13 @@ def register(
 
 @router.get("/verify-email", response_model=VerifyEmailResponse)
 @limiter.limit(LIMIT_VERIFY_EMAIL)
-def verify_email(request: Request, token: str, response: Response) -> VerifyEmailResponse:
-    """Validate a verification token and mark the user's email as verified."""
+def verify_email(request: Request, token: str) -> VerifyEmailResponse:
+    """Validate a verification token and mark the user's email as verified.
+
+    Intentionally does NOT set an auth cookie — the user must sign in explicitly
+    after verification.  This prevents link-scanner prefetches from issuing a
+    session cookie before the real user opens the link.
+    """
     from src.repositories.email_verification_repo import consume_verification_token
     from src.repositories.users_repo import mark_email_verified
 
@@ -489,17 +498,6 @@ def verify_email(request: Request, token: str, response: Response) -> VerifyEmai
         raise HTTPException(
             status_code=503,
             detail="Verification failed — please try again.",
-        )
-
-    # Auto-login: set JWT cookie so user lands directly in the app.
-    from src.repositories.users_repo import get_user_by_email
-    user = get_user_by_email(email)
-    if user:
-        jwt_token = create_access_token({"sub": user.email, "role": user.role})
-        response.set_cookie(
-            key=_COOKIE_NAME,
-            value=jwt_token,
-            **_cookie_set_kwargs(max_age=_ttl_hours() * 3600),
         )
 
     logger.info("email_verified email=%r", email)
