@@ -278,6 +278,8 @@ _SMALLTALK_PHRASES = frozenset([
 _PROFILE_SUMMARY_PHRASES = frozenset([
     "show my profile", "my profile", "profile summary",
     "what do you know about me", "my details",
+    # Arabic profile identity
+    "ما هو اسمي", "ما اسمي", "اسمي", "من انا", "ما هو ملفي",
 ])
 
 _PROFILE_ROLE_SUGGESTIONS_PHRASES = frozenset([
@@ -301,6 +303,18 @@ _SKIP_PHRASES = frozenset([
 _PROFILE_UPDATE_PHRASES = frozenset([
     "update my name", "update my skills", "change my", "edit my profile",
     "update my phone", "update my salary", "update my city", "update my role",
+])
+
+# ── Subscription / pricing phrases ─────────────────────────────────────────
+
+_SUBSCRIPTION_PHRASES = frozenset([
+    # English
+    "show plans", "subscription plans", "pricing", "how much does it cost",
+    "what is the price", "what's the price", "upgrade plan", "current plan",
+    "my subscription", "subscription status", "billing",
+    # Arabic (normalised forms)
+    "كم الاسعار", "كيف اشترك", "كيف يمكنني الاشتراك",
+    "اشتراكي", "باقتي", "الاسعار", "السعر", "خطه الاشتراك",
 ])
 
 _FOLLOW_UP_CONFIRMATION_PHRASES = frozenset([
@@ -333,9 +347,36 @@ _CV_UPLOAD_RE = re.compile(
     re.IGNORECASE,
 )
 
+_CV_CREATE_RE = re.compile(
+    r"\b(create|make|build|draft|write|generate)\b.{0,30}\b(cv|resume|cv for me|resume for me)\b"
+    r"|\b(no\s+cv|no\s+resume|don't\s+have\s+a\s+cv|dont\s+have\s+a\s+cv)\b"
+    r"|\b(create\s+cv|make\s+me\s+a\s+cv|create\s+resume|make\s+me\s+a\s+resume)\b"
+    r"|لا\s+يوجد\s+لدي\s+سيره\s+ذاتيه"
+    r"|انشاء\s+سيره\s+ذاتيه"
+    r"|اصنع\s+لي\s+سيره\s+ذاتيه",
+    re.IGNORECASE,
+)
+
 _PROFILE_UPDATE_RE = re.compile(
     r"\b(update|change|set|modify|adjust)\b.{0,40}"
     r"\b(salary|city|location|preference|role|title|industry|experience|notice|email|phone|telegram)\b",
+    re.IGNORECASE,
+)
+
+_SUBSCRIPTION_RE = re.compile(
+    r"\b(price|pricing|plan|plans|subscription|subscribe|upgrade|cancel|billing|cost|payment)"
+    r"\b.{0,40}\b(plan|subscription|price|cost|billing|payment|package|tier)\b"
+    r"|\b(how much|what is the cost|what's the cost|monthly|annual|yearly)\b"
+    r"|\b(pro|premium|basic|free)\b.{0,20}\b(plan|tier|package|subscription)\b"
+    r"|\b(subscribe|sign up|upgrade|downgrade|renew|cancel)\b.{0,20}\b(plan|subscription|membership)\b"
+    r"|\b(subscription|plan)\b.{0,20}\b(status|details|info|information)\b",
+    re.IGNORECASE,
+)
+
+_DELEGATED_DECISION_RE = re.compile(
+    r"\b(do as you wish|do as u wish|you decide|choose for me|recommend and proceed|"
+    r"pick for me|select for me|whatever you think|i trust you|you choose|"
+    r"انت قرر|اختار لي|شوف الأنسب|الي تشوفه|الي تختاره|اختار الافضل)\b",
     re.IGNORECASE,
 )
 
@@ -560,10 +601,16 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     if lower in _FOLLOW_UP_CONFIRMATION_PHRASES:
         return IntentResult("follow_up_confirmation", 1.0, "exact")
 
+    if lower in _SUBSCRIPTION_PHRASES:
+        return IntentResult("subscription.show_plans", 1.0, "exact")
+
     # ── 3. Regex patterns (ordered by specificity) ───────────────────────
 
     if _CV_UPLOAD_RE.search(text):
         return IntentResult("cv_upload_or_parse", 0.95, "regex")
+
+    if _CV_CREATE_RE.search(text):
+        return IntentResult("cv_create", 0.9, "regex")
 
     # Job-card actions carry structured context — classify before generic patterns.
     job_card_m = _JOB_CARD_ACTION_RE.match(text)
@@ -618,6 +665,14 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
 
     if _PROFILE_UPDATE_RE.search(text):
         return IntentResult("profile_update", 0.85, "regex")
+
+    # Subscription / pricing regex (check before job search)
+    if _SUBSCRIPTION_RE.search(text):
+        return IntentResult("subscription.show_plans", 0.9, "regex")
+
+    # Delegated decision (user asks Rico to choose)
+    if _DELEGATED_DECISION_RE.search(text):
+        return IntentResult("delegated_decision", 0.9, "regex")
 
     # Application tracking regex (looser than exact phrases)
     if _APPLICATION_TRACKING_RE.search(text) and not _JOB_SEARCH_EXPLICIT_RE.search(text):

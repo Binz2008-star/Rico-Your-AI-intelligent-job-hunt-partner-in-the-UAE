@@ -78,6 +78,7 @@ _LEGACY_INTENT_MAP = {
     "profile.show": "profile_summary",
     "profile.update": "profile_update",
     "profile.update_target_roles": "save_target_role",
+    "cv.create": "cv_create",
     # Career prep
     "career_prep.interview": "interview_prep",
     "career_prep.application_angle": "draft_message",
@@ -1558,6 +1559,22 @@ class RicoChatAPI:
             self._append_chat(user_id, "assistant", response["message"])
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
+        # Subscription / pricing
+        if legacy_intent == "subscription.show_plans":
+            return self._finalize(
+                self._handle_subscription_plans(user_id, profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # Delegated decision — user asks Rico to choose
+        if legacy_intent == "delegated_decision":
+            return self._finalize(
+                self._handle_delegated_decision(user_id, profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
         # Onboarding skip
         if legacy_intent == "onboarding_answer":
             response = {
@@ -1586,6 +1603,14 @@ class RicoChatAPI:
                 return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
             return self._finalize(
                 self._cv_first_profile_response(user_id, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # CV creation — user asks to create a CV (no existing CV)
+        if legacy_intent == "cv_create":
+            return self._finalize(
+                self._handle_cv_creation(user_id, profile),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -2101,6 +2126,42 @@ class RicoChatAPI:
                             )
                 except Exception:
                     pass
+
+            # Check if link is expired before opening
+            is_expired = False
+            try:
+                ctx = self._get_recent_context(user_id)
+                for m in ctx.get("recent_search_matches", []):
+                    if (title.lower() in (m.get("title") or "").lower() and
+                            company.lower() in (m.get("company") or "").lower()):
+                        if m.get("verification_status") == "expired":
+                            is_expired = True
+                            break
+            except Exception:
+                pass
+
+            if is_expired:
+                msg = (
+                    f"The apply link for **{title}** at **{company}** appears to be expired.\n\n"
+                    "You can:\n"
+                    "• **Refresh** — I can try to find an updated listing\n"
+                    "• **Dismiss** — Remove this role from your feed\n"
+                    "• **Search** — Look for similar roles right now"
+                )
+                response = {
+                    "type": "open_apply_link",
+                    "intent": "open_apply_link",
+                    "message": msg,
+                    "apply_url": None,
+                    "verification_status": "expired",
+                    "options": [
+                        {"action": "refresh_link", "label": "Refresh", "message": f"refresh link for {title} at {company}"},
+                        {"action": "dismiss_job", "label": "Dismiss", "message": f"dismiss {title} at {company}"},
+                        {"action": "search_similar", "label": "Search similar", "message": f"search similar to {title} at {company}"},
+                    ],
+                }
+                self._append_chat(user_id, "assistant", msg)
+                return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
             if apply_url:
                 msg = f"Apply link for **{title}** at **{company}**: {apply_url}"
@@ -2776,6 +2837,96 @@ class RicoChatAPI:
 
         sentences.append("Full list in Application Flow at /applications.")
         return " ".join(sentences)
+
+    def _handle_subscription_plans(self, user_id: str, profile: Any) -> dict[str, Any]:
+        """Return Rico subscription plans and pricing."""
+        # Try to get user's current plan from subscription repo
+        try:
+            from src.repositories.subscription_repo import get_user_subscription
+            sub = get_user_subscription(user_id)
+            current_plan = sub.get("plan", "free") if sub else "free"
+        except Exception:
+            current_plan = "free"
+
+        plans_msg = (
+            "Rico has two plans:\n"
+            "• **Pro** — AED 29/month (unlimited AI messages, priority job alerts, CV optimization)\n"
+            "• **Premium** — AED 49/month (everything in Pro + dedicated support, interview prep, cover-letter drafting)\n\n"
+            "You can subscribe via WhatsApp or manual bank transfer. "
+            "If you need help, contact support at support@rico.jobs."
+        )
+        return {
+            "type": "subscription.show_plans",
+            "message": plans_msg,
+            "plans": [
+                {"name": "Pro", "price_aed": 29, "period": "monthly"},
+                {"name": "Premium", "price_aed": 49, "period": "monthly"},
+            ],
+            "current_plan": current_plan,
+            "next_action": "choose_plan_or_continue",
+        }
+
+    def _handle_delegated_decision(self, user_id: str, profile: Any) -> dict[str, Any]:
+        """Handle 'you decide' / 'choose for me' by picking the strongest CV-aligned role."""
+        has_cv = bool(profile and self._profile_value(profile, "cv_status") == "parsed")
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+
+        if has_cv and target_roles:
+            chosen_role = target_roles[0]
+            return {
+                "type": "job_search_explicit",
+                "message": (
+                    f"Based on your CV, I'll proceed with the strongest match: **{chosen_role}**."
+                    f" Searching live jobs now..."
+                ),
+                "chosen_role": chosen_role,
+                "source": "delegated_cv_choice",
+                "next_action": "search_jobs",
+            }
+
+        if target_roles:
+            chosen_role = target_roles[0]
+            return {
+                "type": "job_search_explicit",
+                "message": (
+                    f"I'll proceed with your target role: **{chosen_role}**."
+                    f" Searching live jobs now..."
+                ),
+                "chosen_role": chosen_role,
+                "source": "delegated_target_role_choice",
+                "next_action": "search_jobs",
+            }
+
+        return {
+            "type": "clarification",
+            "message": (
+                "I'd be happy to choose for you, but I need more context first. "
+                "Upload your CV or tell me your target role and preferred city."
+            ),
+            "next_action": "need_profile_for_delegation",
+        }
+
+    def _handle_cv_creation(self, user_id: str, profile: Any) -> dict[str, Any]:
+        """Start the no-CV profile builder / CV draft flow."""
+        name = self._profile_value(profile, "name") or ""
+        if name:
+            greeting = f"Hi {name},"
+        else:
+            greeting = "Hi there,"
+        return {
+            "type": "cv_creation",
+            "message": (
+                f"{greeting} I can help you build a CV from scratch. "
+                "Tell me your:\n"
+                "• Current or most recent job title\n"
+                "• Years of experience\n"
+                "• Key skills and certifications\n"
+                "• Preferred industries and cities\n\n"
+                "Or paste any existing work history and I'll format it into a proper CV."
+            ),
+            "next_action": "collect_cv_fields",
+            "fields_needed": ["current_role", "years_experience", "skills", "industries", "preferred_cities"],
+        }
 
     def _handle_application_tracking(self, user_id: str, intent: str = "application_tracking") -> dict[str, Any]:
         """Route application tracking requests to the applications repository."""

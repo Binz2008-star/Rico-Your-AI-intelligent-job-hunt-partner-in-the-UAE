@@ -249,8 +249,7 @@ test.describe("Opportunity Radar /signals", () => {
     const firstCard = page.locator("[data-testid='opportunity-card']").first();
     const badge = firstCard.locator("[data-testid='link-status-badge']");
     await expect(badge).toBeVisible();
-    const badgeText = await badge.textContent();
-    expect(badgeText).toMatch(/live|verified/i);
+    await expect(badge).toHaveText(/live|verified/i);
   });
 
   test("expired link card does not show View job", async ({ page }) => {
