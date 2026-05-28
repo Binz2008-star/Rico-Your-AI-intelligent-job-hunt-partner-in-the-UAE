@@ -144,6 +144,15 @@ _ROLE_TOKEN_CASES: Dict[str, str] = {
     "wms": "WMS",
 }
 
+# Common typo corrections applied before variant mapping
+_TYPO_CORRECTIONS: Dict[str, str] = {
+    "opration": "operation",
+    "opertion": "operation",
+    "enviromental": "environmental",
+    "complince": "compliance",
+    "saftey": "safety",
+}
+
 # Common role variants mapping to canonical forms
 _ROLE_VARIANTS: Dict[str, str] = {
     # Sales roles
@@ -221,6 +230,19 @@ _ROLE_VARIANTS: Dict[str, str] = {
     "accountant": "Accountant",
     "finance manager": "Finance Manager",
     "financial analyst": "Financial Analyst",
+
+    # HSE / Safety / Compliance roles (with typo variants)
+    "hse manager": "HSE Manager",
+    "qhse manager": "QHSE Manager",
+    "ehs manager": "EHS Manager",
+    "safety manager": "Safety Manager",
+    "environmental manager": "Environmental Manager",
+    "compliance manager": "Compliance Manager",
+    "saftey manager": "Safety Manager",
+    "enviromental manager": "Environmental Manager",
+    "complince manager": "Compliance Manager",
+    "oprations manager": "Operations Manager",
+    "opertions manager": "Operations Manager",
 }
 
 # Common prefixes to strip
@@ -295,9 +317,16 @@ class RoleNormalizer:
 
             # Step 1: Clean the input
             cleaned = self._clean_input(role)
+            cleaned_lower = cleaned.lower()
+
+            # Step 1b: Apply typo corrections
+            for typo, correction in _TYPO_CORRECTIONS.items():
+                if typo in cleaned_lower:
+                    cleaned_lower = cleaned_lower.replace(typo, correction)
+                    cleaned = cleaned_lower
 
             # Step 2: Check direct variant mapping
-            if cleaned.lower() in _ROLE_VARIANTS:
+            if cleaned_lower in _ROLE_VARIANTS:
                 canonical = _ROLE_VARIANTS[cleaned.lower()]
                 self._cache[role_lower] = canonical
                 return canonical
