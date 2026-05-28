@@ -45,8 +45,8 @@ const MOCK_JOBS = [
     reason: "Operations background with lean manufacturing experience.",
     tags: ["Operations", "Leadership"],
     posted_at: "2026-05-20T00:00:00.000Z",
-    apply_url: "",
-    source_url: "",
+    apply_url: "https://example.com/expired",
+    source_url: "https://example.com/expired",
     verification_status: "expired",
     match_explanation: {
       verdict: "worth_checking",
@@ -179,6 +179,17 @@ test.describe("Opportunity Radar /signals", () => {
 
   test("page loads without error state", async ({ page }) => {
     await page.goto("/signals");
+    // Wait for terminal state: either cards render or empty state shows
+    await Promise.race([
+      page.waitForSelector("[data-testid='opportunity-card']", {
+        state: "visible",
+        timeout: 5000,
+      }),
+      page.waitForSelector("text=No live signals yet", {
+        state: "visible",
+        timeout: 5000,
+      }),
+    ]);
     await expect(
       page.locator("text=Could not load live signals"),
     ).not.toBeVisible();
@@ -209,7 +220,9 @@ test.describe("Opportunity Radar /signals", () => {
     expect(classes).not.toContain("lg:grid-cols-3");
   });
 
-  test("HSE Manager title does not break vertically", async ({ page }) => {
+  test("HSE Manager title uses break-normal and line-clamp constraints", async ({
+    page,
+  }) => {
     await page.goto("/signals");
     await page.waitForSelector("[data-testid='opportunity-card']", {
       state: "visible",
@@ -221,7 +234,10 @@ test.describe("Opportunity Radar /signals", () => {
       .locator("[data-testid='opportunity-card-title']");
     const text = await title.textContent();
     expect(text).toContain("HSE Manager");
-    expect(text).not.toMatch(/^\w\s*$/m);
+    // Assert CSS constraints prevent bad wrapping instead of inspecting textContent
+    const classAttr = await title.getAttribute("class");
+    expect(classAttr).toContain("break-normal");
+    expect(classAttr).not.toContain("break-all");
   });
 
   test("link badges appear for live job", async ({ page }) => {
@@ -243,10 +259,14 @@ test.describe("Opportunity Radar /signals", () => {
       state: "visible",
       timeout: 5000,
     });
-    // job-2 has no apply_url so PrimaryAction returns null
+    // job-2 has expired link, so PrimaryAction returns "Find similar live jobs" instead of "View job"
     const expiredCard = page.locator("[data-testid='opportunity-card']").nth(1);
     const viewJobBtn = expiredCard.locator("[data-testid='view-job-action']");
     await expect(viewJobBtn).not.toBeVisible();
+    const findSimilarBtn = expiredCard.locator(
+      "[data-testid='find-similar-action']",
+    );
+    await expect(findSimilarBtn).toBeVisible();
   });
 
   test("live card shows View job", async ({ page }) => {

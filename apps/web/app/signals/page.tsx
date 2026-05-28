@@ -193,13 +193,13 @@ function SignalActions({
           href={commandHref(`Prepare application — ${titleCompany}`)}
           className={secondaryClass}
         >
-          Prepare
+          Prepare application
         </Link>
         <Link
           href={commandHref(`Mark as applied — ${titleCompany}`)}
           className={secondaryClass}
         >
-          Applied
+          Mark as applied
         </Link>
         <Link
           href={commandHref(`Save job — ${titleCompany}`)}
