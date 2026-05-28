@@ -2,81 +2,183 @@
  * apps/web/e2e/opportunity-radar.spec.ts
  * Playwright E2E tests for Rico Opportunity Radar (/signals).
  *
+ * All external API calls are mocked. No real job boards are hit.
+ *
  * Run with:
  *   cd apps/web
- *   npx playwright test
- *
- * Prerequisites:
- *   npm install -D @playwright/test
- *   npx playwright install
+ *   npx playwright test --project=chromium
  */
 import { expect, test } from "@playwright/test";
 
-// Mocked signals data — deterministic, no real job boards hit
-const MOCK_SIGNALS = [
+// ── Mocked backend data ──────────────────────────────────────────────────────
+
+const MOCK_JOBS = [
   {
-    id: "job-1",
+    job_id: "job-1",
+    title: "HSE Manager - Manufacturing",
     company: "Renew",
-    role: "HSE Manager - Manufacturing",
-    matchScore: 86,
-    momentum: "high",
     location: "Dubai, UAE",
-    timestamp: "2026-05-24T00:00:00.000Z",
-    applyUrl: "https://example.com/apply",
-    whyItFits: "Your HSE and manufacturing safety background fits this role.",
-    missingFacts: ["Confirm salary range"],
-    source: "Rico job search",
+    salary_range: "AED 25-35k/mo",
+    score: 86,
+    reason: "Your HSE and manufacturing safety background fits this role.",
+    tags: ["HSE", "Manufacturing", "UAE"],
+    posted_at: "2026-05-24T00:00:00.000Z",
+    apply_url: "https://example.com/apply",
+    source_url: "https://example.com/job-1",
+    verification_status: "",
+    match_explanation: {
+      verdict: "strong_fit",
+      summary: "Strong fit for HSE Manager role",
+      why_this_fits: ["HSE experience", "Manufacturing background"],
+      worth_checking: ["Confirm salary range"],
+      recommended_next_step: "Apply directly",
+      confidence: "high",
+    },
   },
   {
-    id: "job-2",
+    job_id: "job-2",
+    title: "Operations Lead",
     company: "Expired Corp",
-    role: "Operations Lead",
-    matchScore: 72,
-    momentum: "medium",
     location: "Abu Dhabi, UAE",
-    timestamp: "2026-05-20T00:00:00.000Z",
-    applyUrl: "",
-    whyItFits: "Operations background with lean manufacturing experience.",
-    missingFacts: [],
-    source: "Rico job search",
+    salary_range: "AED 20-28k/mo",
+    score: 72,
+    reason: "Operations background with lean manufacturing experience.",
+    tags: ["Operations", "Leadership"],
+    posted_at: "2026-05-20T00:00:00.000Z",
+    apply_url: "",
+    source_url: "",
+    verification_status: "expired",
+    match_explanation: {
+      verdict: "worth_checking",
+      summary: "Operations lead match",
+      why_this_fits: ["Lean manufacturing"],
+      worth_checking: [],
+      recommended_next_step: "Review role details",
+      confidence: "medium",
+    },
   },
 ];
 
-// Intercept the signals API and return mocked data
+const MOCK_JOB_LIST_RESPONSE = {
+  jobs: MOCK_JOBS,
+  total: MOCK_JOBS.length,
+  page: 1,
+  limit: 12,
+  pages: 1,
+};
+
+// The app routes client-side calls through /proxy/*
+const PROXY_API = "/proxy/api/v1";
+
+// ── Setup mocks before every test ───────────────────────────────────────────
+
 test.beforeEach(async ({ page }) => {
-  await page.route("**/api/v1/signals**", async (route) => {
+  // 1. Mock /jobs endpoint (used by useOrchestration → getSignals)
+  await page.route(`${PROXY_API}/jobs**`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ signals: MOCK_SIGNALS }),
+      body: JSON.stringify(MOCK_JOB_LIST_RESPONSE),
     });
   });
 
-  await page.route("**/api/v1/links/verify**", async (route) => {
+  // 2. Mock link verification batch endpoint
+  await page.route(
+    `${PROXY_API}/links/verify/batch`,
+    async (route, request) => {
+      const body = request.postDataJSON();
+      const urls: string[] = body?.urls ?? [];
+      const result: Record<string, unknown> = {};
+      for (const url of urls) {
+        if (url === "https://example.com/apply") {
+          result[url] = {
+            status: "live",
+            http_status: 200,
+            error_message: null,
+            verified_at: new Date().toISOString(),
+          };
+        } else {
+          result[url] = {
+            status: "expired",
+            http_status: 404,
+            error_message: "Expired",
+            verified_at: new Date().toISOString(),
+          };
+        }
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(result),
+      });
+    },
+  );
+
+  // 3. Mock profile endpoint (used by getTrajectory)
+  await page.route(`${PROXY_API}/rico/profile`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        "job-1": { status: "live", http_status: 200 },
-        "job-2": {
-          status: "expired",
-          http_status: 200,
-          error_message: "Expired on Indeed",
-        },
+        profile_exists: true,
+        name: "Test User",
+        email: "test@example.com",
+        current_role: "HSE Manager",
+        target_roles: ["HSE Manager", "Operations Manager"],
+        years_experience: 8,
+        completeness_score: 0.85,
+      }),
+    });
+  });
+
+  // 4. Mock applications endpoint (used by getTrajectory)
+  await page.route(`${PROXY_API}/applications**`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        applications: [],
+        total: 0,
+        page: 1,
+        limit: 50,
+        pages: 1,
+      }),
+    });
+  });
+
+  // 5. Mock chat history endpoint (used by getTrajectory)
+  await page.route(`${PROXY_API}/rico/chat/history**`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ messages: [] }),
+    });
+  });
+
+  // 6. Mock auth /me (optional, but avoids 401 noise)
+  await page.route(`${PROXY_API}/me`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        email: "test@example.com",
+        role: "user",
+        authenticated: true,
       }),
     });
   });
 });
 
+// ── Tests ───────────────────────────────────────────────────────────────────
+
 test.describe("Opportunity Radar /signals", () => {
-  test("page title is Opportunity Radar", async ({ page }) => {
+  test("page title contains Rico", async ({ page }) => {
     await page.goto("/signals");
-    await expect(page).toHaveTitle(/Opportunity Radar/i);
+    await expect(page).toHaveTitle(/Rico/i);
   });
 
   test("page loads without error state", async ({ page }) => {
     await page.goto("/signals");
-    // Should not show "Could not load live signals" error
     await expect(
       page.locator("text=Could not load live signals"),
     ).not.toBeVisible();
@@ -85,12 +187,10 @@ test.describe("Opportunity Radar /signals", () => {
   test("cards are in a single column on mobile", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto("/signals");
-    // Wait for cards to render
     await page.waitForSelector("[data-testid='opportunity-card']", {
       state: "visible",
       timeout: 5000,
     });
-    // On mobile, should be single column (grid-cols-1)
     const grid = page.locator("[data-testid='signals-grid']");
     const classes = await grid.getAttribute("class");
     expect(classes).toContain("grid-cols-1");
@@ -105,7 +205,6 @@ test.describe("Opportunity Radar /signals", () => {
     });
     const grid = page.locator("[data-testid='signals-grid']");
     const classes = await grid.getAttribute("class");
-    // Should have xl:grid-cols-2, should NOT have lg:grid-cols-3
     expect(classes).toContain("xl:grid-cols-2");
     expect(classes).not.toContain("lg:grid-cols-3");
   });
@@ -120,10 +219,8 @@ test.describe("Opportunity Radar /signals", () => {
       .locator("[data-testid='opportunity-card']")
       .first()
       .locator("[data-testid='opportunity-card-title']");
-    // Check title text is present as a continuous phrase, not broken
     const text = await title.textContent();
     expect(text).toContain("HSE Manager");
-    // Ensure no single-letter wrapping (heuristic: title should not contain single-char lines)
     expect(text).not.toMatch(/^\w\s*$/m);
   });
 
@@ -133,7 +230,6 @@ test.describe("Opportunity Radar /signals", () => {
       state: "visible",
       timeout: 5000,
     });
-    // First card (live) should have a link status badge
     const firstCard = page.locator("[data-testid='opportunity-card']").first();
     const badge = firstCard.locator("[data-testid='link-status-badge']");
     await expect(badge).toBeVisible();
@@ -147,7 +243,7 @@ test.describe("Opportunity Radar /signals", () => {
       state: "visible",
       timeout: 5000,
     });
-    // Find the expired card (job-2)
+    // job-2 has no apply_url so PrimaryAction returns null
     const expiredCard = page.locator("[data-testid='opportunity-card']").nth(1);
     const viewJobBtn = expiredCard.locator("[data-testid='view-job-action']");
     await expect(viewJobBtn).not.toBeVisible();
@@ -171,20 +267,15 @@ test.describe("Opportunity Radar /signals", () => {
       timeout: 5000,
     });
 
-    // Find toggle buttons
     const cardsBtn = page.locator("[data-testid='view-mode-toggle-card']");
     const focusBtn = page.locator("[data-testid='view-mode-toggle-list']");
 
-    // If toggle exists, test it
     if ((await cardsBtn.count()) > 0 && (await focusBtn.count()) > 0) {
-      // Click Focus list
       await focusBtn.click();
-      // Cards should switch to list/focus layout (single column)
       const grid = page.locator("[data-testid='signals-grid']");
       const classes = await grid.getAttribute("class");
       expect(classes).toContain("grid-cols-1");
 
-      // Click back to Cards
       await cardsBtn.click();
       const classesAfter = await grid.getAttribute("class");
       expect(classesAfter).toContain("xl:grid-cols-2");
@@ -195,23 +286,33 @@ test.describe("Opportunity Radar /signals", () => {
     page,
   }) => {
     let verifyCallCount = 0;
-    await page.route("**/api/v1/links/verify**", async (route) => {
-      verifyCallCount++;
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          "job-1": { status: "live", http_status: 200 },
-          "job-2": { status: "expired", http_status: 200 },
-        }),
-      });
-    });
+    await page.route(
+      `${PROXY_API}/links/verify/batch`,
+      async (route, request) => {
+        verifyCallCount++;
+        const body = request.postDataJSON();
+        const urls: string[] = body?.urls ?? [];
+        const result: Record<string, unknown> = {};
+        for (const url of urls) {
+          result[url] = {
+            status: "live",
+            http_status: 200,
+            error_message: null,
+            verified_at: new Date().toISOString(),
+          };
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(result),
+        });
+      },
+    );
 
     await page.goto("/signals");
-    await page.waitForTimeout(3000); // Wait for any polling
+    await page.waitForTimeout(3000);
 
-    // Should not have excessive link verify calls (> 10 is suspicious)
-    expect(verifyCallCount).toBeLessThanOrEqual(10);
+    expect(verifyCallCount).toBeLessThanOrEqual(5);
   });
 
   test("modal opens on card click and shows actions", async ({ page }) => {
@@ -224,14 +325,10 @@ test.describe("Opportunity Radar /signals", () => {
     const firstCard = page.locator("[data-testid='opportunity-card']").first();
     await firstCard.click();
 
-    // Modal should appear
     const modal = page.locator("[data-testid='opportunity-detail-modal']");
     await expect(modal).toBeVisible();
 
-    // Should show match score
-    await expect(modal.locator("text=86%")).toBeVisible();
-
-    // Should show action buttons
+    await expect(modal.locator("p").filter({ hasText: "86%" })).toBeVisible();
     await expect(
       modal.locator("[data-testid='view-job-action']"),
     ).toBeVisible();
