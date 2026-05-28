@@ -4,56 +4,78 @@ import "./globals.css";
 
 // DESIGN.md spec: IBM Plex Sans Variable + Sora
 const ibmPlexSans = IBM_Plex_Sans({
-    subsets: ["latin"],
-    weight: ["300", "400", "500", "600", "700"],
-    variable: "--font-ibm-plex-sans",
-    display: "swap",
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  variable: "--font-ibm-plex-sans",
+  display: "swap",
 });
 
 const sora = Sora({
-    subsets: ["latin"],
-    variable: "--font-sora",
-    display: "swap",
+  subsets: ["latin"],
+  variable: "--font-sora",
+  display: "swap",
 });
 
 const spaceMono = Space_Mono({
-    subsets: ["latin"],
-    weight: ["400", "700"],
-    variable: "--font-space-mono",
-    display: "swap",
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  variable: "--font-space-mono",
+  display: "swap",
 });
 
 const projectTitle = "Rico: Your AI-intelligent job hunt partner in the UAE";
-const projectDescription = "Rico helps UAE job seekers turn their CV into smarter job matches, clearer next steps, and a more focused job hunt.";
+const projectDescription =
+  "Rico helps UAE job seekers turn their CV into smarter job matches, clearer next steps, and a more focused job hunt.";
 
 export const metadata: Metadata = {
-    metadataBase: new URL(
-        process.env.NEXT_PUBLIC_APP_URL ||
-        process.env.NEXT_PUBLIC_SITE_URL ||
-        "http://localhost:3000"
-    ),
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      "http://localhost:3000",
+  ),
+  title: projectTitle,
+  description: projectDescription,
+  alternates: { canonical: "/" },
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+  },
+  themeColor: "#000000",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Rico",
+  },
+  icons: {
+    icon: [{ url: "/icon.svg" }],
+    apple: [{ url: "/apple-touch-icon.svg" }], // TODO: Convert to PNG for iOS Safari compatibility
+  },
+  openGraph: {
     title: projectTitle,
     description: projectDescription,
-    alternates: { canonical: "/" },
-    openGraph: {
-        title: projectTitle,
-        description: projectDescription,
-        type: "website",
-        siteName: "Rico",
-    },
-    twitter: {
-        card: "summary",
-        title: projectTitle,
-        description: projectDescription,
-    },
+    type: "website",
+    siteName: "Rico",
+  },
+  twitter: {
+    card: "summary",
+    title: projectTitle,
+    description: projectDescription,
+  },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-    return (
-        <html lang="en" className="dark">
-            <body className={`${ibmPlexSans.variable} ${sora.variable} ${spaceMono.variable} antialiased bg-background text-text-primary font-body overflow-x-hidden`}>
-                {children}
-            </body>
-        </html>
-    );
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en" className="dark">
+      <body
+        className={`${ibmPlexSans.variable} ${sora.variable} ${spaceMono.variable} antialiased bg-background text-text-primary font-body overflow-x-hidden`}
+      >
+        {children}
+      </body>
+    </html>
+  );
 }
