@@ -1,0 +1,820 @@
+export type TranslationKey = keyof typeof translations.en;
+
+export const translations = {
+  en: {
+    // Common
+    loading: "Loading...",
+    error: "Error",
+    success: "Success",
+    cancel: "Cancel",
+    save: "Save",
+    delete: "Delete",
+    edit: "Edit",
+    back: "Back",
+    next: "Next",
+    previous: "Previous",
+    submit: "Submit",
+    retry: "Retry",
+    dismiss: "Dismiss",
+    close: "Close",
+
+    // Settings
+    settings: "Settings",
+    settingsSubtitle: "Account, preferences, and integrations",
+    appearance: "Appearance",
+    theme: "Theme",
+    themeDescription: "Choose your preferred color scheme",
+    dark: "Dark",
+    light: "Light",
+    system: "System",
+    language: "Language",
+    languageDescription: "Choose your preferred language",
+
+    // Job Matching Preferences
+    jobMatchingPreferences: "Job Matching Preferences",
+    applyPacing: "Apply pacing",
+    minimumFitScore: "Minimum fit score",
+    safety: "Safety",
+    aggressive: "Aggressive",
+    general: "General",
+    highMatchOnly: "High Match Only",
+
+    // Match Thresholds
+    matchThresholds: "Match thresholds",
+    applyThreshold: "Apply threshold",
+    watchThreshold: "Watch threshold",
+    telegramChatId: "Telegram chat ID",
+    telegramPlaceholder: "Optional — for job alerts",
+    saveSettings: "Save settings",
+    saving: "Saving…",
+
+    // Channel Preferences
+    channelPreferences: "Channel Preferences",
+    telegramNotifications: "Telegram Notifications",
+    telegramConfigured: "A Telegram chat ID is saved for job alerts.",
+    telegramPaused: "Add a Telegram chat ID after backend service is restored.",
+    telegramNotConfigured: "Add a Telegram chat ID to enable job alerts.",
+    statusPaused: "Status: Paused during backend maintenance",
+    statusSyncing: "Syncing with Rico...",
+    statusSynced: "Status: Cloud Synced",
+
+    // Backend Status
+    backendStatus: "Backend Status",
+    service: "Service",
+    status: "Status",
+    environment: "Environment",
+    database: "Database",
+    aiProvider: "AI Provider",
+    huggingFace: "Hugging Face",
+    deepSeek: "DeepSeek",
+    openai: "OpenAI",
+    jotform: "Jotform",
+    telegram: "Telegram",
+    version: "Version",
+    configured: "Configured",
+    notConfigured: "Not configured",
+    active: "Active",
+    notActive: "Not active",
+    connected: "Connected",
+    couldNotReachBackend: "Could not reach backend",
+
+    // Frontend Config
+    frontendConfig: "Frontend Config",
+    mockMode: "Mock mode",
+    mockEnabled: "ENABLED — using dev fixtures",
+    mockDisabled: "OFF — hitting real backend",
+
+    // Legal
+    legal: "Legal",
+    termsOfService: "Terms of Service",
+    privacyPolicy: "Privacy Policy",
+    refundPolicy: "Refund & Cancellation",
+
+    // Auth
+    login: "Log in",
+    signup: "Sign up",
+    email: "Email",
+    password: "Password",
+    forgotPassword: "Forgot password?",
+    resetPassword: "Reset password",
+    logout: "Log out",
+    welcomeBack: "Welcome Back",
+    accessTrajectory: "Access your trajectory intelligence",
+    signInToAgent: "Sign in to your autonomous job agent",
+    backendMaintenance: "Backend maintenance in progress",
+    backendMaintenanceAuth:
+      "Rico's backend service is temporarily offline while hosting is being restored. Subscription, login, Telegram, and Stripe webhook features are paused. No payment validation should be attempted until the backend is back online.",
+    authenticating: "Authenticating...",
+    accessIntelligence: "Access Intelligence",
+    pleaseVerifyEmail:
+      "Please verify your email before continuing. Check your inbox.",
+    emailPasswordIncorrect: "The email or password is incorrect.",
+    couldNotLogin:
+      "We couldn't log you in right now. Please try again in a moment.",
+    verificationEmailSent: "Verification email sent. Please check your inbox.",
+    couldNotResend: "Couldn't resend right now. Please try again in a moment.",
+    resendVerification: "Resend verification email",
+    stillHavingTrouble: "Still having trouble signing in?",
+    createAccount: "Create account",
+    name: "Name",
+    initializeIntelligence: "Initialize Intelligence",
+    beginTrajectory: "Begin your trajectory evolution",
+    checkYourEmail: "Check your email",
+    accountCreated: "Account created. We sent a verification link to",
+    clickLinkToActivate:
+      "Click the link in the email to activate your account.",
+    sending: "Sending...",
+    backToLogin: "Back to login",
+    initializing: "Initializing...",
+    beginJourney: "Begin Journey",
+    goToLogin: "Go to login",
+    alreadyHaveAccount: "Already have an account?",
+    emailAlreadyRegistered:
+      "This email is already registered. Please log in instead.",
+    checkDetails: "Please check your details and try again.",
+    couldNotCreateAccount:
+      "We couldn't create your account right now. Please try again in a moment.",
+    signIn: "Sign in",
+    signUpFree: "Sign up free",
+    uploadYourCV: "Upload your CV",
+    yourName: "Your name",
+    emailPlaceholder: "you@example.com",
+    passwordPlaceholder: "••••••••",
+    mostPopular: "Most Popular",
+    currentPlan: "Current Plan",
+    temporarilyUnavailable: "Temporarily unavailable",
+    manageSubscription: "Manage Subscription",
+    connecting: "Connecting…",
+    upgradeTo: "Upgrade to",
+    loginToUpgrade: "Log in to upgrade",
+    whatsappPaymentConfirm:
+      "We'll confirm payment and activate your account manually.",
+    whatsappPaymentUseEmail: "Use your Rico account email in the message.",
+    checkoutCancelled: "Checkout cancelled",
+    checkoutCancelledDesc:
+      "No payment was made. You can try again whenever you're ready.",
+    freePlan: "Free",
+    freePlanDesc: "50 AI messages · 10 saved jobs · 1 profile optimisation/mo",
+    current: "Current",
+    openRico: "Open Rico",
+    subscriptionTitle: "Subscription",
+    subscriptionSubtitle: "Upgrade your Rico AI plan",
+    backendMaintenanceSub: "Backend maintenance in progress",
+    backendMaintenanceSubDesc:
+      "Rico's backend service is temporarily offline. Subscription features are paused until the backend returns.",
+    subscriptionStatusUnavailable: "Subscription status unavailable",
+    subscriptionStatusUnavailableDesc:
+      "Plan cards below are static reference information. Activation is disabled until the backend returns.",
+    couldNotLoadSubscription:
+      "Could not load your current subscription status.",
+    paymentIssue: "Payment issue",
+    paymentIssueDesc:
+      "There was an issue with your subscription. Please contact Rico support to resolve this.",
+    activePlan: "Active",
+    expiresOn: "Expires on",
+    renews: "Renews",
+    couldNotLoadPlans: "Could not load subscription plans.",
+    couldNotLoadPlansRefresh: "Could not load plans. Please refresh the page.",
+    faqTitle: "Frequently Asked Questions",
+    faqHowUpgrade: "How does upgrading work?",
+    faqHowUpgradeManual:
+      "Click the WhatsApp button on your chosen plan. Send us your Rico account email and preferred plan. We'll confirm your payment and activate your account within a few hours.",
+    faqHowUpgradeStripe:
+      "Click Upgrade to be taken to secure checkout. After payment your plan activates immediately.",
+    faqPaymentMethods: "What payment methods are accepted?",
+    faqPaymentMethodsManual:
+      "We accept bank transfer, Ziina, and Mamo. After payment, send the receipt and your Rico account email via WhatsApp for activation.",
+    faqPaymentMethodsStripe:
+      "We accept all major credit and debit cards. Your payment is securely processed and card details are never stored on our servers.",
+    faqActivationTime: "How quickly is my account activated?",
+    faqActivationTimeManual:
+      "After we receive your payment confirmation via WhatsApp, your Rico account is activated within a few hours. You will need to logout and log back in if premium access does not appear immediately.",
+    faqActivationTimeStripe:
+      "Activation is immediate after successful payment.",
+    faqChangeCancel: "Can I change or cancel my plan?",
+    faqChangeCancelManual:
+      "Contact Rico support via WhatsApp to adjust or cancel your subscription. Your access continues until the end of your current period.",
+    faqChangeCancelStripe:
+      "You can upgrade, downgrade, or cancel at any time through the subscription management portal. When cancelling, access continues until the end of the billing period.",
+    pricesInAED: "Prices in AED. Billed monthly. Cancel any time.",
+
+    // Landing page
+    landingIntelligenceCvProfileExtraction: "CV profile extraction",
+    landingIntelligenceRoleIntelligence: "Role intelligence",
+    landingIntelligenceOpportunityMatching: "Opportunity matching",
+    landingIntelligenceApplicationTracking: "Application tracking",
+    landingIntelligenceTelegramAlerts: "Telegram and job alerts",
+    landingHowItWorks01Title: "Upload your CV",
+    landingHowItWorks01Body:
+      "Rico reads your history first, then builds a private career profile without a setup wizard.",
+    landingHowItWorks02Title: "Profile intelligence forms",
+    landingHowItWorks02Body:
+      "Skills, trajectory, seniority, preferences, compensation signals, and gaps become structured memory.",
+    landingHowItWorks03Title: "The market is filtered",
+    landingHowItWorks03Body:
+      "Roles are ranked by fit, timing, momentum, and what Rico already knows about your direction.",
+    landingHowItWorks04Title: "You approve the moves",
+    landingHowItWorks04Body:
+      "Rico tracks, drafts, and alerts in the background while important decisions stay under your control.",
+    landingMemoryCareerStack: "Career stack and seniority",
+    landingMemoryTargetRoles: "Target roles and rejected paths",
+    landingMemoryRecruiterHistory: "Recruiter response history",
+    landingMemoryCompensation: "Compensation and location signals",
+    landingMemoryOutcomes: "Application outcomes",
+    landingLiveMatch1Role: "Senior Python Platform Engineer",
+    landingLiveMatch1Signal: "High trajectory fit",
+    landingLiveMatch2Role: "AI Operations Lead",
+    landingLiveMatch2Signal: "Strong timing window",
+    landingLiveMatch3Role: "Backend Automation Architect",
+    landingLiveMatch3Signal: "Compensation momentum",
+
+    // Subscription fallback plans
+    fallbackProName: "Pro",
+    fallbackProDescription:
+      "Smart AI job hunting for active UAE professionals.",
+    fallbackProFeature1: "Unlimited CV analysis",
+    fallbackProFeature2: "Smart AI role recommendations",
+    fallbackProFeature3: "Advanced match scoring",
+    fallbackProFeature4: "Saved searches",
+    fallbackProFeature5: "Priority support",
+    fallbackProFeature6: "Higher daily job limits",
+    fallbackPremiumName: "Premium",
+    fallbackPremiumDescription:
+      "Full automation and premium AI recommendations.",
+    fallbackPremiumFeature1: "Everything in Pro",
+    fallbackPremiumFeature2: "Auto-apply system",
+    fallbackPremiumFeature3: "Priority AI ranking",
+    fallbackPremiumFeature4: "Advanced job automation",
+    fallbackPremiumFeature5: "Premium job pipelines",
+    fallbackPremiumFeature6: "Recruiter visibility (coming soon)",
+    pricingMonthShort: "/mo",
+
+    // Landing page hero
+    landingHeroEyebrow: "Start free",
+    landingHeroTitle:
+      "Give Rico your CV. Let the system build the intelligence layer.",
+    landingHeroBody:
+      "The first useful action is not a form. It is your career history becoming structured, remembered, and ready for matching.",
+
+    // Landing page section headings
+    landingSectionHowRicoWorks: "How Rico works",
+    landingSectionHowRicoWorksTitle:
+      "A career system that starts from your history",
+    landingSectionHowRicoWorksBody:
+      "The landing flow is intentionally short: upload, extraction, matching, approval. Rico does the heavy work quietly.",
+    landingSectionWhatRicoRemembers: "What Rico remembers",
+    landingSectionWhatRicoRemembersTitle: "Memory that compounds every search",
+    landingSectionWhatRicoRemembersBody:
+      "Rico turns your CV and outcomes into a living profile, so each match is judged against your actual trajectory instead of a one-time keyword search.",
+    landingSectionOpportunityEngine: "Opportunity engine",
+    landingSectionTelegramAlerts: "Telegram and job alerts",
+    landingSectionYouStayInControl: "You stay in control",
+    landingSectionPricing: "Pricing",
+    landingSectionPricingTitle: "Simple plans for serious career moves",
+    landingSectionPricingBody:
+      "Start free with 50 AI messages and 10 saved jobs. Upgrade when you need more.",
+    landingSectionStartFree: "Start free",
+
+    // Landing page pricing block
+    landingPricingPopular: "Popular",
+    landingPricingPro: "Pro",
+    landingPricingProPrice: "AED 29",
+    landingPricingPerMonth: "/month",
+    landingPricingProFeature1: "300 AI messages per month",
+    landingPricingProFeature2: "100 saved jobs",
+    landingPricingProFeature3: "20 profile optimisations per month",
+    landingPricingProFeature4: "Smart AI role recommendations",
+    landingPricingProFeature5: "Advanced match scoring",
+    landingPricingUpgradeToPro: "Upgrade to Pro",
+    landingPricingPremium: "Premium",
+    landingPricingPremiumPrice: "AED 49",
+    landingPricingPremiumFeature1: "Everything in Pro",
+    landingPricingPremiumFeature2: "Auto-apply system",
+    landingPricingPremiumFeature3: "Priority AI ranking",
+    landingPricingPremiumFeature4: "Advanced job automation",
+    landingPricingPremiumFeature5: "Premium job pipelines",
+    landingPricingPremiumFeature6: "1500 AI messages per month",
+    landingPricingPremiumFeature7: "Unlimited saved jobs",
+    landingPricingPremiumFeature8: "100 profile optimisations per month",
+    landingPricingPremiumFeature9: "Premium recommendations",
+    landingPricingUpgradeToPremium: "Upgrade to Premium",
+    landingPricingFreePlanDesc:
+      "50 AI messages · 10 saved jobs · 1 profile optimisation/mo",
+
+    // Landing page footer
+    landingFooterTerms: "Terms",
+    landingFooterPrivacy: "Privacy",
+    landingFooterRefunds: "Refunds",
+    landingFooterAllRights: "© 2026 Rico Hunt. All rights reserved.",
+
+    // Landing page live profile loop
+    landingLiveProfileOnline: "Online",
+    landingLiveProfileReady: "ready",
+    landingLiveProfileWatching: "watching",
+
+    // Landing page other section headings
+    landingSectionInvisibleIntelligence: "Invisible background intelligence",
+    landingSectionLiveProfileLoop: "Live profile loop",
+    landingSectionOpportunityEngineTitle: "Scored opportunities in real time",
+    landingSectionOpportunityEngineBody:
+      "Each role is ranked by fit, timing, momentum, and trajectory. Rico surfaces the moves that matter.",
+    landingSectionTelegramAlertsTitle: "Telegram and job alerts",
+    landingSectionTelegramAlertsBody:
+      "Get notified when high-fit roles appear. Rico watches the market so you don't have to.",
+    landingSectionYouStayInControlTitle: "You stay in control",
+    landingSectionYouStayInControlBody:
+      "Rico tracks, drafts, and alerts in the background while important decisions stay under your control.",
+
+    // Landing page other labels
+    landingHeroBadge: "CV-first trajectory intelligence",
+    landingMarketScan: "Market scan",
+    landingMainHeroTitle: "Rico AI is your autonomous",
+    landingMainHeroHighlight: "career operating system",
+    landingMainHeroBody:
+      "Upload your CV once. Rico extracts your profile, remembers your trajectory, watches the market, and asks before important career moves.",
+    landingNoSetupWizard: "No setup wizard",
+    landingNoEnterpriseForms: "No enterprise forms",
+    landingNoSilentApplying: "No silent applying",
+    landingNextAlert: "Next alert",
+    landingNextAlertMessage:
+      "A senior backend role crossed the fit threshold after your CV profile update.",
+    landingFreePlanLabel: "Free",
+
+    // Upload CV page
+    uploadTitle: "Release your history",
+    uploadSubtitle: "Upload your CV to initiate trajectory intelligence",
+    uploadDragDrop: "Drag and drop your CV",
+    uploadDropHere: "Drop your CV here",
+    uploadOr: "or",
+    uploadSelectFile: "Select File",
+    uploadProcessing: "Processing...",
+    uploadSupportedFormats: "Supported formats",
+    uploadPDF: "PDF",
+    uploadEncrypted: "End-to-end encrypted processing",
+    uploadCompleteTitle: "Profile Intelligence Ready",
+    uploadCompleteMessage:
+      "Your career trajectory has been mapped. Redirecting to command center...",
+    uploadError: "Upload failed. Please try again.",
+
+    // Command page
+    commandPlaceholder: "Tell Rico what you need...",
+    commandDefaultPlaceholder:
+      "Ask Rico anything — jobs, CV, applications, interviews…",
+    commandMaintenance: "Backend maintenance in progress",
+    commandCheckingSession: "Checking your session…",
+    commandUploadCV: "Upload CV",
+    commandMessageRico: "Message Rico",
+    commandSend: "Send",
+    commandSending: "Sending...",
+
+    // Subscription (existing keys)
+    subscription: "Subscription",
+    plans: "Plans",
+    free: "Free",
+    pro: "Pro",
+    premium: "Premium",
+    upgrade: "Upgrade",
+    manage: "Manage",
+    continueOnWhatsApp: "Continue on WhatsApp",
+
+    // Upload
+    uploadCV: "Upload CV",
+    uploadDescription: "Upload your CV to get started",
+    dragAndDrop: "Drag and drop your CV here",
+    or: "or",
+    browseFiles: "browse files",
+    uploading: "Uploading...",
+    processing: "Processing...",
+
+    // Command
+    command: "Command",
+    typeYourMessage: "Type your message...",
+    send: "Send",
+
+    // Empty States
+    noJobs: "No jobs found",
+    noApplications: "No applications yet",
+    noSignals: "No signals available",
+
+    // Errors
+    sessionExpired: "Session expired",
+    pleaseLogInAgain: "Please log in again",
+    couldNotLoadSettings: "Could not load settings",
+    saveFailed: "Save failed",
+    backendUnreachable: "Backend unreachable",
+    settingsSyncPaused: "Settings sync is paused during backend maintenance",
+
+    // Maintenance
+    backendMaintenanceDescription:
+      "Settings sync and Telegram delivery are paused while Render hosting is restored. Existing frontend pages remain available, but backend-backed preferences cannot be changed.",
+  },
+  ar: {
+    // Common
+    loading: "جاري التحميل...",
+    error: "خطأ",
+    success: "نجح",
+    cancel: "إلغاء",
+    save: "حفظ",
+    delete: "حذف",
+    edit: "تعديل",
+    back: "رجوع",
+    next: "التالي",
+    previous: "السابق",
+    submit: "إرسال",
+    retry: "إعادة المحاولة",
+    dismiss: "إغلاق",
+    close: "إغلاق",
+
+    // Settings
+    settings: "الإعدادات",
+    settingsSubtitle: "الحساب، التفضيلات، والتكاملات",
+    appearance: "المظهر",
+    theme: "السمة",
+    themeDescription: "اختر نظام الألوان المفضل لديك",
+    dark: "داكن",
+    light: "فاتح",
+    system: "النظام",
+    language: "اللغة",
+    languageDescription: "اختر اللغة المفضلة لديك",
+
+    // Job Matching Preferences
+    jobMatchingPreferences: "تفضيلات مطابقة الوظائف",
+    applyPacing: "وتيرة التقديم",
+    minimumFitScore: "الحد الأدنى لدرجة المطابقة",
+    safety: "آمن",
+    aggressive: "نشط",
+    general: "عام",
+    highMatchOnly: "مطابقة عالية فقط",
+
+    // Match Thresholds
+    matchThresholds: "عتبات المطابقة",
+    applyThreshold: "عتبة التقديم",
+    watchThreshold: "عتبة المراقبة",
+    telegramChatId: "معرف تيليجرام",
+    telegramPlaceholder: "اختياري — لتنبيهات الوظائف",
+    saveSettings: "حفظ الإعدادات",
+    saving: "جاري الحفظ...",
+
+    // Channel Preferences
+    channelPreferences: "تفضيلات القنوات",
+    telegramNotifications: "إشعارات تيليجرام",
+    telegramConfigured: "تم حفظ معرف تيليجرام لتنبيهات الوظائف.",
+    telegramPaused: "أضف معرف تيليجرام بعد استعادة خدمة الخادم.",
+    telegramNotConfigured: "أضف معرف تيليجرام لتفعيل تنبيهات الوظائف.",
+    statusPaused: "الحالة: متوقف أثناء صيانة الخادم",
+    statusSyncing: "جاري المزامنة مع ريكو...",
+    statusSynced: "الحالة: متزامن مع السحابة",
+
+    // Backend Status
+    backendStatus: "حالة الخادم",
+    service: "الخدمة",
+    status: "الحالة",
+    environment: "البيئة",
+    database: "قاعدة البيانات",
+    aiProvider: "مزود الذكاء الاصطناعي",
+    huggingFace: "هغينغ فيس",
+    deepSeek: "ديب سيك",
+    openai: "أوبن أيه آي",
+    jotform: "جوت فورم",
+    telegram: "تيليجرام",
+    version: "الإصدار",
+    configured: "مُعد",
+    notConfigured: "غير مُعد",
+    active: "نشط",
+    notActive: "غير نشط",
+    connected: "متصل",
+    couldNotReachBackend: "لا يمكن الوصول إلى الخادم",
+
+    // Frontend Config
+    frontendConfig: "إعدادات الواجهة",
+    mockMode: "وضع المحاكاة",
+    mockEnabled: "مُفعّل — استخدام بيانات التطوير",
+    mockDisabled: "مُعطّل — الاتصال بالخادم الحقيقي",
+
+    // Legal
+    legal: "قانوني",
+    termsOfService: "شروط الخدمة",
+    privacyPolicy: "سياسة الخصوصية",
+    refundPolicy: "الاسترداد والإلغاء",
+
+    // Auth
+    login: "تسجيل الدخول",
+    signup: "إنشاء حساب",
+    email: "البريد الإلكتروني",
+    password: "كلمة المرور",
+    forgotPassword: "نسيت كلمة المرور؟",
+    resetPassword: "إعادة تعيين كلمة المرور",
+    logout: "تسجيل الخروج",
+    welcomeBack: "مرحبًا بعودتك",
+    accessTrajectory: "الوصول إلى ذكاء المسار المهني",
+    signInToAgent: "سجّل الدخول إلى وكيل الوظائف الذكي",
+    backendMaintenance: "صيانة الخادم قيد التقدم",
+    backendMaintenanceAuth:
+      "خدمة خادم ريكو متوقفة مؤقتًا أثناء استعادة الاستضافة. الاشتراك، تسجيل الدخول، تيليجرام، وخطافات Stripe متوقفة. لا يجب محاولة التحقق من الدفع حتى يعود الخادم للعمل.",
+    authenticating: "جاري المصادقة...",
+    accessIntelligence: "الوصول إلى الذكاء",
+    pleaseVerifyEmail:
+      "يرجى التحقق من بريدك الإلكتروني قبل المتابعة. تحقق من صندوق الوارد.",
+    emailPasswordIncorrect: "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+    couldNotLogin:
+      "لم نتمكن من تسجيل الدخول الآن. يرجى المحاولة مرة أخرى بعد لحظات.",
+    verificationEmailSent: "تم إرسال بريد التحقق. يرجى التحقق من صندوق الوارد.",
+    couldNotResend:
+      "لم نتمكن من إعادة الإرسال الآن. يرجى المحاولة مرة أخرى بعد لحظات.",
+    resendVerification: "إعادة إرسال بريد التحقق",
+    stillHavingTrouble: "لا تزال تواجه مشاكل في تسجيل الدخول؟",
+    createAccount: "إنشاء حساب",
+    name: "الاسم",
+    initializeIntelligence: "تهيئة الذكاء",
+    beginTrajectory: "ابدأ تطور مسارك المهني",
+    checkYourEmail: "تحقق من بريدك الإلكتروني",
+    accountCreated: "تم إنشاء الحساب. أرسلنا رابط التحقق إلى",
+    clickLinkToActivate: "انقر على الرابط في البريد الإلكتروني لتفعيل حسابك.",
+    sending: "جاري الإرسال...",
+    backToLogin: "العودة لتسجيل الدخول",
+    initializing: "جاري التهيئة...",
+    beginJourney: "ابدأ الرحلة",
+    goToLogin: "اذهب لتسجيل الدخول",
+    alreadyHaveAccount: "لديك حساب بالفعل؟",
+    emailAlreadyRegistered:
+      "البريد الإلكتروني مسجل بالفعل. يرجى تسجيل الدخول بدلاً من ذلك.",
+    checkDetails: "يرجى التحقق من التفاصيل والمحاولة مرة أخرى.",
+    couldNotCreateAccount:
+      "لم نتمكن من إنشاء حسابك الآن. يرجى المحاولة مرة أخرى بعد لحظات.",
+    signIn: "تسجيل الدخول",
+    signUpFree: "سجّل مجانًا",
+    uploadYourCV: "ارفع سيرتك الذاتية",
+    yourName: "اسمك",
+    emailPlaceholder: "you@example.com",
+    passwordPlaceholder: "••••••••",
+    mostPopular: "الأكثر شعبية",
+    currentPlan: "الخطة الحالية",
+    temporarilyUnavailable: "غير متاح مؤقتًا",
+    manageSubscription: "إدارة الاشتراك",
+    connecting: "جاري الاتصال…",
+    upgradeTo: "ترقية إلى",
+    loginToUpgrade: "سجّل الدخول للترقية",
+    whatsappPaymentConfirm: "سنؤكد الدفع ونفعل حسابك يدويًا.",
+    whatsappPaymentUseEmail: "استخدم بريدك الإلكتروني في ريكو في الرسالة.",
+    checkoutCancelled: "تم إلغاء الدفع",
+    checkoutCancelledDesc:
+      "لم يتم الدفع. يمكنك المحاولة مرة أخرى عندما تكون جاهزًا.",
+    freePlan: "مجاني",
+    freePlanDesc:
+      "50 رسالة ذكاء اصطناعي · 10 وظائف محفوظة · 1 تحسين ملف شخصي/شهر",
+    current: "الحالي",
+    openRico: "افتح ريكو",
+    subscriptionTitle: "الاشتراك",
+    subscriptionSubtitle: "ترقية خطة ريكو AI",
+    backendMaintenanceSub: "صيانة الخادم قيد التقدم",
+    backendMaintenanceSubDesc:
+      "خدمة خادم ريكو متوقفة مؤقتًا. ميزات الاشتراك متوقفة حتى عودة الخادم.",
+    subscriptionStatusUnavailable: "حالة الاشتراك غير متاحة",
+    subscriptionStatusUnavailableDesc:
+      "بطاقات الخطط أدناه معلومات مرجعية ثابتة. التفعيل معطل حتى عودة الخادم.",
+    couldNotLoadSubscription: "لم نتمكن من تحميل حالة اشتراكك الحالية.",
+    paymentIssue: "مشكلة في الدفع",
+    paymentIssueDesc:
+      "حدثت مشكلة في اشتراكك. يرجى الاتصال بدعم ريكو لحل هذه المشكلة.",
+    activePlan: "نشط",
+    expiresOn: "تنتهي في",
+    renews: "تجدد",
+    couldNotLoadPlans: "لم نتمكن من تحميل خطط الاشتراك.",
+    couldNotLoadPlansRefresh: "لم نتمكن من تحميل الخطط. يرجى تحديث الصفحة.",
+    faqTitle: "الأسئلة المتكررة",
+    faqHowUpgrade: "كيف تعمل الترقية؟",
+    faqHowUpgradeManual:
+      "انقر على زر واتساب في الخطة المختارة. أرسل لنا بريدك الإلكتروني في ريكو والخطة المفضلة. سنؤكد دفعك ونفعل حسابك خلال بضع ساعات.",
+    faqHowUpgradeStripe:
+      "انقر ترقية للانتقال إلى الدفع الآمن. بعد الدفع، يتم تفعيل خطتك فورًا.",
+    faqPaymentMethods: "ما هي طرق الدفع المقبولة؟",
+    faqPaymentMethodsManual:
+      "نقبل التحويل البنكي وزيينة ومامو. بعد الدفع، أرسل الإيصال وبريدك الإلكتروني في ريكو عبر واتساب للتفعيل.",
+    faqPaymentMethodsStripe:
+      "نقبل جميع بطاقات الائتمان والخصم الرئيسية. يتم معالجة الدفع بشكل آمن ولا يتم تخزين تفاصيل البطاقة على خوادمنا.",
+    faqActivationTime: "كم سرعة تفعيل حسابي؟",
+    faqActivationTimeManual:
+      "بعد استلام تأكيد الدفع عبر واتساب، يتم تفعيل حساب ريكو خلال بضع ساعات. قد تحتاج إلى تسجيل الخروج وتسجيل الدخول مرة أخرى إذا لم يظهر الوصول المميز فورًا.",
+    faqActivationTimeStripe: "التفعيل فوري بعد الدفع الناجح.",
+    faqChangeCancel: "هل يمكنني تغيير أو إلغاء خطتي؟",
+    faqChangeCancelManual:
+      "اتصل بدعم ريكو عبر واتساب لضبط أو إلغاء اشتراكك. يستمر الوصول حتى نهاية فترتك الحالية.",
+    faqChangeCancelStripe:
+      "يمكنك الترقية أو التخفيض أو الإلغاء في أي وقت من خلال بوابة إدارة الاشتراك. عند الإلغاء، يستمر الوصول حتى نهاية فترة الفوترة.",
+    pricesInAED: "الأسعار بالدرهم الإمارات. فوترة شهرية. إلغاء في أي وقت.",
+
+    // Landing page
+    landingIntelligenceCvProfileExtraction:
+      "استخراج الملف المهني من السيرة الذاتية",
+    landingIntelligenceRoleIntelligence: "تحليل الأدوار المناسبة",
+    landingIntelligenceOpportunityMatching: "مطابقة الفرص الوظيفية",
+    landingIntelligenceApplicationTracking: "تتبع طلبات التقديم",
+    landingIntelligenceTelegramAlerts: "تنبيهات تيليجرام والوظائف",
+    landingHowItWorks01Title: "ارفع سيرتك الذاتية",
+    landingHowItWorks01Body:
+      "يقرأ ريكو تاريخك أولاً، ثم يبني ملفًا مهنيًا خاصًا دون معالج إعداد.",
+    landingHowItWorks02Title: "تكوين ذكاء الملف",
+    landingHowItWorks02Body:
+      "المهارات والمسار والخبرة والتفضيلات وإشارات التعويض والفجوات تصبح ذاكرة منظمة.",
+    landingHowItWorks03Title: "السوق يتم تصفيته",
+    landingHowItWorks03Body:
+      "يتم ترتيب الأدوار حسب الملاءمة والتوقيت والزخم وما يعرفه ريكو بالفعل عن اتجاهك.",
+    landingHowItWorks04Title: "أنت توافق على الحركات",
+    landingHowItWorks04Body:
+      "يتتبع ريكو ويصمم وينبه في الخلفية بينما تظل القرارات المهمة تحت سيطرتك.",
+    landingMemoryCareerStack: "المجموعة المهنية والخبرة",
+    landingMemoryTargetRoles: "الأدوار المستهدفة والمسارات المرفوضة",
+    landingMemoryRecruiterHistory: "تاريخ استجابة المسؤولين عن التوظيف",
+    landingMemoryCompensation: "إشارات التعويض والموقع",
+    landingMemoryOutcomes: "نتائج طلبات التقديم",
+    landingLiveMatch1Role: "مهندس منصة بايثون أول",
+    landingLiveMatch1Signal: "ملاءمة عالية للمسار",
+    landingLiveMatch2Role: "قائد عمليات الذكاء الاصطناعي",
+    landingLiveMatch2Signal: "نافذة توقيت قوية",
+    landingLiveMatch3Role: "مهندس أتمتة الخلفية",
+    landingLiveMatch3Signal: "زخم التعويض",
+
+    // Subscription fallback plans
+    fallbackProName: "احترافي",
+    fallbackProDescription:
+      "البحث الذكي عن الوظائف باستخدام الذكاء الاصطناعي للمحترفين النشطين في الإمارات.",
+    fallbackProFeature1: "تحليل سيرة ذاتية غير محدود",
+    fallbackProFeature2: "توصيات أدوار ذكية بالذكاء الاصطناعي",
+    fallbackProFeature3: "نظام مطابقة متقدم",
+    fallbackProFeature4: "عمليات بحث محفوظة",
+    fallbackProFeature5: "دعم أولوية",
+    fallbackProFeature6: "حدود وظائف يومية أعلى",
+    fallbackPremiumName: "مميز",
+    fallbackPremiumDescription: "أتمتة كاملة وتوصيات مميزة بالذكاء الاصطناعي.",
+    fallbackPremiumFeature1: "كل ما في الاحترافي",
+    fallbackPremiumFeature2: "نظام التقديم التلقائي",
+    fallbackPremiumFeature3: "ترتيب أولوية الذكاء الاصطناعي",
+    fallbackPremiumFeature4: "أتمتة وظائف متقدمة",
+    fallbackPremiumFeature5: "خطوط وظائف مميزة",
+    fallbackPremiumFeature6: "رؤية المسؤولين عن التوظيف (قريبًا)",
+    pricingMonthShort: "/شهر",
+
+    // Landing page hero
+    landingHeroEyebrow: "ابدأ مجانًا",
+    landingHeroTitle: "أعطِ ريكو سيرتك الذاتية. دع النظام يبني طبقة الذكاء.",
+    landingHeroBody:
+      "الإجراء المفيد الأول ليس نموذجًا. إنه تاريخك المهني يصبح منظمًا ومتذكرًا وجاهزًا للمطابقة.",
+
+    // Landing page section headings
+    landingSectionHowRicoWorks: "كيف يعمل ريكو",
+    landingSectionHowRicoWorksTitle: "نظام مهني يبدأ من تاريخك",
+    landingSectionHowRicoWorksBody:
+      "مسار الهبوط قصير عمدًا: رفع، استخراج، مطابقة، موافقة. ريكو يقوم بالعمل الشاق بهدوء.",
+    landingSectionWhatRicoRemembers: "ما يتذكره ريكو",
+    landingSectionWhatRicoRemembersTitle: "ذاكرة تتضاعف مع كل بحث",
+    landingSectionWhatRicoRemembersBody:
+      "يحول ريكو سيرتك الذاتية والنتائج إلى ملف حي، بحيث يتم الحكم على كل مطابقة بناءً على مسارك الفعلي بدلاً من بحث كلمات مفتاحية لمرة واحدة.",
+    landingSectionOpportunityEngine: "محرك الفرص",
+    landingSectionTelegramAlerts: "تنبيهات تيليجرام والوظائف",
+    landingSectionYouStayInControl: "أنت تظل تحت السيطرة",
+    landingSectionPricing: "التسعير",
+    landingSectionPricingTitle: "خطط بسيطة للحركات المهنية الجادة",
+    landingSectionPricingBody:
+      "ابدأ مجانًا مع 50 رسالة ذكاء اصطناعي و 10 وظائف محفوظة. ترق عندما تحتاج المزيد.",
+    landingSectionStartFree: "ابدأ مجانًا",
+
+    // Landing page pricing block
+    landingPricingPopular: "الأكثر شعبية",
+    landingPricingPro: "احترافي",
+    landingPricingProPrice: "29 درهم",
+    landingPricingPerMonth: "/شهر",
+    landingPricingProFeature1: "300 رسالة ذكاء اصطناعي شهريًا",
+    landingPricingProFeature2: "100 وظيفة محفوظة",
+    landingPricingProFeature3: "20 تحسين ملف شخصي شهريًا",
+    landingPricingProFeature4: "توصيات أدوار ذكية بالذكاء الاصطناعي",
+    landingPricingProFeature5: "نظام مطابقة متقدم",
+    landingPricingUpgradeToPro: "ترقية إلى احترافي",
+    landingPricingPremium: "مميز",
+    landingPricingPremiumPrice: "49 درهم",
+    landingPricingPremiumFeature1: "كل ما في الاحترافي",
+    landingPricingPremiumFeature2: "نظام التقديم التلقائي",
+    landingPricingPremiumFeature3: "ترتيب أولوية الذكاء الاصطناعي",
+    landingPricingPremiumFeature4: "أتمتة وظائف متقدمة",
+    landingPricingPremiumFeature5: "خطوط وظائف مميزة",
+    landingPricingPremiumFeature6: "1500 رسالة ذكاء اصطناعي شهريًا",
+    landingPricingPremiumFeature7: "وظائف محفوظة غير محدودة",
+    landingPricingPremiumFeature8: "100 تحسين ملف شخصي شهريًا",
+    landingPricingPremiumFeature9: "توصيات مميزة",
+    landingPricingUpgradeToPremium: "ترقية إلى مميز",
+    landingPricingFreePlanDesc:
+      "50 رسالة ذكاء اصطناعي · 10 وظائف محفوظة · 1 تحسين ملف شخصي/شهر",
+
+    // Landing page footer
+    landingFooterTerms: "الشروط",
+    landingFooterPrivacy: "الخصوصية",
+    landingFooterRefunds: "الاسترداد",
+    landingFooterAllRights: "© 2026 ريكو هانت. جميع الحقوق محفوظة.",
+
+    // Landing page live profile loop
+    landingLiveProfileOnline: "متصل",
+    landingLiveProfileReady: "جاهز",
+    landingLiveProfileWatching: "يراقب",
+
+    // Landing page other section headings
+    landingSectionInvisibleIntelligence: "ذكاء خفي في الخلفية",
+    landingSectionLiveProfileLoop: "حلقة الملف الحي",
+    landingSectionOpportunityEngineTitle: "فرص مصنفة في الوقت الفعلي",
+    landingSectionOpportunityEngineBody:
+      "يتم ترتيب كل دور حسب الملاءمة والتوقيت والزخم والمسار. يظهر ريكو الحركات المهمة.",
+    landingSectionTelegramAlertsTitle: "تنبيهات تيليجرام والوظائف",
+    landingSectionTelegramAlertsBody:
+      "احصل على إشعار عند ظهور أدوار عالية الملاءمة. يراقب ريكو السوق حتى لا تضطر لذلك.",
+    landingSectionYouStayInControlTitle: "أنت تظل تحت السيطرة",
+    landingSectionYouStayInControlBody:
+      "يتتبع ريكو ويصمم وينبه في الخلفية بينما تظل القرارات المهمة تحت سيطرتك.",
+
+    // Landing page other labels
+    landingHeroBadge: "ذكاء المسار المهني القائم على السيرة الذاتية",
+    landingMarketScan: "مسح السوق",
+    landingMainHeroTitle: "ريكو AI هو نظامك التشغيلي المهني المستقل",
+    landingMainHeroHighlight: "نظام التشغيل المهني",
+    landingMainHeroBody:
+      "ارفع سيرتك الذاتية مرة واحدة. يستخرج ريكو ملفك الشخصي، يتذكر مسارك، يراقب السوق، ويسأل قبل الحركات المهنية المهمة.",
+    landingNoSetupWizard: "لا معالج إعداد",
+    landingNoEnterpriseForms: "لا نماذج مؤسسية",
+    landingNoSilentApplying: "لا تقديم صامت",
+    landingNextAlert: "التنبيه التالي",
+    landingNextAlertMessage:
+      "تجاوز دور الخلفية العالي حد الملاءمة بعد تحديث ملف سيرتك الذاتية.",
+    landingFreePlanLabel: "مجاني",
+
+    // Upload CV page
+    uploadTitle: "أطلق سراح تاريخك",
+    uploadSubtitle: "ارفع سيرتك الذاتية لبدء ذكاء المسار",
+    uploadDragDrop: "اسحب وأفلت سيرتك الذاتية",
+    uploadDropHere: "أفلت سيرتك الذاتية هنا",
+    uploadOr: "أو",
+    uploadSelectFile: "اختر ملف",
+    uploadProcessing: "جاري المعالجة...",
+    uploadSupportedFormats: "التنسيقات المدعومة",
+    uploadPDF: "PDF",
+    uploadEncrypted: "معالجة مشفرة من طرف إلى طرف",
+    uploadCompleteTitle: "ذكاء الملف الشخصي جاهز",
+    uploadCompleteMessage:
+      "تم تعيين مسارك المهني. إعادة التوجيه إلى مركز القيادة...",
+    uploadError: "فشل الرفع. يرجى المحاولة مرة أخرى.",
+
+    // Command page
+    commandPlaceholder: "أخبر ريكو بما تحتاج...",
+    commandDefaultPlaceholder:
+      "اسأل ريكو أي شيء — وظائف، سيرة ذاتية، طلبات، مقابلات…",
+    commandMaintenance: "صيانة الخلفية قيد التقدم",
+    commandCheckingSession: "جاري التحقق من جلستك…",
+    commandUploadCV: "رفع السيرة الذاتية",
+    commandMessageRico: "رسالة لريكو",
+    commandSend: "إرسال",
+    commandSending: "جاري الإرسال...",
+
+    // Subscription
+    subscription: "الاشتراك",
+    plans: "الخطط",
+    free: "مجاني",
+    pro: "احترافي",
+    premium: "مميز",
+    upgrade: "ترقية",
+    manage: "إدارة",
+    continueOnWhatsApp: "المتابعة على واتساب",
+
+    // Upload
+    uploadCV: "رفع السيرة الذاتية",
+    uploadDescription: "ارفع سيرتك الذاتية للبدء",
+    dragAndDrop: "اسحب وأفلت سيرتك الذاتية هنا",
+    or: "أو",
+    browseFiles: "تصفح الملفات",
+    uploading: "جاري الرفع...",
+    processing: "جاري المعالجة...",
+
+    // Command
+    command: "الأمر",
+    typeYourMessage: "اكتب رسالتك...",
+    send: "إرسال",
+
+    // Empty States
+    noJobs: "لم يتم العثور على وظائف",
+    noApplications: "لا توجد طلبات بعد",
+    noSignals: "لا توجد إشارات متاحة",
+
+    // Errors
+    sessionExpired: "انتهت الجلسة",
+    pleaseLogInAgain: "يرجى تسجيل الدخول مرة أخرى",
+    couldNotLoadSettings: "لا يمكن تحميل الإعدادات",
+    saveFailed: "فشل الحفظ",
+    backendUnreachable: "الخادم غير متاح",
+    settingsSyncPaused: "مزامنة الإعدادات متوقفة أثناء صيانة الخادم",
+
+    // Maintenance
+    backendMaintenanceDescription:
+      "مزامنة الإعدادات وتوصيلات تيليجرام متوقفة أثناء استعادة استضافة Render. الصفحات الحالية متاحة، لكن التفضيلات التي تعتمد على الخادم لا يمكن تغييرها.",
+  },
+} as const;
+
+export function useTranslation(language: "en" | "ar") {
+  return (key: string): string => {
+    return translations[language][key as keyof typeof translations.en];
+  };
+}
