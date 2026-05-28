@@ -41,7 +41,7 @@ export const metadata: Metadata = {
     initialScale: 1,
   },
   themeColor: "#000000",
-  manifest: "/manifest",
+  manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -49,7 +49,7 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [{ url: "/icon.svg" }],
-    apple: [{ url: "/apple-touch-icon.svg" }],
+    apple: [{ url: "/apple-touch-icon.svg" }], // TODO: Convert to PNG for iOS Safari compatibility
   },
   openGraph: {
     title: projectTitle,
