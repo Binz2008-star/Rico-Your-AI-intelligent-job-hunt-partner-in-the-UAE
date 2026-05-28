@@ -74,6 +74,7 @@ function LinkStatusBadge({
 
   return (
     <span
+      data-testid="link-status-badge"
       className={`text-label-caps text-[10px] px-2 py-1 border rounded ${palette[status]}`}
     >
       {labels[status]}
@@ -112,6 +113,7 @@ function PrimaryAction({
   if (linkStatus === "expired") {
     return (
       <Link
+        data-testid="find-similar-action"
         href={commandHref(`Find similar live jobs — ${titleCompany}`)}
         className="inline-flex items-center gap-1.5 rounded-full border border-cyan/25 bg-cyan/10 px-4 py-2 text-[13px] font-semibold text-cyan hover:bg-cyan/15"
       >
@@ -133,6 +135,7 @@ function PrimaryAction({
   if (signal.applyUrl && showViewJob) {
     return (
       <a
+        data-testid="view-job-action"
         href={signal.applyUrl}
         target="_blank"
         rel="noreferrer"
@@ -233,6 +236,7 @@ function SignalCard({
 
   return (
     <GlassPanel
+      data-testid="opportunity-card"
       className={`rounded-xl border border-white/10 hover:border-primary/30 transition-all group ${isList ? "p-4" : "p-5"}`}
     >
       <button
@@ -246,6 +250,7 @@ function SignalCard({
         >
           <div className="min-w-0 flex-1">
             <h3
+              data-testid="opportunity-card-title"
               className={`font-semibold text-on-surface break-normal ${isList ? "text-base line-clamp-1" : "text-lg line-clamp-2"}`}
             >
               {signal.role}
@@ -336,7 +341,7 @@ export default function SignalsPage() {
       : "grid grid-cols-1 xl:grid-cols-2 gap-5";
 
   const renderSignalGrid = (items: OpportunitySignal[]) => (
-    <div className={gridClass}>
+    <div data-testid="signals-grid" className={gridClass}>
       {items.map((signal) => (
         <SignalCard
           key={signal.id}
@@ -351,7 +356,10 @@ export default function SignalsPage() {
   );
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden">
+    <div
+      data-testid="opportunity-radar-page"
+      className="relative min-h-screen overflow-x-hidden"
+    >
       <AuraGlow aria-hidden="true" variant="magenta" position="top-left" />
       <AuraGlow aria-hidden="true" variant="cyan" position="bottom-right" />
       <TopNav />
@@ -359,7 +367,10 @@ export default function SignalsPage() {
       <main className="relative z-10 pt-32 pb-40 px-container-padding-mobile md:px-container-padding-desktop max-w-6xl mx-auto">
         <div className="mb-10 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
           <div>
-            <h1 className="font-headline-xl text-headline-xl text-on-surface mb-3">
+            <h1
+              data-testid="opportunity-radar-title"
+              className="font-headline-xl text-headline-xl text-on-surface mb-3"
+            >
               Opportunity Radar
             </h1>
             <p className="font-body-lg text-body-lg text-on-surface-variant max-w-xl">
@@ -369,6 +380,7 @@ export default function SignalsPage() {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
+              data-testid="view-mode-toggle-card"
               type="button"
               onClick={() => setViewMode("card")}
               className={`rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${viewMode === "card" ? "bg-white/10 text-white" : "text-on-surface-variant hover:text-white"}`}
@@ -378,6 +390,7 @@ export default function SignalsPage() {
               Cards
             </button>
             <button
+              data-testid="view-mode-toggle-list"
               type="button"
               onClick={() => setViewMode("list")}
               className={`rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${viewMode === "list" ? "bg-white/10 text-white" : "text-on-surface-variant hover:text-white"}`}
@@ -446,7 +459,10 @@ export default function SignalsPage() {
       </main>
 
       {selectedSignal && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-4 py-6 backdrop-blur-sm md:items-center">
+        <div
+          data-testid="opportunity-detail-modal"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-4 py-6 backdrop-blur-sm md:items-center"
+        >
           <GlassPanel className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/10 p-6">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
@@ -463,6 +479,7 @@ export default function SignalsPage() {
                 </p>
               </div>
               <button
+                data-testid="close-modal"
                 type="button"
                 onClick={() => setSelectedSignal(null)}
                 className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-sm text-on-surface-variant hover:text-white"
