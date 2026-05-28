@@ -211,7 +211,7 @@ class TestMeEndpointDbBacked:
         assert body["subscription"]["plan"] == "pro"
         assert body["subscription"]["subscription_status"] == "active"
         assert body["subscription"]["stripe_customer_id"] == "cus_test"
-        assert body["plan"]["price_monthly"] == 50
+        assert body["plan"]["price_monthly"] == 29
         assert body["plan"]["currency"] == "AED"
         assert body["subscription"]["entitlements"]["monthly_ai_message_limit"] == 300
         assert body["subscription"]["entitlements"]["saved_jobs_limit"] == 100
@@ -230,7 +230,7 @@ class TestMeEndpointDbBacked:
         body = r.json()
         assert body["is_active"] is True
         assert body["subscription"]["plan"] == "premium"
-        assert body["plan"]["price_monthly"] == 150
+        assert body["plan"]["price_monthly"] == 49
         assert body["subscription"]["entitlements"]["monthly_ai_message_limit"] == 1500
         assert body["subscription"]["entitlements"]["saved_jobs_limit"] is None
         assert body["subscription"]["entitlements"]["premium_recommendations_enabled"] is True
