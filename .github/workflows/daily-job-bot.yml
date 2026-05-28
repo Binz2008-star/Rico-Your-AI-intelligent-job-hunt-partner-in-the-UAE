@@ -2,8 +2,8 @@ name: Daily Job Bot Legacy
 
 on:
   schedule:
-    - cron: '0 6 * * *'   # 6:00 AM UTC
-    - cron: '0 15 * * *'  # 3:00 PM UTC
+    - cron: "0 6 * * *" # 6:00 AM UTC
+    - cron: "0 15 * * *" # 3:00 PM UTC
   workflow_dispatch:
 
 permissions:
@@ -24,7 +24,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: "3.11"
           cache: pip
 
       - name: Install dependencies
@@ -40,17 +40,17 @@ jobs:
       - name: Run intelligence pipeline
         id: run_daily
         env:
-          DATABASE_URL:       ${{ secrets.DATABASE_URL }}
-          HF_TOKEN:           ${{ secrets.HF_TOKEN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
-          EMAIL_USER:         ${{ secrets.EMAIL_USER }}
-          EMAIL_PASS:         ${{ secrets.EMAIL_PASS }}
-          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
-          EXCLUDE_KEYWORDS:   ${{ secrets.EXCLUDE_KEYWORDS }}
-          NG_ENABLED:         "false"
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          EXCLUDE_KEYWORDS: ${{ secrets.EXCLUDE_KEYWORDS }}
+          NG_ENABLED: "false"
           AUTO_APPLY_ENABLED: "false"
-          RICO_DEMO_MODE:     ${{ secrets.RICO_DEMO_MODE || 'false' }}
+          RICO_DEMO_MODE: ${{ secrets.RICO_DEMO_MODE || 'false' }}
           RICO_TELEGRAM_PUBLIC_ALERTS: ${{ secrets.RICO_TELEGRAM_PUBLIC_ALERTS || 'true' }}
         run: python -m src.run_daily
 
@@ -58,8 +58,8 @@ jobs:
         if: failure() && steps.run_daily.outcome == 'failure'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
-          RICO_DEMO_MODE:     ${{ secrets.RICO_DEMO_MODE || 'false' }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RICO_DEMO_MODE: ${{ secrets.RICO_DEMO_MODE || 'false' }}
           RICO_TELEGRAM_PUBLIC_ALERTS: ${{ secrets.RICO_TELEGRAM_PUBLIC_ALERTS || 'true' }}
         run: |
           python -c "
@@ -83,10 +83,10 @@ jobs:
       - name: Run follow-up reminders
         if: steps.run_daily.outcome == 'success'
         env:
-          DATABASE_URL:       ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
-          HF_TOKEN:           ${{ secrets.HF_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: python -m src.follow_up
 
       - name: Deploy dashboard to GitHub Pages
@@ -102,4 +102,7 @@ jobs:
           git config user.name "GitHub Action"
           git add docs/index.html
           git diff --staged --quiet || git commit -m "Update dashboard [skip ci]"
-          git push
+          # Pull latest changes before pushing to avoid non-fast-forward rejections
+          git pull --rebase origin main
+          # Use force-with-lease for dashboard updates (safer than force, checks remote hasn't changed unexpectedly)
+          git push --force-with-lease origin main || echo "Dashboard push failed — likely concurrent main update"
