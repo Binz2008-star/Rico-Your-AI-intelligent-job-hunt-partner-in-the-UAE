@@ -77,11 +77,11 @@ export function Sidebar() {
         <aside className="w-[220px] flex-shrink-0 bg-[#0a0a1a] border-r border-white/5 flex flex-col h-full overflow-y-auto">
             {/* Logo */}
             <div className="px-5 py-5 border-b border-white/5 flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-[8px] bg-gradient-to-br from-[#5b4fff] to-[#8b5cf6] flex items-center justify-center text-white font-['Cabinet_Grotesk',sans-serif] font-black text-[12px] shadow-[0_4px_12px_rgba(91,79,255,0.3)]">
+                <div className="w-7 h-7 rounded-[8px] bg-[#f5a623] flex items-center justify-center text-[#0a0a1a] font-['Cabinet_Grotesk',sans-serif] font-black text-[13px] shadow-[0_4px_12px_rgba(245,166,35,0.35)]">
                     R
                 </div>
                 <span className="font-['Cabinet_Grotesk',sans-serif] font-800 text-[17px] tracking-tight text-white">
-                    Rico AI
+                    Rico <span className="text-[#f5a623]">Hunt</span>
                 </span>
             </div>
 
@@ -105,7 +105,7 @@ export function Sidebar() {
                             className={cn(
                                 "flex items-center gap-2.5 px-3 py-2 rounded-[9px] text-[13px] font-medium transition-all duration-150",
                                 active
-                                    ? "bg-[rgba(91,79,255,0.12)] text-[#a78bfa] border border-[rgba(91,79,255,0.2)]"
+                                    ? "bg-[rgba(245,166,35,0.10)] text-[#f5a623] border border-[rgba(245,166,35,0.22)]"
                                     : "text-white/45 hover:text-white/80 hover:bg-white/5"
                             )}
                         >
@@ -124,7 +124,7 @@ export function Sidebar() {
                     onClick={logout}
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[9px] hover:bg-white/5 transition-colors group"
                 >
-                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#5b4fff] to-[#00c9a7] flex items-center justify-center text-white font-['Cabinet_Grotesk',sans-serif] font-black text-[10px] flex-shrink-0">
+                    <div className="w-7 h-7 rounded-full bg-[#f5a623] flex items-center justify-center text-[#0a0a1a] font-['Cabinet_Grotesk',sans-serif] font-black text-[10px] flex-shrink-0">
                         {initials}
                     </div>
                     <div className="flex-1 min-w-0 text-left">

@@ -35,19 +35,19 @@ export const metadata: Metadata = {
         process.env.NEXT_PUBLIC_SITE_URL ||
         "http://localhost:3000"
     ),
-    title: "Rico AI — Autonomous Career Trajectory Intelligence",
-    description: "Cinematic career intelligence system. Memory-weighted trajectory mapping, command-centered orchestration, and opportunity momentum analysis for autonomous career evolution.",
+    title: "Rico Hunt — Your AI Job-Hunt Partner in the UAE",
+    description: "Your AI job-hunt partner in the UAE. Upload your CV and Rico finds matching jobs, tracks your applications, and guides your next move — in English and Arabic.",
     alternates: { canonical: "/" },
     openGraph: {
-        title: "Rico AI — Autonomous Career Trajectory Intelligence",
-        description: "The future of career intelligence. Memory-weighted trajectory mapping, command-centered orchestration, and opportunity momentum analysis.",
+        title: "Rico Hunt — Your AI Job-Hunt Partner in the UAE",
+        description: "Upload your CV. Rico finds matching UAE jobs, tracks your applications, and guides your next move — in English and Arabic.",
         type: "website",
-        siteName: "Rico AI",
+        siteName: "Rico Hunt",
     },
     twitter: {
         card: "summary",
-        title: "Rico AI — Autonomous Career Trajectory Intelligence",
-        description: "The future of career intelligence. Memory-weighted trajectory mapping, command-centered orchestration, and opportunity momentum analysis.",
+        title: "Rico Hunt — Your AI Job-Hunt Partner in the UAE",
+        description: "Upload your CV. Rico finds matching UAE jobs, tracks your applications, and guides your next move — in English and Arabic.",
     },
 };
 
