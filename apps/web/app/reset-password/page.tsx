@@ -140,8 +140,9 @@ export default function ResetPasswordPage() {
       <div className="w-full max-w-sm">
         {/* Brand */}
         <div className="mb-8 text-center">
-          <Link href="/" className="text-lg font-bold text-white tracking-tight">
-            Rico AI
+          <Link href="/" className="inline-flex items-center gap-2 text-lg font-bold text-white tracking-tight">
+            <span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-[#f5a623] text-sm font-black text-[#0a0a1a] shadow-[0_4px_12px_rgba(245,166,35,0.35)]">R</span>
+            Rico <span className="text-[#f5a623]">Hunt</span>
           </Link>
           <p className="mt-1 text-sm text-zinc-400">Set a new password</p>
         </div>

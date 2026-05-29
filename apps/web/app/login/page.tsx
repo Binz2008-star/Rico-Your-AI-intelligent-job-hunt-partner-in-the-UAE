@@ -16,10 +16,10 @@ export default function LoginPage() {
                 {/* Brand */}
                 <div className="mb-8 text-center">
                     <Link href="/" className="inline-flex items-center gap-2.5 justify-center">
-                        <div className="w-9 h-9 rounded-[10px] bg-gradient-to-br from-magenta to-cyan flex items-center justify-center text-sm font-black text-white shadow-[0_4px_16px_rgba(255,45,142,0.3)]">
+                        <div className="w-9 h-9 rounded-[10px] bg-[#f5a623] flex items-center justify-center text-sm font-black text-[#0a0a1a] shadow-[0_4px_16px_rgba(245,166,35,0.35)]">
                             R
                         </div>
-                        <span className="font-display font-black text-xl text-white tracking-tight">Rico AI</span>
+                        <span className="font-display font-black text-xl text-white tracking-tight">Rico <span className="text-[#f5a623]">Hunt</span></span>
                     </Link>
                     <p className="mt-3 text-sm text-text-muted">Sign in to your autonomous job agent</p>
                 </div>

@@ -21,10 +21,10 @@ const MISSING_FIELDS: { key: keyof OnboardingPayload; label: string; placeholder
 function BrandHeader() {
   return (
     <Link href="/" className="mb-10 inline-flex items-center gap-2.5">
-      <div className="w-8 h-8 rounded-[9px] bg-gradient-to-br from-[#5b4fff] to-[#8b5cf6] flex items-center justify-center text-sm font-black text-white shadow-[0_4px_16px_rgba(91,79,255,0.3)]">
+      <div className="w-8 h-8 rounded-[9px] bg-[#f5a623] flex items-center justify-center text-sm font-black text-[#0a0a1a] shadow-[0_4px_16px_rgba(245,166,35,0.35)]">
         R
       </div>
-      <span className="font-['Cabinet_Grotesk',sans-serif] font-black text-lg text-white tracking-tight">Rico AI</span>
+      <span className="font-['Cabinet_Grotesk',sans-serif] font-black text-lg text-white tracking-tight">Rico <span className="text-[#f5a623]">Hunt</span></span>
     </Link>
   );
 }
