@@ -35,7 +35,7 @@ function detectBrowserLanguage(): Language {
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
     const [language, setLanguageState] = useState<Language>(() => {
-        const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+        const stored = getStoredLanguage();
         // If there's a saved preference (en or ar), use it
         if (stored === "en" || stored === "ar") {
             return stored;
