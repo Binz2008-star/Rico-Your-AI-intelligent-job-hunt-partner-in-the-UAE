@@ -759,6 +759,9 @@ export interface JobMatch {
   match_concerns?: string[];
   missing_facts?: string[];
   recommended_action?: string;
+  apply_url?: string;
+  source_url?: string;
+  verification_status?: "live" | "lead_needs_verification";
 }
 
 export interface RicoOption {

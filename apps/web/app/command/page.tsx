@@ -255,22 +255,48 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
                 <p className="text-[11px] text-text-muted mb-2 leading-relaxed">{match.why}</p>
             )}
 
-            {/* Actions */}
-            {match.actions && match.actions.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                    {match.actions.map((action) => (
-                        <button
-                            type="button"
-                            key={action}
-                            onClick={() => onAction(`${action} — ${match.title} at ${match.company}`)}
-                            aria-label={`${action} for ${match.title} at ${match.company}`}
-                            className="text-[10px] px-2.5 py-1 rounded-lg border border-border-soft text-text-secondary hover:border-magenta/40 hover:text-white transition-colors"
-                        >
-                            {action}
-                        </button>
-                    ))}
-                </div>
-            )}
+            {/* Apply / Source links */}
+            <div className="flex flex-wrap gap-1.5 mt-2">
+                {match.apply_url && match.apply_url !== "#" && (
+                    <a
+                        href={match.apply_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Apply for ${match.title} at ${match.company}`}
+                        className="text-[11px] px-3 py-1.5 rounded-lg bg-magenta text-white font-medium hover:bg-magenta-hover transition-colors"
+                    >
+                        Apply now
+                    </a>
+                )}
+                {match.source_url && match.source_url !== "#" && match.source_url !== match.apply_url && (
+                    <a
+                        href={match.source_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`View ${match.title} at ${match.company} on job board`}
+                        className="text-[11px] px-3 py-1.5 rounded-lg border border-border-soft text-text-secondary hover:border-cyan/40 hover:text-white transition-colors"
+                    >
+                        View listing
+                    </a>
+                )}
+                {match.verification_status === "lead_needs_verification" && (
+                    <span className="text-[10px] px-2 py-1 rounded-lg border border-border-soft text-text-muted italic">
+                        Link pending verification
+                    </span>
+                )}
+                {/* Chat action buttons */}
+                {match.actions && match.actions.length > 0 && match.actions.map((action) => (
+                    <button
+                        type="button"
+                        key={action}
+                        onClick={() => onAction(`${action} — ${match.title} at ${match.company}`)}
+                        aria-label={`${action} for ${match.title} at ${match.company}`}
+                        className="text-[10px] px-2.5 py-1 rounded-lg border border-border-soft text-text-secondary hover:border-magenta/40 hover:text-white transition-colors"
+                    >
+                        {action}
+                    </button>
+                ))}
+            </div>
         </article>
     );
 }
@@ -440,6 +466,7 @@ export default function CommandPage() {
                 "";
             const responseSource = res.response_source ?? "unknown";
             const isRateLimited = responseSource === "rate_limited";
+            const isFallbackMode = res.type === "fallback_response";
 
             if (isRateLimited) {
                 setMessages((prev) => [...prev, {
@@ -447,18 +474,35 @@ export default function CommandPage() {
                     role: "rico",
                     text: "Rico is busy right now — please try again in a minute.",
                 }]);
+            } else if (isFallbackMode) {
+                // Backend AI provider unavailable — show neutral message, never expose internal provider state
+                setMessages((prev) => [...prev, {
+                    id: nextId(),
+                    role: "rico",
+                    text: "I'm here! Upload your CV to get started, or ask me about UAE jobs, applications, or interview prep.",
+                    options: res.options as RicoOption[] | undefined,
+                }]);
             } else if (!reply && !res.matches && !res.options) {
                 setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: "Rico returned an empty response. Please try again." }]);
             } else {
+                // No-match state: backend returned job_matches type but empty matches array
+                const hasEmptyMatches = res.type === "job_matches" && Array.isArray(res.matches) && res.matches.length === 0;
+                const displayText = hasEmptyMatches && !reply
+                    ? `No live UAE matches found right now. Try a related role or broaden your search — I can suggest alternatives based on your CV.`
+                    : reply;
+                const displayOptions: RicoOption[] = hasEmptyMatches && !res.options ? [
+                    { action: "broaden", label: "Suggest related roles", message: "Suggest roles similar to my target based on my CV" },
+                    { action: "upload_cv", label: "Upload or update my CV", message: "__cv_upload__" },
+                ] : (res.options as RicoOption[] | undefined) ?? [];
                 setMessages((prev) => [
                     ...prev,
                     {
                         id: nextId(),
                         role: "rico",
-                        text: reply,
+                        text: displayText,
                         type: res.type,
                         matches: res.matches as JobMatch[] | undefined,
-                        options: res.options as RicoOption[] | undefined,
+                        options: displayOptions.length > 0 ? displayOptions : (res.options as RicoOption[] | undefined),
                         next_action: res.next_action,
                         roleName: res.role,
                         reasons: res.reasons,

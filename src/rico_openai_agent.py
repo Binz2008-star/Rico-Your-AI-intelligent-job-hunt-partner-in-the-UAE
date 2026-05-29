@@ -245,8 +245,8 @@ class RicoOpenAIAgent:
         return {
             "type": "fallback_response",
             "message": (
-                "Free mode is active. Rico can help set up your profile and guide your job search using free AI/fallback tools. "
-                "Advanced reasoning will activate after the configured AI provider is available."
+                "I'm here to help with your UAE job search. "
+                "Upload your CV to get started, or ask me about jobs, applications, or interview prep."
             ),
             "provider": "fallback",
         }
