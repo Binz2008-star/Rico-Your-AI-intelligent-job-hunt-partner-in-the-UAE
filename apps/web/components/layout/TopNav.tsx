@@ -23,7 +23,8 @@ export const TopNav = React.forwardRef<HTMLElement, TopNavProps>(
             <header
                 ref={ref as any}
                 className={cn(
-                    'fixed top-4 w-full z-50 px-4 md:px-container-padding-desktop',
+                    // top inset keeps the floating pill clear of the notch / status bar
+                    'fixed top-[max(1rem,env(safe-area-inset-top))] w-full z-50 px-4 md:px-container-padding-desktop',
                     className
                 )}
             >

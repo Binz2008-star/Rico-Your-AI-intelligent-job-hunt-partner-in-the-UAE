@@ -23,7 +23,8 @@ export const Navigation = React.forwardRef<HTMLElement, NavigationProps>(
             <nav
                 ref={ref as any}
                 className={cn(
-                    'fixed bottom-6 left-1/2 -translate-x-1/2 z-50',
+                    // bottom inset keeps the floating pill clear of the iOS home indicator
+                    'fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-50',
                     'flex items-center gap-1 rounded-full border border-white/10 px-2 py-2',
                     'bg-[rgba(10,10,24,0.72)] backdrop-blur-2xl',
                     'shadow-[0_22px_60px_rgba(5,5,16,0.32)]',
