@@ -13,34 +13,38 @@ const config: Config = {
                 // Rico AI Cinematic Design System v2
                 // Based on DESIGN.md spec: pure black + magenta + cyan
 
-                // Global Canvas - Pure Black
-                background: "#000000",
+                // Rico Site v2 token system — all semantic colors resolve through
+                // CSS variables (channels) so they switch with the .light theme and
+                // still support Tailwind alpha modifiers via `/ <alpha-value>`.
+
+                // Global Canvas
+                background: "rgb(var(--bg) / <alpha-value>)",
                 surface: {
-                    DEFAULT: "#0a0a0f",
-                    elevated: "#111116",
-                    subtle: "rgba(255, 255, 255, 0.02)",
-                    glass: "rgba(255, 255, 255, 0.04)",
+                    DEFAULT: "rgb(var(--surface) / <alpha-value>)",
+                    elevated: "rgb(var(--surface-elevated) / <alpha-value>)",
+                    subtle: "rgb(var(--overlay) / 0.02)",
+                    glass: "rgb(var(--overlay) / 0.04)",
                 },
 
                 // Primary System - Magenta
                 magenta: {
-                    DEFAULT: "#ff2d8e",
-                    glow: "rgba(255, 45, 142, 0.3)",
-                    soft: "rgba(255, 45, 142, 0.1)",
-                    dim: "rgba(255, 45, 142, 0.05)",
-                    hover: "#ff4a9e",
+                    DEFAULT: "rgb(var(--magenta) / <alpha-value>)",
+                    glow: "rgb(var(--magenta) / 0.3)",
+                    soft: "rgb(var(--magenta) / 0.1)",
+                    dim: "rgb(var(--magenta) / 0.05)",
+                    hover: "rgb(var(--magenta-hover) / <alpha-value>)",
                 },
 
                 // Secondary System - Cyan
                 cyan: {
-                    DEFAULT: "#00e5ff",
-                    glow: "rgba(0, 229, 255, 0.3)",
-                    soft: "rgba(0, 229, 255, 0.1)",
-                    dim: "rgba(0, 229, 255, 0.05)",
-                    hover: "#33ebff",
+                    DEFAULT: "rgb(var(--cyan) / <alpha-value>)",
+                    glow: "rgb(var(--cyan) / 0.3)",
+                    soft: "rgb(var(--cyan) / 0.1)",
+                    dim: "rgb(var(--cyan) / 0.05)",
+                    hover: "rgb(var(--cyan-hover) / <alpha-value>)",
                 },
 
-                // Gradient System
+                // Gradient System (kept as literal gradients; accent endpoints fixed)
                 gradient: {
                     magenta: "linear-gradient(135deg, #ff2d8e 0%, #ff1a5c 100%)",
                     cyan: "linear-gradient(135deg, #00e5ff 0%, #00b8cc 100%)",
@@ -48,47 +52,46 @@ const config: Config = {
                     subtle: "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 100%)",
                 },
 
-                // Text System - High Contrast White + Grayscale
+                // Text System
                 text: {
-                    primary: "#ffffff",
-                    secondary: "rgba(255, 255, 255, 0.72)",
-                    tertiary: "rgba(255, 255, 255, 0.48)",
-                    muted: "rgba(255, 255, 255, 0.28)",
-                    disabled: "rgba(255, 255, 255, 0.16)",
+                    primary: "rgb(var(--text-primary) / <alpha-value>)",
+                    secondary: "rgb(var(--text-secondary) / <alpha-value>)",
+                    tertiary: "rgb(var(--text-tertiary) / <alpha-value>)",
+                    muted: "rgb(var(--text-muted) / <alpha-value>)",
+                    disabled: "rgb(var(--text-disabled) / <alpha-value>)",
                 },
 
-                // Border System
+                // Border System (overlay channel + fixed alphas)
                 border: {
-                    subtle: "rgba(255, 255, 255, 0.06)",
-                    soft: "rgba(255, 255, 255, 0.1)",
-                    medium: "rgba(255, 255, 255, 0.16)",
-                    strong: "rgba(255, 255, 255, 0.24)",
+                    subtle: "rgb(var(--overlay) / 0.06)",
+                    soft: "rgb(var(--overlay) / 0.1)",
+                    medium: "rgb(var(--overlay) / 0.16)",
+                    strong: "rgb(var(--overlay) / 0.24)",
                     gradient: "linear-gradient(135deg, rgba(255,45,142,0.5) 0%, rgba(0,229,255,0.5) 100%)",
                 },
 
-                // Legacy compatibility layer (transition period)
-                // These map to new system for backward compatibility
-                "surface-container": "#0a0a0f",
-                "surface-variant": "#111116",
-                primary: "#ffffff",
-                secondary: "#00e5ff",
+                // Legacy compatibility layer — now token-backed so it themes too.
+                "surface-container": "rgb(var(--surface) / <alpha-value>)",
+                "surface-variant": "rgb(var(--surface-elevated) / <alpha-value>)",
+                primary: "rgb(var(--text-primary) / <alpha-value>)",
+                secondary: "rgb(var(--cyan) / <alpha-value>)",
                 error: "#ff5e5b",
-                outline: "rgba(255, 255, 255, 0.1)",
+                outline: "rgb(var(--overlay) / 0.1)",
                 rico: {
-                    bg: "#000000",
-                    surface: "#0a0a0f",
-                    "surface-2": "#111116",
-                    border: "rgba(255, 255, 255, 0.06)",
-                    accent: "#ff2d8e",
-                    "accent-hover": "#ff4a9e",
-                    "accent-muted": "rgba(255, 45, 142, 0.1)",
-                    "accent-border": "rgba(255, 45, 142, 0.4)",
-                    "accent-glow": "rgba(255, 45, 142, 0.2)",
-                    text: "#ffffff",
-                    "text-muted": "rgba(255, 255, 255, 0.72)",
-                    "text-dim": "rgba(255, 255, 255, 0.48)",
-                    purple: "#ff2d8e",
-                    teal: "#00e5ff",
+                    bg: "rgb(var(--bg) / <alpha-value>)",
+                    surface: "rgb(var(--surface) / <alpha-value>)",
+                    "surface-2": "rgb(var(--surface-elevated) / <alpha-value>)",
+                    border: "rgb(var(--overlay) / 0.06)",
+                    accent: "rgb(var(--magenta) / <alpha-value>)",
+                    "accent-hover": "rgb(var(--magenta-hover) / <alpha-value>)",
+                    "accent-muted": "rgb(var(--magenta) / 0.1)",
+                    "accent-border": "rgb(var(--magenta) / 0.4)",
+                    "accent-glow": "rgb(var(--magenta) / 0.2)",
+                    text: "rgb(var(--text-primary) / <alpha-value>)",
+                    "text-muted": "rgb(var(--text-secondary) / <alpha-value>)",
+                    "text-dim": "rgb(var(--text-tertiary) / <alpha-value>)",
+                    purple: "rgb(var(--magenta) / <alpha-value>)",
+                    teal: "rgb(var(--cyan) / <alpha-value>)",
                     red: "#ff5e5b",
                     amber: "#f5a623",
                 },
