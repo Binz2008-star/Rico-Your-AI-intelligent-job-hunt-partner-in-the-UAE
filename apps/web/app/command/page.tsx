@@ -610,11 +610,18 @@ export default function CommandPage() {
                                 Sign out
                             </button>
                         </>
-                    ) : (
+                    ) : chatAudience === "public" ? (
                         <>
                             <Link href={COMMAND_LOGIN_HREF} className="text-[13px] text-text-muted hover:text-white transition-colors">Sign in</Link>
                             <Link href={COMMAND_SIGNUP_HREF} className="text-[12px] px-3 py-1.5 rounded-lg bg-magenta text-white hover:bg-magenta-hover transition-colors font-medium">Sign up free</Link>
                         </>
+                    ) : (
+                        /* checking — reveal no auth state until /me resolves, so signed-in
+                           users never flash public "Sign in / Sign up free" links. */
+                        <span
+                            aria-hidden="true"
+                            className="h-8 w-28 rounded-lg bg-surface/60 border border-border-subtle animate-pulse motion-reduce:animate-none"
+                        />
                     )}
                 </div>
             </header>
@@ -630,7 +637,7 @@ export default function CommandPage() {
                 onChange={handleCVUpload}
             />
 
-            <div className="relative z-10 flex flex-col flex-1 h-[calc(100vh-57px)] sm:h-[calc(100vh-65px)] max-w-3xl w-full mx-auto px-2 sm:px-4">
+            <div className="relative z-10 flex flex-col flex-1 h-[calc(100dvh-57px)] sm:h-[calc(100dvh-65px)] max-w-3xl w-full mx-auto px-2 sm:px-4">
                 {/* Messages Container */}
                 <div className="flex-1 overflow-y-auto px-2 py-6 space-y-5 pb-32" role="log" aria-live="polite" aria-atomic="false" aria-busy={thinking}>
 
@@ -828,8 +835,9 @@ export default function CommandPage() {
                     <div ref={bottomRef} />
                 </div>
 
-                {/* Floating input bar */}
-                <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-background via-background/95 to-transparent">
+                {/* Floating input bar — dvh column + safe-area keeps it on-screen above
+                    the mobile browser chrome / iOS home indicator. */}
+                <div className="absolute bottom-0 left-0 right-0 px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] bg-gradient-to-t from-background via-background to-transparent">
                     {uploadError && (
                         <p className="text-[11px] text-rico-red mb-2 text-center" role="alert">{uploadError}</p>
                     )}
@@ -862,7 +870,7 @@ export default function CommandPage() {
                                 placeholder={chatAudience === "checking"
                                     ? "Checking your session…"
                                     : "Ask Rico anything — jobs, CV, applications, interviews…"}
-                                className="w-full resize-none bg-surface/80 border border-border-soft backdrop-blur-xl rounded-2xl py-3 pl-4 pr-12 text-sm text-white placeholder:text-text-muted transition-all shadow-2xl"
+                                className="w-full resize-none bg-surface border border-border-soft hover:border-border-strong focus:border-magenta/60 backdrop-blur-xl rounded-2xl py-3 pl-4 pr-12 text-sm text-white placeholder:text-text-muted transition-all shadow-2xl"
                             />
                             <button
                                 type="button"

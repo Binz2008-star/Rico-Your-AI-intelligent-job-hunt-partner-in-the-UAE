@@ -1,0 +1,86 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
+vi.mock("next/link", () => ({
+  default: ({ children, href, ...props }: any) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
+
+import CommandPage from "@/app/command/page";
+
+type JsonValue = Record<string, unknown>;
+type ResponseLike = { ok: boolean; status: number; json: () => Promise<JsonValue> };
+
+function jsonResponse(body: JsonValue, status = 200): ResponseLike {
+  return { ok: status >= 200 && status < 300, status, json: async () => body };
+}
+
+const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<ResponseLike>>();
+
+beforeEach(() => {
+  fetchMock.mockReset();
+  localStorage.clear();
+  localStorage.setItem("rico_sid", "test-session-01");
+  vi.stubGlobal("fetch", fetchMock);
+});
+
+describe("/command auth-state containment (issue #281)", () => {
+  it("signed-in user never sees public 'Sign in / Sign up free' links", async () => {
+    fetchMock.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/api/v1/me")) {
+        return jsonResponse({ authenticated: true, role: "user", email: "u@u.com" });
+      }
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    render(<CommandPage />);
+
+    // Once /me resolves, the authenticated controls appear…
+    expect(await screen.findByText("Sign out")).toBeInTheDocument();
+    // …and the public links must NOT be rendered for a signed-in user.
+    expect(screen.queryByText("Sign up free")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sign in")).not.toBeInTheDocument();
+  });
+
+  it("public user sees 'Sign in / Sign up free' only after the session check resolves", async () => {
+    fetchMock.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/api/v1/me")) {
+        return jsonResponse({ authenticated: false, role: "guest", email: null, guest: true });
+      }
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    render(<CommandPage />);
+
+    expect(await screen.findByText("Sign up free")).toBeInTheDocument();
+    expect(screen.getByText("Sign in")).toBeInTheDocument();
+    expect(screen.queryByText("Sign out")).not.toBeInTheDocument();
+  });
+
+  it("while the session is still being checked, no public links flash", () => {
+    // /me never resolves → component stays in the 'checking' state.
+    fetchMock.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/api/v1/me")) {
+        return new Promise<ResponseLike>(() => {}); // pending forever
+      }
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    render(<CommandPage />);
+
+    // During 'checking' a neutral placeholder is shown — neither auth state is revealed.
+    expect(screen.queryByText("Sign up free")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sign in")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sign out")).not.toBeInTheDocument();
+  });
+});

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans, Sora, Space_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -43,6 +43,15 @@ export const metadata: Metadata = {
         title: "Rico AI — Autonomous Career Trajectory Intelligence",
         description: "The future of career intelligence. Memory-weighted trajectory mapping, command-centered orchestration, and opportunity momentum analysis.",
     },
+};
+
+// viewport-fit=cover is required for env(safe-area-inset-*) to resolve on notched /
+// installed-PWA devices; the floating navs and command input rely on it.
+export const viewport: Viewport = {
+    width: "device-width",
+    initialScale: 1,
+    viewportFit: "cover",
+    themeColor: "#000000",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

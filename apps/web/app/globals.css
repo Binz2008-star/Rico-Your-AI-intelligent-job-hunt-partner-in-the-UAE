@@ -7,6 +7,11 @@
  */
 
 :root {
+    /* Lock the app to dark until a real theme system ships. This renders native
+       browser UI (form controls, scrollbars, autofill) dark and prevents white
+       flashes on the black canvas. Do not add a light theme without the audit. */
+    color-scheme: dark;
+
     /* Focus ring - cyan accent */
     --focus-ring: #00e5ff;
     --focus-ring-shadow: rgba(0, 229, 255, 0.16);
