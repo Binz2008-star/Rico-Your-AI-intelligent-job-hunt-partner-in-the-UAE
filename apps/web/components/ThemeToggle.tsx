@@ -2,13 +2,7 @@
 
 import { useTheme } from "@/contexts/ThemeContext";
 
-/**
- * Rico Site v2 — theme toggle.
- *
- * Minimal, accessible dark/light switch. Light mode is token-driven (see
- * globals.css `.light`) and AA-contrast targeted. Defaults to dark; the user's
- * choice is persisted by ThemeContext. Respects reduced-motion via Tailwind.
- */
+// Accessible dark/light switch. Defaults to dark; choice persisted by ThemeContext.
 export function ThemeToggle({ className = "" }: { className?: string }) {
     const { resolvedTheme, setTheme } = useTheme();
     const isDark = resolvedTheme === "dark";
