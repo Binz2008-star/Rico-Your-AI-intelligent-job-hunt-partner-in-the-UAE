@@ -263,28 +263,42 @@ class RicoChatAPI:
         ).start()
 
     @staticmethod
-    def _build_openai_context(profile: Any) -> dict[str, Any]:
-        """Build context for OpenAI agent from profile."""
+    def _build_openai_context(self, profile: Any, user_id: str | None = None) -> dict[str, Any]:  # type: ignore[override]
+        """Build context for OpenAI agent from profile and recent conversation history."""
         if profile is None:
-            return {"profile_exists": False}
-        if is_dataclass(profile):
-            raw = asdict(profile)
-        elif isinstance(profile, dict):
-            raw = dict(profile)
+            ctx: dict[str, Any] = {"profile_exists": False}
         else:
-            raw = {k: getattr(profile, k) for k in dir(profile) if not k.startswith("_")}
+            if is_dataclass(profile):
+                raw = asdict(profile)
+            elif isinstance(profile, dict):
+                raw = dict(profile)
+            else:
+                raw = {k: getattr(profile, k) for k in dir(profile) if not k.startswith("_")}
 
-        # Optimize profile to avoid large dumps - only include essential fields
-        essential_fields = {
-            "email", "phone", "skills", "years_experience",
-            "preferred_cities", "target_roles", "industries",
-            "salary_expectation_aed", "deal_breakers"
-        }
+            essential_fields = {
+                "email", "phone", "skills", "years_experience",
+                "preferred_cities", "target_roles", "industries",
+                "salary_expectation_aed", "deal_breakers"
+            }
+            ctx = {
+                "profile_exists": True,
+                **{k: v for k, v in raw.items() if k in essential_fields and v not in (None, "", [], {})},
+            }
 
-        return {
-            "profile_exists": True,
-            **{k: v for k, v in raw.items() if k in essential_fields and v not in (None, "", [], {})},
-        }
+        # Embed last 8 turns so the AI has conversation context for yes/no and follow-ups
+        if user_id:
+            try:
+                recent = self._get_recent_messages(user_id, limit=8)
+                if recent:
+                    ctx["conversation_history"] = [
+                        {"role": m.get("role", "user"), "content": str(m.get("content") or m.get("message") or "")}
+                        for m in recent
+                        if m.get("content") or m.get("message")
+                    ]
+            except Exception:
+                pass
+
+        return ctx
 
     @staticmethod
     def _profile_value(profile: Any, key: str, default: Any = None) -> Any:
@@ -994,6 +1008,18 @@ class RicoChatAPI:
         "continue", "go on",
     })
 
+    # Affirmative / negative single-word replies in EN + AR
+    _AFFIRMATIVE_PHRASES = frozenset({
+        "yes", "yeah", "yep", "yup", "sure", "absolutely", "of course",
+        "please", "go ahead", "do it", "ok", "okay", "alright", "sounds good",
+        "نعم", "أيوه", "ايوه", "اوك", "حسنا", "تفضل", "اكيد", "طبعا", "موافق",
+        "بالتأكيد", "نعم من فضلك", "يلا", "اه", "آه",
+    })
+    _NEGATIVE_PHRASES = frozenset({
+        "no", "nope", "nah", "not now", "skip", "cancel", "never mind",
+        "لا", "لأ", "مو الحين", "مو ذا", "بعدين", "ما ابي", "ما أبغى",
+    })
+
     _ARABIC_WHAT_NOW_TERMS = frozenset({
         "مالحل", "ما الحل", "ماالحل",
         "مالحل الان", "مالحل الآن",
@@ -1007,6 +1033,89 @@ class RicoChatAPI:
         """True for Arabic 'what now / what's the solution' follow-up phrases."""
         text = re.sub(r"[\s؟?.!,]+", " ", (message or "").strip().lower()).strip()
         return any(term in text for term in RicoChatAPI._ARABIC_WHAT_NOW_TERMS)
+
+    @staticmethod
+    def _is_affirmative(message: str) -> bool:
+        """True for yes/نعم/sure single-word affirmatives."""
+        text = re.sub(r"[\s؟?.!،,]+", " ", (message or "").strip().lower()).strip()
+        return text in RicoChatAPI._AFFIRMATIVE_PHRASES
+
+    @staticmethod
+    def _is_negative(message: str) -> bool:
+        """True for no/لا single-word negatives."""
+        text = re.sub(r"[\s؟?.!،,]+", " ", (message or "").strip().lower()).strip()
+        return text in RicoChatAPI._NEGATIVE_PHRASES
+
+    def _get_last_assistant_message(self, user_id: str) -> str:
+        """Return the last assistant message text for pending-intent resolution."""
+        try:
+            recent = self._get_recent_messages(user_id, limit=10)
+            for m in reversed(recent):
+                if m.get("role") == "assistant":
+                    return str(m.get("content") or m.get("message") or "")
+        except Exception:
+            pass
+        return ""
+
+    def _resolve_pending_intent(self, user_id: str, message: str, profile: Any) -> dict[str, Any] | None:
+        """If last Rico message offered a yes/no action and user affirms, execute it.
+
+        Returns a response dict if a pending intent was resolved, else None.
+        """
+        if not self._is_affirmative(message):
+            return None
+
+        last = self._get_last_assistant_message(user_id).lower()
+        if not last:
+            return None
+
+        # Detect what Rico last offered
+        cv_improve_signals = (
+            "اقتراح" in last or "تحسين سيرة" in last or "improve your cv" in last
+            or "cv improvement" in last or "update your cv" in last
+        )
+        job_search_signals = (
+            "find live" in last or "search for" in last or "ابحث" in last
+            or "وظائف حية" in last or "shall i search" in last or "want me to search" in last
+        )
+        application_angle_signals = (
+            "application angle" in last or "cover letter" in last or "tailor" in last
+            or "زاوية تقديم" in last
+        )
+        reminder_signals = (
+            "reminder" in last or "follow up" in last or "تذكير" in last
+        )
+
+        if cv_improve_signals:
+            return self._answer_with_ai_fallback(
+                user_id=user_id,
+                message="Give me specific CV improvement suggestions based on my profile and target roles.",
+                profile=profile,
+                save_user_message=False,
+            )
+        if job_search_signals:
+            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            role = target_roles[0] if target_roles else "my target role"
+            return self._answer_with_ai_fallback(
+                user_id=user_id,
+                message=f"Find live UAE jobs for {role}",
+                profile=profile,
+                save_user_message=False,
+            )
+        if application_angle_signals:
+            return self._answer_with_ai_fallback(
+                user_id=user_id,
+                message="Prepare my application angle and suggest how to tailor it for the role.",
+                profile=profile,
+                save_user_message=False,
+            )
+        if reminder_signals:
+            return {
+                "type": "reminder_set",
+                "message": "تم ضبط التذكير. سأذكرك بالمتابعة." if "تذكير" in last else "Reminder set. I'll nudge you to follow up.",
+            }
+
+        return None
 
     _JOB_SEARCH_OPTIONS = {
         "type": "options",
@@ -1333,7 +1442,7 @@ class RicoChatAPI:
         """Run the single conversational AI fallback path used by chat routing."""
         if save_user_message:
             self._append_chat(user_id, "user", message)
-        user_context = self._build_openai_context(profile)
+        user_context = self._build_openai_context(profile, user_id=user_id)
         blocked_questions = self._get_blocked_questions(profile)
         if isinstance(user_context, dict):
             user_context["blocked_questions"] = blocked_questions
@@ -1463,6 +1572,21 @@ class RicoChatAPI:
         profile = self._resolve_profile(user_id)
         has_cv = profile.has_cv
         text = self._normalize_followup_phrase(message)
+
+        # ── Pending-intent resolver: yes/no after Rico's question ──────────────
+        # Must run before generic routing so "نعم" resolves the last offered action
+        # instead of falling through to a generic action card.
+        if self._is_affirmative(message):
+            pending = self._resolve_pending_intent(user_id, message, profile)
+            if pending is not None:
+                return self._finalize(pending, self.SOURCE_AI, profile=profile)
+        if self._is_negative(message):
+            # User declined the offered action — acknowledge and let them continue
+            return self._finalize(
+                {"type": "clarification", "message": "حسناً، أخبرني بما تريد فعله." if any(ord(c) > 127 for c in message) else "Got it. What would you like to do instead?"},
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
 
         # ── Deterministic follow-up phrases (must be before role classification) ──
         if text in self._FOLLOWUP_KEEP_ALL_PHRASES:
@@ -2341,7 +2465,7 @@ class RicoChatAPI:
 
         # Interview prep
         if legacy_intent == "interview_prep":
-            user_context = self._build_openai_context(profile)
+            user_context = self._build_openai_context(profile, user_id=user_id)
             system_prompt = (
                 "You are Rico, a UAE career coach. Give concise, practical interview preparation "
                 "tips including likely questions, company research pointers, and answer frameworks."

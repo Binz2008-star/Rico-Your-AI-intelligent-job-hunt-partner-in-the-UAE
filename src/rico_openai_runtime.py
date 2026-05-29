@@ -246,13 +246,15 @@ def _call_openai_responses(
     final_user_message: str,
     *,
     smoke: bool,
+    conversation_history: Optional[list] = None,
 ) -> str:
+    history = conversation_history or []
+    input_messages = [{"role": "system", "content": system_prompt}]
+    input_messages.extend(history)
+    input_messages.append({"role": "user", "content": final_user_message})
     response = client.responses.create(
         model=model,
-        input=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": final_user_message},
-        ],
+        input=input_messages,
         max_output_tokens=(
             _SMOKE_MAX_OUTPUT_TOKENS if smoke else _DEFAULT_MAX_OUTPUT_TOKENS
         ),
@@ -267,13 +269,15 @@ def _call_deepseek_chat(
     final_user_message: str,
     *,
     smoke: bool,
+    conversation_history: Optional[list] = None,
 ) -> str:
+    history = conversation_history or []
+    messages = [{"role": "system", "content": system_prompt}]
+    messages.extend(history)
+    messages.append({"role": "user", "content": final_user_message})
     response = client.chat.completions.create(
         model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": final_user_message},
-        ],
+        messages=messages,
         max_tokens=(
             _SMOKE_MAX_OUTPUT_TOKENS if smoke else _DEFAULT_MAX_OUTPUT_TOKENS
         ),
@@ -287,6 +291,7 @@ def call_openai_minimal(
     *,
     smoke: bool = False,
     provider: Optional[str] = None,
+    conversation_history: Optional[list] = None,
 ) -> Dict[str, Any]:
     """Send the simplest possible call to the active premium provider.
 
@@ -314,21 +319,28 @@ def call_openai_minimal(
         payload["profile_context_present"] = profile_present
         return payload
 
-    system_prompt = (
-        "You are Rico, a helpful job-search assistant. "
-        "Answer clearly, practically, and briefly."
+    from src.rico_identity import get_rico_system_prompt
+    import re as _re
+    _arabic_re = _re.compile(r'[؀-ۿ]')
+    _user_lang = "ar" if _arabic_re.search(str(user_message or "")) else "en"
+    _lang_rule = (
+        "\n\nIMPORTANT: The user is writing in Arabic. You MUST reply entirely in Arabic. "
+        "Use natural, professional Gulf Arabic. Never switch to English mid-reply."
+        if _user_lang == "ar" else
+        "\n\nReply in English."
     )
+    system_prompt = get_rico_system_prompt() + _lang_rule
 
     final_user_message = "Say OK" if smoke else str(user_message or "")
 
     if profile_context and not smoke:
         safe_context = str(profile_context)[:_PROFILE_CONTEXT_MAX_CHARS]
         final_user_message = (
-            "User profile context, summarized:\n"
-            f"{safe_context}\n\n"
-            "User message:\n"
-            f"{final_user_message}"
+            f"[User profile]\n{safe_context}\n\n"
+            f"[User message]\n{final_user_message}"
         )
+
+    safe_history = (conversation_history or [])[:8] if not smoke else []
 
     last_error: Optional[Dict[str, Any]] = None
     model_attempts = [primary_model]
@@ -344,6 +356,7 @@ def call_openai_minimal(
                     system_prompt,
                     final_user_message,
                     smoke=smoke,
+                    conversation_history=safe_history,
                 )
             else:
                 text = _call_openai_responses(
@@ -352,6 +365,7 @@ def call_openai_minimal(
                     system_prompt,
                     final_user_message,
                     smoke=smoke,
+                    conversation_history=safe_history,
                 )
 
             if not text:
