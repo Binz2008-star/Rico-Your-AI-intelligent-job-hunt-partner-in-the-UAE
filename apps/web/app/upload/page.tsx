@@ -54,7 +54,7 @@ export default function UploadPage() {
     const handleProcessingComplete = () => {
         setIsProcessing(false);
         setUploadComplete(true);
-        setTimeout(() => router.push('/command'), 2000);
+        setTimeout(() => router.push('/command?cv=ready'), 2000);
     };
 
     const handleUpload = async (file: File) => {
@@ -88,9 +88,9 @@ export default function UploadPage() {
                             <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
                                 <MaterialIcon icon="check_circle" className="text-primary text-5xl" />
                             </div>
-                            <h1 className="font-headline-xl text-headline-xl text-on-surface mb-4">Profile Intelligence Ready</h1>
+                            <h1 className="font-headline-xl text-headline-xl text-on-surface mb-4">Your profile is ready</h1>
                             <p className="text-body-lg text-on-surface-variant mb-4">
-                                Your career trajectory has been mapped. Redirecting to command center...
+                                Rico has read your CV and prepared your job search profile. Redirecting to your dashboard...
                             </p>
                             <div className="flex justify-center">
                                 <div className="w-8 h-0.5 bg-[var(--magenta)] rounded-full animate-pulse" />
@@ -102,10 +102,10 @@ export default function UploadPage() {
                         <>
                             <div className="text-center mb-12">
                                 <h1 className="font-headline-xl text-headline-xl text-on-surface mb-4 tracking-tight">
-                                    Release your history
+                                    Upload your CV
                                 </h1>
                                 <p className="font-body-lg text-body-lg text-on-surface-variant">
-                                    Upload your CV to initiate trajectory intelligence
+                                    Let Rico build your career profile and find matching UAE jobs
                                 </p>
                             </div>
 
@@ -166,7 +166,7 @@ export default function UploadPage() {
                             <div className="mt-8 flex items-center justify-center gap-3">
                                 <MaterialIcon icon="lock" className="text-on-surface-variant/40 text-sm" />
                                 <p className="text-[10px] text-on-surface-variant/40 uppercase tracking-widest">
-                                    End-to-end encrypted processing
+                                    Secure CV processing — your CV is used only to build your Rico profile
                                 </p>
                             </div>
                         </>
