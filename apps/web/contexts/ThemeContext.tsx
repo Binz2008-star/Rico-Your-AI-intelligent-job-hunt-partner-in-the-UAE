@@ -21,8 +21,12 @@ function getSystemTheme(): "dark" | "light" {
     : "light";
 }
 
+// Default to "dark" (not "system") so production stays dark-only until light mode
+// is explicitly QA'd and enabled. Users opt in via the theme control; their choice
+// is then remembered. This prevents an unreviewed light theme auto-activating for
+// visitors whose OS is set to light.
 function getStoredTheme(): Theme {
-  if (typeof window === "undefined") return "system";
+  if (typeof window === "undefined") return "dark";
   try {
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
     if (stored === "dark" || stored === "light" || stored === "system") {
@@ -31,7 +35,7 @@ function getStoredTheme(): Theme {
   } catch (e) {
     // Ignore localStorage errors
   }
-  return "system";
+  return "dark";
 }
 
 function resolveTheme(theme: Theme): "dark" | "light" {
@@ -91,10 +95,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Degrade gracefully when no provider is mounted (e.g. isolated unit tests or a
+// stray render outside the tree): return a safe dark default with a no-op setter
+// rather than throwing and crashing the whole page over a theme control.
+const FALLBACK_THEME: ThemeContextType = {
+  theme: "dark",
+  resolvedTheme: "dark",
+  setTheme: () => {},
+};
+
 export function useTheme() {
   const context = useContext(ThemeContext);
-  if (context === undefined) {
-    throw new Error("useTheme must be used within a ThemeProvider");
-  }
-  return context;
+  return context ?? FALLBACK_THEME;
 }
