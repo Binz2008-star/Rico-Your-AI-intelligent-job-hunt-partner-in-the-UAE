@@ -376,9 +376,17 @@ export default function CommandPage() {
 
         setMessages((prev) => [...prev, { id: nextId(), role: "user", text: trimmed }]);
         setThinking(true);
-        // Set operation state for job search if message indicates job search
-        if (trimmed.toLowerCase().includes("job") || trimmed.toLowerCase().includes("find") || trimmed.toLowerCase().includes("search")) {
-            setOperationState({ state: "searching", message: "Searching for jobs..." });
+        const lc = trimmed.toLowerCase();
+        if (lc.match(/\b(job|find|search|vacanc|opening|role|position|hiring)\b/)) {
+            setOperationState({ state: "searching", message: "Searching UAE jobs…" });
+        } else if (lc.match(/\b(match|appli|track|status|applied|interview|offer)\b/)) {
+            setOperationState({ state: "searching", message: "Checking your matches…" });
+        } else if (lc.match(/\b(career|next move|recommend|suggest|direction|trajectory|what should)\b/)) {
+            setOperationState({ state: "extracting", message: "Preparing recommendations…" });
+        } else if (lc.match(/\b(cv|resume|profile|experience|skills)\b/)) {
+            setOperationState({ state: "reading", message: "Reading your profile…" });
+        } else if (lc.match(/\b(interview|prep|prepare|question)\b/)) {
+            setOperationState({ state: "extracting", message: "Preparing interview guidance…" });
         }
         scrollBottom();
 
@@ -506,7 +514,7 @@ export default function CommandPage() {
         setUploadError("");
         setMessages((prev) => [...prev, { id: nextId(), role: "user", text: `📎 Uploading CV: ${file.name}` }]);
         setThinking(true);
-        setOperationState({ state: "reading", message: "Reading PDF file..." });
+        setOperationState({ state: "reading", message: "Reading CV…" });
         scrollBottom();
         try {
             const result: UploadCVResponse =
@@ -589,7 +597,7 @@ export default function CommandPage() {
 
     async function handleConfirmProfile(preview: ProfilePreview, filename: string, messageId: number) {
         setThinking(true);
-        setOperationState({ state: "confirming", message: "Saving profile..." });
+        setOperationState({ state: "confirming", message: "Saving your profile…" });
         try {
             const userId = `public:${getSessionId(sessionIdRef)}`;
             await confirmCVProfile({ preview, filename }, userId);
