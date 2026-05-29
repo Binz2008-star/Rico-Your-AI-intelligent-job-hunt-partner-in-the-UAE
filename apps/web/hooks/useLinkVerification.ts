@@ -1,11 +1,12 @@
 import {
-  linkVerificationApi,
-  type LinkVerificationResponse,
-} from "@/lib/api/client";
+  verifyLink,
+  verifyLinkBatch,
+  type LinkVerificationResult,
+} from "@/lib/api";
 import type { OpportunitySignal } from "@/lib/api/orchestration";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type UILinkStatus = LinkVerificationResponse["status"] | "checking";
+type UILinkStatus = LinkVerificationResult["status"] | "checking";
 
 interface UILinkVerificationResult {
   status: UILinkStatus;
@@ -15,7 +16,7 @@ interface UILinkVerificationResult {
   redirect_url?: string;
 }
 
-const VERIFICATION_CACHE = new Map<string, LinkVerificationResponse>();
+const VERIFICATION_CACHE = new Map<string, LinkVerificationResult>();
 const MAX_CONCURRENT = 5;
 const MAX_VISIBLE_TO_VERIFY = 12;
 
@@ -34,14 +35,14 @@ export function useLinkVerification(signals: OpportunitySignal[]) {
   );
 
   const verifyUrl = useCallback(
-    async (url: string): Promise<LinkVerificationResponse | null> => {
+    async (url: string): Promise<LinkVerificationResult | null> => {
       // Check cache first
       if (VERIFICATION_CACHE.has(url)) {
         return VERIFICATION_CACHE.get(url)!;
       }
 
       try {
-        const result = await linkVerificationApi.verify({ url });
+        const result = await verifyLink(url);
         VERIFICATION_CACHE.set(url, result);
         return result;
       } catch (error) {
@@ -55,7 +56,7 @@ export function useLinkVerification(signals: OpportunitySignal[]) {
   const verifyBatch = useCallback(
     async (
       urls: string[],
-    ): Promise<Record<string, LinkVerificationResponse | null>> => {
+    ): Promise<Record<string, LinkVerificationResult | null>> => {
       const uncachedUrls = urls.filter((url) => !VERIFICATION_CACHE.has(url));
 
       if (uncachedUrls.length === 0) {
@@ -64,14 +65,14 @@ export function useLinkVerification(signals: OpportunitySignal[]) {
             acc[url] = VERIFICATION_CACHE.get(url)!;
             return acc;
           },
-          {} as Record<string, LinkVerificationResponse>,
+          {} as Record<string, LinkVerificationResult>,
         );
       }
 
       // Use batch API if available, otherwise fall back to individual calls
       try {
         const batchResults =
-          await linkVerificationApi.verifyBatch(uncachedUrls);
+          await verifyLinkBatch(uncachedUrls);
 
         // Cache results
         Object.entries(batchResults).forEach(([url, result]) => {
@@ -83,7 +84,7 @@ export function useLinkVerification(signals: OpportunitySignal[]) {
             acc[url] = VERIFICATION_CACHE.get(url)!;
             return acc;
           },
-          {} as Record<string, LinkVerificationResponse>,
+          {} as Record<string, LinkVerificationResult>,
         );
       } catch (error) {
         console.error(
@@ -92,7 +93,7 @@ export function useLinkVerification(signals: OpportunitySignal[]) {
         );
 
         // Fall back to individual calls
-        const results: Record<string, LinkVerificationResponse | null> = {};
+        const results: Record<string, LinkVerificationResult | null> = {};
         for (const url of urls) {
           results[url] = await verifyUrl(url);
         }

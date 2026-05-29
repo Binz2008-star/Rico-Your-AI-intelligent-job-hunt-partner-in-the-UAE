@@ -1202,6 +1202,50 @@ export async function sendAgentChat(
   return validateShape(AgentUIResponseSchema, result, "agent chat");
 }
 
+// ── Link Verification ─────────────────────────────────────────────────────────
+
+export interface LinkVerificationResult {
+  status:
+    | "live"
+    | "expired"
+    | "blocked"
+    | "redirect"
+    | "source_only"
+    | "needs_review";
+  http_status: number | null;
+  error_message: string | null;
+  verified_at: string;
+  redirect_url?: string;
+}
+
+export async function verifyLink(url: string): Promise<LinkVerificationResult> {
+  const data = await requestJson<LinkVerificationResult>(
+    "/api/v1/links/verify",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ url }),
+    },
+  );
+  return data;
+}
+
+export async function verifyLinkBatch(
+  urls: string[],
+): Promise<Record<string, LinkVerificationResult>> {
+  const data = await requestJson<Record<string, LinkVerificationResult>>(
+    "/api/v1/links/verify/batch",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ urls }),
+    },
+  );
+  return data;
+}
+
 // ── Subscription ──────────────────────────────────────────────────────────────
 
 export interface SubscriptionEntitlements {
