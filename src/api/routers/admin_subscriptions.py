@@ -2,17 +2,19 @@
 
 POST /api/v1/admin/subscriptions/activate  — manually activate a subscription
 after receiving payment outside of an automated checkout (WhatsApp / bank transfer).
+GET  /api/v1/admin/subscriptions/intents   — list recent upgrade intents for lead tracking.
 """
 from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, EmailStr
 
 from src.api.deps import require_admin
+from src.db import get_subscription_intents
 
 logger = logging.getLogger(__name__)
 
@@ -97,3 +99,12 @@ def admin_activate_subscription(
         status="active",
         expires_at=expires_at,
     )
+
+
+@router.get("/intents")
+def list_upgrade_intents(
+    limit: int = Query(default=100, le=500),
+    _admin: str = Depends(require_admin),
+) -> List[Dict[str, Any]]:
+    """Return recent subscription upgrade intents for lead tracking."""
+    return get_subscription_intents(limit=limit)

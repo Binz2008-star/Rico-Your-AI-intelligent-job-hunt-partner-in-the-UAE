@@ -2,7 +2,8 @@
 
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, RicoOption, UploadCVResponse } from "@/lib/api";
 import { confirmCVProfile, fetchMe, logout, sendChat, sendChatPublic, uploadCV } from "@/lib/api";
-import { orchestrationApi, type TrajectoryForecast } from "@/lib/api/orchestration";
+import { orchestrationApi } from "@/lib/api/orchestration";
+import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
 import { buildAuthHref } from "@/lib/redirect";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import Link from "next/link";
@@ -28,32 +29,6 @@ function getSessionId(sessionIdRef: React.MutableRefObject<string | null>): stri
 
 function prefersReducedMotion(): boolean {
     return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
-
-// Trajectory-analysis prompts ("Analyze my trajectory", "Map my next move") are
-// answered by the structured getTrajectory() data path (profile + applications +
-// history) rather than the generic conversational fallback, which classifies them
-// as "unknown". Keep the matcher tight so ordinary chat is never hijacked, and
-// always fall through to normal chat when there is no trajectory data to show.
-const TRAJECTORY_ANALYSIS_RE =
-    /\b(analyse|analyze|map|show|review|assess)\b[^.?!]*\b(career|trajector(?:y|ies)|next (?:career )?move)\b/i;
-
-export function looksLikeTrajectoryAnalysis(message: string): boolean {
-    return TRAJECTORY_ANALYSIS_RE.test(message);
-}
-
-export function formatTrajectory(forecast: TrajectoryForecast): string {
-    const lines: string[] = ["Here's your current career trajectory, built from your live Rico profile:", ""];
-    forecast.nodes.forEach((node, index) => {
-        const confidence = Math.round(node.probability * 100);
-        const marker = node.status === "completed" ? "✓" : node.status === "current" ? "▶" : "○";
-        lines.push(`${marker} **${index + 1}. ${node.title}** _(${node.timeline})_`);
-        lines.push(`   ${node.description}`);
-        lines.push(`   Confidence: ${confidence}%`);
-        lines.push("");
-    });
-    lines.push("Ask me to map your next move, evaluate an opportunity, or search roles that fit this path.");
-    return lines.join("\n");
 }
 
 interface Message {

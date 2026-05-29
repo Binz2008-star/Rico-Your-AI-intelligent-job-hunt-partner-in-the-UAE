@@ -10,6 +10,7 @@ import {
     createCustomerPortalSession,
     getMySubscription,
     getSubscriptionPlans,
+    recordSubscriptionIntent,
     type SubscriptionMeResponse,
     type SubscriptionPlan,
 } from "@/lib/api";
@@ -81,6 +82,7 @@ function PlanCard({
     anyCheckoutPending,
     onUpgrade,
     onManage,
+    onIntent,
     maintenanceMode,
     manualBilling,
 }: {
@@ -92,6 +94,7 @@ function PlanCard({
     anyCheckoutPending: boolean;
     onUpgrade: (plan: "pro" | "premium") => void;
     onManage: () => void;
+    onIntent: (plan: "pro" | "premium") => void;
     maintenanceMode: boolean;
     manualBilling: boolean;
 }) {
@@ -188,6 +191,7 @@ function PlanCard({
                             href={buildWhatsAppUpgradeUrl(plan.plan)}
                             target="_blank"
                             rel="noopener noreferrer"
+                            onClick={() => onIntent(plan.plan)}
                             className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-[13px] font-bold transition-all ${
                                 plan.is_popular
                                     ? "bg-[#ff2d8e] text-white hover:bg-[#ff4a9e] shadow-[0_0_20px_rgba(255,45,142,0.3)]"
@@ -201,7 +205,7 @@ function PlanCard({
                         </a>
                     ) : (
                         <button
-                            onClick={() => onUpgrade(plan.plan)}
+                            onClick={() => { onIntent(plan.plan); onUpgrade(plan.plan); }}
                             disabled={anyCheckoutPending}
                             className={`w-full py-3 rounded-xl text-[13px] font-bold transition-all disabled:opacity-40 ${
                                 plan.is_popular
@@ -398,6 +402,10 @@ export default function SubscriptionPage() {
         [maintenanceMode, toast]
     );
 
+    const handleIntent = useCallback((plan: "pro" | "premium") => {
+        void recordSubscriptionIntent(plan, MANUAL_BILLING ? "manual" : "stripe", "/subscription");
+    }, []);
+
     const handleManage = useCallback(async () => {
         if (maintenanceMode) {
             toast("Subscription management is paused during backend maintenance", "error");
@@ -553,6 +561,7 @@ export default function SubscriptionPage() {
                                 anyCheckoutPending={checkingOut !== null}
                                 onUpgrade={handleUpgrade}
                                 onManage={handleManage}
+                                onIntent={handleIntent}
                                 maintenanceMode={maintenanceMode}
                                 manualBilling={MANUAL_BILLING}
                             />

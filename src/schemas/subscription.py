@@ -98,3 +98,13 @@ class WebhookEvent(BaseModel):
     id: str
     type: str
     data: Dict[str, Any]
+
+
+class SubscriptionIntentRequest(BaseModel):
+    plan: str
+    billing_mode: str = "manual"
+    source_page: str = "/subscription"
+
+
+class SubscriptionIntentResponse(BaseModel):
+    recorded: bool

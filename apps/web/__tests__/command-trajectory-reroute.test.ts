@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 // would otherwise fail in jsdom so we can import the pure helpers under test.
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
 
-import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/app/command/page";
+import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
 import type { TrajectoryForecast } from "@/lib/api/orchestration";
 
 describe("looksLikeTrajectoryAnalysis", () => {
