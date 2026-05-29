@@ -4,8 +4,9 @@ import {
   fetchProfile,
   getApplications,
   getJobs,
+  sendAgentChat,
+  uploadCV,
 } from "../api";
-import { agentApi, ricoChatApi } from "./client";
 
 export interface CommandResponse {
   success: boolean;
@@ -104,7 +105,7 @@ function applicationProbability(status: Application["status"]): number {
 
 export const orchestrationApi = {
   executeCommand: async (command: string): Promise<CommandResponse> => {
-    const response = await agentApi.chat({ message: command });
+    const response = await sendAgentChat({ message: command });
     return {
       success: response.success,
       message: response.message,
@@ -227,6 +228,6 @@ export const orchestrationApi = {
   },
 
   uploadCV: async (file: File): Promise<unknown> => {
-    return ricoChatApi.uploadCV(file);
+    return uploadCV(file);
   },
 };

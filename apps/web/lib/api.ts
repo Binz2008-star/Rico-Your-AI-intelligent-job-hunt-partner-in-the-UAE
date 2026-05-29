@@ -1,4 +1,6 @@
 import {
+  AgentChatRequestSchema,
+  AgentUIResponseSchema,
   ConfirmCVProfileResponseSchema,
   MeResponseSchema,
   ProfileUpdateResponseSchema,
@@ -8,6 +10,7 @@ import {
   SavedSearchesResponseSchema,
   UploadCVResponseSchema,
 } from "@/lib/schemas";
+import type { AgentChatRequest, AgentUIResponse } from "@/lib/schemas";
 import type {
   Application,
   ApplicationActionRequest,
@@ -1184,6 +1187,19 @@ export async function fetchChatHistory(
     data,
     "Rico chat history",
   );
+}
+
+export async function sendAgentChat(
+  data: AgentChatRequest,
+): Promise<AgentUIResponse> {
+  const payload = AgentChatRequestSchema.parse(data);
+  const result = await requestJson<unknown>("/api/v1/agent/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  return validateShape(AgentUIResponseSchema, result, "agent chat");
 }
 
 // ── Subscription ──────────────────────────────────────────────────────────────
