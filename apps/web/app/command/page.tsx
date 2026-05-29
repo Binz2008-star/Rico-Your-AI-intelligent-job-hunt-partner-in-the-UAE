@@ -5,7 +5,6 @@ import { confirmCVProfile, fetchMe, logout, sendChat, sendChatPublic, uploadCV }
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
 import { buildAuthHref } from "@/lib/redirect";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -46,7 +45,6 @@ interface Message {
     preview?: ProfilePreview;
     filename?: string;
     extractionQuality?: string;
-    sourceLabel?: string;
 }
 
 type ChatAudience = "checking" | "authenticated" | "public";
@@ -54,35 +52,56 @@ type ChatAudience = "checking" | "authenticated" | "public";
 let _id = 0;
 function nextId() { return ++_id; }
 
-function getSourceLabel(responseSource: string | undefined): string | null {
-    switch ((responseSource ?? "").toLowerCase()) {
-        case "fallback":
-        case "none":
-            return "Fallback mode";
-        case "huggingface":
-        case "hf":
-            return "HF active";
-        case "deepseek":
-            return "DeepSeek active";
-        case "openai":
-            return "OpenAI active";
-        case "rate_limited":
-            return "Provider rate-limited";
-        default:
-            return null;
-    }
-}
-
 const QUICK_ACTIONS = [
-    { label: "Analyze my trajectory", prompt: "Analyze my current career trajectory." },
-    { label: "Map my next move", prompt: "Map my best next career move based on my profile." },
+    { label: "Find UAE jobs that match my CV", prompt: "Find UAE jobs that match my CV and experience." },
     { label: "Upload my CV", prompt: "__cv_upload__" },
-    { label: "Evaluate an opportunity", prompt: "Evaluate an opportunity against my long-term trajectory." },
-    { label: "Improve compensation path", prompt: "Find moves that improve my compensation trajectory." },
-    { label: "Prepare for an interview", prompt: "Help me prepare strategically for an interview." },
+    { label: "What should I do next?", prompt: "Based on my profile and experience, what's the best next step in my job search?" },
+    { label: "Analyze my next career move", prompt: "Analyze the best next career move based on my background." },
+    { label: "Show my applications", prompt: "Show my job applications and their status." },
+    { label: "Help me prep for an interview", prompt: "Help me prepare for an upcoming job interview." },
 ];
 const COMMAND_LOGIN_HREF = buildAuthHref("/login", "/command");
 const COMMAND_SIGNUP_HREF = buildAuthHref("/signup", "/command");
+
+function renderInline(text: string): React.ReactNode {
+    const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+    return parts.map((part, i) => {
+        if (part.startsWith("**") && part.endsWith("**")) {
+            return <strong key={i} className="font-semibold text-white">{part.slice(2, -2)}</strong>;
+        }
+        if (part.startsWith("*") && part.endsWith("*")) {
+            return <em key={i} className="italic">{part.slice(1, -1)}</em>;
+        }
+        return part;
+    });
+}
+
+function renderMarkdown(text: string): React.ReactNode {
+    const lines = text.split("\n");
+    return lines.map((line, i) => {
+        if (line.startsWith("### ")) {
+            return <p key={i} className="font-semibold text-[13px] text-white mt-2 mb-0.5">{renderInline(line.slice(4))}</p>;
+        }
+        if (line.startsWith("## ")) {
+            return <p key={i} className="font-semibold text-[14px] text-white mt-3 mb-1">{renderInline(line.slice(3))}</p>;
+        }
+        if (line.startsWith("# ")) {
+            return <p key={i} className="font-bold text-[15px] text-white mt-3 mb-1">{renderInline(line.slice(2))}</p>;
+        }
+        if (line.startsWith("- ") || line.startsWith("• ")) {
+            return (
+                <div key={i} className="flex gap-1.5 leading-relaxed">
+                    <span className="text-magenta shrink-0 mt-0.5">•</span>
+                    <span>{renderInline(line.slice(2))}</span>
+                </div>
+            );
+        }
+        if (line.trim() === "") {
+            return <div key={i} className="h-1.5" />;
+        }
+        return <p key={i} className="leading-relaxed">{renderInline(line)}</p>;
+    });
+}
 
 function ThinkingIndicator() {
     return (
@@ -412,15 +431,13 @@ export default function CommandPage() {
                 res.data?.text ??
                 "";
             const responseSource = res.response_source ?? "unknown";
-            const sourceLabel = getSourceLabel(responseSource);
             const isRateLimited = responseSource === "rate_limited";
 
             if (isRateLimited) {
                 setMessages((prev) => [...prev, {
                     id: nextId(),
                     role: "rico",
-                    text: "Rico's AI is rate-limited right now — please try again in a minute.",
-                    sourceLabel: sourceLabel ?? undefined,
+                    text: "Rico is busy right now — please try again in a minute.",
                 }]);
             } else if (!reply && !res.matches && !res.options) {
                 setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: "Rico returned an empty response. Please try again." }]);
@@ -438,7 +455,6 @@ export default function CommandPage() {
                         roleName: res.role,
                         reasons: res.reasons,
                         next_actions: res.next_actions as NextAction[] | undefined,
-                        sourceLabel: sourceLabel ?? undefined,
                     },
                 ]);
             }
@@ -475,10 +491,10 @@ export default function CommandPage() {
                 return;
             }
             if (cvReady) {
-                setMessages([{ id: 1, role: "rico", text: "Your CV is ready. What would you like Rico to do next?\n\n• Find jobs that match my CV\n• Analyze my career direction\n• Show my profile summary\n• Track my applications" }]);
+                setMessages([{ id: 1, role: "rico", text: "Your CV is ready — I've read it and built your profile.\n\nWhat would you like to do next?\n\n- Find UAE jobs that match my CV\n- Analyze my best next career move\n- Show my profile summary\n- Track my applications" }]);
                 return;
             }
-            setMessages([{ id: 1, role: "rico", text: "I'm Rico, your AI job-hunt partner in the UAE. Upload your CV or ask me to find matching jobs, track your applications, or guide your next career move." }]);
+            setMessages([{ id: 1, role: "rico", text: "Hi, I'm Rico — your AI job-hunt partner in the UAE.\n\nUpload your CV and I'll find matching jobs, track your applications, and guide your next career move." }]);
         }, 0);
         return () => window.clearTimeout(timeoutId);
     }, [chatAudience, prompt, sendMessage]);
@@ -577,7 +593,10 @@ export default function CommandPage() {
         try {
             const userId = `public:${getSessionId(sessionIdRef)}`;
             await confirmCVProfile({ preview, filename }, userId);
-            setMessages((prev) => prev.map(m => m.id === messageId ? { ...m, type: "profile_confirmed", text: "Profile confirmed. I can now use it for job matching. Tell me your target roles and I'll start finding matches." } : m));
+            const confirmText = chatAudience === "public"
+                ? "Profile saved for this session.\n\n**Sign up free** to keep your profile, track applications, and get job alerts — so you don't lose your progress when you close the tab."
+                : "Profile confirmed. I can now use it for job matching. Tell me your target roles and I'll start finding matches.";
+            setMessages((prev) => prev.map(m => m.id === messageId ? { ...m, type: "profile_confirmed", text: confirmText } : m));
         } catch (err) {
             const msg = err instanceof Error ? err.message : "Confirmation failed";
             setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: `Could not confirm profile: ${msg}. Please try again.` }]);
@@ -696,23 +715,34 @@ export default function CommandPage() {
                     )}
 
                     {/* Messages */}
-                    {messages.map((m) => (
+                    {messages.map((m, idx) => {
+                        const prevMsg = messages[idx - 1];
+                        const isFirstInGroup = !prevMsg || prevMsg.role !== m.role;
+                        return (
                         <div
                             key={m.id}
                             className={`flex items-end gap-2 animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none ${m.role === "user" ? "justify-end" : "justify-start"
                                 }`}
                         >
                             {m.role === "rico" && (
-                                <div className="w-7 h-7 rounded-lg bg-[#f5a623] flex items-center justify-center text-[11px] font-black text-[#0a0a1a] shrink-0 mb-1 shadow-[0_2px_8px_rgba(245,166,35,0.3)]">
-                                    R
-                                </div>
+                                isFirstInGroup ? (
+                                    <div className="w-7 h-7 rounded-lg bg-[#f5a623] flex items-center justify-center text-[11px] font-black text-[#0a0a1a] shrink-0 mb-1 shadow-[0_2px_8px_rgba(245,166,35,0.3)]">
+                                        R
+                                    </div>
+                                ) : (
+                                    <div className="w-7 shrink-0" />
+                                )
                             )}
                             <div className={`max-w-[82%] ${m.role === "user"
                                 ? "rounded-2xl rounded-tr-none bg-magenta px-4 py-3 text-[14px] text-white leading-relaxed shadow-[0_4px_15px_rgba(255,45,142,0.2)]"
                                 : "rounded-2xl rounded-tl-none bg-surface border border-border-subtle px-4 py-3 text-[14px] text-white leading-relaxed backdrop-blur-md"
                                 }`}>
                                 {/* Message text */}
-                                {m.text && <div className="whitespace-pre-wrap">{m.text}</div>}
+                                {m.text && (
+                                    m.role === "rico"
+                                        ? <div className="space-y-0.5">{renderMarkdown(m.text)}</div>
+                                        : <div className="whitespace-pre-wrap">{m.text}</div>
+                                )}
 
                                 {/* Job match cards */}
                                 {m.matches && m.matches.length > 0 && (
@@ -842,9 +872,6 @@ export default function CommandPage() {
                                     </div>
                                 )}
 
-                                {m.sourceLabel && (
-                                    <p className="mt-2 text-[11px] text-text-muted">{m.sourceLabel}</p>
-                                )}
                             </div>
                             {m.role === "user" && (
                                 <div className="w-6 h-6 rounded-full bg-surface-subtle flex items-center justify-center text-[10px] font-medium text-text-secondary shrink-0 mb-1">
@@ -852,7 +879,8 @@ export default function CommandPage() {
                                 </div>
                             )}
                         </div>
-                    ))}
+                        );
+                    })}
 
                     {thinking && (
                         <div className="flex flex-col gap-2">

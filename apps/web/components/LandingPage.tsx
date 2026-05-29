@@ -213,10 +213,12 @@ export default function LandingPage() {
                   Let Rico run your job search smarter.
                 </span>
               </h1>
-              <p className="mt-6 max-w-2xl text-lg leading-8 text-text-secondary md:text-xl">
-                Rico is your AI job-hunt partner in the UAE. It reads your CV,
-                understands your experience, finds matching jobs, tracks your
-                applications, and guides your next move — in English and Arabic.
+              <p className="mt-3 text-[clamp(1.1rem,2.5vw,1.5rem)] font-medium leading-[1.3] tracking-wide text-text-secondary/80" dir="rtl" lang="ar">
+                ارفع سيرتك الذاتية. دع ريكو يبحث عن وظيفتك في الإمارات.
+              </p>
+              <p className="mt-5 max-w-2xl text-lg leading-8 text-text-secondary md:text-xl">
+                Rico reads your CV, finds matching UAE jobs, tracks your applications,
+                and guides your next career move — in English and Arabic.
               </p>
               <p className="mt-3 max-w-2xl text-sm leading-7 text-text-tertiary">
                 Rico never applies silently. You approve every important action.
