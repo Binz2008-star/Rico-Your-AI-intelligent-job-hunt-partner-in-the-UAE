@@ -13,24 +13,28 @@ vi.mock("next/link", () => ({
 }));
 
 describe("LandingPage", () => {
-  it("renders the cinematic Rico AI landing hierarchy", () => {
+  it("renders the hero headline and human-friendly copy", () => {
     render(<LandingPage />);
 
     expect(
       screen.getByRole("heading", {
-        name: /Upload your CV\. Get a career operating system/i,
+        name: /Upload your CV\.\s+Let Rico run your job search smarter\./i,
       })
     ).toBeInTheDocument();
     expect(screen.getByText("How Rico works")).toBeInTheDocument();
-    // The five-step product flow is the core clarity element.
-    expect(screen.getByText("CV Upload")).toBeInTheDocument();
-    expect(screen.getByText("Profile Intelligence")).toBeInTheDocument();
-    expect(screen.getByText("Job Matches")).toBeInTheDocument();
-    expect(screen.getByText("Application Tracking")).toBeInTheDocument();
-    expect(screen.getByText("Career Command Center")).toBeInTheDocument();
-    expect(screen.getByText("What Rico remembers")).toBeInTheDocument();
-    expect(screen.getByText("Opportunity engine")).toBeInTheDocument();
+    // Five-step flow with plain job-seeker language (step titles; "Upload your CV" also appears in CTA buttons)
+    expect(screen.getAllByText("Upload your CV").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Build your career profile")).toBeInTheDocument();
+    expect(screen.getByText("Find matching UAE jobs")).toBeInTheDocument();
+    expect(screen.getByText("Track your applications")).toBeInTheDocument();
+    expect(screen.getByText("Get guidance and alerts")).toBeInTheDocument();
+    // Section labels
+    expect(screen.getByText("Rico remembers your career goals")).toBeInTheDocument();
+    expect(screen.getByText("Smart job matching")).toBeInTheDocument();
     expect(screen.getByText("You stay in control")).toBeInTheDocument();
+    // Bilingual / trust copy
+    expect(screen.getAllByText(/in English and Arabic/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/Rico never applies silently/i).length).toBeGreaterThanOrEqual(1);
   });
 
   it("preserves the primary onboarding and auth links", () => {
@@ -38,10 +42,10 @@ describe("LandingPage", () => {
 
     expect(screen.getByRole("link", { name: /Sign in/i })).toHaveAttribute("href", "/login");
     expect(
-      screen.getAllByRole("link", { name: /Sign up free/i }).some((link) => link.getAttribute("href") === "/signup")
+      screen.getAllByRole("link", { name: /Upload your CV/i }).some((link) => link.getAttribute("href") === "/upload")
     ).toBe(true);
     expect(
-      screen.getAllByRole("link", { name: /Upload your CV/i }).some((link) => link.getAttribute("href") === "/upload")
+      screen.getAllByRole("link", { name: /Start free/i }).some((link) => link.getAttribute("href") === "/signup")
     ).toBe(true);
   });
 });

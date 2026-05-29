@@ -5,11 +5,11 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 const intelligenceLoop = [
-  "CV profile extraction",
-  "Role intelligence",
-  "Opportunity matching",
-  "Application tracking",
-  "Telegram and job alerts",
+  "Reading your CV",
+  "Understanding your experience",
+  "Finding matching UAE jobs",
+  "Tracking your applications",
+  "Sending job alerts",
 ];
 
 // The core product story, told as one continuous flow. Each step names a concrete
@@ -17,8 +17,8 @@ const intelligenceLoop = [
 const productFlow = [
   {
     step: "01",
-    title: "CV Upload",
-    body: "Drop your CV. No wizard, no long forms — your history is the starting point.",
+    title: "Upload your CV",
+    body: "Rico reads your experience, skills, education, and career history.",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M12 16V4M12 4 8 8M12 4l4 4" />
@@ -28,8 +28,8 @@ const productFlow = [
   },
   {
     step: "02",
-    title: "Profile Intelligence",
-    body: "Rico extracts skills, seniority, and trajectory into a living career profile.",
+    title: "Build your career profile",
+    body: "Rico turns your CV into a living profile it can use to match you with better jobs.",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <circle cx="12" cy="8" r="4" />
@@ -39,8 +39,8 @@ const productFlow = [
   },
   {
     step: "03",
-    title: "Job Matches",
-    body: "Relevant UAE roles are ranked by real fit — not keyword spam from job boards.",
+    title: "Find matching UAE jobs",
+    body: "Rico searches for roles that fit your experience, target role, salary, and location.",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <circle cx="11" cy="11" r="7" />
@@ -50,8 +50,8 @@ const productFlow = [
   },
   {
     step: "04",
-    title: "Application Tracking",
-    body: "Every application, status, and follow-up stays organised in one place.",
+    title: "Track your applications",
+    body: "Keep your saved jobs, opened links, applications, and follow-ups in one place.",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M9 11l3 3L22 4" />
@@ -61,8 +61,8 @@ const productFlow = [
   },
   {
     step: "05",
-    title: "Career Command Center",
-    body: "Rico guides your next move and surfaces the signals that actually matter.",
+    title: "Get guidance and alerts",
+    body: "Rico tells you what matters next — a new job match, a missing skill, or a follow-up reminder.",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M3 12h4l2 6 4-12 2 6h6" />
@@ -72,24 +72,28 @@ const productFlow = [
 ];
 
 const memoryItems = [
-  "Career stack and seniority",
-  "Target roles and rejected paths",
-  "Recruiter response history",
-  "Compensation and location signals",
-  "Application outcomes",
+  "Your CV and experience",
+  "Target roles and preferred locations",
+  "Salary expectations",
+  "Application history",
+  "Follow-up reminders",
 ];
 
 const liveMatches = [
   {
-    role: "Senior Python Platform Engineer",
+    role: "HSE Manager",
     score: "94",
-    signal: "High trajectory fit",
+    signal: "Strong match with your safety and compliance experience",
   },
-  { role: "AI Operations Lead", score: "89", signal: "Strong timing window" },
   {
-    role: "Backend Automation Architect",
+    role: "Operations Manager",
+    score: "89",
+    signal: "Good match with your UAE experience",
+  },
+  {
+    role: "Environmental Compliance Officer",
     score: "86",
-    signal: "Compensation momentum",
+    signal: "Matches your regulatory and inspection background",
   },
 ];
 
@@ -204,15 +208,18 @@ export default function LandingPage() {
                 Your AI job-hunt partner in the UAE
               </p>
               <h1 className="font-display text-[clamp(2.5rem,7vw,5.5rem)] font-semibold leading-[1.02] tracking-tight text-text-primary">
-                Upload your CV. Get a{" "}
+                Upload your CV.{" "}
                 <span className="bg-gradient-to-r from-magenta to-cyan bg-clip-text text-transparent">
-                  career operating system
+                  Let Rico run your job search smarter.
                 </span>
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-8 text-text-secondary md:text-xl">
-                Rico turns your CV into a living profile that finds relevant UAE
-                jobs, tracks your applications, and guides your next move — and it
-                always asks before acting.
+                Rico is your AI job-hunt partner in the UAE. It reads your CV,
+                understands your experience, finds matching jobs, tracks your
+                applications, and guides your next move — in English and Arabic.
+              </p>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-text-tertiary">
+                Rico never applies silently. You approve every important action.
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
                 <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
@@ -228,7 +235,7 @@ export default function LandingPage() {
                     href="/signup"
                     className="inline-flex w-full items-center justify-center rounded-full border border-white/10 bg-white/[0.04] px-7 py-4 text-base font-semibold text-white backdrop-blur-xl transition-colors hover:bg-white/[0.08] sm:w-auto"
                   >
-                    Sign up free
+                    Start free
                   </Link>
                 </motion.div>
               </div>
@@ -241,10 +248,10 @@ export default function LandingPage() {
               <div className="mb-6 flex items-center justify-between gap-4">
                 <div>
                   <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-text-tertiary">
-                    Invisible background intelligence
+                    What Rico does for you
                   </p>
                   <h2 className="mt-2 text-2xl font-semibold text-white">
-                    Live profile loop
+                    Working on your job search
                   </h2>
                 </div>
                 <span className="rounded-full border border-cyan/30 bg-cyan/10 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.2em] text-cyan">
@@ -284,8 +291,8 @@ export default function LandingPage() {
           <section className="px-5 py-16 md:px-10 lg:px-16">
             <SectionHeading
               eyebrow="How Rico works"
-              title="From CV to career command center"
-              body="One continuous flow. Upload once, and Rico carries you from raw history to a live, guided job hunt."
+              title="From CV to better job opportunities"
+              body="Upload your CV once. Rico reads your experience and starts finding matching UAE jobs right away."
             />
             <div className="mx-auto max-w-7xl">
               {/* Connecting line behind the steps (desktop only) */}
@@ -333,15 +340,14 @@ export default function LandingPage() {
             <div className="mx-auto grid max-w-7xl gap-5 lg:grid-cols-[0.9fr_1.1fr]">
               <RicoCardPanel>
                 <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-magenta">
-                  What Rico remembers
+                  Rico remembers your career goals
                 </p>
                 <h2 className="mt-4 text-3xl font-semibold text-white md:text-4xl">
-                  Memory that compounds every search
+                  Every search gets smarter
                 </h2>
                 <p className="mt-5 text-base leading-7 text-text-secondary">
-                  Rico turns your CV and outcomes into a living profile, so each
-                  match is judged against your actual trajectory instead of a
-                  one-time keyword search.
+                  Every search gets smarter because Rico remembers your CV,
+                  target roles, preferred locations, and application history.
                 </p>
               </RicoCardPanel>
               <RicoCardPanel delay={0.08}>
@@ -366,14 +372,14 @@ export default function LandingPage() {
                 <div className="mb-6 flex items-center justify-between gap-4">
                   <div>
                     <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-cyan">
-                      Opportunity engine
+                      Smart job matching
                     </p>
                     <h2 className="mt-4 text-3xl font-semibold text-white md:text-4xl">
-                      Live matching without the job-board noise
+                      Jobs that fit your CV, not random job-board noise
                     </h2>
                   </div>
                   <span className="hidden rounded-full border border-magenta/30 bg-magenta/10 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-magenta sm:inline-flex">
-                    Market scan
+                    UAE jobs
                   </span>
                 </div>
                 <div className="space-y-3">
@@ -406,23 +412,23 @@ export default function LandingPage() {
               </RicoCardPanel>
               <RicoCardPanel delay={0.08}>
                 <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-magenta">
-                  Telegram and job alerts
+                  Job alerts when something important changes
                 </p>
                 <h2 className="mt-4 text-3xl font-semibold text-white md:text-4xl">
-                  Signals arrive when timing changes
+                  Rico tells you when to act
                 </h2>
                 <p className="mt-5 text-base leading-7 text-text-secondary">
-                  Rico can watch role movement, recruiter patterns, and
-                  application status, then surface the few signals that matter
-                  for your next move.
+                  Rico watches your saved jobs, new matches, and application
+                  status — and alerts you when something is worth your
+                  attention.
                 </p>
                 <div className="mt-8 rounded-lg border border-cyan/[0.18] bg-cyan/10 p-4">
                   <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-cyan">
-                    Next alert
+                    Latest alert
                   </p>
                   <p className="mt-3 text-sm leading-6 text-white">
-                    A senior backend role crossed the fit threshold after your
-                    CV profile update.
+                    A new job matches your CV and target salary. Rico is ready
+                    to show it to you.
                   </p>
                 </div>
               </RicoCardPanel>
@@ -436,12 +442,12 @@ export default function LandingPage() {
                   You stay in control
                 </p>
                 <h2 className="mt-4 text-3xl font-semibold text-white md:text-4xl">
-                  Autonomous intelligence, approval-first action
+                  Rico works for you, not instead of you
                 </h2>
                 <p className="mt-5 text-base leading-7 text-text-secondary">
-                  Rico can analyze, rank, draft, and track. You decide when to
-                  apply, when to pause, and what career direction is worth
-                  pursuing.
+                  Rico finds jobs, ranks them, and tracks your progress. You
+                  decide when to apply, when to pause, and which direction to
+                  take your career.
                 </p>
               </RicoCardPanel>
               <RicoCardPanel delay={0.08}>
@@ -549,11 +555,12 @@ export default function LandingPage() {
                 Start free
               </p>
               <h2 className="mx-auto mt-4 max-w-3xl text-3xl font-semibold text-white md:text-5xl">
-                Give Rico your CV. Let the system build the intelligence layer.
+                Upload your CV. Let Rico find your next job.
               </h2>
               <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-text-secondary">
-                The first useful action is not a form. It is your career history
-                becoming structured, remembered, and ready for matching.
+                Upload your CV and Rico goes to work. It reads your experience,
+                finds matching UAE jobs, and tells you what to do next — in
+                English and Arabic.
               </p>
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
                 <Link
@@ -566,7 +573,7 @@ export default function LandingPage() {
                   href="/signup"
                   className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/[0.04] px-7 py-4 text-base font-semibold text-white transition-colors hover:bg-white/[0.08]"
                 >
-                  Sign up free
+                  Start free
                 </Link>
               </div>
             </RicoCardPanel>
