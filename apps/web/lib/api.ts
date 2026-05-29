@@ -1325,3 +1325,18 @@ export async function createCustomerPortalSession(): Promise<CheckoutResponse> {
     method: "POST",
   });
 }
+
+export async function recordSubscriptionIntent(
+  plan: string,
+  billingMode: "manual" | "stripe" = "manual",
+  sourcePage: string = "/subscription",
+): Promise<void> {
+  try {
+    await requestJson("/api/v1/subscription/intent", {
+      method: "POST",
+      body: JSON.stringify({ plan, billing_mode: billingMode, source_page: sourcePage }),
+    });
+  } catch {
+    // Fire-and-forget — never surface errors to the user
+  }
+}

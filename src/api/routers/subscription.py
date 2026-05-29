@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import ValidationError
@@ -10,10 +11,13 @@ from pydantic import ValidationError
 logger = logging.getLogger(__name__)
 
 from src.api.deps import get_current_user_id
+from src.db import record_subscription_intent
 from src.schemas.subscription import (
     CheckoutResponse,
     PlansResponse,
     SubscriptionCreateRequest,
+    SubscriptionIntentRequest,
+    SubscriptionIntentResponse,
     SubscriptionResponse,
     SubscriptionWebhookResponse,
     WebhookEvent,
@@ -27,6 +31,32 @@ from src.subscription_plans import (
 )
 
 router = APIRouter(prefix="/api/v1/subscription", tags=["subscription"])
+
+
+@router.post("/intent", response_model=SubscriptionIntentResponse)
+async def record_upgrade_intent(
+    body: SubscriptionIntentRequest,
+    request: Request,
+) -> SubscriptionIntentResponse:
+    """Fire-and-forget upgrade intent log. Works for both authenticated and anonymous users."""
+    user_id: Optional[str] = None
+    email: Optional[str] = None
+    try:
+        from src.api.deps import get_current_user
+        user = get_current_user(request)
+        user_id = user.get("email", "").strip() or None
+        email = user_id
+    except Exception:
+        pass  # unauthenticated — record without user info
+
+    recorded = record_subscription_intent(
+        plan=body.plan,
+        billing_mode=body.billing_mode,
+        user_id=user_id,
+        email=email,
+        source_page=body.source_page,
+    )
+    return SubscriptionIntentResponse(recorded=recorded)
 
 
 @router.get("/plans", response_model=PlansResponse)

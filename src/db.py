@@ -140,6 +140,25 @@ def init_db():
                 ADD COLUMN IF NOT EXISTS link_verified_at TIMESTAMP
             """)
 
+            # Subscription intent log — records every upgrade/WhatsApp click for lead tracking
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS subscription_intents (
+                    id SERIAL PRIMARY KEY,
+                    user_id TEXT,
+                    email TEXT,
+                    plan TEXT NOT NULL,
+                    billing_mode TEXT NOT NULL DEFAULT 'manual',
+                    source_page TEXT DEFAULT '/subscription',
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """)
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_sub_intents_user ON subscription_intents(user_id)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_sub_intents_created ON subscription_intents(created_at DESC)"
+            )
+
             # Create indexes for better performance
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_link ON jobs(link)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_score ON jobs(score DESC)")
@@ -393,6 +412,61 @@ def get_application_stats() -> Dict[str, Any]:
 def is_db_available() -> bool:
     """Check if database is available."""
     return DB_ENABLED
+
+
+def record_subscription_intent(
+    plan: str,
+    billing_mode: str = "manual",
+    user_id: Optional[str] = None,
+    email: Optional[str] = None,
+    source_page: str = "/subscription",
+) -> bool:
+    """Log a subscription upgrade intent. Fire-and-forget — never raises."""
+    conn = get_db_connection()
+    if not conn:
+        return False
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO subscription_intents (user_id, email, plan, billing_mode, source_page)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (user_id, email, plan, billing_mode, source_page),
+            )
+        _commit(conn)
+        return True
+    except Exception as exc:
+        logger.warning("record_subscription_intent failed: %s", exc)
+        _rollback(conn)
+        return False
+    finally:
+        conn.close()
+
+
+def get_subscription_intents(limit: int = 100) -> List[Dict[str, Any]]:
+    """Return recent subscription intents for admin review."""
+    conn = get_db_connection()
+    if not conn:
+        return []
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, user_id, email, plan, billing_mode, source_page, created_at
+                FROM subscription_intents
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            cols = [desc[0] for desc in cur.description]
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
+    except Exception as exc:
+        logger.warning("get_subscription_intents failed: %s", exc)
+        return []
+    finally:
+        conn.close()
 
 
 def main():
