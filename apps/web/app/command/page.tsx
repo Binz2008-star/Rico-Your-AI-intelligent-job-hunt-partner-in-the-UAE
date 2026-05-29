@@ -1,7 +1,7 @@
 "use client";
 
-import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, RicoOption, UploadCVResponse } from "@/lib/api";
-import { confirmCVProfile, fetchMe, logout, sendChat, sendChatPublic, uploadCV } from "@/lib/api";
+import type { ChatApiResponse, ChatStreamEvent, JobMatch, NextAction, ProfilePreview, RicoOption, UploadCVResponse } from "@/lib/api";
+import { confirmCVProfile, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
 import { buildAuthHref } from "@/lib/redirect";
@@ -45,6 +45,7 @@ interface Message {
     preview?: ProfilePreview;
     filename?: string;
     extractionQuality?: string;
+    streaming?: boolean;
 }
 
 type ChatAudience = "checking" | "authenticated" | "public";
@@ -103,14 +104,14 @@ function renderMarkdown(text: string): React.ReactNode {
     });
 }
 
-function ThinkingIndicator() {
+function ThinkingIndicator({ label }: { label?: string }) {
     return (
-        <div className="flex justify-start animate-pulse motion-reduce:animate-none" role="status" aria-live="polite" aria-label="Rico is thinking">
-            <div className="bg-surface border border-border-subtle rounded-2xl rounded-tl-none px-4 py-4 flex gap-1.5 items-center backdrop-blur-md">
-                <span className="sr-only">Rico is thinking</span>
-                <span aria-hidden="true" className="w-1.5 h-1.5 bg-magenta rounded-full animate-bounce motion-reduce:animate-none [animation-duration:0.8s]" />
-                <span aria-hidden="true" className="w-1.5 h-1.5 bg-cyan rounded-full animate-bounce motion-reduce:animate-none [animation-duration:0.8s] [animation-delay:0.2s]" />
-                <span aria-hidden="true" className="w-1.5 h-1.5 bg-magenta rounded-full animate-bounce motion-reduce:animate-none [animation-duration:0.8s] [animation-delay:0.4s]" />
+        <div className="rico-thinking-row" role="status" aria-live="polite" aria-label="Rico is thinking">
+            <span className="sr-only">Rico is thinking</span>
+            <div className="rico-orb" aria-hidden="true"><span>R</span></div>
+            <div className="rico-thinking-label">
+                <span>{label ?? "Thinking…"}</span>
+                <span className="rico-dots" aria-hidden="true"><i /><i /><i /></span>
             </div>
         </div>
     );
@@ -447,68 +448,99 @@ export default function CommandPage() {
         }
 
         try {
-            const res: ChatApiResponse =
-                chatAudience === "authenticated"
-                    ? await sendChat(trimmed, controller.signal)
-                    : await sendChatPublic(trimmed, getSessionId(sessionIdRef), controller.signal);
-            const reply =
-                res.response ??
-                res.reply ??
-                res.message ??
-                res.content ??
-                res.answer ??
-                res.text ??
-                res.data?.response ??
-                res.data?.reply ??
-                res.data?.message ??
-                res.data?.content ??
-                res.data?.text ??
-                "";
-            const responseSource = res.response_source ?? "unknown";
-            const isRateLimited = responseSource === "rate_limited";
-            const isFallbackMode = res.type === "fallback_response";
+            // Use SSE streaming for conversational messages; fall back to JSON for errors
+            const streamId = nextId();
+            let streamStarted = false;
 
-            if (isRateLimited) {
-                setMessages((prev) => [...prev, {
-                    id: nextId(),
-                    role: "rico",
-                    text: "Rico is busy right now — please try again in a minute.",
-                }]);
-            } else if (isFallbackMode) {
-                // Backend AI provider unavailable — show neutral message, never expose internal provider state
-                setMessages((prev) => [...prev, {
-                    id: nextId(),
-                    role: "rico",
-                    text: "I'm here! Upload your CV to get started, or ask me about UAE jobs, applications, or interview prep.",
-                    options: res.options as RicoOption[] | undefined,
-                }]);
-            } else if (!reply && !res.matches && !res.options) {
-                setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: "Rico returned an empty response. Please try again." }]);
-            } else {
-                // No-match state: backend returned job_matches type but empty matches array
-                const hasEmptyMatches = res.type === "job_matches" && Array.isArray(res.matches) && res.matches.length === 0;
-                const displayText = hasEmptyMatches && !reply
-                    ? `No live UAE matches found right now. Try a related role or broaden your search — I can suggest alternatives based on your CV.`
-                    : reply;
-                const displayOptions: RicoOption[] = hasEmptyMatches && !res.options ? [
-                    { action: "broaden", label: "Suggest related roles", message: "Suggest roles similar to my target based on my CV" },
-                    { action: "upload_cv", label: "Upload or update my CV", message: "__cv_upload__" },
-                ] : (res.options as RicoOption[] | undefined) ?? [];
-                setMessages((prev) => [
-                    ...prev,
-                    {
-                        id: nextId(),
-                        role: "rico",
-                        text: displayText,
-                        type: res.type,
-                        matches: res.matches as JobMatch[] | undefined,
-                        options: displayOptions.length > 0 ? displayOptions : (res.options as RicoOption[] | undefined),
-                        next_action: res.next_action,
-                        roleName: res.role,
-                        reasons: res.reasons,
-                        next_actions: res.next_actions as NextAction[] | undefined,
-                    },
-                ]);
+            function applyDoneResponse(res: ChatApiResponse) {
+                const reply =
+                    res.response ?? res.reply ?? res.message ?? res.content ??
+                    res.answer ?? res.text ??
+                    res.data?.response ?? res.data?.reply ?? res.data?.message ??
+                    res.data?.content ?? res.data?.text ?? "";
+                const responseSource = res.response_source ?? "unknown";
+                const isRateLimited = responseSource === "rate_limited";
+                const isFallbackMode = res.type === "fallback_response";
+
+                if (isRateLimited) {
+                    setMessages((prev) => {
+                        const filtered = prev.filter((m) => m.id !== streamId);
+                        return [...filtered, { id: streamId, role: "rico", text: "Rico is busy right now — please try again in a minute." }];
+                    });
+                } else if (isFallbackMode) {
+                    setMessages((prev) => {
+                        const filtered = prev.filter((m) => m.id !== streamId);
+                        return [...filtered, { id: streamId, role: "rico", text: "I'm here! Upload your CV to get started, or ask me about UAE jobs, applications, or interview prep.", options: res.options as RicoOption[] | undefined }];
+                    });
+                } else if (!reply && !res.matches && !res.options) {
+                    setMessages((prev) => {
+                        const filtered = prev.filter((m) => m.id !== streamId);
+                        return [...filtered, { id: streamId, role: "rico", text: "Rico returned an empty response. Please try again." }];
+                    });
+                } else {
+                    const hasEmptyMatches = res.type === "job_matches" && Array.isArray(res.matches) && res.matches.length === 0;
+                    const displayText = hasEmptyMatches && !reply
+                        ? "No live UAE matches found right now. Try a related role or broaden your search — I can suggest alternatives based on your CV."
+                        : reply;
+                    const displayOptions: RicoOption[] = hasEmptyMatches && !res.options ? [
+                        { action: "broaden", label: "Suggest related roles", message: "Suggest roles similar to my target based on my CV" },
+                        { action: "upload_cv", label: "Upload or update my CV", message: "__cv_upload__" },
+                    ] : (res.options as RicoOption[] | undefined) ?? [];
+                    setMessages((prev) => {
+                        const filtered = prev.filter((m) => m.id !== streamId);
+                        return [...filtered, {
+                            id: streamId,
+                            role: "rico",
+                            text: displayText,
+                            type: res.type,
+                            matches: res.matches as JobMatch[] | undefined,
+                            options: displayOptions.length > 0 ? displayOptions : (res.options as RicoOption[] | undefined),
+                            next_action: res.next_action,
+                            roleName: res.role,
+                            reasons: res.reasons,
+                            next_actions: res.next_actions as NextAction[] | undefined,
+                            streaming: false,
+                        }];
+                    });
+                }
+            }
+
+            const streamGen = chatAudience === "authenticated"
+                ? sendChatStream(trimmed, controller.signal)
+                : sendChatStreamPublic(trimmed, getSessionId(sessionIdRef), controller.signal);
+
+            for await (const event of streamGen) {
+                if (event.type === "token" && event.text) {
+                    if (!streamStarted) {
+                        streamStarted = true;
+                        setThinking(false);
+                        setOperationState(null);
+                        setMessages((prev) => [...prev, { id: streamId, role: "rico", text: event.text!, streaming: true }]);
+                    } else {
+                        setMessages((prev) => prev.map((m) =>
+                            m.id === streamId ? { ...m, text: m.text + event.text! } : m
+                        ));
+                    }
+                    scrollBottom();
+                } else if (event.type === "done" && event.response) {
+                    applyDoneResponse(event.response);
+                } else if (event.type === "error") {
+                    // Stream returned error — fall back to regular JSON call
+                    const res: ChatApiResponse =
+                        chatAudience === "authenticated"
+                            ? await sendChat(trimmed, controller.signal)
+                            : await sendChatPublic(trimmed, getSessionId(sessionIdRef), controller.signal);
+                    applyDoneResponse(res);
+                }
+            }
+
+            // If stream ended without a "done" event and no text was streamed, show fallback
+            if (!streamStarted) {
+                const res: ChatApiResponse =
+                    chatAudience === "authenticated"
+                        ? await sendChat(trimmed, controller.signal)
+                        : await sendChatPublic(trimmed, getSessionId(sessionIdRef), controller.signal);
+                applyDoneResponse(res);
             }
         } catch (err) {
             if (err instanceof Error) {
@@ -767,24 +799,13 @@ export default function CommandPage() {
                     )}
 
                     {/* Messages */}
-                    {messages.map((m, idx) => {
-                        const prevMsg = messages[idx - 1];
-                        const isFirstInGroup = !prevMsg || prevMsg.role !== m.role;
+                    {messages.map((m) => {
                         return (
                         <div
                             key={m.id}
                             className={`flex items-end gap-2 animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none ${m.role === "user" ? "justify-end" : "justify-start"
                                 }`}
                         >
-                            {m.role === "rico" && (
-                                isFirstInGroup ? (
-                                    <div className="w-7 h-7 rounded-lg bg-[#f5a623] flex items-center justify-center text-[11px] font-black text-[#0a0a1a] shrink-0 mb-1 shadow-[0_2px_8px_rgba(245,166,35,0.3)]">
-                                        R
-                                    </div>
-                                ) : (
-                                    <div className="w-7 shrink-0" />
-                                )
-                            )}
                             <div className={`max-w-[82%] ${m.role === "user"
                                 ? "rounded-2xl rounded-tr-none bg-magenta px-4 py-3 text-[14px] text-white leading-relaxed shadow-[0_4px_15px_rgba(255,45,142,0.2)]"
                                 : "rounded-2xl rounded-tl-none bg-surface border border-border-subtle px-4 py-3 text-[14px] text-white leading-relaxed backdrop-blur-md"
@@ -893,12 +914,12 @@ export default function CommandPage() {
                                         </div>
                                     </div>
                                 )}
-                                {m.options && m.options.length > 0 && (
+                                {!m.streaming && m.options && m.options.length > 0 && (
                                     <OptionButtons options={m.options} onAction={(prompt) => sendMessage(prompt)} />
                                 )}
 
                                 {/* Role confirmation reasons + next_actions */}
-                                {m.type === "role_confirmation" && (
+                                {!m.streaming && m.type === "role_confirmation" && (
                                     <div className="mt-3 space-y-2">
                                         {m.reasons && m.reasons.length > 0 && (
                                             <ul className="list-disc list-inside text-[13px] text-text-secondary space-y-0.5">

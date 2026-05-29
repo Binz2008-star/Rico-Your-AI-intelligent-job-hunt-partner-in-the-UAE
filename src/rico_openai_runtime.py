@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Generator, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -408,3 +408,81 @@ def call_openai_minimal(
     payload = _failure_payload(last_error, active_provider, primary_model, fallback_model)
     payload["profile_context_present"] = profile_present
     return payload
+
+
+def call_openai_stream(
+    user_message: str,
+    profile_context: Optional[str] = None,
+    *,
+    provider: Optional[str] = None,
+    conversation_history: Optional[list] = None,
+) -> Generator[str, None, None]:
+    """Stream text tokens from the active AI provider as they arrive.
+
+    Yields raw text chunks. The caller is responsible for SSE framing.
+    Falls back to yielding the full non-streamed text if streaming fails.
+    """
+    import re as _re
+    from src.rico_identity import get_rico_system_prompt
+
+    active_provider = _provider_name(provider)
+    primary_model, fallback_model = _provider_models(active_provider)
+
+    _arabic_re = _re.compile(r'[؀-ۿ]')
+    _user_lang = "ar" if _arabic_re.search(str(user_message or "")) else "en"
+    _lang_rule = (
+        "\n\nIMPORTANT: The user is writing in Arabic. You MUST reply entirely in Arabic. "
+        "Use natural, professional Gulf Arabic."
+        if _user_lang == "ar" else "\n\nReply in English."
+    )
+    system_prompt = get_rico_system_prompt() + _lang_rule
+
+    final_message = str(user_message or "")
+    if profile_context:
+        safe_context = str(profile_context)[:_PROFILE_CONTEXT_MAX_CHARS]
+        final_message = f"[User profile]\n{safe_context}\n\n[User message]\n{final_message}"
+
+    safe_history = (conversation_history or [])[:8]
+
+    try:
+        client = _build_client(active_provider)
+    except Exception:
+        result = call_openai_minimal(user_message, profile_context, provider=provider,
+                                     conversation_history=conversation_history)
+        yield result.get("text", "")
+        return
+
+    messages = [{"role": "system", "content": system_prompt}]
+    messages.extend(safe_history)
+    messages.append({"role": "user", "content": final_message})
+
+    model = primary_model
+    try:
+        if active_provider == "deepseek":
+            stream = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=_DEFAULT_MAX_OUTPUT_TOKENS,
+                stream=True,
+            )
+            for chunk in stream:
+                delta = chunk.choices[0].delta if chunk.choices else None
+                if delta and delta.content:
+                    yield delta.content
+        else:
+            # OpenAI Responses API streaming
+            stream = client.responses.create(
+                model=model,
+                input=messages,
+                max_output_tokens=_DEFAULT_MAX_OUTPUT_TOKENS,
+                stream=True,
+            )
+            for event in stream:
+                text = getattr(getattr(event, "delta", None), "text", None) or ""
+                if text:
+                    yield text
+    except Exception:
+        # Streaming failed — fall back to non-streaming
+        result = call_openai_minimal(user_message, profile_context, provider=provider,
+                                     conversation_history=conversation_history)
+        yield result.get("text", "")
