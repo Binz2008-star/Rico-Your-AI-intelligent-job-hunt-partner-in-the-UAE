@@ -63,22 +63,22 @@ export function DashboardShell({
             <AuraGlow aria-hidden="true" variant="cyan" position="bottom-right" className="animate-pulse-magenta" style={{ animationDelay: "-2s" }} />
             <TopNav />
 
-            <main className="relative z-10 mx-auto max-w-7xl px-container-padding-mobile pb-52 pt-36 md:px-container-padding-desktop md:pt-40">
-                <GlassPanel className="mb-8 rounded-[28px] border border-white/10 px-5 py-5 md:px-8 md:py-7">
+            <main className="relative z-10 mx-auto max-w-7xl px-container-padding-mobile pb-32 pt-36 md:px-container-padding-desktop md:pt-40 md:pb-40">
+                <GlassPanel className="mb-8 rounded-[28px] border border-border-subtle bg-surface/80 px-5 py-5 md:px-8 md:py-7">
                     <div className="flex flex-col gap-6">
                         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                             <div className="space-y-3">
-                                <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-on-surface-variant/70">
+                                <span className="inline-flex items-center gap-2 rounded-full border border-border-subtle bg-surface/50 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
                                     <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                                     Authenticated Workspace
                                 </span>
                                 {title && (
-                                    <h1 className="font-headline-xl text-headline-xl tracking-tight text-on-surface">
+                                    <h1 className="font-headline-xl text-headline-xl tracking-tight text-text-primary">
                                         {title}
                                     </h1>
                                 )}
                                 {subtitle && (
-                                    <p className="max-w-2xl text-body-md text-on-surface-variant">
+                                    <p className="max-w-2xl text-body-md text-text-secondary">
                                         {subtitle}
                                     </p>
                                 )}
@@ -88,7 +88,7 @@ export function DashboardShell({
                                 {actions}
                                 <Link
                                     href="/command"
-                                    className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-[12px] font-semibold text-primary transition-all hover:bg-primary/15"
+                                    className="inline-flex items-center gap-2 rounded-full border border-magenta/30 bg-magenta/10 px-4 py-2 text-[12px] font-semibold text-text-primary transition-all hover:bg-magenta/20"
                                 >
                                     <MaterialIcon icon="auto_awesome" size={16} />
                                     Command Center
@@ -97,7 +97,7 @@ export function DashboardShell({
                                     type="button"
                                     onClick={handleLogout}
                                     disabled={signingOut}
-                                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-[12px] font-semibold text-on-surface-variant transition-all hover:border-white/20 hover:text-on-surface disabled:opacity-50"
+                                    className="inline-flex items-center gap-2 rounded-full border border-border-subtle bg-surface/50 px-4 py-2 text-[12px] font-semibold text-text-secondary transition-all hover:bg-surface hover:text-text-primary disabled:opacity-50"
                                 >
                                     <MaterialIcon icon="logout" size={16} />
                                     {signingOut ? "Signing out..." : "Sign out"}
@@ -116,8 +116,8 @@ export function DashboardShell({
                                         className={cn(
                                             "inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-[11px] uppercase tracking-[0.14em] transition-all",
                                             active
-                                                ? "border-primary/35 bg-primary/12 text-on-surface shadow-[0_10px_30px_rgba(91,79,255,0.16)]"
-                                                : "border-white/8 bg-white/[0.02] text-on-surface-variant/75 hover:border-white/16 hover:text-on-surface"
+                                                ? "border-magenta/35 bg-magenta/12 text-text-primary shadow-[0_10px_30px_rgba(255,45,142,0.16)]"
+                                                : "border-border-subtle bg-surface/30 text-text-secondary hover:border-border-subtle hover:text-text-primary"
                                         )}
                                     >
                                         {route.icon ? <MaterialIcon icon={route.icon} size={15} /> : null}

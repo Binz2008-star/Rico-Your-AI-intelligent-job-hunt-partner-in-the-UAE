@@ -14,8 +14,7 @@ import {
     type SubscriptionPlan,
 } from "@/lib/api";
 import { buildWhatsAppManageUrl, buildWhatsAppUpgradeUrl, isManualBillingMode } from "@/lib/billing";
-import { useRouter } from "next/navigation";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 
 const SUBSCRIPTION_MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === "true";
@@ -100,17 +99,15 @@ function PlanCard({
 
     return (
         <div
-            className={`relative flex flex-col rounded-2xl border p-6 backdrop-blur-md overflow-hidden transition-all ${
-                plan.is_popular
-                    ? "border-[rgba(255,45,142,0.4)] bg-[#13132a]/60 shadow-[0_0_40px_rgba(255,45,142,0.08)]"
-                    : "border-white/[0.06] bg-[#13132a]/40"
-            }`}
+            className={`relative flex flex-col rounded-2xl border p-6 backdrop-blur-md overflow-hidden transition-all ${plan.is_popular
+                    ? "border-magenta/40 bg-surface/60 shadow-[0_0_40px_rgba(255,45,142,0.08)]"
+                    : "border-border-subtle bg-surface/40"
+                }`}
         >
             {/* Glow */}
             <div
-                className={`absolute -top-10 -right-10 w-36 h-36 blur-3xl rounded-full pointer-events-none ${
-                    plan.is_popular ? "bg-[#ff2d8e]/8" : "bg-[#5b4fff]/5"
-                }`}
+                className={`absolute -top-10 -right-10 w-36 h-36 blur-3xl rounded-full pointer-events-none ${plan.is_popular ? "bg-[#ff2d8e]/8" : "bg-[#5b4fff]/5"
+                    }`}
             />
 
             {/* Popular badge */}
@@ -132,32 +129,31 @@ function PlanCard({
             )}
 
             <div className={isCurrent ? "mt-8" : plan.is_popular ? "mt-6" : "mt-0"}>
-                <h2 className="text-[22px] font-bold text-white font-['Cabinet_Grotesk',sans-serif]">
+                <h2 className="text-[22px] font-bold text-text-primary font-['Cabinet_Grotesk',sans-serif]">
                     {plan.name}
                 </h2>
                 {plan.description && (
-                    <p className="mt-1 text-[13px] text-[#8080a0]">{plan.description}</p>
+                    <p className="mt-1 text-[13px] text-text-secondary">{plan.description}</p>
                 )}
             </div>
 
             <div className="mt-5 flex items-baseline gap-1">
-                <span className="text-[38px] font-black text-white leading-none">
+                <span className="text-[38px] font-black text-text-primary leading-none">
                     {plan.price_monthly}
                 </span>
-                <span className="text-[13px] text-[#5a5a7a] font-medium">
+                <span className="text-[13px] text-text-tertiary font-medium">
                     {plan.currency}/mo
                 </span>
             </div>
 
             <ul className="mt-6 flex flex-col gap-2.5 flex-1">
                 {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2.5 text-[13px] text-[#c0c0d8]">
+                    <li key={feature} className="flex items-start gap-2.5 text-[13px] text-text-secondary">
                         <span
-                            className={`mt-0.5 w-4 h-4 flex-shrink-0 rounded-full flex items-center justify-center text-[10px] font-black ${
-                                isProPlan
+                            className={`mt-0.5 w-4 h-4 flex-shrink-0 rounded-full flex items-center justify-center text-[10px] font-black ${isProPlan
                                     ? "bg-[rgba(255,45,142,0.2)] text-[#ff2d8e]"
                                     : "bg-[rgba(91,79,255,0.2)] text-[#7b6fff]"
-                            }`}
+                                }`}
                         >
                             ✓
                         </span>
@@ -188,14 +184,13 @@ function PlanCard({
                             href={buildWhatsAppUpgradeUrl(plan.plan)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-[13px] font-bold transition-all ${
-                                plan.is_popular
+                            className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-[13px] font-bold transition-all ${plan.is_popular
                                     ? "bg-[#ff2d8e] text-white hover:bg-[#ff4a9e] shadow-[0_0_20px_rgba(255,45,142,0.3)]"
                                     : "bg-[rgba(91,79,255,0.15)] text-[#7b6fff] border border-[rgba(91,79,255,0.35)] hover:bg-[rgba(91,79,255,0.25)]"
-                            }`}
+                                }`}
                         >
                             <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
                             </svg>
                             Continue on WhatsApp
                         </a>
@@ -203,11 +198,10 @@ function PlanCard({
                         <button
                             onClick={() => onUpgrade(plan.plan)}
                             disabled={anyCheckoutPending}
-                            className={`w-full py-3 rounded-xl text-[13px] font-bold transition-all disabled:opacity-40 ${
-                                plan.is_popular
+                            className={`w-full py-3 rounded-xl text-[13px] font-bold transition-all disabled:opacity-40 ${plan.is_popular
                                     ? "bg-[#ff2d8e] text-white hover:bg-[#ff4a9e] shadow-[0_0_20px_rgba(255,45,142,0.3)]"
                                     : "bg-[rgba(91,79,255,0.15)] text-[#7b6fff] border border-[rgba(91,79,255,0.35)] hover:bg-[rgba(91,79,255,0.25)]"
-                            }`}
+                                }`}
                         >
                             {loading ? (
                                 <span className="flex items-center justify-center gap-2">
@@ -222,11 +216,10 @@ function PlanCard({
                 ) : (
                     <a
                         href="/login"
-                        className={`block w-full py-3 rounded-xl text-center text-[13px] font-bold transition-all ${
-                            plan.is_popular
+                        className={`block w-full py-3 rounded-xl text-center text-[13px] font-bold transition-all ${plan.is_popular
                                 ? "bg-[rgba(255,45,142,0.15)] text-[#ff2d8e] border border-[rgba(255,45,142,0.35)] hover:bg-[rgba(255,45,142,0.25)]"
                                 : "bg-[rgba(91,79,255,0.1)] text-[#7b6fff] border border-[rgba(91,79,255,0.25)] hover:bg-[rgba(91,79,255,0.2)]"
-                        }`}
+                            }`}
                     >
                         Log in to upgrade
                     </a>
@@ -246,62 +239,62 @@ function PlanCard({
 }
 
 function CancelBanner() {
-  const params = useSearchParams();
-  const router = useRouter();
-  const [dismissed, setDismissed] = useState(false);
+    const params = useSearchParams();
+    const router = useRouter();
+    const [dismissed, setDismissed] = useState(false);
 
-  if (dismissed || params.get("checkout") !== "cancelled") return null;
+    if (dismissed || params.get("checkout") !== "cancelled") return null;
 
-  return (
-    <div className="flex items-start gap-3 rounded-xl border border-[rgba(245,166,35,0.35)] bg-[rgba(245,166,35,0.08)] px-5 py-4">
-      <span className="text-[#f5a623] text-[18px] mt-0.5">⚠</span>
-      <div>
-        <p className="text-[13px] font-semibold text-[#f5a623]">Checkout cancelled</p>
-        <p className="mt-0.5 text-[12px] text-[#a08040]">
-          No payment was made. You can try again whenever you&apos;re ready.
-        </p>
-      </div>
-      <button
-        onClick={() => {
-          setDismissed(true);
-          router.replace("/subscription");
-        }}
-        className="ml-auto text-[#a08040] hover:text-[#f5a623] text-[18px] leading-none flex-shrink-0"
-        aria-label="Dismiss"
-      >
-        ×
-      </button>
-    </div>
-  );
+    return (
+        <div className="flex items-start gap-3 rounded-xl border border-[rgba(245,166,35,0.35)] bg-[rgba(245,166,35,0.08)] px-5 py-4">
+            <span className="text-[#f5a623] text-[18px] mt-0.5">⚠</span>
+            <div>
+                <p className="text-[13px] font-semibold text-[#f5a623]">Checkout cancelled</p>
+                <p className="mt-0.5 text-[12px] text-[#a08040]">
+                    No payment was made. You can try again whenever you&apos;re ready.
+                </p>
+            </div>
+            <button
+                onClick={() => {
+                    setDismissed(true);
+                    router.replace("/subscription");
+                }}
+                className="ml-auto text-[#a08040] hover:text-[#f5a623] text-[18px] leading-none flex-shrink-0"
+                aria-label="Dismiss"
+            >
+                ×
+            </button>
+        </div>
+    );
 }
 
 function FreePlanRow({ currentPlan, isLoggedIn }: { currentPlan: string | null; isLoggedIn: boolean }) {
     const isCurrent = currentPlan === "free";
     return (
-        <div className="flex items-center justify-between rounded-xl border border-white/[0.05] bg-[#0d0d1f]/60 px-5 py-4">
+        <div className="flex items-center justify-between rounded-xl border border-border-subtle bg-surface/60 px-5 py-4">
             <div>
-                <span className="text-[13px] font-semibold text-[#c0c0d8]">Free</span>
-                <span className="ml-3 text-[12px] text-[#5a5a7a]">
+                <span className="text-[13px] font-semibold text-text-primary">Free</span>
+                <span className="ml-3 text-[12px] text-text-tertiary">
                     50 AI messages · 10 saved jobs · 1 profile optimisation/mo
                 </span>
             </div>
             <div className="flex items-center gap-3">
                 {isCurrent && (
-                    <span className="text-[11px] font-bold uppercase tracking-widest text-[#5a5a7a] border border-white/[0.08] rounded-full px-3 py-1">
+                    <span className="text-[11px] font-bold uppercase tracking-widest text-text-tertiary border border-border-subtle rounded-full px-3 py-1">
                         Current
                     </span>
                 )}
                 {isCurrent && isLoggedIn ? (
                     <a
                         href="/command"
-                        className="text-[12px] font-semibold text-[#7b6fff] hover:underline whitespace-nowrap"
+                        className="text-[12px] font-semibold text-primary hover:underline whitespace-nowrap"
                     >
                         Open Rico →
                     </a>
                 ) : !isLoggedIn ? (
                     <a
                         href="/signup"
-                        className="text-[12px] font-semibold text-[#7b6fff] hover:underline whitespace-nowrap"
+                        className="text-[12px] font-semibold text-primary hover:underline whitespace-nowrap"
                     >
                         Sign up free →
                     </a>
@@ -447,9 +440,9 @@ export default function SubscriptionPage() {
                                 </p>
                             </div>
                         </div>
-                        <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 px-5 py-4">
-                            <p className="text-[13px] font-semibold text-white">Subscription status unavailable</p>
-                            <p className="mt-1 text-[12px] text-[#8080a0]">
+                        <div className="rounded-xl border border-border-subtle bg-surface/40 px-5 py-4">
+                            <p className="text-[13px] font-semibold text-text-primary">Subscription status unavailable</p>
+                            <p className="mt-1 text-[12px] text-text-secondary">
                                 Plan cards below are static reference information. Activation is disabled until the backend returns.
                             </p>
                         </div>
@@ -525,7 +518,7 @@ export default function SubscriptionPage() {
                         {[0, 1].map((i) => (
                             <div
                                 key={i}
-                                className="h-72 rounded-2xl bg-[#13132a]/40 border border-white/[0.04] animate-pulse"
+                                className="h-72 rounded-2xl bg-surface/40 border border-border-subtle animate-pulse"
                             />
                         ))}
                     </div>
@@ -569,35 +562,35 @@ export default function SubscriptionPage() {
 
                 {/* FAQ Section */}
                 <div className="mt-12">
-                    <h3 className="text-[18px] font-semibold text-white mb-6">Frequently Asked Questions</h3>
+                    <h3 className="text-[18px] font-semibold text-text-primary mb-6">Frequently Asked Questions</h3>
                     <div className="space-y-4">
-                        <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 p-5">
-                            <h4 className="text-[14px] font-semibold text-white mb-2">How does upgrading work?</h4>
-                            <p className="text-[13px] text-[#5a5a7a]">
+                        <div className="rounded-xl border border-border-subtle bg-surface/40 p-5">
+                            <h4 className="text-[14px] font-semibold text-text-primary mb-2">How does upgrading work?</h4>
+                            <p className="text-[13px] text-text-tertiary">
                                 {MANUAL_BILLING
                                     ? "Click the WhatsApp button on your chosen plan. Send us your Rico account email and preferred plan. We'll confirm your payment and activate your account within a few hours."
                                     : "Click Upgrade to be taken to secure checkout. After payment your plan activates immediately."}
                             </p>
                         </div>
-                        <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 p-5">
-                            <h4 className="text-[14px] font-semibold text-white mb-2">What payment methods are accepted?</h4>
-                            <p className="text-[13px] text-[#5a5a7a]">
+                        <div className="rounded-xl border border-border-subtle bg-surface/40 p-5">
+                            <h4 className="text-[14px] font-semibold text-text-primary mb-2">What payment methods are accepted?</h4>
+                            <p className="text-[13px] text-text-tertiary">
                                 {MANUAL_BILLING
                                     ? "We accept bank transfer, Ziina, and Mamo. After payment, send the receipt and your Rico account email via WhatsApp for activation."
                                     : "We accept all major credit and debit cards. Your payment is securely processed and card details are never stored on our servers."}
                             </p>
                         </div>
-                        <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 p-5">
-                            <h4 className="text-[14px] font-semibold text-white mb-2">How quickly is my account activated?</h4>
-                            <p className="text-[13px] text-[#5a5a7a]">
+                        <div className="rounded-xl border border-border-subtle bg-surface/40 p-5">
+                            <h4 className="text-[14px] font-semibold text-text-primary mb-2">How quickly is my account activated?</h4>
+                            <p className="text-[13px] text-text-tertiary">
                                 {MANUAL_BILLING
                                     ? "After we receive your payment confirmation via WhatsApp, your Rico account is activated within a few hours. You will need to logout and log back in if premium access does not appear immediately."
                                     : "Activation is immediate after successful payment."}
                             </p>
                         </div>
-                        <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 p-5">
-                            <h4 className="text-[14px] font-semibold text-white mb-2">Can I change or cancel my plan?</h4>
-                            <p className="text-[13px] text-[#5a5a7a]">
+                        <div className="rounded-xl border border-border-subtle bg-surface/40 p-5">
+                            <h4 className="text-[14px] font-semibold text-text-primary mb-2">Can I change or cancel my plan?</h4>
+                            <p className="text-[13px] text-text-tertiary">
                                 {MANUAL_BILLING
                                     ? "Contact Rico support via WhatsApp to adjust or cancel your subscription. Your access continues until the end of your current period."
                                     : "You can upgrade, downgrade, or cancel at any time through the subscription management portal. When cancelling, access continues until the end of the billing period."}
@@ -607,7 +600,7 @@ export default function SubscriptionPage() {
                 </div>
 
                 {/* Footer note */}
-                <p className="text-[11px] text-[#5a5a7a] text-center">
+                <p className="text-[11px] text-text-tertiary text-center">
                     Prices in AED. Billed monthly. Cancel any time.
                 </p>
             </div>

@@ -1,8 +1,6 @@
 "use client";
 
-import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { MobileControls } from "@/components/MobileControls";
-import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTranslation } from "@/lib/translations";
 import { MotionConfig, motion } from "framer-motion";
@@ -150,13 +148,7 @@ export default function LandingPage() {
                         </span>
                     </Link>
                     <nav className="flex items-center gap-3">
-                        <div className="sm:hidden">
-                            <MobileControls />
-                        </div>
-                        <div className="hidden sm:flex items-center gap-2">
-                            <LanguageSwitcher />
-                            <ThemeSwitcher />
-                        </div>
+                        <MobileControls />
                         <Link
                             href="/login"
                             className="text-sm text-text-secondary transition-colors hover:text-text-primary hidden sm:block"
