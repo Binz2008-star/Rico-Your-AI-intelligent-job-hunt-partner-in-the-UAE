@@ -50,6 +50,9 @@ export const metadata: Metadata = {
         statusBarStyle: "black-translucent",
         title: "Rico",
     },
+    other: {
+        "mobile-web-app-capable": "yes",
+    },
     icons: {
         icon: [{ url: "/icon.svg" }],
         apple: [{ url: "/apple-touch-icon.svg" }], // TODO: Convert to PNG for iOS Safari compatibility

@@ -1,5 +1,6 @@
 'use client';
 
+import { MobileControls } from '@/components/MobileControls';
 import { AuraGlow } from '@/components/ui/AuraGlow';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
