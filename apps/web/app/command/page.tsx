@@ -3,6 +3,7 @@
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, RicoOption, UploadCVResponse } from "@/lib/api";
 import { confirmCVProfile, fetchMe, logout, sendChat, sendChatPublic, uploadCV } from "@/lib/api";
 import { buildAuthHref } from "@/lib/redirect";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -599,6 +600,7 @@ export default function CommandPage() {
                     Rico<span className="text-magenta">.ai</span>
                 </Link>
                 <div className="flex items-center gap-2 sm:gap-3">
+                    <ThemeToggle />
                     {chatAudience === "authenticated" ? (
                         <>
                             <Link href="/dashboard" className="hidden sm:block text-[13px] text-text-muted hover:text-white transition-colors">Dashboard</Link>
