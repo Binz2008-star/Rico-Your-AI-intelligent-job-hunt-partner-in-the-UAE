@@ -15,7 +15,7 @@
 
 :root {
   /* ---- Rico AI Design System Tokens (NEW) ---- */
-  
+
   /* Canvas (true black) */
   --rico-bg:                #000000;
   --rico-surface:           #131313;
@@ -121,7 +121,7 @@
   --dur-velocity: 700ms;
 
   /* ---- BACKWARD-COMPATIBLE ALIASES (for existing code) ---- */
-  
+
   /* Focus ring - cyan accent */
   --focus-ring-offset: 3px;
   --focus-ring-width: 3px;
@@ -135,6 +135,72 @@
   --surface: #0a0a0f;
 }
 
+/* Light theme overrides */
+.light {
+  /* Canvas (light gray/white) */
+  --rico-bg: #ffffff;
+  --rico-surface: #f5f5f7;
+  --rico-surface-low: #fafafa;
+  --rico-surface-high: #e8e8ed;
+  --rico-surface-highest: #d1d1d6;
+  --rico-surface-lowest: #f2f2f7;
+  --rico-surface-glass: rgba(0, 0, 0, 0.03);
+
+  /* Brand: Primary (magenta - slightly darker for light bg) */
+  --rico-primary: #d81b60;
+  --rico-primary-container: #ff4895;
+  --rico-primary-fixed: #ff80ab;
+  --rico-primary-fixed-dim: #d81b60;
+  --rico-on-primary: #ffffff;
+  --rico-on-primary-container: #3a001c;
+  --rico-glow-magenta: rgba(216, 27, 96, 0.12);
+  --rico-magenta-glow: rgba(216, 27, 96, 0.4);
+
+  /* Brand: Secondary (cyan - slightly darker for light bg) */
+  --rico-secondary: #0097a7;
+  --rico-secondary-dim: #00bcd4;
+  --rico-secondary-container: #00e5ff;
+  --rico-secondary-fixed: #4dd0e1;
+  --rico-on-secondary: #ffffff;
+  --rico-on-secondary-container: #00363d;
+  --rico-glow-cyan: rgba(0, 151, 167, 0.12);
+  --rico-cyan-glow: rgba(0, 188, 212, 0.5);
+
+  /* Foreground (dark text for light bg) */
+  --rico-fg-1: #1c1c1e;
+  --rico-fg-2: #3c3c43;
+  --rico-fg-muted: #636366;
+  --rico-fg-3: rgba(60, 60, 67, 0.6);
+  --rico-fg-4: rgba(60, 60, 67, 0.4);
+  --rico-fg-5: rgba(28, 28, 30, 0.16);
+
+  --rico-outline: #8e8e93;
+  --rico-outline-variant: #c7c7cc;
+  --rico-tertiary: #636366;
+  --rico-tertiary-dim: #aeaeb2;
+
+  /* Borders (dark at low alpha for light bg) */
+  --rico-stroke-top: rgba(0, 0, 0, 0.08);
+  --rico-stroke-left: rgba(0, 0, 0, 0.04);
+  --rico-border-subtle: rgba(0, 0, 0, 0.05);
+  --rico-border-soft: rgba(0, 0, 0, 0.08);
+  --rico-border-medium: rgba(0, 0, 0, 0.12);
+
+  /* Semantic */
+  --rico-error: #ff3b30;
+  --rico-error-bg: rgba(255, 59, 48, 0.1);
+  --rico-success: #34c759;
+  --rico-success-bg: rgba(52, 199, 89, 0.1);
+
+  /* Legacy aliases for light mode */
+  --magenta: #d81b60;
+  --magenta-glow: rgba(216, 27, 96, 0.2);
+  --cyan: #0097a7;
+  --cyan-glow: rgba(0, 151, 167, 0.2);
+  --pure-black: #ffffff;
+  --surface: #f5f5f7;
+}
+
 html,
 body {
     /* Pure black global canvas per DESIGN.md */
@@ -146,6 +212,16 @@ body {
     font-family: var(--font-ibm-plex-sans), system-ui, sans-serif;
     height: 100%;
     overflow-x: hidden;
+}
+
+/* Light mode body override */
+.light html,
+.light body {
+    background:
+        radial-gradient(circle at top left, rgba(216, 27, 96, 0.06) 0%, transparent 38%),
+        radial-gradient(circle at bottom right, rgba(0, 151, 167, 0.05) 0%, transparent 32%),
+        #ffffff;
+    color: #1c1c1e;
 }
 
 #root,
