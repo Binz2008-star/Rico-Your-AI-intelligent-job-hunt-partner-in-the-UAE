@@ -78,7 +78,7 @@ function buildProxyUrl(path: string, params?: Record<string, unknown>): string {
   return query ? `${url}?${query}` : url;
 }
 
-async function requestJson<T>(
+export async function requestJson<T>(
   path: string,
   init: RequestInit = {},
   params?: Record<string, unknown>,

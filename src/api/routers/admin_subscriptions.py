@@ -15,6 +15,7 @@ from pydantic import BaseModel, EmailStr
 
 from src.api.deps import require_admin
 from src.db import get_subscription_intents
+from src.repositories.users_repo import list_active_users
 
 logger = logging.getLogger(__name__)
 
@@ -108,3 +109,23 @@ def list_upgrade_intents(
 ) -> List[Dict[str, Any]]:
     """Return recent subscription upgrade intents for lead tracking."""
     return get_subscription_intents(limit=limit)
+
+
+@router.get("/users")
+def list_recent_signups(
+    limit: int = Query(default=100, le=500),
+    _admin: str = Depends(require_admin),
+) -> List[Dict[str, Any]]:
+    """Return recent signups for admin lead view."""
+    users = list_active_users()
+    result = []
+    for u in users[-limit:]:
+        result.append({
+            "id": u.id,
+            "email": u.email,
+            "role": u.role,
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+            "last_login_at": u.last_login_at.isoformat() if u.last_login_at else None,
+        })
+    result.sort(key=lambda x: x["created_at"] or "", reverse=True)
+    return result
