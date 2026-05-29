@@ -1,5 +1,4 @@
-import { AppProviders } from "@/components/AppProviders";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans, Sora, Space_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -24,58 +23,42 @@ const spaceMono = Space_Mono({
     display: "swap",
 });
 
-const projectTitle = "Rico: Your AI-intelligent job hunt partner in the UAE";
-const projectDescription =
-    "Rico helps UAE job seekers turn their CV into smarter job matches, clearer next steps, and a more focused job hunt.";
-
 export const metadata: Metadata = {
     metadataBase: new URL(
         process.env.NEXT_PUBLIC_APP_URL ||
         process.env.NEXT_PUBLIC_SITE_URL ||
-        "http://localhost:3000",
+        "http://localhost:3000"
     ),
-    title: projectTitle,
-    description: projectDescription,
+    title: "Rico AI — Autonomous Career Trajectory Intelligence",
+    description: "Cinematic career intelligence system. Memory-weighted trajectory mapping, command-centered orchestration, and opportunity momentum analysis for autonomous career evolution.",
     alternates: { canonical: "/" },
-    viewport: {
-        width: "device-width",
-        initialScale: 1,
-    },
-    themeColor: "#000000",
-    manifest: "/manifest.webmanifest",
-    appleWebApp: {
-        capable: true,
-        statusBarStyle: "black-translucent",
-        title: "Rico",
-    },
-    icons: {
-        icon: [{ url: "/icon.svg" }],
-        apple: [{ url: "/apple-touch-icon.svg" }], // TODO: Convert to PNG for iOS Safari compatibility
-    },
     openGraph: {
-        title: projectTitle,
-        description: projectDescription,
+        title: "Rico AI — Autonomous Career Trajectory Intelligence",
+        description: "The future of career intelligence. Memory-weighted trajectory mapping, command-centered orchestration, and opportunity momentum analysis.",
         type: "website",
-        siteName: "Rico",
+        siteName: "Rico AI",
     },
     twitter: {
         card: "summary",
-        title: projectTitle,
-        description: projectDescription,
+        title: "Rico AI — Autonomous Career Trajectory Intelligence",
+        description: "The future of career intelligence. Memory-weighted trajectory mapping, command-centered orchestration, and opportunity momentum analysis.",
     },
 };
 
-export default function RootLayout({
-    children,
-}: {
-    children: React.ReactNode;
-}) {
+// viewport-fit=cover is required for env(safe-area-inset-*) to resolve on notched /
+// installed-PWA devices; the floating navs and command input rely on it.
+export const viewport: Viewport = {
+    width: "device-width",
+    initialScale: 1,
+    viewportFit: "cover",
+    themeColor: "#000000",
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
         <html lang="en" className="dark">
-            <body
-                className={`${ibmPlexSans.variable} ${sora.variable} ${spaceMono.variable} antialiased bg-background text-text-primary font-body overflow-x-hidden`}
-            >
-                <AppProviders>{children}</AppProviders>
+            <body className={`${ibmPlexSans.variable} ${sora.variable} ${spaceMono.variable} antialiased bg-background text-text-primary font-body overflow-x-hidden`}>
+                {children}
             </body>
         </html>
     );

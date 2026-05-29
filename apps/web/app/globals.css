@@ -2,203 +2,29 @@
 @tailwind components;
 @tailwind utilities;
 
-/* =========================================================================
- * Rico AI Design System — Design Tokens
- *
- * Source: Rico AI Design System package (colors_and_type.css)
- * Version: Phase 1 — Token introduction only
- *
- * Brand: Cinematic Intelligence on a true-black canvas.
- * Two brand colors — soft pink primary, icy cyan secondary.
- * IBM Plex Sans exclusively.
- * ========================================================================= */
+/* Rico AI Cinematic Design System v2
+ * Based on DESIGN.md spec: pure black + magenta + cyan
+ */
 
 :root {
-  /* ---- Rico AI Design System Tokens (NEW) ---- */
+    /* Lock the app to dark until a real theme system ships. This renders native
+       browser UI (form controls, scrollbars, autofill) dark and prevents white
+       flashes on the black canvas. Do not add a light theme without the audit. */
+    color-scheme: dark;
 
-  /* Canvas (true black) */
-  --rico-bg:                #000000;
-  --rico-surface:           #131313;
-  --rico-surface-low:       #1b1b1b;
-  --rico-surface-high:      #2a2a2a;
-  --rico-surface-highest:   #353535;
-  --rico-surface-lowest:    #0e0e0e;
-  --rico-surface-glass:     rgba(255, 255, 255, 0.03);
+    /* Focus ring - cyan accent */
+    --focus-ring: #00e5ff;
+    --focus-ring-shadow: rgba(0, 229, 255, 0.16);
+    --focus-ring-offset: 3px;
+    --focus-ring-width: 3px;
 
-  /* Brand: Primary (soft pink → hot magenta) */
-  --rico-primary:           #ffb1c8;
-  --rico-primary-container: #ff4895;
-  --rico-primary-fixed:     #ffd9e2;
-  --rico-primary-fixed-dim: #ffb1c8;
-  --rico-on-primary:        #650032;
-  --rico-on-primary-container: #58002c;
-  --rico-glow-magenta:      rgba(255, 45, 142, 0.08);
-  --rico-magenta-glow:      rgba(255, 177, 200, 0.5);
-
-  /* Brand: Secondary (icy cyan → active cyan) */
-  --rico-secondary:         #bef4ff;
-  --rico-secondary-dim:     #00daf3;
-  --rico-secondary-container: #01e3fd;
-  --rico-secondary-fixed:   #9cefff;
-  --rico-on-secondary:      #00363d;
-  --rico-on-secondary-container: #00616d;
-  --rico-glow-cyan:         rgba(0, 227, 253, 0.08);
-  --rico-cyan-glow:         rgba(0, 218, 243, 0.6);
-
-  /* Foreground */
-  --rico-fg-1:              #e2e2e2;
-  --rico-fg-2:              #e2bdc6;
-  --rico-fg-muted:          #e2bdc6;
-  --rico-fg-3:              rgba(226, 189, 198, 0.6);
-  --rico-fg-4:              rgba(226, 189, 198, 0.4);
-  --rico-fg-5:              rgba(226, 226, 226, 0.16);
-
-  --rico-outline:           #aa8891;
-  --rico-outline-variant:   #5a3f47;
-  --rico-tertiary:          #c6c6c7;
-  --rico-tertiary-dim:      #909192;
-
-  /* Borders (white at low alpha — for glass strokes) */
-  --rico-stroke-top:        rgba(255, 255, 255, 0.10);
-  --rico-stroke-left:       rgba(255, 255, 255, 0.05);
-  --rico-border-subtle:     rgba(255, 255, 255, 0.05);
-  --rico-border-soft:       rgba(255, 255, 255, 0.10);
-  --rico-border-medium:     rgba(255, 255, 255, 0.16);
-
-  /* Semantic */
-  --rico-error:             #ffb4ab;
-  --rico-error-bg:          rgba(255, 180, 171, 0.08);
-  --rico-success:           #6bdba6;
-  --rico-success-bg:        rgba(107, 219, 166, 0.08);
-
-  /* Type */
-  --font-display:           'IBM Plex Sans', system-ui, sans-serif;
-  --font-body:              'IBM Plex Sans', system-ui, sans-serif;
-  --font-icon:              'Material Symbols Outlined';
-
-  --t-hero:                 128px;
-  --t-headline-xl:          64px;
-  --t-headline-lg:          40px;
-  --t-headline-md:          32px;
-  --t-body-lg:              18px;
-  --t-body-md:              16px;
-  --t-body-sm:              14px;
-  --t-label:                12px;
-  --t-micro:                10px;
-
-  /* Spacing */
-  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
-  --space-6: 24px; --space-8: 32px; --space-10: 40px; --space-12: 48px;
-  --space-16: 64px; --space-20: 80px; --space-32: 128px;
-  --space-section: 160px;
-  --container-max: 1440px;
-  --container-pad-mobile: 24px;
-  --container-pad-desktop: 120px;
-
-  /* Radius */
-  --r-default: 2px;
-  --r-lg:      4px;
-  --r-xl:      8px;
-  --r-pill:    12px;
-  --r-full:    9999px;
-
-  /* Shadow */
-  --shadow-dock:        0 24px 60px rgba(0, 0, 0, 0.6);
-  --shadow-fab:         0 12px 40px rgba(255, 255, 255, 0.10), 0 4px 16px rgba(0, 0, 0, 0.5);
-  --shadow-glow-cyan:   0 0 10px rgba(0, 218, 243, 0.6);
-  --shadow-glow-magenta:0 0 10px rgba(255, 177, 200, 0.6);
-  --shadow-track-cyan:  0 0 15px #00daf3;
-
-  /* Focus */
-  --focus-ring:         #00daf3;
-  --focus-ring-shadow:  rgba(0, 218, 243, 0.16);
-
-  /* Motion */
-  --ease-out:   cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-soft:  cubic-bezier(0.4, 0, 0.6, 1);
-  --dur-hover:  300ms;
-  --dur-state:  500ms;
-  --dur-velocity: 700ms;
-
-  /* ---- BACKWARD-COMPATIBLE ALIASES (for existing code) ---- */
-
-  /* Focus ring - cyan accent */
-  --focus-ring-offset: 3px;
-  --focus-ring-width: 3px;
-
-  /* Cinematic color tokens (legacy aliases) */
-  --magenta: #ff2d8e;
-  --magenta-glow: rgba(255, 45, 142, 0.3);
-  --cyan: #00e5ff;
-  --cyan-glow: rgba(0, 229, 255, 0.3);
-  --pure-black: #000000;
-  --surface: #0a0a0f;
-}
-
-/* Light theme overrides */
-.light {
-  /* Canvas (light gray/white) */
-  --rico-bg: #ffffff;
-  --rico-surface: #f5f5f7;
-  --rico-surface-low: #fafafa;
-  --rico-surface-high: #e8e8ed;
-  --rico-surface-highest: #d1d1d6;
-  --rico-surface-lowest: #f2f2f7;
-  --rico-surface-glass: rgba(0, 0, 0, 0.03);
-
-  /* Brand: Primary (magenta - slightly darker for light bg) */
-  --rico-primary: #d81b60;
-  --rico-primary-container: #ff4895;
-  --rico-primary-fixed: #ff80ab;
-  --rico-primary-fixed-dim: #d81b60;
-  --rico-on-primary: #ffffff;
-  --rico-on-primary-container: #3a001c;
-  --rico-glow-magenta: rgba(216, 27, 96, 0.12);
-  --rico-magenta-glow: rgba(216, 27, 96, 0.4);
-
-  /* Brand: Secondary (cyan - slightly darker for light bg) */
-  --rico-secondary: #0097a7;
-  --rico-secondary-dim: #00bcd4;
-  --rico-secondary-container: #00e5ff;
-  --rico-secondary-fixed: #4dd0e1;
-  --rico-on-secondary: #ffffff;
-  --rico-on-secondary-container: #00363d;
-  --rico-glow-cyan: rgba(0, 151, 167, 0.12);
-  --rico-cyan-glow: rgba(0, 188, 212, 0.5);
-
-  /* Foreground (dark text for light bg) */
-  --rico-fg-1: #1c1c1e;
-  --rico-fg-2: #3c3c43;
-  --rico-fg-muted: #636366;
-  --rico-fg-3: rgba(60, 60, 67, 0.6);
-  --rico-fg-4: rgba(60, 60, 67, 0.4);
-  --rico-fg-5: rgba(28, 28, 30, 0.16);
-
-  --rico-outline: #8e8e93;
-  --rico-outline-variant: #c7c7cc;
-  --rico-tertiary: #636366;
-  --rico-tertiary-dim: #aeaeb2;
-
-  /* Borders (dark at low alpha for light bg) */
-  --rico-stroke-top: rgba(0, 0, 0, 0.08);
-  --rico-stroke-left: rgba(0, 0, 0, 0.04);
-  --rico-border-subtle: rgba(0, 0, 0, 0.05);
-  --rico-border-soft: rgba(0, 0, 0, 0.08);
-  --rico-border-medium: rgba(0, 0, 0, 0.12);
-
-  /* Semantic */
-  --rico-error: #ff3b30;
-  --rico-error-bg: rgba(255, 59, 48, 0.1);
-  --rico-success: #34c759;
-  --rico-success-bg: rgba(52, 199, 89, 0.1);
-
-  /* Legacy aliases for light mode */
-  --magenta: #d81b60;
-  --magenta-glow: rgba(216, 27, 96, 0.2);
-  --cyan: #0097a7;
-  --cyan-glow: rgba(0, 151, 167, 0.2);
-  --pure-black: #ffffff;
-  --surface: #f5f5f7;
+    /* Cinematic color tokens */
+    --magenta: #ff2d8e;
+    --magenta-glow: rgba(255, 45, 142, 0.3);
+    --cyan: #00e5ff;
+    --cyan-glow: rgba(0, 229, 255, 0.3);
+    --pure-black: #000000;
+    --surface: #0a0a0f;
 }
 
 html,
@@ -214,16 +40,6 @@ body {
     overflow-x: hidden;
 }
 
-/* Light mode body override */
-.light html,
-.light body {
-    background:
-        radial-gradient(circle at top left, rgba(216, 27, 96, 0.06) 0%, transparent 38%),
-        radial-gradient(circle at bottom right, rgba(0, 151, 167, 0.05) 0%, transparent 32%),
-        #ffffff;
-    color: #1c1c1e;
-}
-
 #root,
 body>div:first-child {
     height: 100%;
@@ -231,7 +47,6 @@ body>div:first-child {
 
 /* Glass panel utility */
 .glass-panel {
-    position: relative;
     backdrop-filter: blur(36px);
     background:
         linear-gradient(180deg, rgba(19, 19, 42, 0.78) 0%, rgba(10, 10, 24, 0.7) 100%);
@@ -239,20 +54,6 @@ body>div:first-child {
     box-shadow:
         0 20px 60px rgba(5, 5, 16, 0.28),
         inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-.glass-panel::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    padding: 1px;
-    background: linear-gradient(135deg, rgba(255, 45, 142, 0.18), rgba(0, 229, 255, 0.12), transparent 58%);
-    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    mask-composite: exclude;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 240ms ease;
 }
 
 .glass-island {
@@ -264,81 +65,6 @@ body>div:first-child {
     box-shadow:
         0 18px 45px rgba(5, 5, 16, 0.24),
         inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-
-/* Tight product-grade primitives */
-.rico-card {
-    position: relative;
-    overflow: hidden;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.025)),
-        radial-gradient(circle at 12% 0%, rgba(255, 45, 142, 0.08), transparent 34%),
-        radial-gradient(circle at 90% 12%, rgba(0, 229, 255, 0.07), transparent 30%),
-        rgba(10, 10, 15, 0.86);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow:
-        0 22px 70px rgba(0, 0, 0, 0.34),
-        inset 0 1px 0 rgba(255, 255, 255, 0.055);
-}
-
-.rico-card::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(135deg, rgba(255, 45, 142, 0.12), transparent 32%, rgba(0, 229, 255, 0.08));
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 240ms ease;
-}
-
-.rico-card:hover::after,
-.rico-card:focus-within::after,
-.glass-panel:hover::before,
-.glass-panel:focus-within::before {
-    opacity: 1;
-}
-
-.rico-kicker {
-    color: rgba(255, 255, 255, 0.52);
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-}
-
-.rico-muted {
-    color: rgba(255, 255, 255, 0.58);
-}
-
-.rico-divider {
-    border-color: rgba(255, 255, 255, 0.07);
-}
-
-.rico-chip {
-    background: rgba(255, 255, 255, 0.055);
-    border: 1px solid rgba(255, 255, 255, 0.075);
-    color: rgba(255, 255, 255, 0.68);
-}
-
-.rico-chip-accent {
-    background: rgba(255, 45, 142, 0.095);
-    border: 1px solid rgba(255, 45, 142, 0.22);
-    color: rgba(255, 191, 222, 0.96);
-}
-
-/* =========================================================================
- * Rico AI Design System — Animations
- * ========================================================================= */
-
-@keyframes rico-flicker {
-    0%, 100% {
-        opacity: 1;
-        transform: scale(1);
-    }
-    50% {
-        opacity: 0.4;
-        transform: scale(0.8);
-    }
 }
 
 /* Aura glow effects */
