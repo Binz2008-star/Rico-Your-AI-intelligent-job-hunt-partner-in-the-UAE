@@ -4,10 +4,7 @@ import { AuraGlow } from '@/components/ui/AuraGlow';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { PageTransition, StaggerChildren } from '@/components/ui/PageTransition';
-import { authApi } from '@/lib/api/auth';
-import { resendVerification } from '@/lib/api';
-import { ApiError } from '@/lib/api';
-import axios from 'axios';
+import { ApiError, register, resendVerification } from '@/lib/api';
 import Link from 'next/link';
 import React, { useState } from 'react';
 
@@ -20,21 +17,6 @@ function mapSignupError(err: unknown): { message: string; showLoginLink: boolean
             };
         }
         if (err.statusCode === 400 || err.statusCode === 422) {
-            return {
-                message: 'Please check your details and try again.',
-                showLoginLink: false,
-            };
-        }
-    }
-    if (axios.isAxiosError(err)) {
-        const status = err.response?.status;
-        if (status === 409) {
-            return {
-                message: 'This email is already registered. Please log in instead.',
-                showLoginLink: true,
-            };
-        }
-        if (status === 400 || status === 422) {
             return {
                 message: 'Please check your details and try again.',
                 showLoginLink: false,
@@ -65,7 +47,7 @@ export function SignupForm() {
         setError('');
         setShowLoginLink(false);
         try {
-            const result = await authApi.register({ email, password, name });
+            const result = await register(email, password);
             if (result.email_verification_required) {
                 setRegisteredEmail(result.email);
                 setVerificationSent(true);
