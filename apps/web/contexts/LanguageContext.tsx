@@ -15,15 +15,15 @@ const LanguageContext = createContext<LanguageContextType | undefined>(
 
 const LANGUAGE_STORAGE_KEY = "rico-language";
 
-function getStoredLanguage(): Language {
-    if (typeof window === "undefined") return "en";
+function getStoredLanguage(): Language | null {
+    if (typeof window === "undefined") return null;
     try {
         const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
         if (stored === "en" || stored === "ar") return stored;
     } catch (e) {
         // Ignore localStorage errors
     }
-    return "en";
+    return null;
 }
 
 function detectBrowserLanguage(): Language {
@@ -34,15 +34,15 @@ function detectBrowserLanguage(): Language {
 }
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-    const [language, setLanguageState] = useState<Language>(() => {
+    const [language, setLanguageState] = useState<Language>("en");
+
+    useEffect(() => {
+        // Initialize language from localStorage or browser detection on client mount
         const stored = getStoredLanguage();
-        // If there's a saved preference (en or ar), use it
-        if (stored === "en" || stored === "ar") {
-            return stored;
-        }
-        // Otherwise detect from browser
-        return detectBrowserLanguage();
-    });
+        const initialLanguage = stored ?? detectBrowserLanguage();
+        setLanguageState(initialLanguage);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const setLanguage = (newLanguage: Language) => {
         setLanguageState(newLanguage);
