@@ -1,4 +1,6 @@
 import { AppProviders } from "@/components/AppProviders";
+import { LanguageHtmlAttributes } from "@/components/LanguageHtmlAttributes";
+import { QADebugMarker } from "@/components/QADebugMarker";
 import type { Metadata } from "next";
 import { IBM_Plex_Sans, Sora, Space_Mono } from "next/font/google";
 import "./globals.css";
@@ -75,7 +77,11 @@ export default function RootLayout({
             <body
                 className={`${ibmPlexSans.variable} ${sora.variable} ${spaceMono.variable} antialiased bg-background text-text-primary font-body overflow-x-hidden`}
             >
-                <AppProviders>{children}</AppProviders>
+                <AppProviders>
+                    <LanguageHtmlAttributes />
+                    {children}
+                    <QADebugMarker />
+                </AppProviders>
             </body>
         </html>
     );

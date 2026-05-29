@@ -80,6 +80,11 @@ export default function UploadPage() {
             <AuraGlow variant="magenta" position="top-right" className="animate-pulse-magenta" />
             <AuraGlow variant="cyan" position="bottom-left" className="animate-pulse-magenta" style={{ animationDelay: '-2s' }} />
 
+            {/* Mobile Controls Header */}
+            <div className="fixed top-4 right-4 z-50 md:hidden">
+                <MobileControls />
+            </div>
+
             {/* Main Content */}
             <main className="relative z-10 w-full max-w-2xl px-container-padding-mobile md:px-container-padding-desktop">
                 {uploadComplete ? (

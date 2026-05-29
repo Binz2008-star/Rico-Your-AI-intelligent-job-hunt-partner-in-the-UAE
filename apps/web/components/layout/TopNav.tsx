@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React from 'react';
+import { MobileControls } from '../MobileControls';
 import { MaterialIcon } from '../ui/MaterialIcon';
 
 interface TopNavProps {
@@ -37,6 +38,9 @@ export const TopNav = React.forwardRef<HTMLElement, TopNavProps>(
                         </span>
                     </Link>
                     <div className="flex items-center gap-3">
+                        <div className="md:hidden">
+                            <MobileControls />
+                        </div>
                         <nav className="hidden md:flex items-center gap-2" aria-label="Primary navigation">
                             <Link
                                 href="/command"
@@ -70,7 +74,7 @@ export const TopNav = React.forwardRef<HTMLElement, TopNavProps>(
                         <Link
                             href="/profile"
                             aria-label="Profile"
-                            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-primary transition-all hover:border-primary/30 hover:bg-primary/10"
+                            className="hidden md:flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-primary transition-all hover:border-primary/30 hover:bg-primary/10"
                         >
                             <MaterialIcon icon="account_circle" />
                         </Link>
