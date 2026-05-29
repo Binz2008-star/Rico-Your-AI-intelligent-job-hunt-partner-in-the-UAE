@@ -34,15 +34,9 @@ function detectBrowserLanguage(): Language {
 }
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-    const [language, setLanguageState] = useState<Language>("en");
-
-    useEffect(() => {
-        // Initialize language from localStorage or browser detection on client mount
-        const stored = getStoredLanguage();
-        const initialLanguage = stored ?? detectBrowserLanguage();
-        setLanguageState(initialLanguage);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    const [language, setLanguageState] = useState<Language>(
+        () => getStoredLanguage() ?? "en"
+    );
 
     const setLanguage = (newLanguage: Language) => {
         setLanguageState(newLanguage);

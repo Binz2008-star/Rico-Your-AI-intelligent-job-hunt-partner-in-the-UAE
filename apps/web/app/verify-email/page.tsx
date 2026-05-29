@@ -16,18 +16,16 @@ function VerifyEmailContent() {
     const router = useRouter();
     const token = searchParams.get("token") ?? "";
 
-    const [status, setStatus] = useState<Status>("loading");
-    const [message, setMessage] = useState("");
+    const [status, setStatus] = useState<Status>(() => token ? "loading" : "error");
+    const [message, setMessage] = useState(() =>
+        token ? "" : "No verification token found. Please use the link from your email."
+    );
     const [resendEmail, setResendEmail] = useState("");
     const [resendLoading, setResendLoading] = useState(false);
     const [resendMessage, setResendMessage] = useState("");
 
     useEffect(() => {
-        if (!token) {
-            setStatus("error");
-            setMessage("No verification token found. Please use the link from your email.");
-            return;
-        }
+        if (!token) return;
 
         verifyEmail(token)
             .then(() => {

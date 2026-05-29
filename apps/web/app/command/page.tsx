@@ -497,7 +497,7 @@ export default function CommandPage() {
             setMessages([{ id: 1, role: "rico", text: "Hi, I'm Rico — your AI job-hunt partner in the UAE.\n\nUpload your CV and I'll find matching jobs, track your applications, and guide your next career move." }]);
         }, 0);
         return () => window.clearTimeout(timeoutId);
-    }, [chatAudience, prompt, sendMessage]);
+    }, [chatAudience, cvReady, prompt, sendMessage]);
 
     async function handleCVUpload(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
