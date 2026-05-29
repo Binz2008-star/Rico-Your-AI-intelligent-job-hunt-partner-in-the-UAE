@@ -45,6 +45,10 @@ interface Message {
     preview?: ProfilePreview;
     filename?: string;
     extractionQuality?: string;
+    // Job search metadata
+    search_query?: string;
+    result_count?: number;
+    broadened?: boolean;
 }
 
 type ChatAudience = "checking" | "authenticated" | "public";
@@ -403,9 +407,9 @@ export default function CommandPage() {
         setMessages((prev) => [...prev, { id: nextId(), role: "user", text: trimmed }]);
         setThinking(true);
         const lc = trimmed.toLowerCase();
-        if (lc.match(/\b(job|find|search|vacanc|opening|role|position|hiring)\b/)) {
+        if (lc.match(/\b(job|find|search|vacanc|opening|role|position|hiring|live jobs|live role)\b/)) {
             setOperationState({ state: "searching", message: "Searching UAE jobs…" });
-        } else if (lc.match(/\b(match|appli|track|status|applied|interview|offer)\b/)) {
+        } else if (lc.match(/\b(match|appli|track|status|applied|offer)\b/)) {
             setOperationState({ state: "searching", message: "Checking your matches…" });
         } else if (lc.match(/\b(career|next move|recommend|suggest|direction|trajectory|what should)\b/)) {
             setOperationState({ state: "extracting", message: "Preparing recommendations…" });
@@ -507,6 +511,9 @@ export default function CommandPage() {
                         roleName: res.role,
                         reasons: res.reasons,
                         next_actions: res.next_actions as NextAction[] | undefined,
+                        search_query: (res as Record<string, unknown>).search_query as string | undefined,
+                        result_count: (res as Record<string, unknown>).result_count as number | undefined,
+                        broadened: (res as Record<string, unknown>).broadened as boolean | undefined,
                     },
                 ]);
             }
@@ -770,35 +777,62 @@ export default function CommandPage() {
                     {messages.map((m, idx) => {
                         const prevMsg = messages[idx - 1];
                         const isFirstInGroup = !prevMsg || prevMsg.role !== m.role;
+                        const hasJobCards = m.type === "job_matches" && Array.isArray(m.matches) && m.matches.length > 0;
+                        const isStructured = m.type === "profile_preview" || hasJobCards;
+
                         return (
                         <div
                             key={m.id}
-                            className={`flex items-end gap-2 animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none ${m.role === "user" ? "justify-end" : "justify-start"
-                                }`}
+                            className={`flex animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none ${
+                                m.role === "user" ? "justify-end items-end gap-1.5" : "justify-start items-start gap-2"
+                            } ${isFirstInGroup ? "mt-3" : "mt-1"}`}
                         >
+                            {/* Rico avatar — only on first in group, aligned to top of bubble */}
                             {m.role === "rico" && (
                                 isFirstInGroup ? (
-                                    <div className="w-7 h-7 rounded-lg bg-[#f5a623] flex items-center justify-center text-[11px] font-black text-[#0a0a1a] shrink-0 mb-1 shadow-[0_2px_8px_rgba(245,166,35,0.3)]">
+                                    <div className="w-6 h-6 rounded-md bg-[#f5a623] flex items-center justify-center text-[10px] font-black text-[#0a0a1a] shrink-0 mt-0.5 shadow-[0_2px_6px_rgba(245,166,35,0.25)]" aria-hidden="true">
                                         R
                                     </div>
                                 ) : (
-                                    <div className="w-7 shrink-0" />
+                                    <div className="w-6 shrink-0" aria-hidden="true" />
                                 )
                             )}
-                            <div className={`max-w-[82%] ${m.role === "user"
-                                ? "rounded-2xl rounded-tr-none bg-magenta px-4 py-3 text-[14px] text-white leading-relaxed shadow-[0_4px_15px_rgba(255,45,142,0.2)]"
-                                : "rounded-2xl rounded-tl-none bg-surface border border-border-subtle px-4 py-3 text-[14px] text-white leading-relaxed backdrop-blur-md"
-                                }`}>
+
+                            <div className={`${isStructured ? "max-w-[92%] sm:max-w-[85%]" : "max-w-[78%] sm:max-w-[72%]"} ${
+                                m.role === "user"
+                                    ? "rounded-2xl rounded-tr-sm bg-magenta px-3.5 py-2.5 text-[14px] text-white leading-relaxed shadow-sm"
+                                    : isStructured
+                                        ? "rounded-xl bg-surface/60 border border-border-subtle p-3 text-[13px] text-white leading-relaxed backdrop-blur-sm"
+                                        : "rounded-2xl rounded-tl-sm bg-surface/50 border border-border-subtle/60 px-3.5 py-2.5 text-[14px] text-white leading-relaxed backdrop-blur-sm"
+                            }`}>
+
+                                {/* Search result summary bar */}
+                                {m.type === "job_matches" && (
+                                    <div className="flex items-center gap-2 mb-2 text-[10px] text-text-muted">
+                                        <span className="text-cyan">🔍</span>
+                                        <span>
+                                            Searched: <strong className="text-text-secondary">{m.search_query ?? "UAE jobs"}</strong>
+                                            {" · "}
+                                            {m.result_count != null
+                                                ? m.result_count === 0
+                                                    ? "No matches"
+                                                    : `${m.result_count} match${m.result_count === 1 ? "" : "es"}`
+                                                : "Results"}
+                                            {m.broadened && <span className="text-rico-amber"> · Broadened</span>}
+                                        </span>
+                                    </div>
+                                )}
+
                                 {/* Message text */}
                                 {m.text && (
                                     m.role === "rico"
-                                        ? <div className="space-y-0.5">{renderMarkdown(m.text)}</div>
+                                        ? <div className="space-y-0.5 text-[13px]">{renderMarkdown(m.text)}</div>
                                         : <div className="whitespace-pre-wrap">{m.text}</div>
                                 )}
 
                                 {/* Job match cards */}
                                 {m.matches && m.matches.length > 0 && (
-                                    <div className="mt-3">
+                                    <div className="mt-2 space-y-2">
                                         {m.matches.map((match, i) => (
                                             <JobMatchCard key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
                                         ))}
@@ -832,7 +866,6 @@ export default function CommandPage() {
                                 {m.type === "profile_preview" && editingProfileId === m.id && draftProfile && (
                                     <div className="mt-3 space-y-2 border-t border-border-soft pt-3">
                                         <p className="text-[11px] font-semibold text-magenta">Edit profile</p>
-
                                         {(
                                             [
                                                 ["name", "Name"],
@@ -852,7 +885,6 @@ export default function CommandPage() {
                                                 />
                                             </label>
                                         ))}
-
                                         <label className="block space-y-0.5">
                                             <span className="text-[10px] text-text-muted">Skills (comma-separated)</span>
                                             <input
@@ -866,7 +898,6 @@ export default function CommandPage() {
                                                 className="w-full rounded-lg bg-surface-subtle border border-border-soft px-3 py-1.5 text-[12px] text-white placeholder:text-text-muted focus:outline-none focus:border-magenta/60"
                                             />
                                         </label>
-
                                         <div className="flex gap-2 pt-1">
                                             <button
                                                 type="button"
@@ -893,6 +924,7 @@ export default function CommandPage() {
                                         </div>
                                     </div>
                                 )}
+
                                 {m.options && m.options.length > 0 && (
                                     <OptionButtons options={m.options} onAction={(prompt) => sendMessage(prompt)} />
                                 )}
@@ -901,7 +933,7 @@ export default function CommandPage() {
                                 {m.type === "role_confirmation" && (
                                     <div className="mt-3 space-y-2">
                                         {m.reasons && m.reasons.length > 0 && (
-                                            <ul className="list-disc list-inside text-[13px] text-text-secondary space-y-0.5">
+                                            <ul className="list-disc list-inside text-[12px] text-text-secondary space-y-0.5">
                                                 {m.reasons.map((r, i) => (
                                                     <li key={i}>{r}</li>
                                                 ))}
@@ -914,7 +946,7 @@ export default function CommandPage() {
                                                         type="button"
                                                         key={na.action}
                                                         onClick={() => sendMessage(na.message ?? na.label)}
-                                                        className="text-[12px] px-3 py-2 rounded-xl border border-magenta/30 text-magenta hover:bg-magenta-soft hover:border-magenta/60 transition-colors rico-focus-strong"
+                                                        className="text-[11px] px-3 py-1.5 rounded-xl border border-magenta/30 text-magenta hover:bg-magenta-soft hover:border-magenta/60 transition-colors rico-focus-strong"
                                                     >
                                                         {na.label}
                                                     </button>
@@ -923,13 +955,7 @@ export default function CommandPage() {
                                         )}
                                     </div>
                                 )}
-
                             </div>
-                            {m.role === "user" && (
-                                <div className="w-6 h-6 rounded-full bg-surface-subtle flex items-center justify-center text-[10px] font-medium text-text-secondary shrink-0 mb-1">
-                                    You
-                                </div>
-                            )}
                         </div>
                         );
                     })}

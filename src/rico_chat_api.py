@@ -1163,6 +1163,8 @@ class RicoChatAPI:
             "operation_status": "completed",
             "operation_type": "job_search",
             "result_count": len(formatted),
+            "search_query": search_role,
+            "broadened": len(all_matches) == 0,
         }
 
         if role_intelligence_data:
@@ -1260,7 +1262,7 @@ class RicoChatAPI:
             role_names = [r["role"] for r in adjacent[:3]]
             base_message += f" Your CV is also strong for {', '.join(role_names)} roles. I'll search those too if needed."
         elif not top_matches:
-            base_message += " I did not find strong matches yet, so I will keep scanning and use this profile for future matches."
+            base_message += " No live matches found right now. I've saved this as your target role — you can run this search again anytime."
 
         return prefix + base_message
 
