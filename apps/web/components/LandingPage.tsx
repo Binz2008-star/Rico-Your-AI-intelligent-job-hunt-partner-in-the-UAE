@@ -12,26 +12,62 @@ const intelligenceLoop = [
   "Telegram and job alerts",
 ];
 
-const howItWorks = [
+// The core product story, told as one continuous flow. Each step names a concrete
+// outcome so a first-time visitor understands the whole loop in a single glance.
+const productFlow = [
   {
-    eyebrow: "01",
-    title: "Upload your CV",
-    body: "Rico reads your history first, then builds a private career profile without a setup wizard.",
+    step: "01",
+    title: "CV Upload",
+    body: "Drop your CV. No wizard, no long forms — your history is the starting point.",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M12 16V4M12 4 8 8M12 4l4 4" />
+        <path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />
+      </svg>
+    ),
   },
   {
-    eyebrow: "02",
-    title: "Profile intelligence forms",
-    body: "Skills, trajectory, seniority, preferences, compensation signals, and gaps become structured memory.",
+    step: "02",
+    title: "Profile Intelligence",
+    body: "Rico extracts skills, seniority, and trajectory into a living career profile.",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 21a8 8 0 0 1 16 0" />
+      </svg>
+    ),
   },
   {
-    eyebrow: "03",
-    title: "The market is filtered",
-    body: "Roles are ranked by fit, timing, momentum, and what Rico already knows about your direction.",
+    step: "03",
+    title: "Job Matches",
+    body: "Relevant UAE roles are ranked by real fit — not keyword spam from job boards.",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" />
+        <path d="m21 21-4.3-4.3" />
+      </svg>
+    ),
   },
   {
-    eyebrow: "04",
-    title: "You approve the moves",
-    body: "Rico tracks, drafts, and alerts in the background while important decisions stay under your control.",
+    step: "04",
+    title: "Application Tracking",
+    body: "Every application, status, and follow-up stays organised in one place.",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M9 11l3 3L22 4" />
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+      </svg>
+    ),
+  },
+  {
+    step: "05",
+    title: "Career Command Center",
+    body: "Rico guides your next move and surfaces the signals that actually matter.",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M3 12h4l2 6 4-12 2 6h6" />
+      </svg>
+    ),
   },
 ];
 
@@ -165,18 +201,18 @@ export default function LandingPage() {
               className="max-w-3xl"
             >
               <p className="mb-5 inline-flex rounded-full border border-cyan/25 bg-cyan/10 px-4 py-2 font-mono text-[11px] uppercase tracking-[0.26em] text-cyan">
-                CV-first trajectory intelligence
+                Your AI job-hunt partner in the UAE
               </p>
-              <h1 className="font-display text-[clamp(3rem,8vw,6.8rem)] font-semibold leading-[0.95] tracking-normal text-white">
-                Rico AI is your autonomous{" "}
+              <h1 className="font-display text-[clamp(2.5rem,7vw,5.5rem)] font-semibold leading-[1.02] tracking-tight text-text-primary">
+                Upload your CV. Get a{" "}
                 <span className="bg-gradient-to-r from-magenta to-cyan bg-clip-text text-transparent">
                   career operating system
                 </span>
               </h1>
-              <p className="mt-7 max-w-2xl text-lg leading-8 text-text-secondary md:text-xl">
-                Upload your CV once. Rico extracts your profile, remembers your
-                trajectory, watches the market, and asks before important career
-                moves.
+              <p className="mt-6 max-w-2xl text-lg leading-8 text-text-secondary md:text-xl">
+                Rico turns your CV into a living profile that finds relevant UAE
+                jobs, tracks your applications, and guides your next move — and it
+                always asks before acting.
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
                 <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
@@ -248,21 +284,48 @@ export default function LandingPage() {
           <section className="px-5 py-16 md:px-10 lg:px-16">
             <SectionHeading
               eyebrow="How Rico works"
-              title="A career system that starts from your history"
-              body="The landing flow is intentionally short: upload, extraction, matching, approval. Rico does the heavy work quietly."
+              title="From CV to career command center"
+              body="One continuous flow. Upload once, and Rico carries you from raw history to a live, guided job hunt."
             />
-            <div className="mx-auto grid max-w-7xl gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {howItWorks.map((step, index) => (
-                <RicoCardPanel key={step.title} delay={0.08 * index}>
-                  <p className="font-mono text-xs text-cyan">{step.eyebrow}</p>
-                  <h3 className="mt-5 text-xl font-semibold text-white">
-                    {step.title}
-                  </h3>
-                  <p className="mt-4 text-sm leading-6 text-text-secondary">
-                    {step.body}
-                  </p>
-                </RicoCardPanel>
-              ))}
+            <div className="mx-auto max-w-7xl">
+              {/* Connecting line behind the steps (desktop only) */}
+              <div className="relative grid gap-4 md:grid-cols-5">
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-0 right-0 top-[34px] hidden h-px bg-gradient-to-r from-magenta/40 via-cyan/40 to-magenta/40 md:block"
+                />
+                {productFlow.map((node, index) => (
+                  <motion.div
+                    key={node.step}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: index * 0.08, ease: "easeOut" }}
+                    className="relative flex flex-col items-center text-center"
+                  >
+                    <div className="relative z-10 flex h-[68px] w-[68px] items-center justify-center rounded-2xl border border-border-soft bg-surface-elevated shadow-[0_12px_40px_rgba(0,0,0,0.35)]">
+                      <span className="h-7 w-7 text-cyan [&>svg]:h-full [&>svg]:w-full">
+                        {node.icon}
+                      </span>
+                      <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-magenta to-cyan font-mono text-[10px] font-bold text-black">
+                        {index + 1}
+                      </span>
+                    </div>
+                    <h3 className="mt-5 text-base font-semibold text-text-primary">
+                      {node.title}
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-text-secondary">
+                      {node.body}
+                    </p>
+                    {/* Down-arrow connector on mobile/stacked layout */}
+                    {index < productFlow.length - 1 && (
+                      <div
+                        aria-hidden="true"
+                        className="my-3 h-5 w-px bg-gradient-to-b from-cyan/50 to-transparent md:hidden"
+                      />
+                    )}
+                  </motion.div>
+                ))}
+              </div>
             </div>
           </section>
 

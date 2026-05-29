@@ -18,10 +18,16 @@ describe("LandingPage", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: /Rico AI is your autonomous career operating system/i,
+        name: /Upload your CV\. Get a career operating system/i,
       })
     ).toBeInTheDocument();
     expect(screen.getByText("How Rico works")).toBeInTheDocument();
+    // The five-step product flow is the core clarity element.
+    expect(screen.getByText("CV Upload")).toBeInTheDocument();
+    expect(screen.getByText("Profile Intelligence")).toBeInTheDocument();
+    expect(screen.getByText("Job Matches")).toBeInTheDocument();
+    expect(screen.getByText("Application Tracking")).toBeInTheDocument();
+    expect(screen.getByText("Career Command Center")).toBeInTheDocument();
     expect(screen.getByText("What Rico remembers")).toBeInTheDocument();
     expect(screen.getByText("Opportunity engine")).toBeInTheDocument();
     expect(screen.getByText("You stay in control")).toBeInTheDocument();
