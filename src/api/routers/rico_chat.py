@@ -87,6 +87,7 @@ class RicoChatRequest(BaseModel):
     """Authenticated chat request - user_id derived from JWT."""
     message: str = Field(..., max_length=4096)
     operation_id: str | None = Field(None, min_length=8, max_length=80)
+    language: str | None = Field(None, pattern="^(en|ar)$")
 
     @field_validator("message")
     @classmethod
@@ -102,6 +103,7 @@ class RicoPublicChatRequest(BaseModel):
     session_id: str | None = Field(None, min_length=8, max_length=64)
     email: str | None = Field(None)
     operation_id: str | None = Field(None, min_length=8, max_length=80)
+    language: str | None = Field(None, pattern="^(en|ar)$")
 
     @field_validator("session_id")
     @classmethod
@@ -547,6 +549,7 @@ def rico_chat(request: Request, payload: RicoChatRequest) -> RicoChatResponse:
             ctx=ctx,
             message=payload.message,
             operation_id=payload.operation_id,
+            language=payload.language,
         )
 
         logger.info(
@@ -619,6 +622,7 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> RicoCh
             ctx=ctx,
             message=payload.message,
             operation_id=payload.operation_id,
+            language=payload.language,
         )
 
         logger.info(

@@ -93,6 +93,7 @@ def send_message(
     ctx: RicoSessionContext,
     message: str,
     operation_id: str | None = None,
+    language: str | None = None,
 ) -> Dict[str, Any]:
     """Policy Gateway → IntentRouter → legacy classifier."""
     from src.services.operation_state import build_status_response, is_status_followup
