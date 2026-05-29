@@ -120,7 +120,7 @@ export default function LandingPage() {
 
     return (
         <MotionConfig reducedMotion="user">
-            <div className="relative min-h-screen overflow-x-hidden bg-background text-white">
+            <div className="relative min-h-screen overflow-x-hidden bg-background text-text-primary">
                 <div className="fixed inset-0 pointer-events-none z-0">
                     <motion.div
                         aria-hidden="true"
@@ -137,10 +137,10 @@ export default function LandingPage() {
                     <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.04)_0%,rgba(255,255,255,0)_18%,rgba(255,255,255,0.025)_100%)]" />
                 </div>
 
-                <header className="relative z-10 flex items-center justify-between border-b border-border-subtle bg-black/50 px-5 py-4 backdrop-blur-xl md:px-10">
+                <header className="relative z-10 flex items-center justify-between border-b border-border-subtle bg-surface/50 px-5 py-4 backdrop-blur-xl md:px-10">
                     <Link
                         href="/"
-                        className="flex items-center gap-2 text-lg font-black tracking-tight text-white"
+                        className="flex items-center gap-2 text-lg font-black tracking-tight text-text-primary"
                     >
                         <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-magenta to-cyan text-sm font-black shadow-[0_0_28px_rgba(255,45,142,0.28)]">
                             R
@@ -159,13 +159,13 @@ export default function LandingPage() {
                         </div>
                         <Link
                             href="/login"
-                            className="text-sm text-text-secondary transition-colors hover:text-white hidden sm:block"
+                            className="text-sm text-text-secondary transition-colors hover:text-text-primary hidden sm:block"
                         >
                             {t("login")}
                         </Link>
                         <Link
                             href="/signup"
-                            className="rounded-full border border-magenta/40 bg-magenta/10 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-magenta/25 hidden sm:block"
+                            className="rounded-full border border-magenta/40 bg-magenta/10 px-4 py-2 text-sm font-semibold text-text-primary transition-colors hover:bg-magenta/25 hidden sm:block"
                         >
                             {t("signUpFree")}
                         </Link>
@@ -183,7 +183,7 @@ export default function LandingPage() {
                             <p className="mb-5 inline-flex rounded-full border border-cyan/25 bg-cyan/10 px-4 py-2 font-mono text-[11px] uppercase tracking-[0.26em] text-cyan">
                                 {t("landingHeroBadge")}
                             </p>
-                            <h1 className="font-display text-[clamp(3rem,8vw,6.8rem)] font-semibold leading-[0.95] tracking-normal text-white">
+                            <h1 className="font-display text-[clamp(3rem,8vw,6.8rem)] font-semibold leading-[0.95] tracking-normal text-text-primary">
                                 {t("landingMainHeroTitle")}{" "}
                                 <span className="bg-gradient-to-r from-magenta to-cyan bg-clip-text text-transparent">
                                     {t("landingMainHeroHighlight")}
@@ -204,7 +204,7 @@ export default function LandingPage() {
                                 <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
                                     <Link
                                         href="/signup"
-                                        className="inline-flex w-full items-center justify-center rounded-full border border-white/10 bg-white/[0.04] px-7 py-4 text-base font-semibold text-white backdrop-blur-xl transition-colors hover:bg-white/[0.08] sm:w-auto"
+                                        className="inline-flex w-full items-center justify-center rounded-full border border-border-subtle bg-surface/10 px-7 py-4 text-base font-semibold text-text-primary backdrop-blur-xl transition-colors hover:bg-surface/20 sm:w-auto"
                                     >
                                         {t("signUpFree")}
                                     </Link>
@@ -221,7 +221,7 @@ export default function LandingPage() {
                                     <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-text-tertiary">
                                         {t("landingSectionInvisibleIntelligence")}
                                     </p>
-                                    <h2 className="mt-2 text-2xl font-semibold text-white">
+                                    <h2 className="mt-2 text-2xl font-semibold text-text-primary">
                                         {t("landingSectionLiveProfileLoop")}
                                     </h2>
                                 </div>
@@ -269,7 +269,7 @@ export default function LandingPage() {
                             {howItWorksKeys.map((step, index) => (
                                 <RicoCardPanel key={step.titleKey} delay={0.08 * index}>
                                     <p className="font-mono text-xs text-cyan">{step.eyebrow}</p>
-                                    <h3 className="mt-5 text-xl font-semibold text-white">
+                                    <h3 className="mt-5 text-xl font-semibold text-text-primary">
                                         {t(step.titleKey)}
                                     </h3>
                                     <p className="mt-4 text-sm leading-6 text-text-secondary">
@@ -298,10 +298,10 @@ export default function LandingPage() {
                                     {memoryItemKeys.map((key) => (
                                         <div
                                             key={key}
-                                            className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-4"
+                                            className="rounded-lg border border-border-subtle bg-surface/10 p-4"
                                         >
                                             <div className="mb-4 h-1 w-10 rounded-full bg-gradient-to-r from-magenta to-cyan" />
-                                            <p className="text-sm font-medium text-white">{t(key)}</p>
+                                            <p className="text-sm font-medium text-text-primary">{t(key)}</p>
                                         </div>
                                     ))}
                                 </div>
@@ -317,8 +317,8 @@ export default function LandingPage() {
                                         <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-cyan">
                                             {t("landingSectionOpportunityEngine")}
                                         </p>
-                                        <h2 className="mt-4 text-3xl font-semibold text-white md:text-4xl">
-                                            {t("landingSectionOpportunityEngineTitle")}
+                                        <h2 className="mt-4 text-3xl font-semibold text-text-primary md:text-4xl">
+                                            {t("landingOpportunityEngineSubtitle")}
                                         </h2>
                                     </div>
                                     <span className="hidden rounded-full border border-magenta/30 bg-magenta/10 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-magenta sm:inline-flex">
@@ -329,11 +329,11 @@ export default function LandingPage() {
                                     {liveMatchKeys.map((match) => (
                                         <div
                                             key={match.roleKey}
-                                            className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-4"
+                                            className="rounded-lg border border-border-subtle bg-surface/10 p-4"
                                         >
                                             <div className="flex items-start justify-between gap-4">
                                                 <div>
-                                                    <h3 className="text-base font-semibold text-white">
+                                                    <h3 className="text-base font-semibold text-text-primary">
                                                         {t(match.roleKey)}
                                                     </h3>
                                                     <p className="mt-1 text-sm text-text-tertiary">
@@ -345,7 +345,7 @@ export default function LandingPage() {
                                                         {match.score}
                                                     </p>
                                                     <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-muted">
-                                                        fit
+                                                        {t("landingFitScore")}
                                                     </p>
                                                 </div>
                                             </div>
@@ -357,8 +357,8 @@ export default function LandingPage() {
                                 <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-magenta">
                                     {t("landingSectionTelegramAlerts")}
                                 </p>
-                                <h2 className="mt-4 text-3xl font-semibold text-white md:text-4xl">
-                                    {t("landingSectionTelegramAlertsTitle")}
+                                <h2 className="mt-4 text-3xl font-semibold text-text-primary md:text-4xl">
+                                    {t("landingTelegramAlertsSubtitle")}
                                 </h2>
                                 <p className="mt-5 text-base leading-7 text-text-secondary">
                                     {t("landingSectionTelegramAlertsBody")}
@@ -367,7 +367,7 @@ export default function LandingPage() {
                                     <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-cyan">
                                         {t("landingNextAlert")}
                                     </p>
-                                    <p className="mt-3 text-sm leading-6 text-white">
+                                    <p className="mt-3 text-sm leading-6 text-text-primary">
                                         {t("landingNextAlertMessage")}
                                     </p>
                                 </div>
@@ -382,7 +382,7 @@ export default function LandingPage() {
                                     {t("landingSectionYouStayInControl")}
                                 </p>
                                 <h2 className="mt-4 text-3xl font-semibold text-white md:text-4xl">
-                                    Autonomous intelligence, approval-first action
+                                    {t("landingControlSubtitle")}
                                 </h2>
                                 <p className="mt-5 text-base leading-7 text-text-secondary">
                                     {t("landingSectionYouStayInControlBody")}
@@ -397,9 +397,9 @@ export default function LandingPage() {
                                     ].map((item) => (
                                         <div
                                             key={item}
-                                            className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-4"
+                                            className="rounded-lg border border-border-subtle bg-surface/10 p-4"
                                         >
-                                            <p className="text-sm font-semibold text-white">{item}</p>
+                                            <p className="text-sm font-semibold text-text-primary">{item}</p>
                                             <div className="mt-5 h-1 rounded-full bg-gradient-to-r from-magenta to-cyan" />
                                         </div>
                                     ))}
@@ -425,7 +425,7 @@ export default function LandingPage() {
                                 <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-text-tertiary">
                                     {t("landingPricingPro")}
                                 </p>
-                                <h3 className="mt-4 text-4xl font-semibold text-white">
+                                <h3 className="mt-4 text-4xl font-semibold text-text-primary">
                                     {t("landingPricingProPrice")}
                                 </h3>
                                 <p className="mt-2 text-sm text-text-secondary">{t("landingPricingPerMonth")}</p>
@@ -447,7 +447,7 @@ export default function LandingPage() {
                                 <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-text-tertiary">
                                     {t("landingPricingPremium")}
                                 </p>
-                                <h3 className="mt-4 text-4xl font-semibold text-white">
+                                <h3 className="mt-4 text-4xl font-semibold text-text-primary">
                                     {t("landingPricingPremiumPrice")}
                                 </h3>
                                 <p className="mt-2 text-sm text-text-secondary">{t("landingPricingPerMonth")}</p>
@@ -461,14 +461,14 @@ export default function LandingPage() {
                                 </ul>
                                 <Link
                                     href="/subscription"
-                                    className="mt-8 inline-flex w-full items-center justify-center rounded-full border border-white/10 bg-white/[0.04] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/[0.08]"
+                                    className="mt-8 inline-flex w-full items-center justify-center rounded-full border border-border-subtle bg-surface/10 px-6 py-3 text-sm font-semibold text-text-primary transition-colors hover:bg-surface/20"
                                 >
                                     {t("landingPricingUpgradeToPremium")}
                                 </Link>
                             </RicoCardPanel>
                         </div>
                         <div className="mx-auto mt-6 max-w-5xl">
-                            <div className="flex items-center justify-between rounded-xl border border-white/[0.05] bg-white/[0.03] px-5 py-4">
+                            <div className="flex items-center justify-between rounded-xl border border-border-subtle bg-surface/10 px-5 py-4">
                                 <div>
                                     <span className="text-[13px] font-semibold text-[#c0c0d8]">
                                         {t("landingFreePlanLabel")}
@@ -507,7 +507,7 @@ export default function LandingPage() {
                                 </Link>
                                 <Link
                                     href="/signup"
-                                    className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/[0.04] px-7 py-4 text-base font-semibold text-white transition-colors hover:bg-white/[0.08]"
+                                    className="inline-flex items-center justify-center rounded-full border border-border-subtle bg-surface/10 px-7 py-4 text-base font-semibold text-text-primary transition-colors hover:bg-surface/20"
                                 >
                                     {t("signUpFree")}
                                 </Link>
@@ -515,23 +515,23 @@ export default function LandingPage() {
                         </RicoCardPanel>
                     </section>
                 </main>
-                <footer className="relative z-10 border-t border-white/10 bg-black/30 px-5 py-8 text-center">
+                <footer className="relative z-10 border-t border-border-subtle bg-surface/30 px-5 py-8 text-center">
                     <div className="mb-3 flex items-center justify-center gap-6">
                         <Link
                             href="/terms"
-                            className="text-xs text-text-tertiary transition-colors hover:text-white"
+                            className="text-xs text-text-tertiary transition-colors hover:text-text-primary"
                         >
                             {t("landingFooterTerms")}
                         </Link>
                         <Link
                             href="/privacy"
-                            className="text-xs text-text-tertiary transition-colors hover:text-white"
+                            className="text-xs text-text-tertiary transition-colors hover:text-text-primary"
                         >
                             {t("landingFooterPrivacy")}
                         </Link>
                         <Link
                             href="/refund-policy"
-                            className="text-xs text-text-tertiary transition-colors hover:text-white"
+                            className="text-xs text-text-tertiary transition-colors hover:text-text-primary"
                         >
                             {t("landingFooterRefunds")}
                         </Link>
