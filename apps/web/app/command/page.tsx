@@ -276,6 +276,10 @@ function OptionButtons({ options, onAction }: { options: RicoOption[]; onAction:
 export default function CommandPage() {
     const router = useRouter();
     const useMock = process.env.NEXT_PUBLIC_USE_MOCK === "true";
+    const cvReady = typeof window === "undefined"
+        ? false
+        : new URLSearchParams(window.location.search).get("cv") === "ready";
+
     const prompt = typeof window === "undefined"
         ? null
         : new URLSearchParams(window.location.search).get("prompt");
@@ -470,7 +474,11 @@ export default function CommandPage() {
                 void sendMessage(prompt);
                 return;
             }
-            setMessages([{ id: 1, role: "rico", text: "I'm Rico, your career trajectory intelligence system. Ask me to analyze your trajectory, evaluate an opportunity, map your next move, or upload your CV so I can build your strategic profile." }]);
+            if (cvReady) {
+                setMessages([{ id: 1, role: "rico", text: "Your CV is ready. What would you like Rico to do next?\n\n• Find jobs that match my CV\n• Analyze my career direction\n• Show my profile summary\n• Track my applications" }]);
+                return;
+            }
+            setMessages([{ id: 1, role: "rico", text: "I'm Rico, your AI job-hunt partner in the UAE. Upload your CV or ask me to find matching jobs, track your applications, or guide your next career move." }]);
         }, 0);
         return () => window.clearTimeout(timeoutId);
     }, [chatAudience, prompt, sendMessage]);
@@ -624,11 +632,10 @@ export default function CommandPage() {
             {/* Top nav — minimal, matches landing */}
             <header className="relative z-10 flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border-subtle">
                 <Link href="/" className="flex items-center gap-2 text-white font-black text-base sm:text-lg tracking-tight">
-                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-[9px] bg-gradient-to-br from-magenta to-cyan flex items-center justify-center text-sm font-black shadow-[0_4px_16px_rgba(255,45,142,0.3)]">R</div>
-                    Rico<span className="text-magenta">.ai</span>
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-[9px] bg-[#f5a623] flex items-center justify-center text-sm font-black text-[#0a0a1a] shadow-[0_4px_16px_rgba(245,166,35,0.35)]">R</div>
+                    Rico<span className="text-[#f5a623]"> Hunt</span>
                 </Link>
                 <div className="flex items-center gap-2 sm:gap-3">
-                    <ThemeToggle />
                     {chatAudience === "authenticated" ? (
                         <>
                             <Link href="/dashboard" className="hidden sm:block text-[13px] text-text-muted hover:text-white transition-colors">Dashboard</Link>
@@ -696,7 +703,7 @@ export default function CommandPage() {
                                 }`}
                         >
                             {m.role === "rico" && (
-                                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-magenta to-cyan flex items-center justify-center text-[11px] font-black text-white shrink-0 mb-1 shadow-[0_2px_8px_rgba(255,45,142,0.3)]">
+                                <div className="w-7 h-7 rounded-lg bg-[#f5a623] flex items-center justify-center text-[11px] font-black text-[#0a0a1a] shrink-0 mb-1 shadow-[0_2px_8px_rgba(245,166,35,0.3)]">
                                     R
                                 </div>
                             )}
@@ -867,7 +874,7 @@ export default function CommandPage() {
 
                 {/* Floating input bar — dvh column + safe-area keeps it on-screen above
                     the mobile browser chrome / iOS home indicator. */}
-                <div className="absolute bottom-0 left-0 right-0 px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] bg-gradient-to-t from-background via-background to-transparent">
+                <div className="absolute bottom-0 left-0 right-0 px-4 pt-4 pb-[calc(2rem+env(safe-area-inset-bottom))] bg-gradient-to-t from-background via-background to-transparent">
                     {uploadError && (
                         <p className="text-[11px] text-rico-red mb-2 text-center" role="alert">{uploadError}</p>
                     )}

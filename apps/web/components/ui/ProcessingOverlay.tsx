@@ -3,11 +3,11 @@
 import React, { useEffect, useState } from 'react';
 
 const PROCESSING_STAGES = [
-    'Analyzing document structure...',
-    'Extracting career trajectory...',
-    'Mapping skill topology...',
-    'Building intelligence profile...',
-    'Calibrating opportunity vectors...',
+    'Reading your CV...',
+    'Understanding your experience...',
+    'Identifying your skills and roles...',
+    'Building your career profile...',
+    'Preparing your job search dashboard...',
 ];
 
 interface ProcessingOverlayProps {
