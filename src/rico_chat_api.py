@@ -1257,6 +1257,19 @@ class RicoChatAPI:
         except Exception as e:
             logger.debug("Applied-job filter unavailable: %s", e)
 
+        # Filter out UAE-nationals-only listings for non-national users.
+        try:
+            nationality = (
+                self._profile_value(profile, "nationality") or
+                self._profile_value(profile, "citizenship") or ""
+            ).strip().lower()
+            is_uae_national = nationality in ("uae", "emirati", "emirati national", "uae national")
+            if not is_uae_national and all_matches:
+                from src.eligibility_filter import filter_for_non_nationals
+                all_matches = filter_for_non_nationals(all_matches)
+        except Exception as e:
+            logger.debug("Eligibility filter unavailable: %s", e)
+
         top_matches = all_matches[:5]
         formatted = [self._format_match(m, profile) for m in top_matches]
 
