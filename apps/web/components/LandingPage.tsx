@@ -3,6 +3,7 @@
 import { MotionConfig, motion } from "framer-motion";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const intelligenceLoop = [
   "Reading your CV",
@@ -149,6 +150,7 @@ function SectionHeading({
 }
 
 export default function LandingPage() {
+  const { language, setLanguage } = useLanguage();
   return (
     <MotionConfig reducedMotion="user">
       <div className="relative min-h-screen overflow-x-hidden bg-background text-white">
@@ -181,6 +183,14 @@ export default function LandingPage() {
             </span>
           </Link>
           <nav className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setLanguage(language === "en" ? "ar" : "en")}
+              aria-label={language === "en" ? "Switch to Arabic" : "Switch to English"}
+              className="text-[12px] font-semibold px-2.5 py-1 rounded-lg border border-border-subtle text-text-secondary hover:text-white hover:border-[#f5a623]/50 transition-colors"
+            >
+              {language === "en" ? "عربي" : "EN"}
+            </button>
             <Link
               href="/login"
               className="text-sm text-text-secondary transition-colors hover:text-white"

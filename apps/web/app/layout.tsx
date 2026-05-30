@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans, Sora, Space_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 
 // No-flash theme script: runs before paint to apply the stored theme class so a
 // light-mode user never sees a dark flash (and vice-versa). Mirrors ThemeContext:
@@ -67,7 +68,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
             </head>
             <body className={`${ibmPlexSans.variable} ${sora.variable} ${spaceMono.variable} antialiased bg-background text-text-primary font-body overflow-x-hidden`}>
-                <ThemeProvider>{children}</ThemeProvider>
+                <ThemeProvider><LanguageProvider>{children}</LanguageProvider></ThemeProvider>
             </body>
         </html>
     );
