@@ -23,6 +23,24 @@ const nextConfig = {
             },
         ];
     },
+
+    // Redirect deprecated user-facing routes to /command (ChatGPT-style: chat is the app).
+    // Support pages (/profile, /upload, /subscription) and auth/legal remain accessible.
+    async redirects() {
+        return [
+            { source: "/chat", destination: "/command", permanent: false },
+            { source: "/dashboard", destination: "/command", permanent: false },
+            { source: "/jobs", destination: "/command", permanent: false },
+            { source: "/flow", destination: "/command", permanent: false },
+            { source: "/applications", destination: "/command", permanent: false },
+            { source: "/signals", destination: "/command", permanent: false },
+            { source: "/archive", destination: "/command", permanent: false },
+            { source: "/saved-searches", destination: "/command", permanent: false },
+            { source: "/onboarding", destination: "/command", permanent: false },
+            { source: "/orchestrate", destination: "/command", permanent: false },
+            { source: "/settings", destination: "/profile", permanent: false },
+        ];
+    },
 };
 
 module.exports = nextConfig;

@@ -1,10 +1,10 @@
 "use client";
 
-import type { ChatApiResponse, ChatStreamEvent, JobMatch, NextAction, ProfilePreview, RicoOption, UploadCVResponse } from "@/lib/api";
+import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, RicoOption, UploadCVResponse } from "@/lib/api";
 import { confirmCVProfile, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
-import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
 import { buildAuthHref } from "@/lib/redirect";
+import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -759,7 +759,7 @@ export default function CommandPage() {
                 <div className="flex items-center gap-2 sm:gap-3">
                     {chatAudience === "authenticated" ? (
                         <>
-                            <Link href="/dashboard" className="hidden sm:block text-[13px] text-text-muted hover:text-white transition-colors">Dashboard</Link>
+                            <Link href="/profile" className="hidden sm:block text-[13px] text-text-muted hover:text-white transition-colors">Profile</Link>
                             <button
                                 type="button"
                                 onClick={handleLogout}
@@ -824,179 +824,177 @@ export default function CommandPage() {
                         const isStructured = m.type === "profile_preview" || hasJobCards;
 
                         return (
-                        <div
-                            key={m.id}
-                            className={`flex animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none ${
-                                m.role === "user" ? "justify-end items-end gap-1.5" : "justify-start items-start gap-2"
-                            } ${isFirstInGroup ? "mt-3" : "mt-1"}`}
-                        >
-                            <div className={`${isStructured ? "max-w-[92%] sm:max-w-[85%]" : "max-w-[78%] sm:max-w-[72%]"} ${
-                                m.role === "user"
+                            <div
+                                key={m.id}
+                                className={`flex animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none ${m.role === "user" ? "justify-end items-end gap-1.5" : "justify-start items-start gap-2"
+                                    } ${isFirstInGroup ? "mt-3" : "mt-1"}`}
+                            >
+                                <div className={`${isStructured ? "max-w-[92%] sm:max-w-[85%]" : "max-w-[78%] sm:max-w-[72%]"} ${m.role === "user"
                                     ? "rounded-2xl rounded-tr-sm bg-magenta px-3.5 py-2.5 text-[14px] text-white leading-relaxed shadow-sm"
                                     : isStructured
                                         ? "rounded-xl bg-surface/60 border border-border-subtle p-3 text-[13px] text-white leading-relaxed backdrop-blur-sm"
                                         : "rounded-2xl rounded-tl-sm bg-surface/50 border border-border-subtle/60 px-3.5 py-2.5 text-[14px] text-white leading-relaxed backdrop-blur-sm"
-                            }`}>
+                                    }`}>
 
-                                {/* Search result summary bar */}
-                                {m.type === "job_matches" && (
-                                    <div className="flex items-center gap-2 mb-2 text-[10px] text-text-muted">
-                                        <span className="text-cyan">🔍</span>
-                                        <span>
-                                            Searched: <strong className="text-text-secondary">{m.search_query ?? "UAE jobs"}</strong>
-                                            {" · "}
-                                            {m.result_count != null
-                                                ? m.result_count === 0
-                                                    ? "No matches"
-                                                    : `${m.result_count} match${m.result_count === 1 ? "" : "es"}`
-                                                : "Results"}
-                                            {m.broadened && <span className="text-rico-amber"> · Broadened</span>}
-                                        </span>
-                                    </div>
-                                )}
+                                    {/* Search result summary bar */}
+                                    {m.type === "job_matches" && (
+                                        <div className="flex items-center gap-2 mb-2 text-[10px] text-text-muted">
+                                            <span className="text-cyan">🔍</span>
+                                            <span>
+                                                Searched: <strong className="text-text-secondary">{m.search_query ?? "UAE jobs"}</strong>
+                                                {" · "}
+                                                {m.result_count != null
+                                                    ? m.result_count === 0
+                                                        ? "No matches"
+                                                        : `${m.result_count} match${m.result_count === 1 ? "" : "es"}`
+                                                    : "Results"}
+                                                {m.broadened && <span className="text-rico-amber"> · Broadened</span>}
+                                            </span>
+                                        </div>
+                                    )}
 
-                                {/* Message text */}
-                                {m.text && (
-                                    m.role === "rico"
-                                        ? <div className="space-y-0.5 text-[13px]">{renderMarkdown(m.text)}</div>
-                                        : <div className="whitespace-pre-wrap">{m.text}</div>
-                                )}
+                                    {/* Message text */}
+                                    {m.text && (
+                                        m.role === "rico"
+                                            ? <div className="space-y-0.5 text-[13px]">{renderMarkdown(m.text)}</div>
+                                            : <div className="whitespace-pre-wrap">{m.text}</div>
+                                    )}
 
-                                {/* Source rate-limited notice — keep the user inside Rico
+                                    {/* Source rate-limited notice — keep the user inside Rico
                                     and point them at the alternate link on each card. */}
-                                {m.rate_limit_notice && (
-                                    <div className="mt-2 flex items-start gap-2 rounded-lg border border-rico-amber/40 bg-rico-amber/10 px-3 py-2 text-[11px] text-rico-amber">
-                                        <span aria-hidden="true">⚠️</span>
-                                        <span>{m.rate_limit_notice}</span>
-                                    </div>
-                                )}
+                                    {m.rate_limit_notice && (
+                                        <div className="mt-2 flex items-start gap-2 rounded-lg border border-rico-amber/40 bg-rico-amber/10 px-3 py-2 text-[11px] text-rico-amber">
+                                            <span aria-hidden="true">⚠️</span>
+                                            <span>{m.rate_limit_notice}</span>
+                                        </div>
+                                    )}
 
-                                {/* Job match cards */}
-                                {m.matches && m.matches.length > 0 && (
-                                    <div className="mt-2 space-y-2">
-                                        {m.matches.map((match, i) => (
-                                            <JobMatchCard key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
-                                        ))}
-                                    </div>
-                                )}
+                                    {/* Job match cards */}
+                                    {m.matches && m.matches.length > 0 && (
+                                        <div className="mt-2 space-y-2">
+                                            {m.matches.map((match, i) => (
+                                                <JobMatchCard key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
+                                            ))}
+                                        </div>
+                                    )}
 
-                                {/* Profile preview confirmation buttons */}
-                                {m.type === "profile_preview" && m.preview && m.filename && editingProfileId !== m.id && (
-                                    <div className="mt-3 flex gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => handleConfirmProfile(m.preview!, m.filename!, m.id)}
-                                            disabled={thinking}
-                                            className="text-[12px] px-4 py-2 rounded-lg bg-cyan text-white font-medium hover:bg-cyan-hover transition-colors disabled:opacity-50"
-                                        >
-                                            Use this profile
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setEditingProfileId(m.id);
-                                                setDraftProfile(m.preview!);
-                                            }}
-                                            disabled={thinking}
-                                            className="text-[12px] px-4 py-2 rounded-lg border border-border-soft text-text-secondary hover:border-magenta/40 hover:text-white transition-colors disabled:opacity-50"
-                                        >
-                                            Edit before saving
-                                        </button>
-                                    </div>
-                                )}
-                                {m.type === "profile_preview" && editingProfileId === m.id && draftProfile && (
-                                    <div className="mt-3 space-y-2 border-t border-border-soft pt-3">
-                                        <p className="text-[11px] font-semibold text-magenta">Edit profile</p>
-                                        {(
-                                            [
-                                                ["name", "Name"],
-                                                ["current_role", "Current role"],
-                                                ["email", "Email"],
-                                                ["phone", "Phone"],
-                                            ] as [keyof ProfilePreview, string][]
-                                        ).map(([field, label]) => (
-                                            <label key={field} className="block space-y-0.5">
-                                                <span className="text-[10px] text-text-muted">{label}</span>
-                                                <input
-                                                    value={(draftProfile[field] as string) ?? ""}
-                                                    onChange={(e) =>
-                                                        setDraftProfile((prev) => (prev ? { ...prev, [field]: e.target.value } : prev))
-                                                    }
-                                                    className="w-full rounded-lg bg-surface-subtle border border-border-soft px-3 py-1.5 text-[12px] text-white placeholder:text-text-muted focus:outline-none focus:border-magenta/60"
-                                                />
-                                            </label>
-                                        ))}
-                                        <label className="block space-y-0.5">
-                                            <span className="text-[10px] text-text-muted">Skills (comma-separated)</span>
-                                            <input
-                                                value={(draftProfile.skills_detected ?? draftProfile.skills ?? []).join(", ")}
-                                                onChange={(e) => {
-                                                    const skills = e.target.value.split(",").map((skill) => skill.trim()).filter(Boolean);
-                                                    setDraftProfile((prev) =>
-                                                        prev ? { ...prev, skills_detected: skills, skills } : prev
-                                                    );
-                                                }}
-                                                className="w-full rounded-lg bg-surface-subtle border border-border-soft px-3 py-1.5 text-[12px] text-white placeholder:text-text-muted focus:outline-none focus:border-magenta/60"
-                                            />
-                                        </label>
-                                        <div className="flex gap-2 pt-1">
+                                    {/* Profile preview confirmation buttons */}
+                                    {m.type === "profile_preview" && m.preview && m.filename && editingProfileId !== m.id && (
+                                        <div className="mt-3 flex gap-2">
                                             <button
                                                 type="button"
-                                                onClick={() => {
-                                                    handleConfirmProfile(draftProfile, m.filename!, m.id);
-                                                    setEditingProfileId(null);
-                                                    setDraftProfile(null);
-                                                }}
+                                                onClick={() => handleConfirmProfile(m.preview!, m.filename!, m.id)}
                                                 disabled={thinking}
                                                 className="text-[12px] px-4 py-2 rounded-lg bg-cyan text-white font-medium hover:bg-cyan-hover transition-colors disabled:opacity-50"
                                             >
-                                                Save profile
+                                                Use this profile
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={() => {
-                                                    setEditingProfileId(null);
-                                                    setDraftProfile(null);
+                                                    setEditingProfileId(m.id);
+                                                    setDraftProfile(m.preview!);
                                                 }}
-                                                className="text-[12px] px-4 py-2 rounded-lg border border-border-soft text-text-secondary hover:border-magenta/40 hover:text-white transition-colors"
+                                                disabled={thinking}
+                                                className="text-[12px] px-4 py-2 rounded-lg border border-border-soft text-text-secondary hover:border-magenta/40 hover:text-white transition-colors disabled:opacity-50"
                                             >
-                                                Cancel
+                                                Edit before saving
                                             </button>
                                         </div>
-                                    </div>
-                                )}
-                                {!m.streaming && m.options && m.options.length > 0 && (
-                                    <OptionButtons options={m.options} onAction={(prompt) => sendMessage(prompt)} />
-                                )}
-
-                                {/* Role confirmation reasons + next_actions */}
-                                {!m.streaming && m.type === "role_confirmation" && (
-                                    <div className="mt-3 space-y-2">
-                                        {m.reasons && m.reasons.length > 0 && (
-                                            <ul className="list-disc list-inside text-[12px] text-text-secondary space-y-0.5">
-                                                {m.reasons.map((r, i) => (
-                                                    <li key={i}>{r}</li>
-                                                ))}
-                                            </ul>
-                                        )}
-                                        {m.next_actions && m.next_actions.length > 0 && (
-                                            <div className="flex flex-wrap gap-2 pt-1">
-                                                {m.next_actions.map((na) => (
-                                                    <button
-                                                        type="button"
-                                                        key={na.action}
-                                                        onClick={() => sendMessage(na.message ?? na.label)}
-                                                        className="text-[11px] px-3 py-1.5 rounded-xl border border-magenta/30 text-magenta hover:bg-magenta-soft hover:border-magenta/60 transition-colors rico-focus-strong"
-                                                    >
-                                                        {na.label}
-                                                    </button>
-                                                ))}
+                                    )}
+                                    {m.type === "profile_preview" && editingProfileId === m.id && draftProfile && (
+                                        <div className="mt-3 space-y-2 border-t border-border-soft pt-3">
+                                            <p className="text-[11px] font-semibold text-magenta">Edit profile</p>
+                                            {(
+                                                [
+                                                    ["name", "Name"],
+                                                    ["current_role", "Current role"],
+                                                    ["email", "Email"],
+                                                    ["phone", "Phone"],
+                                                ] as [keyof ProfilePreview, string][]
+                                            ).map(([field, label]) => (
+                                                <label key={field} className="block space-y-0.5">
+                                                    <span className="text-[10px] text-text-muted">{label}</span>
+                                                    <input
+                                                        value={(draftProfile[field] as string) ?? ""}
+                                                        onChange={(e) =>
+                                                            setDraftProfile((prev) => (prev ? { ...prev, [field]: e.target.value } : prev))
+                                                        }
+                                                        className="w-full rounded-lg bg-surface-subtle border border-border-soft px-3 py-1.5 text-[12px] text-white placeholder:text-text-muted focus:outline-none focus:border-magenta/60"
+                                                    />
+                                                </label>
+                                            ))}
+                                            <label className="block space-y-0.5">
+                                                <span className="text-[10px] text-text-muted">Skills (comma-separated)</span>
+                                                <input
+                                                    value={(draftProfile.skills_detected ?? draftProfile.skills ?? []).join(", ")}
+                                                    onChange={(e) => {
+                                                        const skills = e.target.value.split(",").map((skill) => skill.trim()).filter(Boolean);
+                                                        setDraftProfile((prev) =>
+                                                            prev ? { ...prev, skills_detected: skills, skills } : prev
+                                                        );
+                                                    }}
+                                                    className="w-full rounded-lg bg-surface-subtle border border-border-soft px-3 py-1.5 text-[12px] text-white placeholder:text-text-muted focus:outline-none focus:border-magenta/60"
+                                                />
+                                            </label>
+                                            <div className="flex gap-2 pt-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        handleConfirmProfile(draftProfile, m.filename!, m.id);
+                                                        setEditingProfileId(null);
+                                                        setDraftProfile(null);
+                                                    }}
+                                                    disabled={thinking}
+                                                    className="text-[12px] px-4 py-2 rounded-lg bg-cyan text-white font-medium hover:bg-cyan-hover transition-colors disabled:opacity-50"
+                                                >
+                                                    Save profile
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setEditingProfileId(null);
+                                                        setDraftProfile(null);
+                                                    }}
+                                                    className="text-[12px] px-4 py-2 rounded-lg border border-border-soft text-text-secondary hover:border-magenta/40 hover:text-white transition-colors"
+                                                >
+                                                    Cancel
+                                                </button>
                                             </div>
-                                        )}
-                                    </div>
-                                )}
+                                        </div>
+                                    )}
+                                    {!m.streaming && m.options && m.options.length > 0 && (
+                                        <OptionButtons options={m.options} onAction={(prompt) => sendMessage(prompt)} />
+                                    )}
+
+                                    {/* Role confirmation reasons + next_actions */}
+                                    {!m.streaming && m.type === "role_confirmation" && (
+                                        <div className="mt-3 space-y-2">
+                                            {m.reasons && m.reasons.length > 0 && (
+                                                <ul className="list-disc list-inside text-[12px] text-text-secondary space-y-0.5">
+                                                    {m.reasons.map((r, i) => (
+                                                        <li key={i}>{r}</li>
+                                                    ))}
+                                                </ul>
+                                            )}
+                                            {m.next_actions && m.next_actions.length > 0 && (
+                                                <div className="flex flex-wrap gap-2 pt-1">
+                                                    {m.next_actions.map((na) => (
+                                                        <button
+                                                            type="button"
+                                                            key={na.action}
+                                                            onClick={() => sendMessage(na.message ?? na.label)}
+                                                            className="text-[11px] px-3 py-1.5 rounded-xl border border-magenta/30 text-magenta hover:bg-magenta-soft hover:border-magenta/60 transition-colors rico-focus-strong"
+                                                        >
+                                                            {na.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                        </div>
                         );
                     })}
 
