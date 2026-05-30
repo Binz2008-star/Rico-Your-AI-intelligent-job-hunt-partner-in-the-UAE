@@ -542,6 +542,17 @@ export default function CommandClient() {
                 void sendMessage(prompt);
                 return;
             }
+            // For authenticated users, show profile-aware greeting instead of generic onboarding
+            if (chatAudience === "authenticated") {
+                setMessages([
+                    {
+                        id: 1,
+                        role: "rico",
+                        text: "Welcome back. I'm ready to help with your job search.\n\nWhat would you like to do today?\n\n- Find matching jobs\n- Analyze my career trajectory\n- Review my applications\n- Update my profile",
+                    },
+                ]);
+                return;
+            }
             setMessages([
                 {
                     id: 1,
