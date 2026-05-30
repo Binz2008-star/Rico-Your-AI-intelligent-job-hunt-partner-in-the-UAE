@@ -1115,6 +1115,10 @@ class RicoChatAPI:
         "list it", "show it", "list", "show all", "show all of them",
         "display them", "give me the list", "give me them", "print them",
         "what are they", "which ones", "tell me which ones",
+        # Application/lifecycle-specific aliases (resolve to last lifecycle context)
+        "list applications", "show applications",
+        "list my applications", "show my applications",
+        "list saved", "show saved", "list my saved", "show my saved",
         # Arabic
         "اذكرهم", "اذكرها", "اعرضهم", "اعرضها", "ورجيني القائمة",
         "ورني القائمة", "عرضهم", "عرضها", "اعرض القائمة", "القائمة",
@@ -1123,7 +1127,8 @@ class RicoChatAPI:
 
     @staticmethod
     def _is_list_followup(message: str) -> bool:
-        return message.strip().lower() in RicoChatAPI._LIST_FOLLOWUP_PHRASES
+        # Normalize before matching so "list them,," / "list them." both resolve.
+        return RicoChatAPI._normalize_followup_phrase(message) in RicoChatAPI._LIST_FOLLOWUP_PHRASES
 
     def _store_lifecycle_context(self, user_id: str, query_type: str) -> None:
         """Remember the last lifecycle query so a follow-up 'list them' can replay it."""
