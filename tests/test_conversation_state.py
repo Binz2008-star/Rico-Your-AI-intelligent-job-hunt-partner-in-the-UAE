@@ -31,7 +31,7 @@ def _make_api() -> RicoChatAPI:
 def _make_profile(target_roles: list[str] | None = None) -> MagicMock:
     profile = MagicMock()
     profile.has_cv = True
-    profile.target_roles = target_roles or ["Software Engineer"]
+    profile.target_roles = ["Software Engineer"] if target_roles is None else target_roles
     return profile
 
 
