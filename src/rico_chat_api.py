@@ -298,7 +298,59 @@ class RicoChatAPI:
             except Exception:
                 pass
 
+            # Cross-session recall: surface jobs the user recently discussed so
+            # Rico can say "you looked at the AESG role last Tuesday — want an update?"
+            summary = self._recent_jobs_summary(user_id)
+            if summary:
+                ctx["recently_discussed_jobs"] = summary
+
         return ctx
+
+    def _recent_jobs_summary(self, user_id: str, limit: int = 3) -> str:
+        """Compact one-line summary of recently discussed jobs for the system prompt.
+
+        Returns '' when nothing is available or the lookup fails. Never raises.
+        """
+        try:
+            from src.repositories.user_job_context_repo import get_recently_discussed
+            rows = get_recently_discussed(user_id, limit=limit)
+        except Exception:
+            return ""
+        if not rows:
+            return ""
+        now = datetime.now(timezone.utc)
+        parts: list[str] = []
+        for r in rows:
+            title = (r.get("title") or "").strip()
+            company = (r.get("company") or "").strip()
+            if not title:
+                continue
+            status = (r.get("status") or "discussed").strip()
+            when = r.get("last_discussed_at")
+            ago = self._humanize_ago(when, now)
+            label = f"{title}" + (f" at {company}" if company else "")
+            parts.append(f"{label} ({status}{', ' + ago if ago else ''})")
+        return "; ".join(parts)
+
+    @staticmethod
+    def _humanize_ago(when: Any, now: Any) -> str:
+        """Render a timestamp as 'today' / 'yesterday' / 'N days ago'. '' on failure."""
+        if when is None:
+            return ""
+        try:
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=timezone.utc)
+            days = (now - when).days
+        except Exception:
+            return ""
+        if days <= 0:
+            return "today"
+        if days == 1:
+            return "yesterday"
+        if days < 7:
+            return f"{days} days ago"
+        weeks = days // 7
+        return "last week" if weeks == 1 else f"{weeks} weeks ago"
 
     @staticmethod
     def _profile_value(profile: Any, key: str, default: Any = None) -> Any:

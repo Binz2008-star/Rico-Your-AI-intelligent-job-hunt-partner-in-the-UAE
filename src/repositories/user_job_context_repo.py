@@ -15,6 +15,25 @@ logger = logging.getLogger(__name__)
 _UTC = timezone.utc
 _MATCH_TTL_DAYS = 7
 
+# Maps a runtime/chat action verb to the coarse `status` column value.
+_ACTION_STATUS_MAP = {
+    "apply": "applied",
+    "mark_applied": "applied",
+    "save": "saved",
+    "track": "saved",
+    "skip": "skipped",
+    "not_relevant": "skipped",
+    "block": "blocked",
+    "draft": "discussed",
+    "why": "discussed",
+    "remind": "discussed",
+    "discussed": "discussed",
+}
+
+
+def _status_for_action(action: str) -> str:
+    return _ACTION_STATUS_MAP.get((action or "").strip().lower(), "discussed")
+
 
 def upsert_matches(user_id: str, matches: list[dict]) -> None:
     """
@@ -168,3 +187,118 @@ def find_by_title_company(
         return None
     finally:
         conn.close()
+
+
+def record_interaction(
+    user_id: str,
+    title: str,
+    company: str,
+    action: str,
+    note: Optional[str] = None,
+) -> None:
+    """
+    Persist that a user interacted with a specific job (took an action or
+    meaningfully discussed it). Upserts on (user_id, lower(title), lower(company))
+    so a job mentioned before any search match still gets a row.
+
+    Updates last_action, last_action_at, last_discussed_at, interaction_count,
+    status (and user_note when provided). Never raises.
+    """
+    t = (title or "").strip()
+    c = (company or "").strip()
+    if not user_id or not t or not c:
+        return
+    from src.db import get_db_connection
+
+    conn = get_db_connection()
+    if not conn:
+        logger.debug("user_job_context_repo: DB unavailable, skipping interaction user=%s", user_id)
+        return
+    status = _status_for_action(action)
+    act = (action or "discussed").strip().lower()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO user_job_context
+                    (user_id, title, company, last_action, last_action_at,
+                     last_discussed_at, user_note, interaction_count, status, searched_at)
+                VALUES (%s, %s, %s, %s, NOW(), NOW(), %s, 1, %s, NOW())
+                ON CONFLICT (user_id, lower(title), lower(company))
+                DO UPDATE SET
+                    last_action       = EXCLUDED.last_action,
+                    last_action_at    = NOW(),
+                    last_discussed_at = NOW(),
+                    user_note         = COALESCE(EXCLUDED.user_note, user_job_context.user_note),
+                    interaction_count = user_job_context.interaction_count + 1,
+                    status            = EXCLUDED.status
+                """,
+                (user_id, t, c, act, (note or None), status),
+            )
+        conn.commit()
+        logger.debug("user_job_context_repo: recorded %s on %s @ %s user=%s", act, t, c, user_id)
+    except Exception:
+        logger.exception("user_job_context_repo_record_failed user=%s", user_id)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    finally:
+        conn.close()
+
+
+def _recent_rows(user_id: str, order_col: str, limit: int, max_age_days: int) -> list[dict]:
+    """Shared reader for recently-interacted / recently-discussed queries."""
+    if not user_id:
+        return []
+    from src.db import get_db_connection
+
+    conn = get_db_connection()
+    if not conn:
+        return []
+    cutoff = datetime.now(_UTC) - timedelta(days=max_age_days)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT title, company, location, last_action, last_action_at,
+                       last_discussed_at, status, apply_url, source_url
+                  FROM user_job_context
+                 WHERE user_id = %s
+                   AND {order_col} IS NOT NULL
+                   AND {order_col} >= %s
+                 ORDER BY {order_col} DESC
+                 LIMIT %s
+                """,
+                (user_id, cutoff, limit),
+            )
+            rows = cur.fetchall() or []
+        return [
+            {
+                "title":             r[0],
+                "company":           r[1],
+                "location":          r[2],
+                "last_action":       r[3],
+                "last_action_at":    r[4],
+                "last_discussed_at": r[5],
+                "status":            r[6],
+                "apply_url":         r[7] or "",
+                "source_url":        r[8] or "",
+            }
+            for r in rows
+        ]
+    except Exception:
+        logger.exception("user_job_context_repo_recent_failed user=%s", user_id)
+        return []
+    finally:
+        conn.close()
+
+
+def get_recently_interacted(user_id: str, limit: int = 5, max_age_days: int = 30) -> list[dict]:
+    """Jobs the user took an action on, most recent first."""
+    return _recent_rows(user_id, "last_action_at", limit, max_age_days)
+
+
+def get_recently_discussed(user_id: str, limit: int = 3, max_age_days: int = 14) -> list[dict]:
+    """Jobs the user discussed in chat, most recent first."""
+    return _recent_rows(user_id, "last_discussed_at", limit, max_age_days)

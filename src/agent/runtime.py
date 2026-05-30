@@ -175,6 +175,20 @@ class AgentRuntime:
             message=message, error=error_str, duration_ms=elapsed,
         )
 
+        # 8. Persist per-job interaction so Rico can recall it across sessions.
+        #    Fire-and-forget: never let a context-write failure affect the action.
+        if tool_ok and resolved_job.get("title") and resolved_job.get("company"):
+            try:
+                from src.repositories.user_job_context_repo import record_interaction
+                record_interaction(
+                    user_id=user_id,
+                    title=resolved_job.get("title", ""),
+                    company=resolved_job.get("company", ""),
+                    action=action,
+                )
+            except Exception:
+                logger.debug("runtime: failed to record job context interaction", exc_info=True)
+
         return RuntimeResult(
             ok=tool_ok,
             message=message,
