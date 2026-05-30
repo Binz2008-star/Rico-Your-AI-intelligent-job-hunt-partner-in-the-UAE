@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import LandingPage from "@/components/LandingPage";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 
 vi.mock("next/link", () => ({
   default: ({ children, href, ...props }: { children: ReactNode; href: string }) => (
@@ -12,9 +13,13 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+function renderWithLanguage(ui: React.ReactElement) {
+  return render(<LanguageProvider>{ui}</LanguageProvider>);
+}
+
 describe("LandingPage", () => {
   it("renders the hero headline and human-friendly copy", () => {
-    render(<LandingPage />);
+    renderWithLanguage(<LandingPage />);
 
     expect(
       screen.getByRole("heading", {
@@ -38,7 +43,7 @@ describe("LandingPage", () => {
   });
 
   it("preserves the primary onboarding and auth links", () => {
-    render(<LandingPage />);
+    renderWithLanguage(<LandingPage />);
 
     expect(screen.getByRole("link", { name: /Sign in/i })).toHaveAttribute("href", "/login");
     expect(
