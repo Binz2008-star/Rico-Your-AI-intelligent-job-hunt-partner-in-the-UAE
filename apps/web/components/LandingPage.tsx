@@ -76,7 +76,7 @@ const pillars = [
   { label: "UAE-focused job search", icon: "AE" },
   { label: "CV-first matching", icon: "CV" },
   { label: "Chat-based job search", icon: "AI" },
-  { label: "Manual WhatsApp support", icon: "WA" },
+  { label: "Support via info@ricohunt.ae", icon: "✉" },
 ];
 
 const audienceCards = [
@@ -91,7 +91,7 @@ const audienceCards = [
   {
     heading: "Early access — beta feedback coming",
     body: "We're collecting feedback from our first users. If you try Rico, we'd love to hear what worked.",
-    cta: { label: "Share feedback on WhatsApp", href: "https://wa.me/971585989080?text=Hi%2C%20I%27d%20like%20to%20share%20feedback%20about%20Rico" },
+    cta: { label: "Share feedback by email", href: "mailto:info@ricohunt.ae?subject=Rico%20feedback" },
   },
 ];
 
