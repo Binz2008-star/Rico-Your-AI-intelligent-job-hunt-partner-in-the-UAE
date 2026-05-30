@@ -455,6 +455,10 @@ def get_by_status(user_id: str, statuses, limit: int = 25) -> list[dict]:
         return [_lifecycle_row(r) for r in rows]
     except Exception:
         logger.exception("user_job_context_repo_get_by_status_failed user=%s", user_id)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         return []
     finally:
         conn.close()
@@ -483,6 +487,10 @@ def get_opened_not_applied(user_id: str, limit: int = 25) -> list[dict]:
         return [_lifecycle_row(r) for r in rows]
     except Exception:
         logger.exception("user_job_context_repo_opened_not_applied_failed user=%s", user_id)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         return []
     finally:
         conn.close()

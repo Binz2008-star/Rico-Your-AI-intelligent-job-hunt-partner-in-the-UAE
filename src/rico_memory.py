@@ -126,25 +126,37 @@ class RicoMemoryStore:
     def append_chat_message(self, user_id: str, role: str, message: str) -> None:
         if not _JSON_WRITE_ENABLED:
             return
-        history = self.load_chat_history(user_id)
-        history.append({
-            "role": role,
-            "message": message,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        })
-        self._chat_path(user_id).write_text(
-            json.dumps(history[-200:], indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        try:
+            history = self.load_chat_history(user_id)
+            history.append({
+                "role": role,
+                "message": message,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+            self._chat_path(user_id).write_text(
+                json.dumps(history[-200:], indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except Exception:
+            logger.error(
+                "rico_memory: chat history write failed user=%s role=%s — chat will continue without persistence",
+                user_id, role, exc_info=True,
+            )
 
         if role == "user" and message:
-            self.add_memory(
-                user_id=user_id,
-                memory_type="conversation",
-                content=message,
-                source="chat",
-                confidence=0.55,
-            )
+            try:
+                self.add_memory(
+                    user_id=user_id,
+                    memory_type="conversation",
+                    content=message,
+                    source="chat",
+                    confidence=0.55,
+                )
+            except Exception:
+                logger.error(
+                    "rico_memory: add_memory failed user=%s — continuing without memory write",
+                    user_id, exc_info=True,
+                )
 
     def load_chat_history(self, user_id: str, limit: int | None = None) -> List[Dict[str, Any]]:
         path = self._chat_path(user_id)

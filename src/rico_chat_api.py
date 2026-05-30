@@ -246,7 +246,10 @@ class RicoChatAPI:
         path on remote PostgreSQL latency (~1s round-trip on Neon).
         """
         payload = json.dumps(message) if isinstance(message, dict) else message
-        self.memory.append_chat_message(user_id, role, payload)
+        try:
+            self.memory.append_chat_message(user_id, role, payload)
+        except Exception:
+            logger.error("rico_chat_api: memory append_chat_message failed user=%s role=%s", user_id, role, exc_info=True)
         if not getattr(self, "_persist", True):
             return
         # Async DB persistence — non-blocking, daemon so worker shutdown is
@@ -3222,6 +3225,14 @@ class RicoChatAPI:
             )
         # Store lifecycle context so "list them" after a summary shows applied jobs.
         self._store_lifecycle_context(user_id, "lifecycle_show_applied")
+        # Cache the enriched apps so "list them" can replay without querying migration-022 columns.
+        try:
+            self.memory.set_context(user_id, "cached_application_list", {
+                "apps": enriched[:20],
+                "stats": stats,
+            })
+        except Exception:
+            pass
         return {
             "type": "application_status",
             "message": msg,
@@ -3258,6 +3269,27 @@ class RicoChatAPI:
 
         # Always remember the last lifecycle query so "list them" can replay it.
         self._store_lifecycle_context(user_id, query_type)
+
+        # Fallback: if the lifecycle table returned nothing (e.g. migration 022 not yet applied),
+        # try the in-memory cache written by _handle_application_tracking so "list them" after
+        # an application summary still returns the correct list without needing new DB columns.
+        if not rows and query_type == "lifecycle_show_applied":
+            try:
+                cached = self.memory.get_context(user_id, "cached_application_list") or {}
+                cached_apps = cached.get("apps") or []
+                if cached_apps:
+                    rows = [
+                        {
+                            "title": a.get("title") or "",
+                            "company": a.get("company") or "",
+                            "apply_url": a.get("link") or a.get("apply_url") or "",
+                            "source_url": a.get("source_url") or "",
+                            "status": a.get("status") or "applied",
+                        }
+                        for a in cached_apps
+                    ]
+            except Exception:
+                pass
 
         if not rows:
             return {
