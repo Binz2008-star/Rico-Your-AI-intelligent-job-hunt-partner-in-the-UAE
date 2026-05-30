@@ -1,7 +1,7 @@
 "use client";
 
-import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, RicoOption, UploadCVResponse } from "@/lib/api";
-import { confirmCVProfile, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, uploadCV } from "@/lib/api";
+import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, ProfileResponse, RicoOption, UploadCVResponse } from "@/lib/api";
+import { confirmCVProfile, fetchMe, fetchProfile, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { buildAuthHref } from "@/lib/redirect";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
@@ -80,6 +80,25 @@ const QUICK_ACTIONS = [
     { label: "Show my applications", prompt: "Show my job applications and their status." },
     { label: "Help me prep for an interview", prompt: "Help me prepare for an upcoming job interview." },
 ];
+
+function buildWelcomeMessage(isAuthenticated: boolean, profile: ProfileResponse | null): string {
+    if (!isAuthenticated || !profile?.profile_exists) {
+        return "Hi, I'm Rico — your AI job-hunt partner in the UAE.\n\nUpload your CV and I'll find matching jobs, track your applications, and guide your next career move.";
+    }
+    const firstName = profile.name?.split(" ")[0] ?? null;
+    const greeting = firstName ? `Welcome back, ${firstName}.` : "Welcome back.";
+    const role = profile.target_roles?.[0] ?? profile.current_role ?? null;
+    const hasData = (profile.completeness_score ?? 0) > 0.15;
+
+    if (hasData && role) {
+        return `${greeting}\n\nI'm actively watching for ${role} opportunities in UAE.\n\nAsk me to find new jobs, review your applications, prep for interviews, or plan your next career move.`;
+    }
+    if (hasData) {
+        return `${greeting}\n\nYour profile is active. Tell me your target role and I'll search UAE opportunities immediately.`;
+    }
+    return `${greeting}\n\nUpload your CV and I'll build your profile and start matching you to UAE jobs.`;
+}
+
 const COMMAND_LOGIN_HREF = buildAuthHref("/login", "/command");
 const COMMAND_SIGNUP_HREF = buildAuthHref("/signup", "/command");
 
@@ -290,6 +309,8 @@ export default function CommandPage() {
     const [operationState, setOperationState] = useState<{ state: string; message: string } | null>(null);
     const [editingProfileId, setEditingProfileId] = useState<number | null>(null);
     const [draftProfile, setDraftProfile] = useState<ProfilePreview | null>(null);
+    const [userProfile, setUserProfile] = useState<ProfileResponse | null>(null);
+    const [profileLoading, setProfileLoading] = useState(true);
     const bottomRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -331,6 +352,18 @@ export default function CommandPage() {
             controller.abort();
         };
     }, [useMock]);
+
+    useEffect(() => {
+        if (chatAudience === "checking") return;
+        if (chatAudience !== "authenticated") {
+            setProfileLoading(false);
+            return;
+        }
+        fetchProfile()
+            .then(setUserProfile)
+            .catch(() => {})
+            .finally(() => setProfileLoading(false));
+    }, [chatAudience]);
 
     const scrollBottom = useCallback(() => {
         const behavior = prefersReducedMotion() ? "auto" : "smooth";
@@ -526,6 +559,7 @@ export default function CommandPage() {
 
     useEffect(() => {
         if (chatAudience === "checking" || promptSentRef.current) return;
+        if (chatAudience === "authenticated" && profileLoading) return;
         promptSentRef.current = true;
         const timeoutId = window.setTimeout(() => {
             if (prompt) {
@@ -536,10 +570,10 @@ export default function CommandPage() {
                 setMessages([{ id: 1, role: "rico", text: "Your CV is ready — I've read it and built your profile.\n\nWhat would you like to do next?\n\n- Find UAE jobs that match my CV\n- Analyze my best next career move\n- Show my profile summary\n- Track my applications" }]);
                 return;
             }
-            setMessages([{ id: 1, role: "rico", text: "Hi, I'm Rico — your AI job-hunt partner in the UAE.\n\nUpload your CV and I'll find matching jobs, track your applications, and guide your next career move." }]);
+            setMessages([{ id: 1, role: "rico", text: buildWelcomeMessage(chatAudience === "authenticated", userProfile) }]);
         }, 0);
         return () => window.clearTimeout(timeoutId);
-    }, [chatAudience, cvReady, prompt, sendMessage]);
+    }, [chatAudience, cvReady, profileLoading, userProfile, prompt, sendMessage]);
 
     async function handleCVUpload(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
@@ -736,13 +770,37 @@ export default function CommandPage() {
                 onChange={handleCVUpload}
             />
 
+            {/* Context strip — shown for authenticated users with profile data */}
+            {chatAudience === "authenticated" && !profileLoading && userProfile?.profile_exists && (
+                <div className="relative z-10 flex items-center gap-3 px-4 sm:px-6 py-2 border-b border-border-subtle bg-surface/20 overflow-x-auto">
+                    {userProfile.name && (
+                        <span className="text-[11px] font-medium text-white shrink-0">
+                            {userProfile.name.split(" ")[0]}
+                        </span>
+                    )}
+                    {(userProfile.target_roles?.[0] ?? userProfile.current_role) && (
+                        <span className="text-[10px] text-text-muted shrink-0">
+                            {userProfile.target_roles?.[0] ?? userProfile.current_role} · UAE
+                        </span>
+                    )}
+                    <div className="flex-1" />
+                    <span className={`text-[9px] px-2 py-0.5 rounded-full border font-medium shrink-0 whitespace-nowrap ${
+                        (userProfile.completeness_score ?? 0) > 0.15
+                            ? "border-cyan/30 text-cyan bg-cyan/5"
+                            : "border-amber-400/30 text-amber-400 bg-amber-400/5"
+                    }`}>
+                        {(userProfile.completeness_score ?? 0) > 0.15 ? "CV Active" : "Upload CV"}
+                    </span>
+                </div>
+            )}
+
             <div className="relative z-10 flex flex-col flex-1 h-[calc(100dvh-57px)] sm:h-[calc(100dvh-65px)] max-w-3xl w-full mx-auto px-2 sm:px-4">
                 {/* Messages Container */}
                 <div className="flex-1 min-h-0 overflow-y-auto px-2 py-6 space-y-5" role="log" aria-live="polite" aria-atomic="false" aria-busy={thinking}>
 
                     {/* Quick start (shown above first message) */}
                     {messages.length <= 1 && !thinking && (
-                        <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:justify-center gap-2 pb-4">
+                        <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:justify-center gap-2 pb-4" dir="ltr">
                             {QUICK_ACTIONS.map((qa) => (
                                 <button
                                     type="button"

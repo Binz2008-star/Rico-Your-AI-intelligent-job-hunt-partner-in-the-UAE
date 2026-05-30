@@ -1285,15 +1285,6 @@ async def confirm_cv_profile(
             request_ref,
         )
 
-        from src.services.subscription_gating import (
-            enforce_profile_optimization_allowed,
-            record_profile_optimization_usage,
-        )
-        try:
-            enforce_profile_optimization_allowed(resolved_user_id)
-        except HTTPException:
-            raise  # 402 subscription-limit must reach the client, not be swallowed as 500
-
         # Build profile updates from preview - use skills_detected if available, fallback to skills
         preview_skills = payload.preview.get("skills_detected") or payload.preview.get("skills", [])
         profile_updates = {
@@ -1318,7 +1309,6 @@ async def confirm_cv_profile(
 
         # Update permanent profile
         upsert_profile(user_id=resolved_user_id, updates=profile_updates)
-        record_profile_optimization_usage(resolved_user_id)
 
         # Only mark onboarding complete for authenticated users (not public sessions)
         if not is_valid_public_user_id(resolved_user_id):

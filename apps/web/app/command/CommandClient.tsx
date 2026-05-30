@@ -19,6 +19,7 @@ import type {
     JobMatch,
     NextAction,
     ProfilePreview,
+    ProfileResponse,
     RicoOption,
     UploadCVResponse,
 } from "@/lib/api";
@@ -26,6 +27,7 @@ import {
     ApiError,
     confirmCVProfile,
     fetchMe,
+    fetchProfile,
     getMySubscription,
     logout,
     sendChat,
@@ -172,6 +174,24 @@ const QUICK_ACTIONS = [
             "Check my application follow-ups and tell me what needs attention next.",
     },
 ];
+
+function buildWelcomeMessage(isAuthenticated: boolean, profile: ProfileResponse | null): string {
+    if (!isAuthenticated || !profile?.profile_exists) {
+        return "I'm Rico, your career trajectory intelligence system. Ask me to analyze your trajectory, evaluate an opportunity, map your next move, or upload your CV so I can build your strategic profile.";
+    }
+    const firstName = profile.name?.split(" ")[0] ?? null;
+    const greeting = firstName ? `Welcome back, ${firstName}.` : "Welcome back.";
+    const role = profile.target_roles?.[0] ?? profile.current_role ?? null;
+    const hasData = (profile.completeness_score ?? 0) > 0.15;
+
+    if (hasData && role) {
+        return `${greeting}\n\nI'm actively watching for ${role} opportunities in UAE.\n\nAsk me to find new jobs, review your applications, prep for interviews, or plan your next career move.`;
+    }
+    if (hasData) {
+        return `${greeting}\n\nYour profile is active. Tell me your target role and I'll search UAE opportunities immediately.`;
+    }
+    return `${greeting}\n\nUpload your CV and I'll build your profile and start matching you to UAE jobs.`;
+}
 const COMMAND_LOGIN_HREF = buildAuthHref("/login", "/command");
 const COMMAND_SIGNUP_HREF = buildAuthHref("/signup", "/command");
 const BACKEND_MAINTENANCE_MODE =
@@ -286,6 +306,8 @@ export default function CommandClient() {
     const [userPlan, setUserPlan] = useState<"free" | "pro" | "premium" | null>(
         null,
     );
+    const [userProfile, setUserProfile] = useState<ProfileResponse | null>(null);
+    const [profileLoading, setProfileLoading] = useState(true);
     const bottomRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -332,6 +354,19 @@ export default function CommandClient() {
         getMySubscription()
             .then((r) => setUserPlan(r.subscription.plan))
             .catch(() => { }); // non-critical
+    }, [chatAudience]);
+
+    // ── Profile fetch (non-blocking, authenticated only) ──
+    useEffect(() => {
+        if (chatAudience === "checking") return;
+        if (chatAudience !== "authenticated") {
+            setProfileLoading(false);
+            return;
+        }
+        fetchProfile()
+            .then(setUserProfile)
+            .catch(() => {})
+            .finally(() => setProfileLoading(false));
     }, [chatAudience]);
 
     // ── Scroll (verbatim from /command) ──
@@ -533,9 +568,10 @@ export default function CommandClient() {
         [chatAudience, scrollBottom, thinking, language, t],
     );
 
-    // ── Initial message / URL prompt (verbatim from /command) ──
+    // ── Initial message / URL prompt ──
     useEffect(() => {
         if (chatAudience === "checking" || promptSentRef.current) return;
+        if (chatAudience === "authenticated" && profileLoading) return;
         promptSentRef.current = true;
         const timeoutId = window.setTimeout(() => {
             if (prompt) {
@@ -546,12 +582,12 @@ export default function CommandClient() {
                 {
                     id: 1,
                     role: "rico",
-                    text: "I'm Rico, your career trajectory intelligence system. Ask me to analyze your trajectory, evaluate an opportunity, map your next move, or upload your CV so I can build your strategic profile.",
+                    text: buildWelcomeMessage(chatAudience === "authenticated", userProfile),
                 },
             ]);
         }, 0);
         return () => window.clearTimeout(timeoutId);
-    }, [chatAudience, prompt, sendMessage]);
+    }, [chatAudience, profileLoading, userProfile, prompt, sendMessage]);
 
     // ── CV upload (verbatim from /command) ──
     async function handleCVUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -825,6 +861,30 @@ export default function CommandClient() {
                 disabled={BACKEND_MAINTENANCE_MODE}
             />
 
+            {/* Context strip — authenticated users with profile data */}
+            {chatAudience === "authenticated" && !profileLoading && userProfile?.profile_exists && (
+                <div className="relative z-10 flex items-center gap-3 px-4 sm:px-6 py-2 border-b border-[var(--rico-border-subtle)] bg-[rgba(255,255,255,0.02)] overflow-x-auto">
+                    {userProfile.name && (
+                        <span className="text-[11px] font-medium text-[var(--rico-fg-1)] shrink-0">
+                            {userProfile.name.split(" ")[0]}
+                        </span>
+                    )}
+                    {(userProfile.target_roles?.[0] ?? userProfile.current_role) && (
+                        <span className="text-[10px] text-[var(--rico-fg-3)] shrink-0">
+                            {userProfile.target_roles?.[0] ?? userProfile.current_role} · UAE
+                        </span>
+                    )}
+                    <div className="flex-1" />
+                    <span className={`text-[9px] px-2 py-0.5 rounded-full border font-medium shrink-0 whitespace-nowrap ${
+                        (userProfile.completeness_score ?? 0) > 0.15
+                            ? "border-[rgba(0,229,255,0.3)] text-[rgb(0,229,255)] bg-[rgba(0,229,255,0.05)]"
+                            : "border-[rgba(245,166,35,0.3)] text-[rgba(245,166,35,1)] bg-[rgba(245,166,35,0.05)]"
+                    }`}>
+                        {(userProfile.completeness_score ?? 0) > 0.15 ? "CV Active" : "Upload CV"}
+                    </span>
+                </div>
+            )}
+
             {/* Chat area */}
             <div className="relative z-10 flex flex-col flex-1 h-[calc(100dvh-57px)] sm:h-[calc(100dvh-65px)] max-w-3xl w-full mx-auto px-2 sm:px-4">
                 {/* Message list */}
@@ -851,7 +911,7 @@ export default function CommandClient() {
 
                     {/* Quick actions (shown before first real exchange) */}
                     {messages.length <= 1 && !thinking && !BACKEND_MAINTENANCE_MODE && (
-                        <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:justify-center gap-2 pb-4">
+                        <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:justify-center gap-2 pb-4" dir="ltr">
                             {QUICK_ACTIONS.map((qa) => (
                                 <button
                                     type="button"
