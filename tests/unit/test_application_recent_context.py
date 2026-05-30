@@ -13,8 +13,8 @@ def test_recent_application_context_uses_application_flow_route():
         action="mark_applied",
     )
 
-    assert ctx["recent_route"] == "/applications"
-    assert ctx["recent_application"]["route"] == "/applications"
+    assert ctx["recent_route"] == "/command"
+    assert ctx["recent_application"]["route"] == "/command"
     assert ctx["recent_application"]["status_label"] == "applied"
     assert ctx["timeline"][0]["action"] == "mark_applied"
 
@@ -32,7 +32,6 @@ def test_recent_context_message_includes_next_step_for_applied_job():
 
     assert "Safety And Health Environment Manager" in message
     assert "Global Corporation" in message
-    assert "/applications" in message
     assert "follow up" in message.lower()
 
 

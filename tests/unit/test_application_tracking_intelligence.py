@@ -123,7 +123,7 @@ def test_build_message_single_applied_no_follow_up():
     assert "1 tracked application" in msg
     assert "1 applied" in msg
     assert "follow-up" not in msg.lower()
-    assert "/applications" in msg
+    assert "list my applications" in msg
 
 
 def test_build_message_follow_up_callout():

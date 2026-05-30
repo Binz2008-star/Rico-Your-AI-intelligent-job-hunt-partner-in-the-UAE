@@ -1565,7 +1565,7 @@ class RicoChatAPI:
         self._append_chat(user_id, "assistant", response)
         mark_completed(user_id, operation_id, len(formatted))
         if formatted:
-            self._store_search_matches_context(user_id, formatted)
+            self._store_search_matches_context(user_id, formatted, search_role=search_role)
         return response
 
     def _enrich_with_role_intelligence(
@@ -1889,6 +1889,39 @@ class RicoChatAPI:
                     self.SOURCE_KEYWORD,
                     profile=profile,
                 )
+            # "list them" after a job search — replay the cached recent_search_matches.
+            ctx = self._get_recent_context(user_id)
+            cached_matches = ctx.get("recent_search_matches") or []
+            if cached_matches:
+                lines = []
+                for i, m in enumerate(cached_matches, 1):
+                    title = m.get("title", "")
+                    company = m.get("company", "")
+                    loc = m.get("location", "")
+                    link = m.get("apply_url", "") or m.get("source_url", "")
+                    loc_part = f" · {loc}" if loc else ""
+                    link_part = f" — [Apply]({link})" if link else ""
+                    lines.append(f"{i}. **{title}** at **{company}**{loc_part}{link_part}")
+                role_hint = ctx.get("recent_search_role") or ctx.get("recent_role") or ctx.get("recent_job") or "your last search"
+                msg = f"Here are the results from {role_hint}:\n\n" + "\n".join(lines)
+                return self._finalize(
+                    {"type": "job_matches", "message": msg, "jobs": cached_matches},
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
+            # Nothing to list yet — give a clear prompt instead of falling to AI.
+            return self._finalize(
+                {
+                    "type": "clarification",
+                    "message": (
+                        "I don't have a recent search or list to show you yet. "
+                        "Try: 'find jobs for Environmental Compliance Officer in Dubai' "
+                        "or 'show my saved jobs'."
+                    ),
+                },
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
 
         # ── Verify / "make sure" follow-up: re-confirm the last real turn ───────
         # Without this, "make sure please" after an applied-jobs reply gets
@@ -1897,6 +1930,18 @@ class RicoChatAPI:
             verified = self._resolve_verify_followup(user_id, profile)
             if verified is not None:
                 return self._finalize(verified, self.SOURCE_KEYWORD, profile=profile)
+            # Memory miss (e.g. multi-worker Render) — acknowledge without crashing.
+            return self._finalize(
+                {
+                    "type": "clarification",
+                    "message": (
+                        "I'm not sure which result you'd like me to double-check. "
+                        "Could you tell me what you'd like me to verify?"
+                    ),
+                },
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
 
         # ── Pending-intent resolver: yes/no after Rico's question ──────────────
         # Must run before generic routing so "نعم" resolves the last offered action
@@ -2468,7 +2513,6 @@ class RicoChatAPI:
                 _create_manual_app(title=title, company=company, status="applied", user_id=user_id)
                 msg = (
                     f"Tracked — **{title}** at **{company}** marked as applied. "
-                    "It is now in Application Flow at /applications. "
                     "I will treat this as your latest application context for follow-ups."
                 )
                 self._store_recent_context(
@@ -2492,7 +2536,6 @@ class RicoChatAPI:
                 "job_title": title,
                 "job_company": company,
                 "job_status": "applied",
-                "application_route": "/applications",
                 "next_action": "follow_up_after_7_days",
             }
             self._append_chat(user_id, "assistant", msg)
@@ -2510,14 +2553,14 @@ class RicoChatAPI:
                 _create_manual_app(title=title, company=company, status="saved", user_id=user_id)
                 if has_url:
                     msg = (
-                        f"Saved — **{title}** at **{company}** added to Application Flow. "
-                        "View it at /applications. I will use this as your latest job context."
+                        f"Saved — **{title}** at **{company}**. "
+                        "I will use this as your latest job context."
                     )
                 else:
                     msg = (
-                        f"Saved as lead — **{title}** at **{company}** noted in Application Flow. "
-                        "This role hasn't been verified via an apply link yet. "
-                        "Open the apply link to confirm it's still live before applying."
+                        f"Saved as lead — **{title}** at **{company}**. "
+                        "This role hasn't been verified via an apply link yet — "
+                        "open the apply link to confirm it's still live before applying."
                     )
                 self._store_recent_context(
                     user_id,
@@ -2540,7 +2583,6 @@ class RicoChatAPI:
                 "job_title": title,
                 "job_company": company,
                 "job_status": "saved",
-                "application_route": "/applications",
                 "next_action": "review_or_mark_applied",
             }
             self._append_chat(user_id, "assistant", msg)
@@ -2724,7 +2766,7 @@ class RicoChatAPI:
                     fu_hint = " Consider following up now." if latest.get("needs_follow_up") else " Keep tracking it here."
                     msg = (
                         f"Most recent: **{job}** at **{company}** — status: **{status}**{days_str}. "
-                        f"View it in Application Flow at /applications. {fu_hint}"
+                        f"{fu_hint}"
                     )
                 else:
                     msg = (
@@ -2963,10 +3005,12 @@ class RicoChatAPI:
 
     # ── New intent-specific handlers ─────────────────────────────────────────
 
-    def _store_search_matches_context(self, user_id: str, formatted: list[dict[str, Any]]) -> None:
+    def _store_search_matches_context(self, user_id: str, formatted: list[dict[str, Any]], search_role: str = "") -> None:
         """Merge recent search results into context and persist to Neon."""
         try:
             ctx = self._get_recent_context(user_id)
+            if search_role:
+                ctx["recent_search_role"] = search_role
             ctx["recent_search_matches"] = [
                 {
                     "title": m.get("title", ""),
@@ -3283,7 +3327,7 @@ class RicoChatAPI:
         company: str,
         status: str,
         action: str,
-        route: str = "/applications",
+        route: str = "/command",
         job_id: str | None = None,
         link: str | None = None,
     ) -> dict[str, Any]:
@@ -3379,7 +3423,7 @@ class RicoChatAPI:
         job = app.get("title") or ctx.get("recent_job") or "Unknown"
         company = app.get("company") or ctx.get("recent_company") or "Unknown"
         status = app.get("status_label") or ctx.get("recent_status_label") or self._application_status_label(ctx.get("recent_status"))
-        route = app.get("route") or ctx.get("recent_route") or "/applications"
+        route = app.get("route") or ctx.get("recent_route") or "/command"
         action = app.get("last_action") or ctx.get("recent_action") or "tracked"
         updated_at = app.get("updated_at")
 
@@ -3397,7 +3441,7 @@ class RicoChatAPI:
             except (TypeError, ValueError):
                 pass
 
-        next_step = "Next step: keep it in Application Flow and update the status when you get a reply."
+        next_step = "Next step: update the status when you get a reply."
         if (app.get("status") or ctx.get("recent_status")) == "applied":
             next_step = "Next step: follow up if there is no response after 7 days."
         elif (app.get("status") or ctx.get("recent_status")) == "saved":
@@ -3406,7 +3450,7 @@ class RicoChatAPI:
         return (
             f"Your latest application context is **{job}** at **{company}**. "
             f"It is currently **{status}** from the last action: {action}.{time_hint} "
-            f"View it in Application Flow at {route}. {next_step}"
+            f"{next_step}"
         )
 
     def _build_tracking_message(self, apps: list[dict], stats: dict) -> str:
@@ -3464,7 +3508,7 @@ class RicoChatAPI:
                 f"{', '.join(fu_companies)}{suffix}."
             )
 
-        sentences.append("Full list in Application Flow at /applications.")
+        sentences.append("Ask me to 'list my applications' any time to see the full list.")
         return " ".join(sentences)
 
     def _handle_subscription_plans(self, user_id: str, profile: Any) -> dict[str, Any]:
