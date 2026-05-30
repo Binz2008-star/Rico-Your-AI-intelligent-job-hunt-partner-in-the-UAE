@@ -35,6 +35,7 @@ from typing import Any, Optional
 from functools import wraps
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.api.admin_guard import require_admin_user
@@ -580,6 +581,155 @@ def rico_chat(request: Request, payload: RicoChatRequest) -> RicoChatResponse:
         )
         error_response["error_ref"] = request_ref
         return RicoChatResponse(**error_response, trace_id=request_ref)
+
+
+@router.post("/chat/stream")
+@limiter.limit(LIMIT_CHAT)
+def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingResponse:
+    """Authenticated SSE streaming chat — yields tokens as they arrive from the AI.
+
+    Response: text/event-stream
+    Each SSE event is one of:
+      data: {"type":"token","text":"<chunk>"}
+      data: {"type":"done","response":{ ...full RicoChatResponse fields... }}
+      data: {"type":"error","message":"<msg>"}
+    """
+    import json as _json
+    from src.rico_openai_runtime import call_openai_stream
+    from src.rico_chat_api import RicoChatAPI
+    from src.repositories.profile_repo import get_profile
+
+    try:
+        user = get_current_user(request)
+    except HTTPException as exc:
+        def _err():
+            yield f'data: {_json.dumps({"type":"error","message":"Unauthorized"})}\n\n'
+        return StreamingResponse(_err(), media_type="text/event-stream")
+
+    user_id = user["email"]
+    ctx = RicoSessionContext.for_authenticated(user_id)
+
+    def _event_stream():
+        try:
+            # For non-conversational intents (job search, CV ops) fall back to
+            # the full JSON response so structured data (job cards, profile preview)
+            # arrives correctly. Only pure conversational replies are streamed.
+            from src.services.chat_service import _intent_router  # type: ignore[attr-defined]
+            profile = get_profile(user_id)
+            decision = _intent_router.route(
+                message=payload.message,
+                user_id=user_id,
+                profile_context_present=profile is not None,
+            )
+            if not decision.should_use_ai:
+                # Non-streaming path: emit full response as a single "done" event
+                result = chat_service.send_message(ctx=ctx, message=payload.message)
+                yield f'data: {_json.dumps({"type":"done","response":result})}\n\n'
+                return
+
+            # Streaming AI path
+            api = RicoChatAPI(persist=ctx.can_persist_profile)
+            user_context = api._build_openai_context(profile, user_id=user_id)
+            profile_context_str = (
+                _json.dumps(user_context, ensure_ascii=False)
+                if user_context else None
+            )
+            conversation_history = user_context.get("conversation_history", [])
+            from src.rico_env import get_ai_provider
+            provider = get_ai_provider()
+
+            full_text = []
+            for chunk in call_openai_stream(
+                payload.message,
+                profile_context=profile_context_str,
+                provider=provider,
+                conversation_history=conversation_history,
+            ):
+                full_text.append(chunk)
+                yield f'data: {_json.dumps({"type":"token","text":chunk})}\n\n'
+
+            # Persist the final assembled message
+            assembled = "".join(full_text)
+            api._append_chat(user_id, "user", payload.message)
+            api._append_chat(user_id, "assistant", assembled)
+
+            yield f'data: {_json.dumps({"type":"done","response":{"message":assembled,"type":"conversational","response_source":"stream"}})}\n\n'
+        except Exception as exc:
+            logger.exception("chat_stream_error user=%s", user_id)
+            yield f'data: {_json.dumps({"type":"error","message":"Stream error. Please try again."})}\n\n'
+
+    return StreamingResponse(
+        _event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/chat/stream/public")
+@limiter.limit("10/minute")
+def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) -> StreamingResponse:
+    """Unauthenticated SSE streaming chat for public/guest users."""
+    import json as _json
+    from src.rico_openai_runtime import call_openai_stream
+    from src.rico_chat_api import RicoChatAPI
+    from src.repositories.profile_repo import get_profile
+    from src.api.public_identity import is_safe_public_session_id
+
+    session_id = payload.session_id or ""
+    if not session_id or not is_safe_public_session_id(session_id):
+        def _err():
+            yield f'data: {_json.dumps({"type":"error","message":"Invalid session."})}\n\n'
+        return StreamingResponse(_err(), media_type="text/event-stream")
+
+    user_id = f"public:{session_id}"
+    ctx = RicoSessionContext.for_public(user_id)
+
+    def _event_stream():
+        try:
+            from src.services.chat_service import _intent_router  # type: ignore[attr-defined]
+            profile = get_profile(user_id)
+            decision = _intent_router.route(
+                message=payload.message,
+                user_id=user_id,
+                profile_context_present=profile is not None,
+            )
+            if not decision.should_use_ai:
+                result = chat_service.send_message(ctx=ctx, message=payload.message)
+                yield f'data: {_json.dumps({"type":"done","response":result})}\n\n'
+                return
+
+            api = RicoChatAPI(persist=False)
+            user_context = api._build_openai_context(profile, user_id=user_id)
+            profile_context_str = (
+                _json.dumps(user_context, ensure_ascii=False) if user_context else None
+            )
+            conversation_history = user_context.get("conversation_history", [])
+            from src.rico_env import get_ai_provider
+            provider = get_ai_provider()
+
+            full_text = []
+            for chunk in call_openai_stream(
+                payload.message,
+                profile_context=profile_context_str,
+                provider=provider,
+                conversation_history=conversation_history,
+            ):
+                full_text.append(chunk)
+                yield f'data: {_json.dumps({"type":"token","text":chunk})}\n\n'
+
+            assembled = "".join(full_text)
+            api._append_chat(user_id, "user", payload.message)
+            api._append_chat(user_id, "assistant", assembled)
+            yield f'data: {_json.dumps({"type":"done","response":{"message":assembled,"type":"conversational","response_source":"stream"}})}\n\n'
+        except Exception:
+            logger.exception("chat_stream_public_error user=%s", user_id)
+            yield f'data: {_json.dumps({"type":"error","message":"Stream error. Please try again."})}\n\n'
+
+    return StreamingResponse(
+        _event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/chat/public", response_model=RicoChatResponse)

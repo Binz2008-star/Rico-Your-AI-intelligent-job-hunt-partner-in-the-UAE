@@ -1164,6 +1164,78 @@ export async function sendChat(
   return validateShape(RicoChatResponseSchema, data, "authenticated Rico chat");
 }
 
+export interface ChatStreamEvent {
+  type: "token" | "done" | "error";
+  text?: string;
+  response?: ChatApiResponse;
+  error?: string;
+}
+
+export async function* sendChatStream(
+  message: string,
+  signal?: AbortSignal,
+): AsyncGenerator<ChatStreamEvent> {
+  const res = await fetch(`${PROXY}/api/v1/rico/chat/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    signal,
+    body: JSON.stringify({ message }),
+  });
+  if (!res.ok || !res.body) {
+    // Fall back gracefully — caller should use sendChat instead
+    yield { type: "error", error: `${res.status}` };
+    return;
+  }
+  yield* _readSSE(res.body);
+}
+
+export async function* sendChatStreamPublic(
+  message: string,
+  sessionId: string,
+  signal?: AbortSignal,
+): AsyncGenerator<ChatStreamEvent> {
+  const res = await fetch(`${PROXY}/api/v1/rico/chat/stream/public`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    signal,
+    body: JSON.stringify({ message, session_id: sessionId }),
+  });
+  if (!res.ok || !res.body) {
+    yield { type: "error", error: `${res.status}` };
+    return;
+  }
+  yield* _readSSE(res.body);
+}
+
+async function* _readSSE(body: ReadableStream<Uint8Array>): AsyncGenerator<ChatStreamEvent> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const raw = line.slice(6).trim();
+        if (!raw || raw === "[DONE]") continue;
+        try {
+          yield JSON.parse(raw) as ChatStreamEvent;
+        } catch {
+          // malformed SSE line, skip
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 export interface ChatHistoryMessage {
   role: string;
   content: string;

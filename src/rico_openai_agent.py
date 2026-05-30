@@ -140,10 +140,15 @@ class RicoOpenAIAgent:
             json.dumps(user_context, ensure_ascii=False)
             if user_context else None
         )
+        conversation_history = (
+            user_context.get("conversation_history", [])
+            if isinstance(user_context, dict) else []
+        )
         result = call_openai_minimal(
             user_message,
             profile_context=profile_context,
             provider=provider,
+            conversation_history=conversation_history,
         )
 
         if result.get("success"):

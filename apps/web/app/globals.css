@@ -241,3 +241,76 @@ body::after {
         transition-duration: 0.01ms !important;
     }
 }
+
+/* ── Rico thinking indicator ──────────────────────────────────────────────── */
+.rico-thinking-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 8px 0 10px;
+}
+.rico-orb {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-weight: 500;
+    font-size: 15px;
+    background:
+        radial-gradient(circle at center, rgba(255, 43, 150, 0.22), rgba(255, 43, 150, 0.04)),
+        #09090f;
+    border: 1px solid rgba(255, 43, 150, 0.7);
+    box-shadow:
+        0 0 12px rgba(255, 43, 150, 0.35),
+        inset 0 0 10px rgba(255, 43, 150, 0.14);
+    animation: ricoOrbPulse 1.4s ease-in-out infinite;
+    flex-shrink: 0;
+}
+.rico-orb span {
+    display: inline-block;
+    animation: ricoRSpin 1.6s linear infinite;
+}
+.rico-thinking-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: rgba(255, 255, 255, 0.68);
+    font-size: 13px;
+}
+.rico-dots {
+    display: inline-flex;
+    gap: 4px;
+}
+.rico-dots i {
+    display: block;
+    width: 5px;
+    height: 5px;
+    border-radius: 999px;
+    background: #ff2b96;
+    opacity: 0.35;
+    font-style: normal;
+    animation: ricoDot 1.2s ease-in-out infinite;
+}
+.rico-dots i:nth-child(2) { animation-delay: 0.15s; }
+.rico-dots i:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes ricoRSpin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+@keyframes ricoOrbPulse {
+    0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 10px rgba(255, 43, 150, 0.28);
+    }
+    50% {
+        transform: scale(1.04);
+        box-shadow: 0 0 18px rgba(255, 43, 150, 0.5);
+    }
+}
+@keyframes ricoDot {
+    0%, 100% { opacity: 0.25; transform: translateY(0); }
+    50%       { opacity: 1;    transform: translateY(-2px); }
+}
