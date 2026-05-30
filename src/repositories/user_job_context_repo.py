@@ -68,13 +68,14 @@ def upsert_matches(user_id: str, matches: list[dict]) -> None:
                 # correct source-URL fallback instead of a Google link as apply_url.
                 if au and su and au == su:
                     au = ""
+                alt = (m.get("alt_link") or m.get("alt_url") or "").strip()
                 vs = m.get("verification_status") or "lead_needs_verification"
                 cur.execute(
                     """
                     INSERT INTO user_job_context
                         (user_id, title, company, location, apply_url, source_url,
-                         verification_status, searched_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                         alt_url, verification_status, searched_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
                     ON CONFLICT (user_id, lower(title), lower(company))
                     DO UPDATE SET
                         apply_url           = CASE
@@ -86,6 +87,10 @@ def upsert_matches(user_id: str, matches: list[dict]) -> None:
                                                 NULLIF(EXCLUDED.source_url, ''),
                                                 user_job_context.source_url
                                               ),
+                        alt_url             = COALESCE(
+                                                NULLIF(EXCLUDED.alt_url, ''),
+                                                user_job_context.alt_url
+                                              ),
                         verification_status = EXCLUDED.verification_status,
                         searched_at         = NOW()
                     """,
@@ -96,6 +101,7 @@ def upsert_matches(user_id: str, matches: list[dict]) -> None:
                         (m.get("location") or "").strip() or None,
                         au,
                         su,
+                        alt,
                         vs,
                     ),
                 )
@@ -143,7 +149,7 @@ def find_by_title_company(
             cur.execute(
                 """
                 SELECT title, company, location, apply_url, source_url,
-                       verification_status, searched_at
+                       alt_url, verification_status, searched_at
                   FROM user_job_context
                  WHERE user_id = %s
                    AND lower(title) = lower(%s)
@@ -179,8 +185,9 @@ def find_by_title_company(
             "location":            row[2],
             "apply_url":           row[3] or "",
             "source_url":          row[4] or "",
-            "verification_status": row[5] or "lead_needs_verification",
-            "searched_at":         row[6],
+            "alt_url":             row[5] or "",
+            "verification_status": row[6] or "lead_needs_verification",
+            "searched_at":         row[7],
         }
     except Exception:
         logger.exception("user_job_context_repo_find_failed user=%s", user_id)

@@ -858,11 +858,14 @@ class RicoChatAPI:
 
         # Preserve URL fields so the frontend can surface apply links and distinguish
         # verified live postings from leads that still need a working apply URL.
+        # alt_link (job_google_link) is kept separately so the apply-fallback chain
+        # can offer an alternate link when the primary apply URL is unavailable.
         apply_url = str(
             m.get("job_apply_link") or m.get("apply_link") or m.get("link") or ""
         ).strip()
+        alt_link = str(m.get("job_google_link") or m.get("alt_link") or "").strip()
         source_url = str(
-            m.get("job_google_link") or m.get("source_url") or apply_url
+            m.get("source_url") or alt_link or apply_url
         ).strip()
         verification_status = "live" if apply_url else "lead_needs_verification"
 
@@ -872,6 +875,7 @@ class RicoChatAPI:
             "score": normalized_score,
             "apply_url": apply_url,
             "source_url": source_url,
+            "alt_link": alt_link,
             "verification_status": verification_status,
             "actions": ["Prepare application", "Save", "Ask why", "Skip"],
             **explanation,
@@ -1182,70 +1186,29 @@ class RicoChatAPI:
     }
 
     @staticmethod
-    def _search_jsearch_direct(role: str) -> list[dict[str, Any]]:
-        """Query JSearch (RapidAPI) for live UAE jobs matching *role*.
+    @staticmethod
+    def _search_jsearch_meta(role: str) -> Any:
+        """Query JSearch for live UAE jobs matching *role*, with cache + retry.
 
-        Returns a list of job dicts ready for ``_format_match``.  Never raises —
-        any failure (missing key, network error, bad JSON) returns an empty list.
+        Returns a ``jsearch_client.FetchResult`` so the caller can tell a genuine
+        empty result apart from a rate-limited source. Never raises.
         """
-        import json as _json
-        import urllib.request
-        from urllib.parse import quote_plus
+        from src import jsearch_client
 
-        api_key = os.getenv("RAPIDAPI_KEY", "").strip()
-        if not api_key:
-            logger.debug("jsearch_direct: RAPIDAPI_KEY not set — skipping")
-            return []
-
-        query = f"{role} UAE"
-        url = (
-            "https://jsearch.p.rapidapi.com/search-v2"
-            f"?query={quote_plus(query)}&num_pages=1&country=ae&date_posted=all"
+        result = jsearch_client.search(f"{role} UAE")
+        # Stamp a default score so downstream scoring/formatting works unchanged.
+        for job in result.items:
+            job.setdefault("score", 50)
+        logger.info(
+            "jsearch_direct role=%r results=%d cache_hit=%s rate_limited=%s",
+            role, len(result.items), result.cache_hit, result.rate_limited,
         )
-        headers = {
-            "x-rapidapi-host": "jsearch.p.rapidapi.com",
-            "x-rapidapi-key": api_key,
-            "Content-Type": "application/json",
-        }
-        try:
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=12) as resp:
-                data = _json.loads(resp.read().decode())
-        except Exception as exc:
-            logger.warning("jsearch_direct_failed role=%r: %s", role, exc)
-            return []
+        return result
 
-        raw_items = (
-            data.get("data", {}).get("jobs", [])
-            if isinstance(data.get("data"), dict)
-            else data.get("data", [])
-        )
-        jobs: list[dict[str, Any]] = []
-        seen: set[str] = set()
-        for item in raw_items:
-            link = str(item.get("job_apply_link") or item.get("job_google_link") or "")
-            dedup = str(item.get("job_id") or link)
-            if not dedup or dedup in seen:
-                continue
-            seen.add(dedup)
-            location = ", ".join(filter(None, [
-                item.get("job_city") or "",
-                item.get("job_state") or "",
-                item.get("job_country") or "",
-            ])) or "UAE"
-            jobs.append({
-                "title":           str(item.get("job_title") or ""),
-                "company":         str(item.get("employer_name") or ""),
-                "location":        location,
-                "link":            link,
-                "description":     str(item.get("job_description") or ""),
-                "source":          "jsearch",
-                "salary_string":   str(item.get("job_salary_string") or ""),
-                "employment_type": str(item.get("job_employment_type") or ""),
-                "score":           50,
-            })
-        logger.info("jsearch_direct role=%r results=%d", role, len(jobs))
-        return jobs
+    @staticmethod
+    def _search_jsearch_direct(role: str) -> list[dict[str, Any]]:
+        """Backward-compatible list wrapper around :meth:`_search_jsearch_meta`."""
+        return RicoChatAPI._search_jsearch_meta(role).items
 
     def _target_role_search_response(
         self, user_id: str, role: str, profile: Any, from_saved_profile: bool = False
@@ -1268,8 +1231,11 @@ class RicoChatAPI:
 
         # Primary path: live JSearch query for the exact requested role.
         # Falls back to the legacy scraper pipeline only when JSearch is unavailable.
+        rate_limited = False
         try:
-            all_matches = self._search_jsearch_direct(search_role)
+            fetch = self._search_jsearch_meta(search_role)
+            all_matches = fetch.items
+            rate_limited = fetch.rate_limited
             if not all_matches:
                 search_profile = (
                     _dc_replace(profile, target_roles=[search_role])
@@ -1326,7 +1292,14 @@ class RicoChatAPI:
             "result_count": len(formatted),
             "search_query": search_role,
             "broadened": len(all_matches) == 0,
+            "rate_limited": rate_limited,
         }
+
+        if rate_limited:
+            response["rate_limit_notice"] = (
+                "This source is temporarily rate-limited. "
+                "Try the alternate link on each result, or search again shortly."
+            )
 
         if role_intelligence_data:
             response["role_intelligence"] = role_intelligence_data
