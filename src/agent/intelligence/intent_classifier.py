@@ -149,6 +149,10 @@ _LEGACY_INTENT_MAP = {
     # Application tracking
     "application.show_flow": "application_tracking",
     "application.recent_context": "application_tracking",
+    # Lifecycle funnel queries
+    "lifecycle.show_saved": "lifecycle_show_saved",
+    "lifecycle.show_applied": "lifecycle_show_applied",
+    "lifecycle.show_opened_not_applied": "lifecycle_show_opened_not_applied",
     # Profile
     "profile.show": "profile_summary",
     "profile.update": "profile_update",
@@ -257,6 +261,47 @@ _APPLICATION_TRACKING_PHRASES = frozenset([
     "ya please check",
     "yes please check",
 ])
+
+_LIFECYCLE_SAVED_PHRASES = frozenset([
+    "show saved jobs", "show my saved jobs", "my saved jobs", "saved jobs",
+    "jobs i saved", "which jobs did i save", "list saved jobs",
+    "اعرض الوظائف المحفوظة", "وظائفي المحفوظة",
+])
+
+_LIFECYCLE_APPLIED_PHRASES = frozenset([
+    "show applied jobs", "show my applied jobs", "jobs i applied to",
+    "jobs i applied for", "what jobs did i apply to", "what did i apply to",
+    "which jobs did i apply to", "my applied jobs",
+    "الوظائف التي تقدمت لها", "ما الوظائف التي تقدمت لها",
+])
+
+_LIFECYCLE_OPENED_NOT_APPLIED_PHRASES = frozenset([
+    "show jobs i opened but did not apply to",
+    "show jobs i opened but didn't apply to",
+    "jobs i opened but didn't apply",
+    "opened but not applied",
+    "jobs i clicked but didn't apply",
+    "jobs i opened without applying",
+])
+
+_LIFECYCLE_SAVED_RE = re.compile(
+    r"\b(show|list|view|see|get)\b.{0,20}\bsaved\b.{0,15}\bjobs?\b"
+    r"|\bsaved\b.{0,15}\bjobs?\b.{0,10}\b(show|list|view|see)\b"
+    r"|\bmy\s+saved\s+jobs?\b",
+    re.IGNORECASE,
+)
+
+_LIFECYCLE_APPLIED_RE = re.compile(
+    r"\bjobs?\b.{0,20}\b(applied|apply)\b"
+    r"|\b(applied|apply)\b.{0,10}\bto\b"
+    r"|\bwhat.{0,10}\b(applied|apply)\b",
+    re.IGNORECASE,
+)
+
+_LIFECYCLE_OPENED_NOT_APPLIED_RE = re.compile(
+    r"\bopened?\b.{0,30}\b(not|didn.t|did\s+not)\s+appl",
+    re.IGNORECASE,
+)
 
 _HELP_PHRASES = frozenset([
     "help", "menu", "options", "what can you do", "commands",
@@ -580,6 +625,14 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     if lower in _RECENT_CONTEXT_PHRASES:
         return IntentResult("recent_context", 1.0, "exact")
 
+    # Lifecycle funnel queries — exact (more specific than application_tracking)
+    if lower in _LIFECYCLE_SAVED_PHRASES:
+        return IntentResult("lifecycle_show_saved", 1.0, "exact")
+    if lower in _LIFECYCLE_APPLIED_PHRASES:
+        return IntentResult("lifecycle_show_applied", 1.0, "exact")
+    if lower in _LIFECYCLE_OPENED_NOT_APPLIED_PHRASES:
+        return IntentResult("lifecycle_show_opened_not_applied", 1.0, "exact")
+
     if lower in _APPLICATION_TRACKING_PHRASES:
         return IntentResult("application_tracking", 1.0, "exact")
 
@@ -673,6 +726,14 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     # Delegated decision (user asks Rico to choose)
     if _DELEGATED_DECISION_RE.search(text):
         return IntentResult("delegated_decision", 0.9, "regex")
+
+    # Lifecycle funnel queries regex (before application_tracking, more specific)
+    if _LIFECYCLE_OPENED_NOT_APPLIED_RE.search(text):
+        return IntentResult("lifecycle_show_opened_not_applied", 0.9, "regex")
+    if _LIFECYCLE_SAVED_RE.search(text) and not _JOB_SEARCH_EXPLICIT_RE.search(text):
+        return IntentResult("lifecycle_show_saved", 0.85, "regex")
+    if _LIFECYCLE_APPLIED_RE.search(text) and not _JOB_SEARCH_EXPLICIT_RE.search(text):
+        return IntentResult("lifecycle_show_applied", 0.85, "regex")
 
     # Application tracking regex (looser than exact phrases)
     if _APPLICATION_TRACKING_RE.search(text) and not _JOB_SEARCH_EXPLICIT_RE.search(text):
