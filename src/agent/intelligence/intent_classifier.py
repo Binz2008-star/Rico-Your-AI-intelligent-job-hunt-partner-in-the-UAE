@@ -466,7 +466,7 @@ _JOB_SEARCH_FOR_ROLE_RE = re.compile(
 #   "{action} — {title} at {company}"
 # Must be checked BEFORE generic apply/save patterns.
 _JOB_CARD_ACTION_RE = re.compile(
-    r"^(Prepare application|Mark as applied|Track this job|Save job|Open apply link)\s*[—\-–]\s*(.+)\s+at\s+(.+?)$",
+    r"^(Prepare application|Mark as applied|Track this job|Save job|Save|Open apply link)\s*[—\-–]\s*(.+)\s+at\s+(.+?)$",
     re.IGNORECASE | re.DOTALL,
 )
 
@@ -690,6 +690,7 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
             "mark as applied": "mark_applied",
             "track this job": "track_job",
             "save job": "save_job",
+            "save": "save_job",
             "open apply link": "open_apply_link",
         }
         matched_intent = intent_map.get(action_raw, "job_action")
