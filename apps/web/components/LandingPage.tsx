@@ -72,6 +72,29 @@ const productFlow = [
   },
 ];
 
+const pillars = [
+  { label: "UAE-focused job search", icon: "AE" },
+  { label: "CV-first matching", icon: "CV" },
+  { label: "Chat-based job search", icon: "AI" },
+  { label: "Manual WhatsApp support", icon: "WA" },
+];
+
+const audienceCards = [
+  {
+    heading: "Built for UAE professionals",
+    body: "HSE, ESG, operations, compliance, engineering, and finance roles across Dubai, Abu Dhabi, and the wider UAE.",
+  },
+  {
+    heading: "Designed around your CV",
+    body: "Upload once. Rico reads your experience and turns it into job-search actions inside chat — no forms, no wizard.",
+  },
+  {
+    heading: "Early access — beta feedback coming",
+    body: "We're collecting feedback from our first users. If you try Rico, we'd love to hear what worked.",
+    cta: { label: "Share feedback on WhatsApp", href: "https://wa.me/971585989080?text=Hi%2C%20I%27d%20like%20to%20share%20feedback%20about%20Rico" },
+  },
+];
+
 const memoryItems = [
   "Your CV and experience",
   "Target roles and preferred locations",
@@ -300,6 +323,26 @@ export default function LandingPage() {
             </RicoCardPanel>
           </section>
 
+          {/* Pillars strip */}
+          <section className="border-y border-white/[0.06] bg-white/[0.025] px-5 py-7 md:px-10 lg:px-16">
+            <div className="mx-auto grid max-w-5xl grid-cols-2 gap-4 md:grid-cols-4">
+              {pillars.map((p, i) => (
+                <motion.div
+                  key={p.label}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.45, delay: i * 0.07, ease: "easeOut" }}
+                  className="flex items-center gap-3"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04] font-mono text-[10px] font-bold text-cyan">
+                    {p.icon}
+                  </span>
+                  <p className="text-[13px] font-medium text-text-secondary">{p.label}</p>
+                </motion.div>
+              ))}
+            </div>
+          </section>
+
           <section className="px-5 py-16 md:px-10 lg:px-16">
             <SectionHeading
               eyebrow="How Rico works"
@@ -479,6 +522,39 @@ export default function LandingPage() {
                   ))}
                 </div>
               </RicoCardPanel>
+            </div>
+          </section>
+
+          {/* Audience / early-access cards */}
+          <section className="px-5 py-16 md:px-10 lg:px-16">
+            <SectionHeading
+              eyebrow="Who Rico is built for"
+              title="Designed around the UAE job market"
+              body="Rico is purpose-built for professionals searching for roles in the UAE — not a generic AI assistant."
+            />
+            <div className="mx-auto grid max-w-7xl gap-5 md:grid-cols-3">
+              {audienceCards.map((card, i) => (
+                <RicoCardPanel key={card.heading} delay={i * 0.1}>
+                  <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-cyan">
+                    {i === 2 ? "Early access" : i === 1 ? "How it works" : "Built for"}
+                  </p>
+                  <h3 className="mt-4 text-xl font-semibold text-white">{card.heading}</h3>
+                  <p className="mt-3 text-sm leading-7 text-text-secondary">{card.body}</p>
+                  {card.cta && (
+                    <a
+                      href={card.cta.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-cyan hover:underline"
+                    >
+                      {card.cta.label}
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-3.5 w-3.5" aria-hidden="true">
+                        <path d="M3 8h10M9 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </a>
+                  )}
+                </RicoCardPanel>
+              ))}
             </div>
           </section>
 
