@@ -407,6 +407,101 @@ export const translations = {
     // Maintenance
     backendMaintenanceDescription:
       "Settings sync and Telegram delivery are paused while Render hosting is restored. Existing frontend pages remain available, but backend-backed preferences cannot be changed.",
+
+    // Landing page – nav
+    landingSignIn: "Sign in",
+    landingSignUpFree: "Sign up free",
+    landingSignUpFreeArrow: "Sign up free →",
+
+    // Landing page – hero section
+    landingHeroTagline: "Your AI job-hunt partner in the UAE",
+    landingHeroMainTitle: "Upload your CV.",
+    landingHeroMainHighlight: "Let Rico run your job search smarter.",
+    landingHeroMainBody:
+      "Rico reads your CV, finds matching UAE jobs, tracks your applications, and guides your next career move — in English and Arabic.",
+    landingHeroApprovalNote:
+      "Rico never applies silently. You approve every important action.",
+    landingUploadYourCV: "Upload your CV",
+
+    // Landing page – live profile card
+    landingCardLabel: "What Rico does for you",
+    landingCardTitle: "Working on your job search",
+
+    // Landing page – intelligence loop items
+    landingIntelligenceReading: "Reading your CV",
+    landingIntelligenceUnderstanding: "Understanding your experience",
+    landingIntelligenceFinding: "Finding matching UAE jobs",
+    landingIntelligenceTracking: "Tracking your applications",
+    landingIntelligenceSending: "Sending job alerts",
+
+    // Landing page – How Rico works section
+    landingHowItWorksTitle: "From CV to better job opportunities",
+    landingHowItWorksBody:
+      "Upload your CV once. Rico reads your experience and starts finding matching UAE jobs right away.",
+    landingHowItWorks05Title: "Get guidance and alerts",
+    landingHowItWorks05Body:
+      "Rico tells you what matters next — a new job match, a missing skill, or a follow-up reminder.",
+
+    // Landing page – memory section
+    landingMemoryEyebrow: "Rico remembers your career goals",
+    landingMemoryTitle: "Every search gets smarter",
+    landingMemoryBody:
+      "Every search gets smarter because Rico remembers your CV, target roles, preferred locations, and application history.",
+    landingMemoryItem1: "Your CV and experience",
+    landingMemoryItem2: "Target roles and preferred locations",
+    landingMemoryItem3: "Salary expectations",
+    landingMemoryItem4: "Application history",
+    landingMemoryItem5: "Follow-up reminders",
+
+    // Landing page – smart match section
+    landingSmartMatchEyebrow: "Smart job matching",
+    landingSmartMatchTitle: "Jobs that fit your CV, not random job-board noise",
+    landingUAEJobsBadge: "UAE jobs",
+    landingMatchFitLabel: "fit",
+    landingCurrentMatch1Role: "HSE Manager",
+    landingCurrentMatch1Signal:
+      "Strong match with your safety and compliance experience",
+    landingCurrentMatch2Role: "Operations Manager",
+    landingCurrentMatch2Signal: "Good match with your UAE experience",
+    landingCurrentMatch3Role: "Environmental Compliance Officer",
+    landingCurrentMatch3Signal:
+      "Matches your regulatory and inspection background",
+
+    // Landing page – alerts section
+    landingAlertsEyebrow: "Job alerts when something important changes",
+    landingAlertsTitle: "Rico tells you when to act",
+    landingAlertsBody:
+      "Rico watches your saved jobs, new matches, and application status — and alerts you when something is worth your attention.",
+    landingLatestAlert: "Latest alert",
+    landingLatestAlertBody:
+      "A new job matches your CV and target salary. Rico is ready to show it to you.",
+
+    // Landing page – control section
+    landingControlEyebrow: "You stay in control",
+    landingControlTitle: "Rico works for you, not instead of you",
+    landingControlBody:
+      "Rico finds jobs, ranks them, and tracks your progress. You decide when to apply, when to pause, and which direction to take your career.",
+    landingControlItem1: "No setup wizard",
+    landingControlItem2: "No enterprise forms",
+    landingControlItem3: "No silent applying",
+
+    // Landing page – CTA section
+    landingCTAEyebrow: "Start free",
+    landingCTATitle: "Upload your CV. Let Rico find your next job.",
+    landingCTABody:
+      "Upload your CV and Rico goes to work. It reads your experience, finds matching UAE jobs, and tells you what to do next — in English and Arabic.",
+
+    // Command page – missing keys
+    commandThinking: "Rico is thinking…",
+    commandSearching: "Searching for jobs…",
+    commandQuickAction1:
+      "Find matching jobs using my saved target role. If I do not have one saved, ask me which role to search for.",
+    commandQuickAction2:
+      "Review my CV and profile for better job matches, then tell me the highest-impact improvements.",
+    commandQuickAction3:
+      "Prepare an application plan for my strongest current job match.",
+    commandQuickAction4:
+      "Check my application follow-ups and tell me what needs attention next.",
   },
   ar: {
     // Common
@@ -810,6 +905,99 @@ export const translations = {
     // Maintenance
     backendMaintenanceDescription:
       "مزامنة الإعدادات وتوصيلات تيليجرام متوقفة أثناء استعادة استضافة Render. الصفحات الحالية متاحة، لكن التفضيلات التي تعتمد على الخادم لا يمكن تغييرها.",
+
+    // Landing page – nav
+    landingSignIn: "تسجيل الدخول",
+    landingSignUpFree: "إنشاء حساب مجاني",
+    landingSignUpFreeArrow: "إنشاء حساب مجاني ←",
+
+    // Landing page – hero section
+    landingHeroTagline: "شريكك الذكي في البحث عن العمل في الإمارات",
+    landingHeroMainTitle: "ارفع سيرتك الذاتية.",
+    landingHeroMainHighlight: "دع ريكو يدير بحثك الوظيفي بذكاء.",
+    landingHeroMainBody:
+      "يقرأ ريكو سيرتك الذاتية، يجد وظائف مناسبة في الإمارات، يتتبع طلباتك، ويرشدك في مسيرتك المهنية — بالإنجليزية والعربية.",
+    landingHeroApprovalNote:
+      "لا يُقدّم ريكو أبدًا بصمت. أنت توافق على كل إجراء مهم.",
+    landingUploadYourCV: "ارفع سيرتك الذاتية",
+
+    // Landing page – live profile card
+    landingCardLabel: "ما يفعله ريكو من أجلك",
+    landingCardTitle: "يعمل على بحثك الوظيفي",
+
+    // Landing page – intelligence loop items
+    landingIntelligenceReading: "يقرأ سيرتك الذاتية",
+    landingIntelligenceUnderstanding: "يفهم تجربتك",
+    landingIntelligenceFinding: "يجد وظائف مناسبة في الإمارات",
+    landingIntelligenceTracking: "يتتبع طلباتك",
+    landingIntelligenceSending: "يرسل تنبيهات الوظائف",
+
+    // Landing page – How Rico works section
+    landingHowItWorksTitle: "من السيرة الذاتية إلى فرص عمل أفضل",
+    landingHowItWorksBody:
+      "ارفع سيرتك الذاتية مرة واحدة. يقرأ ريكو خبرتك ويبدأ في إيجاد وظائف مناسبة في الإمارات فورًا.",
+    landingHowItWorks05Title: "احصل على إرشادات وتنبيهات",
+    landingHowItWorks05Body:
+      "يخبرك ريكو بما يهم بعد ذلك — مطابقة وظيفة جديدة، مهارة ناقصة، أو تذكير بالمتابعة.",
+
+    // Landing page – memory section
+    landingMemoryEyebrow: "ريكو يتذكر أهدافك المهنية",
+    landingMemoryTitle: "كل بحث يصبح أذكى",
+    landingMemoryBody:
+      "كل بحث يصبح أذكى لأن ريكو يتذكر سيرتك الذاتية والأدوار المستهدفة والمواقع المفضلة وتاريخ التقديم.",
+    landingMemoryItem1: "سيرتك الذاتية وخبرتك",
+    landingMemoryItem2: "الأدوار المستهدفة والمواقع المفضلة",
+    landingMemoryItem3: "توقعات الراتب",
+    landingMemoryItem4: "تاريخ التقديم",
+    landingMemoryItem5: "تذكيرات المتابعة",
+
+    // Landing page – smart match section
+    landingSmartMatchEyebrow: "مطابقة وظيفية ذكية",
+    landingSmartMatchTitle: "وظائف تناسب سيرتك الذاتية، لا ضوضاء عشوائية",
+    landingUAEJobsBadge: "وظائف الإمارات",
+    landingMatchFitLabel: "ملاءمة",
+    landingCurrentMatch1Role: "مدير الصحة والسلامة والبيئة",
+    landingCurrentMatch1Signal: "مطابقة قوية مع خبرتك في السلامة والامتثال",
+    landingCurrentMatch2Role: "مدير العمليات",
+    landingCurrentMatch2Signal: "مطابقة جيدة مع خبرتك في الإمارات",
+    landingCurrentMatch3Role: "مسؤول الامتثال البيئي",
+    landingCurrentMatch3Signal: "يتوافق مع خلفيتك في التنظيم والتفتيش",
+
+    // Landing page – alerts section
+    landingAlertsEyebrow: "تنبيهات الوظائف عند تغيير شيء مهم",
+    landingAlertsTitle: "ريكو يخبرك متى تتصرف",
+    landingAlertsBody:
+      "يراقب ريكو وظائفك المحفوظة والمطابقات الجديدة وحالة التقديم — وينبهك عندما يكون شيء يستحق انتباهك.",
+    landingLatestAlert: "آخر تنبيه",
+    landingLatestAlertBody:
+      "وظيفة جديدة تتطابق مع سيرتك الذاتية والراتب المستهدف. ريكو جاهز لإظهارها لك.",
+
+    // Landing page – control section
+    landingControlEyebrow: "أنت تبقى في السيطرة",
+    landingControlTitle: "ريكو يعمل من أجلك، لا بدلاً عنك",
+    landingControlBody:
+      "يجد ريكو الوظائف ويصنفها ويتتبع تقدمك. أنت تقرر متى تتقدم، ومتى توقف، وفي أي اتجاه تأخذ مسيرتك المهنية.",
+    landingControlItem1: "لا معالج إعداد",
+    landingControlItem2: "لا نماذج مؤسسية",
+    landingControlItem3: "لا تقديم صامت",
+
+    // Landing page – CTA section
+    landingCTAEyebrow: "ابدأ مجانًا",
+    landingCTATitle: "ارفع سيرتك الذاتية. دع ريكو يجد وظيفتك القادمة.",
+    landingCTABody:
+      "ارفع سيرتك الذاتية وريكو يبدأ العمل. يقرأ خبرتك، يجد وظائف مناسبة في الإمارات، ويخبرك بما يجب فعله — بالإنجليزية والعربية.",
+
+    // Command page – missing keys
+    commandThinking: "ريكو يفكر…",
+    commandSearching: "جاري البحث عن وظائف…",
+    commandQuickAction1:
+      "ابحث عن وظائف مناسبة باستخدام دوري المستهدف المحفوظ. إذا لم يكن محفوظًا، اسألني عن الدور الذي أبحث عنه.",
+    commandQuickAction2:
+      "راجع سيرتي الذاتية وملفي للحصول على مطابقات أفضل، ثم أخبرني بأعلى تحسينات الأثر.",
+    commandQuickAction3:
+      "أعدّ خطة تقديم لأقوى مطابقة وظيفية حالية لديّ.",
+    commandQuickAction4:
+      "تحقق من متابعات طلباتي وأخبرني بما يحتاج اهتمامًا بعد ذلك.",
   },
 } as const;
 

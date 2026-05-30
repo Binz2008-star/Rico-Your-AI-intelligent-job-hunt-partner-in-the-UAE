@@ -4,99 +4,7 @@ import { MotionConfig, motion } from "framer-motion";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
-
-const intelligenceLoop = [
-  "Reading your CV",
-  "Understanding your experience",
-  "Finding matching UAE jobs",
-  "Tracking your applications",
-  "Sending job alerts",
-];
-
-// The core product story, told as one continuous flow. Each step names a concrete
-// outcome so a first-time visitor understands the whole loop in a single glance.
-const productFlow = [
-  {
-    step: "01",
-    title: "Upload your CV",
-    body: "Rico reads your experience, skills, education, and career history.",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M12 16V4M12 4 8 8M12 4l4 4" />
-        <path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />
-      </svg>
-    ),
-  },
-  {
-    step: "02",
-    title: "Build your career profile",
-    body: "Rico turns your CV into a living profile it can use to match you with better jobs.",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <circle cx="12" cy="8" r="4" />
-        <path d="M4 21a8 8 0 0 1 16 0" />
-      </svg>
-    ),
-  },
-  {
-    step: "03",
-    title: "Find matching UAE jobs",
-    body: "Rico searches for roles that fit your experience, target role, salary, and location.",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <circle cx="11" cy="11" r="7" />
-        <path d="m21 21-4.3-4.3" />
-      </svg>
-    ),
-  },
-  {
-    step: "04",
-    title: "Track your applications",
-    body: "Keep your saved jobs, opened links, applications, and follow-ups in one place.",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M9 11l3 3L22 4" />
-        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-      </svg>
-    ),
-  },
-  {
-    step: "05",
-    title: "Get guidance and alerts",
-    body: "Rico tells you what matters next — a new job match, a missing skill, or a follow-up reminder.",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M3 12h4l2 6 4-12 2 6h6" />
-      </svg>
-    ),
-  },
-];
-
-const memoryItems = [
-  "Your CV and experience",
-  "Target roles and preferred locations",
-  "Salary expectations",
-  "Application history",
-  "Follow-up reminders",
-];
-
-const liveMatches = [
-  {
-    role: "HSE Manager",
-    score: "94",
-    signal: "Strong match with your safety and compliance experience",
-  },
-  {
-    role: "Operations Manager",
-    score: "89",
-    signal: "Good match with your UAE experience",
-  },
-  {
-    role: "Environmental Compliance Officer",
-    score: "86",
-    signal: "Matches your regulatory and inspection background",
-  },
-];
+import { useTranslation } from "@/lib/translations";
 
 function RicoCardPanel({
   children,
@@ -151,9 +59,106 @@ function SectionHeading({
 
 export default function LandingPage() {
   const { language, setLanguage } = useLanguage();
+  const t = useTranslation(language);
+  const isAr = language === "ar";
+
+  const intelligenceLoop = [
+    t("landingIntelligenceReading"),
+    t("landingIntelligenceUnderstanding"),
+    t("landingIntelligenceFinding"),
+    t("landingIntelligenceTracking"),
+    t("landingIntelligenceSending"),
+  ];
+
+  const productFlow = [
+    {
+      step: "01",
+      title: t("landingHowItWorks01Title"),
+      body: t("landingHowItWorks01Body"),
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M12 16V4M12 4 8 8M12 4l4 4" />
+          <path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />
+        </svg>
+      ),
+    },
+    {
+      step: "02",
+      title: t("landingHowItWorks02Title"),
+      body: t("landingHowItWorks02Body"),
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 21a8 8 0 0 1 16 0" />
+        </svg>
+      ),
+    },
+    {
+      step: "03",
+      title: t("landingHowItWorks03Title"),
+      body: t("landingHowItWorks03Body"),
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m21 21-4.3-4.3" />
+        </svg>
+      ),
+    },
+    {
+      step: "04",
+      title: t("landingHowItWorks04Title"),
+      body: t("landingHowItWorks04Body"),
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M9 11l3 3L22 4" />
+          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+        </svg>
+      ),
+    },
+    {
+      step: "05",
+      title: t("landingHowItWorks05Title"),
+      body: t("landingHowItWorks05Body"),
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M3 12h4l2 6 4-12 2 6h6" />
+        </svg>
+      ),
+    },
+  ];
+
+  const memoryItems = [
+    t("landingMemoryItem1"),
+    t("landingMemoryItem2"),
+    t("landingMemoryItem3"),
+    t("landingMemoryItem4"),
+    t("landingMemoryItem5"),
+  ];
+
+  const liveMatches = [
+    {
+      role: t("landingCurrentMatch1Role"),
+      score: "94",
+      signal: t("landingCurrentMatch1Signal"),
+    },
+    {
+      role: t("landingCurrentMatch2Role"),
+      score: "89",
+      signal: t("landingCurrentMatch2Signal"),
+    },
+    {
+      role: t("landingCurrentMatch3Role"),
+      score: "86",
+      signal: t("landingCurrentMatch3Signal"),
+    },
+  ];
+
   return (
     <MotionConfig reducedMotion="user">
-      <div className="relative min-h-screen overflow-x-hidden bg-background text-white">
+      <div
+        className="relative min-h-screen overflow-x-hidden bg-background text-white"
+        dir={isAr ? "rtl" : "ltr"}
+      >
         <div className="fixed inset-0 pointer-events-none z-0">
           <motion.div
             aria-hidden="true"
@@ -185,23 +190,23 @@ export default function LandingPage() {
           <nav className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => setLanguage(language === "en" ? "ar" : "en")}
-              aria-label={language === "en" ? "Switch to Arabic" : "Switch to English"}
+              onClick={() => setLanguage(isAr ? "en" : "ar")}
+              aria-label={isAr ? "Switch to English" : "Switch to Arabic"}
               className="text-[12px] font-semibold px-2.5 py-1 rounded-lg border border-border-subtle text-text-secondary hover:text-white hover:border-[#f5a623]/50 transition-colors"
             >
-              {language === "en" ? "عربي" : "EN"}
+              {isAr ? "EN" : "عربي"}
             </button>
             <Link
               href="/login"
               className="text-sm text-text-secondary transition-colors hover:text-white"
             >
-              Sign in
+              {t("landingSignIn")}
             </Link>
             <Link
               href="/signup"
               className="rounded-full border border-magenta/40 bg-magenta/10 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-magenta/25"
             >
-              Sign up free
+              {t("landingSignUpFree")}
             </Link>
           </nav>
         </header>
@@ -215,23 +220,19 @@ export default function LandingPage() {
               className="max-w-3xl"
             >
               <p className="mb-5 inline-flex rounded-full border border-cyan/25 bg-cyan/10 px-4 py-2 font-mono text-[11px] uppercase tracking-[0.26em] text-cyan">
-                Your AI job-hunt partner in the UAE
+                {t("landingHeroTagline")}
               </p>
               <h1 className="font-display text-[clamp(2.5rem,7vw,5.5rem)] font-semibold leading-[1.02] tracking-tight text-text-primary">
-                Upload your CV.{" "}
+                {t("landingHeroMainTitle")}{" "}
                 <span className="bg-gradient-to-r from-magenta to-cyan bg-clip-text text-transparent">
-                  Let Rico run your job search smarter.
+                  {t("landingHeroMainHighlight")}
                 </span>
               </h1>
-              <p className="mt-3 text-[clamp(1.1rem,2.5vw,1.5rem)] font-medium leading-[1.3] tracking-wide text-text-secondary/80" dir="rtl" lang="ar">
-                ارفع سيرتك الذاتية. دع ريكو يبحث عن وظيفتك في الإمارات.
-              </p>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-text-secondary md:text-xl">
-                Rico reads your CV, finds matching UAE jobs, tracks your applications,
-                and guides your next career move — in English and Arabic.
+                {t("landingHeroMainBody")}
               </p>
               <p className="mt-3 max-w-2xl text-sm leading-7 text-text-tertiary">
-                Rico never applies silently. You approve every important action.
+                {t("landingHeroApprovalNote")}
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
                 <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
@@ -239,7 +240,7 @@ export default function LandingPage() {
                     href="/upload"
                     className="inline-flex w-full items-center justify-center rounded-full bg-gradient-to-r from-magenta to-cyan px-7 py-4 text-base font-semibold text-black transition-opacity hover:opacity-90 sm:w-auto"
                   >
-                    Upload your CV
+                    {t("landingUploadYourCV")}
                   </Link>
                 </motion.div>
                 <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
@@ -247,7 +248,7 @@ export default function LandingPage() {
                     href="/signup"
                     className="inline-flex w-full items-center justify-center rounded-full border border-white/10 bg-white/[0.04] px-7 py-4 text-base font-semibold text-white backdrop-blur-xl transition-colors hover:bg-white/[0.08] sm:w-auto"
                   >
-                    Start free
+                    {t("landingSectionStartFree")}
                   </Link>
                 </motion.div>
               </div>
@@ -260,26 +261,26 @@ export default function LandingPage() {
               <div className="mb-6 flex items-center justify-between gap-4">
                 <div>
                   <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-text-tertiary">
-                    What Rico does for you
+                    {t("landingCardLabel")}
                   </p>
                   <h2 className="mt-2 text-2xl font-semibold text-white">
-                    Working on your job search
+                    {t("landingCardTitle")}
                   </h2>
                 </div>
                 <span className="rounded-full border border-cyan/30 bg-cyan/10 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.2em] text-cyan">
-                  Online
+                  {t("landingLiveProfileOnline")}
                 </span>
               </div>
               <div className="space-y-4">
                 {intelligenceLoop.map((item, index) => (
                   <div
-                    key={item}
+                    key={index}
                     className="border-b border-white/5 pb-4 last:border-b-0 last:pb-0"
                   >
                     <div className="mb-2 flex items-center justify-between gap-4">
                       <p className="text-sm font-medium text-white">{item}</p>
                       <p className="font-mono text-[11px] text-text-tertiary">
-                        {index === 0 ? "ready" : "watching"}
+                        {index === 0 ? t("landingLiveProfileReady") : t("landingLiveProfileWatching")}
                       </p>
                     </div>
                     <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
@@ -302,12 +303,11 @@ export default function LandingPage() {
 
           <section className="px-5 py-16 md:px-10 lg:px-16">
             <SectionHeading
-              eyebrow="How Rico works"
-              title="From CV to better job opportunities"
-              body="Upload your CV once. Rico reads your experience and starts finding matching UAE jobs right away."
+              eyebrow={t("landingSectionHowRicoWorks")}
+              title={t("landingHowItWorksTitle")}
+              body={t("landingHowItWorksBody")}
             />
             <div className="mx-auto max-w-7xl">
-              {/* Connecting line behind the steps (desktop only) */}
               <div className="relative grid gap-4 md:grid-cols-5">
                 <div
                   aria-hidden="true"
@@ -335,7 +335,6 @@ export default function LandingPage() {
                     <p className="mt-2 text-sm leading-6 text-text-secondary">
                       {node.body}
                     </p>
-                    {/* Down-arrow connector on mobile/stacked layout */}
                     {index < productFlow.length - 1 && (
                       <div
                         aria-hidden="true"
@@ -352,21 +351,20 @@ export default function LandingPage() {
             <div className="mx-auto grid max-w-7xl gap-5 lg:grid-cols-[0.9fr_1.1fr]">
               <RicoCardPanel>
                 <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-magenta">
-                  Rico remembers your career goals
+                  {t("landingMemoryEyebrow")}
                 </p>
                 <h2 className="mt-4 text-3xl font-semibold text-white md:text-4xl">
-                  Every search gets smarter
+                  {t("landingMemoryTitle")}
                 </h2>
                 <p className="mt-5 text-base leading-7 text-text-secondary">
-                  Every search gets smarter because Rico remembers your CV,
-                  target roles, preferred locations, and application history.
+                  {t("landingMemoryBody")}
                 </p>
               </RicoCardPanel>
               <RicoCardPanel delay={0.08}>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {memoryItems.map((item) => (
+                  {memoryItems.map((item, i) => (
                     <div
-                      key={item}
+                      key={i}
                       className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-4"
                     >
                       <div className="mb-4 h-1 w-10 rounded-full bg-gradient-to-r from-magenta to-cyan" />
@@ -384,14 +382,14 @@ export default function LandingPage() {
                 <div className="mb-6 flex items-center justify-between gap-4">
                   <div>
                     <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-cyan">
-                      Smart job matching
+                      {t("landingSmartMatchEyebrow")}
                     </p>
                     <h2 className="mt-4 text-3xl font-semibold text-white md:text-4xl">
-                      Jobs that fit your CV, not random job-board noise
+                      {t("landingSmartMatchTitle")}
                     </h2>
                   </div>
                   <span className="hidden rounded-full border border-magenta/30 bg-magenta/10 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-magenta sm:inline-flex">
-                    UAE jobs
+                    {t("landingUAEJobsBadge")}
                   </span>
                 </div>
                 <div className="space-y-3">
@@ -414,7 +412,7 @@ export default function LandingPage() {
                             {match.score}
                           </p>
                           <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-muted">
-                            fit
+                            {t("landingMatchFitLabel")}
                           </p>
                         </div>
                       </div>
@@ -424,23 +422,20 @@ export default function LandingPage() {
               </RicoCardPanel>
               <RicoCardPanel delay={0.08}>
                 <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-magenta">
-                  Job alerts when something important changes
+                  {t("landingAlertsEyebrow")}
                 </p>
                 <h2 className="mt-4 text-3xl font-semibold text-white md:text-4xl">
-                  Rico tells you when to act
+                  {t("landingAlertsTitle")}
                 </h2>
                 <p className="mt-5 text-base leading-7 text-text-secondary">
-                  Rico watches your saved jobs, new matches, and application
-                  status — and alerts you when something is worth your
-                  attention.
+                  {t("landingAlertsBody")}
                 </p>
                 <div className="mt-8 rounded-lg border border-cyan/[0.18] bg-cyan/10 p-4">
                   <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-cyan">
-                    Latest alert
+                    {t("landingLatestAlert")}
                   </p>
                   <p className="mt-3 text-sm leading-6 text-white">
-                    A new job matches your CV and target salary. Rico is ready
-                    to show it to you.
+                    {t("landingLatestAlertBody")}
                   </p>
                 </div>
               </RicoCardPanel>
@@ -451,23 +446,21 @@ export default function LandingPage() {
             <div className="mx-auto grid max-w-7xl gap-5 lg:grid-cols-[0.9fr_1.1fr]">
               <RicoCardPanel>
                 <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-cyan">
-                  You stay in control
+                  {t("landingControlEyebrow")}
                 </p>
                 <h2 className="mt-4 text-3xl font-semibold text-white md:text-4xl">
-                  Rico works for you, not instead of you
+                  {t("landingControlTitle")}
                 </h2>
                 <p className="mt-5 text-base leading-7 text-text-secondary">
-                  Rico finds jobs, ranks them, and tracks your progress. You
-                  decide when to apply, when to pause, and which direction to
-                  take your career.
+                  {t("landingControlBody")}
                 </p>
               </RicoCardPanel>
               <RicoCardPanel delay={0.08}>
                 <div className="grid gap-4 md:grid-cols-3">
                   {[
-                    "No setup wizard",
-                    "No enterprise forms",
-                    "No silent applying",
+                    t("landingControlItem1"),
+                    t("landingControlItem2"),
+                    t("landingControlItem3"),
                   ].map((item) => (
                     <div
                       key={item}
@@ -484,9 +477,9 @@ export default function LandingPage() {
 
           <section className="px-5 py-16 md:px-10 lg:px-16">
             <SectionHeading
-              eyebrow="Pricing"
-              title="Simple plans for serious career moves"
-              body="Start free with 50 AI messages and 10 saved jobs. Upgrade when you need more."
+              eyebrow={t("landingSectionPricing")}
+              title={t("landingSectionPricingTitle")}
+              body={t("landingSectionPricingBody")}
             />
             <div className="mx-auto grid max-w-5xl gap-4 md:grid-cols-2">
               <RicoCardPanel
@@ -494,50 +487,50 @@ export default function LandingPage() {
                 className="border-magenta/30 bg-magenta/[0.03]"
               >
                 <div className="mb-4 inline-flex rounded-full border border-magenta/30 bg-magenta/10 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-magenta">
-                  Popular
+                  {t("landingPricingPopular")}
                 </div>
                 <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-text-tertiary">
-                  Pro
+                  {t("landingPricingPro")}
                 </p>
                 <h3 className="mt-4 text-4xl font-semibold text-white">
-                  AED 29
+                  {t("landingPricingProPrice")}
                 </h3>
-                <p className="mt-2 text-sm text-text-secondary">/month</p>
+                <p className="mt-2 text-sm text-text-secondary">{t("landingPricingPerMonth")}</p>
                 <ul className="mt-6 space-y-3 text-sm text-text-secondary">
-                  <li>300 AI messages per month</li>
-                  <li>100 saved jobs</li>
-                  <li>20 profile optimisations per month</li>
-                  <li>Smart AI role recommendations</li>
-                  <li>Advanced match scoring</li>
+                  <li>{t("landingPricingProFeature1")}</li>
+                  <li>{t("landingPricingProFeature2")}</li>
+                  <li>{t("landingPricingProFeature3")}</li>
+                  <li>{t("landingPricingProFeature4")}</li>
+                  <li>{t("landingPricingProFeature5")}</li>
                 </ul>
                 <Link
                   href="/subscription"
                   className="mt-8 inline-flex w-full items-center justify-center rounded-full bg-gradient-to-r from-magenta to-cyan px-6 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90"
                 >
-                  Upgrade to Pro
+                  {t("landingPricingUpgradeToPro")}
                 </Link>
               </RicoCardPanel>
               <RicoCardPanel delay={0.16}>
                 <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-text-tertiary">
-                  Premium
+                  {t("landingPricingPremium")}
                 </p>
                 <h3 className="mt-4 text-4xl font-semibold text-white">
-                  AED 49
+                  {t("landingPricingPremiumPrice")}
                 </h3>
-                <p className="mt-2 text-sm text-text-secondary">/month</p>
+                <p className="mt-2 text-sm text-text-secondary">{t("landingPricingPerMonth")}</p>
                 <ul className="mt-6 space-y-3 text-sm text-text-secondary">
-                  <li>1500 AI messages per month</li>
-                  <li>Unlimited saved jobs</li>
-                  <li>100 profile optimisations per month</li>
-                  <li>Everything in Pro</li>
-                  <li>Auto-apply system</li>
-                  <li>Premium recommendations</li>
+                  <li>{t("landingPricingPremiumFeature6")}</li>
+                  <li>{t("landingPricingPremiumFeature7")}</li>
+                  <li>{t("landingPricingPremiumFeature8")}</li>
+                  <li>{t("landingPricingPremiumFeature1")}</li>
+                  <li>{t("landingPricingPremiumFeature2")}</li>
+                  <li>{t("landingPricingPremiumFeature9")}</li>
                 </ul>
                 <Link
                   href="/subscription"
                   className="mt-8 inline-flex w-full items-center justify-center rounded-full border border-white/10 bg-white/[0.04] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/[0.08]"
                 >
-                  Upgrade to Premium
+                  {t("landingPricingUpgradeToPremium")}
                 </Link>
               </RicoCardPanel>
             </div>
@@ -545,17 +538,17 @@ export default function LandingPage() {
               <div className="flex items-center justify-between rounded-xl border border-white/[0.05] bg-white/[0.03] px-5 py-4">
                 <div>
                   <span className="text-[13px] font-semibold text-[#c0c0d8]">
-                    Free
+                    {t("landingFreePlanLabel")}
                   </span>
                   <span className="ml-3 text-[12px] text-[#5a5a7a]">
-                    50 AI messages · 10 saved jobs · 1 profile optimisation/mo
+                    {t("landingPricingFreePlanDesc")}
                   </span>
                 </div>
                 <Link
                   href="/signup"
                   className="text-[12px] font-semibold text-[#7b6fff] hover:underline whitespace-nowrap"
                 >
-                  Sign up free →
+                  {t("landingSignUpFreeArrow")}
                 </Link>
               </div>
             </div>
@@ -564,28 +557,26 @@ export default function LandingPage() {
           <section className="px-5 pb-20 pt-10 md:px-10 lg:px-16">
             <RicoCardPanel className="mx-auto max-w-5xl text-center">
               <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-magenta">
-                Start free
+                {t("landingCTAEyebrow")}
               </p>
               <h2 className="mx-auto mt-4 max-w-3xl text-3xl font-semibold text-white md:text-5xl">
-                Upload your CV. Let Rico find your next job.
+                {t("landingCTATitle")}
               </h2>
               <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-text-secondary">
-                Upload your CV and Rico goes to work. It reads your experience,
-                finds matching UAE jobs, and tells you what to do next — in
-                English and Arabic.
+                {t("landingCTABody")}
               </p>
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
                 <Link
                   href="/upload"
                   className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-magenta to-cyan px-7 py-4 text-base font-semibold text-black transition-opacity hover:opacity-90"
                 >
-                  Upload your CV
+                  {t("landingUploadYourCV")}
                 </Link>
                 <Link
                   href="/signup"
                   className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/[0.04] px-7 py-4 text-base font-semibold text-white transition-colors hover:bg-white/[0.08]"
                 >
-                  Start free
+                  {t("landingSectionStartFree")}
                 </Link>
               </div>
             </RicoCardPanel>
@@ -597,23 +588,23 @@ export default function LandingPage() {
               href="/terms"
               className="text-xs text-text-tertiary transition-colors hover:text-white"
             >
-              Terms
+              {t("landingFooterTerms")}
             </Link>
             <Link
               href="/privacy"
               className="text-xs text-text-tertiary transition-colors hover:text-white"
             >
-              Privacy
+              {t("landingFooterPrivacy")}
             </Link>
             <Link
               href="/refund-policy"
               className="text-xs text-text-tertiary transition-colors hover:text-white"
             >
-              Refunds
+              {t("landingFooterRefunds")}
             </Link>
           </div>
           <p className="text-xs text-text-tertiary">
-            © 2026 Rico Hunt. All rights reserved.
+            {t("landingFooterAllRights")}
           </p>
         </footer>
       </div>
