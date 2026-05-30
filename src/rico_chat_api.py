@@ -2772,6 +2772,64 @@ class RicoChatAPI:
 
         # Save job
         if legacy_intent == "save_job":
+            # "Save — {title} at {company}" comes from a Rico-generated job card.
+            # Resolve the job from recent results / persisted context so the user
+            # is never asked for a URL to save something Rico itself produced.
+            raw_title = (getattr(intent_result, "extracted_title", None) or "").strip()
+            raw_company = (getattr(intent_result, "extracted_company", None) or "").strip()
+            resolved = self._resolve_card_job(user_id, raw_title, raw_company)
+            title = ((resolved.get("title") if resolved else None) or raw_title).strip()
+            company = ((resolved.get("company") if resolved else None) or raw_company).strip()
+
+            if title and company:
+                apply_url = ((resolved.get("apply_url") if resolved else "") or "").strip()
+                source_url = ((resolved.get("source_url") if resolved else "") or "").strip()
+                alt_url = (
+                    ((resolved.get("alt_url") or resolved.get("alt_link")) if resolved else "") or ""
+                ).strip()
+                # No direct apply URL → save with the best available source/alt link
+                # and flag it for verification. Never block the save on a missing URL.
+                effective_source = source_url or alt_url
+                verification_status = (resolved or {}).get("verification_status") or "lead_needs_verification"
+                if not apply_url and effective_source:
+                    verification_status = "needs_source_verification"
+
+                job_dict = {
+                    "title": title,
+                    "company": company,
+                    "apply_url": apply_url,
+                    "source_url": effective_source,
+                    "alt_url": alt_url,
+                    "verification_status": verification_status,
+                }
+                # Stable job_key (title+company) keeps runtime idempotency correct
+                # and lets the runtime stamp record_interaction + set_lifecycle_status.
+                job_key = self._derive_lifecycle_job_key(title, company)
+                result = agent_runtime.handle_action(
+                    user_id=user_id, action="save", job=job_dict, job_key=job_key, source="chat",
+                )
+                if result.ok:
+                    success_msg = f"Saved — {title} at {company}. I'll keep it in your tracked jobs."
+                else:
+                    logger.warning(
+                        "rico_chat: save action not ok user=%s title=%s err=%s",
+                        user_id, title, result.error,
+                    )
+                    success_msg = (
+                        f"Noted — {title} at {company} is in your tracker. "
+                        "I'll keep it with your saved jobs."
+                    )
+                response = {
+                    "type": "save_job",
+                    "intent": "save_job",
+                    "message": success_msg,
+                    "entities": {"title": title, "company": company},
+                    "verification_status": verification_status,
+                }
+                self._append_chat(user_id, "assistant", success_msg)
+                return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+
+            # Could not identify a job from the card — fall back to the tool router.
             context = self._build_router_context(user_id, profile)
             routed = _route(message, user_id=user_id, context=context)
             if routed.tool_name:
@@ -2963,6 +3021,78 @@ class RicoChatAPI:
         current_rank = RicoChatAPI._get_status_rank(current_status)
         new_rank = RicoChatAPI._get_status_rank(new_status)
         return new_rank >= current_rank
+
+    def _resolve_card_job(
+        self, user_id: str, raw_title: str, raw_company: str
+    ) -> Optional[dict[str, Any]]:
+        """Resolve a job-card action back to the job Rico generated.
+
+        When the user clicks "Save — {title} at {company}", the classifier's
+        greedy "... at ..." split can mis-attribute the boundary (e.g. a company
+        like "Careers at UAE"). This reconstructs the original "{title} at
+        {company}" string and matches it against, in order:
+          1. the last search-result payload (recent_search_matches in context),
+          2. persisted user_job_context (find_by_title_company across splits),
+          3. recently interacted / discussed jobs.
+        Returns the matched job dict (title/company/apply_url/source_url/...) or
+        None. Never raises.
+        """
+        raw_title = (raw_title or "").strip()
+        raw_company = (raw_company or "").strip()
+        if not raw_title and not raw_company:
+            return None
+        payload = (f"{raw_title} at {raw_company}" if raw_company else raw_title).strip().lower()
+
+        def _matches(cand_title: str, cand_company: str) -> bool:
+            ct = (cand_title or "").strip()
+            cc = (cand_company or "").strip()
+            if not ct:
+                return False
+            combined = (f"{ct} at {cc}" if cc else ct).strip().lower()
+            if combined == payload:
+                return True
+            return payload.startswith(ct.lower()) and (not cc or payload.endswith(cc.lower()))
+
+        # 1. Last search-result payload (in-memory context).
+        try:
+            ctx = self._get_recent_context(user_id)
+            for m in ctx.get("recent_search_matches", []) or []:
+                if _matches(m.get("title", ""), m.get("company", "")):
+                    return dict(m)
+        except Exception:
+            logger.debug("rico_chat: card-job recent-match lookup failed user=%s", user_id, exc_info=True)
+
+        # 2 + 3. Persisted context + recently interacted/discussed (survives restarts).
+        try:
+            from src.repositories.user_job_context_repo import (
+                find_by_title_company,
+                get_recently_interacted,
+                get_recently_discussed,
+            )
+            # Try each plausible title/company boundary of the reconstructed payload
+            # so "Careers at UAE" is matched as the company rather than truncated.
+            full = f"{raw_title} at {raw_company}" if raw_company else raw_title
+            parts = full.split(" at ")
+            candidates: list[tuple[str, str]] = []
+            if raw_title and raw_company:
+                candidates.append((raw_title, raw_company))
+            for i in range(1, len(parts)):
+                t = " at ".join(parts[:i]).strip()
+                c = " at ".join(parts[i:]).strip()
+                if t and c and (t, c) not in candidates:
+                    candidates.append((t, c))
+            for t, c in candidates:
+                row = find_by_title_company(user_id, t, c)
+                if row:
+                    return row
+            for fn in (get_recently_interacted, get_recently_discussed):
+                for row in fn(user_id) or []:
+                    if _matches(row.get("title", ""), row.get("company", "")):
+                        return row
+        except Exception:
+            logger.debug("rico_chat: card-job db lookup failed user=%s", user_id, exc_info=True)
+
+        return None
 
     @staticmethod
     def _derive_lifecycle_job_key(title: str, company: str, url: str = "") -> str:
