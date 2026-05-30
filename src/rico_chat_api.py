@@ -2055,6 +2055,21 @@ class RicoChatAPI:
 
         # Subscription / pricing
         if legacy_intent == "subscription.show_plans":
+            _AMBIGUOUS_SUBSCRIBE_PHRASES = frozenset([
+                "how can i subscribe", "how do i subscribe", "how to subscribe",
+                "i want to subscribe", "i want to upgrade",
+            ])
+            if message.strip().lower() in _AMBIGUOUS_SUBSCRIBE_PHRASES:
+                clarify_response = {
+                    "type": "subscription.clarify",
+                    "message": "What would you like to subscribe to?",
+                    "options": [
+                        {"action": "show_plans", "label": "Rico Pro / Premium plans", "message": "Show me Rico subscription plans and pricing"},
+                        {"action": "job_alerts", "label": "Job alert notifications", "message": "How do job alert notifications work?"},
+                    ],
+                }
+                self._append_chat(user_id, "assistant", clarify_response["message"])
+                return self._finalize(clarify_response, self.SOURCE_KEYWORD, profile=profile)
             sub_response = self._handle_subscription_plans(user_id, profile)
             self._append_chat(user_id, "assistant", sub_response.get("message", ""))
             return self._finalize(sub_response, self.SOURCE_KEYWORD, profile=profile)
@@ -3523,10 +3538,9 @@ class RicoChatAPI:
 
         plans_msg = (
             "Rico has two plans:\n"
-            "• **Pro** — AED 29/month (unlimited AI messages, priority job alerts, CV optimization)\n"
-            "• **Premium** — AED 49/month (everything in Pro + dedicated support, interview prep, cover-letter drafting)\n\n"
-            "You can subscribe via WhatsApp or manual bank transfer. "
-            "If you need help, contact support at support@rico.jobs."
+            "• **Pro** — AED 29/month (unlimited AI chats, priority alerts, CV optimization)\n"
+            "• **Premium** — AED 49/month (Pro + interview prep, cover letters, dedicated support)\n\n"
+            "Subscribe at ricohunt.com/subscription or ask me for details."
         )
         return {
             "type": "subscription.show_plans",
@@ -3537,6 +3551,11 @@ class RicoChatAPI:
             ],
             "current_plan": current_plan,
             "next_action": "choose_plan_or_continue",
+            "options": [
+                {"action": "subscription_pro_details", "label": "Tell me more about Pro", "message": "Tell me more about the Rico Pro plan"},
+                {"action": "subscription_premium_details", "label": "Tell me more about Premium", "message": "Tell me more about the Rico Premium plan"},
+                {"action": "subscription_how_to", "label": "How do I subscribe?", "message": "How do I subscribe to Rico Pro or Premium?"},
+            ],
         }
 
     def _handle_delegated_decision(self, user_id: str, profile: Any) -> dict[str, Any]:
