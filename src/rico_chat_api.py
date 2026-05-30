@@ -1130,6 +1130,210 @@ class RicoChatAPI:
         # Normalize before matching so "list them,," / "list them." both resolve.
         return RicoChatAPI._normalize_followup_phrase(message) in RicoChatAPI._LIST_FOLLOWUP_PHRASES
 
+    # ── Canonical "last turn" memory ─────────────────────────────────────────
+    # One reliable record of the last meaningful thing Rico did, so vague
+    # follow-ups ("make sure", "that one", "list them") can anchor to a real
+    # intent + object instead of being re-classified from scratch by the AI.
+    #
+    # Only "anchor-worthy" response types update it; clarifications, smalltalk,
+    # errors and option menus deliberately do NOT overwrite the anchor, so a
+    # follow-up after a clarification still resolves against the last real turn.
+    _LAST_TURN_INTENT_BY_TYPE = {
+        "application_status":        "application_tracking",
+        "application":               "application_tracking",
+        "lifecycle_query":           "lifecycle_query",
+        "job_matches":               "job_search",
+        "job_search_explicit":       "job_search",
+        "no_results_recovery":       "job_search",
+        "save_job":                  "save_job",
+        "track_job":                 "track_job",
+        "open_apply_link":           "open_apply_link",
+        "mark_applied":              "mark_applied",
+        "prepare_application":       "prepare_application",
+        "explain_match":             "explain_match",
+        "draft_message":             "draft_message",
+        "interview_prep":            "interview_prep",
+        "profile_summary":           "profile_summary",
+        "profile_role_suggestions":  "profile_role_suggestions",
+    }
+
+    # Lifecycle/application intents whose anchor a "list them"/"make sure" replays.
+    _LAST_TURN_LIFECYCLE_INTENTS = frozenset({"application_tracking", "lifecycle_query"})
+
+    # Short "verify / are you sure / re-confirm" follow-ups. These must NOT fall
+    # through to bare-role classification (which would treat "make sure please"
+    # as a job title). They re-confirm the last informational turn instead.
+    _VERIFY_FOLLOWUP_PHRASES = frozenset({
+        "make sure", "make sure please", "please make sure",
+        "are you sure", "you sure", "u sure", "sure about that",
+        "is that right", "is that correct", "is this correct", "is this right",
+        "are you certain", "you certain", "really", "for real", "seriously",
+        "double check", "double check please", "check again", "recheck",
+        "verify", "verify please", "verify that", "confirm that", "make certain",
+        # Arabic
+        "متأكد", "هل أنت متأكد", "تأكد", "تأكد من فضلك", "أكد",
+    })
+
+    def _set_last_turn(
+        self,
+        user_id: str,
+        *,
+        intent: str,
+        response_type: str,
+        obj: dict[str, Any] | None = None,
+        user_message: str = "",
+    ) -> None:
+        """Persist the single canonical last-turn record."""
+        try:
+            self.memory.set_context(user_id, "last_turn", {
+                "intent": intent,
+                "response_type": response_type,
+                "object": obj or {},
+                "user_message": (user_message or "")[:300],
+                "ts": datetime.now(timezone.utc).isoformat(),
+            })
+        except Exception:
+            logger.debug("rico_chat: failed to store last_turn user=%s", user_id)
+
+    def _get_last_turn(self, user_id: str) -> dict[str, Any]:
+        try:
+            return self.memory.get_context(user_id, "last_turn") or {}
+        except Exception:
+            return {}
+
+    def _record_last_turn(self, user_id: str, message: str, result: dict[str, Any]) -> None:
+        """From a finalized response, update the canonical last-turn anchor.
+
+        Only anchor-worthy response types update it (see _LAST_TURN_INTENT_BY_TYPE);
+        clarifications / errors / menus are skipped so the anchor stays meaningful.
+        """
+        if not isinstance(result, dict):
+            return
+        rtype = str(result.get("type") or "")
+        intent = self._LAST_TURN_INTENT_BY_TYPE.get(rtype)
+        if not intent:
+            return  # not anchor-worthy — keep the previous anchor intact
+
+        obj: dict[str, Any] = {}
+        entities = result.get("entities")
+        if isinstance(entities, dict):
+            if entities.get("title"):
+                obj["title"] = entities["title"]
+            if entities.get("company"):
+                obj["company"] = entities["company"]
+        # Carry the lifecycle replay marker so "list them"/"make sure" can re-run it.
+        if intent in self._LAST_TURN_LIFECYCLE_INTENTS:
+            qt = (self._get_lifecycle_context(user_id) or {}).get("last_query_type")
+            if qt:
+                obj["query_type"] = qt
+        self._set_last_turn(
+            user_id, intent=intent, response_type=rtype, obj=obj, user_message=message,
+        )
+
+    @staticmethod
+    def _is_verify_followup(message: str) -> bool:
+        """True for short 'are you sure / make sure / re-confirm' follow-ups."""
+        norm = RicoChatAPI._normalize_followup_phrase(message)
+        if norm in RicoChatAPI._VERIFY_FOLLOWUP_PHRASES:
+            return True
+        # Arabic phrases may carry diacritics/extra spacing — check membership loosely.
+        stripped = re.sub(r"[\s؟?.!،,]+", " ", (message or "").strip().lower()).strip()
+        return stripped in RicoChatAPI._VERIFY_FOLLOWUP_PHRASES
+
+    _VALID_LIFECYCLE_QUERY_TYPES = frozenset({
+        "lifecycle_show_saved",
+        "lifecycle_show_applied",
+        "lifecycle_show_opened_not_applied",
+    })
+
+    def _resolve_lifecycle_query_for_followup(self, user_id: str) -> str | None:
+        """Resolve which lifecycle query a 'list them' follow-up should replay.
+
+        Prefers the dedicated lifecycle context; falls back to the canonical
+        last-turn anchor so the follow-up still works if only the anchor is set.
+        """
+        last_query = (self._get_lifecycle_context(user_id) or {}).get("last_query_type")
+        if last_query in self._VALID_LIFECYCLE_QUERY_TYPES:
+            return last_query
+        last = self._get_last_turn(user_id)
+        if last.get("intent") in self._LAST_TURN_LIFECYCLE_INTENTS:
+            qt = (last.get("object") or {}).get("query_type")
+            if qt in self._VALID_LIFECYCLE_QUERY_TYPES:
+                return qt
+            # An application-tracking turn with no explicit query_type defaults
+            # to the applied funnel — that's what was just shown.
+            if last.get("intent") == "application_tracking":
+                return "lifecycle_show_applied"
+        return None
+
+    def _resolve_verify_followup(self, user_id: str, profile: Any) -> dict[str, Any] | None:
+        """Anchor a 'make sure / are you sure' follow-up to the last real turn.
+
+        Re-runs the last informational query so Rico re-confirms with fresh data
+        instead of re-classifying the vague phrase as a new role/intent. Never
+        triggers a mutation (apply/save) — those still require explicit action.
+        """
+        last = self._get_last_turn(user_id)
+        intent = last.get("intent")
+        if not intent:
+            return None
+
+        if intent in self._LAST_TURN_LIFECYCLE_INTENTS:
+            lifecycle_query = self._resolve_lifecycle_query_for_followup(user_id)
+            if intent == "application_tracking" and not (last.get("object") or {}).get("query_type"):
+                # The last turn was the applications summary — re-run it verbatim.
+                resp = self._handle_application_tracking(user_id, intent="application_tracking")
+            elif lifecycle_query:
+                resp = self._handle_lifecycle_query(user_id, lifecycle_query)
+            else:
+                resp = self._handle_application_tracking(user_id, intent="application_tracking")
+            # Prefix so the user sees this as a re-confirmation, not a fresh answer.
+            base = resp.get("message") or ""
+            resp["message"] = (
+                "I double-checked — here's exactly what I have on record:\n\n" + base
+                if base else "I double-checked your records."
+            )
+            return resp
+
+        if intent == "job_search":
+            obj = last.get("object") or {}
+            title = obj.get("title") or ""
+            if title:
+                return {
+                    "type": "clarification",
+                    "message": (
+                        f"Yes — the last search I showed you was for \"{title}\". "
+                        "Want me to re-run it for fresh live results, or refine the role or city?"
+                    ),
+                }
+            return {
+                "type": "clarification",
+                "message": (
+                    "Yes — that was the latest live search I ran. Want me to re-run it "
+                    "for fresh results, or narrow it by role or city?"
+                ),
+            }
+
+        # Save / apply / track / prepare etc. — confirm the specific job on record.
+        obj = last.get("object") or {}
+        title = obj.get("title")
+        company = obj.get("company")
+        if title and company:
+            action_label = {
+                "save_job": "saved", "track_job": "tracked",
+                "mark_applied": "marked as applied", "open_apply_link": "opened the apply link for",
+                "prepare_application": "prepared an application for",
+            }.get(intent, "noted")
+            return {
+                "type": "clarification",
+                "message": (
+                    f"Confirmed — I have \"{title}\" at {company} {action_label} in your tracker. "
+                    "Want me to show the full list or take the next step?"
+                ),
+                "entities": {"title": title, "company": company},
+            }
+        return None
+
     def _store_lifecycle_context(self, user_id: str, query_type: str) -> None:
         """Remember the last lifecycle query so a follow-up 'list them' can replay it."""
         try:
@@ -1499,6 +1703,9 @@ class RicoChatAPI:
                     error_response.setdefault("error", "empty_message")
                     return error_response
                 result.setdefault("success", True)
+                # Update the canonical last-turn anchor so vague follow-ups
+                # ("make sure", "list them", "that one") can resolve reliably.
+                self._record_last_turn(user_id, message, result)
             return result
         except Exception as exc:
             if self._current_operation_id:
@@ -1675,18 +1882,21 @@ class RicoChatAPI:
         # Must run before the affirmative resolver so short list-commands don't
         # fall through to the AI and crash on ambiguous short input.
         if self._is_list_followup(message):
-            lc_ctx = self._get_lifecycle_context(user_id)
-            last_query = lc_ctx.get("last_query_type")
-            if last_query in (
-                "lifecycle_show_saved",
-                "lifecycle_show_applied",
-                "lifecycle_show_opened_not_applied",
-            ):
+            last_query = self._resolve_lifecycle_query_for_followup(user_id)
+            if last_query:
                 return self._finalize(
                     self._handle_lifecycle_query(user_id, last_query),
                     self.SOURCE_KEYWORD,
                     profile=profile,
                 )
+
+        # ── Verify / "make sure" follow-up: re-confirm the last real turn ───────
+        # Without this, "make sure please" after an applied-jobs reply gets
+        # classified as a bare job role. Anchor it to the last_turn instead.
+        if self._is_verify_followup(message):
+            verified = self._resolve_verify_followup(user_id, profile)
+            if verified is not None:
+                return self._finalize(verified, self.SOURCE_KEYWORD, profile=profile)
 
         # ── Pending-intent resolver: yes/no after Rico's question ──────────────
         # Must run before generic routing so "نعم" resolves the last offered action
