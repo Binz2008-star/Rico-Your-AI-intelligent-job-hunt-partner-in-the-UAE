@@ -152,7 +152,16 @@ def search(query: str, *, use_cache: bool = True, country: str = "ae") -> FetchR
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as resp:
                 data = json.loads(resp.read().decode())
-            items = [normalize_item(it) for it in _raw_items(data)]
+            raw_items = [normalize_item(it) for it in _raw_items(data)]
+            seen_ids: set = set()
+            items = []
+            for it in raw_items:
+                jid = it.get("job_id", "")
+                if jid and jid in seen_ids:
+                    continue
+                if jid:
+                    seen_ids.add(jid)
+                items.append(it)
             _cache_put(query, items)
             logger.info("jsearch_fetch ok query=%r results=%d retries=%d", query, len(items), retries)
             return FetchResult(items=items, retries=retries)
