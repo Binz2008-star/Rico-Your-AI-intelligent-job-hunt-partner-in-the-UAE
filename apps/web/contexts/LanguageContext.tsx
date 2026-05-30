@@ -47,10 +47,9 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    // Update lang and dir attributes on document
+    // Update lang attribute only — dir is scoped per-page (LandingPage sets its own wrapper dir)
     useEffect(() => {
         document.documentElement.lang = language;
-        document.documentElement.dir = language === "ar" ? "rtl" : "ltr";
     }, [language]);
 
     return (
