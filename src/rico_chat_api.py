@@ -72,10 +72,6 @@ _LEGACY_INTENT_MAP = {
     # Application tracking
     "application.show_flow": "application_tracking",
     "application.recent_context": "application_tracking",
-    # Lifecycle queries (chat-side funnel memory)
-    "lifecycle.show_saved": "lifecycle_show_saved",
-    "lifecycle.show_applied": "lifecycle_show_applied",
-    "lifecycle.show_opened_not_applied": "lifecycle_show_opened_not_applied",
     # Recent context follow-up (native legacy name, pass through)
     "recent_context": "recent_context",
     # Profile
@@ -1839,18 +1835,6 @@ class RicoChatAPI:
                 profile=profile,
             )
 
-        # Lifecycle funnel queries — chat-side memory (user_job_context)
-        if legacy_intent in (
-            "lifecycle_show_saved",
-            "lifecycle_show_applied",
-            "lifecycle_show_opened_not_applied",
-        ):
-            return self._finalize(
-                self._handle_lifecycle_query(user_id, legacy_intent),
-                self.SOURCE_KEYWORD,
-                profile=profile,
-            )
-
         # Profile-match job search (use CV/profile, not a named role)
         if legacy_intent == "job_search_profile_match":
             if not has_cv:
@@ -2742,22 +2726,6 @@ class RicoChatAPI:
                 "rico_chat: failed to persist lifecycle event user=%s title=%s company=%s status=%s",
                 user_id, title, company, status
             )
-        # Also stamp user_job_context with the lifecycle timestamp so Rico can
-        # answer funnel-memory questions ("show jobs I opened but didn't apply to").
-        try:
-            from src.repositories.user_job_context_repo import set_lifecycle_status
-            set_lifecycle_status(
-                user_id=user_id,
-                title=title,
-                company=company,
-                status=status,
-                apply_url=url,
-            )
-        except Exception:
-            logger.debug(
-                "rico_chat: failed to stamp user_job_context lifecycle user=%s title=%s",
-                user_id, title,
-            )
 
     def _store_recent_context(self, user_id: str, context: dict[str, Any]) -> None:
         try:
@@ -3158,57 +3126,6 @@ class RicoChatAPI:
             "applications": enriched,
             "stats": stats,
             "follow_up_needed": follow_up_needed,
-        }
-
-    def _handle_lifecycle_query(self, user_id: str, query_type: str) -> dict[str, Any]:
-        """Answer funnel-memory questions from user_job_context.
-
-        Handles three Rico chat questions:
-          - lifecycle_show_saved            → "show saved jobs"
-          - lifecycle_show_applied          → "what jobs did I apply to?"
-          - lifecycle_show_opened_not_applied → "show jobs I opened but did not apply to"
-        """
-        from src.repositories.user_job_context_repo import (
-            get_by_status,
-            get_opened_not_applied,
-        )
-
-        if query_type == "lifecycle_show_saved":
-            rows = get_by_status(user_id, "saved")
-            label = "saved"
-            empty_msg = "You haven't saved any jobs yet. When you save a job from Rico, it'll appear here."
-        elif query_type == "lifecycle_show_applied":
-            rows = get_by_status(user_id, "applied")
-            label = "applied"
-            empty_msg = "I don't have any jobs marked as applied yet. After you apply, hit 'Mark as applied' so Rico can track it."
-        else:  # lifecycle_show_opened_not_applied
-            rows = get_opened_not_applied(user_id)
-            label = "opened but not applied"
-            empty_msg = "No jobs in that bucket yet — these are jobs where you clicked the apply link but haven't marked as applied."
-
-        if not rows:
-            return {
-                "type": "lifecycle_query",
-                "intent": query_type,
-                "message": empty_msg,
-                "jobs": [],
-                "count": 0,
-            }
-
-        lines = [f"Here are your **{label}** jobs ({len(rows)}):\n"]
-        for r in rows[:20]:
-            title = r.get("title") or "Unknown Role"
-            company = r.get("company") or "Unknown Company"
-            url = r.get("apply_url") or r.get("source_url") or ""
-            link_part = f" — [Apply]({url})" if url else ""
-            lines.append(f"• **{title}** at {company}{link_part}")
-
-        return {
-            "type": "lifecycle_query",
-            "intent": query_type,
-            "message": "\n".join(lines),
-            "jobs": rows[:20],
-            "count": len(rows),
         }
 
     def _handle_profile_role_suggestions(self, profile: Any) -> dict[str, Any]:
