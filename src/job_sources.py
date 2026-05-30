@@ -2,12 +2,55 @@ from pathlib import Path
 from urllib.parse import quote_plus
 
 from jobspy import scrape_jobs
+import hashlib
+import json
 import logging
 import os
 import time
 from typing import List, Dict, Any
 
 logger = logging.getLogger(__name__)
+
+# ── JSearch Redis cache ────────────────────────────────────────────────────────
+_JSEARCH_CACHE_TTL = 1800  # 30 minutes
+
+
+def _get_redis_client():
+    """Return a Redis client if RICO_REDIS_URL / REDIS_URL is configured, else None."""
+    try:
+        import redis  # type: ignore
+        url = os.getenv("RICO_REDIS_URL") or os.getenv("REDIS_URL")
+        if not url:
+            return None
+        r = redis.from_url(url, socket_connect_timeout=2, socket_timeout=2)
+        r.ping()
+        return r
+    except Exception:
+        return None
+
+
+def _jsearch_request(url: str, headers: dict, max_retries: int = 3) -> dict:
+    """GET a JSearch URL, retrying on HTTP 429 with exponential backoff."""
+    import urllib.request
+    import urllib.error
+
+    for attempt in range(max_retries):
+        req = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return json.loads(resp.read().decode())
+        except urllib.error.HTTPError as exc:
+            if exc.code == 429:
+                wait = 2 ** (attempt + 1)  # 2 → 4 → 8 s
+                logger.warning(
+                    "jsearch_rate_limited attempt=%d/%d wait=%ds",
+                    attempt + 1, max_retries, wait,
+                )
+                if attempt < max_retries - 1:
+                    time.sleep(wait)
+                    continue
+            raise
+    raise RuntimeError("jsearch_request: unreachable")
 
 _QUERIES = [
     "ESG Manager",
@@ -211,11 +254,9 @@ _JSEARCH_QUERIES = [
 def fetch_jsearch_jobs(save_to_db: bool = True) -> List[Dict[str, Any]]:
     """
     Fetch jobs from JSearch (RapidAPI) for UAE-focused HSE/ESG roles.
-    Reads RAPIDAPI_KEY from environment. Returns scored job list.
+    Results are cached in Redis for 30 min per query to reduce API usage.
+    Retries automatically on HTTP 429 with exponential backoff.
     """
-    import urllib.request
-    import json
-
     api_key = os.getenv("RAPIDAPI_KEY", "").strip()
     if not api_key:
         logger.error("jsearch: RAPIDAPI_KEY not set — skipping")
@@ -224,6 +265,7 @@ def fetch_jsearch_jobs(save_to_db: bool = True) -> List[Dict[str, Any]]:
     from src.scoring import score_job
     from src.db import save_job as db_save_job
 
+    redis_client = _get_redis_client()
     seen: set = set()
     results: List[Dict[str, Any]] = []
 
@@ -234,37 +276,74 @@ def fetch_jsearch_jobs(save_to_db: bool = True) -> List[Dict[str, Any]]:
     }
 
     for query in _JSEARCH_QUERIES:
-        url = (
-            f"{_JSEARCH_BASE}/search-v2"
-            f"?query={quote_plus(query)}&num_pages=1&country=ae&date_posted=all"
-        )
-        req = urllib.request.Request(url, headers=headers)
-        try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                data = json.loads(resp.read().decode())
-        except Exception as exc:
-            logger.warning("jsearch_fetch_failed query=%r: %s", query, exc)
-            time.sleep(2)
-            continue
+        jobs_list = None
 
-        jobs_list = data.get("data", {}).get("jobs", []) if isinstance(data.get("data"), dict) else data.get("data", [])
+        # ── 1. Try Redis cache ────────────────────────────────────────────────
+        cache_key = "jsearch:v1:" + hashlib.md5(query.encode()).hexdigest()
+        if redis_client:
+            try:
+                cached = redis_client.get(cache_key)
+                if cached:
+                    jobs_list = json.loads(cached)
+                    logger.info("jsearch_cache_hit query=%r count=%d", query, len(jobs_list))
+            except Exception as cache_exc:
+                logger.debug("jsearch_cache_read_error: %s", cache_exc)
+
+        # ── 2. Fetch from API if not cached ───────────────────────────────────
+        if jobs_list is None:
+            url = (
+                f"{_JSEARCH_BASE}/search-v2"
+                f"?query={quote_plus(query)}&num_pages=1&country=ae&date_posted=all"
+            )
+            try:
+                data = _jsearch_request(url, headers)
+            except Exception as exc:
+                logger.warning("jsearch_fetch_failed query=%r: %s", query, exc)
+                time.sleep(2)
+                continue
+
+            jobs_list = (
+                data.get("data", {}).get("jobs", [])
+                if isinstance(data.get("data"), dict)
+                else data.get("data", [])
+            )
+
+            # Cache the raw list for next 30 min
+            if redis_client and jobs_list:
+                try:
+                    redis_client.setex(cache_key, _JSEARCH_CACHE_TTL, json.dumps(jobs_list))
+                    logger.debug("jsearch_cache_stored query=%r ttl=%ds", query, _JSEARCH_CACHE_TTL)
+                except Exception as cache_exc:
+                    logger.debug("jsearch_cache_write_error: %s", cache_exc)
+
+            time.sleep(1)  # polite delay only when we actually hit the API
+
+        # ── 3. Process the job list ───────────────────────────────────────────
         for item in jobs_list:
             job_id = item.get("job_id", "")
-            link = item.get("job_apply_link") or item.get("job_google_link") or ""
+            apply_link = item.get("job_apply_link") or ""
+            google_link = item.get("job_google_link") or ""
+            link = apply_link or google_link
+            # alt_link is the other URL so users have a fallback if one is unavailable
+            alt_link = google_link if link == apply_link else apply_link
+
             dedup_key = job_id or link
             if not dedup_key or dedup_key in seen:
                 continue
             seen.add(dedup_key)
+
             location = ", ".join(filter(None, [
                 item.get("job_city"),
                 item.get("job_state"),
                 item.get("job_country"),
             ])) or "UAE"
+
             job: Dict[str, Any] = {
                 "title":           item.get("job_title", ""),
                 "company":         item.get("employer_name", ""),
                 "location":        location,
                 "link":            link,
+                "alt_link":        alt_link,
                 "description":     item.get("job_description", ""),
                 "source":          "jsearch",
                 "salary_string":   item.get("job_salary_string") or "",
@@ -276,11 +355,9 @@ def fetch_jsearch_jobs(save_to_db: bool = True) -> List[Dict[str, Any]]:
                 db_save_job(job, score)
             results.append(job)
 
-        time.sleep(1)
-
     passed = sum(1 for j in results if j["score"] > 0)
     logger.info(
-        "jsearch_jobs_fetched total=%d passed=%d rejected=%d",
-        len(results), passed, len(results) - passed,
+        "jsearch_jobs_fetched total=%d passed=%d rejected=%d cache_enabled=%s",
+        len(results), passed, len(results) - passed, redis_client is not None,
     )
     return results
