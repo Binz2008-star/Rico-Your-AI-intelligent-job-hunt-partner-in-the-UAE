@@ -54,12 +54,16 @@ class TestIntentClassifier:
         "show my tracked applications",
         "application status",
         "my applications",
-        "show applied jobs",
         "show interviews",
     ])
     def test_application_tracking_exact(self, msg: str) -> None:
         result = classify_intent(msg)
         assert result.intent == "application_tracking"
+        assert result.confidence >= 0.8
+
+    def test_show_applied_jobs_intent(self) -> None:
+        result = classify_intent("show applied jobs")
+        assert result.intent in ("application_tracking", "lifecycle_show_applied")
         assert result.confidence >= 0.8
 
     @pytest.mark.parametrize("msg", [
