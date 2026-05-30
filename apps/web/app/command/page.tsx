@@ -396,14 +396,16 @@ export default function CommandPage() {
         setMessages((prev) => [...prev, { id: nextId(), role: "user", text: trimmed }]);
         setThinking(true);
         const lc = trimmed.toLowerCase();
-        if (lc.match(/\b(job|find|search|vacanc|opening|role|position|hiring|live jobs|live role)\b/)) {
+        if (lc.match(/\b(subscri|plan|pricing|package|upgrade)\b/)) {
+            setOperationState({ state: "checking", message: "Checking plans…" });
+        } else if (lc.match(/\b(job|find|search|vacanc|opening|role|position|hiring)\b/)) {
             setOperationState({ state: "searching", message: "Searching UAE jobs…" });
-        } else if (lc.match(/\b(match|appli|track|status|applied|offer)\b/)) {
-            setOperationState({ state: "searching", message: "Checking your matches…" });
+        } else if (lc.match(/\b(appli|track|application|status|applied|offer)\b/)) {
+            setOperationState({ state: "reviewing", message: "Reviewing applications…" });
+        } else if (lc.match(/\b(cv|resume|profile|experience|skills)\b/)) {
+            setOperationState({ state: "reading", message: "Looking at your profile…" });
         } else if (lc.match(/\b(career|next move|recommend|suggest|direction|trajectory|what should)\b/)) {
             setOperationState({ state: "extracting", message: "Preparing recommendations…" });
-        } else if (lc.match(/\b(cv|resume|profile|experience|skills)\b/)) {
-            setOperationState({ state: "reading", message: "Reading your profile…" });
         } else if (lc.match(/\b(interview|prep|prepare|question)\b/)) {
             setOperationState({ state: "extracting", message: "Preparing interview guidance…" });
         }
