@@ -567,10 +567,11 @@ def rico_chat(request: Request, payload: RicoChatRequest) -> RicoChatResponse:
         raise
     except Exception as exc:
         logger.exception(
-            "chat_error user=%s message_len=%d error=%s request_ref=%s",
+            "chat_error user=%s message_len=%d error_type=%s error=%s request_ref=%s",
             ctx.user_id if "ctx" in locals() else "unknown",
             len(payload.message) if "payload" in locals() else 0,
-            str(exc),
+            type(exc).__name__,
+            str(exc) or repr(exc),
             request_ref,
         )
         _metrics.record_request((time.time() - start_time) * 1000)
@@ -790,10 +791,11 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> RicoCh
         return RicoChatResponse(**stripped_result, trace_id=request_ref)
     except Exception as exc:
         logger.exception(
-            "chat_public_error user=%s message_len=%d error=%s request_ref=%s",
+            "chat_public_error user=%s message_len=%d error_type=%s error=%s request_ref=%s",
             ctx.user_id if "ctx" in locals() else "unknown",
             len(payload.message) if "payload" in locals() else 0,
-            str(exc),
+            type(exc).__name__,
+            str(exc) or repr(exc),
             request_ref,
         )
         _metrics.record_request((time.time() - start_time) * 1000)
