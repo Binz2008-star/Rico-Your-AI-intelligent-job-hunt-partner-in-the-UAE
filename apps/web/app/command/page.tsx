@@ -355,6 +355,15 @@ export default function CommandPage() {
     const [operationState, setOperationState] = useState<{ state: string; message: string } | null>(null);
     const [editingProfileId, setEditingProfileId] = useState<number | null>(null);
     const [draftProfile, setDraftProfile] = useState<ProfilePreview | null>(null);
+
+    // Force LTR direction for /command to prevent RTL punctuation issues
+    // This is a temporary fix until full RTL support is implemented
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            document.documentElement.dir = "ltr";
+            document.documentElement.lang = "en";
+        }
+    }, []);
     const bottomRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
