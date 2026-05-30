@@ -269,8 +269,7 @@ class RicoChatAPI:
             daemon=True,
         ).start()
 
-    @staticmethod
-    def _build_openai_context(self, profile: Any, user_id: str | None = None) -> dict[str, Any]:  # type: ignore[override]
+    def _build_openai_context(self, profile: Any, user_id: str | None = None) -> dict[str, Any]:
         """Build context for OpenAI agent from profile and recent conversation history."""
         if profile is None:
             ctx: dict[str, Any] = {"profile_exists": False}
@@ -1646,6 +1645,23 @@ class RicoChatAPI:
           4. For role-like text, use 3-tier role classifier
           5. Unknown / nonsense → clarification, not search
         """
+        try:
+            return self._handle_active_user_inner(user_id, message)
+        except Exception:
+            logger.exception("rico_routing_error user=%s msg=%r", user_id, message)
+            fallback = {
+                "type": "clarification",
+                "message": (
+                    "I'm here to help with your UAE job search. "
+                    "You can search for a role, upload your CV, ask about your applications, "
+                    "or say 'help' for all options."
+                ),
+            }
+            self._append_chat(user_id, "assistant", fallback["message"])
+            return self._finalize(fallback, self.SOURCE_KEYWORD, profile=None)
+
+    def _handle_active_user_inner(self, user_id: str, message: str) -> dict[str, Any]:
+        """Inner routing — called by _handle_active_user which provides the safe fallback."""
         profile = self._resolve_profile(user_id)
         has_cv = profile.has_cv
         text = self._normalize_followup_phrase(message)
@@ -1779,11 +1795,9 @@ class RicoChatAPI:
 
         # Subscription / pricing
         if legacy_intent == "subscription.show_plans":
-            return self._finalize(
-                self._handle_subscription_plans(user_id, profile),
-                self.SOURCE_KEYWORD,
-                profile=profile,
-            )
+            sub_response = self._handle_subscription_plans(user_id, profile)
+            self._append_chat(user_id, "assistant", sub_response.get("message", ""))
+            return self._finalize(sub_response, self.SOURCE_KEYWORD, profile=profile)
 
         # Delegated decision — user asks Rico to choose
         if legacy_intent == "delegated_decision":
@@ -1821,14 +1835,17 @@ class RicoChatAPI:
                 ))
             )
             if _is_cv_question:
-                return self._finalize(
-                    self._answer_with_ai_fallback(
-                        user_id=user_id, message=message, profile=profile,
-                        save_user_message=False,
-                    ),
-                    self.SOURCE_AI,
-                    profile=profile,
+                friend_cv_msg = (
+                    "You can paste or share your friend's CV text in this chat and I can analyse it "
+                    "for them right now — no account needed for a one-off review.\n\n"
+                    "However, for saved profile, job tracking, personalised alerts, and application "
+                    "history, your friend needs their own Rico account at ricohunt.com.\n\n"
+                    "Important: if you upload a CV here it will overwrite *your* profile, so only do "
+                    "that if you intend to update your own details."
                 )
+                response = {"type": "account_delegation", "message": friend_cv_msg}
+                self._append_chat(user_id, "assistant", friend_cv_msg)
+                return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
             cv_status = self._profile_value(profile, "cv_status")
             if cv_status == "parsed" or self._profile_value(profile, "manual_profile_wizard_disabled"):
                 response = {
@@ -3109,9 +3126,9 @@ class RicoChatAPI:
         """Return Rico subscription plans and pricing."""
         # Try to get user's current plan from subscription repo
         try:
-            from src.repositories.subscription_repo import get_user_subscription
-            sub = get_user_subscription(user_id)
-            current_plan = sub.get("plan", "free") if sub else "free"
+            from src.repositories.subscription_repo import get_subscription
+            sub = get_subscription(user_id)
+            current_plan = (sub.get("plan") or "free") if sub else "free"
         except Exception:
             current_plan = "free"
 
