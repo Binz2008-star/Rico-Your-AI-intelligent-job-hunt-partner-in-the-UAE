@@ -213,15 +213,23 @@ def test_jsearch_direct_coerces_nullable_strings(monkeypatch):
 
     monkeypatch.setenv("RAPIDAPI_KEY", "test-key")
 
+    import src.jsearch_client as _jsearch_client
+    _jsearch_client.clear_cache()
+
     with patch("urllib.request.urlopen", return_value=FakeResponse()):
         jobs = RicoChatAPI._search_jsearch_direct("HSE Manager")
 
+    # normalize_item now emits apply_link, alt_link, job_id in addition to the
+    # original 9 fields — update expected dict accordingly.
     assert jobs == [
         {
             "title": "",
             "company": "",
             "location": "AE",
             "link": "https://example.com/job-1",
+            "apply_link": "",
+            "alt_link": "https://example.com/job-1",
+            "job_id": "job-1",
             "description": "",
             "source": "jsearch",
             "salary_string": "",

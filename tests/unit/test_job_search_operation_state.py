@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from src.jsearch_client import FetchResult
 from src.rico_chat_api import RicoChatAPI
 from src.schemas.chat import RicoSessionContext
 from src.services import chat_service
@@ -63,8 +64,8 @@ def test_specific_hse_manager_continues_to_job_search(monkeypatch):
     monkeypatch.setattr(api, "_append_chat", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         api,
-        "_search_jsearch_direct",
-        lambda role: [
+        "_search_jsearch_meta",
+        lambda role: FetchResult(items=[
             {
                 "title": "HSE Manager",
                 "company": "ACME",
@@ -73,7 +74,7 @@ def test_specific_hse_manager_continues_to_job_search(monkeypatch):
                 "description": "Lead HSE operations.",
                 "score": 88,
             }
-        ],
+        ]),
     )
     monkeypatch.setattr(
         api.system,

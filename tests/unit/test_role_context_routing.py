@@ -204,6 +204,12 @@ class TestSaveTargetRoleHandler:
 # ── _search_jsearch_direct (unit, no network) ─────────────────────────────────
 
 class TestSearchJsearchDirect:
+    def setup_method(self):
+        # jsearch_client._cache is process-global; clear it so results from one
+        # test cannot bleed into another via the stale-cache fallback path.
+        from src import jsearch_client
+        jsearch_client.clear_cache()
+
     def test_returns_empty_when_no_api_key(self, monkeypatch):
         monkeypatch.delenv("RAPIDAPI_KEY", raising=False)
         from src.rico_chat_api import RicoChatAPI

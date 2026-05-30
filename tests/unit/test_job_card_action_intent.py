@@ -98,9 +98,9 @@ def test_application_tracking_phrases():
         "tracked applications",
         "my applications",
         "show applications",
-        "show applied jobs",
+        # "show applied jobs" and "show my applied jobs" now intentionally route to
+        # lifecycle_show_applied (more specific intent) — tested separately below.
         "applied jobs",
-        "show my applied jobs",
         "show interviews",
         "interview status",
         "my interviews",
@@ -115,6 +115,18 @@ def test_application_tracking_phrases():
         result = classify_intent(phrase)
         assert result.intent == "application_tracking", (
             f"Expected 'application_tracking' for phrase: {phrase!r}, got '{result.intent}'"
+        )
+
+    # These phrases are more specifically classified as lifecycle_show_applied
+    # because the lifecycle funnel check runs before the general tracking check.
+    lifecycle_applied_phrases = [
+        "show applied jobs",
+        "show my applied jobs",
+    ]
+    for phrase in lifecycle_applied_phrases:
+        result = classify_intent(phrase)
+        assert result.intent == "lifecycle_show_applied", (
+            f"Expected 'lifecycle_show_applied' for phrase: {phrase!r}, got '{result.intent}'"
         )
 
 
