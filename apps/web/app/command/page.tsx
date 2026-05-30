@@ -30,12 +30,27 @@ function prefersReducedMotion(): boolean {
     return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+interface ApplicationEntry {
+    job_id?: string;
+    title?: string;
+    company?: string;
+    status?: string;
+    date_applied?: string | null;
+    date_updated?: string | null;
+    days_since_applied?: number | null;
+    days_since_update?: number | null;
+    needs_follow_up?: boolean;
+}
+
 interface Message {
     id: number;
     role: "user" | "rico";
     text: string;
     type?: string;
     matches?: JobMatch[];
+    applications?: ApplicationEntry[];
+    follow_up_needed?: ApplicationEntry[];
+    profile_gaps?: string[];
     options?: RicoOption[];
     next_action?: string;
     freeMode?: boolean;
@@ -121,21 +136,15 @@ function ThinkingIndicator({ label }: { label?: string }) {
     );
 }
 
-function OperationStateIndicator({ state, message }: { state: string; message: string }) {
-    const icons = {
-        reading: "📄",
-        extracting: "⚙️",
-        searching: "🔍",
-        confirming: "✓",
-    };
-    const icon = icons[state as keyof typeof icons] || "⏳";
-
+function OperationStateIndicator({ state: _state, message }: { state: string; message: string }) {
     return (
-        <div className="flex justify-start animate-pulse motion-reduce:animate-none" role="status" aria-live="polite">
-            <div className="bg-surface border border-border-subtle rounded-2xl rounded-tl-none px-4 py-3 flex gap-2 items-center backdrop-blur-md">
-                <span className="text-lg" aria-hidden="true">{icon}</span>
-                <span className="text-[13px] text-text-secondary">{message}</span>
-            </div>
+        <div className="flex items-center gap-2.5 pl-8" role="status" aria-live="polite">
+            <span className="flex gap-0.5" aria-hidden="true">
+                <i className="w-1 h-1 rounded-full bg-magenta/50 block animate-bounce [animation-delay:0ms]" />
+                <i className="w-1 h-1 rounded-full bg-magenta/50 block animate-bounce [animation-delay:150ms]" />
+                <i className="w-1 h-1 rounded-full bg-magenta/50 block animate-bounce [animation-delay:300ms]" />
+            </span>
+            <span className="text-[12px] text-text-muted">{message}</span>
         </div>
     );
 }
@@ -143,166 +152,66 @@ function OperationStateIndicator({ state, message }: { state: string; message: s
 function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt: string) => void }) {
     const score = match.score ?? 0;
     const scoreLabel = score >= 0.8 ? "Strong match" : score >= 0.6 ? "Good match" : "Possible match";
-    const confidence = match.confidence || "medium";
+    const scoreColor = score >= 0.8
+        ? "bg-cyan-dim text-cyan"
+        : score >= 0.6
+            ? "bg-rico-amber/10 text-rico-amber"
+            : "bg-magenta-dim text-magenta";
+    const topReason = match.match_reasons?.[0] ?? match.why ?? "";
 
-    // Confidence badge styling with clear accessibility (colored text + border on dark background)
-    const getConfidenceBadge = () => {
-        const config = {
-            high: {
-                label: "High confidence fit",
-                bgColor: "bg-transparent",
-                textColor: "text-cyan",
-                borderColor: "border-cyan",
-                icon: "✓"
-            },
-            medium: {
-                label: "Medium confidence fit",
-                bgColor: "bg-transparent",
-                textColor: "text-rico-amber",
-                borderColor: "border-rico-amber",
-                icon: "○"
-            },
-            low: {
-                label: "Needs careful review",
-                bgColor: "bg-transparent",
-                textColor: "text-rico-red",
-                borderColor: "border-rico-red",
-                icon: "!"
-            }
-        };
-        return config[confidence as keyof typeof config] || config.medium;
-    };
-
-    const confidenceBadge = getConfidenceBadge();
+    const clean = (u?: string) => (u && u !== "#" ? u.trim() : "");
+    const chain = [clean(match.apply_url), clean(match.source_url), clean(match.alt_link)].filter(Boolean);
+    const primary = chain[0] || "";
 
     return (
-        <article className="rounded-xl border border-border-subtle bg-surface p-3 mb-2" aria-label={`Job match: ${match.title} at ${match.company}. ${scoreLabel}. ${confidenceBadge.label}.`}>
-            {/* Top row: title, company, score, confidence */}
-            <div className="flex items-start justify-between gap-2 mb-2">
+        <article
+            className="rounded-xl border border-border-subtle bg-surface/30 px-3 py-2.5"
+            aria-label={`Job match: ${match.title} at ${match.company}`}
+            data-testid="opportunity-card"
+        >
+            <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-semibold text-white">{match.title}</div>
-                    <div className="text-[11px] text-text-secondary">{match.company}{match.location ? ` · ${match.location}` : ""}</div>
+                    <div
+                        className="text-[13px] font-semibold text-white break-normal line-clamp-2"
+                        data-testid="opportunity-card-title"
+                    >
+                        {match.title}
+                    </div>
+                    <div className="text-[11px] text-text-secondary mt-0.5">
+                        {match.company}{match.location ? ` · ${match.location}` : ""}
+                    </div>
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                    {score > 0 && (
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${score >= 0.8
-                            ? "bg-cyan-dim text-cyan"
-                            : score >= 0.6
-                                ? "bg-rico-amber/10 text-rico-amber"
-                                : "bg-magenta-dim text-magenta"
-                            }`}>
-                            {scoreLabel}
-                        </span>
-                    )}
-                    {/* Confidence badge with icon and label for accessibility */}
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 ${confidenceBadge.bgColor} ${confidenceBadge.textColor} border ${confidenceBadge.borderColor} cursor-pointer`}>
-                        <span aria-hidden="true">{confidenceBadge.icon}</span>
-                        <span>{confidenceBadge.label}</span>
+                {score > 0 && (
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 mt-0.5 ${scoreColor}`}>
+                        {scoreLabel}
                     </span>
-                </div>
+                )}
             </div>
 
-            {/* Why this fits - max 4 items for scan speed */}
-            {match.match_reasons && match.match_reasons.length > 0 && (
-                <section className="mb-2" aria-label="Why this job fits your profile">
-                    <p className="text-[10px] font-semibold text-cyan mb-1">Why this fits:</p>
-                    <ul className="text-[10px] text-text-secondary list-disc list-inside space-y-0.5">
-                        {match.match_reasons.slice(0, 4).map((reason, idx) => (
-                            <li key={idx}>{reason}</li>
-                        ))}
-                        {match.match_reasons.length > 4 && (
-                            <li className="text-[9px] text-text-muted italic">+{match.match_reasons.length - 4} more reasons</li>
-                        )}
-                    </ul>
-                </section>
+            {topReason && (
+                <p className="text-[11px] text-text-muted mt-1.5 line-clamp-1">{topReason}</p>
             )}
 
-            {/* Worth checking - max 3 items to prevent overwhelming */}
-            {match.match_concerns && match.match_concerns.length > 0 && (
-                <section className="mb-2" aria-label="Items worth checking about this job match">
-                    <p className="text-[10px] font-semibold text-rico-amber mb-1">Worth checking:</p>
-                    <ul className="text-[10px] text-text-secondary list-disc list-inside space-y-0.5">
-                        {match.match_concerns.slice(0, 3).map((concern, idx) => (
-                            <li key={idx}>{concern}</li>
-                        ))}
-                        {match.match_concerns.length > 3 && (
-                            <li className="text-[9px] text-text-muted italic">+{match.match_concerns.length - 3} more</li>
-                        )}
-                    </ul>
-                </section>
-            )}
-
-            {/* Missing facts - max 3 items for cognitive load */}
-            {match.missing_facts && match.missing_facts.length > 0 && (
-                <section className="mb-2" aria-label="Missing facts from job posting">
-                    <p className="text-[10px] font-semibold text-magenta mb-1">Missing facts:</p>
-                    <ul className="text-[10px] text-text-secondary list-disc list-inside space-y-0.5">
-                        {match.missing_facts.slice(0, 3).map((fact, idx) => (
-                            <li key={idx}>{fact}</li>
-                        ))}
-                        {match.missing_facts.length > 3 && (
-                            <li className="text-[9px] text-text-muted italic">+{match.missing_facts.length - 3} more</li>
-                        )}
-                    </ul>
-                </section>
-            )}
-
-            {/* Recommended action - max 2 lines for instant clarity */}
-            {match.recommended_action && (
-                <section className="mb-2 p-2 bg-surface-subtle rounded-lg border-l-2 border-magenta" aria-label="Recommended next step">
-                    <p className="text-[10px] font-semibold text-magenta mb-0.5">Recommended next step:</p>
-                    <p className="text-[10px] text-white leading-relaxed line-clamp-2">{match.recommended_action}</p>
-                </section>
-            )}
-
-            {/* Fallback to legacy why field */}
-            {!match.match_reasons && match.why && (
-                <p className="text-[11px] text-text-muted mb-2 leading-relaxed">{match.why}</p>
-            )}
-
-            {/* Apply / Source links — fallback chain: apply_url → source_url → alt_link.
-                The first usable link becomes "Apply now"; the next distinct link is
-                offered as an alternate so the user keeps a path when one source is down. */}
-            {(() => {
-                const clean = (u?: string) => (u && u !== "#" ? u.trim() : "");
-                const chain = [clean(match.apply_url), clean(match.source_url), clean(match.alt_link)].filter(Boolean);
-                const primary = chain[0] || "";
-                const alternate = chain.find((u) => u !== primary) || "";
-                return (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                        {primary && (
-                            <a
-                                href={primary}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                aria-label={`Apply for ${match.title} at ${match.company}`}
-                                className="text-[11px] px-3 py-1.5 rounded-lg bg-magenta text-white font-medium hover:bg-magenta-hover transition-colors"
-                            >
-                                Apply now
-                            </a>
-                        )}
-                        {alternate && (
-                            <a
-                                href={alternate}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                aria-label={`Open alternate link for ${match.title} at ${match.company}`}
-                                className="text-[11px] px-3 py-1.5 rounded-lg border border-border-soft text-text-secondary hover:border-cyan/40 hover:text-white transition-colors"
-                            >
-                                Alternate link
-                            </a>
-                        )}
-                        {!primary && match.verification_status === "lead_needs_verification" && (
-                            <span className="text-[10px] px-2 py-1 rounded-lg border border-border-soft text-text-muted italic">
-                                Link pending verification
-                            </span>
-                        )}
-                    </div>
-                );
-            })()}
-            <div className="flex flex-wrap gap-1.5 mt-2">
-                {/* Chat action buttons */}
-                {match.actions && match.actions.length > 0 && match.actions.map((action) => (
+            <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+                {primary ? (
+                    <a
+                        href={primary}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid="view-job-action"
+                        aria-label={`Apply for ${match.title} at ${match.company}`}
+                        className="text-[11px] px-2.5 py-1 rounded-lg bg-magenta text-white font-medium hover:bg-magenta-hover transition-colors"
+                    >
+                        Apply now
+                    </a>
+                ) : (
+                    match.verification_status === "lead_needs_verification" && (
+                        <span className="text-[10px] px-2 py-1 rounded-lg border border-border-soft text-text-muted italic">
+                            Link pending verification
+                        </span>
+                    )
+                )}
+                {match.actions?.map((action) => (
                     <button
                         type="button"
                         key={action}
@@ -315,6 +224,73 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
                 ))}
             </div>
         </article>
+    );
+}
+
+function ApplicationStatusCard({ applications, followUpNeeded }: {
+    applications: ApplicationEntry[];
+    followUpNeeded: ApplicationEntry[];
+}) {
+    const stageDefs = [
+        { key: "saved", label: "Saved" },
+        { key: "applied", label: "Applied" },
+        { key: "interview", label: "Interview" },
+        { key: "offer", label: "Offer" },
+        { key: "rejected", label: "Rejected" },
+    ];
+    const counts = stageDefs.reduce((acc, s) => ({
+        ...acc,
+        [s.key]: applications.filter((a) => a.status === s.key).length,
+    }), {} as Record<string, number>);
+    const activeStages = stageDefs.filter((s) => counts[s.key] > 0);
+
+    return (
+        <div className="mt-2 rounded-xl border border-border-subtle bg-surface/30 p-3 space-y-2.5">
+            {activeStages.length > 0 && (
+                <div className="flex flex-wrap gap-4">
+                    {activeStages.map((s) => (
+                        <div key={s.key} className="flex items-baseline gap-1">
+                            <span className="text-[18px] font-bold text-white leading-none">{counts[s.key]}</span>
+                            <span className="text-[10px] text-text-muted">{s.label}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+            {followUpNeeded.length > 0 && (
+                <div className="border-t border-border-subtle/50 pt-2">
+                    <p className="text-[10px] font-semibold text-rico-amber mb-1.5">Follow up needed</p>
+                    <div className="space-y-1">
+                        {followUpNeeded.map((app, i) => (
+                            <div key={i} className="text-[11px] text-text-secondary flex items-center gap-1.5">
+                                <span className="w-1 h-1 rounded-full bg-rico-amber shrink-0" aria-hidden="true" />
+                                <span>
+                                    {app.title ?? "Role"} at {app.company ?? "Company"}
+                                    {app.days_since_applied != null ? ` · ${app.days_since_applied}d ago` : ""}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function ProfileGapCard({ gaps }: { gaps: string[] }) {
+    return (
+        <div className="mt-2 rounded-xl border border-border-subtle bg-surface/30 px-3 py-2.5 flex items-center gap-3">
+            <div className="flex-1 min-w-0 text-[12px] text-text-secondary">
+                <span className="text-rico-amber font-medium">Profile incomplete — </span>
+                {gaps.slice(0, 2).join(", ")}
+                {gaps.length > 2 && ` +${gaps.length - 2} more`}
+            </div>
+            <Link
+                href="/profile"
+                className="text-[11px] px-2.5 py-1 rounded-lg bg-magenta/10 border border-magenta/30 text-magenta hover:bg-magenta/20 transition-colors shrink-0"
+            >
+                Fill profile
+            </Link>
+        </div>
     );
 }
 
@@ -519,6 +495,9 @@ export default function CommandPage() {
                             result_count: (res as Record<string, unknown>).result_count as number | undefined,
                             broadened: (res as Record<string, unknown>).broadened as boolean | undefined,
                             rate_limit_notice: res.rate_limited ? (res.rate_limit_notice ?? "This source is temporarily rate-limited. Try the alternate link.") : undefined,
+                            applications: (res as Record<string, unknown>).applications as ApplicationEntry[] | undefined,
+                            follow_up_needed: (res as Record<string, unknown>).follow_up_needed as ApplicationEntry[] | undefined,
+                            profile_gaps: (res as Record<string, unknown>).profile_gaps as string[] | undefined,
                             streaming: false,
                         }];
                     });
@@ -821,19 +800,25 @@ export default function CommandPage() {
                         const prevMsg = messages[idx - 1];
                         const isFirstInGroup = !prevMsg || prevMsg.role !== m.role;
                         const hasJobCards = m.type === "job_matches" && Array.isArray(m.matches) && m.matches.length > 0;
-                        const isStructured = m.type === "profile_preview" || hasJobCards;
+                        const hasAppCards = m.type === "application_status" && Array.isArray(m.applications) && m.applications.length > 0;
+                        const isStructured = m.type === "profile_preview" || hasJobCards || hasAppCards;
 
                         return (
                             <div
                                 key={m.id}
-                                className={`flex animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none ${m.role === "user" ? "justify-end items-end gap-1.5" : "justify-start items-start gap-2"
-                                    } ${isFirstInGroup ? "mt-3" : "mt-1"}`}
+                                className={`flex animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none ${m.role === "user" ? "justify-end items-end" : "justify-start items-start gap-2.5"} ${isFirstInGroup ? "mt-4" : "mt-1"}`}
                             >
-                                <div className={`${isStructured ? "max-w-[92%] sm:max-w-[85%]" : "max-w-[78%] sm:max-w-[72%]"} ${m.role === "user"
-                                    ? "rounded-2xl rounded-tr-sm bg-magenta px-3.5 py-2.5 text-[14px] text-white leading-relaxed shadow-sm"
+                                {m.role === "rico" && (
+                                    <div
+                                        className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5 ${isFirstInGroup ? "bg-[#f5a623]/15 border border-[#f5a623]/25 text-[#f5a623]" : "invisible"}`}
+                                        aria-hidden="true"
+                                    >R</div>
+                                )}
+                                <div className={`${m.role === "user"
+                                    ? "max-w-[75%] sm:max-w-[68%] rounded-2xl rounded-tr-sm bg-magenta px-3.5 py-2.5 text-[14px] text-white leading-relaxed shadow-sm"
                                     : isStructured
-                                        ? "rounded-xl bg-surface/60 border border-border-subtle p-3 text-[13px] text-white leading-relaxed backdrop-blur-sm"
-                                        : "rounded-2xl rounded-tl-sm bg-surface/50 border border-border-subtle/60 px-3.5 py-2.5 text-[14px] text-white leading-relaxed backdrop-blur-sm"
+                                        ? "flex-1 min-w-0 rounded-xl bg-surface/40 border border-border-subtle p-3 text-[13px] text-white leading-relaxed"
+                                        : "flex-1 min-w-0 text-[14px] text-white leading-relaxed"
                                     }`}>
 
                                     {/* Search result summary bar */}
@@ -876,6 +861,19 @@ export default function CommandPage() {
                                                 <JobMatchCard key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
                                             ))}
                                         </div>
+                                    )}
+
+                                    {/* Application status card */}
+                                    {m.type === "application_status" && m.applications && m.applications.length > 0 && (
+                                        <ApplicationStatusCard
+                                            applications={m.applications}
+                                            followUpNeeded={m.follow_up_needed ?? []}
+                                        />
+                                    )}
+
+                                    {/* Profile gap card */}
+                                    {m.type === "profile_gap" && m.profile_gaps && m.profile_gaps.length > 0 && (
+                                        <ProfileGapCard gaps={m.profile_gaps} />
                                     )}
 
                                     {/* Profile preview confirmation buttons */}
@@ -1019,6 +1017,17 @@ export default function CommandPage() {
                 {/* Floating input bar — dvh column + safe-area keeps it on-screen above
                     the mobile browser chrome / iOS home indicator. */}
                 <div className="absolute bottom-0 left-0 right-0 px-4 pt-4 pb-[calc(2rem+env(safe-area-inset-bottom))] bg-gradient-to-t from-background via-background to-transparent">
+                    {chatAudience === "public" && messages.filter((m) => m.role === "rico").length >= 2 && (
+                        <div className="mb-2 flex items-center justify-between gap-3 px-1">
+                            <p className="text-[11px] text-text-muted">Save your profile and track applications.</p>
+                            <Link
+                                href={COMMAND_SIGNUP_HREF}
+                                className="text-[11px] px-3 py-1 rounded-lg bg-magenta/10 border border-magenta/30 text-magenta hover:bg-magenta/20 transition-colors shrink-0 font-medium"
+                            >
+                                Sign up free
+                            </Link>
+                        </div>
+                    )}
                     {uploadError && (
                         <p className="text-[11px] text-rico-red mb-2 text-center" role="alert">{uploadError}</p>
                     )}
