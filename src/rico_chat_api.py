@@ -72,6 +72,10 @@ _LEGACY_INTENT_MAP = {
     # Application tracking
     "application.show_flow": "application_tracking",
     "application.recent_context": "application_tracking",
+    # Lifecycle queries (chat-side funnel memory)
+    "lifecycle.show_saved": "lifecycle_show_saved",
+    "lifecycle.show_applied": "lifecycle_show_applied",
+    "lifecycle.show_opened_not_applied": "lifecycle_show_opened_not_applied",
     # Recent context follow-up (native legacy name, pass through)
     "recent_context": "recent_context",
     # Profile
@@ -1102,6 +1106,36 @@ class RicoChatAPI:
         text = re.sub(r"[\s؟?.!،,]+", " ", (message or "").strip().lower()).strip()
         return text in RicoChatAPI._NEGATIVE_PHRASES
 
+    # Phrases the user says to request a list of results after Rico shows a summary.
+    _LIST_FOLLOWUP_PHRASES = frozenset({
+        # English
+        "list them", "show them", "show list", "show me", "show me them",
+        "list it", "show it", "list", "show all", "show all of them",
+        "display them", "give me the list", "give me them", "print them",
+        "what are they", "which ones", "tell me which ones",
+        # Arabic
+        "اذكرهم", "اذكرها", "اعرضهم", "اعرضها", "ورجيني القائمة",
+        "ورني القائمة", "عرضهم", "عرضها", "اعرض القائمة", "القائمة",
+        "وريني", "ورني", "اعرضلي", "اكتبهم", "اكتبها",
+    })
+
+    @staticmethod
+    def _is_list_followup(message: str) -> bool:
+        return message.strip().lower() in RicoChatAPI._LIST_FOLLOWUP_PHRASES
+
+    def _store_lifecycle_context(self, user_id: str, query_type: str) -> None:
+        """Remember the last lifecycle query so a follow-up 'list them' can replay it."""
+        try:
+            self.memory.set_context(user_id, "lifecycle_query_context", {"last_query_type": query_type})
+        except Exception:
+            logger.debug("rico_chat: failed to store lifecycle context user=%s", user_id)
+
+    def _get_lifecycle_context(self, user_id: str) -> dict[str, Any]:
+        try:
+            return self.memory.get_context(user_id, "lifecycle_query_context") or {}
+        except Exception:
+            return {}
+
     def _get_last_assistant_message(self, user_id: str) -> str:
         """Return the last assistant message text for pending-intent resolution."""
         try:
@@ -1613,6 +1647,23 @@ class RicoChatAPI:
         has_cv = profile.has_cv
         text = self._normalize_followup_phrase(message)
 
+        # ── Lifecycle list follow-up: "list them" / "show them" / "اذكرهم" ───────
+        # Must run before the affirmative resolver so short list-commands don't
+        # fall through to the AI and crash on ambiguous short input.
+        if self._is_list_followup(message):
+            lc_ctx = self._get_lifecycle_context(user_id)
+            last_query = lc_ctx.get("last_query_type")
+            if last_query in (
+                "lifecycle_show_saved",
+                "lifecycle_show_applied",
+                "lifecycle_show_opened_not_applied",
+            ):
+                return self._finalize(
+                    self._handle_lifecycle_query(user_id, last_query),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
+
         # ── Pending-intent resolver: yes/no after Rico's question ──────────────
         # Must run before generic routing so "نعم" resolves the last offered action
         # instead of falling through to a generic action card.
@@ -1754,6 +1805,27 @@ class RicoChatAPI:
 
         # CV upload / parse — but if CV is already parsed, don't restart wizard
         if legacy_intent == "cv_upload_or_parse":
+            # Guard: if the message is a question about using someone else's CV
+            # (no actual file attached), route to AI so it can answer naturally
+            # instead of mistakenly treating it as a CV upload action.
+            _lower_msg = message.lower()
+            _is_cv_question = (
+                not CV_FILE_RE.search(message)
+                and any(kw in _lower_msg for kw in (
+                    "friend", "someone else", "can i use", "use his", "use her",
+                    "use their", "use my friend", "his cv", "her cv", "their cv",
+                    "account for", "needs his own", "needs her own",
+                ))
+            )
+            if _is_cv_question:
+                return self._finalize(
+                    self._answer_with_ai_fallback(
+                        user_id=user_id, message=message, profile=profile,
+                        save_user_message=False,
+                    ),
+                    self.SOURCE_AI,
+                    profile=profile,
+                )
             cv_status = self._profile_value(profile, "cv_status")
             if cv_status == "parsed" or self._profile_value(profile, "manual_profile_wizard_disabled"):
                 response = {
@@ -1831,6 +1903,18 @@ class RicoChatAPI:
         if legacy_intent == "application_tracking":
             return self._finalize(
                 self._handle_application_tracking(user_id, intent=intent),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # Lifecycle funnel queries — chat-side memory (user_job_context)
+        if legacy_intent in (
+            "lifecycle_show_saved",
+            "lifecycle_show_applied",
+            "lifecycle_show_opened_not_applied",
+        ):
+            return self._finalize(
+                self._handle_lifecycle_query(user_id, legacy_intent),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -2726,6 +2810,22 @@ class RicoChatAPI:
                 "rico_chat: failed to persist lifecycle event user=%s title=%s company=%s status=%s",
                 user_id, title, company, status
             )
+        # Also stamp user_job_context with the lifecycle timestamp so Rico can
+        # answer funnel-memory questions ("show jobs I opened but didn't apply to").
+        try:
+            from src.repositories.user_job_context_repo import set_lifecycle_status
+            set_lifecycle_status(
+                user_id=user_id,
+                title=title,
+                company=company,
+                status=status,
+                apply_url=url,
+            )
+        except Exception:
+            logger.debug(
+                "rico_chat: failed to stamp user_job_context lifecycle user=%s title=%s",
+                user_id, title,
+            )
 
     def _store_recent_context(self, user_id: str, context: dict[str, Any]) -> None:
         try:
@@ -3120,12 +3220,68 @@ class RicoChatAPI:
                     link=latest.get("link"),
                 ),
             )
+        # Store lifecycle context so "list them" after a summary shows applied jobs.
+        self._store_lifecycle_context(user_id, "lifecycle_show_applied")
         return {
             "type": "application_status",
             "message": msg,
             "applications": enriched,
             "stats": stats,
             "follow_up_needed": follow_up_needed,
+        }
+
+    def _handle_lifecycle_query(self, user_id: str, query_type: str) -> dict[str, Any]:
+        """Answer funnel-memory questions from user_job_context.
+
+        Handles three Rico chat questions:
+          - lifecycle_show_saved            → "show saved jobs"
+          - lifecycle_show_applied          → "what jobs did I apply to?"
+          - lifecycle_show_opened_not_applied → "show jobs I opened but did not apply to"
+        """
+        from src.repositories.user_job_context_repo import (
+            get_by_status,
+            get_opened_not_applied,
+        )
+
+        if query_type == "lifecycle_show_saved":
+            rows = get_by_status(user_id, "saved")
+            label = "saved"
+            empty_msg = "You haven't saved any jobs yet. When you save a job from Rico, it'll appear here."
+        elif query_type == "lifecycle_show_applied":
+            rows = get_by_status(user_id, "applied")
+            label = "applied"
+            empty_msg = "I don't have any jobs marked as applied yet. After you apply, hit 'Mark as applied' so Rico can track it."
+        else:  # lifecycle_show_opened_not_applied
+            rows = get_opened_not_applied(user_id)
+            label = "opened but not applied"
+            empty_msg = "No jobs in that bucket yet — these are jobs where you clicked the apply link but haven't marked as applied."
+
+        # Always remember the last lifecycle query so "list them" can replay it.
+        self._store_lifecycle_context(user_id, query_type)
+
+        if not rows:
+            return {
+                "type": "lifecycle_query",
+                "intent": query_type,
+                "message": empty_msg,
+                "jobs": [],
+                "count": 0,
+            }
+
+        lines = [f"Here are your **{label}** jobs ({len(rows)}):\n"]
+        for r in rows[:20]:
+            title = r.get("title") or "Unknown Role"
+            company = r.get("company") or "Unknown Company"
+            url = r.get("apply_url") or r.get("source_url") or ""
+            link_part = f" — [Apply]({url})" if url else ""
+            lines.append(f"• **{title}** at {company}{link_part}")
+
+        return {
+            "type": "lifecycle_query",
+            "intent": query_type,
+            "message": "\n".join(lines),
+            "jobs": rows[:20],
+            "count": len(rows),
         }
 
     def _handle_profile_role_suggestions(self, profile: Any) -> dict[str, Any]:

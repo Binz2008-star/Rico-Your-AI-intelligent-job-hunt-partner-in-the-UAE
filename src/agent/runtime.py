@@ -179,13 +179,28 @@ class AgentRuntime:
         #    Fire-and-forget: never let a context-write failure affect the action.
         if tool_ok and resolved_job.get("title") and resolved_job.get("company"):
             try:
-                from src.repositories.user_job_context_repo import record_interaction
+                from src.repositories.user_job_context_repo import (
+                    record_interaction,
+                    set_lifecycle_status,
+                )
+                from src.job_lifecycle import lifecycle_for_action
                 record_interaction(
                     user_id=user_id,
                     title=resolved_job.get("title", ""),
                     company=resolved_job.get("company", ""),
                     action=action,
                 )
+                lc = lifecycle_for_action(action)
+                if lc:
+                    lc_status, _ = lc
+                    set_lifecycle_status(
+                        user_id=user_id,
+                        title=resolved_job.get("title", ""),
+                        company=resolved_job.get("company", ""),
+                        status=lc_status,
+                        apply_url=resolved_job.get("apply_url", ""),
+                        source_url=resolved_job.get("source_url", ""),
+                    )
             except Exception:
                 logger.debug("runtime: failed to record job context interaction", exc_info=True)
 
