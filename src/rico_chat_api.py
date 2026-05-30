@@ -72,6 +72,10 @@ _LEGACY_INTENT_MAP = {
     # Application tracking
     "application.show_flow": "application_tracking",
     "application.recent_context": "application_tracking",
+    # Lifecycle queries (chat-side funnel memory)
+    "lifecycle.show_saved": "lifecycle_show_saved",
+    "lifecycle.show_applied": "lifecycle_show_applied",
+    "lifecycle.show_opened_not_applied": "lifecycle_show_opened_not_applied",
     # Recent context follow-up (native legacy name, pass through)
     "recent_context": "recent_context",
     # Profile
@@ -242,7 +246,10 @@ class RicoChatAPI:
         path on remote PostgreSQL latency (~1s round-trip on Neon).
         """
         payload = json.dumps(message) if isinstance(message, dict) else message
-        self.memory.append_chat_message(user_id, role, payload)
+        try:
+            self.memory.append_chat_message(user_id, role, payload)
+        except Exception:
+            logger.error("rico_chat_api: memory append_chat_message failed user=%s role=%s", user_id, role, exc_info=True)
         if not getattr(self, "_persist", True):
             return
         # Async DB persistence — non-blocking, daemon so worker shutdown is
@@ -262,8 +269,7 @@ class RicoChatAPI:
             daemon=True,
         ).start()
 
-    @staticmethod
-    def _build_openai_context(self, profile: Any, user_id: str | None = None) -> dict[str, Any]:  # type: ignore[override]
+    def _build_openai_context(self, profile: Any, user_id: str | None = None) -> dict[str, Any]:
         """Build context for OpenAI agent from profile and recent conversation history."""
         if profile is None:
             ctx: dict[str, Any] = {"profile_exists": False}
@@ -858,11 +864,14 @@ class RicoChatAPI:
 
         # Preserve URL fields so the frontend can surface apply links and distinguish
         # verified live postings from leads that still need a working apply URL.
+        # alt_link (job_google_link) is kept separately so the apply-fallback chain
+        # can offer an alternate link when the primary apply URL is unavailable.
         apply_url = str(
             m.get("job_apply_link") or m.get("apply_link") or m.get("link") or ""
         ).strip()
+        alt_link = str(m.get("job_google_link") or m.get("alt_link") or "").strip()
         source_url = str(
-            m.get("job_google_link") or m.get("source_url") or apply_url
+            m.get("source_url") or alt_link or apply_url
         ).strip()
         verification_status = "live" if apply_url else "lead_needs_verification"
 
@@ -872,6 +881,7 @@ class RicoChatAPI:
             "score": normalized_score,
             "apply_url": apply_url,
             "source_url": source_url,
+            "alt_link": alt_link,
             "verification_status": verification_status,
             "actions": ["Prepare application", "Save", "Ask why", "Skip"],
             **explanation,
@@ -1098,6 +1108,36 @@ class RicoChatAPI:
         text = re.sub(r"[\s؟?.!،,]+", " ", (message or "").strip().lower()).strip()
         return text in RicoChatAPI._NEGATIVE_PHRASES
 
+    # Phrases the user says to request a list of results after Rico shows a summary.
+    _LIST_FOLLOWUP_PHRASES = frozenset({
+        # English
+        "list them", "show them", "show list", "show me", "show me them",
+        "list it", "show it", "list", "show all", "show all of them",
+        "display them", "give me the list", "give me them", "print them",
+        "what are they", "which ones", "tell me which ones",
+        # Arabic
+        "اذكرهم", "اذكرها", "اعرضهم", "اعرضها", "ورجيني القائمة",
+        "ورني القائمة", "عرضهم", "عرضها", "اعرض القائمة", "القائمة",
+        "وريني", "ورني", "اعرضلي", "اكتبهم", "اكتبها",
+    })
+
+    @staticmethod
+    def _is_list_followup(message: str) -> bool:
+        return message.strip().lower() in RicoChatAPI._LIST_FOLLOWUP_PHRASES
+
+    def _store_lifecycle_context(self, user_id: str, query_type: str) -> None:
+        """Remember the last lifecycle query so a follow-up 'list them' can replay it."""
+        try:
+            self.memory.set_context(user_id, "lifecycle_query_context", {"last_query_type": query_type})
+        except Exception:
+            logger.debug("rico_chat: failed to store lifecycle context user=%s", user_id)
+
+    def _get_lifecycle_context(self, user_id: str) -> dict[str, Any]:
+        try:
+            return self.memory.get_context(user_id, "lifecycle_query_context") or {}
+        except Exception:
+            return {}
+
     def _get_last_assistant_message(self, user_id: str) -> str:
         """Return the last assistant message text for pending-intent resolution."""
         try:
@@ -1182,70 +1222,29 @@ class RicoChatAPI:
     }
 
     @staticmethod
-    def _search_jsearch_direct(role: str) -> list[dict[str, Any]]:
-        """Query JSearch (RapidAPI) for live UAE jobs matching *role*.
+    @staticmethod
+    def _search_jsearch_meta(role: str) -> Any:
+        """Query JSearch for live UAE jobs matching *role*, with cache + retry.
 
-        Returns a list of job dicts ready for ``_format_match``.  Never raises —
-        any failure (missing key, network error, bad JSON) returns an empty list.
+        Returns a ``jsearch_client.FetchResult`` so the caller can tell a genuine
+        empty result apart from a rate-limited source. Never raises.
         """
-        import json as _json
-        import urllib.request
-        from urllib.parse import quote_plus
+        from src import jsearch_client
 
-        api_key = os.getenv("RAPIDAPI_KEY", "").strip()
-        if not api_key:
-            logger.debug("jsearch_direct: RAPIDAPI_KEY not set — skipping")
-            return []
-
-        query = f"{role} UAE"
-        url = (
-            "https://jsearch.p.rapidapi.com/search-v2"
-            f"?query={quote_plus(query)}&num_pages=1&country=ae&date_posted=all"
+        result = jsearch_client.search(f"{role} UAE")
+        # Stamp a default score so downstream scoring/formatting works unchanged.
+        for job in result.items:
+            job.setdefault("score", 50)
+        logger.info(
+            "jsearch_direct role=%r results=%d cache_hit=%s rate_limited=%s",
+            role, len(result.items), result.cache_hit, result.rate_limited,
         )
-        headers = {
-            "x-rapidapi-host": "jsearch.p.rapidapi.com",
-            "x-rapidapi-key": api_key,
-            "Content-Type": "application/json",
-        }
-        try:
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=12) as resp:
-                data = _json.loads(resp.read().decode())
-        except Exception as exc:
-            logger.warning("jsearch_direct_failed role=%r: %s", role, exc)
-            return []
+        return result
 
-        raw_items = (
-            data.get("data", {}).get("jobs", [])
-            if isinstance(data.get("data"), dict)
-            else data.get("data", [])
-        )
-        jobs: list[dict[str, Any]] = []
-        seen: set[str] = set()
-        for item in raw_items:
-            link = str(item.get("job_apply_link") or item.get("job_google_link") or "")
-            dedup = str(item.get("job_id") or link)
-            if not dedup or dedup in seen:
-                continue
-            seen.add(dedup)
-            location = ", ".join(filter(None, [
-                item.get("job_city") or "",
-                item.get("job_state") or "",
-                item.get("job_country") or "",
-            ])) or "UAE"
-            jobs.append({
-                "title":           str(item.get("job_title") or ""),
-                "company":         str(item.get("employer_name") or ""),
-                "location":        location,
-                "link":            link,
-                "description":     str(item.get("job_description") or ""),
-                "source":          "jsearch",
-                "salary_string":   str(item.get("job_salary_string") or ""),
-                "employment_type": str(item.get("job_employment_type") or ""),
-                "score":           50,
-            })
-        logger.info("jsearch_direct role=%r results=%d", role, len(jobs))
-        return jobs
+    @staticmethod
+    def _search_jsearch_direct(role: str) -> list[dict[str, Any]]:
+        """Backward-compatible list wrapper around :meth:`_search_jsearch_meta`."""
+        return RicoChatAPI._search_jsearch_meta(role).items
 
     def _target_role_search_response(
         self, user_id: str, role: str, profile: Any, from_saved_profile: bool = False
@@ -1268,8 +1267,11 @@ class RicoChatAPI:
 
         # Primary path: live JSearch query for the exact requested role.
         # Falls back to the legacy scraper pipeline only when JSearch is unavailable.
+        rate_limited = False
         try:
-            all_matches = self._search_jsearch_direct(search_role)
+            fetch = self._search_jsearch_meta(search_role)
+            all_matches = fetch.items
+            rate_limited = fetch.rate_limited
             if not all_matches:
                 search_profile = (
                     _dc_replace(profile, target_roles=[search_role])
@@ -1290,6 +1292,19 @@ class RicoChatAPI:
                 all_matches = [m for m in all_matches if not applied_map.get(get_job_id(m), False)]
         except Exception as e:
             logger.debug("Applied-job filter unavailable: %s", e)
+
+        # Filter out UAE-nationals-only listings for non-national users.
+        try:
+            nationality = (
+                self._profile_value(profile, "nationality") or
+                self._profile_value(profile, "citizenship") or ""
+            ).strip().lower()
+            is_uae_national = nationality in ("uae", "emirati", "emirati national", "uae national")
+            if not is_uae_national and all_matches:
+                from src.eligibility_filter import filter_for_non_nationals
+                all_matches = filter_for_non_nationals(all_matches)
+        except Exception as e:
+            logger.debug("Eligibility filter unavailable: %s", e)
 
         top_matches = all_matches[:5]
         formatted = [self._format_match(m, profile) for m in top_matches]
@@ -1326,7 +1341,14 @@ class RicoChatAPI:
             "result_count": len(formatted),
             "search_query": search_role,
             "broadened": len(all_matches) == 0,
+            "rate_limited": rate_limited,
         }
+
+        if rate_limited:
+            response["rate_limit_notice"] = (
+                "This source is temporarily rate-limited. "
+                "Try the alternate link on each result, or search again shortly."
+            )
 
         if role_intelligence_data:
             response["role_intelligence"] = role_intelligence_data
@@ -1623,9 +1645,43 @@ class RicoChatAPI:
           4. For role-like text, use 3-tier role classifier
           5. Unknown / nonsense → clarification, not search
         """
+        try:
+            return self._handle_active_user_inner(user_id, message)
+        except Exception:
+            logger.exception("rico_routing_error user=%s msg=%r", user_id, message)
+            fallback = {
+                "type": "clarification",
+                "message": (
+                    "I'm here to help with your UAE job search. "
+                    "You can search for a role, upload your CV, ask about your applications, "
+                    "or say 'help' for all options."
+                ),
+            }
+            self._append_chat(user_id, "assistant", fallback["message"])
+            return self._finalize(fallback, self.SOURCE_KEYWORD, profile=None)
+
+    def _handle_active_user_inner(self, user_id: str, message: str) -> dict[str, Any]:
+        """Inner routing — called by _handle_active_user which provides the safe fallback."""
         profile = self._resolve_profile(user_id)
         has_cv = profile.has_cv
         text = self._normalize_followup_phrase(message)
+
+        # ── Lifecycle list follow-up: "list them" / "show them" / "اذكرهم" ───────
+        # Must run before the affirmative resolver so short list-commands don't
+        # fall through to the AI and crash on ambiguous short input.
+        if self._is_list_followup(message):
+            lc_ctx = self._get_lifecycle_context(user_id)
+            last_query = lc_ctx.get("last_query_type")
+            if last_query in (
+                "lifecycle_show_saved",
+                "lifecycle_show_applied",
+                "lifecycle_show_opened_not_applied",
+            ):
+                return self._finalize(
+                    self._handle_lifecycle_query(user_id, last_query),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
 
         # ── Pending-intent resolver: yes/no after Rico's question ──────────────
         # Must run before generic routing so "نعم" resolves the last offered action
@@ -1739,11 +1795,9 @@ class RicoChatAPI:
 
         # Subscription / pricing
         if legacy_intent == "subscription.show_plans":
-            return self._finalize(
-                self._handle_subscription_plans(user_id, profile),
-                self.SOURCE_KEYWORD,
-                profile=profile,
-            )
+            sub_response = self._handle_subscription_plans(user_id, profile)
+            self._append_chat(user_id, "assistant", sub_response.get("message", ""))
+            return self._finalize(sub_response, self.SOURCE_KEYWORD, profile=profile)
 
         # Delegated decision — user asks Rico to choose
         if legacy_intent == "delegated_decision":
@@ -1768,6 +1822,30 @@ class RicoChatAPI:
 
         # CV upload / parse — but if CV is already parsed, don't restart wizard
         if legacy_intent == "cv_upload_or_parse":
+            # Guard: if the message is a question about using someone else's CV
+            # (no actual file attached), route to AI so it can answer naturally
+            # instead of mistakenly treating it as a CV upload action.
+            _lower_msg = message.lower()
+            _is_cv_question = (
+                not CV_FILE_RE.search(message)
+                and any(kw in _lower_msg for kw in (
+                    "friend", "someone else", "can i use", "use his", "use her",
+                    "use their", "use my friend", "his cv", "her cv", "their cv",
+                    "account for", "needs his own", "needs her own",
+                ))
+            )
+            if _is_cv_question:
+                friend_cv_msg = (
+                    "You can paste or share your friend's CV text in this chat and I can analyse it "
+                    "for them right now — no account needed for a one-off review.\n\n"
+                    "However, for saved profile, job tracking, personalised alerts, and application "
+                    "history, your friend needs their own Rico account at ricohunt.com.\n\n"
+                    "Important: if you upload a CV here it will overwrite *your* profile, so only do "
+                    "that if you intend to update your own details."
+                )
+                response = {"type": "account_delegation", "message": friend_cv_msg}
+                self._append_chat(user_id, "assistant", friend_cv_msg)
+                return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
             cv_status = self._profile_value(profile, "cv_status")
             if cv_status == "parsed" or self._profile_value(profile, "manual_profile_wizard_disabled"):
                 response = {
@@ -1845,6 +1923,18 @@ class RicoChatAPI:
         if legacy_intent == "application_tracking":
             return self._finalize(
                 self._handle_application_tracking(user_id, intent=intent),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # Lifecycle funnel queries — chat-side memory (user_job_context)
+        if legacy_intent in (
+            "lifecycle_show_saved",
+            "lifecycle_show_applied",
+            "lifecycle_show_opened_not_applied",
+        ):
+            return self._finalize(
+                self._handle_lifecycle_query(user_id, legacy_intent),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -2740,6 +2830,22 @@ class RicoChatAPI:
                 "rico_chat: failed to persist lifecycle event user=%s title=%s company=%s status=%s",
                 user_id, title, company, status
             )
+        # Also stamp user_job_context with the lifecycle timestamp so Rico can
+        # answer funnel-memory questions ("show jobs I opened but didn't apply to").
+        try:
+            from src.repositories.user_job_context_repo import set_lifecycle_status
+            set_lifecycle_status(
+                user_id=user_id,
+                title=title,
+                company=company,
+                status=status,
+                apply_url=url,
+            )
+        except Exception:
+            logger.debug(
+                "rico_chat: failed to stamp user_job_context lifecycle user=%s title=%s",
+                user_id, title,
+            )
 
     def _store_recent_context(self, user_id: str, context: dict[str, Any]) -> None:
         try:
@@ -3020,9 +3126,9 @@ class RicoChatAPI:
         """Return Rico subscription plans and pricing."""
         # Try to get user's current plan from subscription repo
         try:
-            from src.repositories.subscription_repo import get_user_subscription
-            sub = get_user_subscription(user_id)
-            current_plan = sub.get("plan", "free") if sub else "free"
+            from src.repositories.subscription_repo import get_subscription
+            sub = get_subscription(user_id)
+            current_plan = (sub.get("plan") or "free") if sub else "free"
         except Exception:
             current_plan = "free"
 
@@ -3134,12 +3240,97 @@ class RicoChatAPI:
                     link=latest.get("link"),
                 ),
             )
+        # Store lifecycle context so "list them" after a summary shows applied jobs.
+        self._store_lifecycle_context(user_id, "lifecycle_show_applied")
+        # Cache the enriched apps so "list them" can replay without querying migration-022 columns.
+        try:
+            self.memory.set_context(user_id, "cached_application_list", {
+                "apps": enriched[:20],
+                "stats": stats,
+            })
+        except Exception:
+            pass
         return {
             "type": "application_status",
             "message": msg,
             "applications": enriched,
             "stats": stats,
             "follow_up_needed": follow_up_needed,
+        }
+
+    def _handle_lifecycle_query(self, user_id: str, query_type: str) -> dict[str, Any]:
+        """Answer funnel-memory questions from user_job_context.
+
+        Handles three Rico chat questions:
+          - lifecycle_show_saved            → "show saved jobs"
+          - lifecycle_show_applied          → "what jobs did I apply to?"
+          - lifecycle_show_opened_not_applied → "show jobs I opened but did not apply to"
+        """
+        from src.repositories.user_job_context_repo import (
+            get_by_status,
+            get_opened_not_applied,
+        )
+
+        if query_type == "lifecycle_show_saved":
+            rows = get_by_status(user_id, "saved")
+            label = "saved"
+            empty_msg = "You haven't saved any jobs yet. When you save a job from Rico, it'll appear here."
+        elif query_type == "lifecycle_show_applied":
+            rows = get_by_status(user_id, "applied")
+            label = "applied"
+            empty_msg = "I don't have any jobs marked as applied yet. After you apply, hit 'Mark as applied' so Rico can track it."
+        else:  # lifecycle_show_opened_not_applied
+            rows = get_opened_not_applied(user_id)
+            label = "opened but not applied"
+            empty_msg = "No jobs in that bucket yet — these are jobs where you clicked the apply link but haven't marked as applied."
+
+        # Always remember the last lifecycle query so "list them" can replay it.
+        self._store_lifecycle_context(user_id, query_type)
+
+        # Fallback: if the lifecycle table returned nothing (e.g. migration 022 not yet applied),
+        # try the in-memory cache written by _handle_application_tracking so "list them" after
+        # an application summary still returns the correct list without needing new DB columns.
+        if not rows and query_type == "lifecycle_show_applied":
+            try:
+                cached = self.memory.get_context(user_id, "cached_application_list") or {}
+                cached_apps = cached.get("apps") or []
+                if cached_apps:
+                    rows = [
+                        {
+                            "title": a.get("title") or "",
+                            "company": a.get("company") or "",
+                            "apply_url": a.get("link") or a.get("apply_url") or "",
+                            "source_url": a.get("source_url") or "",
+                            "status": a.get("status") or "applied",
+                        }
+                        for a in cached_apps
+                    ]
+            except Exception:
+                pass
+
+        if not rows:
+            return {
+                "type": "lifecycle_query",
+                "intent": query_type,
+                "message": empty_msg,
+                "jobs": [],
+                "count": 0,
+            }
+
+        lines = [f"Here are your **{label}** jobs ({len(rows)}):\n"]
+        for r in rows[:20]:
+            title = r.get("title") or "Unknown Role"
+            company = r.get("company") or "Unknown Company"
+            url = r.get("apply_url") or r.get("source_url") or ""
+            link_part = f" — [Apply]({url})" if url else ""
+            lines.append(f"• **{title}** at {company}{link_part}")
+
+        return {
+            "type": "lifecycle_query",
+            "intent": query_type,
+            "message": "\n".join(lines),
+            "jobs": rows[:20],
+            "count": len(rows),
         }
 
     def _handle_profile_role_suggestions(self, profile: Any) -> dict[str, Any]:

@@ -213,9 +213,6 @@ def fetch_jsearch_jobs(save_to_db: bool = True) -> List[Dict[str, Any]]:
     Fetch jobs from JSearch (RapidAPI) for UAE-focused HSE/ESG roles.
     Reads RAPIDAPI_KEY from environment. Returns scored job list.
     """
-    import urllib.request
-    import json
-
     api_key = os.getenv("RAPIDAPI_KEY", "").strip()
     if not api_key:
         logger.error("jsearch: RAPIDAPI_KEY not set — skipping")
@@ -223,60 +220,31 @@ def fetch_jsearch_jobs(save_to_db: bool = True) -> List[Dict[str, Any]]:
 
     from src.scoring import score_job
     from src.db import save_job as db_save_job
+    from src import jsearch_client
 
     seen: set = set()
     results: List[Dict[str, Any]] = []
 
-    headers = {
-        "x-rapidapi-host": _JSEARCH_HOST,
-        "x-rapidapi-key": api_key,
-        "Content-Type": "application/json",
-    }
-
     for query in _JSEARCH_QUERIES:
-        url = (
-            f"{_JSEARCH_BASE}/search-v2"
-            f"?query={quote_plus(query)}&num_pages=1&country=ae&date_posted=all"
-        )
-        req = urllib.request.Request(url, headers=headers)
-        try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                data = json.loads(resp.read().decode())
-        except Exception as exc:
-            logger.warning("jsearch_fetch_failed query=%r: %s", query, exc)
+        # Shared client adds caching, 429/5xx retry+backoff and alt_link capture.
+        fetch = jsearch_client.search(query)
+        if fetch.rate_limited:
+            logger.warning("jsearch_jobs: source rate-limited query=%r — backing off", query)
             time.sleep(2)
-            continue
-
-        jobs_list = data.get("data", {}).get("jobs", []) if isinstance(data.get("data"), dict) else data.get("data", [])
-        for item in jobs_list:
-            job_id = item.get("job_id", "")
-            link = item.get("job_apply_link") or item.get("job_google_link") or ""
-            dedup_key = job_id or link
+        for job in fetch.items:
+            dedup_key = job.get("job_id") or job.get("link") or ""
             if not dedup_key or dedup_key in seen:
                 continue
             seen.add(dedup_key)
-            location = ", ".join(filter(None, [
-                item.get("job_city"),
-                item.get("job_state"),
-                item.get("job_country"),
-            ])) or "UAE"
-            job: Dict[str, Any] = {
-                "title":           item.get("job_title", ""),
-                "company":         item.get("employer_name", ""),
-                "location":        location,
-                "link":            link,
-                "description":     item.get("job_description", ""),
-                "source":          "jsearch",
-                "salary_string":   item.get("job_salary_string") or "",
-                "employment_type": item.get("job_employment_type") or "",
-            }
             score = score_job(job)
             job["score"] = score
             if score > 0 and save_to_db:
                 db_save_job(job, score)
             results.append(job)
 
-        time.sleep(1)
+        # Be polite between distinct queries (cache hits return instantly anyway).
+        if not fetch.cache_hit:
+            time.sleep(1)
 
     passed = sum(1 for j in results if j["score"] > 0)
     logger.info(

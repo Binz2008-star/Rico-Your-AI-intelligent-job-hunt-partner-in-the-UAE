@@ -174,7 +174,8 @@ class TestBuildRoleSearchMessage:
 
     def test_no_matches_generic_message(self):
         msg = self._msg([])
-        assert "did not find" in msg or "I will keep scanning" in msg
+        # Honest no-match copy (no false "keep scanning" promise).
+        assert "did not find" in msg or "No live matches found" in msg
 
 
 # ---------------------------------------------------------------------------

@@ -761,6 +761,7 @@ export interface JobMatch {
   recommended_action?: string;
   apply_url?: string;
   source_url?: string;
+  alt_link?: string;
   verification_status?: "live" | "lead_needs_verification";
 }
 
@@ -804,6 +805,8 @@ export interface ChatApiResponse {
   operation_status?: string;
   operation_type?: string;
   result_count?: number | null;
+  rate_limited?: boolean;
+  rate_limit_notice?: string;
 }
 
 export interface ParsedCV {

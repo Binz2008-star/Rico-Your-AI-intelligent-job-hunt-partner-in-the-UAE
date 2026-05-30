@@ -48,6 +48,7 @@ interface Message {
     search_query?: string;
     result_count?: number;
     broadened?: boolean;
+    rate_limit_notice?: string;
     streaming?: boolean;
 }
 
@@ -259,35 +260,47 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
                 <p className="text-[11px] text-text-muted mb-2 leading-relaxed">{match.why}</p>
             )}
 
-            {/* Apply / Source links */}
+            {/* Apply / Source links — fallback chain: apply_url → source_url → alt_link.
+                The first usable link becomes "Apply now"; the next distinct link is
+                offered as an alternate so the user keeps a path when one source is down. */}
+            {(() => {
+                const clean = (u?: string) => (u && u !== "#" ? u.trim() : "");
+                const chain = [clean(match.apply_url), clean(match.source_url), clean(match.alt_link)].filter(Boolean);
+                const primary = chain[0] || "";
+                const alternate = chain.find((u) => u !== primary) || "";
+                return (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                        {primary && (
+                            <a
+                                href={primary}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label={`Apply for ${match.title} at ${match.company}`}
+                                className="text-[11px] px-3 py-1.5 rounded-lg bg-magenta text-white font-medium hover:bg-magenta-hover transition-colors"
+                            >
+                                Apply now
+                            </a>
+                        )}
+                        {alternate && (
+                            <a
+                                href={alternate}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label={`Open alternate link for ${match.title} at ${match.company}`}
+                                className="text-[11px] px-3 py-1.5 rounded-lg border border-border-soft text-text-secondary hover:border-cyan/40 hover:text-white transition-colors"
+                            >
+                                Alternate link
+                            </a>
+                        )}
+                        {!primary && match.verification_status === "lead_needs_verification" && (
+                            <span className="text-[10px] px-2 py-1 rounded-lg border border-border-soft text-text-muted italic">
+                                Link pending verification
+                            </span>
+                        )}
+                    </div>
+                );
+            })()}
             <div className="flex flex-wrap gap-1.5 mt-2">
-                {match.apply_url && match.apply_url !== "#" && (
-                    <a
-                        href={match.apply_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={`Apply for ${match.title} at ${match.company}`}
-                        className="text-[11px] px-3 py-1.5 rounded-lg bg-magenta text-white font-medium hover:bg-magenta-hover transition-colors"
-                    >
-                        Apply now
-                    </a>
-                )}
-                {match.source_url && match.source_url !== "#" && match.source_url !== match.apply_url && (
-                    <a
-                        href={match.source_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={`View ${match.title} at ${match.company} on job board`}
-                        className="text-[11px] px-3 py-1.5 rounded-lg border border-border-soft text-text-secondary hover:border-cyan/40 hover:text-white transition-colors"
-                    >
-                        View listing
-                    </a>
-                )}
-                {match.verification_status === "lead_needs_verification" && (
-                    <span className="text-[10px] px-2 py-1 rounded-lg border border-border-soft text-text-muted italic">
-                        Link pending verification
-                    </span>
-                )}
                 {/* Chat action buttons */}
                 {match.actions && match.actions.length > 0 && match.actions.map((action) => (
                     <button
@@ -505,6 +518,7 @@ export default function CommandPage() {
                             search_query: (res as Record<string, unknown>).search_query as string | undefined,
                             result_count: (res as Record<string, unknown>).result_count as number | undefined,
                             broadened: (res as Record<string, unknown>).broadened as boolean | undefined,
+                            rate_limit_notice: res.rate_limited ? (res.rate_limit_notice ?? "This source is temporarily rate-limited. Try the alternate link.") : undefined,
                             streaming: false,
                         }];
                     });
@@ -816,10 +830,10 @@ export default function CommandPage() {
                                     } ${isFirstInGroup ? "mt-3" : "mt-1"}`}
                             >
                                 <div className={`${isStructured ? "max-w-[92%] sm:max-w-[85%]" : "max-w-[78%] sm:max-w-[72%]"} ${m.role === "user"
-                                        ? "rounded-2xl rounded-tr-sm bg-magenta px-3.5 py-2.5 text-[14px] text-white leading-relaxed shadow-sm"
-                                        : isStructured
-                                            ? "rounded-xl bg-surface/60 border border-border-subtle p-3 text-[13px] text-white leading-relaxed backdrop-blur-sm"
-                                            : "rounded-2xl rounded-tl-sm bg-surface/50 border border-border-subtle/60 px-3.5 py-2.5 text-[14px] text-white leading-relaxed backdrop-blur-sm"
+                                    ? "rounded-2xl rounded-tr-sm bg-magenta px-3.5 py-2.5 text-[14px] text-white leading-relaxed shadow-sm"
+                                    : isStructured
+                                        ? "rounded-xl bg-surface/60 border border-border-subtle p-3 text-[13px] text-white leading-relaxed backdrop-blur-sm"
+                                        : "rounded-2xl rounded-tl-sm bg-surface/50 border border-border-subtle/60 px-3.5 py-2.5 text-[14px] text-white leading-relaxed backdrop-blur-sm"
                                     }`}>
 
                                     {/* Search result summary bar */}
@@ -844,6 +858,15 @@ export default function CommandPage() {
                                         m.role === "rico"
                                             ? <div className="space-y-0.5 text-[13px]">{renderMarkdown(m.text)}</div>
                                             : <div className="whitespace-pre-wrap">{m.text}</div>
+                                    )}
+
+                                    {/* Source rate-limited notice — keep the user inside Rico
+                                    and point them at the alternate link on each card. */}
+                                    {m.rate_limit_notice && (
+                                        <div className="mt-2 flex items-start gap-2 rounded-lg border border-rico-amber/40 bg-rico-amber/10 px-3 py-2 text-[11px] text-rico-amber">
+                                            <span aria-hidden="true">⚠️</span>
+                                            <span>{m.rate_limit_notice}</span>
+                                        </div>
                                     )}
 
                                     {/* Job match cards */}
