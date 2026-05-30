@@ -353,13 +353,23 @@ _PROFILE_UPDATE_PHRASES = frozenset([
 # ── Subscription / pricing phrases ─────────────────────────────────────────
 
 _SUBSCRIPTION_PHRASES = frozenset([
-    # English
+    # English — exact / short phrases
     "show plans", "subscription plans", "pricing", "how much does it cost",
     "what is the price", "what's the price", "upgrade plan", "current plan",
     "my subscription", "subscription status", "billing",
+    # Purchase / sign-up intent (the phrases that caused the production crash)
+    "how can i subscribe", "how do i subscribe", "how to subscribe",
+    "i want to subscribe", "i want to buy", "how to buy",
+    "subscribe today", "how can subscribe today",
+    "buy subscription", "purchase subscription",
+    "buy a subscription", "purchase a plan",
+    "how much is it", "how much is the subscription",
+    "i want to upgrade", "how to upgrade",
     # Arabic (normalised forms)
     "كم الاسعار", "كيف اشترك", "كيف يمكنني الاشتراك",
     "اشتراكي", "باقتي", "الاسعار", "السعر", "خطه الاشتراك",
+    "ابي اشترك", "كيف اشتري", "ابي اشتري", "كم السعر",
+    "اريد الاشتراك", "اريد ان اشترك",
 ])
 
 _FOLLOW_UP_CONFIRMATION_PHRASES = frozenset([
@@ -414,7 +424,11 @@ _SUBSCRIPTION_RE = re.compile(
     r"|\b(how much|what is the cost|what's the cost|monthly|annual|yearly)\b"
     r"|\b(pro|premium|basic|free)\b.{0,20}\b(plan|tier|package|subscription)\b"
     r"|\b(subscribe|sign up|upgrade|downgrade|renew|cancel)\b.{0,20}\b(plan|subscription|membership)\b"
-    r"|\b(subscription|plan)\b.{0,20}\b(status|details|info|information)\b",
+    r"|\b(subscription|plan)\b.{0,20}\b(status|details|info|information)\b"
+    # Catch "how can I subscribe", "I want to buy/subscribe", "buy a plan" etc.
+    r"|\b(how\s+(can|do|to|could)\s+(i\s+)?subscribe)\b"
+    r"|\b(i\s+want\s+to\s+(subscribe|buy|purchase|upgrade))\b"
+    r"|\b(buy|purchase)\b.{0,20}\b(subscription|plan|access|package)\b",
     re.IGNORECASE,
 )
 

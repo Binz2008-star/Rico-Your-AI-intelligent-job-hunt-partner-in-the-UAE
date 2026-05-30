@@ -1805,6 +1805,27 @@ class RicoChatAPI:
 
         # CV upload / parse — but if CV is already parsed, don't restart wizard
         if legacy_intent == "cv_upload_or_parse":
+            # Guard: if the message is a question about using someone else's CV
+            # (no actual file attached), route to AI so it can answer naturally
+            # instead of mistakenly treating it as a CV upload action.
+            _lower_msg = message.lower()
+            _is_cv_question = (
+                not CV_FILE_RE.search(message)
+                and any(kw in _lower_msg for kw in (
+                    "friend", "someone else", "can i use", "use his", "use her",
+                    "use their", "use my friend", "his cv", "her cv", "their cv",
+                    "account for", "needs his own", "needs her own",
+                ))
+            )
+            if _is_cv_question:
+                return self._finalize(
+                    self._answer_with_ai_fallback(
+                        user_id=user_id, message=message, profile=profile,
+                        save_user_message=False,
+                    ),
+                    self.SOURCE_AI,
+                    profile=profile,
+                )
             cv_status = self._profile_value(profile, "cv_status")
             if cv_status == "parsed" or self._profile_value(profile, "manual_profile_wizard_disabled"):
                 response = {
