@@ -76,7 +76,7 @@ const pillars = [
   { label: "UAE-focused job search", icon: "AE" },
   { label: "CV-first matching", icon: "CV" },
   { label: "Chat-based job search", icon: "AI" },
-  { label: "Support via info@ricohunt.ae", icon: "✉" },
+  { label: "WhatsApp & email support", icon: "✉" },
 ];
 
 const audienceCards = [
@@ -91,7 +91,10 @@ const audienceCards = [
   {
     heading: "Early access — beta feedback coming",
     body: "We're collecting feedback from our first users. If you try Rico, we'd love to hear what worked.",
-    cta: { label: "Share feedback by email", href: "mailto:info@ricohunt.ae?subject=Rico%20feedback" },
+    ctas: [
+      { label: "Email us", href: "mailto:info@ricohunt.ae?subject=Rico%20feedback" },
+      { label: "WhatsApp", href: "https://wa.me/971585989080?text=Hi%2C%20I%27d%20like%20to%20share%20feedback%20about%20Rico" },
+    ],
   },
 ];
 
@@ -540,18 +543,23 @@ export default function LandingPage() {
                   </p>
                   <h3 className="mt-4 text-xl font-semibold text-white">{card.heading}</h3>
                   <p className="mt-3 text-sm leading-7 text-text-secondary">{card.body}</p>
-                  {card.cta && (
-                    <a
-                      href={card.cta.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-cyan hover:underline"
-                    >
-                      {card.cta.label}
-                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-3.5 w-3.5" aria-hidden="true">
-                        <path d="M3 8h10M9 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </a>
+                  {card.ctas && (
+                    <div className="mt-6 flex flex-wrap gap-3">
+                      {card.ctas.map((cta) => (
+                        <a
+                          key={cta.label}
+                          href={cta.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 text-sm font-semibold text-cyan hover:underline"
+                        >
+                          {cta.label}
+                          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-3.5 w-3.5" aria-hidden="true">
+                            <path d="M3 8h10M9 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </a>
+                      ))}
+                    </div>
                   )}
                 </RicoCardPanel>
               ))}
