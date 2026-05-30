@@ -123,106 +123,66 @@ function renderMarkdown(text: string): React.ReactNode {
     });
 }
 
-function ThinkingIndicator({ label }: { label?: string }) {
+function WorkingIndicator({ message }: { message: string }) {
     return (
-        <div className="rico-thinking-row" role="status" aria-live="polite" aria-label="Rico is thinking">
-            <span className="sr-only">Rico is thinking</span>
+        <div className="rico-thinking-row" role="status" aria-live="polite" aria-label={message}>
+            <span className="sr-only">{message}</span>
             <div className="rico-orb" aria-hidden="true"><span>R</span></div>
             <div className="rico-thinking-label">
-                <span>{label ?? "Thinking…"}</span>
+                <span>{message}</span>
                 <span className="rico-dots" aria-hidden="true"><i /><i /><i /></span>
             </div>
         </div>
     );
 }
 
-function OperationStateIndicator({ state: _state, message }: { state: string; message: string }) {
-    return (
-        <div className="flex items-center gap-2.5 pl-8" role="status" aria-live="polite">
-            <span className="flex gap-0.5" aria-hidden="true">
-                <i className="w-1 h-1 rounded-full bg-magenta/50 block animate-bounce [animation-delay:0ms]" />
-                <i className="w-1 h-1 rounded-full bg-magenta/50 block animate-bounce [animation-delay:150ms]" />
-                <i className="w-1 h-1 rounded-full bg-magenta/50 block animate-bounce [animation-delay:300ms]" />
-            </span>
-            <span className="text-[12px] text-text-muted">{message}</span>
-        </div>
-    );
-}
-
-function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt: string) => void }) {
+function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onAction: (prompt: string) => void }) {
     const score = match.score ?? 0;
-    const scoreLabel = score >= 0.8 ? "Strong match" : score >= 0.6 ? "Good match" : "Possible match";
-    const scoreColor = score >= 0.8
-        ? "bg-cyan-dim text-cyan"
-        : score >= 0.6
-            ? "bg-rico-amber/10 text-rico-amber"
-            : "bg-magenta-dim text-magenta";
+    const scorePct = score > 0 ? `${Math.round(score * 100)}%` : null;
+    const scoreColor = score >= 0.8 ? "text-cyan" : score >= 0.6 ? "text-rico-amber" : "text-magenta";
     const topReason = match.match_reasons?.[0] ?? match.why ?? "";
 
     const clean = (u?: string) => (u && u !== "#" ? u.trim() : "");
-    const chain = [clean(match.apply_url), clean(match.source_url), clean(match.alt_link)].filter(Boolean);
-    const primary = chain[0] || "";
+    const primary = [clean(match.apply_url), clean(match.source_url), clean(match.alt_link)].filter(Boolean)[0] ?? "";
 
     return (
         <article
-            className="rounded-xl border border-border-subtle bg-surface/30 px-3 py-2.5"
+            className="flex items-center gap-2.5 rounded-lg border border-border-subtle/50 px-2.5 py-2"
             aria-label={`Job match: ${match.title} at ${match.company}`}
             data-testid="opportunity-card"
         >
-            <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                    <div
-                        className="text-[13px] font-semibold text-white break-normal line-clamp-2"
-                        data-testid="opportunity-card-title"
-                    >
-                        {match.title}
-                    </div>
-                    <div className="text-[11px] text-text-secondary mt-0.5">
-                        {match.company}{match.location ? ` · ${match.location}` : ""}
-                    </div>
+            <div className="flex-1 min-w-0">
+                <div
+                    className="text-[12px] font-semibold text-white break-normal line-clamp-1"
+                    data-testid="opportunity-card-title"
+                >
+                    {match.title}
                 </div>
-                {score > 0 && (
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 mt-0.5 ${scoreColor}`}>
-                        {scoreLabel}
-                    </span>
-                )}
+                <div className="text-[10px] text-text-muted mt-0.5 line-clamp-1">
+                    {match.company}{match.location ? ` · ${match.location}` : ""}{topReason ? ` · ${topReason}` : ""}
+                </div>
             </div>
-
-            {topReason && (
-                <p className="text-[11px] text-text-muted mt-1.5 line-clamp-1">{topReason}</p>
+            {scorePct && (
+                <span className={`text-[10px] font-semibold shrink-0 tabular-nums ${scoreColor}`}>{scorePct}</span>
             )}
-
-            <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
-                {primary ? (
-                    <a
-                        href={primary}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        data-testid="view-job-action"
-                        aria-label={`Apply for ${match.title} at ${match.company}`}
-                        className="text-[11px] px-2.5 py-1 rounded-lg bg-magenta text-white font-medium hover:bg-magenta-hover transition-colors"
-                    >
-                        Apply now
-                    </a>
-                ) : (
-                    match.verification_status === "lead_needs_verification" && (
-                        <span className="text-[10px] px-2 py-1 rounded-lg border border-border-soft text-text-muted italic">
-                            Link pending verification
-                        </span>
-                    )
-                )}
-                {match.actions?.map((action) => (
-                    <button
-                        type="button"
-                        key={action}
-                        onClick={() => onAction(`${action} — ${match.title} at ${match.company}`)}
-                        aria-label={`${action} for ${match.title} at ${match.company}`}
-                        className="text-[10px] px-2.5 py-1 rounded-lg border border-border-soft text-text-secondary hover:border-magenta/40 hover:text-white transition-colors"
-                    >
-                        {action}
-                    </button>
-                ))}
-            </div>
+            {primary ? (
+                <a
+                    href={primary}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="view-job-action"
+                    aria-label={`Apply for ${match.title} at ${match.company}`}
+                    className="text-[10px] px-2 py-1 rounded-md bg-magenta/10 border border-magenta/30 text-magenta hover:bg-magenta/20 transition-colors shrink-0 font-medium"
+                >
+                    Apply
+                </a>
+            ) : (
+                match.verification_status === "lead_needs_verification" && (
+                    <span className="text-[9px] px-2 py-1 rounded-md border border-border-soft text-text-muted italic shrink-0">
+                        Verifying
+                    </span>
+                )
+            )}
         </article>
     );
 }
@@ -245,26 +205,25 @@ function ApplicationStatusCard({ applications, followUpNeeded }: {
     const activeStages = stageDefs.filter((s) => counts[s.key] > 0);
 
     return (
-        <div className="mt-2 rounded-xl border border-border-subtle bg-surface/30 p-3 space-y-2.5">
+        <div className="mt-1.5 rounded-lg border border-border-subtle/50 px-2.5 py-2 space-y-1.5">
             {activeStages.length > 0 && (
-                <div className="flex flex-wrap gap-4">
+                <div className="flex flex-wrap gap-3">
                     {activeStages.map((s) => (
                         <div key={s.key} className="flex items-baseline gap-1">
-                            <span className="text-[18px] font-bold text-white leading-none">{counts[s.key]}</span>
+                            <span className="text-[14px] font-bold text-white leading-none tabular-nums">{counts[s.key]}</span>
                             <span className="text-[10px] text-text-muted">{s.label}</span>
                         </div>
                     ))}
                 </div>
             )}
             {followUpNeeded.length > 0 && (
-                <div className="border-t border-border-subtle/50 pt-2">
-                    <p className="text-[10px] font-semibold text-rico-amber mb-1.5">Follow up needed</p>
-                    <div className="space-y-1">
+                <div className={activeStages.length > 0 ? "border-t border-border-subtle/40 pt-1.5" : ""}>
+                    <div className="space-y-0.5">
                         {followUpNeeded.map((app, i) => (
-                            <div key={i} className="text-[11px] text-text-secondary flex items-center gap-1.5">
-                                <span className="w-1 h-1 rounded-full bg-rico-amber shrink-0" aria-hidden="true" />
-                                <span>
-                                    {app.title ?? "Role"} at {app.company ?? "Company"}
+                            <div key={i} className="text-[10px] text-text-secondary flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rico-amber shrink-0" aria-hidden="true" />
+                                <span className="line-clamp-1">
+                                    {app.title ?? "Role"}{app.company ? ` · ${app.company}` : ""}
                                     {app.days_since_applied != null ? ` · ${app.days_since_applied}d ago` : ""}
                                 </span>
                             </div>
@@ -278,15 +237,15 @@ function ApplicationStatusCard({ applications, followUpNeeded }: {
 
 function ProfileGapCard({ gaps }: { gaps: string[] }) {
     return (
-        <div className="mt-2 rounded-xl border border-border-subtle bg-surface/30 px-3 py-2.5 flex items-center gap-3">
-            <div className="flex-1 min-w-0 text-[12px] text-text-secondary">
-                <span className="text-rico-amber font-medium">Profile incomplete — </span>
+        <div className="mt-1.5 rounded-lg border border-border-subtle/50 px-2.5 py-1.5 flex items-center gap-2">
+            <div className="flex-1 min-w-0 text-[11px] text-text-secondary line-clamp-1">
+                <span className="text-rico-amber font-medium">Incomplete — </span>
                 {gaps.slice(0, 2).join(", ")}
-                {gaps.length > 2 && ` +${gaps.length - 2} more`}
+                {gaps.length > 2 && ` +${gaps.length - 2}`}
             </div>
             <Link
                 href="/profile"
-                className="text-[11px] px-2.5 py-1 rounded-lg bg-magenta/10 border border-magenta/30 text-magenta hover:bg-magenta/20 transition-colors shrink-0"
+                className="text-[10px] px-2 py-1 rounded-md bg-magenta/10 border border-magenta/30 text-magenta hover:bg-magenta/20 transition-colors shrink-0"
             >
                 Fill profile
             </Link>
@@ -694,6 +653,7 @@ export default function CommandPage() {
         const text = input.trim();
         if (!text) return;
         setInput("");
+        if (textareaRef.current) textareaRef.current.style.height = "auto";
         await sendMessage(text);
     }
 
@@ -778,7 +738,7 @@ export default function CommandPage() {
 
             <div className="relative z-10 flex flex-col flex-1 h-[calc(100dvh-57px)] sm:h-[calc(100dvh-65px)] max-w-3xl w-full mx-auto px-2 sm:px-4">
                 {/* Messages Container */}
-                <div className="flex-1 overflow-y-auto px-2 py-6 space-y-5 pb-32" role="log" aria-live="polite" aria-atomic="false" aria-busy={thinking}>
+                <div className="flex-1 min-h-0 overflow-y-auto px-2 py-6 space-y-5" role="log" aria-live="polite" aria-atomic="false" aria-busy={thinking}>
 
                     {/* Quick start (shown above first message) */}
                     {messages.length <= 1 && !thinking && (
@@ -801,9 +761,9 @@ export default function CommandPage() {
                     {messages.map((m, idx) => {
                         const prevMsg = messages[idx - 1];
                         const isFirstInGroup = !prevMsg || prevMsg.role !== m.role;
-                        const hasJobCards = m.type === "job_matches" && Array.isArray(m.matches) && m.matches.length > 0;
-                        const hasAppCards = m.type === "application_status" && Array.isArray(m.applications) && m.applications.length > 0;
-                        const isStructured = m.type === "profile_preview" || hasJobCards || hasAppCards;
+                        // Only profile_preview gets a light panel — job cards and app cards
+                        // float as attachments directly in the chat stream.
+                        const isStructured = m.type === "profile_preview";
 
                         return (
                             <div
@@ -819,24 +779,17 @@ export default function CommandPage() {
                                 <div className={`${m.role === "user"
                                     ? "max-w-[75%] sm:max-w-[68%] rounded-2xl rounded-tr-sm bg-magenta px-3.5 py-2.5 text-[14px] text-white leading-relaxed shadow-sm"
                                     : isStructured
-                                        ? "flex-1 min-w-0 rounded-xl bg-surface/40 border border-border-subtle p-3 text-[13px] text-white leading-relaxed"
+                                        ? "flex-1 min-w-0 rounded-xl bg-surface/20 border border-border-subtle/40 p-3 text-[13px] text-white leading-relaxed"
                                         : "flex-1 min-w-0 text-[14px] text-white leading-relaxed"
                                     }`}>
 
-                                    {/* Search result summary bar */}
-                                    {m.type === "job_matches" && (
-                                        <div className="flex items-center gap-2 mb-2 text-[10px] text-text-muted">
-                                            <span className="text-cyan">🔍</span>
-                                            <span>
-                                                Searched: <strong className="text-text-secondary">{m.search_query ?? "UAE jobs"}</strong>
-                                                {" · "}
-                                                {m.result_count != null
-                                                    ? m.result_count === 0
-                                                        ? "No matches"
-                                                        : `${m.result_count} match${m.result_count === 1 ? "" : "es"}`
-                                                    : "Results"}
-                                                {m.broadened && <span className="text-rico-amber"> · Broadened</span>}
-                                            </span>
+                                    {/* Search result caption */}
+                                    {m.type === "job_matches" && m.search_query && (
+                                        <div className="mb-1.5 text-[10px] text-text-muted">
+                                            {m.result_count != null && m.result_count > 0
+                                                ? `${m.result_count} match${m.result_count === 1 ? "" : "es"}`
+                                                : "No matches"} for <strong className="text-text-secondary">{m.search_query}</strong>
+                                            {m.broadened && <span className="text-rico-amber"> · broadened</span>}
                                         </div>
                                     )}
 
@@ -1000,13 +953,9 @@ export default function CommandPage() {
 
                     {thinking && (
                         <div className="flex flex-col gap-2">
-                            {operationState ? (
-                                <OperationStateIndicator state={operationState.state} message={operationState.message} />
-                            ) : (
-                                <ThinkingIndicator />
-                            )}
+                            <WorkingIndicator message={operationState?.message ?? "Thinking…"} />
                             {slowHint && (
-                                <p className="text-[11px] text-text-muted pl-9 animate-pulse motion-reduce:animate-none" role="status">
+                                <p className="text-[11px] text-text-muted pl-[42px] animate-pulse motion-reduce:animate-none" role="status">
                                     Rico is waking up — first request after idle can take up to a minute…
                                 </p>
                             )}
@@ -1016,9 +965,9 @@ export default function CommandPage() {
                     <div ref={bottomRef} />
                 </div>
 
-                {/* Floating input bar — dvh column + safe-area keeps it on-screen above
-                    the mobile browser chrome / iOS home indicator. */}
-                <div className="absolute bottom-0 left-0 right-0 px-4 pt-4 pb-[calc(2rem+env(safe-area-inset-bottom))] bg-gradient-to-t from-background via-background to-transparent">
+                {/* Input bar — shrink-0 flex child keeps it below the scroll area;
+                    safe-area padding covers iOS home indicator. */}
+                <div className="shrink-0 px-4 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom))] bg-gradient-to-t from-background via-background/95 to-transparent">
                     {chatAudience === "public" && messages.filter((m) => m.role === "rico").length >= 2 && (
                         <div className="mb-2 flex items-center justify-between gap-3 px-1">
                             <p className="text-[11px] text-text-muted">Save your profile and track applications.</p>
@@ -1053,7 +1002,11 @@ export default function CommandPage() {
                             <textarea
                                 ref={textareaRef}
                                 value={input}
-                                onChange={(e) => setInput(e.target.value)}
+                                onChange={(e) => {
+                                    setInput(e.target.value);
+                                    e.target.style.height = "auto";
+                                    e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+                                }}
                                 onKeyDown={handleKeyDown}
                                 disabled={thinking || chatAudience === "checking"}
                                 rows={1}
@@ -1082,7 +1035,7 @@ export default function CommandPage() {
                         </div>
                     </div>
                     <p id="command-input-hint" className="text-center text-[10px] text-text-muted mt-2 opacity-40">
-                        Enter to send · Shift+Enter for new line · 📎 to upload CV
+                        Enter to send · Shift+Enter for new line · clip icon to upload CV
                     </p>
                 </div>
             </div>
