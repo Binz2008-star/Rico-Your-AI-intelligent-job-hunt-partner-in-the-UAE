@@ -190,24 +190,52 @@ def _infer_roles_from_skills(
     if not family_hits:
         return []
 
-    # Get top families by hit count
-    top_families = sorted(family_hits, key=lambda k: -family_hits[k])[:2]
+    # Priority families: always include hse_qhse and environmental_esg if they have hits
+    priority_families = ["hse_qhse", "environmental_esg"]
+    top_families: list[str] = []
 
-    # Build role list from top families
+    # Add priority families if they have hits
+    for family in priority_families:
+        if family in family_hits and family not in top_families:
+            top_families.append(family)
+
+    # Fill remaining slots with highest-hit families (excluding already-added priority ones)
+    remaining_slots = 2 - len(top_families)
+    if remaining_slots > 0:
+        other_families = sorted(
+            [f for f in family_hits if f not in top_families],
+            key=lambda k: -family_hits[k]
+        )
+        top_families.extend(other_families[:remaining_slots])
+
+    # Build role list from top families with round-robin interleaving
     roles: list[str] = []
     seen: set[str] = set()
 
-    for family in top_families:
-        family_roles = _SKILL_FAMILY_ROLES.get(family, [])
-        for role in family_roles:
-            if role not in seen:
-                roles.append(role)
-                seen.add(role)
+    # Reserve slot for Operations Manager - Environmental Services if conditions met
+    has_ops_manager_slot = (
+        "operations" in skill_lower
+        and any(f in top_families for f in ["environmental_esg", "hse_qhse"])
+    )
+    max_roles = 6 if has_ops_manager_slot else 7  # Reserve 1 slot for Ops Manager
+
+    # Round-robin: take one role from each family in sequence
+    max_roles_per_family = 4  # Limit to prevent one family from dominating
+    family_role_queues: dict[str, list[str]] = {
+        family: _SKILL_FAMILY_ROLES.get(family, [])[:max_roles_per_family]
+        for family in top_families
+    }
+
+    while any(family_role_queues.values()) and len(roles) < max_roles:
+        for family in top_families:
+            if family_role_queues[family] and len(roles) < max_roles:
+                role = family_role_queues[family].pop(0)
+                if role not in seen:
+                    roles.append(role)
+                    seen.add(role)
 
     # Add Operations Manager - Environmental Services if operations skill present
-    if "operations" in skill_lower and any(
-        f in top_families for f in ["environmental_esg", "hse_qhse"]
-    ):
+    if has_ops_manager_slot:
         if "Operations Manager - Environmental Services" not in seen:
             roles.append("Operations Manager - Environmental Services")
 
