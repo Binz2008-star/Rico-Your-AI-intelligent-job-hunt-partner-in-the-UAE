@@ -548,13 +548,10 @@ def test_profile_renormalization_with_versioning():
     assert "HSE Manager" in retrieved.target_roles or "Environmental Manager" in retrieved.target_roles
 
 
-<<<<<<< HEAD
 # ============================================================================
 # DB Roundtrip Tests - Diagnostic for production issue
 # ============================================================================
 
-=======
->>>>>>> e0f2620 (test(profile): add DB user upsert/read roundtrip test)
 def test_db_user_upsert_read_roundtrip():
     """Test that db.upsert_user and db.get_user_bundle use the same identity key."""
     from src.rico_db import RicoDB
@@ -583,7 +580,6 @@ def test_db_user_upsert_read_roundtrip():
         with conn.cursor() as cur:
             cur.execute("DELETE FROM rico_users WHERE external_user_id = %s", (test_email,))
         conn.commit()
-<<<<<<< HEAD
 
 
 def test_api_patch_to_db_to_get_roundtrip(monkeypatch):
