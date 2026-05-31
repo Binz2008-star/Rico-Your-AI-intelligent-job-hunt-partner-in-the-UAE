@@ -12,6 +12,9 @@ from __future__ import annotations
 
 from typing import Any
 
+# Increment this when normalization logic changes to force re-normalization
+NORMALIZATION_VERSION = 2
+
 
 # Broad roles that should not be saved standalone without qualification
 _BROAD_STANDALONE_ROLES = {

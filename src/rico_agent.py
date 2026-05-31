@@ -56,6 +56,7 @@ class RicoProfile:
     cv_status: Optional[str] = None
     profile_creation_mode: Optional[str] = None
     manual_profile_wizard_disabled: bool = False
+    normalization_version: Optional[int] = None
     settings: RicoAgentSettings = field(default_factory=RicoAgentSettings)
 
 
