@@ -873,7 +873,13 @@ class RicoChatAPI:
         source_url = str(
             m.get("source_url") or alt_link or apply_url
         ).strip()
-        verification_status = "live" if apply_url else "lead_needs_verification"
+
+        # Classify source quality from domain patterns — no network call.
+        try:
+            from src.services.source_quality import classify_url
+            verification_status = classify_url(apply_url or source_url)
+        except Exception:
+            verification_status = "needs_source_verification" if apply_url else "lead_needs_verification"
 
         result = {
             "title": str(m.get("title") or "Untitled role"),

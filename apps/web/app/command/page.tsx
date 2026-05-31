@@ -136,52 +136,114 @@ function WorkingIndicator({ message }: { message: string }) {
     );
 }
 
+type VerificationStatus = JobMatch["verification_status"];
+
+function SourceQualityBadge({ status }: { status: VerificationStatus }) {
+    if (!status) return null;
+    if (status === "live_verified") {
+        return (
+            <span title="Verified source" className="text-[9px] px-1.5 py-0.5 rounded border border-cyan/40 text-cyan shrink-0">
+                Verified
+            </span>
+        );
+    }
+    if (status === "login_required") {
+        return (
+            <span title="This link requires login — may not reach the apply page directly" className="text-[9px] px-1.5 py-0.5 rounded border border-rico-amber/40 text-rico-amber shrink-0">
+                Login required
+            </span>
+        );
+    }
+    if (status === "rate_limited") {
+        return (
+            <span title="This source is frequently rate-limited (429). The link may not load." className="text-[9px] px-1.5 py-0.5 rounded border border-rico-amber/40 text-rico-amber shrink-0">
+                Rate limited
+            </span>
+        );
+    }
+    if (status === "aggregator_untrusted") {
+        return (
+            <span title="Aggregator link — job may be reposted or outdated" className="text-[9px] px-1.5 py-0.5 rounded border border-border-soft text-text-muted shrink-0">
+                Aggregator
+            </span>
+        );
+    }
+    if (status === "needs_source_verification" || status === "lead_needs_verification") {
+        return (
+            <span title="Source not yet verified" className="text-[9px] px-1.5 py-0.5 rounded border border-border-soft text-text-muted shrink-0 italic">
+                Needs verification
+            </span>
+        );
+    }
+    return null;
+}
+
 function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onAction: (prompt: string) => void }) {
     const score = match.score ?? 0;
     const scorePct = score > 0 ? `${Math.round(score * 100)}%` : null;
     const scoreColor = score >= 0.8 ? "text-cyan" : score >= 0.6 ? "text-rico-amber" : "text-magenta";
     const topReason = match.match_reasons?.[0] ?? match.why ?? "";
+    const vStatus = match.verification_status;
 
     const clean = (u?: string) => (u && u !== "#" ? u.trim() : "");
     const primary = [clean(match.apply_url), clean(match.source_url), clean(match.alt_link)].filter(Boolean)[0] ?? "";
 
+    // When primary link is known-bad, prefer alt_link as the visible link
+    const isBadLink = vStatus === "login_required" || vStatus === "rate_limited";
+    const fallback = clean(match.alt_link) || clean(match.source_url) || "";
+    const applyHref = isBadLink && fallback ? fallback : primary;
+    const applyLabel = isBadLink && fallback ? "Alt link" : "Apply";
+
     return (
         <article
-            className="flex items-center gap-2.5 rounded-lg border border-border-subtle/50 px-2.5 py-2"
+            className="rounded-lg border border-border-subtle/50 px-2.5 py-2 space-y-1.5"
             aria-label={`Job match: ${match.title} at ${match.company}`}
             data-testid="opportunity-card"
         >
-            <div className="flex-1 min-w-0">
-                <div
-                    className="text-[12px] font-semibold text-white break-normal line-clamp-1"
-                    data-testid="opportunity-card-title"
-                >
-                    {match.title}
+            <div className="flex items-center gap-2.5">
+                <div className="flex-1 min-w-0">
+                    <div
+                        className="text-[12px] font-semibold text-white break-normal line-clamp-1"
+                        data-testid="opportunity-card-title"
+                    >
+                        {match.title}
+                    </div>
+                    <div className="text-[10px] text-text-muted mt-0.5 line-clamp-1">
+                        {match.company}{match.location ? ` · ${match.location}` : ""}{topReason ? ` · ${topReason}` : ""}
+                    </div>
                 </div>
-                <div className="text-[10px] text-text-muted mt-0.5 line-clamp-1">
-                    {match.company}{match.location ? ` · ${match.location}` : ""}{topReason ? ` · ${topReason}` : ""}
-                </div>
+                {scorePct && (
+                    <span className={`text-[10px] font-semibold shrink-0 tabular-nums ${scoreColor}`}>{scorePct}</span>
+                )}
+                {applyHref ? (
+                    <a
+                        href={applyHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid="view-job-action"
+                        aria-label={`${applyLabel}: ${match.title} at ${match.company}`}
+                        className="text-[10px] px-2 py-1 rounded-md bg-magenta/10 border border-magenta/30 text-magenta hover:bg-magenta/20 transition-colors shrink-0 font-medium"
+                    >
+                        {applyLabel}
+                    </a>
+                ) : null}
             </div>
-            {scorePct && (
-                <span className={`text-[10px] font-semibold shrink-0 tabular-nums ${scoreColor}`}>{scorePct}</span>
-            )}
-            {primary ? (
-                <a
-                    href={primary}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    data-testid="view-job-action"
-                    aria-label={`Apply for ${match.title} at ${match.company}`}
-                    className="text-[10px] px-2 py-1 rounded-md bg-magenta/10 border border-magenta/30 text-magenta hover:bg-magenta/20 transition-colors shrink-0 font-medium"
-                >
-                    Apply
-                </a>
-            ) : (
-                match.verification_status === "lead_needs_verification" && (
-                    <span className="text-[9px] px-2 py-1 rounded-md border border-border-soft text-text-muted italic shrink-0">
-                        Verifying
-                    </span>
-                )
+
+            {/* Source quality row — only shown when there is something to say */}
+            {vStatus && (
+                <div className="flex items-center gap-1.5">
+                    <SourceQualityBadge status={vStatus} />
+                    {isBadLink && !fallback && (
+                        <span className="text-[9px] text-text-muted italic">
+                            Direct apply link unavailable — search for the role on the company site.
+                        </span>
+                    )}
+                    {isBadLink && fallback && (
+                        <span className="text-[9px] text-text-muted italic">
+                            Primary link blocked — using alternate link.
+                        </span>
+                    )}
+                </div>
             )}
         </article>
     );
