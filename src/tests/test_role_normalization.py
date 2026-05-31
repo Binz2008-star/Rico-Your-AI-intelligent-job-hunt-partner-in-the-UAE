@@ -206,5 +206,39 @@ def test_normalize_preserves_specific_roles():
     assert "Safety Officer" in normalized
 
 
+def test_production_profile_exact_match():
+    """Exact production profile from ricohunt.com - regression test for #312 fix."""
+    skills = ["hse", "iso 14001", "audit", "compliance", "esg", "sustainability", "environmental management", "excel", "operations"]
+    target_roles = ["Engineer", "Manager", "Operations Lead", "Operations Manager"]
+
+    normalized = normalize_target_roles(
+        target_roles=target_roles,
+        skills=skills,
+        years_experience=10,
+    )
+
+    # Must include HSE and environmental roles (priority families)
+    assert "HSE Manager" in normalized, "HSE Manager must be present (priority family)"
+    assert "QHSE Manager" in normalized, "QHSE Manager must be present (priority family)"
+    assert "Environmental Manager" in normalized, "Environmental Manager must be present (priority family)"
+
+    # Must include ESG/sustainability roles
+    assert "ESG Manager" in normalized or "Sustainability Manager" in normalized, "ESG or Sustainability Manager must be present"
+
+    # Must include Operations Manager - Environmental Services (operations skill + HSE/env)
+    assert "Operations Manager - Environmental Services" in normalized, "Operations Manager - Environmental Services must be present"
+
+    # Should NOT contain broad standalone roles
+    assert "Engineer" not in normalized
+    assert "Manager" not in [r for r in normalized if r == "Manager"]
+    assert "Operations Lead" not in normalized
+    assert "Operations Manager" not in [r for r in normalized if r == "Operations Manager"]
+
+    # Should NOT contain overly generic compliance/audit roles (they're lower priority than HSE/env)
+    # With priority logic, HSE and environmental families should dominate
+    hse_env_count = sum(1 for r in normalized if any(term in r for term in ["HSE", "QHSE", "Environmental", "ESG", "Sustainability"]))
+    assert hse_env_count >= 4, f"Should have at least 4 HSE/environmental roles, got {hse_env_count}: {normalized}"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
