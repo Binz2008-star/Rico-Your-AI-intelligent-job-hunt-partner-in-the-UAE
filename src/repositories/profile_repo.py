@@ -142,17 +142,44 @@ def _bundle_to_profile(bundle: dict[str, Any]) -> RicoProfile:
 # ============================================================================
 
 def get_profile(user_id: str) -> RicoProfile | None:
-    """Load profile: DB first, JSON fallback."""
+    """Load profile: DB first, JSON fallback. Normalizes broad target_roles if needed."""
     db = _db()
+    profile = None
+
     if db:
         try:
             bundle = db.get_user_bundle(user_id)
             if bundle:
-                return _bundle_to_profile(bundle)
+                profile = _bundle_to_profile(bundle)
         except Exception as e:
             logger.exception("profile_repo: get_profile DB failed user_id=%s", user_id)
 
-    return _memory().load_profile(user_id)
+    if not profile:
+        profile = _memory().load_profile(user_id)
+
+    # One-time cleanup: normalize broad target_roles if profile has CV evidence
+    if profile and profile.target_roles:
+        from src.role_normalization import should_normalize_profile, normalize_target_roles
+
+        if should_normalize_profile(profile.target_roles, profile.skills):
+            normalized = normalize_target_roles(
+                target_roles=profile.target_roles,
+                skills=profile.skills,
+                years_experience=profile.years_experience,
+                current_role=profile.current_role,
+            )
+            if normalized != profile.target_roles:
+                logger.info(
+                    "profile_normalization user=%s old_roles=%s new_roles=%s",
+                    user_id,
+                    profile.target_roles,
+                    normalized,
+                )
+                profile.target_roles = normalized
+                # Persist the normalized roles
+                upsert_profile(user_id, {"target_roles": normalized})
+
+    return profile
 
 
 def upsert_profile(user_id: str, updates: dict[str, Any]) -> RicoProfile:
