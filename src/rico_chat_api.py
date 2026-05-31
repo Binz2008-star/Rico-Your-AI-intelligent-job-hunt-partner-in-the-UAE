@@ -98,6 +98,16 @@ CV_FILE_RE = re.compile(r"\b[\w .()_-]+\.(?:pdf|docx?|txt)\b", re.IGNORECASE)
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PHONE_RE = re.compile(r"(?:\+?\d[\d\s().-]{7,}\d)")
 FOLLOWUP_BOUNDARY_PUNCT_RE = re.compile(r"^[\s\"'([{]+|[\s\"')\]}.,!?;:]+$")
+# Telegram @username: 4-32 alphanumeric/underscore chars
+TELEGRAM_USERNAME_RE = re.compile(r"@([A-Za-z0-9_]{4,32})\b")
+# Natural declarations: "my telegram is @Robin_amg", "telegram: Robin_amg",
+# "my telegram handle is @test_user" (multiple connector words allowed via *).
+_TELEGRAM_NATURAL_RE = re.compile(
+    r"(?:my\s+telegram|telegram\s*[:=]|تيليجرام\s*[:=]?)"
+    r"(?:\s+(?:is|handle|username|id|account))*"
+    r"[:\s]*@?([A-Za-z0-9_]{4,32})\b",
+    re.IGNORECASE,
+)
 
 # Domain-agnostic. A bare role is a short noun phrase. Anything starting with
 # one of these tokens is a question, command, greeting, or sentence - never
@@ -447,6 +457,10 @@ class RicoChatAPI:
 
         tokens = text.split()
         if not tokens or len(tokens) > _MAX_ROLE_WORDS:
+            return False
+
+        # @username is never a job role — caught upstream by Telegram handler
+        if tokens[0].startswith("@"):
             return False
 
         # Contractions (e.g. "can't", "don't") start with a verb, not a job title.
@@ -1059,7 +1073,7 @@ class RicoChatAPI:
         )
 
     def _extract_inline_contact_updates(self, message: str) -> dict[str, Any]:
-        """Extract email and phone from message."""
+        """Extract email, phone, and Telegram username from message."""
         updates: dict[str, Any] = {}
         emails = EMAIL_RE.findall(message)
         phones = PHONE_RE.findall(message)
@@ -1067,7 +1081,68 @@ class RicoChatAPI:
             updates["email"] = emails[0]
         if phones:
             updates["phone"] = phones[0].strip()
+        tg = self._extract_telegram_username(message)
+        if tg:
+            updates["telegram_username"] = tg
         return updates
+
+    @staticmethod
+    def _extract_telegram_username(message: str) -> str | None:
+        """Return a Telegram username from natural declarations or a bare @handle.
+
+        Handles:
+          - "my telegram is @Robin_amg"
+          - "telegram: @Robin_amg"
+          - "@Robin_amg"  (whole message, no spaces)
+        Returns the username without the leading @, or None.
+        """
+        # Natural declaration: "my telegram is @Robin_amg"
+        m = _TELEGRAM_NATURAL_RE.search(message)
+        if m:
+            return m.group(1).lstrip("@")
+        # Bare @username as the entire message (no spaces)
+        stripped = message.strip()
+        if stripped.startswith("@") and " " not in stripped:
+            username = stripped[1:]
+            if 4 <= len(username) <= 32 and all(c.isalnum() or c == "_" for c in username):
+                return username
+        return None
+
+    def _handle_telegram_username(self, user_id: str, username: str, profile: Any) -> dict[str, Any]:
+        """Persist a Telegram username to the user profile and confirm.
+
+        Clears the pending_question slot on success so the next message
+        is routed normally.
+        """
+        normalized = username.lstrip("@").strip()
+        try:
+            upsert_profile(user_id=user_id, updates={"telegram_username": normalized})
+            ctx = self._get_recent_context(user_id)
+            ctx.pop("pending_question", None)
+            self._store_recent_context(user_id, ctx)
+            msg = (
+                f"Got it — I've saved your Telegram as @{normalized}. "
+                "You'll receive job alerts there once notifications are set up."
+            )
+        except Exception as exc:
+            logger.warning("rico_chat: telegram_username save failed user=%s: %s", user_id, exc)
+            msg = (
+                "I noted your Telegram handle but couldn't save it right now. "
+                "Please try again in a moment."
+            )
+        response = {"type": "profile_update", "field": "telegram_username", "message": msg}
+        self._append_chat(user_id, "assistant", msg)
+        return response
+
+    def _ask_for_telegram_username(self, user_id: str) -> dict[str, Any]:
+        """Ask the user for their Telegram username and open the pending slot."""
+        ctx = self._get_recent_context(user_id)
+        ctx["pending_question"] = "telegram_username"
+        self._store_recent_context(user_id, ctx)
+        msg = "What's your Telegram username? Share it as @username (e.g. @Robin_amg) and I'll save it to your profile."
+        resp = {"type": "clarification", "message": msg}
+        self._append_chat(user_id, "assistant", msg)
+        return resp
 
     def _cv_first_profile_response(self, user_id: str, message: str) -> dict[str, Any]:
         """Handle CV-first profile creation response."""
@@ -1488,6 +1563,15 @@ class RicoChatAPI:
                 "type": "reminder_set",
                 "message": "تم ضبط التذكير. سأذكرك بالمتابعة." if "تذكير" in last else "Reminder set. I'll nudge you to follow up.",
             }
+
+        # If Rico's last message asked for a Telegram username, open the pending slot
+        # so the user's next reply (the actual @username) is captured correctly.
+        telegram_signals = (
+            "telegram" in last or "تيليجرام" in last
+            or "@username" in last or "telegram username" in last
+        )
+        if telegram_signals:
+            return self._ask_for_telegram_username(user_id)
 
         return None
 
@@ -2031,6 +2115,38 @@ class RicoChatAPI:
                         "or 'show my saved jobs'."
                     ),
                 },
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Telegram username: pending-slot resolution ────────────────────────
+        # Must run before role classification. If Rico asked for a Telegram
+        # username in the previous turn (pending_question == "telegram_username"),
+        # the next user message is the answer — with or without a leading @.
+        _tg_ctx = self._get_recent_context(user_id)
+        if _tg_ctx.get("pending_question") == "telegram_username":
+            candidate = message.strip().lstrip("@")
+            if candidate and all(c.isalnum() or c == "_" for c in candidate) and 4 <= len(candidate) <= 32:
+                return self._finalize(
+                    self._handle_telegram_username(user_id, candidate, profile),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
+            # Unrecognisable — re-prompt and keep the slot open
+            re_prompt = {
+                "type": "clarification",
+                "message": "That doesn't look like a valid Telegram username. Please share it as @username (e.g. @Robin_amg).",
+            }
+            self._append_chat(user_id, "assistant", re_prompt["message"])
+            return self._finalize(re_prompt, self.SOURCE_KEYWORD, profile=profile)
+
+        # ── Telegram username: direct declaration ─────────────────────────────
+        # "my telegram is @Robin_amg"  /  "@Robin_amg" as the whole message —
+        # must intercept before _looks_like_bare_target_role routes it to job search.
+        _tg_direct = self._extract_telegram_username(message)
+        if _tg_direct:
+            return self._finalize(
+                self._handle_telegram_username(user_id, _tg_direct, profile),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
