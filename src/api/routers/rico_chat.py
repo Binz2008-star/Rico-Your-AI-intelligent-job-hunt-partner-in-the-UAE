@@ -1045,6 +1045,8 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
     from src.role_normalization import normalize_profile_updates
     updates = normalize_profile_updates(updates)
 
+    logger.info("update_profile endpoint: user_id=%s updates=%s", user_id, updates)
+
     if updates:
         upsert_profile(user_id, updates)
         logger.info("profile_update user=%s fields=%s", user_id, list(updates.keys()))
