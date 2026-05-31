@@ -1,5 +1,6 @@
 "use client";
 
+import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, RicoOption, UploadCVResponse } from "@/lib/api";
 import { confirmCVProfile, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
@@ -705,6 +706,16 @@ export default function CommandPage() {
         router.push("/login");
     }
 
+    function handleNewChat() {
+        setMessages([{ id: nextId(), role: "rico", text: "Hi! I'm Rico. How can I help with your job search today?" }]);
+        setInput("");
+    }
+
+    function handleClearChat() {
+        setMessages([]);
+        setInput("");
+    }
+
     function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
@@ -734,39 +745,15 @@ export default function CommandPage() {
                 <div aria-hidden="true" className="absolute bottom-0 -right-[100px] w-[500px] h-[500px] rounded-full bg-cyan-dim blur-[140px]" />
             </div>
 
-            {/* Top nav — minimal, matches landing */}
-            <header className="relative z-10 flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border-subtle">
-                <Link href="/" className="flex items-center gap-2 text-white font-black text-base sm:text-lg tracking-tight">
-                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-[9px] bg-[#f5a623] flex items-center justify-center text-sm font-black text-[#0a0a1a] shadow-[0_4px_16px_rgba(245,166,35,0.35)]">R</div>
-                    Rico<span className="text-[#f5a623]"> Hunt</span>
-                </Link>
-                <div className="flex items-center gap-2 sm:gap-3">
-                    {chatAudience === "authenticated" ? (
-                        <>
-                            <Link href="/profile" className="hidden sm:block text-[13px] text-text-muted hover:text-white transition-colors">Profile</Link>
-                            <button
-                                type="button"
-                                onClick={handleLogout}
-                                className="text-[12px] px-3 py-1.5 rounded-lg bg-magenta text-white hover:bg-magenta-hover transition-colors font-medium"
-                            >
-                                Sign out
-                            </button>
-                        </>
-                    ) : chatAudience === "public" ? (
-                        <>
-                            <Link href={COMMAND_LOGIN_HREF} className="text-[13px] text-text-muted hover:text-white transition-colors">Sign in</Link>
-                            <Link href={COMMAND_SIGNUP_HREF} className="text-[12px] px-3 py-1.5 rounded-lg bg-magenta text-white hover:bg-magenta-hover transition-colors font-medium">Sign up free</Link>
-                        </>
-                    ) : (
-                        /* checking — reveal no auth state until /me resolves, so signed-in
-                           users never flash public "Sign in / Sign up free" links. */
-                        <span
-                            aria-hidden="true"
-                            className="h-8 w-28 rounded-lg bg-surface/60 border border-border-subtle animate-pulse motion-reduce:animate-none"
-                        />
-                    )}
-                </div>
-            </header>
+            {/* Mobile command header */}
+            <MobileCommandHeader
+                chatAudience={chatAudience}
+                onLogout={handleLogout}
+                onNewChat={handleNewChat}
+                onClearChat={handleClearChat}
+                loginHref={COMMAND_LOGIN_HREF}
+                signupHref={COMMAND_SIGNUP_HREF}
+            />
 
             {/* Hidden file input for CV upload */}
             <input
@@ -779,7 +766,7 @@ export default function CommandPage() {
                 onChange={handleCVUpload}
             />
 
-            <div className="relative z-10 flex flex-col flex-1 h-[calc(100dvh-57px)] sm:h-[calc(100dvh-65px)] max-w-3xl w-full mx-auto px-2 sm:px-4">
+            <div className="relative z-10 flex flex-col flex-1 h-[calc(100dvh-53px)] max-w-3xl w-full mx-auto px-2 sm:px-4">
                 {/* Messages Container */}
                 <div className="flex-1 min-h-0 overflow-y-auto px-2 py-6 space-y-5" role="log" aria-live="polite" aria-atomic="false" aria-busy={thinking}>
 

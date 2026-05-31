@@ -407,6 +407,18 @@ export const translations = {
     // Maintenance
     backendMaintenanceDescription:
       "Settings sync and Telegram delivery are paused while Render hosting is restored. Existing frontend pages remain available, but backend-backed preferences cannot be changed.",
+
+    // Mobile command header
+    newChat: "New chat",
+    clearChat: "Clear chat",
+    chatHistory: "Chat history",
+    help: "Help",
+    reportIssue: "Report issue",
+
+    // Upload additional
+    uploadSecureNote: "End-to-end encrypted. Your CV is never shared.",
+    uploadProfileReady: "Profile Intelligence Ready",
+    uploadProfileReadyDesc: "Your career trajectory has been mapped and is ready for matching.",
   },
   ar: {
     // Common
@@ -810,6 +822,18 @@ export const translations = {
     // Maintenance
     backendMaintenanceDescription:
       "مزامنة الإعدادات وتوصيلات تيليجرام متوقفة أثناء استعادة استضافة Render. الصفحات الحالية متاحة، لكن التفضيلات التي تعتمد على الخادم لا يمكن تغييرها.",
+
+    // Mobile command header
+    newChat: "محادثة جديدة",
+    clearChat: "مسح المحادثة",
+    chatHistory: "تاريخ المحادثات",
+    help: "مساعدة",
+    reportIssue: "الإبلاغ عن مشكلة",
+
+    // Upload additional
+    uploadSecureNote: "مشفر من طرف إلى طرف. لن تتم مشاركة سيرتك الذاتية أبدًا.",
+    uploadProfileReady: "ذكاء الملف الشخصي جاهز",
+    uploadProfileReadyDesc: "تم تعيين مسارك المهني وهو جاهز للمطابقة.",
   },
 } as const;
 
