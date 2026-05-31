@@ -707,7 +707,11 @@ export default function CommandPage() {
     }
 
     function handleNewChat() {
-        setMessages([{ id: nextId(), role: "rico", text: "Hi! I'm Rico. How can I help with your job search today?" }]);
+        const greeting =
+            chatAudience === "authenticated"
+                ? "New chat started. What would you like to work on next?"
+                : "Hi! I'm Rico. How can I help with your job search today?";
+        setMessages([{ id: nextId(), role: "rico", text: greeting }]);
         setInput("");
     }
 
