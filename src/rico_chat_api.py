@@ -932,9 +932,19 @@ class RicoChatAPI:
         ).strip()
 
         # Classify source quality from domain patterns — no network call.
+        # Google Jobs links (jobs.google.com, google.com/search) are search
+        # intermediary pages, not direct apply URLs. Move them to alt_link so
+        # the frontend can offer them as a fallback, but don't present them as
+        # the primary "Apply" action.
         try:
-            from src.services.source_quality import classify_url
-            verification_status = classify_url(apply_url or source_url)
+            from src.services.source_quality import classify_url, is_google_intermediary
+            if apply_url and is_google_intermediary(apply_url):
+                if not alt_link:
+                    alt_link = apply_url
+                apply_url = ""
+                verification_status = "google_intermediary"
+            else:
+                verification_status = classify_url(apply_url or source_url)
         except Exception:
             verification_status = "needs_source_verification" if apply_url else "lead_needs_verification"
 
@@ -1577,6 +1587,45 @@ class RicoChatAPI:
                 all_matches = filter_for_non_nationals(all_matches)
         except Exception as e:
             logger.debug("Eligibility filter unavailable: %s", e)
+
+        # Deduplicate by title+company fingerprint within this response.
+        # JSearch deduplicates by job_id, but the same role at the same company
+        # can appear under slightly different job_ids (different posting dates).
+        seen_fps: set[str] = set()
+        deduped: list[dict[str, Any]] = []
+        for m in all_matches:
+            fp = (
+                str(m.get("title") or "").lower().strip()
+                + "|"
+                + str(m.get("company") or "").lower().strip()
+            )
+            if fp and fp != "|" and fp not in seen_fps:
+                seen_fps.add(fp)
+                deduped.append(m)
+        all_matches = deduped
+
+        # Quality-sort: surface live/verified sources before aggregators/dead links.
+        _QUALITY_RANK: dict[str, int] = {
+            "live_verified": 0,
+            "needs_source_verification": 1,
+            "google_intermediary": 2,
+            "login_required": 3,
+            "rate_limited": 4,
+            "aggregator_untrusted": 5,
+        }
+        try:
+            from src.services.source_quality import classify_url as _cq, is_google_intermediary as _igi
+
+            def _quality_key(m: dict[str, Any]) -> int:
+                url = str(
+                    m.get("job_apply_link") or m.get("apply_link") or m.get("link") or ""
+                )
+                status = "google_intermediary" if _igi(url) else _cq(url)
+                return _QUALITY_RANK.get(status, 1)
+
+            all_matches.sort(key=_quality_key)
+        except Exception:
+            pass
 
         top_matches = all_matches[:5]
         formatted = [self._format_match(m, profile) for m in top_matches]

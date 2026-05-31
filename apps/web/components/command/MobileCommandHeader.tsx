@@ -72,7 +72,7 @@ export function MobileCommandHeader({
             ? [
                   { label: language === "ar" ? "الملف الشخصي" : "Profile", href: "/profile", icon: "👤" },
                   { label: language === "ar" ? "رفع السيرة الذاتية" : "Upload CV", href: "/upload", icon: "📄" },
-                  { label: language === "ar" ? "الطلبات" : "Applications", href: "/applications", icon: "📋" },
+                  { label: language === "ar" ? "الطلبات" : "Applications", href: "/flow", icon: "📋" },
                   { label: language === "ar" ? "الاشتراك" : "Subscription", href: "/subscription", icon: "✦" },
               ]
             : chatAudience === "public"

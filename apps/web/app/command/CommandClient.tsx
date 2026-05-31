@@ -287,14 +287,6 @@ export default function CommandClient() {
         null,
     );
 
-    // Force LTR direction for /command to prevent RTL punctuation issues
-    // This is a temporary fix until full RTL support is implemented
-    useEffect(() => {
-        if (typeof window !== "undefined") {
-            document.documentElement.dir = "ltr";
-            document.documentElement.lang = "en";
-        }
-    }, []);
     const bottomRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);

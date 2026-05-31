@@ -198,8 +198,15 @@ function SourceQualityBadge({ status }: { status: VerificationStatus }) {
     }
     if (status === "aggregator_untrusted") {
         return (
-            <span title="Aggregator link — job may be reposted or outdated" className="text-[9px] px-1.5 py-0.5 rounded border border-border-soft text-text-muted shrink-0">
+            <span title="Aggregator — job may be reposted or outdated. Apply via the company site directly." className="text-[9px] px-1.5 py-0.5 rounded border border-border-soft text-text-muted shrink-0">
                 Aggregator
+            </span>
+        );
+    }
+    if (status === "google_intermediary") {
+        return (
+            <span title="Google Jobs search link — not a direct apply page. Use the search link to find the original posting." className="text-[9px] px-1.5 py-0.5 rounded border border-rico-amber/30 text-rico-amber shrink-0">
+                Search link
             </span>
         );
     }
@@ -224,13 +231,22 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
     const vStatus = match.verification_status;
 
     const clean = (u?: string) => (u && u !== "#" ? u.trim() : "");
+    // apply_url is guaranteed to be a direct page (not a Google intermediary) — backend
+    // moves Google links to alt_link and sets verification_status="google_intermediary".
     const primary = [clean(match.apply_url), clean(match.source_url), clean(match.alt_link)].filter(Boolean)[0] ?? "";
 
-    // When primary link is known-bad, prefer alt_link as the visible link
-    const isBadLink = vStatus === "login_required" || vStatus === "rate_limited";
+    // Downgrade known-bad primaries to the alt_link fallback
+    const isBadLink =
+        vStatus === "login_required" ||
+        vStatus === "rate_limited" ||
+        vStatus === "aggregator_untrusted" ||
+        vStatus === "google_intermediary";
     const fallback = clean(match.alt_link) || clean(match.source_url) || "";
     const applyHref = isBadLink && fallback ? fallback : primary;
-    const applyLabel = isBadLink && fallback ? "Alt link" : "Apply";
+    const applyLabel =
+        vStatus === "google_intermediary" ? "Search" :
+        isBadLink && fallback ? "Alt link" :
+        "Apply";
 
     return (
         <article
@@ -276,7 +292,12 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
                             Direct apply link unavailable — search for the role on the company site.
                         </span>
                     )}
-                    {isBadLink && fallback && (
+                    {vStatus === "google_intermediary" && fallback && (
+                        <span className="text-[9px] text-text-muted italic">
+                            Google Jobs link — search result, not a direct apply page.
+                        </span>
+                    )}
+                    {isBadLink && vStatus !== "google_intermediary" && fallback && (
                         <span className="text-[9px] text-text-muted italic">
                             Primary link blocked — using alternate link.
                         </span>

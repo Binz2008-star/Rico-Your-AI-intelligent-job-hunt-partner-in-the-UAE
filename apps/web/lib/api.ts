@@ -769,7 +769,8 @@ export interface JobMatch {
     | "needs_source_verification"
     | "login_required"
     | "rate_limited"
-    | "aggregator_untrusted";
+    | "aggregator_untrusted"
+    | "google_intermediary";
 }
 
 export interface RicoOption {

@@ -98,8 +98,33 @@ _AGGREGATOR_UNTRUSTED_DOMAINS: frozenset[str] = frozenset(
         "cvlibrary.co.uk",
         "careerjet.com",
         "jobrapido.com",
+        "jobleads.com",       # 404s reported in production
+        "neuvoo.com",
+        "talent.com",         # redirects to neuvoo; not an employer page
+        "joblist.com",
     }
 )
+
+
+def is_google_intermediary(url: str) -> bool:
+    """True when *url* is a Google Jobs search/intermediary page, not a direct apply URL.
+
+    Google Jobs links (jobs.google.com or google.com/search?…) open a Google
+    search results page that lists multiple employers — they are not direct
+    apply pages and should not be shown as the primary "Apply" action.
+    """
+    if not url:
+        return False
+    try:
+        parsed = urlparse(url)
+        hostname = (parsed.hostname or "").lower().lstrip("www.")
+        if hostname == "jobs.google.com":
+            return True
+        if hostname == "google.com" and "/search" in parsed.path:
+            return True
+    except Exception:
+        pass
+    return False
 
 
 @lru_cache(maxsize=512)

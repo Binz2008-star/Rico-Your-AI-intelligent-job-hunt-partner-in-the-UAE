@@ -75,12 +75,15 @@ const FALLBACK_PLANS: SubscriptionPlan[] = [
     },
 ];
 
+const PLAN_TIER: Record<string, number> = { free: 0, pro: 1, premium: 2 };
+
 function PlanCard({
     plan,
     currentPlan,
     isActive,
     isLoggedIn,
     loading,
+    subLoading,
     anyCheckoutPending,
     onUpgrade,
     onManage,
@@ -94,6 +97,7 @@ function PlanCard({
     isActive: boolean;
     isLoggedIn: boolean;
     loading: boolean;
+    subLoading: boolean;
     anyCheckoutPending: boolean;
     onUpgrade: (plan: "pro" | "premium") => void;
     onManage: () => void;
@@ -103,6 +107,10 @@ function PlanCard({
     t: (key: string) => string;
 }) {
     const isCurrent = currentPlan === plan.plan && isActive;
+    const isHigherPlan =
+        isLoggedIn &&
+        isActive &&
+        (PLAN_TIER[currentPlan ?? ""] ?? -1) > (PLAN_TIER[plan.plan] ?? 0);
     const isProPlan = plan.plan === "pro";
 
     return (
@@ -182,6 +190,8 @@ function PlanCard({
                     >
                         {t('temporarilyUnavailable')}
                     </button>
+                ) : subLoading && isLoggedIn ? (
+                    <div className="w-full py-3 rounded-xl bg-white/[0.04] border border-white/[0.06] animate-pulse h-[44px]" />
                 ) : isCurrent ? (
                     <button
                         onClick={onManage}
@@ -189,6 +199,10 @@ function PlanCard({
                     >
                         {t('manageSubscription')}
                     </button>
+                ) : isHigherPlan ? (
+                    <div className="w-full py-3 rounded-xl text-center text-[13px] font-semibold text-[#5a5a7a] bg-white/[0.03] border border-white/[0.06] cursor-default select-none">
+                        ✓ {t('includedInYourPlan')}
+                    </div>
                 ) : isLoggedIn ? (
                     manualBilling ? (
                         <a
@@ -242,7 +256,7 @@ function PlanCard({
             </div>
 
             {/* WhatsApp sub-copy in manual mode */}
-            {manualBilling && isLoggedIn && !isCurrent && !maintenanceMode && (
+            {manualBilling && isLoggedIn && !isCurrent && !isHigherPlan && !subLoading && !maintenanceMode && (
                 <p className="mt-3 text-[11px] text-[#5a5a7a] text-center leading-snug">
                     {t('whatsappPaymentConfirm')}
                     <br />
@@ -333,6 +347,7 @@ export default function SubscriptionPage() {
     const [plans, setPlans] = useState<SubscriptionPlan[]>(maintenanceMode ? FALLBACK_PLANS : []);
     const [sub, setSub] = useState<SubscriptionMeResponse | null>(null);
     const [loadingPlans, setLoadingPlans] = useState(!maintenanceMode);
+    const [subLoading, setSubLoading] = useState(false);
     const [planError, setPlanError] = useState(false);
     const [subscriptionError, setSubscriptionError] = useState(false);
     const [checkingOut, setCheckingOut] = useState<"pro" | "premium" | null>(null);
@@ -375,12 +390,14 @@ export default function SubscriptionPage() {
     const userEmail = user?.email ?? null;
     useEffect(() => {
         if (!userEmail || maintenanceMode) return;
+        setSubLoading(true);
         getMySubscription()
             .then(setSub)
             .catch(() => {
                 setSubscriptionError(true);
                 toast(t('couldNotLoadSubscription'), "error");
-            });
+            })
+            .finally(() => setSubLoading(false));
     }, [maintenanceMode, toast, userEmail]);
 
     const handleUpgrade = useCallback(
@@ -445,11 +462,22 @@ export default function SubscriptionPage() {
     const currentPlan = user ? sub?.subscription?.plan ?? null : null;
     const isActive = Boolean(sub?.is_active);
     const isLoggedIn = Boolean(user);
+    const { setLanguage } = useLanguage();
 
     return (
         <DashboardShell
             title={t('subscriptionTitle')}
             subtitle={t('subscriptionSubtitle')}
+            actions={
+                <button
+                    type="button"
+                    onClick={() => setLanguage(language === "ar" ? "en" : "ar")}
+                    className="rounded-lg border border-white/10 px-3 py-1.5 text-[12px] font-medium text-[#8080a0] hover:border-white/20 hover:text-white transition-colors"
+                    aria-label="Toggle language"
+                >
+                    {language === "ar" ? "EN" : "عربي"}
+                </button>
+            }
         >
             <div className="max-w-3xl flex flex-col gap-8">
 
@@ -566,6 +594,7 @@ export default function SubscriptionPage() {
                                 isActive={isActive}
                                 isLoggedIn={ready ? isLoggedIn : false}
                                 loading={checkingOut === plan.plan}
+                                subLoading={subLoading}
                                 anyCheckoutPending={checkingOut !== null}
                                 onUpgrade={handleUpgrade}
                                 onManage={handleManage}
