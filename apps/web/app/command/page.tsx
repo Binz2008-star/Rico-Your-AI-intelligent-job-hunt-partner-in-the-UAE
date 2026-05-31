@@ -214,7 +214,10 @@ function SourceQualityBadge({ status }: { status: VerificationStatus }) {
 }
 
 function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onAction: (prompt: string) => void }) {
-    const score = match.score ?? 0;
+    // Normalize to [0.0, 1.0]. New backend sends floats; legacy history may
+    // have 0–100 integers. Values > 1 are divided by 100, then clamped.
+    const _rawScore = match.score ?? 0;
+    const score = Math.min(1, Math.max(0, _rawScore > 1 ? _rawScore / 100 : _rawScore));
     const scorePct = score > 0 ? `${Math.round(score * 100)}%` : null;
     const scoreColor = score >= 0.8 ? "text-cyan" : score >= 0.6 ? "text-rico-amber" : "text-magenta";
     const topReason = match.match_reasons?.[0] ?? match.why ?? "";

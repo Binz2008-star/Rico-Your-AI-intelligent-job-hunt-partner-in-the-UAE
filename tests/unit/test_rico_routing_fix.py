@@ -168,7 +168,7 @@ def test_format_match_omits_null_why_for_jsearch_result():
 
     assert formatted["title"] == "HSE Manager"
     assert formatted["company"] == "Acme Safety"
-    assert formatted["score"] == 50
+    assert formatted["score"] == pytest.approx(0.5, abs=0.001)  # 50 normalized to 0.5
     assert "why" not in formatted
     assert isinstance(formatted["title"], str)
     assert isinstance(formatted["company"], str)

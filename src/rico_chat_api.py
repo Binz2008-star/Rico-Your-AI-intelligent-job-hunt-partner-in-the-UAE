@@ -910,7 +910,14 @@ class RicoChatAPI:
         explanation = build_match_explanation(m, profile)
 
         raw_score = m.get("rico_score") or m.get("score") or 0
-        normalized_score = max(0, min(100, int(raw_score))) if raw_score else 0
+        # Normalize to [0.0, 1.0] — frontend multiplies by 100 for display.
+        # Legacy scoring pipeline (scoring.py) emits 0–100 integers; FitScore
+        # (scorer.py) already emits 0.0–1.0 floats. Values > 1 are divided by 100.
+        if raw_score:
+            _s = float(raw_score)
+            normalized_score = round(max(0.0, min(1.0, _s / 100.0 if _s > 1.0 else _s)), 4)
+        else:
+            normalized_score = 0.0
 
         # Preserve URL fields so the frontend can surface apply links and distinguish
         # verified live postings from leads that still need a working apply URL.
