@@ -314,7 +314,7 @@ export default function CommandClient() {
                 controller.abort();
                 setChatAudience("public");
             }
-        }, 5000);
+        }, 2000);
 
         fetchMe(controller.signal)
             .then((me) => {
@@ -813,7 +813,7 @@ export default function CommandClient() {
                                 Sign out
                             </RicoButton>
                         </>
-                    ) : (
+                    ) : chatAudience === "public" ? (
                         <>
                             <Link
                                 href={COMMAND_LOGIN_HREF}
@@ -829,6 +829,12 @@ export default function CommandClient() {
                                 Sign up free
                             </RicoButton>
                         </>
+                    ) : (
+                        /* checking — hide auth links until /me resolves */
+                        <span
+                            aria-hidden="true"
+                            className="h-8 w-28 rounded-[var(--r-xl)] bg-[rgba(255,255,255,0.05)] border border-[var(--rico-border-subtle)] animate-pulse motion-reduce:animate-none"
+                        />
                     )}
                 </nav>
             </header>

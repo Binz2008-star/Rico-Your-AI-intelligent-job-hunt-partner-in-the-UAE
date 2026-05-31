@@ -385,7 +385,7 @@ export default function CommandPage() {
                 controller.abort();
                 setChatAudience("public");
             }
-        }, 5000);
+        }, 2000);
 
         fetchMe(controller.signal)
             .then((me) => {
