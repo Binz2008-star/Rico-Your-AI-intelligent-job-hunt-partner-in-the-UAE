@@ -546,3 +546,88 @@ def test_profile_renormalization_with_versioning():
         f"Expected normalization_version={NORMALIZATION_VERSION}, got {retrieved.normalization_version}"
     # Roles should still be HSE/environmental (they were already correct)
     assert "HSE Manager" in retrieved.target_roles or "Environmental Manager" in retrieved.target_roles
+
+
+# ============================================================================
+# DB Roundtrip Tests - Diagnostic for production issue
+# ============================================================================
+
+def test_db_user_upsert_read_roundtrip():
+    """Test that db.upsert_user and db.get_user_bundle use the same identity key."""
+    from src.rico_db import RicoDB
+
+    db = RicoDB()
+    test_email = "db_roundtrip_test@example.com"
+    test_name = "Roben Edwan"
+
+    # Upsert user with name
+    user_row = db.upsert_user({
+        "external_user_id": test_email,
+        "name": test_name,
+        "email": test_email
+    })
+    assert user_row["name"] == test_name, \
+        f"Expected name={test_name} after upsert, got {user_row.get('name')}"
+
+    # Read back using the same identity key
+    bundle = db.get_user_bundle(test_email)
+    assert bundle is not None, "get_user_bundle returned None"
+    assert bundle["name"] == test_name, \
+        f"Expected name={test_name} in bundle, got {bundle.get('name')}"
+
+    # Cleanup
+    with db.connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM rico_users WHERE external_user_id = %s", (test_email,))
+        conn.commit()
+
+
+def test_api_patch_to_db_to_get_roundtrip(monkeypatch):
+    """Test full path: PATCH endpoint -> DB -> GET endpoint."""
+    import src.api.routers.rico_chat as rico_chat_router
+    from src.rico_db import RicoDB
+
+    user_id = "api_db_roundtrip_test@example.com"
+    test_name = "Roben Edwan"
+
+    def mock_get_user(request):
+        user = {"email": user_id, "role": "user"}
+        request.state.current_user = user
+        request.state.user_id = user_id
+        return user
+
+    monkeypatch.setattr(rico_chat_router, "get_current_user", mock_get_user)
+
+    client = TestClient(app)
+    db = RicoDB()
+
+    # Cleanup before test
+    with db.connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM rico_users WHERE external_user_id = %s", (user_id,))
+        conn.commit()
+
+    try:
+        # PATCH endpoint
+        response = client.patch("/api/v1/rico/profile", json={"name": test_name})
+        assert response.status_code == 200
+        assert "name" in response.json()["updated_fields"]
+
+        # Direct DB read
+        bundle = db.get_user_bundle(user_id)
+        assert bundle is not None, "get_user_bundle returned None"
+        assert bundle["name"] == test_name, \
+            f"Expected name={test_name} in DB bundle, got {bundle.get('name')}"
+
+        # GET endpoint
+        response = client.get("/api/v1/rico/profile")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["name"] == test_name, \
+            f"Expected name={test_name} in GET response, got {data.get('name')}"
+    finally:
+        # Cleanup
+        with db.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM rico_users WHERE external_user_id = %s", (user_id,))
+            conn.commit()
