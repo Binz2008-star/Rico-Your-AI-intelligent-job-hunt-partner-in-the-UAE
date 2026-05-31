@@ -5,9 +5,9 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { StatusCard } from "@/components/StatusCard";
-import { ApiError, fetchProfile, updateProfile, type ProfileResponse } from "@/lib/api";
-import { useToast } from "@/hooks/useToast";
 import { ToastContainer } from "@/components/ui/Toast";
+import { useToast } from "@/hooks/useToast";
+import { ApiError, fetchProfile, updateProfile, type ProfileResponse } from "@/lib/api";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -259,6 +259,7 @@ function ProfileDetail({
     onSaveNotice,
     onSaveMinSalary,
     onSaveCurrentCompany,
+    onSaveCurrentRole,
     onSaveLinkedin,
     onSaveTargetRoles,
     onSaveCities,
@@ -274,6 +275,7 @@ function ProfileDetail({
     onSaveNotice: (nextNotice: string) => Promise<void>;
     onSaveMinSalary: (nextMinSalary: number) => Promise<void>;
     onSaveCurrentCompany: (nextCompany: string) => Promise<void>;
+    onSaveCurrentRole: (nextRole: string) => Promise<void>;
     onSaveLinkedin: (nextLinkedin: string) => Promise<void>;
     onSaveTargetRoles: (nextRoles: string) => Promise<void>;
     onSaveCities: (nextCities: string) => Promise<void>;
@@ -338,6 +340,14 @@ function ProfileDetail({
                             onSave={onSaveCurrentCompany}
                             placeholder="Enter current company"
                             label="current-company"
+                        />
+                    </Row>
+                    <Row label="Current role">
+                        <EditableTextField
+                            value={profile.current_role}
+                            onSave={onSaveCurrentRole}
+                            placeholder="Enter current role"
+                            label="current-role"
                         />
                     </Row>
                     <Row label="LinkedIn">
@@ -544,6 +554,18 @@ export default function ProfilePage() {
         }
     }, [warnRefreshFail]);
 
+    const handleSaveCurrentRole = useCallback(async (nextRole: string) => {
+        await updateProfile({ current_role: nextRole });
+        setProfile((current) => (current ? { ...current, current_role: nextRole } : current));
+
+        try {
+            const refreshed = await fetchProfile();
+            setProfile(refreshed);
+        } catch {
+            warnRefreshFail();
+        }
+    }, [warnRefreshFail]);
+
     const handleSaveLinkedin = useCallback(async (nextLinkedin: string) => {
         await updateProfile({ linkedin_url: nextLinkedin });
         setProfile((current) => (current ? { ...current, linkedin_url: nextLinkedin } : current));
@@ -680,6 +702,7 @@ export default function ProfilePage() {
                         onSaveNotice={handleSaveNotice}
                         onSaveMinSalary={handleSaveMinSalary}
                         onSaveCurrentCompany={handleSaveCurrentCompany}
+                        onSaveCurrentRole={handleSaveCurrentRole}
                         onSaveLinkedin={handleSaveLinkedin}
                         onSaveTargetRoles={handleSaveTargetRoles}
                         onSaveCities={handleSaveCities}
