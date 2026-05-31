@@ -1267,6 +1267,13 @@ export async function fetchChatHistory(
   );
 }
 
+export async function clearChatHistory(): Promise<void> {
+  await requestJson<unknown>("/api/v1/rico/chat/history", {
+    method: "DELETE",
+    credentials: "include",
+  });
+}
+
 export async function sendAgentChat(
   data: AgentChatRequest,
 ): Promise<AgentUIResponse> {
