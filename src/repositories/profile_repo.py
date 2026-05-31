@@ -158,26 +158,33 @@ def get_profile(user_id: str) -> RicoProfile | None:
         profile = _memory().load_profile(user_id)
 
     # One-time cleanup: normalize broad target_roles if profile has CV evidence
+    # Also re-normalize if normalization version has changed
     if profile and profile.target_roles:
-        from src.role_normalization import should_normalize_profile, normalize_target_roles
+        from src.role_normalization import should_normalize_profile, normalize_target_roles, NORMALIZATION_VERSION
 
-        if should_normalize_profile(profile.target_roles, profile.skills):
+        stored_version = getattr(profile, "normalization_version", 1)
+        needs_normalization = should_normalize_profile(profile.target_roles, profile.skills) or stored_version < NORMALIZATION_VERSION
+
+        if needs_normalization:
             normalized = normalize_target_roles(
                 target_roles=profile.target_roles,
                 skills=profile.skills,
                 years_experience=profile.years_experience,
                 current_role=profile.current_role,
             )
-            if normalized != profile.target_roles:
+            if normalized != profile.target_roles or stored_version < NORMALIZATION_VERSION:
                 logger.info(
-                    "profile_normalization user=%s old_roles=%s new_roles=%s",
+                    "profile_normalization user=%s old_roles=%s new_roles=%s version=%d->%d",
                     user_id,
                     profile.target_roles,
                     normalized,
+                    stored_version,
+                    NORMALIZATION_VERSION,
                 )
                 profile.target_roles = normalized
-                # Persist the normalized roles
-                upsert_profile(user_id, {"target_roles": normalized})
+                profile.normalization_version = NORMALIZATION_VERSION
+                # Persist the normalized roles and version
+                upsert_profile(user_id, {"target_roles": normalized, "normalization_version": NORMALIZATION_VERSION})
 
     return profile
 
