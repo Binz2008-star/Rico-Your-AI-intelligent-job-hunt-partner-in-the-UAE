@@ -94,23 +94,33 @@ def _call_process(api: RicoChatAPI, message: str, context: dict | None = None) -
 
 class TestFormatMatch:
 
-    def test_with_apply_link_sets_live(self):
+    def test_with_apply_link_sets_verified(self):
+        # linkedin.com is a known trusted domain → live_verified
+        m = {"title": "HSE Officer", "company": "Acme", "job_apply_link": "https://linkedin.com/jobs/123"}
+        result = RicoChatAPI._format_match(m, profile=None)
+        assert result["apply_url"] == "https://linkedin.com/jobs/123"
+        assert result["verification_status"] == "live_verified"
+
+    def test_with_unknown_domain_sets_needs_verification(self):
+        # Unknown domain → needs_source_verification (domain-based classification)
         m = {"title": "HSE Officer", "company": "Acme", "job_apply_link": "https://example.com/apply"}
         result = RicoChatAPI._format_match(m, profile=None)
         assert result["apply_url"] == "https://example.com/apply"
-        assert result["verification_status"] == "live"
+        assert result["verification_status"] == "needs_source_verification"
 
-    def test_with_link_field_sets_live(self):
+    def test_with_link_field_sets_needs_verification(self):
+        # Unknown domain via link field → needs_source_verification
         m = {"title": "HSE Officer", "company": "Acme", "link": "https://example.com/apply"}
         result = RicoChatAPI._format_match(m, profile=None)
         assert result["apply_url"] == "https://example.com/apply"
-        assert result["verification_status"] == "live"
+        assert result["verification_status"] == "needs_source_verification"
 
-    def test_without_url_sets_lead(self):
+    def test_without_url_sets_needs_verification(self):
+        # No URL → needs_source_verification (replaces old lead_needs_verification)
         m = {"title": "HSE Officer", "company": "Acme"}
         result = RicoChatAPI._format_match(m, profile=None)
         assert result["apply_url"] == ""
-        assert result["verification_status"] == "lead_needs_verification"
+        assert result["verification_status"] == "needs_source_verification"
 
     def test_source_url_falls_back_to_apply_url(self):
         m = {"title": "HSE Officer", "company": "Acme", "link": "https://apply.example.com"}
