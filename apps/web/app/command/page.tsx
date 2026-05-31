@@ -1,7 +1,7 @@
 "use client";
 
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, RicoOption, UploadCVResponse } from "@/lib/api";
-import { confirmCVProfile, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, uploadCV } from "@/lib/api";
+import { confirmCVProfile, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { buildAuthHref } from "@/lib/redirect";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
@@ -340,6 +340,35 @@ export default function CommandPage() {
             controller.abort();
         };
     }, [useMock]);
+
+    // Load chat history for authenticated users
+    useEffect(() => {
+        if (chatAudience !== "authenticated" || useMock) return;
+
+        let cancelled = false;
+
+        (async () => {
+            try {
+                const history = await fetchChatHistory(20);
+                if (cancelled) return;
+                if (history.messages.length > 0) {
+                    const mappedMessages: Message[] = history.messages.map((msg: { role: string; content: string }, idx: number) => ({
+                        id: idx,
+                        role: msg.role === "user" ? "user" : "rico",
+                        text: msg.content,
+                    }));
+                    setMessages(mappedMessages);
+                    promptSentRef.current = true; // Skip welcome message
+                }
+            } catch {
+                // If history fetch fails, continue with empty state (show welcome)
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [chatAudience, useMock]);
 
     const scrollBottom = useCallback(() => {
         const behavior = prefersReducedMotion() ? "auto" : "smooth";
