@@ -167,7 +167,13 @@ def _infer_roles_from_skills(
     years_experience: float | None = None,
     current_role: str | None = None,
 ) -> list[str]:
-    """Infer specific target roles from skills and experience."""
+    """Infer specific target roles from skills and experience.
+
+    For UAE HSE/environmental profiles the Environmental and HSE families almost
+    always co-occur, so both are treated as priority families: an HSE/environmental
+    CV must surface both Environmental* and HSE* roles, plus the operations-
+    environmental specialisation when operations experience is present.
+    """
     if not skills:
         return []
 
@@ -190,28 +196,57 @@ def _infer_roles_from_skills(
     if not family_hits:
         return []
 
-    # Get top families by hit count
-    top_families = sorted(family_hits, key=lambda k: -family_hits[k])[:2]
+    # Cross-family bridge: strong environmental evidence implies HSE in the UAE
+    # market (and vice versa). Mirrors role_suggester's bridge so normalization
+    # and chat suggestions stay consistent.
+    if family_hits.get("environmental_esg", 0) >= 3:
+        family_hits["hse_qhse"] = max(family_hits.get("hse_qhse", 0), 2)
+    if family_hits.get("hse_qhse", 0) >= 3:
+        family_hits["environmental_esg"] = max(family_hits.get("environmental_esg", 0), 2)
 
-    # Build role list from top families
+    # Priority families lead for HSE/environmental profiles; remaining families
+    # follow, ranked by hit count.
+    _PRIORITY = ("environmental_esg", "hse_qhse")
+    priority_present = [f for f in _PRIORITY if family_hits.get(f)]
+    others = sorted(
+        (f for f in family_hits if f not in _PRIORITY),
+        key=lambda k: -family_hits[k],
+    )
+    ordered = priority_present + others
+    lead = ordered[:2] if len(ordered) >= 2 else ordered
+
+    # Reserve a slot for the operations-environmental specialisation so it is not
+    # lost to the top-N truncation.
+    ops_role: str | None = None
+    if "operations" in skill_lower and any(
+        f in lead for f in ("environmental_esg", "hse_qhse")
+    ):
+        ops_role = "Operations Manager - Environmental Services"
+    limit = 7 - (1 if ops_role else 0)
+
+    # Round-robin interleave the lead families so Environmental* and HSE* roles
+    # both surface near the top instead of one family dominating.
+    role_lists = [list(_SKILL_FAMILY_ROLES.get(f, [])) for f in lead]
     roles: list[str] = []
     seen: set[str] = set()
+    idx = 0
+    guard = 0
+    while any(role_lists) and len(roles) < limit and guard < 100:
+        guard += 1
+        current = role_lists[idx % len(role_lists)]
+        idx += 1
+        if not current:
+            continue
+        role = current.pop(0)
+        if role not in seen:
+            roles.append(role)
+            seen.add(role)
 
-    for family in top_families:
-        family_roles = _SKILL_FAMILY_ROLES.get(family, [])
-        for role in family_roles:
-            if role not in seen:
-                roles.append(role)
-                seen.add(role)
+    if ops_role and ops_role not in seen:
+        roles.append(ops_role)
 
-    # Add Operations Manager - Environmental Services if operations skill present
-    if "operations" in skill_lower and any(
-        f in top_families for f in ["environmental_esg", "hse_qhse"]
-    ):
-        if "Operations Manager - Environmental Services" not in seen:
-            roles.append("Operations Manager - Environmental Services")
+    return roles[:7]
 
-    return roles[:7]  # Limit to top 7 roles
 
 
 def normalize_profile_updates(updates: dict[str, Any]) -> dict[str, Any]:
