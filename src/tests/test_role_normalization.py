@@ -206,5 +206,64 @@ def test_normalize_preserves_specific_roles():
     assert "Safety Officer" in normalized
 
 
+# ---------------------------------------------------------------------------
+# Production profile regression — the exact case that triggered this work.
+# ---------------------------------------------------------------------------
+
+_PROD_SKILLS = [
+    "hse", "iso 14001", "audit", "compliance", "esg",
+    "sustainability", "environmental management", "operations",
+]
+_PROD_BAD_ROLES = ["Engineer", "Manager", "Operations Lead", "Operations Manager"]
+
+
+def _prod_normalized():
+    return normalize_target_roles(_PROD_BAD_ROLES, _PROD_SKILLS, 10)
+
+
+def test_prod_no_broad_roles_remain():
+    roles = _prod_normalized()
+    for bad in ("Engineer", "Manager", "Operations Lead", "Operations Manager"):
+        assert bad not in roles
+
+
+def test_prod_includes_environmental_manager():
+    assert "Environmental Manager" in _prod_normalized()
+
+
+def test_prod_includes_hse_manager():
+    assert "HSE Manager" in _prod_normalized()
+
+
+def test_prod_includes_qhse_manager():
+    assert "QHSE Manager" in _prod_normalized()
+
+
+def test_prod_includes_environmental_compliance_manager():
+    assert "Environmental Compliance Manager" in _prod_normalized()
+
+
+def test_prod_includes_esg_or_sustainability_role():
+    roles = _prod_normalized()
+    assert any("ESG" in r or "Sustainability" in r for r in roles)
+
+
+def test_prod_includes_operations_environmental_services():
+    assert "Operations Manager - Environmental Services" in _prod_normalized()
+
+
+def test_prod_hse_env_roles_dominate():
+    """HSE/env roles must dominate; compliance/audit must not crowd them out."""
+    roles = _prod_normalized()
+    hse_env = [r for r in roles if any(
+        m in r for m in ("Environmental", "HSE", "QHSE", "ESG", "Sustainability", "Safety")
+    )]
+    assert len(hse_env) >= 5, f"Expected HSE/env roles to dominate, got: {roles}"
+
+
+def test_prod_capped_at_seven():
+    assert len(_prod_normalized()) <= 7
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
