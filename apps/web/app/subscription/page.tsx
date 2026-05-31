@@ -106,10 +106,10 @@ function PlanCard({
     manualBilling: boolean;
     t: (key: string) => string;
 }) {
-    const isCurrent = currentPlan === plan.plan && isActive;
+    const isCurrent = currentPlan === plan.plan && (isActive || manualBilling);
     const isHigherPlan =
         isLoggedIn &&
-        isActive &&
+        (isActive || manualBilling) &&
         (PLAN_TIER[currentPlan ?? ""] ?? -1) > (PLAN_TIER[plan.plan] ?? 0);
     const isProPlan = plan.plan === "pro";
 
