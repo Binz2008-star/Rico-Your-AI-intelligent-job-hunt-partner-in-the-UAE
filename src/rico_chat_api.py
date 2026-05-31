@@ -1949,7 +1949,7 @@ class RicoChatAPI:
         if self._is_affirmative(message):
             pending = self._resolve_pending_intent(user_id, message, profile)
             if pending is not None:
-                return self._finalize(pending, self.SOURCE_AI, profile=profile)
+                return self._finalize(pending, self.SOURCE_KEYWORD, profile=profile)
         if self._is_negative(message):
             # User declined the offered action — acknowledge and let them continue
             return self._finalize(
