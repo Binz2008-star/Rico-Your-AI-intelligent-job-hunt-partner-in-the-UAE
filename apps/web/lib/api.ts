@@ -762,7 +762,14 @@ export interface JobMatch {
   apply_url?: string;
   source_url?: string;
   alt_link?: string;
-  verification_status?: "live" | "lead_needs_verification";
+  verification_status?:
+    | "live"
+    | "live_verified"
+    | "lead_needs_verification"
+    | "needs_source_verification"
+    | "login_required"
+    | "rate_limited"
+    | "aggregator_untrusted";
 }
 
 export interface RicoOption {
