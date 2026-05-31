@@ -311,13 +311,26 @@ _HELP_PHRASES = frozenset([
     "مالحل", "ما الحل", "مالحل الان", "مالحل الآن",
 ])
 
+# Acknowledgement phrases — short positive/neutral replies mid-conversation.
+# These do NOT trigger the cold-start greeting; they get a brief warm response.
+_ACKNOWLEDGEMENT_PHRASES = frozenset([
+    "thanks", "thank you", "thank you so much", "thanks a lot", "thank you very much",
+    "ok", "okay", "ok thanks", "ok thank you", "okay thanks", "okay thank you",
+    "great", "perfect", "nice", "cool", "awesome", "excellent", "wonderful",
+    "got it", "understood", "noted", "sounds good", "looks good", "makes sense",
+    "cheers", "much appreciated", "appreciate it", "appreciate that",
+    "no problem", "np", "nvm", "never mind",
+    # Arabic acknowledgement equivalents
+    "شكرا", "شكراً", "شكرا جزيلا", "شكراً جزيلاً", "ممتاز", "رائع",
+    "فهمت", "تمام", "ماشي", "حسنا", "تمام شكرا", "شكرا تمام",
+])
+
 _SMALLTALK_PHRASES = frozenset([
     "hi", "hello", "hey", "good morning", "good afternoon", "good evening",
-    "thanks", "thank you", "ok", "okay", "cool", "great", "nice",
-    "bye", "goodbye", "see you", "cheers",
+    "bye", "goodbye", "see you",
     "hallo", "hola", "hi there", "salam", "marhaba", "ahlan",
-    # Arabic greetings / social phrases (normalised: alef variants, ta marbuta)
-    "مرحبا", "اهلا", "اهلا وسهلا", "السلام عليكم", "شكرا", "مع السلامه",
+    # Arabic greetings (normalised: alef variants, ta marbuta)
+    "مرحبا", "اهلا", "اهلا وسهلا", "السلام عليكم", "مع السلامه",
 ])
 
 _PROFILE_SUMMARY_PHRASES = frozenset([
@@ -623,6 +636,11 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         return IntentResult("unknown", 0.0, "fallback")
 
     # ── 1. Exact-phrase fast paths (before any regex) ────────────────────
+    # Acknowledgements (thanks/ok/great/etc.) are matched before greetings so
+    # they never trigger the cold-start greeting mid-conversation.
+    if lower in _ACKNOWLEDGEMENT_PHRASES:
+        return IntentResult("acknowledgement", 1.0, "exact")
+
     if lower in _SMALLTALK_PHRASES:
         return IntentResult("smalltalk", 1.0, "exact")
 

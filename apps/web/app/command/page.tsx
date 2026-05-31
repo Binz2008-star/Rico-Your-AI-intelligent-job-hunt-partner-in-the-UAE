@@ -1,7 +1,7 @@
 "use client";
 
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, RicoOption, UploadCVResponse } from "@/lib/api";
-import { confirmCVProfile, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, uploadCV } from "@/lib/api";
+import { clearChatHistory, confirmCVProfile, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { buildAuthHref } from "@/lib/redirect";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
@@ -65,6 +65,7 @@ interface Message {
     broadened?: boolean;
     rate_limit_notice?: string;
     streaming?: boolean;
+    stale?: boolean;
 }
 
 type ChatAudience = "checking" | "authenticated" | "public";
@@ -82,6 +83,39 @@ const QUICK_ACTIONS = [
 ];
 const COMMAND_LOGIN_HREF = buildAuthHref("/login", "/command");
 const COMMAND_SIGNUP_HREF = buildAuthHref("/signup", "/command");
+
+const _BARE_SEARCH_ROLES = new Set([
+    "engineer", "manager", "specialist", "consultant", "officer",
+    "analyst", "director", "coordinator", "executive", "lead",
+]);
+
+function isStaleSearchQuery(query?: string): boolean {
+    if (!query) return false;
+    return _BARE_SEARCH_ROLES.has(query.trim().toLowerCase());
+}
+
+function parseHistoryContent(content: string, id: number): Partial<Message> {
+    try {
+        const parsed = JSON.parse(content) as Record<string, unknown>;
+        if (parsed && typeof parsed === "object" && parsed.type === "job_matches") {
+            const query = parsed.search_query as string | undefined;
+            return {
+                id,
+                role: "rico",
+                type: "job_matches",
+                text: (parsed.message ?? parsed.reply ?? parsed.response ?? "") as string,
+                matches: (parsed.matches as JobMatch[] | undefined) ?? [],
+                search_query: query,
+                result_count: parsed.result_count as number | undefined,
+                broadened: parsed.broadened as boolean | undefined,
+                stale: isStaleSearchQuery(query),
+            };
+        }
+    } catch {
+        // Fall through to plain text
+    }
+    return { id, role: "rico", text: content };
+}
 
 function renderInline(text: string): React.ReactNode {
     const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
@@ -290,6 +324,8 @@ export default function CommandPage() {
     const [operationState, setOperationState] = useState<{ state: string; message: string } | null>(null);
     const [editingProfileId, setEditingProfileId] = useState<number | null>(null);
     const [draftProfile, setDraftProfile] = useState<ProfilePreview | null>(null);
+    const [clearingHistory, setClearingHistory] = useState(false);
+    const [confirmClear, setConfirmClear] = useState(false);
 
     // Force LTR direction for /command to prevent RTL punctuation issues
     // This is a temporary fix until full RTL support is implemented
@@ -352,11 +388,21 @@ export default function CommandPage() {
                 const history = await fetchChatHistory(20);
                 if (cancelled) return;
                 if (history.messages.length > 0) {
-                    const mappedMessages: Message[] = history.messages.map((msg: { role: string; content: string }, idx: number) => ({
-                        id: idx,
-                        role: msg.role === "user" ? "user" : "rico",
-                        text: msg.content,
-                    }));
+                    // Deduplicate by (role, content) pairs to avoid double-rendering
+                    // if history is loaded more than once.
+                    const seen = new Set<string>();
+                    const mappedMessages: Message[] = [];
+                    history.messages.forEach((msg: { role: string; content: string }, idx: number) => {
+                        const key = `${msg.role}:${msg.content}`;
+                        if (seen.has(key)) return;
+                        seen.add(key);
+                        if (msg.role === "user") {
+                            mappedMessages.push({ id: idx, role: "user", text: msg.content });
+                        } else {
+                            // Parse JSON assistant payloads (job_matches, etc.) into rich messages
+                            mappedMessages.push(parseHistoryContent(msg.content, idx) as Message);
+                        }
+                    });
                     setMessages(mappedMessages);
                     promptSentRef.current = true; // Skip welcome message
                 }
@@ -705,6 +751,26 @@ export default function CommandPage() {
         router.push("/login");
     }
 
+    async function handleClearHistory() {
+        if (!confirmClear) {
+            setConfirmClear(true);
+            return;
+        }
+        setClearingHistory(true);
+        setConfirmClear(false);
+        try {
+            await clearChatHistory();
+            setMessages([]);
+            promptSentRef.current = false;
+        } catch {
+            // Best-effort — silently swallow; history still cleared locally
+            setMessages([]);
+            promptSentRef.current = false;
+        } finally {
+            setClearingHistory(false);
+        }
+    }
+
     function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
@@ -783,6 +849,41 @@ export default function CommandPage() {
                 {/* Messages Container */}
                 <div className="flex-1 min-h-0 overflow-y-auto px-2 py-6 space-y-5" role="log" aria-live="polite" aria-atomic="false" aria-busy={thinking}>
 
+                    {/* Clear history control — shown at top when authenticated with loaded history */}
+                    {chatAudience === "authenticated" && messages.length > 1 && (
+                        <div className="flex justify-end pb-1">
+                            {confirmClear ? (
+                                <div className="flex items-center gap-2 text-[11px]">
+                                    <span className="text-text-muted">Delete all chat history?</span>
+                                    <button
+                                        type="button"
+                                        onClick={handleClearHistory}
+                                        disabled={clearingHistory}
+                                        className="px-2.5 py-1 rounded-lg bg-rico-red/20 border border-rico-red/40 text-rico-red hover:bg-rico-red/30 transition-colors disabled:opacity-50"
+                                    >
+                                        {clearingHistory ? "Clearing…" : "Yes, clear"}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setConfirmClear(false)}
+                                        className="px-2.5 py-1 rounded-lg border border-border-soft text-text-secondary hover:text-white transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={handleClearHistory}
+                                    className="text-[11px] text-text-muted hover:text-text-secondary transition-colors"
+                                    aria-label="Clear chat history"
+                                >
+                                    Clear history
+                                </button>
+                            )}
+                        </div>
+                    )}
+
                     {/* Quick start (shown above first message) */}
                     {messages.length <= 1 && !thinking && (
                         <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:justify-center gap-2 pb-4">
@@ -829,6 +930,11 @@ export default function CommandPage() {
                                     {/* Search result caption */}
                                     {m.type === "job_matches" && m.search_query && (
                                         <div className="mb-1.5 text-[10px] text-text-muted">
+                                            {m.stale && (
+                                                <span className="mr-1.5 px-1.5 py-0.5 rounded bg-border-subtle text-text-muted border border-border-soft">
+                                                    Old result
+                                                </span>
+                                            )}
                                             {m.result_count != null && m.result_count > 0
                                                 ? `${m.result_count} match${m.result_count === 1 ? "" : "es"}`
                                                 : "No matches"} for <strong className="text-text-secondary">{m.search_query}</strong>
@@ -852,13 +958,27 @@ export default function CommandPage() {
                                         </div>
                                     )}
 
-                                    {/* Job match cards */}
+                                    {/* Job match cards — stale results are collapsed by default */}
                                     {m.matches && m.matches.length > 0 && (
-                                        <div className="mt-2 space-y-2">
-                                            {m.matches.map((match, i) => (
-                                                <JobMatchCard key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
-                                            ))}
-                                        </div>
+                                        m.stale ? (
+                                            <details className="mt-2 group">
+                                                <summary className="cursor-pointer text-[11px] text-text-muted hover:text-text-secondary transition-colors select-none list-none flex items-center gap-1">
+                                                    <svg width="10" height="10" viewBox="0 0 10 10" className="transition-transform group-open:rotate-90" fill="currentColor"><path d="M3 2l4 3-4 3V2z"/></svg>
+                                                    Show {m.matches.length} old result{m.matches.length === 1 ? "" : "s"} (broad search — may be outdated)
+                                                </summary>
+                                                <div className="mt-2 space-y-2 opacity-70">
+                                                    {m.matches.map((match, i) => (
+                                                        <JobMatchCard key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
+                                                    ))}
+                                                </div>
+                                            </details>
+                                        ) : (
+                                            <div className="mt-2 space-y-2">
+                                                {m.matches.map((match, i) => (
+                                                    <JobMatchCard key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
+                                                ))}
+                                            </div>
+                                        )
                                     )}
 
                                     {/* Application status card */}

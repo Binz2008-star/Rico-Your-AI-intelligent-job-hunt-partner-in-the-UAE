@@ -680,3 +680,32 @@ def get_chat_history(user_id: str, limit: int = 50, before: datetime | None = No
                 "timestamp": m.timestamp.isoformat() if hasattr(m, "timestamp") else None,
             })
     return result
+
+
+def clear_chat_history(user_id: str) -> None:
+    """Delete all chat history rows for a user (chat only — profile/applications unaffected)."""
+    db_uid = _resolve_db_user_id(user_id)
+    if db_uid:
+        try:
+            from src.rico_db import RicoDB
+            db = RicoDB()
+            if db.available:
+                conn = db.connect()
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute("DELETE FROM rico_chat_history WHERE user_id = %s", (db_uid,))
+                    conn.commit()
+                finally:
+                    conn.close()
+        except Exception as exc:
+            logger.warning("chat_service: clear_chat_history failed for user=%s: %s", user_id, exc)
+
+    # Best-effort: clear the local JSON chat file as well
+    try:
+        from src.rico_memory import RicoMemoryStore
+        store = RicoMemoryStore()
+        chat_path = store._chat_path(user_id)
+        if chat_path.exists():
+            chat_path.unlink()
+    except Exception:
+        pass

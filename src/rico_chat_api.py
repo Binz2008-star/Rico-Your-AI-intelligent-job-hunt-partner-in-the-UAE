@@ -147,6 +147,56 @@ ONBOARDING_FIELD_LABELS = {
 MAX_CONTEXT_MESSAGES = 10
 MAX_PROFILE_TOKENS = 200  # Conservative estimate for profile summary
 
+# Acknowledgement replies — short, warm, non-restarting
+_ACKNOWLEDGEMENT_REPLIES: dict[str, str] = {
+    "thanks": "You're welcome!",
+    "thank you": "You're welcome!",
+    "thank you so much": "Happy to help anytime!",
+    "thanks a lot": "Happy to help!",
+    "thank you very much": "Happy to help!",
+    "much appreciated": "Glad I could help.",
+    "appreciate it": "Glad I could help.",
+    "appreciate that": "Glad I could help.",
+    "great": "Glad to help.",
+    "perfect": "Happy to help.",
+    "excellent": "Glad to hear that!",
+    "wonderful": "Glad to hear that!",
+    "awesome": "Great!",
+    "cool": "Good to know.",
+    "nice": "Good to know.",
+    "ok": "Of course.",
+    "okay": "Of course.",
+    "ok thanks": "You're welcome.",
+    "okay thanks": "You're welcome.",
+    "ok thank you": "You're welcome.",
+    "okay thank you": "You're welcome.",
+    "got it": "Sounds good.",
+    "understood": "Sounds good.",
+    "noted": "Noted.",
+    "sounds good": "Glad that works for you.",
+    "looks good": "Glad that works for you.",
+    "makes sense": "Great.",
+    "cheers": "Cheers!",
+    # Arabic
+    "شكرا": "عفواً!",
+    "شكراً": "عفواً!",
+    "شكرا جزيلا": "على الرحب والسعة!",
+    "شكراً جزيلاً": "على الرحب والسعة!",
+    "ممتاز": "يسعدني ذلك.",
+    "رائع": "يسعدني ذلك.",
+    "فهمت": "ممتاز.",
+    "تمام": "بالتوفيق.",
+    "ماشي": "حسناً.",
+    "حسنا": "حسناً.",
+}
+_DEFAULT_ACK_REPLY = "Of course! What would you like to do next?"
+
+
+def _acknowledgement_reply(message: str) -> str:
+    """Return a short warm reply for acknowledgement phrases."""
+    key = message.strip().lower()
+    return _ACKNOWLEDGEMENT_REPLIES.get(key, _DEFAULT_ACK_REPLY)
+
 
 class HandlerResult(NamedTuple):
     """Result type for handler functions."""
@@ -1958,6 +2008,17 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        # ── Acknowledgement early check (must be before next-step followup fast path) ──
+        # Phrases like "ok", "great", "thanks" are also in _FOLLOWUP_NEXT_STEP_PHRASES
+        # and _AFFIRMATIVE_PHRASES. If no pending intent was resolved above, treat
+        # them as acknowledgements and return a short warm reply immediately.
+        _msg_lower = message.strip().lower()
+        if _msg_lower in _ACKNOWLEDGEMENT_REPLIES:
+            ack_text = _acknowledgement_reply(message)
+            response = {"type": "acknowledgement", "message": ack_text}
+            self._append_chat(user_id, "assistant", ack_text)
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+
         # ── Deterministic follow-up phrases (must be before role classification) ──
         if text in self._FOLLOWUP_KEEP_ALL_PHRASES:
             return self._finalize(
@@ -2044,12 +2105,26 @@ class RicoChatAPI:
             self._append_chat(user_id, "assistant", self._JOB_SEARCH_OPTIONS)
             return self._finalize(self._JOB_SEARCH_OPTIONS, self.SOURCE_KEYWORD, profile=profile)
 
-        # Smalltalk
+        # Acknowledgement — short warm reply; never restarts or greets
+        if legacy_intent == "acknowledgement":
+            ack_text = _acknowledgement_reply(message)
+            response = {"type": "acknowledgement", "message": ack_text}
+            self._append_chat(user_id, "assistant", ack_text)
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+
+        # Smalltalk (greetings: hi/hello/hey/bye)
+        # If the user is mid-conversation, return a brief continuation instead of
+        # the cold-start greeting — avoids the "Hi! I am Rico…" restart after a
+        # profile/details response.
         if legacy_intent == "smalltalk":
-            response = {
-                "type": "clarification",
-                "message": "Hi! I am Rico, your job search assistant. Tell me a role to search, upload your CV, or say 'help' for options.",
-            }
+            recent = self._get_recent_messages(user_id, limit=4)
+            has_active_conversation = len(recent) >= 2
+            if has_active_conversation:
+                followup = "What would you like to do next? I can search jobs, review applications, or answer questions about your profile."
+                response = {"type": "clarification", "message": followup}
+            else:
+                followup = "Hi! I am Rico, your job search assistant. Tell me a role to search, upload your CV, or say 'help' for options."
+                response = {"type": "clarification", "message": followup}
             self._append_chat(user_id, "assistant", response["message"])
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
