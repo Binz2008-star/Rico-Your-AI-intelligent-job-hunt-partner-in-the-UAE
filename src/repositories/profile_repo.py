@@ -176,7 +176,7 @@ def get_profile(user_id: str) -> RicoProfile | None:
             )
             if normalized != profile.target_roles or stored_version < NORMALIZATION_VERSION:
                 logger.info(
-                    "profile_normalization user=%s old_roles=%s new_roles=%s version=%d->%d",
+                    "profile_normalization user=%s old_roles=%s new_roles=%s version=%s->%d",
                     user_id,
                     profile.target_roles,
                     normalized,

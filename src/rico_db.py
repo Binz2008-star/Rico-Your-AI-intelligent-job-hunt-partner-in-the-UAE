@@ -388,14 +388,20 @@ class RicoDB:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT u.*, p.profile, p.cv_file_url, p.cv_text, p.cv_structured, s.settings
+                    SELECT u.id, u.external_user_id, u.name, u.email, u.phone, u.telegram_username, u.telegram_chat_id, u.source, u.created_at, u.updated_at,
+                           p.profile, p.cv_file_url, p.cv_text, p.cv_structured, s.settings
                     FROM rico_users u
                     LEFT JOIN rico_profiles p ON p.user_id = u.id
                     LEFT JOIN rico_agent_settings s ON s.user_id = u.id
                     WHERE u.id::text = %s OR u.external_user_id = %s OR u.email = %s OR u.telegram_username = %s
+                    ORDER BY
+                        CASE WHEN u.external_user_id = %s THEN 0 ELSE 1 END,
+                        CASE WHEN u.email = %s THEN 0 ELSE 1 END,
+                        CASE WHEN u.telegram_username = %s THEN 0 ELSE 1 END,
+                        u.updated_at DESC
                     LIMIT 1
                     """,
-                    (user_id, user_id, user_id, user_id),
+                    (user_id, user_id, user_id, user_id, user_id, user_id, user_id),
                 )
                 row = cur.fetchone()
             return dict(row) if row else None
