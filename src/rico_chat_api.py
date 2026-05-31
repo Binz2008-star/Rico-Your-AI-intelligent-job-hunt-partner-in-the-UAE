@@ -3923,13 +3923,27 @@ class RicoChatAPI:
         return response
 
     def _get_recent_messages(self, user_id: str, limit: int = MAX_CONTEXT_MESSAGES) -> list[dict[str, str]]:
-        """Get recent messages for context, respecting token limits."""
+        """Get recent messages for context, respecting token limits.
+
+        Prefers DB-backed chat history for authenticated users, falls back to memory.
+        """
         try:
-            # Get messages from memory store
-            messages = self.memory.get_recent_messages(user_id, limit=limit)
+            # Try DB-backed history first (primary for authenticated users)
+            from src.services.chat_service import get_chat_history
+            db_messages = get_chat_history(user_id, limit=limit)
+            if db_messages:
+                return db_messages[-limit:] if len(db_messages) > limit else db_messages
+        except Exception as e:
+            logger.warning("Failed to get recent messages from DB, falling back to memory",
+                         extra={"user_id": user_id, "error": str(e)}, exc_info=True)
+
+        # Fallback to memory store (JSON-backed local storage)
+        try:
+            messages = self.memory.get_chat_messages(user_id, limit=limit)
             return messages[-limit:] if len(messages) > limit else messages
         except Exception as e:
-            logger.warning("Failed to get recent messages", extra={"user_id": user_id, "error": str(e)})
+            logger.warning("Failed to get recent messages from memory",
+                         extra={"user_id": user_id, "error": str(e)}, exc_info=True)
             return []
 
     def _get_blocked_questions(self, profile: Any) -> list[str]:
