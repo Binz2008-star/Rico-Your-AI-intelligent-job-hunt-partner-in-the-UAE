@@ -98,6 +98,14 @@ CV_FILE_RE = re.compile(r"\b[\w .()_-]+\.(?:pdf|docx?|txt)\b", re.IGNORECASE)
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PHONE_RE = re.compile(r"(?:\+?\d[\d\s().-]{7,}\d)")
 FOLLOWUP_BOUNDARY_PUNCT_RE = re.compile(r"^[\s\"'([{]+|[\s\"')\]}.,!?;:]+$")
+# Telegram username: @handle (5–32 chars, alphanumeric + underscore)
+TELEGRAM_HANDLE_RE = re.compile(r"^@[A-Za-z0-9_]{5,32}$")
+# Telegram declaration in natural language: "my telegram is @handle", "@handle" etc.
+TELEGRAM_MENTION_RE = re.compile(
+    r"(?:my\s+)?telegram(?:\s+(?:username|handle|id|account|is|:))?\s+(?:is\s+)?(@[A-Za-z0-9_]{5,32})"
+    r"|(?:^|\s)(@[A-Za-z0-9_]{5,32})(?:\s|$)",
+    re.IGNORECASE,
+)
 
 # Domain-agnostic. A bare role is a short noun phrase. Anything starting with
 # one of these tokens is a question, command, greeting, or sentence - never
@@ -1059,7 +1067,7 @@ class RicoChatAPI:
         )
 
     def _extract_inline_contact_updates(self, message: str) -> dict[str, Any]:
-        """Extract email and phone from message."""
+        """Extract email, phone, and Telegram handle from message."""
         updates: dict[str, Any] = {}
         emails = EMAIL_RE.findall(message)
         phones = PHONE_RE.findall(message)
@@ -1067,6 +1075,11 @@ class RicoChatAPI:
             updates["email"] = emails[0]
         if phones:
             updates["phone"] = phones[0].strip()
+        m = TELEGRAM_MENTION_RE.search(message)
+        if m:
+            handle = m.group(1) or m.group(2)
+            if handle:
+                updates["telegram_username"] = handle
         return updates
 
     def _cv_first_profile_response(self, user_id: str, message: str) -> dict[str, Any]:
@@ -1487,6 +1500,103 @@ class RicoChatAPI:
             return {
                 "type": "reminder_set",
                 "message": "تم ضبط التذكير. سأذكرك بالمتابعة." if "تذكير" in last else "Reminder set. I'll nudge you to follow up.",
+            }
+
+        return None
+
+    # ── Pending field resolver ────────────────────────────────────────────────
+
+    _PENDING_FIELD_ASK_SIGNALS: dict[str, tuple[str, ...]] = {
+        "telegram_username": (
+            "telegram username", "your telegram", "@username",
+            "اسم المستخدم في تيليجرام", "تيليجرام",
+        ),
+        "phone": (
+            "phone number", "your phone", "mobile number",
+            "رقم الهاتف", "رقم جوالك",
+        ),
+        "email": (
+            "email address", "your email", "بريدك الإلكتروني",
+        ),
+    }
+
+    def _resolve_pending_field(
+        self, user_id: str, message: str, profile: Any
+    ) -> "dict[str, Any] | None":
+        """Intercept user replies to Rico's field prompts (e.g. 'What is your Telegram?').
+
+        Checks the last assistant message for known field-request signals and, if the
+        current user message looks like a valid value for that field, saves it and
+        returns a confirmation response — bypassing intent classification entirely.
+
+        Returns a response dict if a pending field was resolved, else None.
+        """
+        msg = message.strip()
+        if not msg:
+            return None
+
+        ctx = self._get_recent_context(user_id)
+        # Explicit pending field stored by an earlier turn
+        pending_field: str | None = ctx.get("_pending_field")
+
+        # Fallback: infer from last assistant message
+        if not pending_field:
+            last_msg = self._get_last_assistant_message(user_id).lower()
+            for field, signals in self._PENDING_FIELD_ASK_SIGNALS.items():
+                if any(sig in last_msg for sig in signals):
+                    pending_field = field
+                    break
+
+        if not pending_field:
+            return None
+
+        # ── Telegram handle ───────────────────────────────────────────────────
+        if pending_field == "telegram_username":
+            handle = msg if msg.startswith("@") else f"@{msg}"
+            if not TELEGRAM_HANDLE_RE.match(handle):
+                return None
+            upsert_profile(user_id=user_id, updates={"telegram_username": handle})
+            ctx.pop("_pending_field", None)
+            self._store_recent_context(user_id, ctx)
+            reply = (
+                f"Got it — I've saved your Telegram username as **{handle}**. "
+                "You'll receive job alerts and updates there."
+            )
+            self._append_chat(user_id, "assistant", reply)
+            return {
+                "type": "preferences_updated",
+                "message": reply,
+                "updated": {"telegram_username": handle},
+            }
+
+        # ── Phone number ──────────────────────────────────────────────────────
+        if pending_field == "phone":
+            if not PHONE_RE.match(msg):
+                return None
+            upsert_profile(user_id=user_id, updates={"phone": msg})
+            ctx.pop("_pending_field", None)
+            self._store_recent_context(user_id, ctx)
+            reply = f"Got it — I've saved your phone number as **{msg}**."
+            self._append_chat(user_id, "assistant", reply)
+            return {
+                "type": "preferences_updated",
+                "message": reply,
+                "updated": {"phone": msg},
+            }
+
+        # ── Email address ─────────────────────────────────────────────────────
+        if pending_field == "email":
+            if not EMAIL_RE.fullmatch(msg):
+                return None
+            upsert_profile(user_id=user_id, updates={"email": msg})
+            ctx.pop("_pending_field", None)
+            self._store_recent_context(user_id, ctx)
+            reply = f"Got it — I've saved your email as **{msg}**."
+            self._append_chat(user_id, "assistant", reply)
+            return {
+                "type": "preferences_updated",
+                "message": reply,
+                "updated": {"email": msg},
             }
 
         return None
@@ -1989,6 +2099,39 @@ class RicoChatAPI:
         profile = self._resolve_profile(user_id)
         has_cv = profile.has_cv
         text = self._normalize_followup_phrase(message)
+
+        # ── Pending field resolver (must run first) ───────────────────────────
+        # When Rico has just asked the user for a specific profile field (e.g.
+        # "What's your Telegram username?"), the raw value the user sends next
+        # (like "@Robin_amg") won't match any intent. Intercept it here so the
+        # field is saved and a correct confirmation is returned without falling
+        # through to the unknown/fallback handler.
+        pending_field_result = self._resolve_pending_field(user_id, message, profile)
+        if pending_field_result is not None:
+            return self._finalize(pending_field_result, self.SOURCE_KEYWORD, profile=profile)
+
+        # ── Proactive Telegram declaration: "my telegram is @handle" ─────────
+        # When the user volunteers their Telegram handle with the keyword "telegram"
+        # in the same message, save it immediately without needing a pending slot.
+        _tg_match = TELEGRAM_MENTION_RE.search(message)
+        if _tg_match and "telegram" in message.lower():
+            _tg_handle = _tg_match.group(1) or _tg_match.group(2)
+            if _tg_handle and TELEGRAM_HANDLE_RE.match(_tg_handle):
+                upsert_profile(user_id=user_id, updates={"telegram_username": _tg_handle})
+                _tg_reply = (
+                    f"Got it — I've saved your Telegram username as **{_tg_handle}**. "
+                    "You'll receive job alerts and updates there."
+                )
+                self._append_chat(user_id, "assistant", _tg_reply)
+                return self._finalize(
+                    {
+                        "type": "preferences_updated",
+                        "message": _tg_reply,
+                        "updated": {"telegram_username": _tg_handle},
+                    },
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
 
         # ── Lifecycle list follow-up: "list them" / "show them" / "اذكرهم" ───────
         # Must run before the affirmative resolver so short list-commands don't
