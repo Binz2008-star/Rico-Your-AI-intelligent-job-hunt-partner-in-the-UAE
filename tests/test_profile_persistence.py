@@ -504,3 +504,45 @@ def test_api_patch_empty_cities_persist(monkeypatch):
     assert response.status_code == 200
     data = response.json()
     assert data["preferred_cities"] == []
+
+
+# ============================================================================
+# Normalization Version Tests
+# ============================================================================
+
+def test_normalization_version_persists():
+    """Test that normalization_version field persists through upsert and retrieval."""
+    user_id = "normalization_version_test@example.com"
+
+    upsert_profile(user_id, {
+        "email": user_id,
+        "normalization_version": 2
+    })
+
+    retrieved = get_profile(user_id)
+    assert retrieved is not None
+    assert retrieved.normalization_version == 2, \
+        f"Expected normalization_version=2, got {retrieved.normalization_version}"
+
+
+def test_profile_renormalization_with_versioning():
+    """Test that profile re-normalizes when normalization_version changes."""
+    from src.role_normalization import NORMALIZATION_VERSION
+
+    user_id = "renormalization_test@example.com"
+
+    # Create profile with old normalization (version 1) and specific-but-wrong roles
+    upsert_profile(user_id, {
+        "email": user_id,
+        "target_roles": ["HSE Manager", "Environmental Manager"],
+        "normalization_version": 1,
+        "skills": ["hse", "iso 14001"]
+    })
+
+    # Get profile - should trigger re-normalization since version < NORMALIZATION_VERSION
+    retrieved = get_profile(user_id)
+    assert retrieved is not None
+    assert retrieved.normalization_version == NORMALIZATION_VERSION, \
+        f"Expected normalization_version={NORMALIZATION_VERSION}, got {retrieved.normalization_version}"
+    # Roles should still be HSE/environmental (they were already correct)
+    assert "HSE Manager" in retrieved.target_roles or "Environmental Manager" in retrieved.target_roles

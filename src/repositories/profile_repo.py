@@ -133,6 +133,7 @@ def _bundle_to_profile(bundle: dict[str, Any]) -> RicoProfile:
         cv_status=pdata.get("cv_status"),
         profile_creation_mode=pdata.get("profile_creation_mode"),
         manual_profile_wizard_disabled=pdata.get("manual_profile_wizard_disabled", False),
+        normalization_version=pdata.get("normalization_version"),
         settings=settings,
     )
 
