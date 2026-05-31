@@ -445,11 +445,22 @@ export default function SubscriptionPage() {
     const currentPlan = user ? sub?.subscription?.plan ?? null : null;
     const isActive = Boolean(sub?.is_active);
     const isLoggedIn = Boolean(user);
+    const { setLanguage } = useLanguage();
 
     return (
         <DashboardShell
             title={t('subscriptionTitle')}
             subtitle={t('subscriptionSubtitle')}
+            actions={
+                <button
+                    type="button"
+                    onClick={() => setLanguage(language === "ar" ? "en" : "ar")}
+                    className="rounded-lg border border-white/10 px-3 py-1.5 text-[12px] font-medium text-[#8080a0] hover:border-white/20 hover:text-white transition-colors"
+                    aria-label="Toggle language"
+                >
+                    {language === "ar" ? "EN" : "عربي"}
+                </button>
+            }
         >
             <div className="max-w-3xl flex flex-col gap-8">
 
