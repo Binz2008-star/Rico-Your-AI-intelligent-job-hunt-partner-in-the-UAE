@@ -151,6 +151,7 @@ def get_profile(user_id: str) -> RicoProfile | None:
         try:
             bundle = db.get_user_bundle(user_id)
             if bundle:
+                logger.info("profile_repo.get_profile: user_id=%s bundle_name=%s bundle_profile=%s", user_id, bundle.get("name"), bundle.get("profile"))
                 profile = _bundle_to_profile(bundle)
         except Exception as e:
             logger.exception("profile_repo: get_profile DB failed user_id=%s", user_id)
@@ -211,6 +212,8 @@ def upsert_profile(user_id: str, updates: dict[str, Any]) -> RicoProfile:
         if (k in _PROFILE_FIELDS or k in _SETTINGS_FIELDS) and v is not None
     }
 
+    logger.info("profile_repo.upsert_profile: user_id=%s filtered_updates=%s", user_id, list(filtered_updates.keys()))
+
     # ── JSON mirror (always) — keeps existing code working ────────────────────
     mem = _memory()
     profile = mem.upsert_profile_from_dict(user_id=user_id, updates=filtered_updates)
@@ -234,8 +237,10 @@ def upsert_profile(user_id: str, updates: dict[str, Any]) -> RicoProfile:
                 "telegram_username": filtered_updates.get("telegram_username"),
             }
             user_payload = {k: v for k, v in user_payload.items() if v is not None}
+            logger.info("profile_repo.upsert_profile: user_id=%s user_payload=%s", user_id, user_payload)
             user_row = db.upsert_user(user_payload, conn=conn)
             db_user_id = str(user_row["id"])
+            logger.info("profile_repo.upsert_profile: db_user_id=%s returned_name=%s", db_user_id, user_row.get("name"))
 
             # 2. Upsert profile JSONB
             profile_data = {
@@ -243,6 +248,7 @@ def upsert_profile(user_id: str, updates: dict[str, Any]) -> RicoProfile:
                 if k in _PROFILE_JSONB_FIELDS
             }
             if profile_data:
+                logger.info("profile_repo.upsert_profile: db_user_id=%s profile_data=%s", db_user_id, profile_data)
                 db.upsert_profile(db_user_id, profile_data, conn=conn)
 
             # 3. Upsert settings
