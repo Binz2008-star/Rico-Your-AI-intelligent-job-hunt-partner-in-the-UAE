@@ -1285,14 +1285,12 @@ async def confirm_cv_profile(
             request_ref,
         )
 
+        # CV profile confirmation is a basic onboarding action, not a gated feature.
+        # Removed enforce_profile_optimization_allowed to allow users to confirm
+        # their CV profile without subscription limits. This is essential for new user onboarding.
         from src.services.subscription_gating import (
-            enforce_profile_optimization_allowed,
             record_profile_optimization_usage,
         )
-        try:
-            enforce_profile_optimization_allowed(resolved_user_id)
-        except HTTPException:
-            raise  # 402 subscription-limit must reach the client, not be swallowed as 500
 
         # Build profile updates from preview - use skills_detected if available, fallback to skills
         preview_skills = payload.preview.get("skills_detected") or payload.preview.get("skills", [])

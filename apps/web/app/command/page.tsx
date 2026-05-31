@@ -290,6 +290,15 @@ export default function CommandPage() {
     const [operationState, setOperationState] = useState<{ state: string; message: string } | null>(null);
     const [editingProfileId, setEditingProfileId] = useState<number | null>(null);
     const [draftProfile, setDraftProfile] = useState<ProfilePreview | null>(null);
+
+    // Force LTR direction for /command to prevent RTL punctuation issues
+    // This is a temporary fix until full RTL support is implemented
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            document.documentElement.dir = "ltr";
+            document.documentElement.lang = "en";
+        }
+    }, []);
     const bottomRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -311,7 +320,7 @@ export default function CommandPage() {
                 controller.abort();
                 setChatAudience("public");
             }
-        }, 5000);
+        }, 2000);
 
         fetchMe(controller.signal)
             .then((me) => {
@@ -534,6 +543,11 @@ export default function CommandPage() {
             }
             if (cvReady) {
                 setMessages([{ id: 1, role: "rico", text: "Your CV is ready — I've read it and built your profile.\n\nWhat would you like to do next?\n\n- Find UAE jobs that match my CV\n- Analyze my best next career move\n- Show my profile summary\n- Track my applications" }]);
+                return;
+            }
+            // For authenticated users, show profile-aware greeting instead of generic onboarding
+            if (chatAudience === "authenticated") {
+                setMessages([{ id: 1, role: "rico", text: "Welcome back. I'm ready to help with your job search.\n\nWhat would you like to do today?\n\n- Find matching jobs\n- Analyze my career trajectory\n- Review my applications\n- Update my profile" }]);
                 return;
             }
             setMessages([{ id: 1, role: "rico", text: "Hi, I'm Rico — your AI job-hunt partner in the UAE.\n\nUpload your CV and I'll find matching jobs, track your applications, and guide your next career move." }]);

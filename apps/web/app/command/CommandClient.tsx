@@ -286,6 +286,15 @@ export default function CommandClient() {
     const [userPlan, setUserPlan] = useState<"free" | "pro" | "premium" | null>(
         null,
     );
+
+    // Force LTR direction for /command to prevent RTL punctuation issues
+    // This is a temporary fix until full RTL support is implemented
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            document.documentElement.dir = "ltr";
+            document.documentElement.lang = "en";
+        }
+    }, []);
     const bottomRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -305,7 +314,7 @@ export default function CommandClient() {
                 controller.abort();
                 setChatAudience("public");
             }
-        }, 5000);
+        }, 2000);
 
         fetchMe(controller.signal)
             .then((me) => {
@@ -540,6 +549,17 @@ export default function CommandClient() {
         const timeoutId = window.setTimeout(() => {
             if (prompt) {
                 void sendMessage(prompt);
+                return;
+            }
+            // For authenticated users, show profile-aware greeting instead of generic onboarding
+            if (chatAudience === "authenticated") {
+                setMessages([
+                    {
+                        id: 1,
+                        role: "rico",
+                        text: "Welcome back. I'm ready to help with your job search.\n\nWhat would you like to do today?\n\n- Find matching jobs\n- Analyze my career trajectory\n- Review my applications\n- Update my profile",
+                    },
+                ]);
                 return;
             }
             setMessages([
@@ -793,7 +813,7 @@ export default function CommandClient() {
                                 Sign out
                             </RicoButton>
                         </>
-                    ) : (
+                    ) : chatAudience === "public" ? (
                         <>
                             <Link
                                 href={COMMAND_LOGIN_HREF}
@@ -809,6 +829,12 @@ export default function CommandClient() {
                                 Sign up free
                             </RicoButton>
                         </>
+                    ) : (
+                        /* checking — hide auth links until /me resolves */
+                        <span
+                            aria-hidden="true"
+                            className="h-8 w-28 rounded-[var(--r-xl)] bg-[rgba(255,255,255,0.05)] border border-[var(--rico-border-subtle)] animate-pulse motion-reduce:animate-none"
+                        />
                     )}
                 </nav>
             </header>
