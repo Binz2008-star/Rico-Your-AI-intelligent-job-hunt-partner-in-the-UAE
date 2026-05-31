@@ -1041,6 +1041,10 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
     if body.skills is not None:
         updates["skills"] = [s.strip() for s in body.skills if s.strip()]
 
+    # Normalize target roles to prevent broad standalone roles (Engineer, Manager, etc.)
+    from src.role_normalization import normalize_profile_updates
+    updates = normalize_profile_updates(updates)
+
     if updates:
         upsert_profile(user_id, updates)
         logger.info("profile_update user=%s fields=%s", user_id, list(updates.keys()))
@@ -1311,8 +1315,17 @@ async def confirm_cv_profile(
             "manual_profile_wizard_disabled": True,
         }
 
-        # Filter out None/empty values
-        profile_updates = {k: v for k, v in profile_updates.items() if v not in (None, [], {})}
+        # Normalize target roles to prevent broad standalone roles (Engineer, Manager, etc.)
+        from src.role_normalization import normalize_profile_updates
+        profile_updates = normalize_profile_updates(profile_updates)
+
+        # Filter out None/empty values, but preserve name if it exists in preview
+        # even if other fields are empty - name is critical for profile identity
+        filtered_updates = {k: v for k, v in profile_updates.items() if v not in (None, [], {})}
+        # Ensure name is preserved if extracted from CV
+        if profile_updates.get("name") and "name" not in filtered_updates:
+            filtered_updates["name"] = profile_updates["name"]
+        profile_updates = filtered_updates
 
         # Update permanent profile
         upsert_profile(user_id=resolved_user_id, updates=profile_updates)
