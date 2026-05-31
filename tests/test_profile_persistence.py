@@ -553,7 +553,7 @@ def test_profile_renormalization_with_versioning():
 # ============================================================================
 
 def test_db_user_upsert_read_roundtrip():
-    """Test that db.upsert_user and db.get_user_bundle use the same identity key."""
+    """Test that db.upsert_user and db.get_user_bundle use the same identity key and name persists."""
     from src.rico_db import RicoDB
 
     db = RicoDB()
@@ -573,13 +573,76 @@ def test_db_user_upsert_read_roundtrip():
     bundle = db.get_user_bundle(test_email)
     assert bundle is not None, "get_user_bundle returned None"
     assert bundle["name"] == test_name, \
-        f"Expected name={test_name} in bundle, got {bundle.get('name')}"
+        f"Expected name={test_name} in bundle, got {bundle.get('name')}. This tests the fix for get_user_bundle SELECT."
 
     # Cleanup
     with db.connect() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM rico_users WHERE external_user_id = %s", (test_email,))
         conn.commit()
+
+
+def test_get_user_bundle_with_duplicate_rows():
+    """Test that get_user_bundle returns the latest row when multiple rows match the same email."""
+    from src.rico_db import RicoDB
+    import uuid
+
+    db = RicoDB()
+    test_email = "duplicate_test@example.com"
+    test_name = "Roben Edwan"
+
+    # Cleanup before test
+    with db.connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM rico_users WHERE email = %s", (test_email,))
+        conn.commit()
+
+    try:
+        # Create an old row with NULL name and old profile
+        old_user_id = str(uuid.uuid4())
+        with db.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO rico_users (id, external_user_id, name, email, created_at, updated_at)
+                    VALUES (%s, %s, NULL, %s, NOW() - INTERVAL '1 day', NOW() - INTERVAL '1 day')
+                    """,
+                    (old_user_id, test_email, test_email)
+                )
+                cur.execute(
+                    """
+                    INSERT INTO rico_profiles (user_id, profile, created_at, updated_at)
+                    VALUES (%s, %s, NOW() - INTERVAL '1 day', NOW() - INTERVAL '1 day')
+                    """,
+                    (old_user_id, '{"target_roles": ["Engineer", "Manager"]}')
+                )
+            conn.commit()
+
+        # Upsert to create/update the current row with name
+        user_row = db.upsert_user({
+            "external_user_id": test_email,
+            "name": test_name,
+            "email": test_email
+        })
+        assert user_row["name"] == test_name, \
+            f"Expected name={test_name} after upsert, got {user_row.get('name')}"
+
+        # get_user_bundle must return the latest row (with name, not NULL)
+        bundle = db.get_user_bundle(test_email)
+        assert bundle is not None, "get_user_bundle returned None"
+        assert bundle["name"] == test_name, \
+            f"Expected name={test_name} in bundle (latest row), got {bundle.get('name')}. This tests deterministic ORDER BY."
+        # Verify profile is also from latest row
+        profile_data = bundle.get("profile") or {}
+        assert profile_data.get("target_roles") != ["Engineer", "Manager"], \
+            "Expected latest profile data, not old profile"
+
+    finally:
+        # Cleanup
+        with db.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM rico_users WHERE email = %s", (test_email,))
+            conn.commit()
 
 
 def test_api_patch_to_db_to_get_roundtrip(monkeypatch):
