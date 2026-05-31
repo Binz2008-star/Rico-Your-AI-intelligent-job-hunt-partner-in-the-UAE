@@ -474,10 +474,12 @@ class TestI_NextStepFollowup:
         result = _run_with_profile(api, "so?", _empty_profile())
         assert result.get("type") != "options"
 
-    def test_ok_returns_options(self):
+    def test_ok_returns_acknowledgement(self):
+        # "ok" is now classified as acknowledgement (not next-step options)
+        # since PR #318 added an acknowledgement early-exit before the followup fast path.
         api = _make_api()
         result = _run_with_profile(api, "ok", _cv_profile())
-        assert result["type"] == "options"
+        assert result["type"] == "acknowledgement"
 
     def test_continue_returns_options(self):
         api = _make_api()

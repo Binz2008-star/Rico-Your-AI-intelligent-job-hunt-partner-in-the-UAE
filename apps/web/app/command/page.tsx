@@ -2,7 +2,7 @@
 
 import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, RicoOption, UploadCVResponse } from "@/lib/api";
-import { confirmCVProfile, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, uploadCV } from "@/lib/api";
+import { clearChatHistory, confirmCVProfile, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { buildAuthHref } from "@/lib/redirect";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
@@ -66,6 +66,7 @@ interface Message {
     broadened?: boolean;
     rate_limit_notice?: string;
     streaming?: boolean;
+    stale?: boolean;
 }
 
 type ChatAudience = "checking" | "authenticated" | "public";
@@ -83,6 +84,39 @@ const QUICK_ACTIONS = [
 ];
 const COMMAND_LOGIN_HREF = buildAuthHref("/login", "/command");
 const COMMAND_SIGNUP_HREF = buildAuthHref("/signup", "/command");
+
+const _BARE_SEARCH_ROLES = new Set([
+    "engineer", "manager", "specialist", "consultant", "officer",
+    "analyst", "director", "coordinator", "executive", "lead",
+]);
+
+function isStaleSearchQuery(query?: string): boolean {
+    if (!query) return false;
+    return _BARE_SEARCH_ROLES.has(query.trim().toLowerCase());
+}
+
+function parseHistoryContent(content: string, id: number): Partial<Message> {
+    try {
+        const parsed = JSON.parse(content) as Record<string, unknown>;
+        if (parsed && typeof parsed === "object" && parsed.type === "job_matches") {
+            const query = parsed.search_query as string | undefined;
+            return {
+                id,
+                role: "rico",
+                type: "job_matches",
+                text: (parsed.message ?? parsed.reply ?? parsed.response ?? "") as string,
+                matches: (parsed.matches as JobMatch[] | undefined) ?? [],
+                search_query: query,
+                result_count: parsed.result_count as number | undefined,
+                broadened: parsed.broadened as boolean | undefined,
+                stale: isStaleSearchQuery(query),
+            };
+        }
+    } catch {
+        // Fall through to plain text
+    }
+    return { id, role: "rico", text: content };
+}
 
 function renderInline(text: string): React.ReactNode {
     const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
@@ -137,52 +171,114 @@ function WorkingIndicator({ message }: { message: string }) {
     );
 }
 
+type VerificationStatus = JobMatch["verification_status"];
+
+function SourceQualityBadge({ status }: { status: VerificationStatus }) {
+    if (!status) return null;
+    if (status === "live_verified") {
+        return (
+            <span title="Verified source" className="text-[9px] px-1.5 py-0.5 rounded border border-cyan/40 text-cyan shrink-0">
+                Verified
+            </span>
+        );
+    }
+    if (status === "login_required") {
+        return (
+            <span title="This link requires login — may not reach the apply page directly" className="text-[9px] px-1.5 py-0.5 rounded border border-rico-amber/40 text-rico-amber shrink-0">
+                Login required
+            </span>
+        );
+    }
+    if (status === "rate_limited") {
+        return (
+            <span title="This source is frequently rate-limited (429). The link may not load." className="text-[9px] px-1.5 py-0.5 rounded border border-rico-amber/40 text-rico-amber shrink-0">
+                Rate limited
+            </span>
+        );
+    }
+    if (status === "aggregator_untrusted") {
+        return (
+            <span title="Aggregator link — job may be reposted or outdated" className="text-[9px] px-1.5 py-0.5 rounded border border-border-soft text-text-muted shrink-0">
+                Aggregator
+            </span>
+        );
+    }
+    if (status === "needs_source_verification" || status === "lead_needs_verification") {
+        return (
+            <span title="Source not yet verified" className="text-[9px] px-1.5 py-0.5 rounded border border-border-soft text-text-muted shrink-0 italic">
+                Needs verification
+            </span>
+        );
+    }
+    return null;
+}
+
 function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onAction: (prompt: string) => void }) {
     const score = match.score ?? 0;
     const scorePct = score > 0 ? `${Math.round(score * 100)}%` : null;
     const scoreColor = score >= 0.8 ? "text-cyan" : score >= 0.6 ? "text-rico-amber" : "text-magenta";
     const topReason = match.match_reasons?.[0] ?? match.why ?? "";
+    const vStatus = match.verification_status;
 
     const clean = (u?: string) => (u && u !== "#" ? u.trim() : "");
     const primary = [clean(match.apply_url), clean(match.source_url), clean(match.alt_link)].filter(Boolean)[0] ?? "";
 
+    // When primary link is known-bad, prefer alt_link as the visible link
+    const isBadLink = vStatus === "login_required" || vStatus === "rate_limited";
+    const fallback = clean(match.alt_link) || clean(match.source_url) || "";
+    const applyHref = isBadLink && fallback ? fallback : primary;
+    const applyLabel = isBadLink && fallback ? "Alt link" : "Apply";
+
     return (
         <article
-            className="flex items-center gap-2.5 rounded-lg border border-border-subtle/50 px-2.5 py-2"
+            className="rounded-lg border border-border-subtle/50 px-2.5 py-2 space-y-1.5"
             aria-label={`Job match: ${match.title} at ${match.company}`}
             data-testid="opportunity-card"
         >
-            <div className="flex-1 min-w-0">
-                <div
-                    className="text-[12px] font-semibold text-white break-normal line-clamp-1"
-                    data-testid="opportunity-card-title"
-                >
-                    {match.title}
+            <div className="flex items-center gap-2.5">
+                <div className="flex-1 min-w-0">
+                    <div
+                        className="text-[12px] font-semibold text-white break-normal line-clamp-1"
+                        data-testid="opportunity-card-title"
+                    >
+                        {match.title}
+                    </div>
+                    <div className="text-[10px] text-text-muted mt-0.5 line-clamp-1">
+                        {match.company}{match.location ? ` · ${match.location}` : ""}{topReason ? ` · ${topReason}` : ""}
+                    </div>
                 </div>
-                <div className="text-[10px] text-text-muted mt-0.5 line-clamp-1">
-                    {match.company}{match.location ? ` · ${match.location}` : ""}{topReason ? ` · ${topReason}` : ""}
-                </div>
+                {scorePct && (
+                    <span className={`text-[10px] font-semibold shrink-0 tabular-nums ${scoreColor}`}>{scorePct}</span>
+                )}
+                {applyHref ? (
+                    <a
+                        href={applyHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid="view-job-action"
+                        aria-label={`${applyLabel}: ${match.title} at ${match.company}`}
+                        className="text-[10px] px-2 py-1 rounded-md bg-magenta/10 border border-magenta/30 text-magenta hover:bg-magenta/20 transition-colors shrink-0 font-medium"
+                    >
+                        {applyLabel}
+                    </a>
+                ) : null}
             </div>
-            {scorePct && (
-                <span className={`text-[10px] font-semibold shrink-0 tabular-nums ${scoreColor}`}>{scorePct}</span>
-            )}
-            {primary ? (
-                <a
-                    href={primary}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    data-testid="view-job-action"
-                    aria-label={`Apply for ${match.title} at ${match.company}`}
-                    className="text-[10px] px-2 py-1 rounded-md bg-magenta/10 border border-magenta/30 text-magenta hover:bg-magenta/20 transition-colors shrink-0 font-medium"
-                >
-                    Apply
-                </a>
-            ) : (
-                match.verification_status === "lead_needs_verification" && (
-                    <span className="text-[9px] px-2 py-1 rounded-md border border-border-soft text-text-muted italic shrink-0">
-                        Verifying
-                    </span>
-                )
+
+            {/* Source quality row — only shown when there is something to say */}
+            {vStatus && (
+                <div className="flex items-center gap-1.5">
+                    <SourceQualityBadge status={vStatus} />
+                    {isBadLink && !fallback && (
+                        <span className="text-[9px] text-text-muted italic">
+                            Direct apply link unavailable — search for the role on the company site.
+                        </span>
+                    )}
+                    {isBadLink && fallback && (
+                        <span className="text-[9px] text-text-muted italic">
+                            Primary link blocked — using alternate link.
+                        </span>
+                    )}
+                </div>
             )}
         </article>
     );
@@ -291,6 +387,8 @@ export default function CommandPage() {
     const [operationState, setOperationState] = useState<{ state: string; message: string } | null>(null);
     const [editingProfileId, setEditingProfileId] = useState<number | null>(null);
     const [draftProfile, setDraftProfile] = useState<ProfilePreview | null>(null);
+    const [clearingHistory, setClearingHistory] = useState(false);
+    const [confirmClear, setConfirmClear] = useState(false);
 
     // Force LTR direction for /command to prevent RTL punctuation issues
     // This is a temporary fix until full RTL support is implemented
@@ -353,11 +451,21 @@ export default function CommandPage() {
                 const history = await fetchChatHistory(20);
                 if (cancelled) return;
                 if (history.messages.length > 0) {
-                    const mappedMessages: Message[] = history.messages.map((msg: { role: string; content: string }, idx: number) => ({
-                        id: idx,
-                        role: msg.role === "user" ? "user" : "rico",
-                        text: msg.content,
-                    }));
+                    // Deduplicate by (role, content) pairs to avoid double-rendering
+                    // if history is loaded more than once.
+                    const seen = new Set<string>();
+                    const mappedMessages: Message[] = [];
+                    history.messages.forEach((msg: { role: string; content: string }, idx: number) => {
+                        const key = `${msg.role}:${msg.content}`;
+                        if (seen.has(key)) return;
+                        seen.add(key);
+                        if (msg.role === "user") {
+                            mappedMessages.push({ id: idx, role: "user", text: msg.content });
+                        } else {
+                            // Parse JSON assistant payloads (job_matches, etc.) into rich messages
+                            mappedMessages.push(parseHistoryContent(msg.content, idx) as Message);
+                        }
+                    });
                     setMessages(mappedMessages);
                     promptSentRef.current = true; // Skip welcome message
                 }
@@ -720,6 +828,26 @@ export default function CommandPage() {
         setInput("");
     }
 
+    async function handleClearHistory() {
+        if (!confirmClear) {
+            setConfirmClear(true);
+            return;
+        }
+        setClearingHistory(true);
+        setConfirmClear(false);
+        try {
+            await clearChatHistory();
+            setMessages([]);
+            promptSentRef.current = false;
+        } catch {
+            // Best-effort — silently swallow; history still cleared locally
+            setMessages([]);
+            promptSentRef.current = false;
+        } finally {
+            setClearingHistory(false);
+        }
+    }
+
     function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
@@ -774,6 +902,41 @@ export default function CommandPage() {
                 {/* Messages Container */}
                 <div className="flex-1 min-h-0 overflow-y-auto px-2 py-6 space-y-5" role="log" aria-live="polite" aria-atomic="false" aria-busy={thinking}>
 
+                    {/* Clear history control — shown at top when authenticated with loaded history */}
+                    {chatAudience === "authenticated" && messages.length > 1 && (
+                        <div className="flex justify-end pb-1">
+                            {confirmClear ? (
+                                <div className="flex items-center gap-2 text-[11px]">
+                                    <span className="text-text-muted">Delete all chat history?</span>
+                                    <button
+                                        type="button"
+                                        onClick={handleClearHistory}
+                                        disabled={clearingHistory}
+                                        className="px-2.5 py-1 rounded-lg bg-rico-red/20 border border-rico-red/40 text-rico-red hover:bg-rico-red/30 transition-colors disabled:opacity-50"
+                                    >
+                                        {clearingHistory ? "Clearing…" : "Yes, clear"}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setConfirmClear(false)}
+                                        className="px-2.5 py-1 rounded-lg border border-border-soft text-text-secondary hover:text-white transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={handleClearHistory}
+                                    className="text-[11px] text-text-muted hover:text-text-secondary transition-colors"
+                                    aria-label="Clear chat history"
+                                >
+                                    Clear history
+                                </button>
+                            )}
+                        </div>
+                    )}
+
                     {/* Quick start (shown above first message) */}
                     {messages.length <= 1 && !thinking && (
                         <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:justify-center gap-2 pb-4">
@@ -820,6 +983,11 @@ export default function CommandPage() {
                                     {/* Search result caption */}
                                     {m.type === "job_matches" && m.search_query && (
                                         <div className="mb-1.5 text-[10px] text-text-muted">
+                                            {m.stale && (
+                                                <span className="mr-1.5 px-1.5 py-0.5 rounded bg-border-subtle text-text-muted border border-border-soft">
+                                                    Old result
+                                                </span>
+                                            )}
                                             {m.result_count != null && m.result_count > 0
                                                 ? `${m.result_count} match${m.result_count === 1 ? "" : "es"}`
                                                 : "No matches"} for <strong className="text-text-secondary">{m.search_query}</strong>
@@ -843,13 +1011,27 @@ export default function CommandPage() {
                                         </div>
                                     )}
 
-                                    {/* Job match cards */}
+                                    {/* Job match cards — stale results are collapsed by default */}
                                     {m.matches && m.matches.length > 0 && (
-                                        <div className="mt-2 space-y-2">
-                                            {m.matches.map((match, i) => (
-                                                <JobMatchCard key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
-                                            ))}
-                                        </div>
+                                        m.stale ? (
+                                            <details className="mt-2 group">
+                                                <summary className="cursor-pointer text-[11px] text-text-muted hover:text-text-secondary transition-colors select-none list-none flex items-center gap-1">
+                                                    <svg width="10" height="10" viewBox="0 0 10 10" className="transition-transform group-open:rotate-90" fill="currentColor"><path d="M3 2l4 3-4 3V2z"/></svg>
+                                                    Show {m.matches.length} old result{m.matches.length === 1 ? "" : "s"} (broad search — may be outdated)
+                                                </summary>
+                                                <div className="mt-2 space-y-2 opacity-70">
+                                                    {m.matches.map((match, i) => (
+                                                        <JobMatchCard key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
+                                                    ))}
+                                                </div>
+                                            </details>
+                                        ) : (
+                                            <div className="mt-2 space-y-2">
+                                                {m.matches.map((match, i) => (
+                                                    <JobMatchCard key={i} match={match} onAction={(prompt) => sendMessage(prompt)} />
+                                                ))}
+                                            </div>
+                                        )
                                     )}
 
                                     {/* Application status card */}

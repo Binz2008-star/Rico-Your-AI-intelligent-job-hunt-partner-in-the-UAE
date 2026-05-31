@@ -93,8 +93,8 @@ class TestArabicConfirmations:
     def test_tamam_is_follow_up_confirmation(self):
         """تمام (okay/done) post-profile confirmation must not crash the system."""
         result = classify_intent("تمام")
-        # Acceptable as either follow_up_confirmation or smalltalk — must not be nonsense/unknown
-        assert result.intent in {"follow_up_confirmation", "smalltalk"}
+        # Acceptable as follow_up_confirmation, smalltalk, or acknowledgement — must not be nonsense/unknown
+        assert result.intent in {"follow_up_confirmation", "smalltalk", "acknowledgement"}
 
 
 class TestArabicSmallTalk:
@@ -103,12 +103,17 @@ class TestArabicSmallTalk:
     @pytest.mark.parametrize("msg", [
         "مرحبا",
         "اهلا",
-        "شكرا",
     ])
     def test_arabic_greeting_is_smalltalk(self, msg):
         result = classify_intent(msg)
         assert result.intent == "smalltalk", (
             f"Arabic greeting '{msg}' should be smalltalk, got {result.intent!r}"
+        )
+
+    def test_arabic_thanks_is_acknowledgement(self):
+        result = classify_intent("شكرا")
+        assert result.intent == "acknowledgement", (
+            f"Arabic 'شكرا' should be acknowledgement, got {result.intent!r}"
         )
 
 

@@ -9,7 +9,8 @@ Routes:
   GET  /api/v1/rico/settings/saved-searches     list saved searches    (JWT required)
   POST /api/v1/rico/settings/saved-searches     save a search          (JWT required)
   DELETE /api/v1/rico/settings/saved-searches/{id} delete saved search (JWT required)
-  GET  /api/v1/rico/chat/history                conversation history   (JWT required)
+  GET    /api/v1/rico/chat/history              conversation history   (JWT required)
+  DELETE /api/v1/rico/chat/history              clear chat history     (JWT required)
   POST /api/v1/rico/feedback                    feedback on matches    (JWT required)
   GET  /api/v1/rico/openai-smoke                AI runtime probe       (JWT required)
   POST /api/v1/rico/upload-cv                   CV file upload + parsing
@@ -810,7 +811,7 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> RicoCh
 @limiter.limit(LIMIT_CHAT)
 def rico_chat_history(
     request: Request,
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(20, ge=1, le=100),
     before: str | None = None,
 ) -> dict[str, Any]:
     """Get conversation history with pagination."""
@@ -833,6 +834,15 @@ def rico_chat_history(
         "total": len(history),
         "has_more": len(history) == limit,
     }
+
+
+@router.delete("/chat/history", status_code=204)
+@limiter.limit(LIMIT_CHAT)
+def rico_clear_chat_history(request: Request) -> None:
+    """Delete all chat history for the authenticated user (chat messages only)."""
+    user = get_current_user(request)
+    user_id = user["email"]
+    chat_service.clear_chat_history(user_id)
 
 
 # ============================================================================

@@ -44,11 +44,18 @@ class TestIntentClassifier:
         assert result.confidence >= 0.9
 
     @pytest.mark.parametrize("msg", [
-        "hi", "hello", "hey", "thanks", "ok", "bye",
+        "hi", "hello", "hey", "bye",
     ])
     def test_smalltalk(self, msg: str) -> None:
         result = classify_intent(msg)
         assert result.intent == "smalltalk"
+
+    @pytest.mark.parametrize("msg", [
+        "ok", "thanks",
+    ])
+    def test_acknowledgement(self, msg: str) -> None:
+        result = classify_intent(msg)
+        assert result.intent == "acknowledgement"
 
     @pytest.mark.parametrize("msg", [
         "show my tracked applications",
