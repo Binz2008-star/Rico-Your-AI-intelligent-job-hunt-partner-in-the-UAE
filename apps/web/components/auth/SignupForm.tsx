@@ -5,31 +5,35 @@ import { GlassPanel } from '@/components/ui/GlassPanel';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { PageTransition, StaggerChildren } from '@/components/ui/PageTransition';
 import { ApiError, register, resendVerification } from '@/lib/api';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { useTranslation, type TranslationKey } from '@/lib/translations';
 import Link from 'next/link';
 import React, { useState } from 'react';
 
-function mapSignupError(err: unknown): { message: string; showLoginLink: boolean } {
+function mapSignupError(err: unknown): { messageKey: TranslationKey; showLoginLink: boolean } {
     if (err instanceof ApiError) {
         if (err.statusCode === 409) {
             return {
-                message: 'This email is already registered. Please log in instead.',
+                messageKey: 'emailAlreadyRegistered',
                 showLoginLink: true,
             };
         }
         if (err.statusCode === 400 || err.statusCode === 422) {
             return {
-                message: 'Please check your details and try again.',
+                messageKey: 'checkDetails',
                 showLoginLink: false,
             };
         }
     }
     return {
-        message: "We couldn't create your account right now. Please try again in a moment.",
+        messageKey: 'couldNotCreateAccount',
         showLoginLink: false,
     };
 }
 
 export function SignupForm() {
+    const { language } = useLanguage();
+    const t = useTranslation(language);
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -57,7 +61,7 @@ export function SignupForm() {
                 console.error('[signup]', err);
             }
             const mapped = mapSignupError(err);
-            setError(mapped.message);
+            setError(t(mapped.messageKey));
             setShowLoginLink(mapped.showLoginLink);
         } finally {
             setIsLoading(false);
@@ -70,9 +74,9 @@ export function SignupForm() {
         setResendMessage('');
         try {
             await resendVerification(registeredEmail);
-            setResendMessage('Verification email sent. Please check your inbox.');
+            setResendMessage(t('verificationEmailSent'));
         } catch {
-            setResendMessage("Couldn't resend right now. Please try again in a moment.");
+            setResendMessage(t('couldNotResend'));
         } finally {
             setResendLoading(false);
         }
@@ -90,13 +94,13 @@ export function SignupForm() {
                             <div className="w-16 h-16 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4">
                                 <MaterialIcon icon="mark_email_unread" className="text-primary text-3xl" />
                             </div>
-                            <h1 className="font-headline-xl text-headline-xl text-on-surface mb-2">Check your email</h1>
+                            <h1 className="font-headline-xl text-headline-xl text-on-surface mb-2">{t('checkYourEmail')}</h1>
                             <p className="text-body-md text-on-surface-variant">
-                                Account created. We sent a verification link to{' '}
+                                {t('accountCreated')}{' '}
                                 <span className="text-primary">{registeredEmail}</span>.
                             </p>
                             <p className="mt-2 text-sm text-on-surface-variant">
-                                Click the link in the email to activate your account.
+                                {t('clickLinkToActivate')}
                             </p>
                         </div>
 
@@ -112,19 +116,19 @@ export function SignupForm() {
                             {resendLoading ? (
                                 <>
                                     <MaterialIcon icon="hourglass_empty" className="animate-spin text-sm" />
-                                    <span>Sending...</span>
+                                    <span>{t('sending')}</span>
                                 </>
                             ) : (
                                 <>
                                     <MaterialIcon icon="refresh" className="text-sm" />
-                                    <span>Resend verification email</span>
+                                    <span>{t('resendVerification')}</span>
                                 </>
                             )}
                         </button>
 
                         <div className="mt-6 text-center">
                             <Link href="/login" className="text-sm text-on-surface-variant hover:text-primary transition-colors">
-                                Back to login
+                                {t('backToLogin')}
                             </Link>
                         </div>
                     </GlassPanel>
@@ -145,14 +149,14 @@ export function SignupForm() {
             <PageTransition>
                 <GlassPanel className="w-full max-w-md p-8 rounded-2xl border border-white/10 transition-all duration-300">
                     <StaggerChildren baseDelay={100} className="text-center mb-8">
-                        <h1 className="font-headline-xl text-headline-xl text-on-surface mb-2">Initialize Intelligence</h1>
-                        <p className="text-body-md text-on-surface-variant">Begin your trajectory evolution</p>
+                        <h1 className="font-headline-xl text-headline-xl text-on-surface mb-2">{t('initializeIntelligence')}</h1>
+                        <p className="text-body-md text-on-surface-variant">{t('beginTrajectory')}</p>
                     </StaggerChildren>
 
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div>
                             <label htmlFor="name" className="block text-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant mb-2">
-                                Name
+                                {t('name')}
                             </label>
                             <input
                                 id="name"
@@ -160,14 +164,14 @@ export function SignupForm() {
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                                 className="w-full bg-surface-container border border-white/10 rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:border-primary transition-all"
-                                placeholder="Your name"
+                                placeholder={t('yourName')}
                                 required
                             />
                         </div>
 
                         <div>
                             <label htmlFor="email" className="block text-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant mb-2">
-                                Email
+                                {t('email')}
                             </label>
                             <input
                                 id="email"
@@ -175,14 +179,14 @@ export function SignupForm() {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 className="w-full bg-surface-container border border-white/10 rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:border-primary transition-all"
-                                placeholder="you@example.com"
+                                placeholder={t('emailPlaceholder')}
                                 required
                             />
                         </div>
 
                         <div>
                             <label htmlFor="password" className="block text-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant mb-2">
-                                Password
+                                {t('password')}
                             </label>
                             <input
                                 id="password"
@@ -190,7 +194,7 @@ export function SignupForm() {
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 className="w-full bg-surface-container border border-white/10 rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:border-primary transition-all"
-                                placeholder="••••••••"
+                                placeholder={t('passwordPlaceholder')}
                                 required
                             />
                         </div>
@@ -203,11 +207,11 @@ export function SignupForm() {
                             {isLoading ? (
                                 <>
                                     <MaterialIcon icon="hourglass_empty" className="animate-spin" />
-                                    <span>Initializing...</span>
+                                    <span>{t('initializing')}</span>
                                 </>
                             ) : (
                                 <>
-                                    <span>Begin Journey</span>
+                                    <span>{t('beginJourney')}</span>
                                     <MaterialIcon icon="rocket_launch" />
                                 </>
                             )}
@@ -224,7 +228,7 @@ export function SignupForm() {
                                         className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
                                     >
                                         <MaterialIcon icon="login" className="text-sm" />
-                                        Go to login
+                                        {t('goToLogin')}
                                     </Link>
                                 </div>
                             )}
@@ -233,7 +237,7 @@ export function SignupForm() {
 
                     <div className="mt-6 text-center">
                         <a href="/login" className="text-sm text-on-surface-variant hover:text-primary transition-colors">
-                            Already have an account?
+                            {t('alreadyHaveAccount')}
                         </a>
                     </div>
                 </GlassPanel>
