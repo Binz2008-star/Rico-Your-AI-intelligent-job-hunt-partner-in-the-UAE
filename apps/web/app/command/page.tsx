@@ -581,12 +581,18 @@ export default function CommandPage() {
             }
         }
 
+        // Tracks whether a real response (reply/matches/options) was already
+        // rendered. Prevents a late stream/network failure from appending a
+        // stale "Something went wrong" message below successful job cards (#325).
+        let responseApplied = false;
+
         try {
             // Use SSE streaming for conversational messages; fall back to JSON for errors
             const streamId = nextId();
             let streamStarted = false;
 
             function applyDoneResponse(res: ChatApiResponse) {
+                responseApplied = true;
                 const reply =
                     res.response ?? res.reply ?? res.message ?? res.content ??
                     res.answer ?? res.text ??
@@ -680,6 +686,12 @@ export default function CommandPage() {
                 applyDoneResponse(res);
             }
         } catch (err) {
+            // A real response already rendered (e.g. job matches) — a late
+            // stream/network failure must not append a stale error below it (#325).
+            if (responseApplied) {
+                if (err instanceof Error && err.message.includes("401")) setSessionExpired(true);
+                return;
+            }
             if (err instanceof Error) {
                 if (err.name === "AbortError") {
                     setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: t("cmdErrTimeout") }]);
