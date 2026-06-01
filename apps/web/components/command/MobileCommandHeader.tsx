@@ -96,7 +96,7 @@ export function MobileCommandHeader({
             >
               <div className="relative flex items-center w-full max-w-3xl mx-auto px-3 py-2.5">
                 {/* Left: hamburger */}
-                <div className="flex items-center" style={{ minWidth: 80 }}>
+                <div className="relative z-10 flex items-center" style={{ minWidth: 80 }}>
                     {chatAudience === "checking" ? (
                         <span
                             aria-hidden="true"
@@ -134,7 +134,7 @@ export function MobileCommandHeader({
                 </div>
 
                 {/* Right side — content depends on auth state */}
-                <div className="flex items-center gap-1 ms-auto" style={{ minWidth: 80, justifyContent: "flex-end" }}>
+                <div className="relative z-10 flex items-center gap-1 ms-auto" style={{ minWidth: 80, justifyContent: "flex-end" }}>
                     {/* Theme toggle — always visible */}
                     <button
                         type="button"
