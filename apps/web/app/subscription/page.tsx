@@ -77,6 +77,31 @@ const FALLBACK_PLANS: SubscriptionPlan[] = [
 
 const PLAN_TIER: Record<string, number> = { free: 0, pro: 1, premium: 2 };
 
+const PLAN_NAME_KEY: Record<string, string> = {
+    Pro: "planProName",
+    Premium: "planPremiumName",
+};
+
+const PLAN_DESC_KEY: Record<string, string> = {
+    "Smart AI job hunting for active UAE professionals.": "planProDesc",
+    "Full automation and premium AI recommendations.": "planPremiumDesc",
+};
+
+const PLAN_FEATURE_KEY: Record<string, string> = {
+    "Unlimited CV analysis": "planFeatureUnlimitedCV",
+    "Smart AI role recommendations": "planFeatureSmartRec",
+    "Advanced match scoring": "planFeatureAdvancedScoring",
+    "Saved searches": "planFeatureSavedSearches",
+    "Priority support": "planFeaturePrioritySupport",
+    "Higher daily job limits": "planFeatureHigherLimits",
+    "Everything in Pro": "planFeatureEverythingPro",
+    "Auto-apply system": "planFeatureAutoApply",
+    "Priority AI ranking": "planFeaturePriorityAI",
+    "Advanced job automation": "planFeatureAdvancedAuto",
+    "Premium job pipelines": "planFeaturePremiumPipelines",
+    "Recruiter visibility (coming soon)": "planFeatureRecruiter",
+};
+
 function PlanCard({
     plan,
     currentPlan,
@@ -113,6 +138,12 @@ function PlanCard({
         (PLAN_TIER[currentPlan ?? ""] ?? -1) > (PLAN_TIER[plan.plan] ?? 0);
     const isProPlan = plan.plan === "pro";
 
+    const localName = PLAN_NAME_KEY[plan.name] ? t(PLAN_NAME_KEY[plan.name]) : plan.name;
+    const localDesc = plan.description
+        ? (PLAN_DESC_KEY[plan.description] ? t(PLAN_DESC_KEY[plan.description]) : plan.description)
+        : undefined;
+    const localFeatures = plan.features.map(f => PLAN_FEATURE_KEY[f] ? t(PLAN_FEATURE_KEY[f]) : f);
+
     return (
         <div
             className={`relative flex flex-col rounded-2xl border p-6 backdrop-blur-md overflow-hidden transition-all ${
@@ -148,10 +179,10 @@ function PlanCard({
 
             <div className={isCurrent ? "mt-8" : plan.is_popular ? "mt-6" : "mt-0"}>
                 <h2 className="text-[22px] font-bold text-text-primary font-['Cabinet_Grotesk',sans-serif]">
-                    {plan.name}
+                    {localName}
                 </h2>
-                {plan.description && (
-                    <p className="mt-1 text-[13px] text-text-secondary">{plan.description}</p>
+                {localDesc && (
+                    <p className="mt-1 text-[13px] text-text-secondary">{localDesc}</p>
                 )}
             </div>
 
@@ -165,8 +196,8 @@ function PlanCard({
             </div>
 
             <ul className="mt-6 flex flex-col gap-2.5 flex-1">
-                {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2.5 text-[13px] text-text-secondary">
+                {localFeatures.map((feature, i) => (
+                    <li key={i} className="flex items-start gap-2.5 text-[13px] text-text-secondary">
                         <span
                             className={`mt-0.5 w-4 h-4 flex-shrink-0 rounded-full flex items-center justify-center text-[10px] font-black ${
                                 isProPlan
@@ -237,7 +268,7 @@ function PlanCard({
                                     {t('connecting')}
                                 </span>
                             ) : (
-                                `${t('upgradeTo')} ${plan.name}`
+                                `${t('upgradeTo')} ${localName}`
                             )}
                         </button>
                     )
