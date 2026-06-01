@@ -745,7 +745,7 @@ export default function CommandPage() {
         if (!file || chatAudience === "checking") return;
         e.target.value = "";
         setUploadError("");
-        setMessages((prev) => [...prev, { id: nextId(), role: "user", text: `📎 Uploading CV: ${file.name}` }]);
+        setMessages((prev) => [...prev, { id: nextId(), role: "user", text: `📎 ${t("cmdCvUploading")}: ${file.name}` }]);
         setThinking(true);
         setOperationState({ state: "reading", message: t("cmdWorkingReadingCv") });
         scrollBottom();
@@ -761,7 +761,7 @@ export default function CommandPage() {
 
             // Check if document was rejected due to wrong type
             if (result.ok === false && result.document_type) {
-                const text = result.message || `This document does not look like a CV/resume (detected as: ${result.document_type}). I did not update your personal job profile. Please upload a personal CV or resume.`;
+                const text = result.message || t("cmdCvWrongType");
                 setMessages((prev) => [...prev, { id: nextId(), role: "rico", text }]);
                 return;
             }
@@ -772,14 +772,14 @@ export default function CommandPage() {
                 // Handle both new (skills_detected) and old (skills) response shapes
                 const skills = preview.skills_detected ?? preview.skills ?? [];
                 const previewText = (
-                    `CV profile preview\n\n` +
-                    `Name: ${preview.name || "—"}\n` +
-                    `Email: ${preview.email || "—"}\n` +
-                    `Phone: ${preview.phone || "—"}\n` +
-                    `Current role: ${preview.current_role || "—"}\n` +
-                    `Experience: ${preview.experience_years ? `~${preview.experience_years} years` : "—"}\n` +
-                    `Skills: ${skills.slice(0, 6).join(", ") || "—"}\n` +
-                    `Document quality: ${result.extraction_quality || "unknown"}\n\n` +
+                    `${t("cmdCvPreviewTitle")}\n\n` +
+                    `${t("cmdCvPreviewName")} ${preview.name || "—"}\n` +
+                    `${t("cmdCvPreviewEmail")} ${preview.email || "—"}\n` +
+                    `${t("cmdCvPreviewPhone")} ${preview.phone || "—"}\n` +
+                    `${t("cmdCvPreviewRole")} ${preview.current_role || "—"}\n` +
+                    `${t("cmdCvPreviewExp")} ${preview.experience_years ? `~${preview.experience_years} ${t("cmdCvPreviewExpYears")}` : "—"}\n` +
+                    `${t("cmdCvPreviewSkills")} ${skills.slice(0, 6).join(", ") || "—"}\n` +
+                    `${t("cmdCvPreviewQuality")} ${result.extraction_quality || "—"}\n\n` +
                     t("cmdCvConfirmPrompt")
                 );
 
@@ -801,26 +801,24 @@ export default function CommandPage() {
             if (p) {
                 const skills = p.skills ?? [];
                 const summary = [
-                    skills.length ? `Skills detected: ${skills.slice(0, 6).join(", ")}` : "",
-                    p.emails?.length ? `Email: ${p.emails[0]}` : "",
-                    p.phones?.length ? `Phone: ${p.phones[0]}` : "",
-                    p.extracted_chars ? `Chars extracted: ${p.extracted_chars}` : "",
+                    skills.length ? `${t("cmdCvSkillsDetected")} ${skills.slice(0, 6).join(", ")}` : "",
+                    p.emails?.length ? `${t("cmdCvPreviewEmail")} ${p.emails[0]}` : "",
+                    p.phones?.length ? `${t("cmdCvPreviewPhone")} ${p.phones[0]}` : "",
                 ].filter(Boolean).join(" · ");
 
                 let text: string;
                 if (p.extraction_quality === "poor") {
-                    text = `CV received: ${file.name}, but I could not read enough text from the document. It may be scanned or image-based. Please upload a text-based PDF or DOCX for better extraction.`;
+                    text = t("cmdCvPoor");
                 } else if (p.extraction_quality === "partial") {
-                    text = `CV received: ${file.name}. I extracted the readable details and updated your profile.${summary ? `\n\n${summary}` : ""}\n\nTell me your target roles and I'll start finding matches.`;
+                    text = `${t("cmdCvPartial")}${summary ? `\n\n${summary}` : ""}\n\n${t("cmdCvFindMatches")}`;
                 } else {
-                    text = `CV received: ${file.name}. I extracted your details and pre-filled your profile.${summary ? `\n\n${summary}` : ""}\n\nTell me your target roles and I'll start finding matches.`;
+                    text = `${t("cmdCvGood")}${summary ? `\n\n${summary}` : ""}\n\n${t("cmdCvFindMatches")}`;
                 }
                 setMessages((prev) => [...prev, { id: nextId(), role: "rico", text }]);
             }
-        } catch (err) {
-            const msg = err instanceof Error ? err.message : "Upload failed";
-            setUploadError(msg);
-            setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: `Could not process CV: ${msg}. Please make sure it's a PDF under 10 MB.` }]);
+        } catch {
+            setUploadError(t("uploadError"));
+            setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: t("cmdCvUploadErr") }]);
         } finally {
             setThinking(false);
             setOperationState(null);
