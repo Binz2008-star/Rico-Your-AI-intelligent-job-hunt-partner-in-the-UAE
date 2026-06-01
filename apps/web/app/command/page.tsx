@@ -232,7 +232,9 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
     const _rawScore = match.score ?? 0;
     const score = Math.min(1, Math.max(0, _rawScore > 1 ? _rawScore / 100 : _rawScore));
     const scorePct = score > 0 ? `${Math.round(score * 100)}%` : null;
-    const scoreColor = score >= 0.8 ? "text-cyan" : score >= 0.6 ? "text-rico-amber" : "text-magenta";
+    // Single-role palette (#325): cyan = positive signal only. Strong matches are
+    // highlighted; everything else stays neutral instead of cycling amber/magenta.
+    const scoreColor = score >= 0.8 ? "text-cyan" : "text-text-muted";
     const topReason = match.match_reasons?.[0] ?? match.why ?? "";
     const vStatus = match.verification_status;
 
@@ -581,12 +583,18 @@ export default function CommandPage() {
             }
         }
 
+        // Tracks whether a real response (reply/matches/options) was already
+        // rendered. Prevents a late stream/network failure from appending a
+        // stale "Something went wrong" message below successful job cards (#325).
+        let responseApplied = false;
+
         try {
             // Use SSE streaming for conversational messages; fall back to JSON for errors
             const streamId = nextId();
             let streamStarted = false;
 
             function applyDoneResponse(res: ChatApiResponse) {
+                responseApplied = true;
                 const reply =
                     res.response ?? res.reply ?? res.message ?? res.content ??
                     res.answer ?? res.text ??
@@ -680,6 +688,12 @@ export default function CommandPage() {
                 applyDoneResponse(res);
             }
         } catch (err) {
+            // A real response already rendered (e.g. job matches) — a late
+            // stream/network failure must not append a stale error below it (#325).
+            if (responseApplied) {
+                if (err instanceof Error && err.message.includes("401")) setSessionExpired(true);
+                return;
+            }
             if (err instanceof Error) {
                 if (err.name === "AbortError") {
                     setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: t("cmdErrTimeout") }]);
@@ -1103,7 +1117,7 @@ export default function CommandPage() {
                                                 type="button"
                                                 onClick={() => handleConfirmProfile(m.preview!, m.filename!, m.id)}
                                                 disabled={thinking}
-                                                className="text-[12px] px-4 py-2 rounded-lg bg-cyan text-white font-medium hover:bg-cyan-hover transition-colors disabled:opacity-50"
+                                                className="text-[12px] px-4 py-2 rounded-lg bg-magenta text-white font-medium hover:bg-magenta-hover transition-colors disabled:opacity-50"
                                             >
                                                 {t("cmdProfileUseThis")}
                                             </button>
@@ -1164,7 +1178,7 @@ export default function CommandPage() {
                                                         setDraftProfile(null);
                                                     }}
                                                     disabled={thinking}
-                                                    className="text-[12px] px-4 py-2 rounded-lg bg-cyan text-white font-medium hover:bg-cyan-hover transition-colors disabled:opacity-50"
+                                                    className="text-[12px] px-4 py-2 rounded-lg bg-magenta text-white font-medium hover:bg-magenta-hover transition-colors disabled:opacity-50"
                                                 >
                                                     {t("cmdProfileSave")}
                                                 </button>
