@@ -398,17 +398,14 @@ export default function SubscriptionPage() {
         },
     ], [t]);
 
-    const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+    const [apiPlans, setApiPlans] = useState<SubscriptionPlan[]>([]);
+    const plans = maintenanceMode ? localizedFallbackPlans : apiPlans;
     const [sub, setSub] = useState<SubscriptionMeResponse | null>(null);
     const [loadingPlans, setLoadingPlans] = useState(!maintenanceMode);
     const [subLoading, setSubLoading] = useState(false);
     const [planError, setPlanError] = useState(false);
     const [subscriptionError, setSubscriptionError] = useState(false);
     const [checkingOut, setCheckingOut] = useState<"pro" | "premium" | null>(null);
-
-    useEffect(() => {
-        if (maintenanceMode) setPlans(localizedFallbackPlans);
-    }, [maintenanceMode, localizedFallbackPlans]);
 
     const loadPlans = useCallback(() => {
         if (maintenanceMode) {
@@ -417,7 +414,7 @@ export default function SubscriptionPage() {
         setLoadingPlans(true);
         setPlanError(false);
         getSubscriptionPlans()
-            .then((r) => setPlans(r.plans))
+            .then((r) => setApiPlans(r.plans))
             .catch(() => {
                 setPlanError(true);
                 toast(t('couldNotLoadPlans'), "error");
@@ -430,7 +427,7 @@ export default function SubscriptionPage() {
         let cancelled = false;
         getSubscriptionPlans()
             .then((r) => {
-                if (!cancelled) setPlans(r.plans);
+                if (!cancelled) setApiPlans(r.plans);
             })
             .catch(() => {
                 if (cancelled) return;
