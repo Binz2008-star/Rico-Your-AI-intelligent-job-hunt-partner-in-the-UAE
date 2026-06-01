@@ -1,11 +1,13 @@
 "use client";
 
 import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
+import { useLanguage } from "@/contexts/LanguageContext";
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, RicoOption, UploadCVResponse } from "@/lib/api";
 import { clearChatHistory, confirmCVProfile, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { buildAuthHref } from "@/lib/redirect";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
+import { useTranslation, type TranslationKey } from "@/lib/translations";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -74,13 +76,13 @@ type ChatAudience = "checking" | "authenticated" | "public";
 let _id = 0;
 function nextId() { return ++_id; }
 
-const QUICK_ACTIONS = [
-    { label: "Find UAE jobs that match my CV", prompt: "Find UAE jobs that match my CV and experience." },
-    { label: "Upload my CV", prompt: "__cv_upload__" },
-    { label: "What should I do next?", prompt: "Based on my profile and experience, what's the best next step in my job search?" },
-    { label: "Analyze my next career move", prompt: "Analyze the best next career move based on my background." },
-    { label: "Show my applications", prompt: "Show my job applications and their status." },
-    { label: "Help me prep for an interview", prompt: "Help me prepare for an upcoming job interview." },
+const QUICK_ACTION_DEFS = [
+    { key: "cmdQaFindJobs", prompt: "Find UAE jobs that match my CV and experience." },
+    { key: "cmdQaUploadCv", prompt: "__cv_upload__" },
+    { key: "cmdQaWhatNext", prompt: "Based on my profile and experience, what's the best next step in my job search?" },
+    { key: "cmdQaCareerMove", prompt: "Analyze the best next career move based on my background." },
+    { key: "cmdQaApplications", prompt: "Show my job applications and their status." },
+    { key: "cmdQaInterview", prompt: "Help me prepare for an upcoming job interview." },
 ];
 const COMMAND_LOGIN_HREF = buildAuthHref("/login", "/command");
 const COMMAND_SIGNUP_HREF = buildAuthHref("/signup", "/command");
@@ -174,46 +176,48 @@ function WorkingIndicator({ message }: { message: string }) {
 type VerificationStatus = JobMatch["verification_status"];
 
 function SourceQualityBadge({ status }: { status: VerificationStatus }) {
+    const { language } = useLanguage();
+    const t = useTranslation(language);
     if (!status) return null;
     if (status === "live_verified") {
         return (
-            <span title="Verified source" className="text-[9px] px-1.5 py-0.5 rounded border border-cyan/40 text-cyan shrink-0">
-                Verified
+            <span title={t("cmdBadgeVerifiedTitle")} className="text-[9px] px-1.5 py-0.5 rounded border border-cyan/40 text-cyan shrink-0">
+                {t("cmdBadgeVerifiedLabel")}
             </span>
         );
     }
     if (status === "login_required") {
         return (
-            <span title="This link requires login — may not reach the apply page directly" className="text-[9px] px-1.5 py-0.5 rounded border border-rico-amber/40 text-rico-amber shrink-0">
-                Login required
+            <span title={t("cmdBadgeLoginTitle")} className="text-[9px] px-1.5 py-0.5 rounded border border-rico-amber/40 text-rico-amber shrink-0">
+                {t("cmdBadgeLoginLabel")}
             </span>
         );
     }
     if (status === "rate_limited") {
         return (
-            <span title="This source is frequently rate-limited (429). The link may not load." className="text-[9px] px-1.5 py-0.5 rounded border border-rico-amber/40 text-rico-amber shrink-0">
-                Rate limited
+            <span title={t("cmdBadgeRateLimitTitle")} className="text-[9px] px-1.5 py-0.5 rounded border border-rico-amber/40 text-rico-amber shrink-0">
+                {t("cmdBadgeRateLimitLabel")}
             </span>
         );
     }
     if (status === "aggregator_untrusted") {
         return (
-            <span title="Aggregator — job may be reposted or outdated. Apply via the company site directly." className="text-[9px] px-1.5 py-0.5 rounded border border-border-soft text-text-muted shrink-0">
-                Aggregator
+            <span title={t("cmdBadgeAggregatorTitle")} className="text-[9px] px-1.5 py-0.5 rounded border border-border-soft text-text-muted shrink-0">
+                {t("cmdBadgeAggregatorLabel")}
             </span>
         );
     }
     if (status === "google_intermediary") {
         return (
-            <span title="Google Jobs search link — not a direct apply page. Use the search link to find the original posting." className="text-[9px] px-1.5 py-0.5 rounded border border-rico-amber/30 text-rico-amber shrink-0">
-                Search link
+            <span title={t("cmdBadgeSearchLinkTitle")} className="text-[9px] px-1.5 py-0.5 rounded border border-rico-amber/30 text-rico-amber shrink-0">
+                {t("cmdBadgeSearchLinkLabel")}
             </span>
         );
     }
     if (status === "needs_source_verification" || status === "lead_needs_verification") {
         return (
-            <span title="Source not yet verified" className="text-[9px] px-1.5 py-0.5 rounded border border-border-soft text-text-muted shrink-0 italic">
-                Needs verification
+            <span title={t("cmdBadgeNeedsVerifTitle")} className="text-[9px] px-1.5 py-0.5 rounded border border-border-soft text-text-muted shrink-0 italic">
+                {t("cmdBadgeNeedsVerifLabel")}
             </span>
         );
     }
@@ -221,6 +225,8 @@ function SourceQualityBadge({ status }: { status: VerificationStatus }) {
 }
 
 function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onAction: (prompt: string) => void }) {
+    const { language } = useLanguage();
+    const t = useTranslation(language);
     // Normalize to [0.0, 1.0]. New backend sends floats; legacy history may
     // have 0–100 integers. Values > 1 are divided by 100, then clamped.
     const _rawScore = match.score ?? 0;
@@ -244,9 +250,9 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
     const fallback = clean(match.alt_link) || clean(match.source_url) || "";
     const applyHref = isBadLink && fallback ? fallback : primary;
     const applyLabel =
-        vStatus === "google_intermediary" ? "Search" :
-        isBadLink && fallback ? "Alt link" :
-        "Apply";
+        vStatus === "google_intermediary" ? t("cmdApplySearch") :
+        isBadLink && fallback ? t("cmdApplyAlt") :
+        t("cmdApply");
 
     return (
         <article
@@ -289,17 +295,17 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
                     <SourceQualityBadge status={vStatus} />
                     {isBadLink && !fallback && (
                         <span className="text-[9px] text-text-muted italic">
-                            Direct apply link unavailable — search for the role on the company site.
+                            {t("cmdNoDirectApply")}
                         </span>
                     )}
                     {vStatus === "google_intermediary" && fallback && (
                         <span className="text-[9px] text-text-muted italic">
-                            Google Jobs link — search result, not a direct apply page.
+                            {t("cmdGoogleJobsNote")}
                         </span>
                     )}
                     {isBadLink && vStatus !== "google_intermediary" && fallback && (
                         <span className="text-[9px] text-text-muted italic">
-                            Primary link blocked — using alternate link.
+                            {t("cmdAltLinkNote")}
                         </span>
                     )}
                 </div>
@@ -312,12 +318,14 @@ function ApplicationStatusCard({ applications, followUpNeeded }: {
     applications: ApplicationEntry[];
     followUpNeeded: ApplicationEntry[];
 }) {
+    const { language } = useLanguage();
+    const t = useTranslation(language);
     const stageDefs = [
-        { key: "saved", label: "Saved" },
-        { key: "applied", label: "Applied" },
-        { key: "interview", label: "Interview" },
-        { key: "offer", label: "Offer" },
-        { key: "rejected", label: "Rejected" },
+        { key: "saved", label: t("cmdStatusSaved") },
+        { key: "applied", label: t("cmdStatusApplied") },
+        { key: "interview", label: t("cmdStatusInterview") },
+        { key: "offer", label: t("cmdStatusOffer") },
+        { key: "rejected", label: t("cmdStatusRejected") },
     ];
     const counts = stageDefs.reduce((acc, s) => ({
         ...acc,
@@ -357,10 +365,12 @@ function ApplicationStatusCard({ applications, followUpNeeded }: {
 }
 
 function ProfileGapCard({ gaps }: { gaps: string[] }) {
+    const { language } = useLanguage();
+    const t = useTranslation(language);
     return (
         <div className="mt-1.5 rounded-lg border border-border-subtle/50 px-2.5 py-1.5 flex items-center gap-2">
             <div className="flex-1 min-w-0 text-[11px] text-text-secondary line-clamp-1">
-                <span className="text-rico-amber font-medium">Incomplete — </span>
+                <span className="text-rico-amber font-medium">{t("cmdIncompletePrefix")}</span>
                 {gaps.slice(0, 2).join(", ")}
                 {gaps.length > 2 && ` +${gaps.length - 2}`}
             </div>
@@ -368,7 +378,7 @@ function ProfileGapCard({ gaps }: { gaps: string[] }) {
                 href="/profile"
                 className="text-[10px] px-2 py-1 rounded-md bg-magenta/10 border border-magenta/30 text-magenta hover:bg-magenta/20 transition-colors shrink-0"
             >
-                Fill profile
+                {t("cmdFillProfile")}
             </Link>
         </div>
     );
@@ -393,6 +403,8 @@ function OptionButtons({ options, onAction }: { options: RicoOption[]; onAction:
 
 export default function CommandPage() {
     const router = useRouter();
+    const { language } = useLanguage();
+    const t = useTranslation(language);
     const useMock = process.env.NEXT_PUBLIC_USE_MOCK === "true";
     const cvReady = typeof window === "undefined"
         ? false
@@ -414,14 +426,12 @@ export default function CommandPage() {
     const [clearingHistory, setClearingHistory] = useState(false);
     const [confirmClear, setConfirmClear] = useState(false);
 
-    // Force LTR direction for /command to prevent RTL punctuation issues
-    // This is a temporary fix until full RTL support is implemented
     useEffect(() => {
         if (typeof window !== "undefined") {
-            document.documentElement.dir = "ltr";
-            document.documentElement.lang = "en";
+            document.documentElement.dir = language === "ar" ? "rtl" : "ltr";
+            document.documentElement.lang = language;
         }
-    }, []);
+    }, [language]);
     const bottomRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -527,17 +537,17 @@ export default function CommandPage() {
         setThinking(true);
         const lc = trimmed.toLowerCase();
         if (lc.match(/\b(subscri|plan|pricing|package|upgrade)\b/)) {
-            setOperationState({ state: "checking", message: "Checking plans…" });
+            setOperationState({ state: "checking", message: t("cmdWorkingPlans") });
         } else if (lc.match(/\b(job|find|search|vacanc|opening|role|position|hiring)\b/)) {
-            setOperationState({ state: "searching", message: "Searching UAE jobs…" });
+            setOperationState({ state: "searching", message: t("cmdWorkingJobs") });
         } else if (lc.match(/\b(appli|track|application|status|applied|offer)\b/)) {
-            setOperationState({ state: "reviewing", message: "Reviewing applications…" });
+            setOperationState({ state: "reviewing", message: t("cmdWorkingApplications") });
         } else if (lc.match(/\b(cv|resume|profile|experience|skills)\b/)) {
-            setOperationState({ state: "reading", message: "Looking at your profile…" });
+            setOperationState({ state: "reading", message: t("cmdWorkingProfile") });
         } else if (lc.match(/\b(career|next move|recommend|suggest|direction|trajectory|what should)\b/)) {
-            setOperationState({ state: "extracting", message: "Preparing recommendations…" });
+            setOperationState({ state: "extracting", message: t("cmdWorkingRecommendations") });
         } else if (lc.match(/\b(interview|prep|prepare|question)\b/)) {
-            setOperationState({ state: "extracting", message: "Preparing interview guidance…" });
+            setOperationState({ state: "extracting", message: t("cmdWorkingInterview") });
         }
         scrollBottom();
 
@@ -589,26 +599,24 @@ export default function CommandPage() {
                 if (isRateLimited) {
                     setMessages((prev) => {
                         const filtered = prev.filter((m) => m.id !== streamId);
-                        return [...filtered, { id: streamId, role: "rico", text: "Rico is busy right now — please try again in a minute." }];
+                        return [...filtered, { id: streamId, role: "rico", text: t("cmdErrRateLimit") }];
                     });
                 } else if (isFallbackMode) {
                     setMessages((prev) => {
                         const filtered = prev.filter((m) => m.id !== streamId);
-                        return [...filtered, { id: streamId, role: "rico", text: "I'm here! Upload your CV to get started, or ask me about UAE jobs, applications, or interview prep.", options: res.options as RicoOption[] | undefined }];
+                        return [...filtered, { id: streamId, role: "rico", text: t("cmdFallbackResponse"), options: res.options as RicoOption[] | undefined }];
                     });
                 } else if (!reply && !res.matches && !res.options) {
                     setMessages((prev) => {
                         const filtered = prev.filter((m) => m.id !== streamId);
-                        return [...filtered, { id: streamId, role: "rico", text: "Rico returned an empty response. Please try again." }];
+                        return [...filtered, { id: streamId, role: "rico", text: t("cmdErrEmptyResponse") }];
                     });
                 } else {
                     const hasEmptyMatches = res.type === "job_matches" && Array.isArray(res.matches) && res.matches.length === 0;
-                    const displayText = hasEmptyMatches && !reply
-                        ? "No live UAE matches found right now. Try a related role or broaden your search — I can suggest alternatives based on your CV."
-                        : reply;
+                    const displayText = hasEmptyMatches && !reply ? t("cmdErrNoMatches") : reply;
                     const displayOptions: RicoOption[] = hasEmptyMatches && !res.options ? [
-                        { action: "broaden", label: "Suggest related roles", message: "Suggest roles similar to my target based on my CV" },
-                        { action: "upload_cv", label: "Upload or update my CV", message: "__cv_upload__" },
+                        { action: "broaden", label: t("cmdOptSuggestRoles"), message: "Suggest roles similar to my target based on my CV" },
+                        { action: "upload_cv", label: t("cmdOptUploadCv"), message: "__cv_upload__" },
                     ] : (res.options as RicoOption[] | undefined) ?? [];
                     setMessages((prev) => {
                         const filtered = prev.filter((m) => m.id !== streamId);
@@ -626,7 +634,7 @@ export default function CommandPage() {
                             search_query: (res as Record<string, unknown>).search_query as string | undefined,
                             result_count: (res as Record<string, unknown>).result_count as number | undefined,
                             broadened: (res as Record<string, unknown>).broadened as boolean | undefined,
-                            rate_limit_notice: res.rate_limited ? (res.rate_limit_notice ?? "This source is temporarily rate-limited. Try the alternate link.") : undefined,
+                            rate_limit_notice: res.rate_limited ? (res.rate_limit_notice ?? t("cmdErrRateLimitSource")) : undefined,
                             applications: (res as Record<string, unknown>).applications as ApplicationEntry[] | undefined,
                             follow_up_needed: (res as Record<string, unknown>).follow_up_needed as ApplicationEntry[] | undefined,
                             profile_gaps: (res as Record<string, unknown>).profile_gaps as string[] | undefined,
@@ -674,16 +682,16 @@ export default function CommandPage() {
         } catch (err) {
             if (err instanceof Error) {
                 if (err.name === "AbortError") {
-                    setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: "Rico is taking longer than usual — the server may be waking up. Please try again in 30 seconds." }]);
+                    setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: t("cmdErrTimeout") }]);
                     return;
                 }
                 if (err.message.includes("401")) { setSessionExpired(true); return; }
                 if (err.name === "TypeError" || err.message === "Failed to fetch" || err.message.includes("network")) {
-                    setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: "Could not reach Rico. Check your connection or try again." }]);
+                    setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: t("cmdErrNetwork") }]);
                     return;
                 }
             }
-            setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: "Something went wrong. Please try again." }]);
+            setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: t("cmdErrGeneric") }]);
         } finally {
             clearTimeout(timeoutId);
             clearTimeout(slowHintId);
@@ -693,7 +701,7 @@ export default function CommandPage() {
             scrollBottom();
             textareaRef.current?.focus();
         }
-    }, [chatAudience, scrollBottom, thinking]);
+    }, [chatAudience, scrollBottom, thinking, t]);
 
     useEffect(() => {
         if (chatAudience === "checking" || promptSentRef.current) return;
@@ -704,18 +712,17 @@ export default function CommandPage() {
                 return;
             }
             if (cvReady) {
-                setMessages([{ id: 1, role: "rico", text: "Your CV is ready — I've read it and built your profile.\n\nWhat would you like to do next?\n\n- Find UAE jobs that match my CV\n- Analyze my best next career move\n- Show my profile summary\n- Track my applications" }]);
+                setMessages([{ id: 1, role: "rico", text: t("cmdWelcomeCvReady") }]);
                 return;
             }
-            // For authenticated users, show profile-aware greeting instead of generic onboarding
             if (chatAudience === "authenticated") {
-                setMessages([{ id: 1, role: "rico", text: "Welcome back. I'm ready to help with your job search.\n\nWhat would you like to do today?\n\n- Find matching jobs\n- Analyze my career trajectory\n- Review my applications\n- Update my profile" }]);
+                setMessages([{ id: 1, role: "rico", text: t("cmdWelcomeBack") }]);
                 return;
             }
-            setMessages([{ id: 1, role: "rico", text: "Hi, I'm Rico — your AI job-hunt partner in the UAE.\n\nUpload your CV and I'll find matching jobs, track your applications, and guide your next career move." }]);
+            setMessages([{ id: 1, role: "rico", text: t("cmdWelcomePublic") }]);
         }, 0);
         return () => window.clearTimeout(timeoutId);
-    }, [chatAudience, cvReady, prompt, sendMessage]);
+    }, [chatAudience, cvReady, prompt, sendMessage, t]);
 
     async function handleCVUpload(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
@@ -724,7 +731,7 @@ export default function CommandPage() {
         setUploadError("");
         setMessages((prev) => [...prev, { id: nextId(), role: "user", text: `📎 Uploading CV: ${file.name}` }]);
         setThinking(true);
-        setOperationState({ state: "reading", message: "Reading CV…" });
+        setOperationState({ state: "reading", message: t("cmdWorkingReadingCv") });
         scrollBottom();
         try {
             const result: UploadCVResponse =
@@ -757,7 +764,7 @@ export default function CommandPage() {
                     `Experience: ${preview.experience_years ? `~${preview.experience_years} years` : "—"}\n` +
                     `Skills: ${skills.slice(0, 6).join(", ") || "—"}\n` +
                     `Document quality: ${result.extraction_quality || "unknown"}\n\n` +
-                    `Use this profile for job matching?`
+                    t("cmdCvConfirmPrompt")
                 );
 
                 const message: Message = {
@@ -807,17 +814,17 @@ export default function CommandPage() {
 
     async function handleConfirmProfile(preview: ProfilePreview, filename: string, messageId: number) {
         setThinking(true);
-        setOperationState({ state: "confirming", message: "Saving your profile…" });
+        setOperationState({ state: "confirming", message: t("cmdWorkingSavingProfile") });
         try {
             const userId = `public:${getSessionId(sessionIdRef)}`;
             await confirmCVProfile({ preview, filename }, userId);
             const confirmText = chatAudience === "public"
-                ? "Profile saved for this session.\n\n**Sign up free** to keep your profile, track applications, and get job alerts — so you don't lose your progress when you close the tab."
-                : "Profile confirmed. I can now use it for job matching. Tell me your target roles and I'll start finding matches.";
+                ? t("cmdCvProfileSavedPublic")
+                : t("cmdCvProfileConfirmed");
             setMessages((prev) => prev.map(m => m.id === messageId ? { ...m, type: "profile_confirmed", text: confirmText } : m));
         } catch (err) {
-            const msg = err instanceof Error ? err.message : "Confirmation failed";
-            setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: `Could not confirm profile: ${msg}. Please try again.` }]);
+            const msg = err instanceof Error ? err.message : t("cmdCvProfileError");
+            setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: `${t("cmdCvProfileError")}: ${msg}` }]);
         } finally {
             setThinking(false);
             setOperationState(null);
@@ -841,8 +848,8 @@ export default function CommandPage() {
     function handleNewChat() {
         const greeting =
             chatAudience === "authenticated"
-                ? "New chat started. What would you like to work on next?"
-                : "Hi! I'm Rico. How can I help with your job search today?";
+                ? t("cmdNewChatAuth")
+                : t("cmdNewChatPublic");
         setMessages([{ id: nextId(), role: "rico", text: greeting }]);
         setInput("");
     }
@@ -883,10 +890,10 @@ export default function CommandPage() {
         return (
             <div className="command-dark-lock min-h-screen bg-background flex items-center justify-center">
                 <div className="flex max-w-lg flex-col items-center gap-4 rounded-2xl border border-border-subtle bg-surface/80 p-8 text-center backdrop-blur-md">
-                    <p className="text-sm font-medium text-white">Session expired.</p>
-                    <p className="text-sm text-text-muted">Sign in again to continue chatting with Rico.</p>
+                    <p className="text-sm font-medium text-white">{t("cmdSessionExpired")}</p>
+                    <p className="text-sm text-text-muted">{t("cmdSessionExpiredMsg")}</p>
                     <Link href={COMMAND_LOGIN_HREF} className="rounded-lg bg-magenta px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-magenta-hover">
-                        Sign in
+                        {t("signIn")}
                     </Link>
                 </div>
             </div>
@@ -931,21 +938,21 @@ export default function CommandPage() {
                         <div className="flex justify-end pb-1">
                             {confirmClear ? (
                                 <div className="flex items-center gap-2 text-[11px]">
-                                    <span className="text-text-muted">Delete all chat history?</span>
+                                    <span className="text-text-muted">{t("cmdDeleteHistory")}</span>
                                     <button
                                         type="button"
                                         onClick={handleClearHistory}
                                         disabled={clearingHistory}
                                         className="px-2.5 py-1 rounded-lg bg-rico-red/20 border border-rico-red/40 text-rico-red hover:bg-rico-red/30 transition-colors disabled:opacity-50"
                                     >
-                                        {clearingHistory ? "Clearing…" : "Yes, clear"}
+                                        {clearingHistory ? t("cmdClearing") : t("cmdClearConfirm")}
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => setConfirmClear(false)}
                                         className="px-2.5 py-1 rounded-lg border border-border-soft text-text-secondary hover:text-white transition-colors"
                                     >
-                                        Cancel
+                                        {t("cancel")}
                                     </button>
                                 </div>
                             ) : (
@@ -953,9 +960,9 @@ export default function CommandPage() {
                                     type="button"
                                     onClick={handleClearHistory}
                                     className="text-[11px] text-text-muted hover:text-text-secondary transition-colors"
-                                    aria-label="Clear chat history"
+                                    aria-label={t("cmdClearHistory")}
                                 >
-                                    Clear history
+                                    {t("cmdClearHistory")}
                                 </button>
                             )}
                         </div>
@@ -964,15 +971,15 @@ export default function CommandPage() {
                     {/* Quick start (shown above first message) */}
                     {messages.length <= 1 && !thinking && (
                         <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:justify-center gap-2 pb-4">
-                            {QUICK_ACTIONS.map((qa) => (
+                            {QUICK_ACTION_DEFS.map((qa) => (
                                 <button
                                     type="button"
-                                    key={qa.label}
+                                    key={qa.key}
                                     onClick={() => sendMessage(qa.prompt)}
                                     disabled={thinking || chatAudience === "checking"}
                                     className="rounded-xl border border-border-subtle bg-surface-glass px-3 py-2 text-[11px] sm:text-xs text-text-secondary transition-colors hover:border-magenta/30 hover:bg-surface-subtle hover:text-white disabled:opacity-50 rico-focus-strong text-center"
                                 >
-                                    {qa.label}
+                                    {t(qa.key as TranslationKey)}
                                 </button>
                             ))}
                         </div>
@@ -1009,13 +1016,13 @@ export default function CommandPage() {
                                         <div className="mb-1.5 text-[10px] text-text-muted">
                                             {m.stale && (
                                                 <span className="mr-1.5 px-1.5 py-0.5 rounded bg-border-subtle text-text-muted border border-border-soft">
-                                                    Old result
+                                                    {t("cmdOldResult")}
                                                 </span>
                                             )}
                                             {m.result_count != null && m.result_count > 0
-                                                ? `${m.result_count} match${m.result_count === 1 ? "" : "es"}`
-                                                : "No matches"} for <strong className="text-text-secondary">{m.search_query}</strong>
-                                            {m.broadened && <span className="text-rico-amber"> · broadened</span>}
+                                                ? `${m.result_count} ${m.result_count === 1 ? t("cmdMatch") : t("cmdMatches")}`
+                                                : t("cmdNoMatches")} for <strong className="text-text-secondary">{m.search_query}</strong>
+                                            {m.broadened && <span className="text-rico-amber"> · {t("cmdBroadened")}</span>}
                                         </div>
                                     )}
 
@@ -1041,7 +1048,7 @@ export default function CommandPage() {
                                             <details className="mt-2 group">
                                                 <summary className="cursor-pointer text-[11px] text-text-muted hover:text-text-secondary transition-colors select-none list-none flex items-center gap-1">
                                                     <svg width="10" height="10" viewBox="0 0 10 10" className="transition-transform group-open:rotate-90" fill="currentColor"><path d="M3 2l4 3-4 3V2z"/></svg>
-                                                    Show {m.matches.length} old result{m.matches.length === 1 ? "" : "s"} (broad search — may be outdated)
+                                                    {t("cmdShowOld")} {m.matches.length} {m.matches.length === 1 ? t("cmdMatch") : t("cmdMatches")} {t("cmdStaleNote")}
                                                 </summary>
                                                 <div className="mt-2 space-y-2 opacity-70">
                                                     {m.matches.map((match, i) => (
@@ -1080,7 +1087,7 @@ export default function CommandPage() {
                                                 disabled={thinking}
                                                 className="text-[12px] px-4 py-2 rounded-lg bg-cyan text-white font-medium hover:bg-cyan-hover transition-colors disabled:opacity-50"
                                             >
-                                                Use this profile
+                                                {t("cmdProfileUseThis")}
                                             </button>
                                             <button
                                                 type="button"
@@ -1091,19 +1098,19 @@ export default function CommandPage() {
                                                 disabled={thinking}
                                                 className="text-[12px] px-4 py-2 rounded-lg border border-border-soft text-text-secondary hover:border-magenta/40 hover:text-white transition-colors disabled:opacity-50"
                                             >
-                                                Edit before saving
+                                                {t("cmdProfileEditBefore")}
                                             </button>
                                         </div>
                                     )}
                                     {m.type === "profile_preview" && editingProfileId === m.id && draftProfile && (
                                         <div className="mt-3 space-y-2 border-t border-border-soft pt-3">
-                                            <p className="text-[11px] font-semibold text-magenta">Edit profile</p>
+                                            <p className="text-[11px] font-semibold text-magenta">{t("cmdProfileEditLabel")}</p>
                                             {(
                                                 [
-                                                    ["name", "Name"],
-                                                    ["current_role", "Current role"],
-                                                    ["email", "Email"],
-                                                    ["phone", "Phone"],
+                                                    ["name", t("name")],
+                                                    ["current_role", t("cmdProfileCurrentRole")],
+                                                    ["email", t("email")],
+                                                    ["phone", t("profilePhone")],
                                                 ] as [keyof ProfilePreview, string][]
                                             ).map(([field, label]) => (
                                                 <label key={field} className="block space-y-0.5">
@@ -1118,7 +1125,7 @@ export default function CommandPage() {
                                                 </label>
                                             ))}
                                             <label className="block space-y-0.5">
-                                                <span className="text-[10px] text-text-muted">Skills (comma-separated)</span>
+                                                <span className="text-[10px] text-text-muted">{t("cmdProfileSkills")}</span>
                                                 <input
                                                     value={(draftProfile.skills_detected ?? draftProfile.skills ?? []).join(", ")}
                                                     onChange={(e) => {
@@ -1141,7 +1148,7 @@ export default function CommandPage() {
                                                     disabled={thinking}
                                                     className="text-[12px] px-4 py-2 rounded-lg bg-cyan text-white font-medium hover:bg-cyan-hover transition-colors disabled:opacity-50"
                                                 >
-                                                    Save profile
+                                                    {t("cmdProfileSave")}
                                                 </button>
                                                 <button
                                                     type="button"
@@ -1151,7 +1158,7 @@ export default function CommandPage() {
                                                     }}
                                                     className="text-[12px] px-4 py-2 rounded-lg border border-border-soft text-text-secondary hover:border-magenta/40 hover:text-white transition-colors"
                                                 >
-                                                    Cancel
+                                                    {t("cancel")}
                                                 </button>
                                             </div>
                                         </div>
@@ -1193,10 +1200,10 @@ export default function CommandPage() {
 
                     {thinking && (
                         <div className="flex flex-col gap-2">
-                            <WorkingIndicator message={operationState?.message ?? "Thinking…"} />
+                            <WorkingIndicator message={operationState?.message ?? t("cmdWorking")} />
                             {slowHint && (
                                 <p className="text-[11px] text-text-muted pl-[42px] animate-pulse motion-reduce:animate-none" role="status">
-                                    Rico is waking up — first request after idle can take up to a minute…
+                                    {t("cmdWorkingSlowHint")}
                                 </p>
                             )}
                         </div>
@@ -1210,12 +1217,12 @@ export default function CommandPage() {
                 <div className="shrink-0 px-4 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom))] bg-gradient-to-t from-background via-background/95 to-transparent">
                     {chatAudience === "public" && messages.filter((m) => m.role === "rico").length >= 2 && (
                         <div className="mb-2 flex items-center justify-between gap-3 px-1">
-                            <p className="text-[11px] text-text-muted">Save your profile and track applications.</p>
+                            <p className="text-[11px] text-text-muted">{t("cmdSignUpCta")}</p>
                             <Link
                                 href={COMMAND_SIGNUP_HREF}
                                 className="text-[11px] px-3 py-1 rounded-lg bg-magenta/10 border border-magenta/30 text-magenta hover:bg-magenta/20 transition-colors shrink-0 font-medium"
                             >
-                                Sign up free
+                                {t("cmdSignUpFree")}
                             </Link>
                         </div>
                     )}
@@ -1228,9 +1235,9 @@ export default function CommandPage() {
                             type="button"
                             onClick={() => fileInputRef.current?.click()}
                             disabled={thinking || chatAudience === "checking"}
-                            title="Upload your CV (PDF)"
+                            title={t("cmdUploadCvTitle")}
                             className="w-10 h-10 rounded-xl border border-border-soft bg-surface/80 text-text-secondary flex items-center justify-center hover:border-magenta/40 hover:text-white transition-all disabled:opacity-30 shrink-0 rico-focus-strong"
-                            aria-label="Upload CV"
+                            aria-label={t("cmdUploadCvAriaLabel")}
                         >
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
@@ -1253,8 +1260,8 @@ export default function CommandPage() {
                                 aria-label="Message Rico"
                                 aria-describedby="command-input-hint"
                                 placeholder={chatAudience === "checking"
-                                    ? "Checking your session…"
-                                    : "Ask Rico anything — jobs, CV, applications, interviews…"}
+                                    ? t("cmdPlaceholderChecking")
+                                    : t("cmdPlaceholderReady")}
                                 className="w-full resize-none bg-surface border border-border-soft hover:border-border-strong focus:border-magenta/60 backdrop-blur-xl rounded-2xl py-3 pl-4 pr-12 text-sm text-white placeholder:text-text-muted transition-all shadow-2xl"
                             />
                             <button
@@ -1262,7 +1269,7 @@ export default function CommandPage() {
                                 onClick={handleSend}
                                 disabled={thinking || chatAudience === "checking" || !input.trim()}
                                 className="absolute right-2 top-1.5 bottom-1.5 w-9 h-9 rounded-xl bg-magenta text-white flex items-center justify-center hover:bg-magenta-hover transition-all disabled:opacity-30 disabled:grayscale rico-focus-strong"
-                                aria-label={thinking ? "Sending…" : "Send"}
+                                aria-label={thinking ? t("cmdSending") : t("send")}
                             >
                                 {thinking ? (
                                     <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin motion-reduce:animate-none" />
@@ -1275,7 +1282,7 @@ export default function CommandPage() {
                         </div>
                     </div>
                     <p id="command-input-hint" className="text-center text-[10px] text-text-muted mt-2 opacity-40">
-                        Enter to send · Shift+Enter for new line · clip icon to upload CV
+                        {t("cmdHint")}
                     </p>
                 </div>
             </div>
