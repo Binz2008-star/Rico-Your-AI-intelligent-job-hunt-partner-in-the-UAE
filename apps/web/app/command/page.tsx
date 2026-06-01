@@ -701,7 +701,7 @@ export default function CommandPage() {
             scrollBottom();
             textareaRef.current?.focus();
         }
-    }, [chatAudience, scrollBottom, thinking, t]);
+    }, [chatAudience, language, scrollBottom, thinking, t]);
 
     useEffect(() => {
         if (chatAudience === "checking" || promptSentRef.current) return;

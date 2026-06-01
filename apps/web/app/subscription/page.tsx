@@ -420,7 +420,7 @@ export default function SubscriptionPage() {
                 toast(t('couldNotLoadPlans'), "error");
             })
             .finally(() => setLoadingPlans(false));
-    }, [maintenanceMode, toast]);
+    }, [maintenanceMode, t, toast]);
 
     useEffect(() => {
         if (maintenanceMode) return;
@@ -440,20 +440,24 @@ export default function SubscriptionPage() {
         return () => {
             cancelled = true;
         };
-    }, [maintenanceMode, toast]);
+    }, [maintenanceMode, t, toast]);
 
     const userEmail = user?.email ?? null;
     useEffect(() => {
         if (!userEmail || maintenanceMode) return;
-        setSubLoading(true);
-        getMySubscription()
-            .then(setSub)
-            .catch(() => {
+        void (async () => {
+            setSubLoading(true);
+            try {
+                const data = await getMySubscription();
+                setSub(data);
+            } catch {
                 setSubscriptionError(true);
                 toast(t('couldNotLoadSubscription'), "error");
-            })
-            .finally(() => setSubLoading(false));
-    }, [maintenanceMode, toast, userEmail]);
+            } finally {
+                setSubLoading(false);
+            }
+        })();
+    }, [maintenanceMode, t, toast, userEmail]);
 
     const handleUpgrade = useCallback(
         async (plan: "pro" | "premium") => {
@@ -481,7 +485,7 @@ export default function SubscriptionPage() {
                 setCheckingOut(null);
             }
         },
-        [maintenanceMode, toast]
+        [maintenanceMode, t, toast]
     );
 
     const handleIntent = useCallback((plan: "pro" | "premium") => {
@@ -512,7 +516,7 @@ export default function SubscriptionPage() {
                     : t('subscriptionPortalFailed');
             toast(msg, "error");
         }
-    }, [maintenanceMode, toast]);
+    }, [maintenanceMode, t, toast]);
 
     const currentPlan = user ? sub?.subscription?.plan ?? null : null;
     const isActive = Boolean(sub?.is_active);
