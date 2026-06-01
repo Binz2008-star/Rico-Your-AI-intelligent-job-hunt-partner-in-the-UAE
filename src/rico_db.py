@@ -821,6 +821,7 @@ class RicoDB:
                 conn.close()
 
 
+
 def init_rico_db() -> bool:
     db = RicoDB()
     if not db.available:

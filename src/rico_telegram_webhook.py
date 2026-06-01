@@ -14,23 +14,6 @@ logger = logging.getLogger(__name__)
 chat_api = RicoChatAPI()
 
 
-def _persist_telegram_identity(user_id: str, tg_user: Dict[str, Any]) -> None:
-    """Save the Telegram numeric chat_id (and @handle if present) to the profile.
-
-    Called on every inbound message so the daily pipeline can find this user
-    when sending proactive job alerts. Failures are logged but never raised —
-    the chat response must always proceed regardless of DB availability.
-    """
-    try:
-        updates: Dict[str, Any] = {"telegram_chat_id": user_id}
-        username = tg_user.get("username")
-        if username:
-            updates["telegram_username"] = f"@{username}"
-        upsert_profile(user_id=user_id, updates=updates)
-    except Exception as exc:
-        logger.warning("telegram_identity_persist_failed user_id=%s error=%s", user_id, exc)
-
-
 # ---------------------------------------------------------------------------
 # /start and /stop handlers
 # ---------------------------------------------------------------------------
@@ -119,12 +102,7 @@ def process_telegram_update(update: Dict[str, Any]) -> Dict[str, Any]:
     tg_user = message.get("from", {})
 
     text = (message.get("text") or "").strip()
-    chat_id_raw = chat.get("id") or tg_user.get("id")
-    chat_id = str(chat_id_raw or "telegram-user")
-    user_id = chat_id
-
-    if chat_id_raw:
-        _persist_telegram_identity(user_id, tg_user)
+    user_id = str(chat.get("id") or tg_user.get("id") or "telegram-user")
 
     # Bot command routing — must run before generic chat handler
     command = text.split()[0].lower() if text.startswith("/") else ""
