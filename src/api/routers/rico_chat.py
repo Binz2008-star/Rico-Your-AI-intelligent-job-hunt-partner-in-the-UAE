@@ -625,7 +625,7 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
             )
             if not decision.should_use_ai:
                 # Non-streaming path: emit full response as a single "done" event
-                result = chat_service.send_message(ctx=ctx, message=payload.message)
+                result = chat_service.send_message(ctx=ctx, message=payload.message, language=payload.language)
                 yield f'data: {_json.dumps({"type":"done","response":result})}\n\n'
                 return
 
@@ -646,6 +646,7 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
                 profile_context=profile_context_str,
                 provider=provider,
                 conversation_history=conversation_history,
+                language=payload.language,
             ):
                 full_text.append(chunk)
                 yield f'data: {_json.dumps({"type":"token","text":chunk})}\n\n'
@@ -696,7 +697,7 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
                 profile_context_present=profile is not None,
             )
             if not decision.should_use_ai:
-                result = chat_service.send_message(ctx=ctx, message=payload.message)
+                result = chat_service.send_message(ctx=ctx, message=payload.message, language=payload.language)
                 yield f'data: {_json.dumps({"type":"done","response":result})}\n\n'
                 return
 
@@ -715,6 +716,7 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
                 profile_context=profile_context_str,
                 provider=provider,
                 conversation_history=conversation_history,
+                language=payload.language,
             ):
                 full_text.append(chunk)
                 yield f'data: {_json.dumps({"type":"token","text":chunk})}\n\n'

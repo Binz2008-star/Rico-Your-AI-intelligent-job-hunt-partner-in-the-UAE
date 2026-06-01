@@ -26,8 +26,9 @@ _OPENING_PHRASES: Final[tuple[str, ...]] = (
     "let me know",
 )
 
-_QUESTION_CHARS: Final[frozenset[str]] = frozenset("?？")
-_FIRST_TOKEN_STRIP: Final[str] = ",.!?;:()/&+-"
+# Both ASCII/fullwidth ? and Arabic question mark ؟
+_QUESTION_CHARS: Final[frozenset[str]] = frozenset("?？؟")
+_FIRST_TOKEN_STRIP: Final[str] = ",.!?؟;:()/&+-"
 _DIRECT_JOB_REQUEST_RE: Final[re.Pattern[str]] = re.compile(
     r"^(?:show me|tell me)\s+(?:new\s+|current\s+|live\s+|some\s+|any\s+)?"
     r"(?:jobs?|roles?|openings?|positions?|vacancies?|matches?)\b"
@@ -48,6 +49,27 @@ _APPLICATION_STATUS_RE: Final[re.Pattern[str]] = re.compile(
     re.IGNORECASE,
 )
 
+# Arabic conversational starters: greetings, open-ended question words, conversational openers.
+# These are pure conversational messages — always route to AI.
+_ARABIC_GREETING_RE: Final[re.Pattern[str]] = re.compile(
+    r"^(?:مرحب[اً]?\b|هلا?\b|هال[اً]?\b|السلام|أهل[اً]?\b|اهل[اً]?\b"
+    r"|يسعد|صباح|مساء|سلام\b|هاي\b)",
+    re.UNICODE,
+)
+
+# Arabic question/open-ended words (first token of message)
+_ARABIC_OPENING_TOKENS: Final[frozenset[str]] = frozenset({
+    "كيف", "ما", "ماذا", "لماذا", "متى", "أين", "اين", "من",
+    "هل", "ممكن", "يمكن", "اشرح", "أخبرني", "اخبرني",
+    "وش", "شو", "ليش", "وين", "إيش", "ايش",
+})
+
+# Arabic imperative job-search commands — keep on legacy classifier (DB access needed)
+_ARABIC_JOB_REQUEST_RE: Final[re.Pattern[str]] = re.compile(
+    r"^(?:ابحث|ابحثي|اعرض|اعرضي|جد\b|جيب|دور|ادور|ادوري|لقيلي|فتش|فتشي|اطلب|طلب)\b",
+    re.UNICODE,
+)
+
 
 def _is_imperative_job_request(lowered: str) -> bool:
     """Return True for explicit search commands that should stay off the AI path."""
@@ -57,6 +79,10 @@ def _is_imperative_job_request(lowered: str) -> bool:
 def _is_application_status_question(lowered: str) -> bool:
     """Return True for application-history queries that must reach the DB, not the AI."""
     return bool(_APPLICATION_STATUS_RE.search(lowered))
+
+
+def _is_arabic_job_request(text: str) -> bool:
+    return bool(_ARABIC_JOB_REQUEST_RE.search(text))
 
 
 def is_open_ended_question(message: str) -> tuple[bool, str]:
@@ -82,6 +108,14 @@ def is_open_ended_question(message: str) -> tuple[bool, str]:
     if _is_imperative_job_request(lowered):
         return False, "ok"
 
+    # Arabic greeting → always conversational
+    if _ARABIC_GREETING_RE.search(text):
+        return True, "arabic_greeting"
+
+    # Arabic job search imperatives stay on legacy (DB needed)
+    if _is_arabic_job_request(text):
+        return False, "ok"
+
     for phrase in _OPENING_PHRASES:
         if lowered == phrase or lowered.startswith(phrase + " "):
             return True, f"phrase:{phrase.replace(' ', '_')}"
@@ -95,5 +129,10 @@ def is_open_ended_question(message: str) -> tuple[bool, str]:
         if _is_application_status_question(lowered):
             return False, "ok"
         return True, f"token:{first}"
+
+    # Arabic opening tokens (question/open-ended words)
+    first_raw = text.split()[0].strip("،,.!?؟;:()/&+-") if text.split() else ""
+    if first_raw in _ARABIC_OPENING_TOKENS:
+        return True, f"arabic_token:{first_raw}"
 
     return False, "ok"

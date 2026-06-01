@@ -1888,11 +1888,12 @@ class RicoChatAPI:
         user_id: str,
         message: str,
         operation_id: str | None = None,
+        language: str | None = None,
     ) -> dict[str, Any]:
         debug_id = _generate_debug_id()
         self._current_operation_id = operation_id
         try:
-            result = self._process_message_inner(user_id, message)
+            result = self._process_message_inner(user_id, message, language=language)
             # Guarantee debug_id on every response
             if isinstance(result, dict):
                 result.setdefault("debug_id", debug_id)
@@ -1951,6 +1952,7 @@ class RicoChatAPI:
         profile: Any,
         *,
         save_user_message: bool,
+        language: str | None = None,
     ) -> dict[str, Any]:
         """Run the single conversational AI fallback path used by chat routing."""
         if save_user_message:
@@ -1960,7 +1962,7 @@ class RicoChatAPI:
         if isinstance(user_context, dict):
             user_context["blocked_questions"] = blocked_questions
 
-        ai_response = self._get_openai_agent().respond(message, user_context=user_context)
+        ai_response = self._get_openai_agent().respond(message, user_context=user_context, language=language)
         raw_ai_message = ai_response.get("message", "")
         filtered_ai_message = self._preserve_ai_message(raw_ai_message, blocked_questions)
         ai_response["message"] = filtered_ai_message
@@ -1976,7 +1978,7 @@ class RicoChatAPI:
         result.setdefault("success", True)
         return result
 
-    def answer_conversationally(self, user_id: str, message: str, profile: Any) -> dict[str, Any]:
+    def answer_conversationally(self, user_id: str, message: str, profile: Any, language: str | None = None) -> dict[str, Any]:
         """Route directly to the existing conversational AI fallback path."""
         debug_id = _generate_debug_id()
         try:
@@ -1985,6 +1987,7 @@ class RicoChatAPI:
                 message=message,
                 profile=profile,
                 save_user_message=True,
+                language=language,
             )
             if isinstance(result, dict):
                 result.setdefault("debug_id", debug_id)
@@ -2029,7 +2032,7 @@ class RicoChatAPI:
                 user_id=user_id,
             )
 
-    def _process_message_inner(self, user_id: str, message: str) -> dict[str, Any]:
+    def _process_message_inner(self, user_id: str, message: str, language: str | None = None) -> dict[str, Any]:
         self._append_chat(user_id, "user", message)
         completed = is_onboarding_complete(user_id)
 
@@ -2049,14 +2052,18 @@ class RicoChatAPI:
             if getattr(self, "_persist", True):
                 upsert_profile(user_id=user_id, updates={"name": user_id})
                 set_onboarding_status(user_id, ONBOARDING_IN_PROGRESS)
-            response = {
-                "type": "onboarding",
-                "message": (
-                    "Welcome to Rico AI. Upload your CV or tell me your target role, UAE city "
-                    "preferences, and salary expectations. If you upload a CV, I will pre-fill "
-                    "the profile and only ask for anything missing or unclear."
-                ),
-            }
+            import re as _re
+            _is_ar = language == "ar" or bool(_re.search(r'[؀-ۿ]', message))
+            onboarding_msg = (
+                "أهلاً بك في ريكو. أرفع سيرتك الذاتية أو أخبرني بالمسمى الوظيفي الذي تستهدفه "
+                "والمدينة التي تفضل العمل فيها بالإمارات وتوقعات راتبك. "
+                "عند رفع السيرة الذاتية سأملأ الملف الشخصي تلقائيًا وأسألك فقط عن أي معلومات ناقصة."
+                if _is_ar else
+                "Welcome to Rico AI. Upload your CV or tell me your target role, UAE city "
+                "preferences, and salary expectations. If you upload a CV, I will pre-fill "
+                "the profile and only ask for anything missing or unclear."
+            )
+            response = {"type": "onboarding", "message": onboarding_msg}
             self._append_chat(user_id, "assistant", response["message"])
             return self._finalize(response, self.SOURCE_KEYWORD, profile=None)
 
