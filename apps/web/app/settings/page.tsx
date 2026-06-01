@@ -14,7 +14,7 @@ const SETTINGS_BACKEND_MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MO
 
 function Row({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
   return (
-    <div className="flex items-center justify-between py-3 border-b border-white/5 last:border-0">
+    <div className="flex items-center justify-between py-3 border-b border-border-subtle last:border-0">
       <span className="text-[13px] text-rico-text-dim">{label}</span>
       <span className={`text-[13px] font-medium flex items-center gap-1.5 ${ok === true ? "text-rico-teal" : ok === false ? "text-rico-red" : "text-rico-text-muted"
         }`}>
@@ -167,7 +167,7 @@ export default function SettingsPage() {
         {/* Job Matching Preferences */}
         {settings && (
           <section className="space-y-4">
-            <h2 className="text-[11px] font-black text-[#5a5a7a] uppercase tracking-[0.2em] ml-1">Job Matching Preferences</h2>
+            <h2 className="text-[11px] font-black text-text-tertiary uppercase tracking-[0.2em] ml-1">Job Matching Preferences</h2>
             <div className="grid gap-4 sm:grid-cols-2">
               <StatusCard title="Apply pacing" value={String(settings.max_daily_applies)}>
                 <div className="mt-2">
@@ -178,7 +178,7 @@ export default function SettingsPage() {
                     onChange={(e) => setSettings({ ...settings, max_daily_applies: Number(e.target.value) })}
                     className="w-full h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer accent-[#5b4fff]"
                   />
-                  <div className="flex justify-between mt-2 text-[10px] text-[#5a5a7a] font-bold uppercase tracking-tighter">
+                  <div className="flex justify-between mt-2 text-[10px] text-text-tertiary font-bold uppercase tracking-tighter">
                     <span>Safety</span>
                     <span>Aggressive</span>
                   </div>
@@ -194,7 +194,7 @@ export default function SettingsPage() {
                     onChange={(e) => setSettings({ ...settings, min_score: Number(e.target.value) })}
                     className="w-full h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer accent-[#00c9a7]"
                   />
-                  <div className="flex justify-between mt-2 text-[10px] text-[#5a5a7a] font-bold uppercase tracking-tighter">
+                  <div className="flex justify-between mt-2 text-[10px] text-text-tertiary font-bold uppercase tracking-tighter">
                     <span>General</span>
                     <span>High Match Only</span>
                   </div>
@@ -205,15 +205,15 @@ export default function SettingsPage() {
         )}
 
         {/* Match Thresholds */}
-        <section className="bg-[#13132a]/40 border border-white/5 rounded-2xl p-6 backdrop-blur-md relative overflow-hidden">
+        <section className="bg-surface-elevated/40 border border-border-subtle rounded-2xl p-6 backdrop-blur-md relative overflow-hidden">
           <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#5b4fff]/5 blur-3xl rounded-full pointer-events-none" />
 
-          <h3 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[17px] text-white mb-6">Match thresholds</h3>
+          <h3 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[17px] text-text-primary mb-6">Match thresholds</h3>
 
           {loadingSettings ? (
             <div className="flex flex-col gap-3">
               {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-10 rounded-lg bg-white/[0.03] animate-pulse" />
+                <div key={i} className="h-10 rounded-lg bg-surface-glass animate-pulse" />
               ))}
             </div>
           ) : error ? (
@@ -225,36 +225,36 @@ export default function SettingsPage() {
             <div className="flex flex-col gap-4">
               <div className="grid grid-cols-2 gap-4">
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-[11px] text-[#5a5a7a] uppercase tracking-wider font-semibold">Apply threshold</span>
+                  <span className="text-[11px] text-text-tertiary uppercase tracking-wider font-semibold">Apply threshold</span>
                   <input
                     type="number"
                     min={0}
                     max={100}
                     value={settings.score_threshold_apply}
                     onChange={(e) => setSettings({ ...settings, score_threshold_apply: Number(e.target.value) })}
-                    className="bg-[#0d0d1f] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] text-[#8080a0] outline-none focus:border-[rgba(91,79,255,0.4)]"
+                    className="bg-surface border border-border-soft rounded-lg px-3 py-2 text-[13px] text-text-secondary outline-none focus:border-[rgba(91,79,255,0.4)]"
                   />
                 </label>
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-[11px] text-[#5a5a7a] uppercase tracking-wider font-semibold">Watch threshold</span>
+                  <span className="text-[11px] text-text-tertiary uppercase tracking-wider font-semibold">Watch threshold</span>
                   <input
                     type="number"
                     min={0}
                     max={100}
                     value={settings.score_threshold_watch}
                     onChange={(e) => setSettings({ ...settings, score_threshold_watch: Number(e.target.value) })}
-                    className="bg-[#0d0d1f] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] text-[#8080a0] outline-none focus:border-[rgba(91,79,255,0.4)]"
+                    className="bg-surface border border-border-soft rounded-lg px-3 py-2 text-[13px] text-text-secondary outline-none focus:border-[rgba(91,79,255,0.4)]"
                   />
                 </label>
               </div>
               <label className="flex flex-col gap-1.5">
-                <span className="text-[11px] text-[#5a5a7a] uppercase tracking-wider font-semibold">Telegram chat ID</span>
+                <span className="text-[11px] text-text-tertiary uppercase tracking-wider font-semibold">Telegram chat ID</span>
                 <input
                   type="text"
                   value={settings.telegram_chat_id}
                   onChange={(e) => setSettings({ ...settings, telegram_chat_id: e.target.value })}
                   placeholder="Optional — for job alerts"
-                  className="bg-[#0d0d1f] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] text-[#8080a0] outline-none focus:border-[rgba(91,79,255,0.4)] placeholder:text-[#5a5a7a]"
+                  className="bg-surface border border-border-soft rounded-lg px-3 py-2 text-[13px] text-text-secondary outline-none focus:border-[rgba(91,79,255,0.4)] placeholder:text-text-tertiary"
                 />
               </label>
               <button
@@ -269,24 +269,24 @@ export default function SettingsPage() {
         </section>
 
         {/* Channel Preferences — Glow Card */}
-        <section className="bg-[#13132a]/40 border border-white/5 rounded-2xl p-6 backdrop-blur-md relative overflow-hidden">
+        <section className="bg-surface-elevated/40 border border-border-subtle rounded-2xl p-6 backdrop-blur-md relative overflow-hidden">
           <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#00c9a7]/5 blur-3xl rounded-full pointer-events-none" />
 
-          <h3 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[17px] text-white mb-6">Channel Preferences</h3>
+          <h3 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[17px] text-text-primary mb-6">Channel Preferences</h3>
 
           <div className="space-y-6">
             <div className="flex items-center justify-between group">
               <div className="space-y-1">
-                <p className="text-sm font-bold text-[#eeeef5] group-hover:text-white transition-colors">Telegram Notifications</p>
-                <p className="text-xs text-[#5a5a7a]">
+                <p className="text-sm font-bold text-text-primary group-hover:text-white transition-colors">Telegram Notifications</p>
+                <p className="text-xs text-text-tertiary">
                   {telegramDescription}
                 </p>
               </div>
               <span className="text-xs text-[#5b4fff] font-medium">{telegramStatus}</span>
             </div>
 
-            <div className="pt-6 border-t border-white/5 flex items-center justify-between">
-              <span className="text-[11px] text-[#5a5a7a] font-medium uppercase tracking-widest">
+            <div className="pt-6 border-t border-border-subtle flex items-center justify-between">
+              <span className="text-[11px] text-text-tertiary font-medium uppercase tracking-widest">
                 {SETTINGS_BACKEND_MAINTENANCE_MODE
                   ? "Status: Paused during backend maintenance"
                   : saving ? "Syncing with Rico..." : "Status: Cloud Synced"}
@@ -298,12 +298,12 @@ export default function SettingsPage() {
 
         {/* Backend Status — Admin Only */}
         {isAdmin && (
-          <section className="bg-[#13132a]/80 border border-white/[0.06] rounded-2xl p-6">
-            <h2 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[15px] mb-4 text-white">Backend Status</h2>
+          <section className="bg-surface-elevated/80 border border-border-subtle rounded-2xl p-6">
+            <h2 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[15px] mb-4 text-text-primary">Backend Status</h2>
             {loadingHealth ? (
               <div className="flex flex-col gap-2">
                 {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="h-10 rounded-lg bg-white/[0.03] animate-pulse" />
+                  <div key={i} className="h-10 rounded-lg bg-surface-glass animate-pulse" />
                 ))}
               </div>
             ) : health ? (
@@ -370,19 +370,19 @@ export default function SettingsPage() {
 
         {/* Frontend Config — Admin Only */}
         {isAdmin && (
-          <section className="bg-[#13132a]/80 border border-white/[0.06] rounded-2xl p-6">
-            <h2 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[15px] mb-4 text-white">Frontend Config</h2>
+          <section className="bg-surface-elevated/80 border border-border-subtle rounded-2xl p-6">
+            <h2 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[15px] mb-4 text-text-primary">Frontend Config</h2>
             <Row label="Mock mode" value={isMock ? "ENABLED — using dev fixtures" : "OFF — hitting real backend"} ok={!isMock} />
           </section>
         )}
 
         {/* Legal */}
-        <section className="bg-[#13132a]/80 border border-white/[0.06] rounded-2xl p-6">
-          <h2 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[15px] mb-4 text-white">Legal</h2>
+        <section className="bg-surface-elevated/80 border border-border-subtle rounded-2xl p-6">
+          <h2 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[15px] mb-4 text-text-primary">Legal</h2>
           <div className="flex flex-wrap gap-4">
-            <a href="/terms" className="text-[13px] text-[#5a5a7a] hover:text-[#eeeef5] transition-colors">Terms of Service</a>
-            <a href="/privacy" className="text-[13px] text-[#5a5a7a] hover:text-[#eeeef5] transition-colors">Privacy Policy</a>
-            <a href="/refund-policy" className="text-[13px] text-[#5a5a7a] hover:text-[#eeeef5] transition-colors">Refund &amp; Cancellation</a>
+            <a href="/terms" className="text-[13px] text-text-tertiary hover:text-text-primary transition-colors">Terms of Service</a>
+            <a href="/privacy" className="text-[13px] text-text-tertiary hover:text-text-primary transition-colors">Privacy Policy</a>
+            <a href="/refund-policy" className="text-[13px] text-text-tertiary hover:text-text-primary transition-colors">Refund &amp; Cancellation</a>
           </div>
         </section>
 

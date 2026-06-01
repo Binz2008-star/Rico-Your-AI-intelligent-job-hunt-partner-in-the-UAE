@@ -59,6 +59,37 @@
     --focus-ring-shadow: rgb(var(--cyan) / 0.16);
     --focus-ring-offset: 3px;
     --focus-ring-width: 3px;
+
+    /* ── Rico Command (--rico-*) alias layer ───────────────────────────────────
+     * The Command page and Rico UI primitives consume a parallel --rico-* token
+     * namespace. These were historically undefined (falling back to inherited
+     * body colors). Aliasing them to the channel tokens above makes the Command
+     * experience render correctly AND flip with the .light theme automatically,
+     * because each rgb(var(--token)) is substituted at use-site against the
+     * cascaded (dark or light) channel value. Define once here in :root.
+     * ─────────────────────────────────────────────────────────────────────── */
+    --rico-bg: rgb(var(--bg));
+    --rico-fg-1: rgb(var(--text-primary));
+    --rico-fg-2: rgb(var(--text-secondary));
+    --rico-fg-3: rgb(var(--text-tertiary));
+    --rico-fg-4: rgb(var(--text-muted));
+    --rico-border-subtle: rgb(var(--overlay) / 0.06);
+    --rico-border-soft: rgb(var(--overlay) / 0.1);
+    --rico-border-medium: rgb(var(--overlay) / 0.16);
+    --rico-primary: rgb(var(--magenta));
+    --rico-primary-container: rgb(var(--magenta) / 0.2);
+    --rico-on-primary: #ffffff;
+    --rico-secondary-dim: rgb(var(--cyan) / 0.6);
+    --rico-magenta-glow: rgb(var(--magenta) / 0.3);
+    --rico-cyan-glow: rgb(var(--cyan) / 0.3);
+    --rico-focus-ring: rgb(var(--cyan));
+    --rico-error: #ff5e5b;
+    --rico-error-bg: rgb(255 94 91 / 0.1);
+
+    /* Radius scale consumed by Rico primitives */
+    --r-lg: 0.5rem;
+    --r-xl: 0.75rem;
+    --r-full: 9999px;
 }
 
 .light {

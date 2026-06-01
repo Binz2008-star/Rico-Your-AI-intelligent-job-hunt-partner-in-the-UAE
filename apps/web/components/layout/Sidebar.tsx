@@ -56,19 +56,19 @@ export function Sidebar() {
         : "R";
 
     return (
-        <aside className="w-[220px] flex-shrink-0 bg-[#0a0a1a] border-r border-white/5 flex flex-col h-full overflow-y-auto">
+        <aside className="w-[220px] flex-shrink-0 bg-background border-r border-border-subtle flex flex-col h-full overflow-y-auto">
             {/* Logo */}
-            <div className="px-5 py-5 border-b border-white/5 flex items-center gap-2.5">
+            <div className="px-5 py-5 border-b border-border-subtle flex items-center gap-2.5">
                 <div className="w-7 h-7 rounded-[8px] bg-[#f5a623] flex items-center justify-center text-[#0a0a1a] font-['Cabinet_Grotesk',sans-serif] font-black text-[13px] shadow-[0_4px_12px_rgba(245,166,35,0.35)]">
                     R
                 </div>
-                <span className="font-['Cabinet_Grotesk',sans-serif] font-800 text-[17px] tracking-tight text-white">
+                <span className="font-['Cabinet_Grotesk',sans-serif] font-800 text-[17px] tracking-tight text-text-primary">
                     Rico <span className="text-[#f5a623]">Hunt</span>
                 </span>
             </div>
 
             {/* Live status */}
-            <div className="px-5 py-3 flex items-center gap-2 border-b border-white/5">
+            <div className="px-5 py-3 flex items-center gap-2 border-b border-border-subtle">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#00c9a7] shadow-[0_0_6px_#00c9a7] animate-pulse" />
                 <span className="text-[11px] text-[#00c9a7] font-medium">System live · UAE</span>
             </div>
@@ -101,7 +101,7 @@ export function Sidebar() {
             </nav>
 
             {/* User footer */}
-            <div className="px-3 py-4 border-t border-white/5">
+            <div className="px-3 py-4 border-t border-border-subtle">
                 <button
                     onClick={logout}
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[9px] hover:bg-white/5 transition-colors group"

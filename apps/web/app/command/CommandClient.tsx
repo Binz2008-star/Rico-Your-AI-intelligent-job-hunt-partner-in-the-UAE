@@ -790,7 +790,7 @@ export default function CommandClient() {
                             {userPlan === "free" && (
                                 <Link
                                     href="/subscription"
-                                    className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold border border-white/[0.08] bg-white/[0.03] text-[var(--rico-fg-4)] hover:text-[var(--rico-fg-2)] transition-colors"
+                                    className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold border border-border-soft bg-surface-glass text-[var(--rico-fg-4)] hover:text-[var(--rico-fg-2)] transition-colors"
                                 >
                                     Free
                                 </Link>
@@ -825,7 +825,7 @@ export default function CommandClient() {
                         /* checking — hide auth links until /me resolves */
                         <span
                             aria-hidden="true"
-                            className="h-8 w-28 rounded-[var(--r-xl)] bg-[rgba(255,255,255,0.05)] border border-[var(--rico-border-subtle)] animate-pulse motion-reduce:animate-none"
+                            className="h-8 w-28 rounded-[var(--r-xl)] bg-[rgb(var(--overlay)_/_0.05)] border border-[var(--rico-border-subtle)] animate-pulse motion-reduce:animate-none"
                         />
                     )}
                 </nav>
@@ -876,7 +876,7 @@ export default function CommandClient() {
                                     key={qa.label}
                                     onClick={() => sendMessage(qa.prompt)}
                                     disabled={thinking || chatAudience === "checking"}
-                                    className="rounded-[var(--r-xl)] border border-[var(--rico-border-subtle)] bg-[rgba(255,255,255,0.03)] px-3 py-2 text-[11px] sm:text-xs text-[var(--rico-fg-3)] transition-colors hover:border-[var(--rico-primary-container)] hover:text-[var(--rico-fg-1)] disabled:opacity-50 text-center"
+                                    className="rounded-[var(--r-xl)] border border-[var(--rico-border-subtle)] bg-[rgb(var(--overlay)_/_0.03)] px-3 py-2 text-[11px] sm:text-xs text-[var(--rico-fg-3)] transition-colors hover:border-[var(--rico-primary-container)] hover:text-[var(--rico-fg-1)] disabled:opacity-50 text-center"
                                 >
                                     {t(qa.label)}
                                 </button>
@@ -992,7 +992,7 @@ export default function CommandClient() {
                                                                         : prev,
                                                                 )
                                                             }
-                                                            className="w-full rounded-[var(--r-lg)] bg-[rgba(255,255,255,0.04)] border border-[var(--rico-border-soft)] px-3 py-1.5 text-[12px] text-[var(--rico-fg-1)] placeholder:text-[var(--rico-fg-4)] focus:outline-none focus:border-[var(--rico-primary-container)]"
+                                                            className="w-full rounded-[var(--r-lg)] bg-[rgb(var(--overlay)_/_0.04)] border border-[var(--rico-border-soft)] px-3 py-1.5 text-[12px] text-[var(--rico-fg-1)] placeholder:text-[var(--rico-fg-4)] focus:outline-none focus:border-[var(--rico-primary-container)]"
                                                         />
                                                     </label>
                                                 ))}
@@ -1017,7 +1017,7 @@ export default function CommandClient() {
                                                                     : prev,
                                                             );
                                                         }}
-                                                        className="w-full rounded-[var(--r-lg)] bg-[rgba(255,255,255,0.04)] border border-[var(--rico-border-soft)] px-3 py-1.5 text-[12px] text-[var(--rico-fg-1)] placeholder:text-[var(--rico-fg-4)] focus:outline-none focus:border-[var(--rico-primary-container)]"
+                                                        className="w-full rounded-[var(--r-lg)] bg-[rgb(var(--overlay)_/_0.04)] border border-[var(--rico-border-soft)] px-3 py-1.5 text-[12px] text-[var(--rico-fg-1)] placeholder:text-[var(--rico-fg-4)] focus:outline-none focus:border-[var(--rico-primary-container)]"
                                                     />
                                                 </label>
                                                 <div className="flex gap-2 pt-1">
@@ -1097,7 +1097,7 @@ export default function CommandClient() {
 
                             {/* User avatar */}
                             {m.role === "user" && (
-                                <div className="w-6 h-6 rounded-full bg-[rgba(255,255,255,0.06)] flex items-center justify-center text-[10px] font-medium text-[var(--rico-fg-3)] shrink-0 mb-1">
+                                <div className="w-6 h-6 rounded-full bg-[rgb(var(--overlay)_/_0.06)] flex items-center justify-center text-[10px] font-medium text-[var(--rico-fg-3)] shrink-0 mb-1">
                                     You
                                 </div>
                             )}
@@ -1176,7 +1176,7 @@ export default function CommandClient() {
                             }
                             title="Upload your CV (PDF)"
                             aria-label={t("commandUploadCV")}
-                            className="w-10 h-10 rounded-[var(--r-xl)] border border-[var(--rico-border-soft)] bg-[rgba(255,255,255,0.03)] text-[var(--rico-fg-3)] flex items-center justify-center hover:border-[var(--rico-primary-container)] hover:text-[var(--rico-fg-1)] transition-all disabled:opacity-30 shrink-0"
+                            className="w-10 h-10 rounded-[var(--r-xl)] border border-[var(--rico-border-soft)] bg-[rgb(var(--overlay)_/_0.03)] text-[var(--rico-fg-3)] flex items-center justify-center hover:border-[var(--rico-primary-container)] hover:text-[var(--rico-fg-1)] transition-all disabled:opacity-30 shrink-0"
                         >
                             <svg
                                 width="16"

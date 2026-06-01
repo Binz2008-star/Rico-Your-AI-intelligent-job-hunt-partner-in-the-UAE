@@ -86,7 +86,7 @@ export function MobileCommandHeader({
         <>
             {/* Header bar */}
             <header
-                className="relative z-10 flex items-center px-3 py-2.5 border-b border-border-subtle bg-[#0a0a1a]/80 backdrop-blur-sm"
+                className="relative z-10 flex items-center px-3 py-2.5 border-b border-border-subtle bg-background/80 backdrop-blur-sm"
                 dir={isRTL ? "rtl" : "ltr"}
             >
                 {/* Left: hamburger */}
@@ -117,7 +117,7 @@ export function MobileCommandHeader({
                 <div className="absolute inset-x-0 flex justify-center pointer-events-none">
                     <Link
                         href="/"
-                        className="pointer-events-auto flex items-center gap-1.5 text-white font-black text-[15px] tracking-tight"
+                        className="pointer-events-auto flex items-center gap-1.5 text-text-primary font-black text-[15px] tracking-tight"
                         tabIndex={-1}
                     >
                         <div className="w-6 h-6 rounded-[7px] bg-[#f5a623] flex items-center justify-center text-[11px] font-black text-[#0a0a1a] shadow-[0_3px_10px_rgba(245,166,35,0.35)]">
@@ -162,7 +162,7 @@ export function MobileCommandHeader({
 
                                 {overflowOpen && (
                                     <div
-                                        className={`absolute top-10 ${isRTL ? "left-0" : "right-0"} z-50 w-48 rounded-xl border border-border-subtle bg-[#13132a]/95 backdrop-blur-md shadow-xl py-1`}
+                                        className={`absolute top-10 ${isRTL ? "left-0" : "right-0"} z-50 w-48 rounded-xl border border-border-subtle bg-surface-elevated/95 backdrop-blur-md shadow-xl py-1`}
                                         role="menu"
                                     >
                                         <button
@@ -251,7 +251,7 @@ export function MobileCommandHeader({
                 role="dialog"
                 aria-label={language === "ar" ? "القائمة الرئيسية" : "Main menu"}
                 aria-modal="true"
-                className={`fixed top-0 z-50 h-full w-72 max-w-[85vw] bg-[#0d0d1f] border-border-subtle flex flex-col shadow-2xl transition-transform duration-300 ease-out safe-top ${
+                className={`fixed top-0 z-50 h-full w-72 max-w-[85vw] bg-surface border-border-subtle flex flex-col shadow-2xl transition-transform duration-300 ease-out safe-top ${
                     isRTL
                         ? `left-0 border-e ${drawerOpen ? "translate-x-0" : "-translate-x-full"}`
                         : `left-0 border-r ${drawerOpen ? "translate-x-0" : "-translate-x-full"}`
@@ -263,7 +263,7 @@ export function MobileCommandHeader({
                     <Link
                         href="/"
                         onClick={() => setDrawerOpen(false)}
-                        className="flex items-center gap-2 text-white font-black text-[15px] tracking-tight"
+                        className="flex items-center gap-2 text-text-primary font-black text-[15px] tracking-tight"
                     >
                         <div className="w-6 h-6 rounded-[7px] bg-[#f5a623] flex items-center justify-center text-[11px] font-black text-[#0a0a1a]">
                             R

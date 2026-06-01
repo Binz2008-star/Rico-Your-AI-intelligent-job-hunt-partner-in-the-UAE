@@ -13,7 +13,7 @@ import { useCallback, useEffect, useState } from "react";
 
 function Tag({ label }: { label: string }) {
     return (
-        <span className="rounded-md bg-white/[0.06] px-2 py-0.5 text-xs text-rico-text-muted">
+        <span className="rounded-md bg-surface-glass px-2 py-0.5 text-xs text-rico-text-muted">
             {label}
         </span>
     );
@@ -99,7 +99,7 @@ function EditableNameField({
     if (!editing) {
         return (
             <span className="inline-flex items-center gap-2">
-                <span className="text-[#eeeef5]">{displayValue}</span>
+                <span className="text-text-primary">{displayValue}</span>
                 <button
                     type="button"
                     aria-label="Edit name"
@@ -126,7 +126,7 @@ function EditableNameField({
                 type="text"
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-[#eeeef5] outline-none transition focus:border-rico-accent"
+                className="w-full rounded-lg border border-border-soft bg-surface-glass px-3 py-2 text-sm text-text-primary outline-none transition focus:border-rico-accent"
                 placeholder="Enter your name"
                 disabled={saving}
             />
@@ -143,7 +143,7 @@ function EditableNameField({
                     type="button"
                     onClick={handleCancel}
                     disabled={saving}
-                    className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-rico-text-muted transition-colors hover:border-white/20 hover:text-[#eeeef5] disabled:opacity-60"
+                    className="rounded-lg border border-border-soft px-3 py-1.5 text-xs font-semibold text-rico-text-muted transition-colors hover:border-white/20 hover:text-text-primary disabled:opacity-60"
                 >
                     Cancel
                 </button>
@@ -197,7 +197,7 @@ function EditableTextField({
     if (!editing) {
         return (
             <>
-                <span className="text-[#eeeef5]">{displayValue}</span>
+                <span className="text-text-primary">{displayValue}</span>
                 <button
                     type="button"
                     aria-label={`Edit ${label}`}
@@ -224,7 +224,7 @@ function EditableTextField({
                 type="text"
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-[#eeeef5] outline-none transition focus:border-rico-accent"
+                className="w-full rounded-lg border border-border-soft bg-surface-glass px-3 py-2 text-sm text-text-primary outline-none transition focus:border-rico-accent"
                 placeholder={placeholder}
                 disabled={saving}
             />
@@ -241,7 +241,7 @@ function EditableTextField({
                     type="button"
                     onClick={handleCancel}
                     disabled={saving}
-                    className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-rico-text-muted transition-colors hover:border-white/20 hover:text-[#eeeef5] disabled:opacity-60"
+                    className="rounded-lg border border-border-soft px-3 py-1.5 text-xs font-semibold text-rico-text-muted transition-colors hover:border-white/20 hover:text-text-primary disabled:opacity-60"
                 >
                     Cancel
                 </button>
@@ -300,7 +300,7 @@ function ProfileDetail({
                         <EditableNameField value={profile.name} onSave={onSaveName} />
                     </Row>
                     <Row label="Email">
-                        <span className="text-[#eeeef5]">{profile.email ?? "—"}</span>
+                        <span className="text-text-primary">{profile.email ?? "—"}</span>
                     </Row>
                     <Row label="Phone">
                         <EditableTextField
