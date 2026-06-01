@@ -129,6 +129,16 @@ export function MobileCommandHeader({
 
                 {/* Right side — content depends on auth state */}
                 <div className="flex items-center gap-1 ms-auto" style={{ minWidth: 80, justifyContent: "flex-end" }}>
+                    {/* Language toggle — always visible */}
+                    <button
+                        type="button"
+                        onClick={() => setLanguage(language === "en" ? "ar" : "en")}
+                        aria-label={language === "ar" ? "Switch to English" : "التبديل إلى العربية"}
+                        className="h-7 px-2 rounded-md border border-border-subtle text-[11px] font-medium text-text-muted hover:text-white hover:border-border-strong transition-colors"
+                    >
+                        {language === "ar" ? "EN" : "AR"}
+                    </button>
+
                     {chatAudience === "authenticated" && (
                         <>
                             {/* New chat */}
