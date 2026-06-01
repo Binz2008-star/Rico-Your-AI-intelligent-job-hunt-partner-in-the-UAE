@@ -22,6 +22,7 @@ Run:
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import logging
 import os
@@ -72,6 +73,8 @@ from src.job_history import add_jobs_to_history, load_job_history
 from src.apply_assistant import run_apply_assistant
 from src.db import init_db, save_job, is_db_available, get_top_jobs
 from src.repositories.subscription_repo import expire_stale_subscriptions
+from src.repositories.profile_repo import get_users_with_telegram_alerts
+from src.telegram_bot import send_telegram_to_user, format_telegram_jobs
 from src.profile import get_candidate_profile, get_target_roles
 from src.applications import get_applied_jobs, get_applied_jobs_count
 from src.decision_engine import JobDecisionEngine, generate_decision_insights
@@ -141,6 +144,64 @@ def _init_db() -> None:
     else:
         logger.warning("db_init_failed json_fallback_active")
         db_errors.labels(step="init").inc()
+
+
+def _notify_users_via_telegram(matches: list) -> None:
+    """Send today's top job matches to every user who has messaged the Rico bot.
+
+    Each user whose Telegram chat_id is recorded in the DB receives the same
+    curated top-match list that the pipeline owner already gets via the legacy
+    TELEGRAM_CHAT_ID env-var path.  Per-user role-filtered scoring is Phase 2.
+
+    Failures for individual users are logged and swallowed — one bad send must
+    not abort the remaining recipients or the pipeline.
+    """
+    if not matches:
+        logger.info("telegram_user_alerts_skipped reason=no_matches")
+        return
+
+    try:
+        users = get_users_with_telegram_alerts()
+    except Exception:
+        logger.exception("telegram_user_alerts_skipped reason=roster_fetch_failed")
+        return
+
+    if not users:
+        logger.info("telegram_user_alerts_skipped reason=no_opted_in_users")
+        return
+
+    try:
+        alert_body = format_telegram_jobs(matches)
+    except Exception:
+        logger.exception("telegram_user_alerts_skipped reason=format_failed")
+        return
+
+    sent = 0
+    for user in users:
+        chat_id = user.get("telegram_chat_id", "")
+        if not chat_id:
+            continue
+        name = user.get("name") or "there"
+        greeting = f"👋 Hi <b>{html.escape(name)}</b>! Here are today's top job matches:\n\n"
+        try:
+            ok = send_telegram_to_user(chat_id, greeting + alert_body)
+            if ok:
+                sent += 1
+                logger.info(
+                    "telegram_user_alert_sent user=%s chat_id=%s",
+                    user.get("external_user_id"), chat_id,
+                )
+            else:
+                logger.warning(
+                    "telegram_user_alert_failed user=%s chat_id=%s",
+                    user.get("external_user_id"), chat_id,
+                )
+        except Exception:
+            logger.exception(
+                "telegram_user_alert_error user=%s", user.get("external_user_id")
+            )
+
+    logger.info("telegram_user_alerts_complete sent=%d total=%d", sent, len(users))
 
 
 def _expire_subscriptions() -> None:
@@ -685,6 +746,7 @@ def run_pipeline() -> int:
         # Continue even if no matches
         _persist_history(all_scored)
         _notify(matches)
+        _notify_users_via_telegram(matches)
         _apply_assistant(matches)
         _auto_apply_naukrigulf(matches)
         _update_learning_repo(matches)

@@ -37,7 +37,7 @@ _SETTINGS_FIELDS = {f.name for f in fields(RicoAgentSettings)}
 
 # Fields that belong in the main user table (vs profile JSONB)
 _USER_TABLE_FIELDS = {
-    "external_user_id", "name", "email", "phone", "telegram_username"
+    "external_user_id", "name", "email", "phone", "telegram_username", "telegram_chat_id"
 }
 
 # Fields that go into profile JSONB
@@ -235,6 +235,7 @@ def upsert_profile(user_id: str, updates: dict[str, Any]) -> RicoProfile:
                 "email": filtered_updates.get("email"),
                 "phone": filtered_updates.get("phone"),
                 "telegram_username": filtered_updates.get("telegram_username"),
+                "telegram_chat_id": filtered_updates.get("telegram_chat_id"),
             }
             user_payload = {k: v for k, v in user_payload.items() if v is not None}
             logger.info("profile_repo.upsert_profile: user_id=%s user_payload=%s", user_id, user_payload)
@@ -800,6 +801,46 @@ def find_identity_candidates(signal: IdentitySignal) -> list[Any]:
             candidates_by_id[p.user_id] = p
 
     return list(candidates_by_id.values())
+
+
+# ============================================================================
+# Telegram alert roster
+# ============================================================================
+
+def get_users_with_telegram_alerts() -> list[dict[str, Any]]:
+    """Return all users who have opted in to Telegram job alerts.
+
+    A user is considered opted-in when they have a numeric telegram_chat_id
+    stored — that ID is captured the first time they message the Rico bot.
+    Returns a list of plain dicts with keys: external_user_id, name,
+    telegram_chat_id, telegram_username.  Returns [] on DB unavailability.
+    """
+    db = _db()
+    if not db:
+        return []
+    try:
+        conn = db.connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT external_user_id,
+                           name,
+                           telegram_chat_id,
+                           telegram_username
+                      FROM rico_users
+                     WHERE telegram_chat_id IS NOT NULL
+                       AND telegram_chat_id <> ''
+                     ORDER BY updated_at DESC
+                    """
+                )
+                cols = [d[0] for d in cur.description]
+                return [dict(zip(cols, row)) for row in cur.fetchall()]
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("profile_repo: get_users_with_telegram_alerts failed")
+        return []
 
 
 # ============================================================================
