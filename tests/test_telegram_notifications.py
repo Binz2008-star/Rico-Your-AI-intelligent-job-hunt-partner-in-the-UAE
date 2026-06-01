@@ -1,253 +1,337 @@
-"""Tests for per-user Telegram job alert notifications."""
+"""tests/test_telegram_notifications.py
+
+Tests for the Telegram notifications workflow (JOB-55):
+  - /start command binds chat_id and enables notifications
+  - /start with unknown @username creates a record under the chat_id user_id
+  - /stop command disables notifications
+  - send_job_alerts sends cards, records to log, returns count
+  - Duplicate guard: already-logged job is skipped
+  - Daily rate cap: stops after MAX_ALERTS_PER_DAY
+  - send_followup_reminder sends correctly-formatted reminder
+  - broadcast_job_alerts_to_subscribed_users iterates subscribed users
+  - Safe failure: Telegram API error → logged, returns 0, does not raise
+"""
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch, call
+import os
+import sys
+from unittest.mock import MagicMock, call, patch
+
 import pytest
 
-
-# ---------------------------------------------------------------------------
-# send_telegram_to_user
-# ---------------------------------------------------------------------------
-
-class TestSendTelegramToUser:
-
-    def test_sends_to_explicit_chat_id(self):
-        from src.telegram_bot import send_telegram_to_user
-
-        with patch("src.telegram_bot.requests.post") as mock_post, \
-             patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "tok123"}):
-            mock_post.return_value = MagicMock(status_code=200)
-            mock_post.return_value.raise_for_status = MagicMock()
-
-            result = send_telegram_to_user("987654321", "Hello!")
-
-        assert result is True
-        payload = mock_post.call_args[1]["json"]
-        assert payload["chat_id"] == "987654321"
-        assert payload["text"] == "Hello!"
-
-    def test_returns_false_when_no_bot_token(self):
-        from src.telegram_bot import send_telegram_to_user
-
-        with patch.dict("os.environ", {}, clear=True):
-            result = send_telegram_to_user("987654321", "Hello!")
-
-        assert result is False
-
-    def test_returns_false_when_no_chat_id(self):
-        from src.telegram_bot import send_telegram_to_user
-
-        with patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "tok123"}):
-            result = send_telegram_to_user("", "Hello!")
-
-        assert result is False
-
-    def test_truncates_long_message(self):
-        from src.telegram_bot import send_telegram_to_user
-
-        long_msg = "x" * 5000
-        with patch("src.telegram_bot.requests.post") as mock_post, \
-             patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "tok123"}):
-            mock_post.return_value = MagicMock(status_code=200)
-            mock_post.return_value.raise_for_status = MagicMock()
-            send_telegram_to_user("123", long_msg)
-
-        sent_text = mock_post.call_args[1]["json"]["text"]
-        assert len(sent_text) <= 4096
-
-    def test_returns_false_on_request_error(self):
-        from src.telegram_bot import send_telegram_to_user
-        import requests as req
-
-        with patch("src.telegram_bot.requests.post", side_effect=req.exceptions.ConnectionError("fail")), \
-             patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "tok123"}):
-            result = send_telegram_to_user("123", "msg")
-
-        assert result is False
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
 # ---------------------------------------------------------------------------
-# get_users_with_telegram_alerts
+# Helpers
 # ---------------------------------------------------------------------------
 
-class TestGetUsersWithTelegramAlerts:
+def _make_telegram_update(text: str, chat_id: int = 111, username: str = "Robin_amg") -> dict:
+    return {
+        "message": {
+            "chat": {"id": chat_id},
+            "from": {"id": chat_id, "username": username},
+            "text": text,
+        }
+    }
 
-    def _mock_db(self, rows):
-        mock_cur = MagicMock()
-        mock_cur.description = [("external_user_id",), ("name",), ("telegram_chat_id",), ("telegram_username",)]
-        mock_cur.fetchall.return_value = rows
-        mock_cur.__enter__ = lambda s: s
-        mock_cur.__exit__ = MagicMock(return_value=False)
 
-        mock_conn = MagicMock()
-        mock_conn.cursor.return_value = mock_cur
-
-        mock_db_inst = MagicMock()
-        mock_db_inst.connect.return_value = mock_conn
-        return mock_db_inst
-
-    def test_returns_users_with_chat_id(self):
-        from src.repositories.profile_repo import get_users_with_telegram_alerts
-
-        rows = [("user@example.com", "Robin", "123456789", "@Robin_amg")]
-        mock_db = self._mock_db(rows)
-
-        with patch("src.repositories.profile_repo._db", return_value=mock_db):
-            result = get_users_with_telegram_alerts()
-
-        assert len(result) == 1
-        assert result[0]["telegram_chat_id"] == "123456789"
-        assert result[0]["telegram_username"] == "@Robin_amg"
-
-    def test_returns_empty_when_db_unavailable(self):
-        from src.repositories.profile_repo import get_users_with_telegram_alerts
-
-        with patch("src.repositories.profile_repo._db", return_value=None):
-            result = get_users_with_telegram_alerts()
-
-        assert result == []
-
-    def test_returns_empty_on_exception(self):
-        from src.repositories.profile_repo import get_users_with_telegram_alerts
-
-        with patch("src.repositories.profile_repo._db", side_effect=Exception("boom")):
-            result = get_users_with_telegram_alerts()
-
-        assert result == []
+def _sample_jobs(n: int = 3) -> list[dict]:
+    return [
+        {
+            "title": f"HSE Manager {i}",
+            "company": f"AcmeCorp {i}",
+            "location": "Dubai, UAE",
+            "salary": "AED 20,000",
+            "score": 85 - i,
+            "apply_url": f"https://example.com/job/{i}",
+        }
+        for i in range(1, n + 1)
+    ]
 
 
 # ---------------------------------------------------------------------------
-# _persist_telegram_identity (webhook)
+# /start command
 # ---------------------------------------------------------------------------
 
-class TestPersistTelegramIdentity:
+class TestStartCommand:
+    def test_start_binds_chat_id_for_known_username(self):
+        """If @username matches an existing user, bind chat_id to that user."""
+        from src.rico_telegram_webhook import _handle_start
 
-    def test_saves_chat_id_to_profile(self):
-        from src.rico_telegram_webhook import _persist_telegram_identity
+        profile = MagicMock()
+        profile.user_id = "user-abc"
+
+        with patch("src.rico_telegram_webhook.find_profiles_by_telegram_username", return_value=[profile]) as mock_find, \
+             patch("src.rico_telegram_webhook.upsert_profile") as mock_upsert:
+            result = _handle_start(
+                {"chat": {"id": 12345}, "from": {"id": 12345, "username": "Robin_amg"}}
+            )
+
+        mock_find.assert_called_once_with("robin_amg")
+        mock_upsert.assert_called_once()
+        call_kwargs = mock_upsert.call_args
+        assert call_kwargs[0][0] == "user-abc"
+        updates = call_kwargs[0][1]
+        assert updates["telegram_chat_id"] == "12345"
+        assert updates["telegram_notifications_enabled"] is True
+        assert result["chat_id"] == "12345"
+        assert "/stop" in result["reply"]
+
+    def test_start_uses_chat_id_as_user_id_when_no_match(self):
+        """Unknown @username → fall back to chat_id as Rico user_id."""
+        from src.rico_telegram_webhook import _handle_start
+
+        with patch("src.rico_telegram_webhook.find_profiles_by_telegram_username", return_value=[]), \
+             patch("src.rico_telegram_webhook.upsert_profile") as mock_upsert:
+            result = _handle_start(
+                {"chat": {"id": 99999}, "from": {"id": 99999, "username": "unknown_user"}}
+            )
+
+        call_kwargs = mock_upsert.call_args
+        # user_id should be the chat_id string
+        assert call_kwargs[0][0] == "99999"
+        assert call_kwargs[0][1]["telegram_chat_id"] == "99999"
+        assert result["chat_id"] == "99999"
+
+    def test_start_without_username(self):
+        """Message without username still binds chat_id to the chat_id user."""
+        from src.rico_telegram_webhook import _handle_start
+
+        with patch("src.rico_telegram_webhook.find_profiles_by_telegram_username", return_value=[]), \
+             patch("src.rico_telegram_webhook.upsert_profile") as mock_upsert:
+            result = _handle_start({"chat": {"id": 55555}, "from": {}})
+
+        mock_upsert.assert_called_once()
+        assert result["chat_id"] == "55555"
+
+    def test_start_upsert_failure_does_not_raise(self):
+        """DB failure on /start is logged but not raised."""
+        from src.rico_telegram_webhook import _handle_start
+
+        with patch("src.rico_telegram_webhook.find_profiles_by_telegram_username", return_value=[]), \
+             patch("src.rico_telegram_webhook.upsert_profile", side_effect=Exception("DB down")):
+            result = _handle_start({"chat": {"id": 77777}, "from": {"username": "testuser"}})
+
+        # Should still return a response dict
+        assert "chat_id" in result
+
+
+# ---------------------------------------------------------------------------
+# /stop command
+# ---------------------------------------------------------------------------
+
+class TestStopCommand:
+    def test_stop_disables_notifications(self):
+        """Sending /stop sets telegram_notifications_enabled=False."""
+        from src.rico_telegram_webhook import _handle_stop
 
         with patch("src.rico_telegram_webhook.upsert_profile") as mock_upsert:
-            # Need to patch the import inside the function
-            pass
+            result = _handle_stop({"chat": {"id": 12345}, "from": {"id": 12345}})
 
-        with patch("src.repositories.profile_repo.upsert_profile") as mock_up:
-            _persist_telegram_identity("123456789", {"username": "Robin_amg"})
-            # Import happens inside function — patch at module level
-        # Just verify no exception raised — import patching is complex; covered by integration
+        mock_upsert.assert_called_once_with("12345", {"telegram_notifications_enabled": False})
+        assert "/start" in result["reply"]
+        assert result["chat_id"] == "12345"
 
-    def test_saves_username_with_at_prefix(self):
-        from src.rico_telegram_webhook import _persist_telegram_identity
+    def test_stop_failure_does_not_raise(self):
+        from src.rico_telegram_webhook import _handle_stop
 
-        captured = {}
-        def fake_upsert(user_id, updates):
-            captured.update({"user_id": user_id, "updates": updates})
-            return MagicMock()
+        with patch("src.rico_telegram_webhook.upsert_profile", side_effect=Exception("DB down")):
+            result = _handle_stop({"chat": {"id": 12345}, "from": {}})
 
-        with patch("src.repositories.profile_repo.upsert_profile", side_effect=fake_upsert):
-            # Patch the function-level import by patching at the source
-            import src.repositories.profile_repo as pr
-            original = pr.upsert_profile
-            pr.upsert_profile = fake_upsert
-            try:
-                _persist_telegram_identity("123456789", {"username": "Robin_amg"})
-            finally:
-                pr.upsert_profile = original
-
-        assert captured.get("updates", {}).get("telegram_username") == "@Robin_amg"
-        assert captured.get("updates", {}).get("telegram_chat_id") == "123456789"
-
-    def test_does_not_raise_on_upsert_failure(self):
-        from src.rico_telegram_webhook import _persist_telegram_identity
-
-        import src.repositories.profile_repo as pr
-        original = pr.upsert_profile
-        pr.upsert_profile = MagicMock(side_effect=Exception("DB down"))
-        try:
-            _persist_telegram_identity("123", {})  # must not raise
-        finally:
-            pr.upsert_profile = original
+        assert "chat_id" in result
 
 
 # ---------------------------------------------------------------------------
-# _notify_users_via_telegram (run_daily)
+# Webhook routing
 # ---------------------------------------------------------------------------
 
-class TestNotifyUsersViaTelegram:
+class TestWebhookRouting:
+    def test_start_command_routed_before_chat(self):
+        """process_telegram_update must call _handle_start for /start."""
+        from src.rico_telegram_webhook import process_telegram_update
 
-    def test_sends_to_each_opted_in_user(self):
-        from src.run_daily import _notify_users_via_telegram
+        with patch("src.rico_telegram_webhook._handle_start") as mock_start:
+            mock_start.return_value = {"chat_id": "1", "reply": "ok"}
+            process_telegram_update(_make_telegram_update("/start"))
 
-        users = [
-            {"external_user_id": "u1", "name": "Robin", "telegram_chat_id": "111"},
-            {"external_user_id": "u2", "name": "Sara",  "telegram_chat_id": "222"},
-        ]
-        fake_matches = [{"title": "HSE Manager", "company": "ADNOC", "apply_url": "https://example.com"}, 50]
+        mock_start.assert_called_once()
 
-        with patch("src.run_daily.get_users_with_telegram_alerts", return_value=users), \
-             patch("src.run_daily.format_telegram_jobs", return_value="formatted jobs"), \
-             patch("src.run_daily.send_telegram_to_user", return_value=True) as mock_send:
+    def test_stop_command_routed_before_chat(self):
+        from src.rico_telegram_webhook import process_telegram_update
 
-            _notify_users_via_telegram([fake_matches])
+        with patch("src.rico_telegram_webhook._handle_stop") as mock_stop:
+            mock_stop.return_value = {"chat_id": "1", "reply": "ok"}
+            process_telegram_update(_make_telegram_update("/stop"))
 
-        assert mock_send.call_count == 2
-        sent_chat_ids = {c[0][0] for c in mock_send.call_args_list}
-        assert "111" in sent_chat_ids
-        assert "222" in sent_chat_ids
+        mock_stop.assert_called_once()
 
-    def test_skips_when_no_matches(self):
-        from src.run_daily import _notify_users_via_telegram
+    def test_regular_message_goes_to_chat_api(self):
+        from src.rico_telegram_webhook import process_telegram_update
 
-        with patch("src.run_daily.get_users_with_telegram_alerts") as mock_roster, \
-             patch("src.run_daily.send_telegram_to_user") as mock_send:
+        with patch("src.rico_telegram_webhook.chat_api") as mock_api:
+            mock_api.process_message.return_value = {"message": "hi"}
+            process_telegram_update(_make_telegram_update("find me jobs in Dubai"))
 
-            _notify_users_via_telegram([])
+        mock_api.process_message.assert_called_once()
 
-        mock_roster.assert_not_called()
+
+# ---------------------------------------------------------------------------
+# send_job_alerts
+# ---------------------------------------------------------------------------
+
+class TestSendJobAlerts:
+    def _mock_db(self, *, sent_today: int = 0, already_sent: bool = False):
+        db = MagicMock()
+        db.available = True
+        db.count_alerts_today.return_value = sent_today
+        db.was_alert_sent.return_value = already_sent
+        db.log_telegram_alert.return_value = True
+        return db
+
+    def test_sends_jobs_and_returns_count(self):
+        from src.services.telegram_alert_service import send_job_alerts
+
+        db = self._mock_db()
+        jobs = _sample_jobs(3)
+
+        with patch("src.services.telegram_alert_service.RicoDB", return_value=db), \
+             patch("src.services.telegram_alert_service._send_message", return_value=True) as mock_send:
+            count = send_job_alerts("user1", "chat123", jobs)
+
+        assert count == 3
+        assert mock_send.call_count == 3
+        assert db.log_telegram_alert.call_count == 3
+
+    def test_duplicate_guard_skips_already_sent(self):
+        """Jobs already logged in telegram_alert_log are skipped."""
+        from src.services.telegram_alert_service import send_job_alerts
+
+        db = self._mock_db(already_sent=True)
+        jobs = _sample_jobs(2)
+
+        with patch("src.services.telegram_alert_service.RicoDB", return_value=db), \
+             patch("src.services.telegram_alert_service._send_message", return_value=True) as mock_send:
+            count = send_job_alerts("user1", "chat123", jobs)
+
+        assert count == 0
         mock_send.assert_not_called()
 
-    def test_skips_when_no_opted_in_users(self):
-        from src.run_daily import _notify_users_via_telegram
+    def test_daily_rate_cap_stops_early(self):
+        """Stops after MAX_ALERTS_PER_DAY regardless of job list length."""
+        from src.services.telegram_alert_service import MAX_ALERTS_PER_DAY, send_job_alerts
 
-        with patch("src.run_daily.get_users_with_telegram_alerts", return_value=[]), \
-             patch("src.run_daily.send_telegram_to_user") as mock_send:
+        db = self._mock_db(sent_today=MAX_ALERTS_PER_DAY)
+        jobs = _sample_jobs(5)
 
-            _notify_users_via_telegram([{"title": "job"}])
+        with patch("src.services.telegram_alert_service.RicoDB", return_value=db), \
+             patch("src.services.telegram_alert_service._send_message") as mock_send:
+            count = send_job_alerts("user1", "chat123", jobs)
 
+        assert count == 0
         mock_send.assert_not_called()
 
-    def test_continues_after_individual_send_failure(self):
-        from src.run_daily import _notify_users_via_telegram
+    def test_dry_run_counts_eligibles_without_sending(self):
+        from src.services.telegram_alert_service import send_job_alerts
 
-        users = [
-            {"external_user_id": "u1", "name": "A", "telegram_chat_id": "111"},
-            {"external_user_id": "u2", "name": "B", "telegram_chat_id": "222"},
+        db = self._mock_db()
+        jobs = _sample_jobs(3)
+
+        with patch("src.services.telegram_alert_service.RicoDB", return_value=db), \
+             patch("src.services.telegram_alert_service._send_message") as mock_send:
+            count = send_job_alerts("user1", "chat123", jobs, dry_run=True)
+
+        assert count == 3
+        mock_send.assert_not_called()
+        db.log_telegram_alert.assert_not_called()
+
+    def test_telegram_api_error_returns_zero_does_not_raise(self):
+        from src.services.telegram_alert_service import send_job_alerts
+
+        db = self._mock_db()
+        jobs = _sample_jobs(2)
+
+        with patch("src.services.telegram_alert_service.RicoDB", return_value=db), \
+             patch("src.services.telegram_alert_service._send_message", return_value=False):
+            count = send_job_alerts("user1", "chat123", jobs)
+
+        assert count == 0  # sends failed → nothing counted
+
+    def test_empty_job_list_returns_zero(self):
+        from src.services.telegram_alert_service import send_job_alerts
+
+        with patch("src.services.telegram_alert_service.RicoDB"):
+            count = send_job_alerts("user1", "chat123", [])
+
+        assert count == 0
+
+    def test_missing_chat_id_returns_zero(self):
+        from src.services.telegram_alert_service import send_job_alerts
+
+        with patch("src.services.telegram_alert_service.RicoDB"):
+            count = send_job_alerts("user1", "", _sample_jobs(2))
+
+        assert count == 0
+
+
+# ---------------------------------------------------------------------------
+# send_followup_reminder
+# ---------------------------------------------------------------------------
+
+class TestFollowupReminder:
+    def test_sends_formatted_reminder(self):
+        from src.services.telegram_alert_service import send_followup_reminder
+
+        with patch("src.services.telegram_alert_service._send_message", return_value=True) as mock_send:
+            result = send_followup_reminder("chat123", "HSE Manager", "AcmeCorp", days_ago=3)
+
+        assert result is True
+        text = mock_send.call_args[0][1]
+        assert "HSE Manager" in text
+        assert "AcmeCorp" in text
+        assert "3 days ago" in text
+
+    def test_followup_api_failure_returns_false(self):
+        from src.services.telegram_alert_service import send_followup_reminder
+
+        with patch("src.services.telegram_alert_service._send_message", return_value=False):
+            result = send_followup_reminder("chat123", "Developer", "Corp")
+
+        assert result is False
+
+
+# ---------------------------------------------------------------------------
+# broadcast_job_alerts_to_subscribed_users
+# ---------------------------------------------------------------------------
+
+class TestBroadcast:
+    def test_iterates_subscribed_users(self):
+        from src.services.telegram_alert_service import broadcast_job_alerts_to_subscribed_users
+
+        mock_db = MagicMock()
+        mock_db.available = True
+        mock_db.get_users_with_active_telegram_notifications.return_value = [
+            {"external_user_id": "user1", "telegram_chat_id": "chat1"},
+            {"external_user_id": "user2", "telegram_chat_id": "chat2"},
         ]
 
-        def fail_first(chat_id, msg):
-            if chat_id == "111":
-                raise RuntimeError("network error")
-            return True
+        jobs = _sample_jobs(2)
 
-        with patch("src.run_daily.get_users_with_telegram_alerts", return_value=users), \
-             patch("src.run_daily.format_telegram_jobs", return_value="jobs"), \
-             patch("src.run_daily.send_telegram_to_user", side_effect=fail_first):
+        with patch("src.services.telegram_alert_service.RicoDB", return_value=mock_db), \
+             patch("src.services.telegram_alert_service.send_job_alerts", return_value=2) as mock_alerts:
+            result = broadcast_job_alerts_to_subscribed_users(jobs)
 
-            _notify_users_via_telegram([{"title": "job"}])  # must not raise
+        assert result["users"] == 2
+        assert result["total_sent"] == 4  # 2 users × 2 each
+        assert mock_alerts.call_count == 2
 
-    def test_greeting_includes_user_name(self):
-        from src.run_daily import _notify_users_via_telegram
+    def test_db_unavailable_returns_empty(self):
+        from src.services.telegram_alert_service import broadcast_job_alerts_to_subscribed_users
 
-        users = [{"external_user_id": "u1", "name": "Robin", "telegram_chat_id": "111"}]
-        captured_msgs = []
+        mock_db = MagicMock()
+        mock_db.available = False
 
-        def capture(chat_id, msg):
-            captured_msgs.append(msg)
-            return True
+        with patch("src.services.telegram_alert_service.RicoDB", return_value=mock_db):
+            result = broadcast_job_alerts_to_subscribed_users(_sample_jobs(2))
 
-        with patch("src.run_daily.get_users_with_telegram_alerts", return_value=users), \
-             patch("src.run_daily.format_telegram_jobs", return_value="job list"), \
-             patch("src.run_daily.send_telegram_to_user", side_effect=capture):
-
-            _notify_users_via_telegram([{"title": "job"}])
-
-        assert "Robin" in captured_msgs[0]
-        assert "job list" in captured_msgs[0]
+        assert result == {"users": 0, "total_sent": 0}

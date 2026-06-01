@@ -37,7 +37,8 @@ _SETTINGS_FIELDS = {f.name for f in fields(RicoAgentSettings)}
 
 # Fields that belong in the main user table (vs profile JSONB)
 _USER_TABLE_FIELDS = {
-    "external_user_id", "name", "email", "phone", "telegram_username", "telegram_chat_id"
+    "external_user_id", "name", "email", "phone",
+    "telegram_username", "telegram_chat_id", "telegram_notifications_enabled",
 }
 
 # Fields that go into profile JSONB
@@ -232,9 +233,7 @@ def upsert_profile(user_id: str, updates: dict[str, Any]) -> RicoProfile:
                 return profile
 
             # 1. Upsert user record
-            # telegram_chat_id is not a RicoProfile/Settings field so it is read
-            # directly from the raw updates dict before filtering.
-            user_payload = {
+            user_payload: dict = {
                 "external_user_id": user_id,
                 "name": filtered_updates.get("name"),
                 "email": filtered_updates.get("email"),
@@ -242,6 +241,9 @@ def upsert_profile(user_id: str, updates: dict[str, Any]) -> RicoProfile:
                 "telegram_username": filtered_updates.get("telegram_username") or updates.get("telegram_username"),
                 "telegram_chat_id": filtered_updates.get("telegram_chat_id") or updates.get("telegram_chat_id"),
             }
+            # telegram_notifications_enabled is boolean — keep explicit False
+            if "telegram_notifications_enabled" in filtered_updates:
+                user_payload["telegram_notifications_enabled"] = filtered_updates["telegram_notifications_enabled"]
             user_payload = {k: v for k, v in user_payload.items() if v is not None}
             logger.info("profile_repo.upsert_profile: user_id=%s user_payload=%s", user_id, user_payload)
             user_row = db.upsert_user(user_payload, conn=conn)
