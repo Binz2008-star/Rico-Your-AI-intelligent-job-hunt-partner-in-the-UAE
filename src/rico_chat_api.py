@@ -1717,6 +1717,29 @@ class RicoChatAPI:
                 deduped.append(m)
         all_matches = deduped
 
+        # Per-user relevance scoring: replace the flat default-50 set in
+        # _search_jsearch_meta with a score derived from the user's actual profile.
+        try:
+            from src.services.relevance_scoring import score_relevance as _score_rel
+            _scoring_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            _scoring_skills = self._as_list(self._profile_value(profile, "skills"))
+            _scoring_cities = self._as_list(self._profile_value(profile, "preferred_cities"))
+            # Include the explicitly requested role even if not saved in profile yet.
+            if search_role and search_role.lower() not in {str(r).lower() for r in _scoring_roles}:
+                _scoring_roles = [search_role] + list(_scoring_roles)
+            for m in all_matches:
+                m["score"] = _score_rel(m, _scoring_roles, _scoring_skills, _scoring_cities)
+        except Exception:
+            pass
+
+        # Relevance floor: drop clearly off-target results when we have enough
+        # candidates (avoids showing completely unrelated jobs just to fill 5 slots).
+        _RELEVANCE_FLOOR = 25
+        if len(all_matches) > 3:
+            above_floor = [m for m in all_matches if m.get("score", 0) >= _RELEVANCE_FLOOR]
+            if above_floor:
+                all_matches = above_floor
+
         # Quality-sort: surface live/verified sources before aggregators/dead links.
         _QUALITY_RANK: dict[str, int] = {
             "live_verified": 0,
@@ -1737,6 +1760,23 @@ class RicoChatAPI:
                 return _QUALITY_RANK.get(status, 1)
 
             all_matches.sort(key=_quality_key)
+        except Exception:
+            pass
+
+        # Aggregator filter: hide untrusted aggregators when verified/direct
+        # sources exist. "Fewer but stronger" — show best-of-weak only when
+        # no better options remain.
+        try:
+            from src.services.source_quality import classify_url as _cq2, is_google_intermediary as _igi2
+            _TRUSTED_STATUSES = {"live_verified", "needs_source_verification", "login_required"}
+
+            def _match_source_quality(m: dict[str, Any]) -> str:
+                url = str(m.get("job_apply_link") or m.get("apply_link") or m.get("link") or "")
+                return "google_intermediary" if _igi2(url) else _cq2(url)
+
+            trusted = [m for m in all_matches if _match_source_quality(m) in _TRUSTED_STATUSES]
+            if len(trusted) >= 2:
+                all_matches = trusted
         except Exception:
             pass
 
