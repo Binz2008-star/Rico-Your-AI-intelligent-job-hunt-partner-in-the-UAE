@@ -175,7 +175,7 @@ export function MobileCommandHeader({
                                             {language === "ar" ? "مسح المحادثة" : "Clear chat"}
                                         </button>
                                         <Link
-                                            href="/command/history"
+                                            href="/archive"
                                             role="menuitem"
                                             onClick={() => setOverflowOpen(false)}
                                             className="flex w-full items-center gap-2.5 px-4 py-2.5 text-[13px] text-text-muted hover:text-white hover:bg-surface/60 transition-colors"
