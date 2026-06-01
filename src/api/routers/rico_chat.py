@@ -1053,11 +1053,11 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
     if body.skills is not None:
         updates["skills"] = [s.strip() for s in body.skills if s.strip()]
 
-    # When the user explicitly sets target_roles via this endpoint, mark the
-    # normalization version as current so get_profile does not re-normalize and
-    # overwrite their choice on the next read. Do NOT call normalize_profile_updates
-    # here — the user's explicit input must be saved exactly as typed.
-    if "target_roles" in updates:
+    # When the user explicitly sets target_roles or skills, bump normalization_version
+    # to the current version so get_profile does not re-normalize and silently mutate
+    # adjacent fields (e.g. a skills save triggering normalization that changes
+    # target_roles). Do NOT call normalize_profile_updates — user input is saved as-is.
+    if "target_roles" in updates or "skills" in updates:
         from src.role_normalization import NORMALIZATION_VERSION
         updates["normalization_version"] = NORMALIZATION_VERSION
 

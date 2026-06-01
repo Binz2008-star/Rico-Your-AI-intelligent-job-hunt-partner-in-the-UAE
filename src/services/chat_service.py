@@ -654,7 +654,11 @@ def get_chat_history(user_id: str, limit: int = 50, before: datetime | None = No
     db_uid = _resolve_db_user_id(user_id)
     if db_uid:
         db_rows = _db_get_chat_history(db_uid, limit=limit, before=before)
-        if db_rows is not None:
+        # Truthy check: only use DB result when it actually has rows. An empty
+        # list (DB query succeeded but 0 rows) falls through to the JSON memory
+        # fallback so that history written before DB persistence was active is
+        # still visible on refresh.
+        if db_rows:
             return db_rows
 
     # --- Fallback: local JSON memory ---
