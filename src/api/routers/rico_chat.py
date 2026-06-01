@@ -1053,9 +1053,13 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
     if body.skills is not None:
         updates["skills"] = [s.strip() for s in body.skills if s.strip()]
 
-    # Normalize target roles to prevent broad standalone roles (Engineer, Manager, etc.)
-    from src.role_normalization import normalize_profile_updates
-    updates = normalize_profile_updates(updates)
+    # When the user explicitly sets target_roles via this endpoint, mark the
+    # normalization version as current so get_profile does not re-normalize and
+    # overwrite their choice on the next read. Do NOT call normalize_profile_updates
+    # here — the user's explicit input must be saved exactly as typed.
+    if "target_roles" in updates:
+        from src.role_normalization import NORMALIZATION_VERSION
+        updates["normalization_version"] = NORMALIZATION_VERSION
 
     logger.info("update_profile endpoint: user_id=%s updates=%s", user_id, updates)
 
