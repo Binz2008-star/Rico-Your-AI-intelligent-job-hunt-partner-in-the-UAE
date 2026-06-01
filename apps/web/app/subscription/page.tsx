@@ -117,8 +117,8 @@ function PlanCard({
         <div
             className={`relative flex flex-col rounded-2xl border p-6 backdrop-blur-md overflow-hidden transition-all ${
                 plan.is_popular
-                    ? "border-[rgba(255,45,142,0.4)] bg-[#13132a]/60 shadow-[0_0_40px_rgba(255,45,142,0.08)]"
-                    : "border-white/[0.06] bg-[#13132a]/40"
+                    ? "border-[rgba(255,45,142,0.4)] bg-surface-elevated/60 shadow-[0_0_40px_rgba(255,45,142,0.08)]"
+                    : "border-border-subtle bg-surface-elevated/40"
             }`}
         >
             {/* Glow */}
@@ -147,26 +147,26 @@ function PlanCard({
             )}
 
             <div className={isCurrent ? "mt-8" : plan.is_popular ? "mt-6" : "mt-0"}>
-                <h2 className="text-[22px] font-bold text-white font-['Cabinet_Grotesk',sans-serif]">
+                <h2 className="text-[22px] font-bold text-text-primary font-['Cabinet_Grotesk',sans-serif]">
                     {plan.name}
                 </h2>
                 {plan.description && (
-                    <p className="mt-1 text-[13px] text-[#8080a0]">{plan.description}</p>
+                    <p className="mt-1 text-[13px] text-text-secondary">{plan.description}</p>
                 )}
             </div>
 
             <div className="mt-5 flex items-baseline gap-1">
-                <span className="text-[38px] font-black text-white leading-none">
+                <span className="text-[38px] font-black text-text-primary leading-none">
                     {plan.price_monthly}
                 </span>
-                <span className="text-[13px] text-[#5a5a7a] font-medium">
+                <span className="text-[13px] text-text-tertiary font-medium">
                     {plan.currency}/mo
                 </span>
             </div>
 
             <ul className="mt-6 flex flex-col gap-2.5 flex-1">
                 {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2.5 text-[13px] text-[#c0c0d8]">
+                    <li key={feature} className="flex items-start gap-2.5 text-[13px] text-text-secondary">
                         <span
                             className={`mt-0.5 w-4 h-4 flex-shrink-0 rounded-full flex items-center justify-center text-[10px] font-black ${
                                 isProPlan
@@ -191,7 +191,7 @@ function PlanCard({
                         {t('temporarilyUnavailable')}
                     </button>
                 ) : subLoading && isLoggedIn ? (
-                    <div className="w-full py-3 rounded-xl bg-white/[0.04] border border-white/[0.06] animate-pulse h-[44px]" />
+                    <div className="w-full py-3 rounded-xl bg-surface-glass border border-border-subtle animate-pulse h-[44px]" />
                 ) : isCurrent ? (
                     <button
                         onClick={onManage}
@@ -200,7 +200,7 @@ function PlanCard({
                         {t('manageSubscription')}
                     </button>
                 ) : isHigherPlan ? (
-                    <div className="w-full py-3 rounded-xl text-center text-[13px] font-semibold text-[#5a5a7a] bg-white/[0.03] border border-white/[0.06] cursor-default select-none">
+                    <div className="w-full py-3 rounded-xl text-center text-[13px] font-semibold text-text-tertiary bg-surface-glass border border-border-subtle cursor-default select-none">
                         ✓ {t('includedInYourPlan')}
                     </div>
                 ) : isLoggedIn ? (
@@ -257,7 +257,7 @@ function PlanCard({
 
             {/* WhatsApp sub-copy in manual mode */}
             {manualBilling && isLoggedIn && !isCurrent && !isHigherPlan && !subLoading && !maintenanceMode && (
-                <p className="mt-3 text-[11px] text-[#5a5a7a] text-center leading-snug">
+                <p className="mt-3 text-[11px] text-text-tertiary text-center leading-snug">
                     {t('whatsappPaymentConfirm')}
                     <br />
                     {t('whatsappPaymentUseEmail')}
@@ -304,16 +304,16 @@ function FreePlanRow({ currentPlan, isLoggedIn }: { currentPlan: string | null; 
     const { language } = useLanguage();
     const t = useTranslation(language);
     return (
-        <div className="flex items-center justify-between rounded-xl border border-white/[0.05] bg-[#0d0d1f]/60 px-5 py-4">
+        <div className="flex items-center justify-between rounded-xl border border-border-subtle bg-surface/60 px-5 py-4">
             <div>
-                <span className="text-[13px] font-semibold text-[#c0c0d8]">{t('freePlan')}</span>
-                <span className="ml-3 text-[12px] text-[#5a5a7a]">
+                <span className="text-[13px] font-semibold text-text-secondary">{t('freePlan')}</span>
+                <span className="ml-3 text-[12px] text-text-tertiary">
                     {t('freePlanDesc')}
                 </span>
             </div>
             <div className="flex items-center gap-3">
                 {isCurrent && (
-                    <span className="text-[11px] font-bold uppercase tracking-widest text-[#5a5a7a] border border-white/[0.08] rounded-full px-3 py-1">
+                    <span className="text-[11px] font-bold uppercase tracking-widest text-text-tertiary border border-border-soft rounded-full px-3 py-1">
                         {t('current')}
                     </span>
                 )}
@@ -472,7 +472,7 @@ export default function SubscriptionPage() {
                 <button
                     type="button"
                     onClick={() => setLanguage(language === "ar" ? "en" : "ar")}
-                    className="rounded-lg border border-white/10 px-3 py-1.5 text-[12px] font-medium text-[#8080a0] hover:border-white/20 hover:text-white transition-colors"
+                    className="rounded-lg border border-border-soft px-3 py-1.5 text-[12px] font-medium text-text-secondary hover:border-white/20 hover:text-white transition-colors"
                     aria-label="Toggle language"
                 >
                     {language === "ar" ? "EN" : "عربي"}
@@ -492,9 +492,9 @@ export default function SubscriptionPage() {
                                 </p>
                             </div>
                         </div>
-                        <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 px-5 py-4">
-                            <p className="text-[13px] font-semibold text-white">{t('subscriptionStatusUnavailable')}</p>
-                            <p className="mt-1 text-[12px] text-[#8080a0]">
+                        <div className="rounded-xl border border-border-subtle bg-surface-elevated/40 px-5 py-4">
+                            <p className="text-[13px] font-semibold text-text-primary">{t('subscriptionStatusUnavailable')}</p>
+                            <p className="mt-1 text-[12px] text-text-secondary">
                                 {t('subscriptionStatusUnavailableDesc')}
                             </p>
                         </div>
@@ -569,7 +569,7 @@ export default function SubscriptionPage() {
                         {[0, 1].map((i) => (
                             <div
                                 key={i}
-                                className="h-72 rounded-2xl bg-[#13132a]/40 border border-white/[0.04] animate-pulse"
+                                className="h-72 rounded-2xl bg-surface-elevated/40 border border-border-subtle animate-pulse"
                             />
                         ))}
                     </div>
@@ -606,7 +606,7 @@ export default function SubscriptionPage() {
                         ))}
                     </div>
                 ) : (
-                    <p className="text-[13px] text-[#5a5a7a]">
+                    <p className="text-[13px] text-text-tertiary">
                         {t('couldNotLoadPlansRefresh')}
                     </p>
                 )}
@@ -616,35 +616,35 @@ export default function SubscriptionPage() {
 
                 {/* FAQ Section */}
                 <div className="mt-12">
-                    <h3 className="text-[18px] font-semibold text-white mb-6">{t('faqTitle')}</h3>
+                    <h3 className="text-[18px] font-semibold text-text-primary mb-6">{t('faqTitle')}</h3>
                     <div className="space-y-4">
-                        <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 p-5">
-                            <h4 className="text-[14px] font-semibold text-white mb-2">{t('faqHowUpgrade')}</h4>
-                            <p className="text-[13px] text-[#5a5a7a]">
+                        <div className="rounded-xl border border-border-subtle bg-surface-elevated/40 p-5">
+                            <h4 className="text-[14px] font-semibold text-text-primary mb-2">{t('faqHowUpgrade')}</h4>
+                            <p className="text-[13px] text-text-tertiary">
                                 {MANUAL_BILLING
                                     ? t('faqHowUpgradeManual')
                                     : t('faqHowUpgradeStripe')}
                             </p>
                         </div>
-                        <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 p-5">
-                            <h4 className="text-[14px] font-semibold text-white mb-2">{t('faqPaymentMethods')}</h4>
-                            <p className="text-[13px] text-[#5a5a7a]">
+                        <div className="rounded-xl border border-border-subtle bg-surface-elevated/40 p-5">
+                            <h4 className="text-[14px] font-semibold text-text-primary mb-2">{t('faqPaymentMethods')}</h4>
+                            <p className="text-[13px] text-text-tertiary">
                                 {MANUAL_BILLING
                                     ? t('faqPaymentMethodsManual')
                                     : t('faqPaymentMethodsStripe')}
                             </p>
                         </div>
-                        <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 p-5">
-                            <h4 className="text-[14px] font-semibold text-white mb-2">{t('faqActivationTime')}</h4>
-                            <p className="text-[13px] text-[#5a5a7a]">
+                        <div className="rounded-xl border border-border-subtle bg-surface-elevated/40 p-5">
+                            <h4 className="text-[14px] font-semibold text-text-primary mb-2">{t('faqActivationTime')}</h4>
+                            <p className="text-[13px] text-text-tertiary">
                                 {MANUAL_BILLING
                                     ? t('faqActivationTimeManual')
                                     : t('faqActivationTimeStripe')}
                             </p>
                         </div>
-                        <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 p-5">
-                            <h4 className="text-[14px] font-semibold text-white mb-2">{t('faqChangeCancel')}</h4>
-                            <p className="text-[13px] text-[#5a5a7a]">
+                        <div className="rounded-xl border border-border-subtle bg-surface-elevated/40 p-5">
+                            <h4 className="text-[14px] font-semibold text-text-primary mb-2">{t('faqChangeCancel')}</h4>
+                            <p className="text-[13px] text-text-tertiary">
                                 {MANUAL_BILLING
                                     ? t('faqChangeCancelManual')
                                     : t('faqChangeCancelStripe')}
@@ -654,7 +654,7 @@ export default function SubscriptionPage() {
                 </div>
 
                 {/* Footer note */}
-                <p className="text-[11px] text-[#5a5a7a] text-center">
+                <p className="text-[11px] text-text-tertiary text-center">
                     {t('pricesInAED')}
                 </p>
             </div>

@@ -84,7 +84,7 @@ export default function UploadPage() {
             <main className="relative z-10 w-full max-w-2xl px-container-padding-mobile md:px-container-padding-desktop">
                 {uploadComplete ? (
                     <PageTransition>
-                        <GlassPanel className="p-12 rounded-2xl border border-white/10 text-center">
+                        <GlassPanel className="p-12 rounded-2xl border border-border-soft text-center">
                             <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
                                 <MaterialIcon icon="check_circle" className="text-primary text-5xl" />
                             </div>
@@ -116,7 +116,7 @@ export default function UploadPage() {
                             )}
 
                             <GlassPanel
-                                className={`p-16 rounded-2xl border border-white/10 text-center transition-all ${isDragging ? 'border-primary/50 bg-primary/5' : 'hover:border-primary/30'
+                                className={`p-16 rounded-2xl border border-border-soft text-center transition-all ${isDragging ? 'border-primary/50 bg-primary/5' : 'hover:border-primary/30'
                                     }`}
                                 onDragOver={handleDragOver}
                                 onDragLeave={handleDragLeave}
@@ -153,12 +153,12 @@ export default function UploadPage() {
                                     </span>
                                 </label>
 
-                                <div className="mt-8 pt-8 border-t border-white/5">
+                                <div className="mt-8 pt-8 border-t border-border-subtle">
                                     <p className="text-[10px] text-on-surface-variant/40 uppercase tracking-widest mb-4">
                                         Supported formats
                                     </p>
                                     <div className="flex justify-center gap-4">
-                                        <span className="text-label-caps text-[10px] px-3 py-1 border border-white/10 rounded-full">PDF</span>
+                                        <span className="text-label-caps text-[10px] px-3 py-1 border border-border-soft rounded-full">PDF</span>
                                     </div>
                                 </div>
                             </GlassPanel>

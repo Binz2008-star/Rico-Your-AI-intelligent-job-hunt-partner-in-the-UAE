@@ -30,11 +30,11 @@ export const TopNav = React.forwardRef<HTMLElement, TopNavProps>(
             >
                 <div className="mx-auto flex w-full max-w-7xl items-center justify-between rounded-full border border-white/10 bg-[rgba(10,10,24,0.6)] px-4 py-3 backdrop-blur-2xl shadow-[0_18px_50px_rgba(5,5,16,0.28)]">
                     <Link href="/" className="flex items-center gap-3 text-on-surface">
-                        <span className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-gradient-to-br from-[#5b4fff] to-[#8b5cf6] text-sm font-black text-white shadow-[0_4px_18px_rgba(91,79,255,0.32)]">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-[#f5a623] text-sm font-black text-[#0a0a1a] shadow-[0_4px_18px_rgba(245,166,35,0.32)]">
                             R
                         </span>
                         <span className="font-headline-lg text-[18px] tracking-tight">
-                            Rico<span className="text-primary"> AI</span>
+                            Rico<span className="text-[#f5a623]"> Hunt</span>
                         </span>
                     </Link>
                     <div className="flex items-center gap-3">

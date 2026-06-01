@@ -342,7 +342,10 @@ class RicoChatAPI:
             essential_fields = {
                 "email", "phone", "skills", "years_experience",
                 "preferred_cities", "target_roles", "industries",
-                "salary_expectation_aed", "deal_breakers"
+                "salary_expectation_aed", "deal_breakers",
+                "telegram_username", "telegram_chat_id",
+                "name", "visa_status", "notice_period",
+                "current_company", "current_role", "linkedin_url",
             }
             ctx = {
                 "profile_exists": True,

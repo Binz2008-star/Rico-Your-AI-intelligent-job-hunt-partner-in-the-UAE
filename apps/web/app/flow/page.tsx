@@ -172,7 +172,7 @@ export default function FlowPage() {
                             {STATUS_COUNT_ORDER.map((s) => (
                                 <div
                                     key={s}
-                                    className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 text-center"
+                                    className="bg-surface-glass border border-border-subtle rounded-xl p-3 text-center"
                                 >
                                     <p className="text-xl font-black tracking-tight text-on-surface">
                                         {grouped[s]}
@@ -195,7 +195,7 @@ export default function FlowPage() {
                             {applications.map((item) => (
                                 <GlassPanel
                                     key={item.application_id}
-                                    className="p-6 rounded-xl border border-white/10 hover:border-primary/30 transition-all"
+                                    className="p-6 rounded-xl border border-border-soft hover:border-primary/30 transition-all"
                                 >
                                     {/* Card header: title/company + status badge */}
                                     <div className="flex items-start justify-between gap-4 mb-3">
@@ -230,7 +230,7 @@ export default function FlowPage() {
                                     )}
 
                                     {/* Divider + date + status dropdown */}
-                                    <div className="flex items-center gap-3 mt-3 pt-3 border-t border-white/[0.06]">
+                                    <div className="flex items-center gap-3 mt-3 pt-3 border-t border-border-subtle">
                                         <span className="text-xs text-on-surface-variant/50 shrink-0">
                                             {fmtDate(item.applied_at) ?? 'No date'}
                                         </span>
@@ -240,7 +240,7 @@ export default function FlowPage() {
                                             onChange={(e) => changeStatus(item, e.target.value as ApplicationStatus)}
                                             disabled={!!updating}
                                             aria-label={`Change status for ${item.title}`}
-                                            className="bg-surface/60 border border-white/[0.08] rounded-lg px-2 py-1 text-[11px] text-on-surface-variant outline-none focus:border-primary/40 cursor-pointer disabled:opacity-40 transition-opacity"
+                                            className="bg-surface/60 border border-border-soft rounded-lg px-2 py-1 text-[11px] text-on-surface-variant outline-none focus:border-primary/40 cursor-pointer disabled:opacity-40 transition-opacity"
                                         >
                                             {STATUS_OPTIONS.map((s) => (
                                                 <option key={s} value={s}>{STATUS_LABELS[s]}</option>
@@ -266,7 +266,7 @@ export default function FlowPage() {
                     role="dialog"
                     aria-label="Track application"
                 >
-                    <GlassPanel className="w-full max-w-md p-6 rounded-xl border border-white/10">
+                    <GlassPanel className="w-full max-w-md p-6 rounded-xl border border-border-soft">
                         <h2 className="font-semibold text-on-surface mb-4">Track Application</h2>
                         <form onSubmit={handleTrackApplication} className="space-y-4" aria-label="Manual application form">
                             <div>
@@ -276,7 +276,7 @@ export default function FlowPage() {
                                     type="text"
                                     value={formData.title}
                                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                                    className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-on-surface outline-none transition focus:border-primary/40"
+                                    className="w-full rounded-lg border border-border-soft bg-surface-glass px-3 py-2 text-sm text-on-surface outline-none transition focus:border-primary/40"
                                     placeholder="e.g., HSE Manager"
                                     disabled={saving}
                                 />
@@ -288,7 +288,7 @@ export default function FlowPage() {
                                     type="text"
                                     value={formData.company}
                                     onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                                    className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-on-surface outline-none transition focus:border-primary/40"
+                                    className="w-full rounded-lg border border-border-soft bg-surface-glass px-3 py-2 text-sm text-on-surface outline-none transition focus:border-primary/40"
                                     placeholder="e.g., Aramco"
                                     disabled={saving}
                                 />
@@ -300,7 +300,7 @@ export default function FlowPage() {
                                     type="text"
                                     value={formData.location}
                                     onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                                    className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-on-surface outline-none transition focus:border-primary/40"
+                                    className="w-full rounded-lg border border-border-soft bg-surface-glass px-3 py-2 text-sm text-on-surface outline-none transition focus:border-primary/40"
                                     placeholder="e.g., Abu Dhabi"
                                     disabled={saving}
                                 />
@@ -312,7 +312,7 @@ export default function FlowPage() {
                                     type="url"
                                     value={formData.url}
                                     onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-                                    className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-on-surface outline-none transition focus:border-primary/40"
+                                    className="w-full rounded-lg border border-border-soft bg-surface-glass px-3 py-2 text-sm text-on-surface outline-none transition focus:border-primary/40"
                                     placeholder="https://..."
                                     disabled={saving}
                                 />
@@ -323,7 +323,7 @@ export default function FlowPage() {
                                     id="status"
                                     value={formData.status}
                                     onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                                    className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-on-surface outline-none transition focus:border-primary/40"
+                                    className="w-full rounded-lg border border-border-soft bg-surface-glass px-3 py-2 text-sm text-on-surface outline-none transition focus:border-primary/40"
                                     disabled={saving}
                                 >
                                     <option value="applied">Applied</option>
@@ -350,7 +350,7 @@ export default function FlowPage() {
                                         setFormData({ title: '', company: '', location: '', url: '', status: 'applied' });
                                     }}
                                     disabled={saving}
-                                    className="flex-1 rounded-lg border border-white/10 px-4 py-2 text-sm font-semibold text-on-surface-variant transition-colors hover:border-white/20 hover:text-on-surface disabled:opacity-60"
+                                    className="flex-1 rounded-lg border border-border-soft px-4 py-2 text-sm font-semibold text-on-surface-variant transition-colors hover:border-white/20 hover:text-on-surface disabled:opacity-60"
                                 >
                                     Cancel
                                 </button>
