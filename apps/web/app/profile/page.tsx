@@ -46,7 +46,7 @@ function ChatEditCTA({ prompt }: { prompt: string }) {
     return (
         <Link
             href={`/command?prompt=${encodeURIComponent(prompt)}`}
-            className="ml-2 text-[11px] text-rico-purple hover:text-[#c4b5fd] transition-colors underline underline-offset-2"
+            className="ms-2 text-[11px] text-rico-purple hover:text-[#c4b5fd] transition-colors underline underline-offset-2"
         >
             Edit
         </Link>
@@ -98,7 +98,7 @@ function EditableNameField({
 
     if (!editing) {
         return (
-            <>
+            <span className="inline-flex items-center gap-2">
                 <span className="text-[#eeeef5]">{displayValue}</span>
                 <button
                     type="button"
@@ -108,11 +108,11 @@ function EditableNameField({
                         setError(null);
                         setEditing(true);
                     }}
-                    className="ml-2 text-[11px] text-rico-purple underline underline-offset-2 transition-colors hover:text-[#c4b5fd]"
+                    className="text-[11px] text-rico-purple underline underline-offset-2 transition-colors hover:text-[#c4b5fd]"
                 >
                     Edit
                 </button>
-            </>
+            </span>
         );
     }
 

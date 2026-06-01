@@ -3,6 +3,7 @@
 import { AuraGlow } from "@/components/ui/AuraGlow";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { logout } from "@/lib/api";
 import Link from "next/link";
@@ -60,6 +61,7 @@ export function DashboardShell({
 
                             <div className="flex flex-wrap items-center gap-2">
                                 {actions}
+                                <LanguageSwitcher />
                                 <Link
                                     href="/command"
                                     className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-[12px] font-semibold text-primary transition-all hover:bg-primary/15"
