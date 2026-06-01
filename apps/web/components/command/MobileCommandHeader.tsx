@@ -84,11 +84,14 @@ export function MobileCommandHeader({
 
     return (
         <>
-            {/* Header bar */}
+            {/* Header bar — full-width divider/background, content aligned to the
+                same centred column as the chat body so desktop doesn't pin the
+                brand/icons to the far screen edges (#325). */}
             <header
-                className="relative z-10 flex items-center px-3 py-2.5 border-b border-border-subtle bg-background/80 backdrop-blur-sm"
+                className="relative z-10 border-b border-border-subtle bg-background/80 backdrop-blur-sm"
                 dir={isRTL ? "rtl" : "ltr"}
             >
+              <div className="relative flex items-center w-full max-w-3xl mx-auto px-3 py-2.5">
                 {/* Left: hamburger */}
                 <div className="flex items-center" style={{ minWidth: 80 }}>
                     {chatAudience === "checking" ? (
@@ -225,6 +228,7 @@ export function MobileCommandHeader({
                         />
                     )}
                 </div>
+              </div>
             </header>
 
             {/* Drawer backdrop */}
