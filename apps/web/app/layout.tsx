@@ -10,6 +10,10 @@ import "./globals.css";
 // default "dark", "system" honoured only if explicitly chosen. Kept tiny + inline.
 const themeInitScript = `(function(){try{var t=localStorage.getItem("rico-theme");var m=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";var r=(t==="light"||t==="dark")?t:(t==="system"?m:"dark");var e=document.documentElement;e.classList.remove("dark","light");e.classList.add(r);e.setAttribute("data-theme",r);}catch(_){}})();`;
 
+// No-flash language script: mirrors LanguageContext — sets lang/dir on <html> before
+// React hydrates so Arabic users never see an LTR flash on page load or refresh.
+const langInitScript = `(function(){try{var l=localStorage.getItem("rico-language");if(l==="ar"){var e=document.documentElement;e.lang="ar";e.dir="rtl";}}catch(_){}})();`;
+
 // DESIGN.md spec: IBM Plex Sans Variable + Sora
 const ibmPlexSans = IBM_Plex_Sans({
     subsets: ["latin"],
@@ -67,6 +71,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <html lang="en" className="dark" suppressHydrationWarning>
             <head>
                 <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+                <script dangerouslySetInnerHTML={{ __html: langInitScript }} />
             </head>
             <body className={`${ibmPlexSans.variable} ${sora.variable} ${spaceMono.variable} antialiased bg-background text-text-primary font-body overflow-x-hidden`}>
                 <ThemeProvider><LanguageProvider>{children}</LanguageProvider></ThemeProvider>
