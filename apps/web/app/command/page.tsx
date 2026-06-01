@@ -124,7 +124,7 @@ function renderInline(text: string): React.ReactNode {
     const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
     return parts.map((part, i) => {
         if (part.startsWith("**") && part.endsWith("**")) {
-            return <strong key={i} className="font-semibold text-white">{part.slice(2, -2)}</strong>;
+            return <strong key={i} className="font-semibold text-rico-text">{part.slice(2, -2)}</strong>;
         }
         if (part.startsWith("*") && part.endsWith("*")) {
             return <em key={i} className="italic">{part.slice(1, -1)}</em>;
@@ -137,13 +137,13 @@ function renderMarkdown(text: string): React.ReactNode {
     const lines = text.split("\n");
     return lines.map((line, i) => {
         if (line.startsWith("### ")) {
-            return <p key={i} className="font-semibold text-[13px] text-white mt-2 mb-0.5">{renderInline(line.slice(4))}</p>;
+            return <p key={i} className="font-semibold text-[13px] text-rico-text mt-2 mb-0.5">{renderInline(line.slice(4))}</p>;
         }
         if (line.startsWith("## ")) {
-            return <p key={i} className="font-semibold text-[14px] text-white mt-3 mb-1">{renderInline(line.slice(3))}</p>;
+            return <p key={i} className="font-semibold text-[14px] text-rico-text mt-3 mb-1">{renderInline(line.slice(3))}</p>;
         }
         if (line.startsWith("# ")) {
-            return <p key={i} className="font-bold text-[15px] text-white mt-3 mb-1">{renderInline(line.slice(2))}</p>;
+            return <p key={i} className="font-bold text-[15px] text-rico-text mt-3 mb-1">{renderInline(line.slice(2))}</p>;
         }
         if (line.startsWith("- ") || line.startsWith("• ")) {
             return (
@@ -263,7 +263,7 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
             <div className="flex items-center gap-2.5">
                 <div className="flex-1 min-w-0">
                     <div
-                        className="text-[12px] font-semibold text-white break-normal line-clamp-1"
+                        className="text-[12px] font-semibold text-rico-text break-normal line-clamp-1"
                         data-testid="opportunity-card-title"
                     >
                         {match.title}
@@ -339,7 +339,7 @@ function ApplicationStatusCard({ applications, followUpNeeded }: {
                 <div className="flex flex-wrap gap-3">
                     {activeStages.map((s) => (
                         <div key={s.key} className="flex items-baseline gap-1">
-                            <span className="text-[14px] font-bold text-white leading-none tabular-nums">{counts[s.key]}</span>
+                            <span className="text-[14px] font-bold text-rico-text leading-none tabular-nums">{counts[s.key]}</span>
                             <span className="text-[10px] text-text-muted">{s.label}</span>
                         </div>
                     ))}
@@ -524,7 +524,7 @@ export default function CommandPage() {
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior }), 50);
     }, []);
 
-    const sendMessage = useCallback(async (text: string) => {
+    const sendMessage = useCallback(async (text: string, displayText?: string) => {
         if (chatAudience === "checking") return;
         if (text === "__cv_upload__") {
             fileInputRef.current?.click();
@@ -533,7 +533,7 @@ export default function CommandPage() {
         const trimmed = text.trim();
         if (!trimmed || thinking) return;
 
-        setMessages((prev) => [...prev, { id: nextId(), role: "user", text: trimmed }]);
+        setMessages((prev) => [...prev, { id: nextId(), role: "user", text: displayText?.trim() ?? trimmed }]);
         setThinking(true);
         const lc = trimmed.toLowerCase();
         if (lc.match(/\b(subscri|plan|pricing|package|upgrade)\b/)) {
@@ -888,9 +888,9 @@ export default function CommandPage() {
 
     if (sessionExpired) {
         return (
-            <div className="command-dark-lock min-h-screen bg-background flex items-center justify-center">
+            <div className="min-h-screen bg-background flex items-center justify-center">
                 <div className="flex max-w-lg flex-col items-center gap-4 rounded-2xl border border-border-subtle bg-surface/80 p-8 text-center backdrop-blur-md">
-                    <p className="text-sm font-medium text-white">{t("cmdSessionExpired")}</p>
+                    <p className="text-sm font-medium text-rico-text">{t("cmdSessionExpired")}</p>
                     <p className="text-sm text-text-muted">{t("cmdSessionExpiredMsg")}</p>
                     <Link href={COMMAND_LOGIN_HREF} className="rounded-lg bg-magenta px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-magenta-hover">
                         {t("signIn")}
@@ -901,7 +901,7 @@ export default function CommandPage() {
     }
 
     return (
-        <div className="command-dark-lock min-h-screen bg-background flex flex-col relative overflow-hidden">
+        <div className="min-h-screen bg-background flex flex-col relative overflow-hidden">
             {/* Ambient glows - cinematic magenta/cyan */}
             <div className="fixed inset-0 pointer-events-none z-0">
                 <div aria-hidden="true" className="absolute -top-[250px] -left-[150px] w-[700px] h-[700px] rounded-full bg-magenta-dim blur-[140px]" />
@@ -950,7 +950,7 @@ export default function CommandPage() {
                                     <button
                                         type="button"
                                         onClick={() => setConfirmClear(false)}
-                                        className="px-2.5 py-1 rounded-lg border border-border-soft text-text-secondary hover:text-white transition-colors"
+                                        className="px-2.5 py-1 rounded-lg border border-border-soft text-text-secondary hover:text-rico-text transition-colors"
                                     >
                                         {t("cancel")}
                                     </button>
@@ -971,17 +971,20 @@ export default function CommandPage() {
                     {/* Quick start (shown above first message) */}
                     {messages.length <= 1 && !thinking && (
                         <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:justify-center gap-2 pb-4">
-                            {QUICK_ACTION_DEFS.map((qa) => (
-                                <button
-                                    type="button"
-                                    key={qa.key}
-                                    onClick={() => sendMessage(qa.prompt)}
-                                    disabled={thinking || chatAudience === "checking"}
-                                    className="rounded-xl border border-border-subtle bg-surface-glass px-3 py-2 text-[11px] sm:text-xs text-text-secondary transition-colors hover:border-magenta/30 hover:bg-surface-subtle hover:text-white disabled:opacity-50 rico-focus-strong text-center"
-                                >
-                                    {t(qa.key as TranslationKey)}
-                                </button>
-                            ))}
+                            {QUICK_ACTION_DEFS.map((qa) => {
+                                const label = t(qa.key as TranslationKey);
+                                return (
+                                    <button
+                                        type="button"
+                                        key={qa.key}
+                                        onClick={() => sendMessage(qa.prompt, label)}
+                                        disabled={thinking || chatAudience === "checking"}
+                                        className="rounded-xl border border-border-subtle bg-surface-glass px-3 py-2 text-[11px] sm:text-xs text-text-secondary transition-colors hover:border-magenta/30 hover:bg-surface-subtle hover:text-rico-text disabled:opacity-50 rico-focus-strong text-center"
+                                    >
+                                        {label}
+                                    </button>
+                                );
+                            })}
                         </div>
                     )}
 
@@ -1007,8 +1010,8 @@ export default function CommandPage() {
                                 <div className={`${m.role === "user"
                                     ? "max-w-[75%] sm:max-w-[68%] rounded-2xl rounded-tr-sm bg-magenta px-3.5 py-2.5 text-[14px] text-white leading-relaxed shadow-sm"
                                     : isStructured
-                                        ? "flex-1 min-w-0 rounded-xl bg-surface/20 border border-border-subtle/40 p-3 text-[13px] text-white leading-relaxed"
-                                        : "flex-1 min-w-0 text-[14px] text-white leading-relaxed"
+                                        ? "flex-1 min-w-0 rounded-xl bg-surface/20 border border-border-subtle/40 p-3 text-[13px] text-rico-text leading-relaxed"
+                                        : "flex-1 min-w-0 text-[14px] text-rico-text leading-relaxed"
                                     }`}>
 
                                     {/* Search result caption */}
@@ -1096,7 +1099,7 @@ export default function CommandPage() {
                                                     setDraftProfile(m.preview!);
                                                 }}
                                                 disabled={thinking}
-                                                className="text-[12px] px-4 py-2 rounded-lg border border-border-soft text-text-secondary hover:border-magenta/40 hover:text-white transition-colors disabled:opacity-50"
+                                                className="text-[12px] px-4 py-2 rounded-lg border border-border-soft text-text-secondary hover:border-magenta/40 hover:text-rico-text transition-colors disabled:opacity-50"
                                             >
                                                 {t("cmdProfileEditBefore")}
                                             </button>
@@ -1120,7 +1123,7 @@ export default function CommandPage() {
                                                         onChange={(e) =>
                                                             setDraftProfile((prev) => (prev ? { ...prev, [field]: e.target.value } : prev))
                                                         }
-                                                        className="w-full rounded-lg bg-surface-subtle border border-border-soft px-3 py-1.5 text-[12px] text-white placeholder:text-text-muted focus:outline-none focus:border-magenta/60"
+                                                        className="w-full rounded-lg bg-surface-subtle border border-border-soft px-3 py-1.5 text-[12px] text-rico-text placeholder:text-text-muted focus:outline-none focus:border-magenta/60"
                                                     />
                                                 </label>
                                             ))}
@@ -1134,7 +1137,7 @@ export default function CommandPage() {
                                                             prev ? { ...prev, skills_detected: skills, skills } : prev
                                                         );
                                                     }}
-                                                    className="w-full rounded-lg bg-surface-subtle border border-border-soft px-3 py-1.5 text-[12px] text-white placeholder:text-text-muted focus:outline-none focus:border-magenta/60"
+                                                    className="w-full rounded-lg bg-surface-subtle border border-border-soft px-3 py-1.5 text-[12px] text-rico-text placeholder:text-text-muted focus:outline-none focus:border-magenta/60"
                                                 />
                                             </label>
                                             <div className="flex gap-2 pt-1">
@@ -1156,7 +1159,7 @@ export default function CommandPage() {
                                                         setEditingProfileId(null);
                                                         setDraftProfile(null);
                                                     }}
-                                                    className="text-[12px] px-4 py-2 rounded-lg border border-border-soft text-text-secondary hover:border-magenta/40 hover:text-white transition-colors"
+                                                    className="text-[12px] px-4 py-2 rounded-lg border border-border-soft text-text-secondary hover:border-magenta/40 hover:text-rico-text transition-colors"
                                                 >
                                                     {t("cancel")}
                                                 </button>
@@ -1236,7 +1239,7 @@ export default function CommandPage() {
                             onClick={() => fileInputRef.current?.click()}
                             disabled={thinking || chatAudience === "checking"}
                             title={t("cmdUploadCvTitle")}
-                            className="w-10 h-10 rounded-xl border border-border-soft bg-surface/80 text-text-secondary flex items-center justify-center hover:border-magenta/40 hover:text-white transition-all disabled:opacity-30 shrink-0 rico-focus-strong"
+                            className="w-10 h-10 rounded-xl border border-border-soft bg-surface/80 text-text-secondary flex items-center justify-center hover:border-magenta/40 hover:text-rico-text transition-all disabled:opacity-30 shrink-0 rico-focus-strong"
                             aria-label={t("cmdUploadCvAriaLabel")}
                         >
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1262,7 +1265,7 @@ export default function CommandPage() {
                                 placeholder={chatAudience === "checking"
                                     ? t("cmdPlaceholderChecking")
                                     : t("cmdPlaceholderReady")}
-                                className="w-full resize-none bg-surface border border-border-soft hover:border-border-strong focus:border-magenta/60 backdrop-blur-xl rounded-2xl py-3 pl-4 pr-12 text-sm text-white placeholder:text-text-muted transition-all shadow-2xl"
+                                className="w-full resize-none bg-surface border border-border-soft hover:border-border-strong focus:border-magenta/60 backdrop-blur-xl rounded-2xl py-3 pl-4 pr-12 text-sm text-rico-text placeholder:text-text-muted transition-all shadow-2xl"
                             />
                             <button
                                 type="button"
