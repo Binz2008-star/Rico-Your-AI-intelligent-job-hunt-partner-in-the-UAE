@@ -1,6 +1,7 @@
 "use client";
 
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -24,6 +25,8 @@ export function MobileCommandHeader({
     signupHref,
 }: MobileCommandHeaderProps) {
     const { language, setLanguage } = useLanguage();
+    const { resolvedTheme, setTheme } = useTheme();
+    const isDark = resolvedTheme === "dark";
     const isRTL = language === "ar";
 
     const [drawerOpen, setDrawerOpen] = useState(false);
@@ -132,6 +135,25 @@ export function MobileCommandHeader({
 
                 {/* Right side — content depends on auth state */}
                 <div className="flex items-center gap-1 ms-auto" style={{ minWidth: 80, justifyContent: "flex-end" }}>
+                    {/* Theme toggle — always visible */}
+                    <button
+                        type="button"
+                        onClick={() => setTheme(isDark ? "light" : "dark")}
+                        aria-label={isDark ? (language === "ar" ? "تبديل إلى الوضع الفاتح" : "Switch to light mode") : (language === "ar" ? "تبديل إلى الوضع الداكن" : "Switch to dark mode")}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted hover:text-white hover:bg-surface/60 transition-colors"
+                    >
+                        {isDark ? (
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <circle cx="12" cy="12" r="4" />
+                                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+                            </svg>
+                        ) : (
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                            </svg>
+                        )}
+                    </button>
+
                     {/* Language toggle — always visible */}
                     <button
                         type="button"
@@ -289,7 +311,7 @@ export function MobileCommandHeader({
                         </Link>
                     ))}
 
-                    {/* Language toggle */}
+                    {/* Language + theme toggles */}
                     <div className="my-2 border-t border-border-subtle" />
                     <button
                         type="button"
@@ -298,6 +320,17 @@ export function MobileCommandHeader({
                     >
                         <span className="text-[16px] w-5 text-center" aria-hidden="true">🌐</span>
                         {language === "ar" ? "English" : "العربية"}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setTheme(isDark ? "light" : "dark")}
+                        className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted hover:text-white hover:bg-surface/60 transition-colors"
+                    >
+                        <span className="text-[16px] w-5 text-center" aria-hidden="true">{isDark ? "☀️" : "🌙"}</span>
+                        {isDark
+                            ? (language === "ar" ? "الوضع الفاتح" : "Light mode")
+                            : (language === "ar" ? "الوضع الداكن" : "Dark mode")
+                        }
                     </button>
 
                     <Link
