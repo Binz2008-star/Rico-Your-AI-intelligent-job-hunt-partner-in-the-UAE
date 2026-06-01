@@ -7,7 +7,7 @@ import { clearChatHistory, confirmCVProfile, fetchChatHistory, fetchMe, logout, 
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { buildAuthHref } from "@/lib/redirect";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
-import { useTranslation, type TranslationKey } from "@/lib/translations";
+import { useTranslation, translations, type TranslationKey } from "@/lib/translations";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -723,6 +723,22 @@ export default function CommandPage() {
         }, 0);
         return () => window.clearTimeout(timeoutId);
     }, [chatAudience, cvReady, prompt, sendMessage, t]);
+
+    // Re-translate the welcome message when language changes while chat is still at welcome state
+    useEffect(() => {
+        void (async () => {
+            setMessages((prev) => {
+                if (prev.length !== 1 || prev[0].role !== "rico") return prev;
+                const welcomeKeys: TranslationKey[] = ["cmdWelcomeCvReady", "cmdWelcomeBack", "cmdWelcomePublic"];
+                const isWelcome = welcomeKeys.some(
+                    (k) => prev[0].text === translations.en[k] || prev[0].text === translations.ar[k],
+                );
+                if (!isWelcome) return prev;
+                const key = cvReady ? "cmdWelcomeCvReady" : chatAudience === "authenticated" ? "cmdWelcomeBack" : "cmdWelcomePublic";
+                return [{ ...prev[0], text: translations[language][key] }];
+            });
+        })();
+    }, [language, chatAudience, cvReady]);
 
     async function handleCVUpload(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
