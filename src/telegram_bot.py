@@ -81,6 +81,32 @@ def send_telegram_message(message: str) -> bool:
         return False
 
 
+def send_telegram_to_user(chat_id: str, message: str) -> bool:
+    """Send a Telegram message to a specific user by their numeric chat_id.
+
+    Unlike send_telegram_message(), this bypasses the TELEGRAM_CHAT_ID env var
+    and sends directly to the supplied chat_id — used for per-user job alerts.
+    Returns True on success.
+    """
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not bot_token or not chat_id:
+        return False
+
+    if len(message) > _TELEGRAM_MAX_CHARS:
+        truncation_note = "\n\n<b>... (message truncated)</b>"
+        message = message[: _TELEGRAM_MAX_CHARS - len(truncation_note)] + truncation_note
+
+    try:
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
+        response = requests.post(url, json=payload, timeout=10)
+        response.raise_for_status()
+        return True
+    except requests.exceptions.RequestException as e:
+        print(f"Error sending Telegram alert to {chat_id}: {e}")
+        return False
+
+
 def send_job_card_with_buttons(job: Dict[str, Any], chat_id: str | None = None) -> bool:
     """
     Send a single job card with Rico inline action buttons.

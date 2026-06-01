@@ -33,6 +33,7 @@ class RicoProfile:
     email: Optional[str] = None
     phone: Optional[str] = None
     telegram_username: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
     current_location: Optional[str] = None
     target_roles: List[str] = field(default_factory=list)
     years_experience: Optional[float] = None
