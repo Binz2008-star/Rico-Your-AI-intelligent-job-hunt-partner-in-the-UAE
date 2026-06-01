@@ -4,6 +4,7 @@ import { AuraGlow } from "@/components/ui/AuraGlow";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { logout } from "@/lib/api";
 import Link from "next/link";
@@ -61,6 +62,7 @@ export function DashboardShell({
 
                             <div className="flex flex-wrap items-center gap-2">
                                 {actions}
+                                <ThemeToggle />
                                 <LanguageSwitcher />
                                 <Link
                                     href="/command"

@@ -763,10 +763,10 @@ export default function CommandClient() {
                     href="/"
                     className="flex items-center gap-2 text-[var(--rico-fg-1)] font-black text-base sm:text-lg tracking-tight"
                 >
-                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-[9px] bg-gradient-to-br from-[var(--rico-primary)] to-[var(--rico-secondary-dim)] flex items-center justify-center text-sm font-black shadow-[0_4px_16px_var(--rico-magenta-glow)]">
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-[9px] bg-[#f5a623] text-[#0a0a1a] flex items-center justify-center text-sm font-black shadow-[0_4px_16px_rgba(245,166,35,0.35)]">
                         R
                     </div>
-                    Rico<span className="text-[var(--rico-primary)]">.ai</span>
+                    Rico<span className="text-[#f5a623]"> Hunt</span>
                 </Link>
                 <nav className="flex items-center gap-2 sm:gap-3">
                     {/* Mobile theme/language controls */}
