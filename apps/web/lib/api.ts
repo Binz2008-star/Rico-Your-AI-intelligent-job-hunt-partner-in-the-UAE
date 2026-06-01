@@ -1185,13 +1185,16 @@ export interface ChatStreamEvent {
 export async function* sendChatStream(
   message: string,
   signal?: AbortSignal,
+  language?: "en" | "ar",
 ): AsyncGenerator<ChatStreamEvent> {
+  const body: Record<string, unknown> = { message };
+  if (language) body.language = language;
   const res = await fetch(`${PROXY}/api/v1/rico/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
     signal,
-    body: JSON.stringify({ message }),
+    body: JSON.stringify(body),
   });
   if (!res.ok || !res.body) {
     // Fall back gracefully — caller should use sendChat instead
@@ -1205,13 +1208,16 @@ export async function* sendChatStreamPublic(
   message: string,
   sessionId: string,
   signal?: AbortSignal,
+  language?: "en" | "ar",
 ): AsyncGenerator<ChatStreamEvent> {
+  const body: Record<string, unknown> = { message, session_id: sessionId };
+  if (language) body.language = language;
   const res = await fetch(`${PROXY}/api/v1/rico/chat/stream/public`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
     signal,
-    body: JSON.stringify({ message, session_id: sessionId }),
+    body: JSON.stringify(body),
   });
   if (!res.ok || !res.body) {
     yield { type: "error", error: `${res.status}` };

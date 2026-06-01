@@ -139,7 +139,7 @@ def send_message(
     )
 
     if decision.should_use_ai:
-        return _conversational_ai_reply(ctx=ctx, message=message, profile=profile)
+        return _conversational_ai_reply(ctx=ctx, message=message, profile=profile, language=language)
 
     return _legacy_send_message(ctx=ctx, message=message, operation_id=operation_id)
 
@@ -425,6 +425,7 @@ def _conversational_ai_reply(
     ctx: RicoSessionContext,
     message: str,
     profile: Any,
+    language: str | None = None,
 ) -> Dict[str, Any]:
     """Use the existing Rico conversational AI fallback path directly."""
     from src.rico_chat_api import RicoChatAPI
@@ -433,6 +434,7 @@ def _conversational_ai_reply(
         user_id=ctx.user_id,
         message=message,
         profile=profile,
+        language=language,
     )
     result["response_source"] = result.get("response_source") or "ai_router"
     result["intent"] = "conversational"

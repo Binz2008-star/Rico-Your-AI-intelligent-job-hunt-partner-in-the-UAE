@@ -1951,6 +1951,7 @@ class RicoChatAPI:
         profile: Any,
         *,
         save_user_message: bool,
+        language: str | None = None,
     ) -> dict[str, Any]:
         """Run the single conversational AI fallback path used by chat routing."""
         if save_user_message:
@@ -1960,7 +1961,7 @@ class RicoChatAPI:
         if isinstance(user_context, dict):
             user_context["blocked_questions"] = blocked_questions
 
-        ai_response = self._get_openai_agent().respond(message, user_context=user_context)
+        ai_response = self._get_openai_agent().respond(message, user_context=user_context, language=language)
         raw_ai_message = ai_response.get("message", "")
         filtered_ai_message = self._preserve_ai_message(raw_ai_message, blocked_questions)
         ai_response["message"] = filtered_ai_message
@@ -1976,7 +1977,7 @@ class RicoChatAPI:
         result.setdefault("success", True)
         return result
 
-    def answer_conversationally(self, user_id: str, message: str, profile: Any) -> dict[str, Any]:
+    def answer_conversationally(self, user_id: str, message: str, profile: Any, language: str | None = None) -> dict[str, Any]:
         """Route directly to the existing conversational AI fallback path."""
         debug_id = _generate_debug_id()
         try:
@@ -1985,6 +1986,7 @@ class RicoChatAPI:
                 message=message,
                 profile=profile,
                 save_user_message=True,
+                language=language,
             )
             if isinstance(result, dict):
                 result.setdefault("debug_id", debug_id)

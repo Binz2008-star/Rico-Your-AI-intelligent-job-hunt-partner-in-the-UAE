@@ -645,8 +645,8 @@ export default function CommandPage() {
             }
 
             const streamGen = chatAudience === "authenticated"
-                ? sendChatStream(trimmed, controller.signal)
-                : sendChatStreamPublic(trimmed, getSessionId(sessionIdRef), controller.signal);
+                ? sendChatStream(trimmed, controller.signal, language)
+                : sendChatStreamPublic(trimmed, getSessionId(sessionIdRef), controller.signal, language);
 
             for await (const event of streamGen) {
                 if (event.type === "token" && event.text) {
@@ -666,8 +666,8 @@ export default function CommandPage() {
                 } else if (event.type === "error") {
                     const res: ChatApiResponse =
                         chatAudience === "authenticated"
-                            ? await sendChat(trimmed, controller.signal)
-                            : await sendChatPublic(trimmed, getSessionId(sessionIdRef), controller.signal);
+                            ? await sendChat(trimmed, controller.signal, undefined, language)
+                            : await sendChatPublic(trimmed, getSessionId(sessionIdRef), controller.signal, undefined, language);
                     applyDoneResponse(res);
                 }
             }
@@ -675,8 +675,8 @@ export default function CommandPage() {
             if (!streamStarted) {
                 const res: ChatApiResponse =
                     chatAudience === "authenticated"
-                        ? await sendChat(trimmed, controller.signal)
-                        : await sendChatPublic(trimmed, getSessionId(sessionIdRef), controller.signal);
+                        ? await sendChat(trimmed, controller.signal, undefined, language)
+                        : await sendChatPublic(trimmed, getSessionId(sessionIdRef), controller.signal, undefined, language);
                 applyDoneResponse(res);
             }
         } catch (err) {
@@ -999,6 +999,7 @@ export default function CommandPage() {
                         return (
                             <div
                                 key={m.id}
+                                dir="ltr"
                                 className={`flex animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none ${m.role === "user" ? "justify-end items-end" : "justify-start items-start gap-2.5"} ${isFirstInGroup ? "mt-4" : "mt-1"}`}
                             >
                                 {m.role === "rico" && (
@@ -1007,7 +1008,7 @@ export default function CommandPage() {
                                         aria-hidden="true"
                                     >R</div>
                                 )}
-                                <div className={`${m.role === "user"
+                                <div dir="auto" className={`${m.role === "user"
                                     ? "max-w-[75%] sm:max-w-[68%] rounded-2xl rounded-tr-sm bg-magenta px-3.5 py-2.5 text-[14px] text-white leading-relaxed shadow-sm"
                                     : isStructured
                                         ? "flex-1 min-w-0 rounded-xl bg-surface/20 border border-border-subtle/40 p-3 text-[13px] text-rico-text leading-relaxed"
