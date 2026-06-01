@@ -163,13 +163,14 @@ def get_profile(user_id: str) -> RicoProfile | None:
     if not profile:
         profile = _memory().load_profile(user_id)
 
-    # One-time cleanup: normalize broad target_roles if profile has CV evidence
-    # Also re-normalize if normalization version has changed
+    # One-time version migration: normalize broad target_roles when the stored
+    # normalization version is older than the current one. Triggered only by a
+    # version bump — NOT on every read — so explicit user edits are respected.
     if profile and profile.target_roles:
-        from src.role_normalization import should_normalize_profile, normalize_target_roles, NORMALIZATION_VERSION
+        from src.role_normalization import normalize_target_roles, NORMALIZATION_VERSION
 
         stored_version = getattr(profile, "normalization_version", 1)
-        needs_normalization = should_normalize_profile(profile.target_roles, profile.skills) or stored_version < NORMALIZATION_VERSION
+        needs_normalization = stored_version < NORMALIZATION_VERSION
 
         if needs_normalization:
             normalized = normalize_target_roles(
