@@ -72,9 +72,13 @@ def _score_title_role(title: str, target_roles: list[str]) -> int:
             overlap = len(core_role & core_title)
             coverage = overlap / len(core_role)
             best = max(best, int(coverage * 45))
-        elif role_tokens and title_tokens:
-            overlap = len(role_tokens & title_tokens)
-            coverage = overlap / len(role_tokens)
+        elif core_role and title_tokens:
+            # Fallback when title has no meaningful core tokens (e.g. "Senior Manager"):
+            # only award points if a real domain token from the role appears in the title.
+            # Using core_role (not role_tokens) ensures level-words like "manager" don't
+            # create false matches between "HSE Manager" and "Senior Manager".
+            overlap = len(core_role & title_tokens)
+            coverage = overlap / len(core_role)
             best = max(best, int(coverage * 30))
 
     return best
