@@ -881,7 +881,7 @@ export default function CommandPage() {
 
     if (sessionExpired) {
         return (
-            <div className="min-h-screen bg-background flex items-center justify-center">
+            <div className="command-dark-lock min-h-screen bg-background flex items-center justify-center">
                 <div className="flex max-w-lg flex-col items-center gap-4 rounded-2xl border border-border-subtle bg-surface/80 p-8 text-center backdrop-blur-md">
                     <p className="text-sm font-medium text-white">Session expired.</p>
                     <p className="text-sm text-text-muted">Sign in again to continue chatting with Rico.</p>
@@ -894,7 +894,7 @@ export default function CommandPage() {
     }
 
     return (
-        <div className="min-h-screen bg-background flex flex-col relative overflow-hidden">
+        <div className="command-dark-lock min-h-screen bg-background flex flex-col relative overflow-hidden">
             {/* Ambient glows - cinematic magenta/cyan */}
             <div className="fixed inset-0 pointer-events-none z-0">
                 <div aria-hidden="true" className="absolute -top-[250px] -left-[150px] w-[700px] h-[700px] rounded-full bg-magenta-dim blur-[140px]" />
