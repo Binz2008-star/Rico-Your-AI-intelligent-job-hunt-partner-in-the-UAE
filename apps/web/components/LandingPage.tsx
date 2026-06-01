@@ -376,7 +376,7 @@ export default function LandingPage() {
   return (
     <MotionConfig reducedMotion="user">
       {/* dir switches the entire document layout to RTL for Arabic */}
-      <div dir={isAr ? "rtl" : "ltr"} className="relative min-h-screen overflow-x-hidden bg-background text-white">
+      <div dir={isAr ? "rtl" : "ltr"} className="command-dark-lock relative min-h-screen overflow-x-hidden bg-background text-white">
         <div className="fixed inset-0 pointer-events-none z-0">
           <motion.div
             aria-hidden="true"

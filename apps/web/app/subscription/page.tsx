@@ -19,7 +19,7 @@ import { buildWhatsAppManageUrl, buildWhatsAppUpgradeUrl, isManualBillingMode } 
 import { useTranslation } from "@/lib/translations";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 
 const SUBSCRIPTION_MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === "true";
 const MANUAL_BILLING = isManualBillingMode();
@@ -77,6 +77,31 @@ const FALLBACK_PLANS: SubscriptionPlan[] = [
 
 const PLAN_TIER: Record<string, number> = { free: 0, pro: 1, premium: 2 };
 
+const PLAN_NAME_KEY: Record<string, string> = {
+    Pro: "planProName",
+    Premium: "planPremiumName",
+};
+
+const PLAN_DESC_KEY: Record<string, string> = {
+    "Smart AI job hunting for active UAE professionals.": "planProDesc",
+    "Full automation and premium AI recommendations.": "planPremiumDesc",
+};
+
+const PLAN_FEATURE_KEY: Record<string, string> = {
+    "Unlimited CV analysis": "planFeatureUnlimitedCV",
+    "Smart AI role recommendations": "planFeatureSmartRec",
+    "Advanced match scoring": "planFeatureAdvancedScoring",
+    "Saved searches": "planFeatureSavedSearches",
+    "Priority support": "planFeaturePrioritySupport",
+    "Higher daily job limits": "planFeatureHigherLimits",
+    "Everything in Pro": "planFeatureEverythingPro",
+    "Auto-apply system": "planFeatureAutoApply",
+    "Priority AI ranking": "planFeaturePriorityAI",
+    "Advanced job automation": "planFeatureAdvancedAuto",
+    "Premium job pipelines": "planFeaturePremiumPipelines",
+    "Recruiter visibility (coming soon)": "planFeatureRecruiter",
+};
+
 function PlanCard({
     plan,
     currentPlan,
@@ -113,6 +138,12 @@ function PlanCard({
         (PLAN_TIER[currentPlan ?? ""] ?? -1) > (PLAN_TIER[plan.plan] ?? 0);
     const isProPlan = plan.plan === "pro";
 
+    const localName = PLAN_NAME_KEY[plan.name] ? t(PLAN_NAME_KEY[plan.name]) : plan.name;
+    const localDesc = plan.description
+        ? (PLAN_DESC_KEY[plan.description] ? t(PLAN_DESC_KEY[plan.description]) : plan.description)
+        : undefined;
+    const localFeatures = plan.features.map(f => PLAN_FEATURE_KEY[f] ? t(PLAN_FEATURE_KEY[f]) : f);
+
     return (
         <div
             className={`relative flex flex-col rounded-2xl border p-6 backdrop-blur-md overflow-hidden transition-all ${
@@ -148,10 +179,10 @@ function PlanCard({
 
             <div className={isCurrent ? "mt-8" : plan.is_popular ? "mt-6" : "mt-0"}>
                 <h2 className="text-[22px] font-bold text-text-primary font-['Cabinet_Grotesk',sans-serif]">
-                    {plan.name}
+                    {localName}
                 </h2>
-                {plan.description && (
-                    <p className="mt-1 text-[13px] text-text-secondary">{plan.description}</p>
+                {localDesc && (
+                    <p className="mt-1 text-[13px] text-text-secondary">{localDesc}</p>
                 )}
             </div>
 
@@ -165,8 +196,8 @@ function PlanCard({
             </div>
 
             <ul className="mt-6 flex flex-col gap-2.5 flex-1">
-                {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2.5 text-[13px] text-text-secondary">
+                {localFeatures.map((feature, i) => (
+                    <li key={i} className="flex items-start gap-2.5 text-[13px] text-text-secondary">
                         <span
                             className={`mt-0.5 w-4 h-4 flex-shrink-0 rounded-full flex items-center justify-center text-[10px] font-black ${
                                 isProPlan
@@ -237,7 +268,7 @@ function PlanCard({
                                     {t('connecting')}
                                 </span>
                             ) : (
-                                `${t('upgradeTo')} ${plan.name}`
+                                `${t('upgradeTo')} ${localName}`
                             )}
                         </button>
                     )
@@ -344,7 +375,31 @@ export default function SubscriptionPage() {
     const t = useTranslation(language);
     const maintenanceMode = SUBSCRIPTION_MAINTENANCE_MODE;
 
-    const [plans, setPlans] = useState<SubscriptionPlan[]>(maintenanceMode ? FALLBACK_PLANS : []);
+    const localizedFallbackPlans = useMemo((): SubscriptionPlan[] => [
+        {
+            ...FALLBACK_PLANS[0],
+            name: t('planProName'),
+            description: t('planProDesc'),
+            features: [
+                t('planFeatureUnlimitedCV'), t('planFeatureSmartRec'),
+                t('planFeatureAdvancedScoring'), t('planFeatureSavedSearches'),
+                t('planFeaturePrioritySupport'), t('planFeatureHigherLimits'),
+            ],
+        },
+        {
+            ...FALLBACK_PLANS[1],
+            name: t('planPremiumName'),
+            description: t('planPremiumDesc'),
+            features: [
+                t('planFeatureEverythingPro'), t('planFeatureAutoApply'),
+                t('planFeaturePriorityAI'), t('planFeatureAdvancedAuto'),
+                t('planFeaturePremiumPipelines'), t('planFeatureRecruiter'),
+            ],
+        },
+    ], [t]);
+
+    const [apiPlans, setApiPlans] = useState<SubscriptionPlan[]>([]);
+    const plans = maintenanceMode ? localizedFallbackPlans : apiPlans;
     const [sub, setSub] = useState<SubscriptionMeResponse | null>(null);
     const [loadingPlans, setLoadingPlans] = useState(!maintenanceMode);
     const [subLoading, setSubLoading] = useState(false);
@@ -359,7 +414,7 @@ export default function SubscriptionPage() {
         setLoadingPlans(true);
         setPlanError(false);
         getSubscriptionPlans()
-            .then((r) => setPlans(r.plans))
+            .then((r) => setApiPlans(r.plans))
             .catch(() => {
                 setPlanError(true);
                 toast(t('couldNotLoadPlans'), "error");
@@ -372,7 +427,7 @@ export default function SubscriptionPage() {
         let cancelled = false;
         getSubscriptionPlans()
             .then((r) => {
-                if (!cancelled) setPlans(r.plans);
+                if (!cancelled) setApiPlans(r.plans);
             })
             .catch(() => {
                 if (cancelled) return;
@@ -412,7 +467,7 @@ export default function SubscriptionPage() {
             try {
                 const result = await createCheckoutSession(plan);
                 if (result.provider === "mock") {
-                    toast("Payment processing is being configured. No charge has been made.", "error");
+                    toast(t('subscriptionPaymentConfiguring'), "error");
                 } else {
                     window.location.href = result.checkout_url;
                 }
@@ -420,7 +475,7 @@ export default function SubscriptionPage() {
                 const msg =
                     err instanceof ApiError
                         ? err.message
-                        : "Checkout failed. Please try again.";
+                        : t('subscriptionCheckoutFailed');
                 toast(msg, "error");
             } finally {
                 setCheckingOut(null);
@@ -446,7 +501,7 @@ export default function SubscriptionPage() {
         try {
             const result = await createCustomerPortalSession();
             if (result.provider === "mock") {
-                toast("Subscription portal is not configured", "error");
+                toast(t('subscriptionPortalNotConfigured'), "error");
             } else {
                 window.location.href = result.checkout_url;
             }
@@ -454,7 +509,7 @@ export default function SubscriptionPage() {
             const msg =
                 err instanceof ApiError
                     ? err.message
-                    : "Failed to open subscription portal. Please try again.";
+                    : t('subscriptionPortalFailed');
             toast(msg, "error");
         }
     }, [maintenanceMode, toast]);

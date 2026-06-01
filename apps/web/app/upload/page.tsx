@@ -6,6 +6,8 @@ import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { PageTransition } from '@/components/ui/PageTransition';
 import { ProcessingOverlay } from '@/components/ui/ProcessingOverlay';
 import { uploadCV } from '@/lib/api';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { useTranslation } from '@/lib/translations';
 import { useRouter } from 'next/navigation';
 import React, { useState } from 'react';
 
@@ -25,6 +27,8 @@ export default function UploadPage() {
     const [uploadComplete, setUploadComplete] = useState(false);
     const [error, setError] = useState('');
     const router = useRouter();
+    const { language } = useLanguage();
+    const t = useTranslation(language);
 
     const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault();
@@ -66,7 +70,7 @@ export default function UploadPage() {
             setIsProcessing(true);
         } catch (err) {
             console.error('Upload failed:', err);
-            setError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
+            setError(err instanceof Error ? err.message : t('uploadError'));
             setIsUploading(false);
         }
     };
@@ -88,9 +92,9 @@ export default function UploadPage() {
                             <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
                                 <MaterialIcon icon="check_circle" className="text-primary text-5xl" />
                             </div>
-                            <h1 className="font-headline-xl text-headline-xl text-on-surface mb-4">Your profile is ready</h1>
+                            <h1 className="font-headline-xl text-headline-xl text-on-surface mb-4">{t('uploadReadyHeading')}</h1>
                             <p className="text-body-lg text-on-surface-variant mb-4">
-                                Rico has read your CV and prepared your job search profile. Redirecting to your dashboard...
+                                {t('uploadReadyBody')}
                             </p>
                             <div className="flex justify-center">
                                 <div className="w-8 h-0.5 bg-[var(--magenta)] rounded-full animate-pulse" />
@@ -102,10 +106,10 @@ export default function UploadPage() {
                         <>
                             <div className="text-center mb-12">
                                 <h1 className="font-headline-xl text-headline-xl text-on-surface mb-4 tracking-tight">
-                                    Upload your CV
+                                    {t('uploadYourCV')}
                                 </h1>
                                 <p className="font-body-lg text-body-lg text-on-surface-variant">
-                                    Let Rico build your career profile and find matching UAE jobs
+                                    {t('uploadCvSubtitle')}
                                 </p>
                             </div>
 
@@ -125,9 +129,9 @@ export default function UploadPage() {
                                 <div className="mb-8">
                                     <MaterialIcon icon="upload_file" className="text-6xl text-on-surface-variant/40 mb-4" />
                                     <p className="text-body-lg text-on-surface-variant mb-2">
-                                        {isDragging ? 'Drop your CV here' : 'Drag and drop your CV'}
+                                        {isDragging ? t('uploadDropHere') : t('uploadDragDrop')}
                                     </p>
-                                    <p className="text-sm text-on-surface-variant/60">or</p>
+                                    <p className="text-sm text-on-surface-variant/60">{t('uploadOr')}</p>
                                 </div>
 
                                 <label className="inline-block cursor-pointer">
@@ -142,11 +146,11 @@ export default function UploadPage() {
                                         {isUploading ? (
                                             <>
                                                 <MaterialIcon icon="hourglass_empty" className="animate-spin" />
-                                                <span className="text-label-caps">Processing...</span>
+                                                <span className="text-label-caps">{t('uploadProcessing')}</span>
                                             </>
                                         ) : (
                                             <>
-                                                <span className="text-label-caps">Select File</span>
+                                                <span className="text-label-caps">{t('uploadSelectFile')}</span>
                                                 <MaterialIcon icon="folder_open" />
                                             </>
                                         )}
@@ -155,10 +159,10 @@ export default function UploadPage() {
 
                                 <div className="mt-8 pt-8 border-t border-border-subtle">
                                     <p className="text-[10px] text-on-surface-variant/40 uppercase tracking-widest mb-4">
-                                        Supported formats
+                                        {t('uploadSupportedFormats')}
                                     </p>
                                     <div className="flex justify-center gap-4">
-                                        <span className="text-label-caps text-[10px] px-3 py-1 border border-border-soft rounded-full">PDF</span>
+                                        <span className="text-label-caps text-[10px] px-3 py-1 border border-border-soft rounded-full">{t('uploadPDF')}</span>
                                     </div>
                                 </div>
                             </GlassPanel>
@@ -166,7 +170,7 @@ export default function UploadPage() {
                             <div className="mt-8 flex items-center justify-center gap-3">
                                 <MaterialIcon icon="lock" className="text-on-surface-variant/40 text-sm" />
                                 <p className="text-[10px] text-on-surface-variant/40 uppercase tracking-widest">
-                                    Secure CV processing — your CV is used only to build your Rico profile
+                                    {t('uploadSecureProcessing')}
                                 </p>
                             </div>
                         </>

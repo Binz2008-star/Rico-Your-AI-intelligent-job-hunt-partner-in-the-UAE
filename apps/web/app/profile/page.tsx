@@ -8,6 +8,8 @@ import { StatusCard } from "@/components/StatusCard";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useToast } from "@/hooks/useToast";
 import { ApiError, fetchProfile, updateProfile, type ProfileResponse } from "@/lib/api";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTranslation } from "@/lib/translations";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -29,6 +31,8 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 }
 
 function ChatCTA({ message }: { message: string }) {
+    const { language } = useLanguage();
+    const t = useTranslation(language);
     return (
         <div className="rounded-lg border border-rico-accent-border bg-rico-accent/[0.05] px-4 py-3">
             <p className="mb-2 text-sm text-rico-text-dim">{message}</p>
@@ -36,7 +40,7 @@ function ChatCTA({ message }: { message: string }) {
                 href="/command"
                 className="inline-block rounded-lg bg-rico-accent px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-rico-accent-hover"
             >
-                Open Rico chat →
+                {t("profileOpenRicoChat")} →
             </Link>
         </div>
     );
@@ -60,6 +64,8 @@ function EditableNameField({
     value: string | null | undefined;
     onSave: (nextName: string) => Promise<void>;
 }) {
+    const { language } = useLanguage();
+    const t = useTranslation(language);
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState(value ?? "");
     const [saving, setSaving] = useState(false);
@@ -78,7 +84,7 @@ function EditableNameField({
             event.preventDefault();
             const trimmed = draft.trim();
             if (!trimmed) {
-                setError("Name cannot be empty.");
+                setError(t("profileNameEmpty"));
                 return;
             }
 
@@ -88,12 +94,12 @@ function EditableNameField({
                 await onSave(trimmed);
                 setEditing(false);
             } catch (err: unknown) {
-                setError(err instanceof Error ? err.message : "Could not save name.");
+                setError(err instanceof Error ? err.message : t("profileCouldNotSaveName"));
             } finally {
                 setSaving(false);
             }
         },
-        [draft, onSave]
+        [draft, onSave, t]
     );
 
     if (!editing) {
@@ -102,7 +108,7 @@ function EditableNameField({
                 <span className="text-text-primary">{displayValue}</span>
                 <button
                     type="button"
-                    aria-label="Edit name"
+                    aria-label={t("edit")}
                     onClick={() => {
                         setDraft(value ?? "");
                         setError(null);
@@ -110,7 +116,7 @@ function EditableNameField({
                     }}
                     className="text-[11px] text-rico-purple underline underline-offset-2 transition-colors hover:text-[#c4b5fd]"
                 >
-                    Edit
+                    {t("edit")}
                 </button>
             </span>
         );
@@ -119,7 +125,7 @@ function EditableNameField({
     return (
         <form className="mt-2 flex max-w-sm flex-col gap-2" onSubmit={handleSave}>
             <label htmlFor="profile-name" className="sr-only">
-                Name
+                {t("name")}
             </label>
             <input
                 id="profile-name"
@@ -127,7 +133,7 @@ function EditableNameField({
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 className="w-full rounded-lg border border-border-soft bg-surface-glass px-3 py-2 text-sm text-text-primary outline-none transition focus:border-rico-accent"
-                placeholder="Enter your name"
+                placeholder={t("profileEnterName")}
                 disabled={saving}
             />
             {error && <p className="text-xs text-rico-red" role="alert">{error}</p>}
@@ -137,7 +143,7 @@ function EditableNameField({
                     disabled={saving}
                     className="rounded-lg bg-rico-accent px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-rico-accent-hover disabled:opacity-60"
                 >
-                    {saving ? "Saving..." : "Save"}
+                    {saving ? t("profileSaving") : t("save")}
                 </button>
                 <button
                     type="button"
@@ -145,7 +151,7 @@ function EditableNameField({
                     disabled={saving}
                     className="rounded-lg border border-border-soft px-3 py-1.5 text-xs font-semibold text-rico-text-muted transition-colors hover:border-white/20 hover:text-text-primary disabled:opacity-60"
                 >
-                    Cancel
+                    {t("cancel")}
                 </button>
             </div>
         </form>
@@ -163,6 +169,8 @@ function EditableTextField({
     placeholder?: string;
     label?: string;
 }) {
+    const { language } = useLanguage();
+    const t = useTranslation(language);
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState(value ?? "");
     const [saving, setSaving] = useState(false);
@@ -186,12 +194,12 @@ function EditableTextField({
                 await onSave(trimmed);
                 setEditing(false);
             } catch (err: unknown) {
-                setError(err instanceof Error ? err.message : "Could not save.");
+                setError(err instanceof Error ? err.message : t("profileCouldNotSave"));
             } finally {
                 setSaving(false);
             }
         },
-        [draft, onSave]
+        [draft, onSave, t]
     );
 
     if (!editing) {
@@ -200,15 +208,15 @@ function EditableTextField({
                 <span className="text-text-primary">{displayValue}</span>
                 <button
                     type="button"
-                    aria-label={`Edit ${label}`}
+                    aria-label={`${t("edit")} ${label}`}
                     onClick={() => {
                         setDraft(value ?? "");
                         setError(null);
                         setEditing(true);
                     }}
-                    className="ml-2 text-[11px] text-rico-purple underline underline-offset-2 transition-colors hover:text-[#c4b5fd]"
+                    className="ms-2 text-[11px] text-rico-purple underline underline-offset-2 transition-colors hover:text-[#c4b5fd]"
                 >
-                    Edit
+                    {t("edit")}
                 </button>
             </>
         );
@@ -235,7 +243,7 @@ function EditableTextField({
                     disabled={saving}
                     className="rounded-lg bg-rico-accent px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-rico-accent-hover disabled:opacity-60"
                 >
-                    {saving ? "Saving..." : "Save"}
+                    {saving ? t("profileSaving") : t("save")}
                 </button>
                 <button
                     type="button"
@@ -243,7 +251,7 @@ function EditableTextField({
                     disabled={saving}
                     className="rounded-lg border border-border-soft px-3 py-1.5 text-xs font-semibold text-rico-text-muted transition-colors hover:border-white/20 hover:text-text-primary disabled:opacity-60"
                 >
-                    Cancel
+                    {t("cancel")}
                 </button>
             </div>
         </form>
@@ -283,6 +291,8 @@ function ProfileDetail({
     onSaveExperience: (nextExperience: string) => Promise<void>;
     onSaveSkills: (nextSkills: string) => Promise<void>;
 }) {
+    const { language } = useLanguage();
+    const t = useTranslation(language);
     const hasJobPrefs =
         (profile.target_roles?.length ?? 0) > 0 ||
         (profile.preferred_cities?.length ?? 0) > 0 ||
@@ -294,67 +304,67 @@ function ProfileDetail({
     return (
         <div className="flex flex-col gap-4">
             {/* Identity */}
-            <StatusCard title="Identity" badge="live">
+            <StatusCard title={t("profileIdentity")} badge="live" badgeLabel={t("profileBadgeSynced")}>
                 <dl className="grid grid-cols-1 gap-y-3 text-sm sm:grid-cols-2 sm:gap-x-6">
-                    <Row label="Name">
+                    <Row label={t("name")}>
                         <EditableNameField value={profile.name} onSave={onSaveName} />
                     </Row>
-                    <Row label="Email">
+                    <Row label={t("email")}>
                         <span className="text-text-primary">{profile.email ?? "—"}</span>
                     </Row>
-                    <Row label="Phone">
+                    <Row label={t("profilePhone")}>
                         <EditableTextField
                             value={profile.phone}
                             onSave={onSavePhone}
-                            placeholder="Enter phone number"
+                            placeholder={t("profileEnterPhone")}
                             label="phone"
                         />
                     </Row>
-                    <Row label="Telegram">
+                    <Row label={t("telegram")}>
                         <EditableTextField
                             value={profile.telegram_username}
                             onSave={onSaveTelegram}
-                            placeholder="Enter Telegram username"
+                            placeholder={t("profileEnterTelegram")}
                             label="telegram"
                         />
                     </Row>
-                    <Row label="Visa">
+                    <Row label={t("profileVisa")}>
                         <EditableTextField
                             value={profile.visa_status}
                             onSave={onSaveVisa}
-                            placeholder="Enter visa status"
+                            placeholder={t("profileEnterVisa")}
                             label="visa"
                         />
                     </Row>
-                    <Row label="Notice">
+                    <Row label={t("profileNotice")}>
                         <EditableTextField
                             value={profile.notice_period}
                             onSave={onSaveNotice}
-                            placeholder="Enter notice period"
+                            placeholder={t("profileEnterNotice")}
                             label="notice"
                         />
                     </Row>
-                    <Row label="Current company">
+                    <Row label={t("profileCurrentCompany")}>
                         <EditableTextField
                             value={profile.current_company}
                             onSave={onSaveCurrentCompany}
-                            placeholder="Enter current company"
+                            placeholder={t("profileEnterCurrentCompany")}
                             label="current-company"
                         />
                     </Row>
-                    <Row label="Current role">
+                    <Row label={t("profileCurrentRole")}>
                         <EditableTextField
                             value={profile.current_role}
                             onSave={onSaveCurrentRole}
-                            placeholder="Enter current role"
+                            placeholder={t("profileEnterCurrentRole")}
                             label="current-role"
                         />
                     </Row>
-                    <Row label="LinkedIn">
+                    <Row label={t("profileLinkedin")}>
                         <EditableTextField
                             value={profile.linkedin_url}
                             onSave={onSaveLinkedin}
-                            placeholder="Enter LinkedIn URL"
+                            placeholder={t("profileEnterLinkedin")}
                             label="linkedin"
                         />
                     </Row>
@@ -362,72 +372,72 @@ function ProfileDetail({
             </StatusCard>
 
             {/* Job preferences */}
-            <StatusCard title="Job preferences" badge={hasJobPrefs ? "live" : "pending"}>
+            <StatusCard title={t("profileJobPreferences")} badge={hasJobPrefs ? "live" : "pending"} badgeLabel={hasJobPrefs ? t("profileBadgeSynced") : t("profileBadgePending")}>
                 {hasJobPrefs ? (
                     <dl className="grid grid-cols-1 gap-y-3 text-sm sm:grid-cols-2 sm:gap-x-6">
-                        <Row label="Target roles">
+                        <Row label={t("profileTargetRoles")}>
                             <EditableTextField
                                 value={profile.target_roles?.join(', ') || null}
                                 onSave={onSaveTargetRoles}
-                                placeholder="Enter target roles (comma-separated)"
+                                placeholder={t("profileEnterTargetRoles")}
                                 label="target-roles"
                             />
                         </Row>
-                        <Row label="Cities">
+                        <Row label={t("profileCities")}>
                             <EditableTextField
                                 value={profile.preferred_cities?.join(', ') || null}
                                 onSave={onSaveCities}
-                                placeholder="Enter preferred cities (comma-separated)"
+                                placeholder={t("profileEnterCities")}
                                 label="cities"
                             />
                         </Row>
-                        <Row label="Salary target">
+                        <Row label={t("profileSalaryTarget")}>
                             <EditableTextField
                                 value={profile.salary_expectation_aed != null ? String(profile.salary_expectation_aed) : null}
                                 onSave={onSaveSalaryTarget}
-                                placeholder="Enter salary target (AED)"
+                                placeholder={t("profileEnterSalaryTarget")}
                                 label="salary-target"
                             />
                         </Row>
-                        <Row label="Minimum salary">
+                        <Row label={t("profileMinimumSalary")}>
                             <EditableTextField
                                 value={profile.minimum_salary_aed != null ? String(profile.minimum_salary_aed) : null}
                                 onSave={async (val) => {
                                     const parsed = Number(val);
                                     if (!Number.isFinite(parsed) || parsed < 0) {
-                                        throw new Error("Enter a valid salary amount.");
+                                        throw new Error(t("profileInvalidSalary"));
                                     }
                                     return onSaveMinSalary(parsed);
                                 }}
-                                placeholder="Enter minimum salary (AED)"
+                                placeholder={t("profileEnterMinSalary")}
                                 label="min-salary"
                             />
                         </Row>
-                        <Row label="Experience">
+                        <Row label={t("profileExperience")}>
                             <EditableTextField
                                 value={profile.years_experience != null ? String(profile.years_experience) : null}
                                 onSave={onSaveExperience}
-                                placeholder="Enter years of experience"
+                                placeholder={t("profileEnterExperience")}
                                 label="experience"
                             />
                         </Row>
                     </dl>
                 ) : (
-                    <ChatCTA message="Tell Rico your target roles, preferred cities, and salary expectations to complete your job preferences." />
+                    <ChatCTA message={t("profileJobPrefsCTA")} />
                 )}
             </StatusCard>
 
             {/* Skills */}
-            <StatusCard title="Skills" badge={hasSkills ? "live" : "pending"}>
+            <StatusCard title={t("profileSkills")} badge={hasSkills ? "live" : "pending"} badgeLabel={hasSkills ? t("profileBadgeSynced") : t("profileBadgePending")}>
                 {hasSkills ? (
                     <EditableTextField
                         value={profile.skills?.join(', ') || null}
                         onSave={onSaveSkills}
-                        placeholder="Enter skills (comma-separated)"
+                        placeholder={t("profileEnterSkills")}
                         label="skills"
                     />
                 ) : (
-                    <ChatCTA message="Share your skills with Rico to improve job matching accuracy." />
+                    <ChatCTA message={t("profileSkillsCTA")} />
                 )}
             </StatusCard>
         </div>
@@ -435,14 +445,16 @@ function ProfileDetail({
 }
 
 export default function ProfilePage() {
+    const { language } = useLanguage();
+    const t = useTranslation(language);
     const { toasts, toast } = useToast();
     const [profile, setProfile] = useState<ProfileResponse | null>(null);
     const [error, setError] = useState<"auth" | "other" | null>(null);
     const [loading, setLoading] = useState(true);
 
     const warnRefreshFail = useCallback(() => {
-        toast("Saved, but profile refresh failed — reload the page to see latest values.", "error");
-    }, [toast]);
+        toast(t("profileRefreshFailed"), "error");
+    }, [toast, t]);
 
     const loadProfile = useCallback(async () => {
         try {
@@ -607,7 +619,7 @@ export default function ProfilePage() {
     const handleSaveSalaryTarget = useCallback(async (nextSalary: string) => {
         const parsed = Number(nextSalary);
         if (!Number.isFinite(parsed) || parsed < 0) {
-            throw new Error("Enter a valid salary amount.");
+            throw new Error(t("profileInvalidSalary"));
         }
         await updateProfile({ salary_expectation_aed: parsed });
         setProfile((current) => (current ? { ...current, salary_expectation_aed: parsed } : current));
@@ -618,12 +630,12 @@ export default function ProfilePage() {
         } catch {
             warnRefreshFail();
         }
-    }, [warnRefreshFail]);
+    }, [warnRefreshFail, t]);
 
     const handleSaveExperience = useCallback(async (nextExperience: string) => {
         const parsed = Number(nextExperience);
         if (!Number.isFinite(parsed) || parsed < 0) {
-            throw new Error("Enter a valid number of years.");
+            throw new Error(t("profileInvalidYears"));
         }
         await updateProfile({ years_experience: parsed });
         setProfile((current) => (current ? { ...current, years_experience: parsed } : current));
@@ -634,7 +646,7 @@ export default function ProfilePage() {
         } catch {
             warnRefreshFail();
         }
-    }, [warnRefreshFail]);
+    }, [warnRefreshFail, t]);
 
     const handleSaveSkills = useCallback(async (nextSkills: string) => {
         const skills = nextSkills.split(',').map(s => s.trim()).filter(Boolean);
@@ -650,13 +662,15 @@ export default function ProfilePage() {
     }, [warnRefreshFail]);
 
     return (
-        <DashboardShell title="Profile">
+        <DashboardShell title={t("profileTitle")}>
             <div className="max-w-2xl">
-                {loading && <LoadingState variant="card" message="Loading profile…" />}
+                {loading && <LoadingState variant="card" message={t("profileLoading")} />}
 
                 {!loading && error && (
                     <ErrorState
                         variant={error === "auth" ? "auth" : "network"}
+                        title={error === "auth" ? t("profileAuthRequired") : t("profileConnectionFailed")}
+                        message={error === "auth" ? t("profileAuthRequiredMsg") : t("profileConnectionFailedMsg")}
                         onRetry={handleRetry}
                     />
                 )}
@@ -664,23 +678,23 @@ export default function ProfilePage() {
                 {!loading && !error && profile && !profile.profile_exists && (
                     <div className="flex flex-col gap-4">
                         <EmptyState
-                            title="No profile set up yet"
-                            description="Rico builds your profile through a short conversation. Tell it your target role, experience, location, and salary range to get started."
-                            actionLabel="Start setup with Rico"
+                            title={t("profileNoProfileTitle")}
+                            description={t("profileNoProfileDesc")}
+                            actionLabel={t("profileStartSetup")}
                             actionHref="/command"
                         />
 
                         <div className="rounded-xl border border-rico-border bg-rico-surface-2/60 p-5">
                             <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-rico-text-dim">
-                                What Rico will set up
+                                {t("profileWhatRicoSetsUp")}
                             </h3>
                             <ul className="flex flex-col gap-2 text-sm text-rico-text-muted">
                                 {[
-                                    "Target roles and preferred job titles",
-                                    "Preferred cities and remote preferences",
-                                    "Salary expectations",
-                                    "Years of experience and skills",
-                                    "Visa status and notice period",
+                                    t("profileSetupRoles"),
+                                    t("profileSetupCities"),
+                                    t("profileSetupSalary"),
+                                    t("profileSetupExperience"),
+                                    t("profileSetupVisa"),
                                 ].map((item) => (
                                     <li key={item} className="flex items-start gap-2">
                                         <span className="mt-0.5 text-rico-purple">·</span>

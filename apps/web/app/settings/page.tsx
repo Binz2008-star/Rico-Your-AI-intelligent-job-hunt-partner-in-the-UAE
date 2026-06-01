@@ -6,7 +6,9 @@ import { StatusCard } from "@/components/StatusCard";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { ApiError, fetchMe, getHealth, getSettings, updateSettings } from "@/lib/api";
+import { useTranslation } from "@/lib/translations";
 import type { HealthResponse, SettingsResponse } from "@/types";
 import { useCallback, useEffect, useState } from "react";
 
@@ -29,6 +31,8 @@ function Row({ label, value, ok }: { label: string; value: string; ok?: boolean 
 export default function SettingsPage() {
   const { user } = useAuth();
   const { toasts, toast } = useToast();
+  const { language } = useLanguage();
+  const t = useTranslation(language);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
   const [loadingHealth, setLoadingHealth] = useState(!SETTINGS_BACKEND_MAINTENANCE_MODE);
@@ -40,15 +44,15 @@ export default function SettingsPage() {
   const isAdmin = userRole === "admin";
   const telegramConfigured = Boolean(settings?.telegram_chat_id?.trim());
   const telegramStatus = SETTINGS_BACKEND_MAINTENANCE_MODE
-    ? "Paused"
+    ? t("paused")
     : telegramConfigured
-      ? "Configured"
-      : "Not configured";
+      ? t("configured")
+      : t("notConfigured");
   const telegramDescription = telegramConfigured
-    ? "A Telegram chat ID is saved for job alerts."
+    ? t("telegramConfigured")
     : SETTINGS_BACKEND_MAINTENANCE_MODE
-      ? "Add a Telegram chat ID after backend service is restored."
-      : "Add a Telegram chat ID to enable job alerts.";
+      ? t("telegramPaused")
+      : t("telegramNotConfigured");
 
   useEffect(() => {
     if (SETTINGS_BACKEND_MAINTENANCE_MODE) {
@@ -56,9 +60,9 @@ export default function SettingsPage() {
     }
     getHealth()
       .then(setHealth)
-      .catch(() => toast("Backend unreachable", "error"))
+      .catch(() => toast(t("backendUnreachable"), "error"))
       .finally(() => setLoadingHealth(false));
-  }, [toast]);
+  }, [toast, t]);
 
   const loadSettings = useCallback(async () => {
     if (SETTINGS_BACKEND_MAINTENANCE_MODE) {
@@ -72,11 +76,11 @@ export default function SettingsPage() {
     } catch (err) {
       const is401 = err instanceof ApiError && err.statusCode === 401;
       setError(is401 ? "auth" : "other");
-      toast(is401 ? "Session expired" : "Could not load settings", "error");
+      toast(is401 ? t("sessionExpired") : t("couldNotLoadSettings"), "error");
     } finally {
       setLoadingSettings(false);
     }
-  }, [toast, user]);
+  }, [toast, user, t]);
 
   useEffect(() => {
     if (SETTINGS_BACKEND_MAINTENANCE_MODE) return;
@@ -115,13 +119,13 @@ export default function SettingsPage() {
 
   const handleRetrySettings = useCallback(() => {
     if (SETTINGS_BACKEND_MAINTENANCE_MODE) {
-      toast("Settings sync is paused during backend maintenance", "error");
+      toast(t("settingsSyncPaused"), "error");
       return;
     }
     setError(null);
     setLoadingSettings(true);
     void loadSettings();
-  }, [loadSettings, toast]);
+  }, [loadSettings, toast, t]);
 
   const handleSave = async () => {
     if (!settings) return;
@@ -137,10 +141,10 @@ export default function SettingsPage() {
         exclude_keywords: settings.exclude_keywords,
       });
       setSettings(updated);
-      toast("Settings saved", "success");
+      toast(t("settingsSaved"), "success");
     } catch (err) {
       const is401 = err instanceof ApiError && err.statusCode === 401;
-      toast(is401 ? "Session expired — please log in again" : "Save failed", "error");
+      toast(is401 ? t("sessionExpiredLogIn") : t("saveFailed"), "error");
     } finally {
       setSaving(false);
     }
@@ -150,16 +154,15 @@ export default function SettingsPage() {
 
   return (
     <DashboardShell
-      title="Settings"
-      subtitle="Account, preferences, and integrations"
+      title={t("settings")}
+      subtitle={t("settingsSubtitle")}
     >
       <div className="max-w-3xl flex flex-col gap-8">
         {SETTINGS_BACKEND_MAINTENANCE_MODE && (
           <section className="rounded-2xl border border-[rgba(245,166,35,0.35)] bg-[rgba(245,166,35,0.08)] px-5 py-4">
-            <p className="text-[13px] font-semibold text-[#f5a623]">Backend maintenance in progress</p>
+            <p className="text-[13px] font-semibold text-[#f5a623]">{t("backendMaintenance")}</p>
             <p className="mt-1 text-[12px] leading-relaxed text-[#a08040]">
-              Settings sync and Telegram delivery are paused while Render hosting is restored.
-              Existing frontend pages remain available, but backend-backed preferences cannot be changed.
+              {t("backendMaintenanceDescription")}
             </p>
           </section>
         )}
@@ -167,36 +170,36 @@ export default function SettingsPage() {
         {/* Job Matching Preferences */}
         {settings && (
           <section className="space-y-4">
-            <h2 className="text-[11px] font-black text-text-tertiary uppercase tracking-[0.2em] ml-1">Job Matching Preferences</h2>
+            <h2 className="text-[11px] font-black text-text-tertiary uppercase tracking-[0.2em] ms-1">{t("jobMatchingPreferences")}</h2>
             <div className="grid gap-4 sm:grid-cols-2">
-              <StatusCard title="Apply pacing" value={String(settings.max_daily_applies)}>
+              <StatusCard title={t("applyPacing")} value={String(settings.max_daily_applies)}>
                 <div className="mt-2">
                   <input
                     type="range" min={0} max={50} step={1}
-                    aria-label="Daily apply limit"
+                    aria-label={t("applyPacing")}
                     value={settings.max_daily_applies}
                     onChange={(e) => setSettings({ ...settings, max_daily_applies: Number(e.target.value) })}
                     className="w-full h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer accent-[#5b4fff]"
                   />
                   <div className="flex justify-between mt-2 text-[10px] text-text-tertiary font-bold uppercase tracking-tighter">
-                    <span>Safety</span>
-                    <span>Aggressive</span>
+                    <span>{t("safety")}</span>
+                    <span>{t("aggressive")}</span>
                   </div>
                 </div>
               </StatusCard>
 
-              <StatusCard title="Minimum fit score" value={`${settings.min_score}%`}>
+              <StatusCard title={t("minimumFitScore")} value={`${settings.min_score}%`}>
                 <div className="mt-2">
                   <input
                     type="range" min={50} max={95} step={5}
-                    aria-label="Minimum fit score"
+                    aria-label={t("minimumFitScore")}
                     value={settings.min_score}
                     onChange={(e) => setSettings({ ...settings, min_score: Number(e.target.value) })}
                     className="w-full h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer accent-[#00c9a7]"
                   />
                   <div className="flex justify-between mt-2 text-[10px] text-text-tertiary font-bold uppercase tracking-tighter">
-                    <span>General</span>
-                    <span>High Match Only</span>
+                    <span>{t("general")}</span>
+                    <span>{t("highMatchOnly")}</span>
                   </div>
                 </div>
               </StatusCard>
@@ -208,7 +211,7 @@ export default function SettingsPage() {
         <section className="bg-surface-elevated/40 border border-border-subtle rounded-2xl p-6 backdrop-blur-md relative overflow-hidden">
           <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#5b4fff]/5 blur-3xl rounded-full pointer-events-none" />
 
-          <h3 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[17px] text-text-primary mb-6">Match thresholds</h3>
+          <h3 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[17px] text-text-primary mb-6">{t("matchThresholds")}</h3>
 
           {loadingSettings ? (
             <div className="flex flex-col gap-3">
@@ -225,7 +228,7 @@ export default function SettingsPage() {
             <div className="flex flex-col gap-4">
               <div className="grid grid-cols-2 gap-4">
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-[11px] text-text-tertiary uppercase tracking-wider font-semibold">Apply threshold</span>
+                  <span className="text-[11px] text-text-tertiary uppercase tracking-wider font-semibold">{t("applyThreshold")}</span>
                   <input
                     type="number"
                     min={0}
@@ -236,7 +239,7 @@ export default function SettingsPage() {
                   />
                 </label>
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-[11px] text-text-tertiary uppercase tracking-wider font-semibold">Watch threshold</span>
+                  <span className="text-[11px] text-text-tertiary uppercase tracking-wider font-semibold">{t("watchThreshold")}</span>
                   <input
                     type="number"
                     min={0}
@@ -248,12 +251,12 @@ export default function SettingsPage() {
                 </label>
               </div>
               <label className="flex flex-col gap-1.5">
-                <span className="text-[11px] text-text-tertiary uppercase tracking-wider font-semibold">Telegram chat ID</span>
+                <span className="text-[11px] text-text-tertiary uppercase tracking-wider font-semibold">{t("telegramChatId")}</span>
                 <input
                   type="text"
                   value={settings.telegram_chat_id}
                   onChange={(e) => setSettings({ ...settings, telegram_chat_id: e.target.value })}
-                  placeholder="Optional — for job alerts"
+                  placeholder={t("telegramPlaceholder")}
                   className="bg-surface border border-border-soft rounded-lg px-3 py-2 text-[13px] text-text-secondary outline-none focus:border-[rgba(91,79,255,0.4)] placeholder:text-text-tertiary"
                 />
               </label>
@@ -262,7 +265,7 @@ export default function SettingsPage() {
                 disabled={saving}
                 className="self-start px-4 py-2 rounded-lg bg-rico-accent-muted text-rico-purple border border-rico-accent-border text-[13px] font-semibold hover:bg-rico-accent/25 transition-all disabled:opacity-40"
               >
-                {saving ? "Saving…" : "Save settings"}
+                {saving ? t("saving") : t("saveSettings")}
               </button>
             </div>
           ) : null}
@@ -272,12 +275,12 @@ export default function SettingsPage() {
         <section className="bg-surface-elevated/40 border border-border-subtle rounded-2xl p-6 backdrop-blur-md relative overflow-hidden">
           <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#00c9a7]/5 blur-3xl rounded-full pointer-events-none" />
 
-          <h3 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[17px] text-text-primary mb-6">Channel Preferences</h3>
+          <h3 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[17px] text-text-primary mb-6">{t("channelPreferences")}</h3>
 
           <div className="space-y-6">
             <div className="flex items-center justify-between group">
               <div className="space-y-1">
-                <p className="text-sm font-bold text-text-primary group-hover:text-white transition-colors">Telegram Notifications</p>
+                <p className="text-sm font-bold text-text-primary group-hover:text-white transition-colors">{t("telegramNotifications")}</p>
                 <p className="text-xs text-text-tertiary">
                   {telegramDescription}
                 </p>
@@ -288,8 +291,8 @@ export default function SettingsPage() {
             <div className="pt-6 border-t border-border-subtle flex items-center justify-between">
               <span className="text-[11px] text-text-tertiary font-medium uppercase tracking-widest">
                 {SETTINGS_BACKEND_MAINTENANCE_MODE
-                  ? "Status: Paused during backend maintenance"
-                  : saving ? "Syncing with Rico..." : "Status: Cloud Synced"}
+                  ? t("statusPaused")
+                  : saving ? t("statusSyncing") : t("statusSynced")}
               </span>
               {saving && <div className="w-3 h-3 border-2 border-[#5b4fff] border-t-transparent rounded-full animate-spin" />}
             </div>
@@ -299,7 +302,7 @@ export default function SettingsPage() {
         {/* Backend Status — Admin Only */}
         {isAdmin && (
           <section className="bg-surface-elevated/80 border border-border-subtle rounded-2xl p-6">
-            <h2 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[15px] mb-4 text-text-primary">Backend Status</h2>
+            <h2 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[15px] mb-4 text-text-primary">{t("backendStatus")}</h2>
             {loadingHealth ? (
               <div className="flex flex-col gap-2">
                 {Array.from({ length: 5 }).map((_, i) => (
@@ -324,46 +327,46 @@ export default function SettingsPage() {
 
                 return (
                   <>
-                    <Row label="Service" value={health.service ?? "—"} />
-                    <Row label="Status" value={health.status} ok={health.status === "ok" || health.status === "healthy"} />
-                    <Row label="Environment" value={health.environment ?? "—"} />
-                    <Row label="Database" value={dbStatus} ok={dbStatus === "connected"} />
+                    <Row label={t("service")} value={health.service ?? "—"} />
+                    <Row label={t("status")} value={health.status} ok={health.status === "ok" || health.status === "healthy"} />
+                    <Row label={t("environment")} value={health.environment ?? "—"} />
+                    <Row label={t("database")} value={dbStatus} ok={dbStatus === "connected"} />
                     <Row
-                      label="AI Provider"
+                      label={t("aiProvider")}
                       value={aiProvider}
                       ok={readyForHf || readyForOpenAI || readyForDeepSeek}
                     />
                     <Row
-                      label="Hugging Face"
-                      value={readyForHf ? "Configured" : "Not configured"}
+                      label={t("huggingFace")}
+                      value={readyForHf ? t("configured") : t("notConfigured")}
                       ok={readyForHf}
                     />
                     <Row
-                      label="DeepSeek"
-                      value={readyForDeepSeek ? "Active" : "Not active"}
+                      label={t("deepSeek")}
+                      value={readyForDeepSeek ? t("active") : t("notActive")}
                       ok={readyForDeepSeek}
                     />
                     <Row
-                      label="OpenAI"
-                      value={readyForOpenAI ? "Active" : "Not active"}
+                      label={t("openai")}
+                      value={readyForOpenAI ? t("active") : t("notActive")}
                       ok={readyForOpenAI}
                     />
                     <Row
-                      label="Jotform"
-                      value={readyForJotform ? "Configured" : "Not configured"}
+                      label={t("jotform")}
+                      value={readyForJotform ? t("configured") : t("notConfigured")}
                       ok={readyForJotform}
                     />
                     <Row
-                      label="Telegram"
-                      value={readyForTelegram ? "Connected" : "Not configured"}
+                      label={t("telegram")}
+                      value={readyForTelegram ? t("connected") : t("notConfigured")}
                       ok={readyForTelegram}
                     />
-                    <Row label="Version" value={`v${health.version ?? "0"}`} />
+                    <Row label={t("version")} value={`v${health.version ?? "0"}`} />
                   </>
                 );
               })()
             ) : (
-              <p className="text-[13px] text-[#ff5e5b]">Could not reach backend</p>
+              <p className="text-[13px] text-[#ff5e5b]">{t("couldNotReachBackend")}</p>
             )}
           </section>
         )}
@@ -371,18 +374,18 @@ export default function SettingsPage() {
         {/* Frontend Config — Admin Only */}
         {isAdmin && (
           <section className="bg-surface-elevated/80 border border-border-subtle rounded-2xl p-6">
-            <h2 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[15px] mb-4 text-text-primary">Frontend Config</h2>
-            <Row label="Mock mode" value={isMock ? "ENABLED — using dev fixtures" : "OFF — hitting real backend"} ok={!isMock} />
+            <h2 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[15px] mb-4 text-text-primary">{t("frontendConfig")}</h2>
+            <Row label={t("mockMode")} value={isMock ? t("mockEnabled") : t("mockDisabled")} ok={!isMock} />
           </section>
         )}
 
         {/* Legal */}
         <section className="bg-surface-elevated/80 border border-border-subtle rounded-2xl p-6">
-          <h2 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[15px] mb-4 text-text-primary">Legal</h2>
+          <h2 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[15px] mb-4 text-text-primary">{t("legal")}</h2>
           <div className="flex flex-wrap gap-4">
-            <a href="/terms" className="text-[13px] text-text-tertiary hover:text-text-primary transition-colors">Terms of Service</a>
-            <a href="/privacy" className="text-[13px] text-text-tertiary hover:text-text-primary transition-colors">Privacy Policy</a>
-            <a href="/refund-policy" className="text-[13px] text-text-tertiary hover:text-text-primary transition-colors">Refund &amp; Cancellation</a>
+            <a href="/terms" className="text-[13px] text-text-tertiary hover:text-text-primary transition-colors">{t("termsOfService")}</a>
+            <a href="/privacy" className="text-[13px] text-text-tertiary hover:text-text-primary transition-colors">{t("privacyPolicy")}</a>
+            <a href="/refund-policy" className="text-[13px] text-text-tertiary hover:text-text-primary transition-colors">{t("refundPolicy")}</a>
           </div>
         </section>
 

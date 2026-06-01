@@ -1,9 +1,13 @@
 "use client";
 
 import { LoginForm } from '@/components/auth/LoginForm';
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTranslation } from "@/lib/translations";
 import Link from "next/link";
 
 export default function LoginPage() {
+    const { language } = useLanguage();
+    const t = useTranslation(language);
     return (
         <main className="flex min-h-screen items-center justify-center bg-background px-4 relative overflow-hidden">
             {/* Ambient glow - cinematic magenta/cyan */}
@@ -21,7 +25,7 @@ export default function LoginPage() {
                         </div>
                         <span className="font-display font-black text-xl text-text-primary tracking-tight">Rico <span className="text-[#f5a623]">Hunt</span></span>
                     </Link>
-                    <p className="mt-3 text-sm text-text-muted">Sign in to your autonomous job agent</p>
+                    <p className="mt-3 text-sm text-text-muted">{t('signInToAgent')}</p>
                 </div>
 
                 <LoginForm />
