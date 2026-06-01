@@ -141,7 +141,7 @@ def send_message(
     if decision.should_use_ai:
         return _conversational_ai_reply(ctx=ctx, message=message, profile=profile, language=language)
 
-    return _legacy_send_message(ctx=ctx, message=message, operation_id=operation_id)
+    return _legacy_send_message(ctx=ctx, message=message, operation_id=operation_id, language=language)
 
 
 def _unsupported_tool_response(policy: Any) -> Dict[str, Any]:
@@ -409,6 +409,7 @@ def _legacy_send_message(
     ctx: RicoSessionContext,
     message: str,
     operation_id: str | None = None,
+    language: str | None = None,
 ) -> Dict[str, Any]:
     """Run the existing Rico chat pipeline unchanged."""
     from src.rico_chat_api import RicoChatAPI
@@ -417,6 +418,7 @@ def _legacy_send_message(
         user_id=ctx.user_id,
         message=message,
         operation_id=operation_id,
+        language=language,
     )
 
 

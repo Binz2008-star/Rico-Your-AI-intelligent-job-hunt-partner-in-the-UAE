@@ -450,7 +450,7 @@ def call_openai_stream(
         client = _build_client(active_provider)
     except Exception:
         result = call_openai_minimal(user_message, profile_context, provider=provider,
-                                     conversation_history=conversation_history)
+                                     conversation_history=conversation_history, language=language)
         yield result.get("text", "")
         return
 
@@ -486,5 +486,5 @@ def call_openai_stream(
     except Exception:
         # Streaming failed — fall back to non-streaming
         result = call_openai_minimal(user_message, profile_context, provider=provider,
-                                     conversation_history=conversation_history)
+                                     conversation_history=conversation_history, language=language)
         yield result.get("text", "")
