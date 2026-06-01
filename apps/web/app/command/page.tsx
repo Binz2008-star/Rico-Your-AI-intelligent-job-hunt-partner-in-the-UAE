@@ -837,8 +837,8 @@ export default function CommandPage() {
                 : t("cmdCvProfileConfirmed");
             setMessages((prev) => prev.map(m => m.id === messageId ? { ...m, type: "profile_confirmed", text: confirmText } : m));
         } catch (err) {
-            const msg = err instanceof Error ? err.message : t("cmdCvProfileError");
-            setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: `${t("cmdCvProfileError")}: ${msg}` }]);
+            const text = err instanceof Error ? `${t("cmdCvProfileError")}: ${err.message}` : t("cmdCvProfileError");
+            setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: text }]);
         } finally {
             setThinking(false);
             setOperationState(null);
