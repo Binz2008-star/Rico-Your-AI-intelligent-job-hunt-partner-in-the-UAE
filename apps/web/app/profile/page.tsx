@@ -619,7 +619,7 @@ export default function ProfilePage() {
     const handleSaveSalaryTarget = useCallback(async (nextSalary: string) => {
         const parsed = Number(nextSalary);
         if (!Number.isFinite(parsed) || parsed < 0) {
-            throw new Error("Enter a valid salary amount.");
+            throw new Error(t("profileInvalidSalary"));
         }
         await updateProfile({ salary_expectation_aed: parsed });
         setProfile((current) => (current ? { ...current, salary_expectation_aed: parsed } : current));
@@ -630,12 +630,12 @@ export default function ProfilePage() {
         } catch {
             warnRefreshFail();
         }
-    }, [warnRefreshFail]);
+    }, [warnRefreshFail, t]);
 
     const handleSaveExperience = useCallback(async (nextExperience: string) => {
         const parsed = Number(nextExperience);
         if (!Number.isFinite(parsed) || parsed < 0) {
-            throw new Error("Enter a valid number of years.");
+            throw new Error(t("profileInvalidYears"));
         }
         await updateProfile({ years_experience: parsed });
         setProfile((current) => (current ? { ...current, years_experience: parsed } : current));
@@ -646,7 +646,7 @@ export default function ProfilePage() {
         } catch {
             warnRefreshFail();
         }
-    }, [warnRefreshFail]);
+    }, [warnRefreshFail, t]);
 
     const handleSaveSkills = useCallback(async (nextSkills: string) => {
         const skills = nextSkills.split(',').map(s => s.trim()).filter(Boolean);
