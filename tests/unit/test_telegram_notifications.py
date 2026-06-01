@@ -327,32 +327,36 @@ class TestStartHandler:
 
         with patch("src.rico_telegram_webhook.find_profiles_by_telegram_username",
                    return_value=[mock_profile]), \
-             patch("src.rico_telegram_webhook.opt_in") as mock_opt_in:
+             patch("src.rico_telegram_webhook.upsert_profile") as mock_upsert:
 
-            reply = _handle_start(chat_id="999", tg_username="@Robin_amg")
+            result = _handle_start({"chat": {"id": 999}, "from": {"id": 999, "username": "Robin_amg"}})
 
-        mock_opt_in.assert_called_once_with("user@example.com", telegram_chat_id="999")
-        assert "job alerts" in reply.lower() or "notifications" in reply.lower() or "receive" in reply.lower()
+        mock_upsert.assert_called_once()
+        updates = mock_upsert.call_args[0][1]
+        assert updates.get("telegram_notifications_enabled") is True
+        reply = result["reply"]
+        assert "job alerts" in reply.lower() or "notifications" in reply.lower() or "receive" in reply.lower() or "/stop" in reply.lower()
 
     def test_start_unknown_username_returns_link_prompt(self):
-        """Unknown Telegram username → prompts user to link account in Settings."""
+        """Unknown Telegram username → creates record under chat_id."""
         from src.rico_telegram_webhook import _handle_start
 
         with patch("src.rico_telegram_webhook.find_profiles_by_telegram_username", return_value=[]), \
-             patch("src.rico_telegram_webhook.opt_in") as mock_opt_in:
+             patch("src.rico_telegram_webhook.upsert_profile") as mock_upsert:
 
-            reply = _handle_start(chat_id="888", tg_username="@stranger")
+            result = _handle_start({"chat": {"id": 888}, "from": {"id": 888, "username": "stranger"}})
 
-        mock_opt_in.assert_not_called()
-        assert "settings" in reply.lower() or "link" in reply.lower() or "ricohunt" in reply.lower()
+        mock_upsert.assert_called_once()
+        assert result["chat_id"] == "888"
 
     def test_start_no_username_returns_generic_prompt(self):
-        """No Telegram username → safe fallback."""
+        """No Telegram username → safe fallback binds chat_id."""
         from src.rico_telegram_webhook import _handle_start
 
         with patch("src.rico_telegram_webhook.find_profiles_by_telegram_username", return_value=[]), \
-             patch("src.rico_telegram_webhook.opt_in"):
+             patch("src.rico_telegram_webhook.upsert_profile"):
 
-            reply = _handle_start(chat_id="777", tg_username=None)
+            result = _handle_start({"chat": {"id": 777}, "from": {}})
 
-        assert isinstance(reply, str) and len(reply) > 0
+        assert result["chat_id"] == "777"
+        assert isinstance(result["reply"], str) and len(result["reply"]) > 0
