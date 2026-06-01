@@ -1,5 +1,9 @@
+'use client';
+
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTranslation } from "@/lib/translations";
 
 export type ErrorVariant = "generic" | "auth" | "network" | "not_found";
 
@@ -57,6 +61,8 @@ export function ErrorState({
   onRetry,
   className,
 }: ErrorStateProps) {
+  const { language } = useLanguage();
+  const t = useTranslation(language);
   const defaults = VARIANT_DEFAULTS[variant];
 
   return (
@@ -82,7 +88,7 @@ export function ErrorState({
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
             </svg>
-            Try again
+            {t("retry")}
           </button>
         )}
         {variant === "auth" && (
@@ -90,7 +96,7 @@ export function ErrorState({
             href="/login"
             className="inline-flex items-center gap-1.5 rounded-lg border border-rico-border px-4 py-2 text-sm font-medium text-rico-text transition-colors hover:bg-white/[0.04]"
           >
-            Sign in
+            {t("signIn")}
           </Link>
         )}
       </div>

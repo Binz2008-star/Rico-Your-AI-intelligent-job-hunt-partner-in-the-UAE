@@ -183,25 +183,6 @@ export function MobileCommandHeader({
                                             <span aria-hidden="true">📜</span>
                                             {language === "ar" ? "تاريخ المحادثات" : "Chat history"}
                                         </Link>
-                                        <div className="my-1 border-t border-border-subtle" />
-                                        <Link
-                                            href="/help"
-                                            role="menuitem"
-                                            onClick={() => setOverflowOpen(false)}
-                                            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-[13px] text-text-muted hover:text-white hover:bg-surface/60 transition-colors"
-                                        >
-                                            <span aria-hidden="true">❓</span>
-                                            {language === "ar" ? "مساعدة" : "Help"}
-                                        </Link>
-                                        <Link
-                                            href="/report"
-                                            role="menuitem"
-                                            onClick={() => setOverflowOpen(false)}
-                                            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-[13px] text-text-muted hover:text-white hover:bg-surface/60 transition-colors"
-                                        >
-                                            <span aria-hidden="true">🚩</span>
-                                            {language === "ar" ? "الإبلاغ عن مشكلة" : "Report issue"}
-                                        </Link>
                                     </div>
                                 )}
                             </div>

@@ -19,7 +19,7 @@ import { buildWhatsAppManageUrl, buildWhatsAppUpgradeUrl, isManualBillingMode } 
 import { useTranslation } from "@/lib/translations";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 
 const SUBSCRIPTION_MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === "true";
 const MANUAL_BILLING = isManualBillingMode();
@@ -344,13 +344,40 @@ export default function SubscriptionPage() {
     const t = useTranslation(language);
     const maintenanceMode = SUBSCRIPTION_MAINTENANCE_MODE;
 
-    const [plans, setPlans] = useState<SubscriptionPlan[]>(maintenanceMode ? FALLBACK_PLANS : []);
+    const localizedFallbackPlans = useMemo((): SubscriptionPlan[] => [
+        {
+            ...FALLBACK_PLANS[0],
+            name: t('planProName'),
+            description: t('planProDesc'),
+            features: [
+                t('planFeatureUnlimitedCV'), t('planFeatureSmartRec'),
+                t('planFeatureAdvancedScoring'), t('planFeatureSavedSearches'),
+                t('planFeaturePrioritySupport'), t('planFeatureHigherLimits'),
+            ],
+        },
+        {
+            ...FALLBACK_PLANS[1],
+            name: t('planPremiumName'),
+            description: t('planPremiumDesc'),
+            features: [
+                t('planFeatureEverythingPro'), t('planFeatureAutoApply'),
+                t('planFeaturePriorityAI'), t('planFeatureAdvancedAuto'),
+                t('planFeaturePremiumPipelines'), t('planFeatureRecruiter'),
+            ],
+        },
+    ], [t]);
+
+    const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
     const [sub, setSub] = useState<SubscriptionMeResponse | null>(null);
     const [loadingPlans, setLoadingPlans] = useState(!maintenanceMode);
     const [subLoading, setSubLoading] = useState(false);
     const [planError, setPlanError] = useState(false);
     const [subscriptionError, setSubscriptionError] = useState(false);
     const [checkingOut, setCheckingOut] = useState<"pro" | "premium" | null>(null);
+
+    useEffect(() => {
+        if (maintenanceMode) setPlans(localizedFallbackPlans);
+    }, [maintenanceMode, localizedFallbackPlans]);
 
     const loadPlans = useCallback(() => {
         if (maintenanceMode) {
@@ -412,7 +439,7 @@ export default function SubscriptionPage() {
             try {
                 const result = await createCheckoutSession(plan);
                 if (result.provider === "mock") {
-                    toast("Payment processing is being configured. No charge has been made.", "error");
+                    toast(t('subscriptionPaymentConfiguring'), "error");
                 } else {
                     window.location.href = result.checkout_url;
                 }
@@ -420,7 +447,7 @@ export default function SubscriptionPage() {
                 const msg =
                     err instanceof ApiError
                         ? err.message
-                        : "Checkout failed. Please try again.";
+                        : t('subscriptionCheckoutFailed');
                 toast(msg, "error");
             } finally {
                 setCheckingOut(null);
@@ -446,7 +473,7 @@ export default function SubscriptionPage() {
         try {
             const result = await createCustomerPortalSession();
             if (result.provider === "mock") {
-                toast("Subscription portal is not configured", "error");
+                toast(t('subscriptionPortalNotConfigured'), "error");
             } else {
                 window.location.href = result.checkout_url;
             }
@@ -454,7 +481,7 @@ export default function SubscriptionPage() {
             const msg =
                 err instanceof ApiError
                     ? err.message
-                    : "Failed to open subscription portal. Please try again.";
+                    : t('subscriptionPortalFailed');
             toast(msg, "error");
         }
     }, [maintenanceMode, toast]);
