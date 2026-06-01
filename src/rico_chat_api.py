@@ -3329,6 +3329,27 @@ class RicoChatAPI:
         except Exception:
             logger.debug("rico_chat: failed to persist search matches to DB user=%s", user_id)
 
+        # Fire per-user Telegram notification for the top match (best-effort).
+        # Opt-in check and rate guard happen inside send_user_notification.
+        try:
+            if formatted:
+                from src.services.telegram_notifications import send_user_notification
+                top = formatted[0]
+                role = search_role or top.get("title", "your search")
+                n = len(formatted)
+                msg = (
+                    f"🔔 <b>Rico found {n} new job match{'es' if n != 1 else ''}</b> for <b>{role}</b>.\n\n"
+                    f"Open the Rico app to review and apply."
+                )
+                send_user_notification(
+                    user_id=user_id,
+                    message=msg,
+                    alert_type="job_alert",
+                    job=None,
+                )
+        except Exception:
+            logger.debug("rico_chat: failed to send Telegram job-alert user=%s", user_id)
+
     @staticmethod
     def _get_status_rank(status: str) -> int:
         """Return numeric rank for application status to prevent regression.

@@ -37,7 +37,8 @@ _SETTINGS_FIELDS = {f.name for f in fields(RicoAgentSettings)}
 
 # Fields that belong in the main user table (vs profile JSONB)
 _USER_TABLE_FIELDS = {
-    "external_user_id", "name", "email", "phone", "telegram_username", "telegram_chat_id"
+    "external_user_id", "name", "email", "phone",
+    "telegram_username", "telegram_chat_id", "telegram_notifications_enabled",
 }
 
 # Fields that go into profile JSONB
@@ -53,6 +54,7 @@ _BOOLEAN_SETTINGS = {
     "can_prepare_interview_notes",
     "can_send_follow_up_reminders",
     "can_create_weekly_report",
+    "can_receive_telegram_notifications",
 }
 
 
@@ -104,6 +106,7 @@ def _bundle_to_profile(bundle: dict[str, Any]) -> RicoProfile:
         can_prepare_interview_notes=sdata.get("can_prepare_interview_notes", True),
         can_send_follow_up_reminders=sdata.get("can_send_follow_up_reminders", True),
         can_create_weekly_report=sdata.get("can_create_weekly_report", True),
+        can_receive_telegram_notifications=sdata.get("can_receive_telegram_notifications", False),
     )
 
     # Build profile with proper type conversion
@@ -113,6 +116,7 @@ def _bundle_to_profile(bundle: dict[str, Any]) -> RicoProfile:
         email=bundle.get("email"),
         phone=bundle.get("phone"),
         telegram_username=bundle.get("telegram_username"),
+        telegram_chat_id=bundle.get("telegram_chat_id"),
         target_roles=pdata.get("target_roles") or [],
         preferred_cities=pdata.get("preferred_cities") or [],
         salary_expectation_aed=pdata.get("salary_expectation_aed"),
@@ -229,14 +233,17 @@ def upsert_profile(user_id: str, updates: dict[str, Any]) -> RicoProfile:
                 return profile
 
             # 1. Upsert user record
-            user_payload = {
+            user_payload: dict = {
                 "external_user_id": user_id,
                 "name": filtered_updates.get("name"),
                 "email": filtered_updates.get("email"),
                 "phone": filtered_updates.get("phone"),
-                "telegram_username": filtered_updates.get("telegram_username"),
-                "telegram_chat_id": filtered_updates.get("telegram_chat_id"),
+                "telegram_username": filtered_updates.get("telegram_username") or updates.get("telegram_username"),
+                "telegram_chat_id": filtered_updates.get("telegram_chat_id") or updates.get("telegram_chat_id"),
             }
+            # telegram_notifications_enabled is boolean — keep explicit False
+            if "telegram_notifications_enabled" in filtered_updates:
+                user_payload["telegram_notifications_enabled"] = filtered_updates["telegram_notifications_enabled"]
             user_payload = {k: v for k, v in user_payload.items() if v is not None}
             logger.info("profile_repo.upsert_profile: user_id=%s user_payload=%s", user_id, user_payload)
             user_row = db.upsert_user(user_payload, conn=conn)
