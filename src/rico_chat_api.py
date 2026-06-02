@@ -532,6 +532,15 @@ class RicoChatAPI:
         re.IGNORECASE,
     )
 
+    # Matches self-referential role phrases that should resolve to saved profile roles.
+    # English: "my target role/roles", "my saved role/roles", "my saved target role/roles"
+    # Arabic:  "دوري المستهدف", "أدواري المستهدفة", "وظيفتي المستهدفة", "وظيفتي المحفوظة"
+    _SELF_REF_ROLE_RE = re.compile(
+        r"^my(?:\s+saved)?\s+(?:target\s+)?roles?$"
+        r"|^(?:دوري|أدواري|وظيفتي)\s+(?:المستهدف(?:ة)?|المحفوظ(?:ة)?)$",
+        re.IGNORECASE,
+    )
+
     @staticmethod
     def _is_live_job_search_request(message: str) -> bool:
         """True when user explicitly asks for live/current/UAE/openings jobs."""
@@ -4201,6 +4210,24 @@ class RicoChatAPI:
         profile_relevant without running them through the taxonomy classifier,
         because they are already derived from the user's CV.
         """
+        # Self-reference guard: "my target role / my saved role / دوري المستهدف" etc.
+        # Resolve to the user's saved profile roles instead of treating the phrase as a job title.
+        if RicoChatAPI._SELF_REF_ROLE_RE.match(role_text.strip()):
+            saved_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            if not saved_roles:
+                response = {
+                    "type": "clarification",
+                    "message": (
+                        "I don't have a saved target role on your profile yet. "
+                        "Tell me your target role (e.g. 'HSE Manager') or upload your CV and I'll set it for you."
+                    ),
+                }
+                self._append_chat(user_id, "assistant", response["message"])
+                return response
+            return self._target_role_search_response(
+                user_id, str(saved_roles[0]), profile, from_saved_profile=True
+            )
+
         from rapidfuzz import fuzz as _fuzz
 
         # Roles already in the user's target_roles are always profile_relevant.
