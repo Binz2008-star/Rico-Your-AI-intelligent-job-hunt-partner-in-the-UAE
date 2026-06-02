@@ -954,10 +954,21 @@ class RicoChatAPI:
                     alt_link = apply_url
                 apply_url = ""
                 verification_status = "google_intermediary"
+            elif apply_url:
+                classified = classify_url(apply_url)
+                # "needs_source_verification" from classify_url means unknown domain —
+                # the job still has a URL, so surface it as "live" (has a link).
+                # Specific negative classifications (login_required, rate_limited, etc.)
+                # are preserved as-is so the frontend can warn users.
+                verification_status = "live" if classified == "needs_source_verification" else classified
             else:
-                verification_status = classify_url(apply_url or source_url)
+                # No apply URL — either an aggregator alt_link only or no URL at all.
+                classified = classify_url(source_url) if source_url else "lead_needs_verification"
+                verification_status = "lead_needs_verification" if classified in (
+                    "needs_source_verification", "google_intermediary"
+                ) else classified
         except Exception:
-            verification_status = "needs_source_verification" if apply_url else "lead_needs_verification"
+            verification_status = "live" if apply_url else "lead_needs_verification"
 
         result = {
             "title": str(m.get("title") or "Untitled role"),
@@ -1617,24 +1628,65 @@ class RicoChatAPI:
     }
 
     @staticmethod
-    @staticmethod
     def _search_jsearch_meta(role: str) -> Any:
         """Query JSearch for live UAE jobs matching *role*, with cache + retry.
+
+        Strategy:
+          1. Primary query: "{role} UAE" (2 pages for better coverage).
+          2. If primary returns < 4 results, supplement with a Dubai-specific
+             query and merge. Avoids extra API calls when primary is rich.
 
         Returns a ``jsearch_client.FetchResult`` so the caller can tell a genuine
         empty result apart from a rate-limited source. Never raises.
         """
         from src import jsearch_client
 
-        result = jsearch_client.search(f"{role} UAE")
+        primary = jsearch_client.search(f"{role} UAE", num_pages=2)
+        items = list(primary.items)
+
+        # Supplement with Dubai-specific query when primary is thin.
+        if len(items) < 4 and not primary.rate_limited:
+            try:
+                supplement = jsearch_client.search(f"{role} Dubai", num_pages=1)
+                # Merge, deduplicating by job_id then title+company fingerprint.
+                seen_ids: set = {j.get("job_id") for j in items if j.get("job_id")}
+                seen_fps: set = {
+                    (str(j.get("title") or "").lower().strip(),
+                     str(j.get("company") or "").lower().strip())
+                    for j in items
+                }
+                for job in supplement.items:
+                    jid = job.get("job_id")
+                    fp = (
+                        str(job.get("title") or "").lower().strip(),
+                        str(job.get("company") or "").lower().strip(),
+                    )
+                    if (jid and jid in seen_ids) or fp in seen_fps:
+                        continue
+                    if jid:
+                        seen_ids.add(jid)
+                    seen_fps.add(fp)
+                    items.append(job)
+            except Exception:
+                pass
+
         # Stamp a default score so downstream scoring/formatting works unchanged.
-        for job in result.items:
+        for job in items:
             job.setdefault("score", 50)
+
         logger.info(
             "jsearch_direct role=%r results=%d cache_hit=%s rate_limited=%s",
-            role, len(result.items), result.cache_hit, result.rate_limited,
+            role, len(items), primary.cache_hit, primary.rate_limited,
         )
-        return result
+        # Return a synthetic FetchResult with the merged items.
+        from src.jsearch_client import FetchResult
+        return FetchResult(
+            items=items,
+            cache_hit=primary.cache_hit,
+            rate_limited=primary.rate_limited,
+            retries=primary.retries,
+            error=primary.error,
+        )
 
     @staticmethod
     def _search_jsearch_direct(role: str) -> list[dict[str, Any]]:
@@ -1718,13 +1770,17 @@ class RicoChatAPI:
         all_matches = deduped
 
         # Quality-sort: surface live/verified sources before aggregators/dead links.
+        # "live" = has an apply URL whose domain is not in any known-bad list.
+        # "live_verified" = known ATS / trusted job board.
         _QUALITY_RANK: dict[str, int] = {
             "live_verified": 0,
-            "needs_source_verification": 1,
+            "live": 1,
+            "needs_source_verification": 1,  # legacy alias kept for in-flight records
             "google_intermediary": 2,
             "login_required": 3,
             "rate_limited": 4,
             "aggregator_untrusted": 5,
+            "lead_needs_verification": 6,
         }
         try:
             from src.services.source_quality import classify_url as _cq, is_google_intermediary as _igi
@@ -1740,7 +1796,7 @@ class RicoChatAPI:
         except Exception:
             pass
 
-        top_matches = all_matches[:5]
+        top_matches = all_matches[:8]
         formatted = [self._format_match(m, profile) for m in top_matches]
 
         skills = self._as_list(self._profile_value(profile, "skills"))[:8]

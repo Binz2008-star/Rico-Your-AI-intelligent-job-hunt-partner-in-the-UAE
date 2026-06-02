@@ -117,8 +117,17 @@ def _raw_items(data: Any) -> List[Dict[str, Any]]:
     return []
 
 
-def search(query: str, *, use_cache: bool = True, country: str = "ae") -> FetchResult:
+def search(
+    query: str,
+    *,
+    use_cache: bool = True,
+    country: str = "ae",
+    num_pages: int = 2,
+) -> FetchResult:
     """Fetch + normalize JSearch results for *query* with cache, retry, backoff.
+
+    Fetches up to *num_pages* pages (default 2, ~20 raw results) to give Rico
+    enough candidates for quality filtering and deduplication.
 
     Never raises. On a rate-limited source it returns whatever was cached (if
     anything) plus `rate_limited=True`.
@@ -127,6 +136,9 @@ def search(query: str, *, use_cache: bool = True, country: str = "ae") -> FetchR
     if not api_key:
         logger.debug("jsearch: RAPIDAPI_KEY not set — skipping query")
         return FetchResult(error="no_api_key")
+
+    # Clamp to reasonable bounds: min 1, max 3 pages to avoid quota burn.
+    num_pages = max(1, min(int(num_pages), 3))
 
     if use_cache:
         cached = _cache_get(query)
@@ -137,7 +149,7 @@ def search(query: str, *, use_cache: bool = True, country: str = "ae") -> FetchR
 
     url = (
         f"{_JSEARCH_BASE}/search-v2"
-        f"?query={quote_plus(query)}&num_pages=1&country={country}&date_posted=all"
+        f"?query={quote_plus(query)}&num_pages={num_pages}&country={country}&date_posted=all"
     )
     headers = {
         "x-rapidapi-host": _JSEARCH_HOST,

@@ -212,6 +212,16 @@ _PROFILE_MATCH_PHRASES = frozenset([
     "based on my cv",
     "based on my profile",
     "jobs for me",
+    # Arabic CV-match phrases
+    "ابحث لي وظائف تناسب سيرتي",
+    "وظائف تناسب ملفي",
+    "وظائف تناسبني",
+    "ما الوظائف التي تناسبني",
+    "وظائف مناسبه لي",
+    "وظائف مناسبة لي",
+    "ابحث لي عن وظيفه مناسبه",
+    "وظيفة مناسبة لسيرتي",
+    "اقترح لي وظائف",
 ])
 
 _RECENT_CONTEXT_PHRASES = frozenset([
@@ -403,7 +413,17 @@ _ROLE_CHANGE_RE = re.compile(
 _JOB_SEARCH_EXPLICIT_RE = re.compile(
     r"\b(find|search|show|get|look for|looking for|any|need|want)\b.{0,60}"
     r"\b(jobs?|roles?|positions?|vacancy|vacancies|openings?|work)\b"
-    r"|^(any\s+)?(jobs?|roles?|positions?|openings?|vacancies?)\s*(please|for me|available)?\s*\??$",
+    r"|^(any\s+)?(jobs?|roles?|positions?|openings?|vacancies?)\s*(please|for me|available)?\s*\??$"
+    # Arabic job-search triggers (دور / ابحث عن / وظيفه / عمل / شغل / فرص)
+    r"|ابحث\s+(لي\s+)?عن\s+(وظيف|عمل|شغل|فرصة)"
+    r"|وظائف\s+(في|بـ|ب)?\s*(الإمارات|دبي|ابوظبي|أبوظبي|الشارقة)"
+    r"|ايجاد\s+وظيف"
+    r"|ابي\s+(وظيف|عمل|شغل)"
+    r"|ابغى\s+(وظيف|عمل|شغل)"
+    r"|دور\s+(لي\s+)?(على\s+)?(وظيف|عمل|شغل)"
+    r"|فرص\s+(عمل|وظيفيه|وظيفية)"
+    r"|هل\s+في\s+(وظائف|عمل|شغل)"
+    r"|هل\s+عندك\s+(وظائف|فرص)",
     re.IGNORECASE,
 )
 
@@ -779,6 +799,10 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         # can search for that role directly instead of falling back to profile roles.
         for_role_m = _JOB_SEARCH_FOR_ROLE_RE.search(text)
         extracted_role = for_role_m.group(1).strip() if for_role_m else None
+        # For mixed Arabic+English messages the English "for <role>" pattern won't fire,
+        # but the English role name is usually the trailing token(s) after the Arabic prefix.
+        if extracted_role is None and has_arabic:
+            extracted_role = _extract_english_role_from_mixed(text)
         return IntentResult("job_search_explicit", 0.85, "regex", extracted_role=extracted_role)
 
     # Arabic job search: request verb + job noun, or request verb + English role name
