@@ -232,7 +232,7 @@ def _as_str(value: Any) -> Optional[str]:
 
 def resolve_profile_context(
     user_id: str,
-    raw: Any,
+    raw: Any = None,
 ) -> ProfileContext:
     """Normalise *any* profile shape into a ``ProfileContext``.
 
