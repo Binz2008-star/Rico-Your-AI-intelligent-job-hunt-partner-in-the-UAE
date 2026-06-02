@@ -14,22 +14,24 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Set, Tuple
 
+from src.models.application_status import ApplicationStatus, VALID_STATUSES as _SHARED_VALID
+
 # Ordered funnel. Index position implies forward progress for display only;
 # transitions are not strictly enforced here (the chat surface is forgiving).
 LIFECYCLE_STATUSES: List[str] = [
-    "found",
-    "saved",
-    "opened_external",
-    "prepared",
-    "applied",
-    "interviewing",
-    "offer",
-    "rejected",
-    "archived",
-    "needs_review",
+    ApplicationStatus.FOUND,
+    ApplicationStatus.SAVED,
+    ApplicationStatus.OPENED_EXTERNAL,
+    ApplicationStatus.PREPARED,
+    ApplicationStatus.APPLIED,
+    ApplicationStatus.INTERVIEW,          # was "interviewing" — normalised in migration 024
+    ApplicationStatus.OFFER,
+    ApplicationStatus.REJECTED,
+    ApplicationStatus.ARCHIVED,
+    ApplicationStatus.NEEDS_REVIEW,
 ]
 
-_VALID: Set[str] = set(LIFECYCLE_STATUSES)
+_VALID: Set[str] = set(LIFECYCLE_STATUSES) | _SHARED_VALID
 
 # Action verb -> (status, timestamp column to stamp with NOW()).
 # `None` timestamp column means "set status only, no dedicated stamp".
