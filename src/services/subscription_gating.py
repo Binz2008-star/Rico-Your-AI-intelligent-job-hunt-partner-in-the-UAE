@@ -207,13 +207,23 @@ def count_profile_optimizations(user_id: str, since: datetime) -> int:
         return 0
 
 
+def check_ai_message_allowed_for_user(user_id: str) -> GateCheck:
+    """Monthly AI-message cap check keyed purely by ``user_id``.
+
+    Independent of how the request was authenticated. The public chat endpoint uses this
+    to enforce the cap on a *registered* user identified only by email, who would otherwise
+    dodge the limit by routing through /chat/public instead of the authenticated /chat.
+    """
+    resolved = resolve_effective_user_plan(user_id)
+    since = _usage_window_start(resolved)
+    usage = count_monthly_ai_messages(user_id, since)
+    return _build_gate_check(user_id, "monthly_ai_message_limit", usage, resolved)
+
+
 def check_ai_message_allowed(ctx: RicoSessionContext) -> GateCheck | None:
     if ctx.auth_type != "authenticated":
         return None
-    resolved = resolve_effective_user_plan(ctx.user_id)
-    since = _usage_window_start(resolved)
-    usage = count_monthly_ai_messages(ctx.user_id, since)
-    return _build_gate_check(ctx.user_id, "monthly_ai_message_limit", usage, resolved)
+    return check_ai_message_allowed_for_user(ctx.user_id)
 
 
 def enforce_saved_job_allowed(user_id: str) -> None:

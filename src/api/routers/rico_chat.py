@@ -755,13 +755,38 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> RicoCh
     try:
         # Build session context: email-identified users can persist profile; anonymous cannot
         if payload.email:
+            from src.repositories.users_repo import get_user_by_email
+
+            registered = get_user_by_email(payload.email)
+            # Canonicalize to the stored email for a registered user so usage counting and
+            # profile persistence use the same identity key as the authenticated /chat path
+            # (and so casing/whitespace variants can't mint a fresh usage bucket).
+            email_identity = registered.email if registered else payload.email
             ctx = RicoSessionContext(
-                user_id=payload.email,
+                user_id=email_identity,
                 auth_type="public",
                 can_persist_profile=True,
                 can_view_private_jobs=False,
                 rate_limit_tier="standard",
             )
+            # A registered user must not dodge their monthly AI-message cap by routing through
+            # the public endpoint with their email. Enforce the same cap the authenticated
+            # /chat path applies. auth_type stays "public" deliberately: the email is unverified
+            # (no JWT), so we must NOT grant authenticated-only privileges (private-job
+            # visibility, account/subscription disclosure) on the strength of an unverified
+            # email — only the usage limit is applied here.
+            if registered:
+                from src.services.subscription_gating import (
+                    check_ai_message_allowed_for_user,
+                )
+
+                gate = check_ai_message_allowed_for_user(email_identity)
+                if gate and not gate.allowed:
+                    _metrics.record_request((time.time() - start_time) * 1000)
+                    return RicoChatResponse(
+                        **_strip_internal_fields(gate.to_response()),
+                        trace_id=request_ref,
+                    )
         else:
             ctx = RicoSessionContext.for_public(payload.session_id[:64])
 
