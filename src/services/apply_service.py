@@ -8,7 +8,18 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict
 
+from src.rico_env import env_bool
+
 logger = logging.getLogger(__name__)
+
+
+def _approval_required() -> bool:
+    """Whether applications need explicit user approval before Rico submits them.
+
+    Defaults to True (safe) so a missing or blank env var can never silently enable
+    auto-submission. Set RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=false to disable.
+    """
+    return env_bool("RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS", True)
 
 
 def _is_browser_unavailable(exc: Exception) -> bool:
@@ -44,11 +55,26 @@ def _clean_apply_error(exc: Exception) -> Dict[str, str]:
     }
 
 
-def apply_to_job(job: Dict[str, Any]) -> Dict[str, str]:
+def apply_to_job(job: Dict[str, Any], *, approved: bool = False) -> Dict[str, str]:
     """
     Trigger automated application for a job.
     Returns: {"status": str, "message": str, "job_id": str (optional)}
+
+    Safety: this is the single chokepoint for real application submission. When approval
+    mode is enabled (RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true, the default), the caller
+    MUST pass approved=True — i.e. the user explicitly approved THIS application. Agent /
+    automation callers leave approved=False, so they can never auto-submit on the user's
+    behalf; they receive an "approval_required" result instead.
     """
+    if _approval_required() and not approved:
+        logger.warning(
+            "apply_blocked_pending_approval link=%s", (job.get("link") or "")[:120]
+        )
+        return {
+            "status": "approval_required",
+            "message": "This application needs your explicit approval before Rico can submit it.",
+        }
+
     link = (job.get("link") or "").lower()
 
     if not link:
