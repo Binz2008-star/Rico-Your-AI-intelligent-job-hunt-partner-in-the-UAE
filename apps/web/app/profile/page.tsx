@@ -108,7 +108,7 @@ function EditableNameField({
                 <span className="text-text-primary">{displayValue}</span>
                 <button
                     type="button"
-                    aria-label={t("edit")}
+                    aria-label={`${t("edit")} ${t("name").toLowerCase()}`}
                     onClick={() => {
                         setDraft(value ?? "");
                         setError(null);
