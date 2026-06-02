@@ -1717,7 +1717,31 @@ class RicoChatAPI:
                 deduped.append(m)
         all_matches = deduped
 
-        # Quality-sort: surface live/verified sources before aggregators/dead links.
+        # Profile-fit ranking: score each result against the user's target roles,
+        # skills, and deal-breakers. Zero-latency (pure keyword matching) so it
+        # doesn't add round-trip time to the chat response.
+        try:
+            from src.llm_scorer import rank_by_profile_fit as _rbpf
+            _profile_target_roles = self._as_list(
+                self._profile_value(profile, "target_roles")
+            )
+            _profile_skills = self._as_list(
+                self._profile_value(profile, "skills")
+            )
+            _profile_deal_breakers = self._as_list(
+                self._profile_value(profile, "deal_breakers")
+            )
+            all_matches = _rbpf(
+                all_matches,
+                target_roles=[str(r) for r in _profile_target_roles if r],
+                skills=[str(s) for s in _profile_skills if s],
+                deal_breakers=[str(d) for d in _profile_deal_breakers if d],
+            )
+        except Exception:
+            pass
+
+        # Quality-sort: within same profile-fit tier, surface live/verified
+        # sources before aggregators/dead links.
         _QUALITY_RANK: dict[str, int] = {
             "live_verified": 0,
             "needs_source_verification": 1,
@@ -1734,7 +1758,10 @@ class RicoChatAPI:
                     m.get("job_apply_link") or m.get("apply_link") or m.get("link") or ""
                 )
                 status = "google_intermediary" if _igi(url) else _cq(url)
-                return _QUALITY_RANK.get(status, 1)
+                # Secondary sort: quality within profile-fit bands
+                fit = m.get("profile_fit_score", 0)
+                fit_band = max(0, 5 - fit // 20)  # 5 bands (0=best fit, 4=worst)
+                return fit_band * 10 + _QUALITY_RANK.get(status, 1)
 
             all_matches.sort(key=_quality_key)
         except Exception:

@@ -258,3 +258,56 @@ def score_jobs_llm(
         f"cache={hits} hf={hf} keyword={kw}"
     )
     return jobs
+
+
+def rank_by_profile_fit(
+    jobs: List[Dict[str, Any]],
+    target_roles: List[str],
+    skills: List[str],
+    deal_breakers: List[str] | None = None,
+) -> List[Dict[str, Any]]:
+    """Fast, zero-latency profile-aware ranking for a list of job dicts.
+
+    Assigns a ``profile_fit_score`` (0–100) to each job using keyword
+    matching against the user's ``target_roles``, ``skills``, and optionally
+    ``deal_breakers``.  Jobs that match a deal-breaker get score 0.  Results
+    are returned sorted descending by ``profile_fit_score``.
+
+    Intended for the chat path where HF embedding latency is unacceptable.
+    Does not mutate the existing ``score`` field so upstream callers can
+    blend or replace it as they see fit.
+    """
+    role_tokens = {t.lower() for r in target_roles for t in r.lower().split()}
+    skill_tokens = {s.lower() for s in skills}
+    breaker_tokens = {b.lower() for b in (deal_breakers or [])}
+
+    def _fit(job: Dict[str, Any]) -> int:
+        title = str(job.get("title") or "").lower()
+        desc = str(job.get("description") or "")[:400].lower()
+        text = f"{title} {desc}"
+
+        # Hard-reject on deal-breakers (title only to avoid false positives).
+        if any(b in title for b in breaker_tokens):
+            return 0
+
+        score = 0
+        # Role match (title weighted 2×, description 1×)
+        role_hits_title = sum(1 for t in role_tokens if t in title)
+        role_hits_desc  = sum(1 for t in role_tokens if t in desc)
+        score += role_hits_title * 12 + role_hits_desc * 4
+
+        # Skill match
+        skill_hits = sum(1 for s in skill_tokens if s in text)
+        score += skill_hits * 5
+
+        # UAE location bonus
+        loc = str(job.get("location") or "").lower()
+        if any(city in loc for city in ("uae", "dubai", "abu dhabi", "sharjah", "ajman")):
+            score += 8
+
+        return min(100, score)
+
+    for job in jobs:
+        job["profile_fit_score"] = _fit(job)
+
+    return sorted(jobs, key=lambda j: j.get("profile_fit_score", 0), reverse=True)
