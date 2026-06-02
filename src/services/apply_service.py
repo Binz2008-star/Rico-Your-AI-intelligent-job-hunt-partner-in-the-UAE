@@ -55,6 +55,32 @@ def _clean_apply_error(exc: Exception) -> Dict[str, str]:
     }
 
 
+def _resolve_apply_link(job: Dict[str, Any]) -> str:
+    """Pick the best known apply URL from normalized and raw job payloads."""
+    for key in (
+        "link",
+        "apply_url",
+        "apply_link",
+        "job_apply_link",
+        "url",
+        "job_url",
+        "alt_link",
+        "source_url",
+    ):
+        value = str(job.get(key) or "").strip()
+        if value:
+            return value
+
+    for nested_key in ("job", "job_data"):
+        nested = job.get(nested_key)
+        if isinstance(nested, dict):
+            value = _resolve_apply_link(nested)
+            if value:
+                return value
+
+    return ""
+
+
 _AUTO_APPLY_DISABLED_STATUSES = {"no_result", "disabled", "unsupported"}
 
 
@@ -64,7 +90,7 @@ def _auto_apply_globally_enabled() -> bool:
 
 def _manual_required_response(job: Dict[str, Any]) -> Dict[str, str]:
     """User-safe response when automation cannot run for any reason."""
-    link = job.get("link") or job.get("apply_link") or ""
+    link = _resolve_apply_link(job)
     msg = "Automated apply is not currently enabled."
     if link:
         msg += f" You can apply manually here: {link}"
@@ -117,9 +143,11 @@ def apply_to_job(job: Dict[str, Any], *, approved: bool = False, user_id: str | 
     3. Subscription entitlement — only checked when the global flag is on; Free/Pro get 402.
     4. Engine routing — Premium users reach the actual apply engines.
     """
+    resolved_link = _resolve_apply_link(job)
+
     if _approval_required() and not approved:
         logger.warning(
-            "apply_blocked_pending_approval link=%s", (job.get("link") or "")[:120]
+            "apply_blocked_pending_approval link=%s", resolved_link[:120]
         )
         return {
             "status": "approval_required",
@@ -133,10 +161,12 @@ def apply_to_job(job: Dict[str, Any], *, approved: bool = False, user_id: str | 
     if user_id:
         _enforce_automation_allowed(user_id)
 
-    link = (job.get("link") or "").lower()
+    link = resolved_link.lower()
 
     if not link:
         return {"status": "error", "message": "Job is missing a link"}
+
+    job = {**job, "link": resolved_link}
 
     if "naukrigulf.com" in link:
         return _normalize_engine_result(_apply_naukrigulf(job), job)
@@ -146,6 +176,7 @@ def apply_to_job(job: Dict[str, Any], *, approved: bool = False, user_id: str | 
 
     # LinkedIn and all other sources: no active engine
     return _manual_required_response(job)
+
 
 
 def _normalize_engine_result(result: Dict[str, str], job: Dict[str, Any]) -> Dict[str, str]:
