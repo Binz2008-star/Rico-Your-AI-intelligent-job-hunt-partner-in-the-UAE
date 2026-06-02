@@ -525,6 +525,33 @@ def test_normalization_version_persists():
         f"Expected normalization_version=2, got {retrieved.normalization_version}"
 
 
+def test_get_profile_handles_none_normalization_version(monkeypatch):
+    """Profiles written before versioning may have null normalization_version."""
+    import src.repositories.profile_repo as profile_repo
+    from src.role_normalization import NORMALIZATION_VERSION
+
+    user_id = "null_normalization_version@example.com"
+    profile = RicoProfile(
+        user_id=user_id,
+        target_roles=["HSE Manager"],
+        skills=["hse"],
+        normalization_version=None,
+    )
+
+    class Memory:
+        def load_profile(self, _user_id):
+            return profile
+
+    monkeypatch.setattr(profile_repo, "_db", lambda: None)
+    monkeypatch.setattr(profile_repo, "_memory", lambda: Memory())
+    monkeypatch.setattr(profile_repo, "upsert_profile", lambda _user_id, _updates: profile)
+
+    retrieved = profile_repo.get_profile(user_id)
+
+    assert retrieved is profile
+    assert retrieved.normalization_version == NORMALIZATION_VERSION
+
+
 def test_profile_renormalization_with_versioning():
     """Test that profile re-normalizes when normalization_version changes."""
     from src.role_normalization import NORMALIZATION_VERSION
