@@ -83,10 +83,6 @@ def _make_api(monkeypatch):
     "track my applications",
     "my applications",
     "my application",
-    # English — without "my"
-    "show applications",
-    "list applications",
-    "display applications",
     # Case insensitive
     "Show My Applications",
     "MY APPLICATIONS",
@@ -116,7 +112,11 @@ def test_regex_matches(phrase):
     # Generic job search
     "find me jobs",
     "show me jobs",
-    # List followups that should still go through list-followup block
+    # Bare forms without "my" — context-aware, stay in list-followup block
+    "show applications",
+    "list applications",
+    "display applications",
+    # Other list followups that should still go through list-followup block
     "list them",
     "show them",
     "show saved",
@@ -147,8 +147,6 @@ def test_regex_does_not_match(phrase):
     "display my applications",
     "check my applications",
     "track my applications",
-    "show applications",
-    "list applications",
 ])
 def test_english_phrases_route_to_application_tracking(monkeypatch, phrase):
     """All English explicit-application phrases reach _handle_application_tracking."""

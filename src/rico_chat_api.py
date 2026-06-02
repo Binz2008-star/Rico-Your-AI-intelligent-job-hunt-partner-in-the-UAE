@@ -543,13 +543,15 @@ class RicoChatAPI:
 
     # Matches explicit requests to view submitted applications — must route to
     # application_tracking regardless of prior turn context.
-    # English: "show my applications", "my applications", "list applications", etc.
+    # "show applications" / "list applications" (no "my") are intentionally excluded:
+    # those bare forms stay in _LIST_FOLLOWUP_PHRASES so they replay lifecycle context
+    # when a prior application turn exists, which is the correct contextual behavior.
+    # English: "show my applications", "my applications", etc.
     # Arabic:  "طلباتي", "اعرض طلباتي", etc.
     _SHOW_MY_APPLICATIONS_RE = re.compile(
         r"^(?:"
         r"(?:show|list|view|see|display|check|track)\s+my\s+applications?|"
-        r"my\s+applications?|"
-        r"(?:show|list|display)\s+applications?"
+        r"my\s+applications?"
         r"|(?:اعرض|أعرض|عرض|اظهر|أظهر|ارني|أريني)\s+طلباتي"
         r"|طلباتي"
         r")$",
