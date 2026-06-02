@@ -482,6 +482,75 @@ class TestRicoConfirmCVProfileRoute:
         assert call_kwargs["updates"]["skills"] == ["hse", "nebosh"]
         assert call_kwargs["updates"]["cv_filename"] == "cv.pdf"
 
+    def test_cv_email_and_phone_never_overwrite_account_identity(self, client):
+        """A CV's parsed email/phone (often a referee's or an old employer's) must never be
+        persisted. Routing it through upsert_profile -> upsert_user (COALESCE) would silently
+        overwrite the authenticated uploader's canonical identity and could break their login
+        or password reset. Account identity comes from the session, not document text."""
+        public_session_id = "public:web-identity-guard"
+        payload = {
+            "preview": {
+                "name": "Real Owner",
+                "email": "referee-not-the-user@oldcompany.com",
+                "phone": "+971500000000",
+                "current_role": "HSE Manager",
+                "experience_years": 7,
+                "skills_detected": ["hse", "nebosh"],
+                "target_roles": ["HSE Manager"],
+                "certifications": ["NEBOSH"],
+                "languages": ["English", "Arabic"],
+            },
+            "filename": "cv.pdf",
+        }
+
+        with patch("src.api.routers.rico_chat.upsert_profile") as mock_upsert, \
+             patch("src.api.routers.rico_chat.mark_onboarding_complete"), \
+             patch("src.services.subscription_gating.record_profile_optimization_usage"):
+            r = client.post(
+                f"/api/v1/rico/confirm-cv-profile?user_id={public_session_id}",
+                json=payload,
+            )
+
+        assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
+        mock_upsert.assert_called_once()
+        updates = mock_upsert.call_args.kwargs["updates"]
+        # Contamination vector closed: identity fields from CV text are not persisted.
+        assert "email" not in updates, "CV-parsed email must not reach the profile/identity layer"
+        assert "phone" not in updates, "CV-parsed phone must not reach the profile/identity layer"
+        # Legitimate CV-derived profile fields still flow through untouched.
+        assert updates["name"] == "Real Owner"
+        assert updates["current_role"] == "HSE Manager"
+        assert updates["skills"] == ["hse", "nebosh"]
+        assert updates["certifications"] == ["NEBOSH"]
+        assert updates["cv_filename"] == "cv.pdf"
+
+    def test_confirm_cv_profile_without_contact_details_still_succeeds(self, client):
+        """A preview with no email/phone must still persist the rest of the profile cleanly."""
+        public_session_id = "public:web-no-contact"
+        payload = {
+            "preview": {
+                "name": "No Contact",
+                "current_role": "Safety Officer",
+                "skills_detected": ["iosh"],
+            },
+            "filename": "cv2.pdf",
+        }
+
+        with patch("src.api.routers.rico_chat.upsert_profile") as mock_upsert, \
+             patch("src.api.routers.rico_chat.mark_onboarding_complete"), \
+             patch("src.services.subscription_gating.record_profile_optimization_usage"):
+            r = client.post(
+                f"/api/v1/rico/confirm-cv-profile?user_id={public_session_id}",
+                json=payload,
+            )
+
+        assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
+        updates = mock_upsert.call_args.kwargs["updates"]
+        assert "email" not in updates
+        assert "phone" not in updates
+        assert updates["name"] == "No Contact"
+        assert updates["skills"] == ["iosh"]
+
 
 class TestRicoTelegramWebhookRouteExists:
     def test_telegram_webhook_route_returns_200(self, client):
