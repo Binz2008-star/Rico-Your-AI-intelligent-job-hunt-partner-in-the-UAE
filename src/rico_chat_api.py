@@ -986,6 +986,14 @@ class RicoChatAPI:
         if location:
             result["location"] = str(location)
 
+        salary = m.get("salary_string") or m.get("salary")
+        if salary:
+            result["salary"] = str(salary)
+
+        emp_type = m.get("employment_type")
+        if emp_type:
+            result["employment_type"] = str(emp_type)
+
         why = m.get("rico_explanation")
         if why:
             result["why"] = str(why)
@@ -1670,9 +1678,16 @@ class RicoChatAPI:
             except Exception:
                 pass
 
-        # Stamp a default score so downstream scoring/formatting works unchanged.
+        # Title-relevance boost: jobs whose title strongly matches the search
+        # role surface before loosely related results in the quality sort.
+        role_tokens = {t.lower() for t in role.split() if len(t) > 2}
         for job in items:
             job.setdefault("score", 50)
+            title_lower = str(job.get("title") or "").lower()
+            hits = sum(1 for tok in role_tokens if tok in title_lower)
+            if hits:
+                # Each matching token adds up to 10 relevance points (max 30)
+                job["score"] = min(100, job["score"] + hits * 10)
 
         logger.info(
             "jsearch_direct role=%r results=%d cache_hit=%s rate_limited=%s",
