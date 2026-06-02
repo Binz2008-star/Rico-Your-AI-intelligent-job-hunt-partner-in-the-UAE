@@ -66,7 +66,7 @@ logger = logging.getLogger(__name__)
 _UTC = timezone.utc
 
 # Constants
-_UNSAFE_CHARS_RE = re.compile(r'[<>"\';\x00-\x1f\x7f‪-‮⁦-⁩]')
+_UNSAFE_CHARS_RE = re.compile("[<>\"';\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]")
 _PDF_MAGIC = b"%PDF"
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
