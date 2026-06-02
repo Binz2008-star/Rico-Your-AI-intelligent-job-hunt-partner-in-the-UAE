@@ -1316,10 +1316,15 @@ async def confirm_cv_profile(
 
         # Build profile updates from preview - use skills_detected if available, fallback to skills
         preview_skills = payload.preview.get("skills_detected") or payload.preview.get("skills", [])
+        # SECURITY: never persist email/phone parsed from CV text. A CV routinely contains a
+        # referee's, a previous employer's, or a mis-parsed contact detail; routing it through
+        # upsert_profile -> upsert_user (which COALESCEs email/phone) would silently overwrite
+        # the authenticated uploader's canonical identity and could break password reset or
+        # lock them out. Account identity comes from the authenticated session / registration,
+        # not from uploaded document text. The parsed contact details are still surfaced to the
+        # user in the upload preview for display; users set email/phone via their explicit input.
         profile_updates = {
             "name": payload.preview.get("name"),
-            "email": payload.preview.get("email"),
-            "phone": payload.preview.get("phone"),
             "current_role": payload.preview.get("current_role"),
             "skills": preview_skills,
             "years_experience": payload.preview.get("experience_years"),
