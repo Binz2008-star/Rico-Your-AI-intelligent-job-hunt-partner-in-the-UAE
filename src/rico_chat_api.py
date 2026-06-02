@@ -2294,6 +2294,32 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        # ── Arabic subscription / billing intent guard ───────────────────────
+        # Must run before CV/role classifiers so Arabic billing terms (باقتي,
+        # الاشتراك, etc.) are never mistaken for career-package context.
+        _ARABIC_SUBSCRIPTION_TERMS = frozenset({
+            "باقتي", "باقتي؟", "باقة", "الباقة", "باقاتي",
+            "اشتراكي", "اشتراكي؟", "اشتراك", "الاشتراك",
+            "خطة اشتراكي", "خطة الاشتراك", "خطتي",
+            "ماهي باقتي", "ما هي باقتي", "ماهو اشتراكي", "ما هو اشتراكي",
+            "اشتراكاتي", "باقاتنا",
+        })
+        _ARABIC_SUBSCRIPTION_KEYWORDS = (
+            "باقت", "اشتراك", "premium", "pro", "مجاني", "مدفوع",
+        )
+        _msg_for_sub = message.strip()
+        _msg_for_sub_lower = _msg_for_sub.lower()
+        if (
+            _msg_for_sub in _ARABIC_SUBSCRIPTION_TERMS
+            or _msg_for_sub_lower in _ARABIC_SUBSCRIPTION_TERMS
+            or any(kw in _msg_for_sub for kw in _ARABIC_SUBSCRIPTION_KEYWORDS)
+        ):
+            return self._finalize(
+                self._handle_subscription_plans(user_id, profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
         # ── Step 1: Unified intent classification ────────────────────────────
         if has_cv and self._looks_like_career_execution_request(message):
             return self._finalize(

@@ -109,6 +109,7 @@ function PlanCard({
     isLoggedIn,
     loading,
     subLoading,
+    subHasLoaded,
     anyCheckoutPending,
     onUpgrade,
     onManage,
@@ -123,6 +124,7 @@ function PlanCard({
     isLoggedIn: boolean;
     loading: boolean;
     subLoading: boolean;
+    subHasLoaded: boolean;
     anyCheckoutPending: boolean;
     onUpgrade: (plan: "pro" | "premium") => void;
     onManage: () => void;
@@ -221,7 +223,7 @@ function PlanCard({
                     >
                         {t('temporarilyUnavailable')}
                     </button>
-                ) : subLoading && isLoggedIn ? (
+                ) : subLoading && isLoggedIn && !subHasLoaded ? (
                     <div className="w-full py-3 rounded-xl bg-surface-glass border border-border-subtle animate-pulse h-[44px]" />
                 ) : isCurrent ? (
                     <button
@@ -654,6 +656,7 @@ export default function SubscriptionPage() {
                                 isLoggedIn={ready ? isLoggedIn : false}
                                 loading={checkingOut === plan.plan}
                                 subLoading={subLoading}
+                                subHasLoaded={sub !== null}
                                 anyCheckoutPending={checkingOut !== null}
                                 onUpgrade={handleUpgrade}
                                 onManage={handleManage}
