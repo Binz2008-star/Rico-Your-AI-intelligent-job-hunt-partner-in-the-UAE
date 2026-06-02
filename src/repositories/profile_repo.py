@@ -169,7 +169,10 @@ def get_profile(user_id: str) -> RicoProfile | None:
     if profile and profile.target_roles:
         from src.role_normalization import normalize_target_roles, NORMALIZATION_VERSION
 
-        stored_version = getattr(profile, "normalization_version", 1)
+        # `getattr` default only applies when the attribute is absent; a DB
+        # profile with a NULL normalization_version yields None, so coalesce to
+        # 1 to avoid "None < int" when comparing against the current version.
+        stored_version = getattr(profile, "normalization_version", 1) or 1
         needs_normalization = stored_version < NORMALIZATION_VERSION
 
         if needs_normalization:
