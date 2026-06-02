@@ -1206,6 +1206,252 @@ class RicoChatAPI:
         text = re.sub(r"[\s؟?.!،,]+", " ", (message or "").strip().lower()).strip()
         return text in RicoChatAPI._NEGATIVE_PHRASES
 
+    @staticmethod
+    def _is_arabic_text(message: str) -> bool:
+        return bool(re.search(r"[\u0600-\u06FF]", message or ""))
+
+    @staticmethod
+    def _wants_no_favorite(message: str) -> bool:
+        lower = (message or "").lower()
+        return bool(
+            re.search(r"\b(do\s*not|don't|dont|no|not)\b.{0,24}\b(favou?rite|save|bookmark)\b", lower)
+            or re.search(r"\b(favou?rite|save|bookmark)\b.{0,24}\b(no|not)\b", lower)
+            or "لا تحفظ" in message
+            or "لا تضيف" in message
+            or "مفضلة" in message and ("لا" in message or "بدون" in message)
+        )
+
+    @staticmethod
+    def _requests_application_draft(message: str) -> bool:
+        lower = (message or "").lower()
+        if re.search(r"\b(draft|write|compose|prepare|generate|create)\b.{0,50}\b(message|email|letter|cover|inmail|linkedin)\b", lower):
+            return True
+        normalized = re.sub(r"[\u064B-\u065F\u0670\u0640]", "", message or "")
+        normalized = re.sub(r"[آأإٱ]", "ا", normalized)
+        has_message_word = "رساله" in normalized or "رسالة" in normalized
+        has_draft_verb = any(term in normalized for term in ("صيغ", "اكتب", "اكتبها", "جهز", "نراجع"))
+        return has_draft_verb or (has_message_word and RicoChatAPI._requests_application_send(message))
+
+    @staticmethod
+    def _requests_application_send(message: str) -> bool:
+        lower = (message or "").lower()
+        if re.search(r"\b(send|submit|forward|deliver|go ahead|proceed|do it)\b", lower):
+            return True
+        normalized = re.sub(r"[\u064B-\u065F\u0670\u0640]", "", message or "")
+        normalized = re.sub(r"[آأإٱ]", "ا", normalized)
+        return any(term in normalized for term in ("ارسل", "ارسال", "ابعث", "قدّم", "قدم", "كمل"))
+
+    @staticmethod
+    def _mentions_linkedin_channel(message: str) -> bool:
+        lower = (message or "").lower()
+        return "linkedin" in lower or "inmail" in lower or "لينكد" in message
+
+    @staticmethod
+    def _looks_like_application_channel_followup(message: str) -> bool:
+        if not message or not message.strip():
+            return False
+        return (
+            RicoChatAPI._requests_application_draft(message)
+            or RicoChatAPI._requests_application_send(message)
+            or RicoChatAPI._wants_no_favorite(message)
+        )
+
+    @staticmethod
+    def _job_context_value(job: dict[str, Any], *keys: str) -> str:
+        for key in keys:
+            value = job.get(key)
+            if value:
+                return str(value).strip()
+        return ""
+
+    def _resolve_recent_application_job(self, user_id: str) -> dict[str, Any] | None:
+        """Return the most recent job/application context for draft/send follow-ups."""
+        try:
+            ctx = self._get_recent_context(user_id)
+        except Exception:
+            ctx = {}
+        if not isinstance(ctx, dict) or not ctx:
+            return None
+
+        pending = ctx.get("_pending_application_send")
+        if isinstance(pending, dict) and isinstance(pending.get("job"), dict):
+            return dict(pending["job"])
+
+        app = ctx.get("recent_application") if isinstance(ctx.get("recent_application"), dict) else {}
+        job: dict[str, Any] = {
+            "title": app.get("title") or ctx.get("recent_job") or ctx.get("recent_search_role") or "",
+            "company": app.get("company") or ctx.get("recent_company") or "",
+            "location": app.get("location") or ctx.get("recent_location") or "",
+            "salary": (
+                app.get("salary") or app.get("salary_range") or app.get("salary_string")
+                or ctx.get("recent_salary") or ctx.get("salary") or ""
+            ),
+            "link": app.get("link") or app.get("apply_url") or app.get("source_url") or "",
+            "status": app.get("status") or ctx.get("recent_status") or "",
+        }
+
+        matches = ctx.get("recent_search_matches") or []
+        if isinstance(matches, list):
+            for match in matches:
+                if not isinstance(match, dict):
+                    continue
+                title = str(match.get("title") or "")
+                company = str(match.get("company") or "")
+                if (
+                    (job["title"] and job["title"].lower() in title.lower())
+                    or (job["company"] and job["company"].lower() in company.lower())
+                    or not job["title"]
+                ):
+                    for key in ("title", "company", "location"):
+                        if not job.get(key) and match.get(key):
+                            job[key] = str(match[key]).strip()
+                    job["salary"] = job.get("salary") or self._job_context_value(
+                        match, "salary", "salary_range", "salary_string", "salary_range_aed"
+                    )
+                    job["link"] = job.get("link") or self._job_context_value(
+                        match, "apply_url", "source_url", "link", "alt_link"
+                    )
+                    break
+
+        if not (job.get("title") or job.get("company")):
+            return None
+        return job
+
+    @staticmethod
+    def _format_application_job_context(job: dict[str, Any], *, arabic: bool) -> str:
+        title = RicoChatAPI._job_context_value(job, "title") or ("الدور" if arabic else "the role")
+        company = RicoChatAPI._job_context_value(job, "company") or ("الشركة" if arabic else "the company")
+        location = RicoChatAPI._job_context_value(job, "location")
+        salary = RicoChatAPI._job_context_value(job, "salary", "salary_range", "salary_string", "salary_range_aed")
+        if arabic:
+            parts = [f"{title} - {company}"]
+            if location:
+                parts.append(location)
+            if salary:
+                parts.append(salary)
+            return "، ".join(parts)
+        parts = [f"{title} at {company}"]
+        if location:
+            parts.append(location)
+        if salary:
+            parts.append(salary)
+        return " - ".join(parts)
+
+    def _draft_application_message(self, job: dict[str, Any], profile: Any, *, arabic: bool) -> str:
+        title = self._job_context_value(job, "title") or ("الدور" if arabic else "the role")
+        company = self._job_context_value(job, "company") or ("الشركة" if arabic else "the company")
+        skills = self._as_list(self._profile_value(profile, "skills"))
+        certs = self._as_list(self._profile_value(profile, "certifications"))
+        strengths = ", ".join(str(s) for s in (skills + certs)[:4]) or ("خبرتي ذات الصلة" if arabic else "my relevant experience")
+        if arabic:
+            return (
+                f"مرحباً،\n\n"
+                f"أود التقدم لدور {title} لدى {company}. لدي خبرة مرتبطة بمتطلبات الدور، "
+                f"خصوصاً في {strengths}. أعتقد أن خلفيتي في التدقيق والامتثال البيئي يمكن أن تضيف قيمة مباشرة للفريق.\n\n"
+                f"يسعدني مشاركة سيرتي الذاتية ومناقشة كيف يمكنني دعم احتياجاتكم.\n\n"
+                f"مع التحية"
+            )
+        return (
+            f"Hello,\n\n"
+            f"I would like to apply for the {title} role at {company}. My background aligns with the role, "
+            f"especially around {strengths}. I believe my audit, compliance, and UAE-market experience can add value quickly.\n\n"
+            f"I would be happy to share my CV and discuss how I can support your team.\n\n"
+            f"Best regards"
+        )
+
+    def _handle_application_channel_followup(
+        self, user_id: str, message: str, profile: Any
+    ) -> dict[str, Any] | None:
+        """Clarify draft/send channels without claiming unsupported application submission."""
+        if not self._looks_like_application_channel_followup(message):
+            return None
+
+        job = self._resolve_recent_application_job(user_id)
+        if not job:
+            return None
+
+        arabic = self._is_arabic_text(message)
+        wants_draft = self._requests_application_draft(message)
+        wants_send = self._requests_application_send(message)
+        no_favorite = self._wants_no_favorite(message)
+        recruiter_email = EMAIL_RE.search(message or "")
+        link = self._job_context_value(job, "link", "apply_url", "source_url")
+        linkedin_context = self._mentions_linkedin_channel(message) or "linkedin" in link.lower() or "inmail" in link.lower()
+        job_context = self._format_application_job_context(job, arabic=arabic)
+
+        draft = self._draft_application_message(job, profile, arabic=arabic)
+        if arabic:
+            lead = f"تمام، لن أضيفها إلى المفضلة. السياق الحالي: {job_context}." if no_favorite else f"السياق الحالي: {job_context}."
+            if wants_draft:
+                message_text = f"{lead}\n\nهذه صياغة نراجعها:\n\n{draft}\n\n"
+                if wants_send:
+                    message_text += (
+                        "هل تريد إرسالها عبر البريد؟ أرسل لي إيميل الـ recruiter. "
+                        "أما LinkedIn/InMail فأعطيك النص للنسخ واللصق فقط، ولا أستطيع إرسالها عبر LinkedIn مباشرة. "
+                        "ولو كانت بوابة توظيف، أستطيع إرشادك للرابط فقط ولا أدّعي التقديم المباشر."
+                    )
+                else:
+                    message_text += "إذا أردت إرسالها، أعطني إيميل الـ recruiter أو رابط/طريقة الإرسال. بوابات التوظيف أتعامل معها كرابط وإرشاد فقط."
+            else:
+                message_text = (
+                    f"{lead}\n\nأعطني إيميل الـ recruiter أو رابط/طريقة الإرسال. "
+                    "إذا كانت LinkedIn/InMail فسأعطيك النص للنسخ واللصق فقط، ولا أستطيع إرسالها عبر LinkedIn مباشرة. "
+                    "وإذا كانت بوابة توظيف فأستطيع إرشادك للرابط فقط، لا التقديم المباشر."
+                )
+        else:
+            lead = f"Got it - I will not save or favorite it. Current job context: {job_context}." if no_favorite else f"Current job context: {job_context}."
+            if wants_draft:
+                message_text = f"{lead}\n\nDraft to review:\n\n{draft}\n\n"
+                if wants_send:
+                    message_text += (
+                        "If this should go by email, send me the recruiter's email; I will keep it as a draft unless mail sending is available and explicitly confirmed. "
+                        "For LinkedIn/InMail, I can only give you copy/paste text; I cannot send through LinkedIn directly. "
+                        "For job portals, I can guide/open the link only; I cannot claim direct submission."
+                    )
+                else:
+                    message_text += "If you want to send it, give me the recruiter email or the apply channel/link. For job portals, I can guide/open the link only."
+            else:
+                message_text = (
+                    f"{lead}\n\nSend where? Give me the recruiter email, or the apply link/channel. "
+                    "For LinkedIn/InMail, I can only give you copy/paste text; I cannot send through LinkedIn directly. "
+                    "For job portals, I can guide/open the link only; I cannot claim direct submission."
+                )
+        if recruiter_email and not linkedin_context:
+            if arabic:
+                message_text += "\n\nوصلني إيميل الـ recruiter. سأبقيها كمسودة جاهزة للمراجعة قبل أي إرسال فعلي."
+            else:
+                message_text += "\n\nI have the recruiter email. I will keep this as a review-ready draft before any actual send."
+
+        try:
+            ctx = self._get_recent_context(user_id)
+            ctx["_pending_application_send"] = {
+                "job": job,
+                "draft": draft,
+                "needs_destination": True,
+                "linkedin_copy_only": linkedin_context,
+            }
+            self._store_recent_context(user_id, ctx)
+        except Exception:
+            pass
+
+        response = {
+            "type": "application_channel_clarification" if not wants_draft else "draft_message",
+            "intent": "application_channel_clarification",
+            "message": message_text,
+            "job_title": self._job_context_value(job, "title"),
+            "job_company": self._job_context_value(job, "company"),
+            "job_context": job_context,
+            "draft": draft if wants_draft else "",
+            "next_action": "await_send_destination",
+            "channel_policy": {
+                "linkedin": "copy_paste_only",
+                "email": "requires_recruiter_email_and_mail_integration",
+                "job_portal": "open_or_guide_only",
+            },
+        }
+        self._append_chat(user_id, "assistant", message_text)
+        return response
+
     # Phrases the user says to request a list of results after Rico shows a summary.
     _LIST_FOLLOWUP_PHRASES = frozenset({
         # English
@@ -2178,6 +2424,14 @@ class RicoChatAPI:
                     self.SOURCE_KEYWORD,
                     profile=profile,
                 )
+
+        # ── Application draft/send channel clarification ─────────────────────
+        # Follow-ups like "go ahead", "send it", or Arabic "صيغ رسالة ... وارسلها"
+        # must preserve the current job context without claiming unsupported
+        # LinkedIn/job-portal submission or re-showing the same action menu.
+        application_channel_result = self._handle_application_channel_followup(user_id, message, profile)
+        if application_channel_result is not None:
+            return self._finalize(application_channel_result, self.SOURCE_KEYWORD, profile=profile)
 
         # ── Lifecycle list follow-up: "list them" / "show them" / "اذكرهم" ───────
         # Must run before the affirmative resolver so short list-commands don't
