@@ -72,6 +72,9 @@ def apply_job(job: Dict[str, Any]) -> ToolExecutionResult:
     from src.services.apply_service import apply_to_job
     start = time.monotonic()
     try:
+        # Agent/automation path: deliberately does NOT pass approved=True. When approval
+        # mode is on (default), apply_to_job returns an "approval_required" result instead
+        # of submitting, so Rico can never auto-apply on the user's behalf from here.
         data = apply_to_job(job)
         return _timed("apply_job", True, data, int((time.monotonic() - start) * 1000))
     except Exception as exc:

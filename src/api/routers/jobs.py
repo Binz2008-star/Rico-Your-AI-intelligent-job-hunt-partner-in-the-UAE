@@ -77,7 +77,10 @@ def apply_job(
     job = _resolve_action_job(job_id, req)
 
     # Attempt browser automation (no-op in cloud when NG_ENABLED=false).
-    result = apply_to_job(job)
+    # This is an explicit, authenticated, per-job apply action initiated by the user
+    # (they POSTed to apply to this specific job), so it carries the approval the
+    # apply_to_job safety gate requires. Agent/automation paths never set approved=True.
+    result = apply_to_job(job, approved=True)
 
     # Regardless of automation outcome, record the apply action in the
     # lifecycle tracker so the /flow page and application history stay
