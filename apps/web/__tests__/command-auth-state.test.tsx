@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
+import { renderWithProviders as render } from "./test-utils";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -62,7 +63,9 @@ describe("/command auth-state containment (issue #281)", () => {
     render(<CommandPage />);
 
     expect(await screen.findByText("Sign up free")).toBeInTheDocument();
-    expect(screen.getByText("Sign in")).toBeInTheDocument();
+    // "Sign in" renders in two responsive variants (compact top bar + slide-in
+    // drawer), so assert presence rather than a single match.
+    expect(screen.getAllByText("Sign in").length).toBeGreaterThan(0);
     expect(screen.queryByText("Sign out")).not.toBeInTheDocument();
   });
 
