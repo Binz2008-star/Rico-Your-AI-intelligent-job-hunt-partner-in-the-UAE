@@ -73,8 +73,46 @@ def apply_job(
     req: Optional[JobActionRequest] = None,
     current_user: dict = Depends(get_current_user),
 ) -> JobActionResponse:
+    user_id = _current_user_id(current_user)
     job = _resolve_action_job(job_id, req)
+
+    # Attempt browser automation (no-op in cloud when NG_ENABLED=false).
     result = apply_to_job(job)
+
+    # Regardless of automation outcome, record the apply action in the
+    # lifecycle tracker so the /flow page and application history stay
+    # consistent.  We record even for "unsupported" sources because the
+    # user's intention to apply is what matters for tracking.
+    try:
+        from src.repositories.user_job_context_repo import (
+            record_interaction,
+            set_lifecycle_status,
+        )
+        from src.job_lifecycle import lifecycle_for_action
+
+        record_interaction(
+            user_id=user_id,
+            title=job.get("title", ""),
+            company=job.get("company", ""),
+            action="apply",
+        )
+        lc = lifecycle_for_action("apply")
+        if lc:
+            lc_status, _ = lc
+            set_lifecycle_status(
+                user_id=user_id,
+                title=job.get("title", ""),
+                company=job.get("company", ""),
+                status=lc_status,
+                apply_url=job.get("apply_link") or job.get("link") or "",
+                source_url=job.get("link") or "",
+            )
+    except Exception:
+        import logging as _logging
+        _logging.getLogger(__name__).debug(
+            "apply tracking failed user=%s job=%s", user_id, job_id, exc_info=True
+        )
+
     return JobActionResponse(
         status=result.get("status", "unknown"),
         message=result.get("message", ""),
