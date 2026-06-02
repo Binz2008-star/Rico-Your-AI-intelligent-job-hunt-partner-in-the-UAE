@@ -328,31 +328,20 @@ def _is_production() -> bool:
     return env in ("production", "prod")
 
 
-@router.post("/forgot-password", response_model=ForgotPasswordResponse)
-@limiter.limit(LIMIT_PASSWORD_RESET)
-def forgot_password(request: Request, req: ForgotPasswordRequest) -> ForgotPasswordResponse:
-    """
-    Initiate password reset. Always returns generic success to prevent email enumeration.
-    Dev/local: logs reset URL to stdout.
-    Production: token suppressed unless RESET_TOKEN_LOG=true.
+def _dispatch_password_reset_email(email: str) -> None:
+    """Create a reset token and email it.
+
+    Runs in a background task so /forgot-password returns at the same time whether or not
+    the email is registered — the synchronous SMTP send for real accounts previously made
+    the response measurably slower, leaking which emails exist (an enumeration oracle).
     """
     from src.repositories.password_reset_repo import create_reset_token
-    from src.repositories.users_repo import get_user_by_email
-
-    _generic = ForgotPasswordResponse(
-        message="If that email is registered, a reset link has been sent."
-    )
-    email = req.email.strip().lower()
-    user  = get_user_by_email(email)
-    if user is None:
-        logger.info("password_reset_request email=%r user_not_found", email)
-        return _generic
 
     try:
         token = create_reset_token(email)
     except Exception:
         logger.exception("password_reset_token_creation_failed email=%r", email)
-        return _generic
+        return
 
     reset_url    = f"{_reset_base_url()}/reset-password?token={token}"
     _prod        = _is_production()
@@ -366,13 +355,39 @@ def forgot_password(request: Request, req: ForgotPasswordRequest) -> ForgotPassw
             email,
         )
 
-    # Send password reset email (best-effort, failures logged but not exposed to user)
+    # Best-effort delivery; failures logged but never exposed to the user.
     from src.services.password_reset_email import send_password_reset_email
-    email_sent = send_password_reset_email(email, token)
-    if not email_sent:
+    if not send_password_reset_email(email, token):
         logger.warning("password_reset_email_failed")
-        # Still return generic success to prevent enumeration attacks
 
+
+@router.post("/forgot-password", response_model=ForgotPasswordResponse)
+@limiter.limit(LIMIT_PASSWORD_RESET)
+def forgot_password(
+    request: Request,
+    req: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+) -> ForgotPasswordResponse:
+    """
+    Initiate password reset. Always returns generic success to prevent email enumeration.
+    Token creation + email delivery are deferred to a background task so the response time
+    does not depend on whether the email is registered.
+    Dev/local: logs reset URL to stdout. Production: token suppressed unless RESET_TOKEN_LOG=true.
+    """
+    from src.repositories.users_repo import get_user_by_email
+
+    _generic = ForgotPasswordResponse(
+        message="If that email is registered, a reset link has been sent."
+    )
+    email = req.email.strip().lower()
+    user  = get_user_by_email(email)
+    if user is None:
+        logger.info("password_reset_request email=%r user_not_found", email)
+        return _generic
+
+    # Defer the slow work (token insert + SMTP) so registered and unregistered emails
+    # return at the same time — closes the timing-based enumeration oracle.
+    background_tasks.add_task(_dispatch_password_reset_email, email)
     return _generic
 
 

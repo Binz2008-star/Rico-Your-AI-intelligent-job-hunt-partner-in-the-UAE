@@ -9,7 +9,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from src.api.deps import get_current_user
+from src.api.deps import get_current_user, require_admin
 from src.schemas.pipeline import PipelineStatusResponse, PipelineTriggerResponse
 from src.services.pipeline_service import get_status, trigger
 
@@ -22,7 +22,7 @@ def pipeline_status(_user: dict = Depends(get_current_user)) -> Dict[str, Any]:
 
 
 @router.post("/trigger", response_model=PipelineTriggerResponse)
-def trigger_pipeline(_user: dict = Depends(get_current_user)) -> PipelineTriggerResponse:
+def trigger_pipeline(_user: dict = Depends(require_admin)) -> PipelineTriggerResponse:
     try:
         trigger()
     except RuntimeError as exc:
