@@ -32,10 +32,29 @@ def _storage_uri() -> str:
     return "memory://"
 
 
+# ── Client identity ───────────────────────────────────────────────────────────
+
+def client_ip_key(request: Request) -> str:
+    """Resolve the real client IP for rate-limiting.
+
+    Behind Render's proxy the TCP peer is the load balancer, so ``request.client.host`` is
+    identical for every user — using it would collapse all clients into a single bucket
+    (so one noisy client could 429 everyone, or the limit could be effectively bypassed).
+    Render forwards the originating client in ``X-Forwarded-For``; use its first entry when
+    present, falling back to the direct peer (correct for local/dev with no proxy).
+    """
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        first = forwarded.split(",")[0].strip()
+        if first:
+            return first
+    return get_remote_address(request)
+
+
 # ── Limiter singleton ─────────────────────────────────────────────────────────
 
 limiter = Limiter(
-    key_func=get_remote_address,
+    key_func=client_ip_key,
     storage_uri=_storage_uri(),
     default_limits=[],          # no global default — each route sets its own
 )
