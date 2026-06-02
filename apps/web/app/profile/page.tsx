@@ -1,16 +1,17 @@
 "use client";
 
-import { DashboardShell } from "@/components/DashboardShell";
+import { AppShell } from "@/components/layout/AppShell";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { StatusCard } from "@/components/StatusCard";
 import { ToastContainer } from "@/components/ui/Toast";
-import { useToast } from "@/hooks/useToast";
-import { ApiError, fetchProfile, updateProfile, type ProfileResponse } from "@/lib/api";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useToast } from "@/hooks/useToast";
+import { ApiError, fetchProfile, logout, updateProfile, type ProfileResponse } from "@/lib/api";
 import { useTranslation } from "@/lib/translations";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 function Tag({ label }: { label: string }) {
@@ -445,9 +446,18 @@ function ProfileDetail({
 }
 
 export default function ProfilePage() {
+    const router = useRouter();
     const { language } = useLanguage();
     const t = useTranslation(language);
     const { toasts, toast } = useToast();
+
+    const handleLogout = useCallback(async () => {
+        try {
+            await logout();
+        } finally {
+            router.push("/login");
+        }
+    }, [router]);
     const [profile, setProfile] = useState<ProfileResponse | null>(null);
     const [error, setError] = useState<"auth" | "other" | null>(null);
     const [loading, setLoading] = useState(true);
@@ -662,8 +672,14 @@ export default function ProfilePage() {
     }, [warnRefreshFail]);
 
     return (
-        <DashboardShell title={t("profileTitle")}>
-            <div className="max-w-2xl">
+        <AppShell
+            title={t("profileTitle")}
+            sidebarProps={{
+                user: profile ? { name: profile.name ?? undefined, email: profile.email } : undefined,
+                onLogout: handleLogout,
+            }}
+        >
+            <div className="max-w-2xl py-4">
                 {loading && <LoadingState variant="card" message={t("profileLoading")} />}
 
                 {!loading && error && (
@@ -727,6 +743,6 @@ export default function ProfilePage() {
                 )}
             </div>
             <ToastContainer toasts={toasts} />
-        </DashboardShell>
+        </AppShell>
     );
 }
