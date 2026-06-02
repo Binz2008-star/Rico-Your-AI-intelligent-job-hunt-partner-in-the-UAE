@@ -1665,8 +1665,41 @@ class RicoChatAPI:
         rate_limited = False
         try:
             fetch = self._search_jsearch_meta(search_role)
-            all_matches = fetch.items
+            all_matches = list(fetch.items)
             rate_limited = fetch.rate_limited
+
+            # Supplement with city-qualified queries when the profile has preferred
+            # cities. This surfaces postings that rank low in UAE-wide search but
+            # are highly relevant to the user's target location, without replacing
+            # the base results. Capped at 2 extra queries to stay within rate limits.
+            if not rate_limited:
+                preferred_cities_raw = self._as_list(
+                    self._profile_value(profile, "preferred_cities")
+                )
+                if preferred_cities_raw:
+                    from src import jsearch_client as _jsc
+                    from src.jsearch_client import build_queries_for_profile as _bqp
+                    city_queries = _bqp(
+                        target_roles=[search_role],
+                        preferred_cities=[str(c) for c in preferred_cities_raw if c],
+                        max_queries=4,
+                    )
+                    # base_q is what _search_jsearch_meta already fetched above.
+                    base_q = f"{search_role} UAE".lower()
+                    for cq in city_queries:
+                        if cq.lower() == base_q:
+                            continue  # already fetched
+                        try:
+                            cq_fetch = _jsc.search(cq)
+                            for job in cq_fetch.items:
+                                job.setdefault("score", 50)
+                            all_matches.extend(cq_fetch.items)
+                            if cq_fetch.rate_limited:
+                                rate_limited = True
+                                break
+                        except Exception:
+                            pass
+
             if not all_matches:
                 search_profile = (
                     _dc_replace(profile, target_roles=[search_role])
