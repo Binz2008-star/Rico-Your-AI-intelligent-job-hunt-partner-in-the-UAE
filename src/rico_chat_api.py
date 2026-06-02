@@ -541,6 +541,23 @@ class RicoChatAPI:
         re.IGNORECASE,
     )
 
+    # Matches explicit requests to view submitted applications — must route to
+    # application_tracking regardless of prior turn context.
+    # "show applications" / "list applications" (no "my") are intentionally excluded:
+    # those bare forms stay in _LIST_FOLLOWUP_PHRASES so they replay lifecycle context
+    # when a prior application turn exists, which is the correct contextual behavior.
+    # English: "show my applications", "my applications", etc.
+    # Arabic:  "طلباتي", "اعرض طلباتي", etc.
+    _SHOW_MY_APPLICATIONS_RE = re.compile(
+        r"^(?:"
+        r"(?:show|list|view|see|display|check|track)\s+my\s+applications?|"
+        r"my\s+applications?"
+        r"|(?:اعرض|أعرض|عرض|اظهر|أظهر|ارني|أريني)\s+طلباتي"
+        r"|طلباتي"
+        r")$",
+        re.IGNORECASE,
+    )
+
     @staticmethod
     def _is_live_job_search_request(message: str) -> bool:
         """True when user explicitly asks for live/current/UAE/openings jobs."""
@@ -2432,6 +2449,17 @@ class RicoChatAPI:
         application_channel_result = self._handle_application_channel_followup(user_id, message, profile)
         if application_channel_result is not None:
             return self._finalize(application_channel_result, self.SOURCE_KEYWORD, profile=profile)
+
+        # ── Explicit "show my applications" guard ────────────────────────────────
+        # "show my applications", "my applications", "اعرض طلباتي", "طلباتي", etc.
+        # are direct intents — route to application_tracking without requiring a
+        # prior lifecycle context (which the list-followup block would need).
+        if RicoChatAPI._SHOW_MY_APPLICATIONS_RE.match(text):
+            return self._finalize(
+                self._handle_application_tracking(user_id, intent="application_tracking"),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
 
         # ── Lifecycle list follow-up: "list them" / "show them" / "اذكرهم" ───────
         # Must run before the affirmative resolver so short list-commands don't
