@@ -1,6 +1,6 @@
 "use client";
 
-import { DashboardShell } from "@/components/DashboardShell";
+import { AppShell } from "@/components/layout/AppShell";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/hooks/useAuth";
@@ -11,14 +11,14 @@ import {
     createCustomerPortalSession,
     getMySubscription,
     getSubscriptionPlans,
+    logout,
     recordSubscriptionIntent,
     type SubscriptionMeResponse,
     type SubscriptionPlan,
 } from "@/lib/api";
 import { buildWhatsAppManageUrl, buildWhatsAppUpgradeUrl, isManualBillingMode } from "@/lib/billing";
 import { useTranslation } from "@/lib/translations";
-import { useRouter } from "next/navigation";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 
 const SUBSCRIPTION_MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === "true";
@@ -146,17 +146,15 @@ function PlanCard({
 
     return (
         <div
-            className={`relative flex flex-col rounded-2xl border p-6 backdrop-blur-md overflow-hidden transition-all ${
-                plan.is_popular
-                    ? "border-[rgba(255,45,142,0.4)] bg-surface-elevated/60 shadow-[0_0_40px_rgba(255,45,142,0.08)]"
-                    : "border-border-subtle bg-surface-elevated/40"
-            }`}
+            className={`relative flex flex-col rounded-2xl border p-6 backdrop-blur-md overflow-hidden transition-all ${plan.is_popular
+                ? "border-[rgba(255,45,142,0.4)] bg-surface-elevated/60 shadow-[0_0_40px_rgba(255,45,142,0.08)]"
+                : "border-border-subtle bg-surface-elevated/40"
+                }`}
         >
             {/* Glow */}
             <div
-                className={`absolute -top-10 -right-10 w-36 h-36 blur-3xl rounded-full pointer-events-none ${
-                    plan.is_popular ? "bg-[#ff2d8e]/8" : "bg-[#5b4fff]/5"
-                }`}
+                className={`absolute -top-10 -right-10 w-36 h-36 blur-3xl rounded-full pointer-events-none ${plan.is_popular ? "bg-[#ff2d8e]/8" : "bg-[#5b4fff]/5"
+                    }`}
             />
 
             {/* Popular badge */}
@@ -199,11 +197,10 @@ function PlanCard({
                 {localFeatures.map((feature, i) => (
                     <li key={i} className="flex items-start gap-2.5 text-[13px] text-text-secondary">
                         <span
-                            className={`mt-0.5 w-4 h-4 flex-shrink-0 rounded-full flex items-center justify-center text-[10px] font-black ${
-                                isProPlan
-                                    ? "bg-[rgba(255,45,142,0.2)] text-[#ff2d8e]"
-                                    : "bg-[rgba(91,79,255,0.2)] text-[#7b6fff]"
-                            }`}
+                            className={`mt-0.5 w-4 h-4 flex-shrink-0 rounded-full flex items-center justify-center text-[10px] font-black ${isProPlan
+                                ? "bg-[rgba(255,45,142,0.2)] text-[#ff2d8e]"
+                                : "bg-[rgba(91,79,255,0.2)] text-[#7b6fff]"
+                                }`}
                         >
                             ✓
                         </span>
@@ -241,14 +238,13 @@ function PlanCard({
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={() => onIntent(plan.plan)}
-                            className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-[13px] font-bold transition-all ${
-                                plan.is_popular
-                                    ? "bg-[#ff2d8e] text-white hover:bg-[#ff4a9e] shadow-[0_0_20px_rgba(255,45,142,0.3)]"
-                                    : "bg-[rgba(91,79,255,0.15)] text-[#7b6fff] border border-[rgba(91,79,255,0.35)] hover:bg-[rgba(91,79,255,0.25)]"
-                            }`}
+                            className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-[13px] font-bold transition-all ${plan.is_popular
+                                ? "bg-[#ff2d8e] text-white hover:bg-[#ff4a9e] shadow-[0_0_20px_rgba(255,45,142,0.3)]"
+                                : "bg-[rgba(91,79,255,0.15)] text-[#7b6fff] border border-[rgba(91,79,255,0.35)] hover:bg-[rgba(91,79,255,0.25)]"
+                                }`}
                         >
                             <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
                             </svg>
                             {t('continueOnWhatsApp')}
                         </a>
@@ -256,11 +252,10 @@ function PlanCard({
                         <button
                             onClick={() => { onIntent(plan.plan); onUpgrade(plan.plan); }}
                             disabled={anyCheckoutPending}
-                            className={`w-full py-3 rounded-xl text-[13px] font-bold transition-all disabled:opacity-40 ${
-                                plan.is_popular
-                                    ? "bg-[#ff2d8e] text-white hover:bg-[#ff4a9e] shadow-[0_0_20px_rgba(255,45,142,0.3)]"
-                                    : "bg-[rgba(91,79,255,0.15)] text-[#7b6fff] border border-[rgba(91,79,255,0.35)] hover:bg-[rgba(91,79,255,0.25)]"
-                            }`}
+                            className={`w-full py-3 rounded-xl text-[13px] font-bold transition-all disabled:opacity-40 ${plan.is_popular
+                                ? "bg-[#ff2d8e] text-white hover:bg-[#ff4a9e] shadow-[0_0_20px_rgba(255,45,142,0.3)]"
+                                : "bg-[rgba(91,79,255,0.15)] text-[#7b6fff] border border-[rgba(91,79,255,0.35)] hover:bg-[rgba(91,79,255,0.25)]"
+                                }`}
                         >
                             {loading ? (
                                 <span className="flex items-center justify-center gap-2">
@@ -275,11 +270,10 @@ function PlanCard({
                 ) : (
                     <a
                         href="/login"
-                        className={`block w-full py-3 rounded-xl text-center text-[13px] font-bold transition-all ${
-                            plan.is_popular
-                                ? "bg-[rgba(255,45,142,0.15)] text-[#ff2d8e] border border-[rgba(255,45,142,0.35)] hover:bg-[rgba(255,45,142,0.25)]"
-                                : "bg-[rgba(91,79,255,0.1)] text-[#7b6fff] border border-[rgba(91,79,255,0.25)] hover:bg-[rgba(91,79,255,0.2)]"
-                        }`}
+                        className={`block w-full py-3 rounded-xl text-center text-[13px] font-bold transition-all ${plan.is_popular
+                            ? "bg-[rgba(255,45,142,0.15)] text-[#ff2d8e] border border-[rgba(255,45,142,0.35)] hover:bg-[rgba(255,45,142,0.25)]"
+                            : "bg-[rgba(91,79,255,0.1)] text-[#7b6fff] border border-[rgba(91,79,255,0.25)] hover:bg-[rgba(91,79,255,0.2)]"
+                            }`}
                     >
                         {t('loginToUpgrade')}
                     </a>
@@ -299,35 +293,35 @@ function PlanCard({
 }
 
 function CancelBanner() {
-  const params = useSearchParams();
-  const router = useRouter();
-  const [dismissed, setDismissed] = useState(false);
-  const { language } = useLanguage();
-  const t = useTranslation(language);
+    const params = useSearchParams();
+    const router = useRouter();
+    const [dismissed, setDismissed] = useState(false);
+    const { language } = useLanguage();
+    const t = useTranslation(language);
 
-  if (dismissed || params.get("checkout") !== "cancelled") return null;
+    if (dismissed || params.get("checkout") !== "cancelled") return null;
 
-  return (
-    <div className="flex items-start gap-3 rounded-xl border border-[rgba(245,166,35,0.35)] bg-[rgba(245,166,35,0.08)] px-5 py-4">
-      <span className="text-[#f5a623] text-[18px] mt-0.5">⚠</span>
-      <div>
-        <p className="text-[13px] font-semibold text-[#f5a623]">{t('checkoutCancelled')}</p>
-        <p className="mt-0.5 text-[12px] text-[#a08040]">
-          {t('checkoutCancelledDesc')}
-        </p>
-      </div>
-      <button
-        onClick={() => {
-          setDismissed(true);
-          router.replace("/subscription");
-        }}
-        className="ml-auto text-[#a08040] hover:text-[#f5a623] text-[18px] leading-none flex-shrink-0"
-        aria-label="Dismiss"
-      >
-        ×
-      </button>
-    </div>
-  );
+    return (
+        <div className="flex items-start gap-3 rounded-xl border border-[rgba(245,166,35,0.35)] bg-[rgba(245,166,35,0.08)] px-5 py-4">
+            <span className="text-[#f5a623] text-[18px] mt-0.5">⚠</span>
+            <div>
+                <p className="text-[13px] font-semibold text-[#f5a623]">{t('checkoutCancelled')}</p>
+                <p className="mt-0.5 text-[12px] text-[#a08040]">
+                    {t('checkoutCancelledDesc')}
+                </p>
+            </div>
+            <button
+                onClick={() => {
+                    setDismissed(true);
+                    router.replace("/subscription");
+                }}
+                className="ml-auto text-[#a08040] hover:text-[#f5a623] text-[18px] leading-none flex-shrink-0"
+                aria-label="Dismiss"
+            >
+                ×
+            </button>
+        </div>
+    );
 }
 
 function FreePlanRow({ currentPlan, isLoggedIn }: { currentPlan: string | null; isLoggedIn: boolean }) {
@@ -521,22 +515,24 @@ export default function SubscriptionPage() {
     const currentPlan = user ? sub?.subscription?.plan ?? null : null;
     const isActive = Boolean(sub?.is_active);
     const isLoggedIn = Boolean(user);
-    const { setLanguage } = useLanguage();
+    const router = useRouter();
+
+    const handleLogout = useCallback(async () => {
+        try {
+            await logout();
+        } finally {
+            router.push("/login");
+        }
+    }, [router]);
 
     return (
-        <DashboardShell
+        <AppShell
             title={t('subscriptionTitle')}
             subtitle={t('subscriptionSubtitle')}
-            actions={
-                <button
-                    type="button"
-                    onClick={() => setLanguage(language === "ar" ? "en" : "ar")}
-                    className="rounded-lg border border-border-soft px-3 py-1.5 text-[12px] font-medium text-text-secondary hover:border-white/20 hover:text-white transition-colors"
-                    aria-label="Toggle language"
-                >
-                    {language === "ar" ? "EN" : "عربي"}
-                </button>
-            }
+            sidebarProps={{
+                user: user ? { name: user.name ?? undefined, email: user.email } : undefined,
+                onLogout: handleLogout,
+            }}
         >
             <div className="max-w-3xl flex flex-col gap-8">
 
@@ -719,6 +715,6 @@ export default function SubscriptionPage() {
             </div>
 
             <ToastContainer toasts={toasts} />
-        </DashboardShell>
+        </AppShell>
     );
 }
