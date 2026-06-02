@@ -434,7 +434,7 @@ export default function CommandPage() {
             document.documentElement.lang = language;
         }
     }, [language]);
-    const bottomRef = useRef<HTMLDivElement>(null);
+    const messagesContainerRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const promptSentRef = useRef(false);
@@ -516,14 +516,19 @@ export default function CommandPage() {
     }, [chatAudience, useMock]);
 
     const scrollBottom = useCallback(() => {
-        const behavior = prefersReducedMotion() ? "auto" : "smooth";
+        const behavior: ScrollBehavior = prefersReducedMotion() ? "auto" : "smooth";
+        const scrollMessagesPane = () => {
+            const pane = messagesContainerRef.current;
+            if (!pane) return;
+            pane.scrollTo({ top: pane.scrollHeight, behavior });
+        };
         if (typeof window !== "undefined") {
             window.requestAnimationFrame(() => {
-                bottomRef.current?.scrollIntoView({ behavior });
+                scrollMessagesPane();
             });
             return;
         }
-        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior }), 50);
+        setTimeout(scrollMessagesPane, 50);
     }, []);
 
     const sendMessage = useCallback(async (text: string, displayText?: string) => {
@@ -959,7 +964,7 @@ export default function CommandPage() {
 
             <div className="relative z-10 flex flex-col flex-1 h-[calc(100dvh-53px)] max-w-3xl w-full mx-auto px-2 sm:px-4">
                 {/* Messages Container */}
-                <div className="flex-1 min-h-0 overflow-y-auto px-2 py-6 space-y-5" role="log" aria-live="polite" aria-atomic="false" aria-busy={thinking}>
+                <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 py-6 space-y-5" role="log" aria-live="polite" aria-atomic="false" aria-busy={thinking}>
 
                     {/* Clear history control — shown at top when authenticated with loaded history */}
                     {chatAudience === "authenticated" && messages.length > 1 && (
@@ -1241,7 +1246,7 @@ export default function CommandPage() {
                         </div>
                     )}
 
-                    <div ref={bottomRef} />
+                    <div aria-hidden="true" />
                 </div>
 
                 {/* Input bar — shrink-0 flex child keeps it below the scroll area;
