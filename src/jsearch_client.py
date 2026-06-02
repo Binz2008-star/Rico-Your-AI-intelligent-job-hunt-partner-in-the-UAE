@@ -117,6 +117,54 @@ def _raw_items(data: Any) -> List[Dict[str, Any]]:
     return []
 
 
+_UAE_CITY_NAMES = frozenset([
+    "dubai", "abu dhabi", "sharjah", "ajman",
+    "ras al khaimah", "fujairah", "al ain", "umm al quwain",
+])
+
+
+def build_queries_for_profile(
+    target_roles: List[str],
+    preferred_cities: List[str],
+    *,
+    max_queries: int = 12,
+) -> List[str]:
+    """Return deduplicated JSearch query strings derived from a user's profile.
+
+    Strategy: city-qualified variants first (most targeted), then base "Role UAE"
+    fallback. Capped at *max_queries* to stay within rate-limit budgets.
+
+    Cities that don't look like UAE cities are silently ignored so a user who typed
+    "Remote" or "Open to relocation" doesn't generate nonsense queries.
+    """
+    queries: list[str] = []
+    seen: set[str] = set()
+
+    def _add(q: str) -> None:
+        norm = q.strip()
+        if norm.lower() not in seen:
+            seen.add(norm.lower())
+            queries.append(norm)
+
+    # Keep only recognisable UAE cities; fall back to empty list (UAE-wide search).
+    uae_cities: list[str] = [
+        c.strip() for c in preferred_cities
+        if any(uae.lower() in c.lower() for uae in _UAE_CITY_NAMES)
+    ]
+
+    for role in target_roles[:6]:
+        role = (role or "").strip()
+        if not role:
+            continue
+        for city in uae_cities[:3]:
+            _add(f"{role} {city} UAE")
+        _add(f"{role} UAE")
+        if len(queries) >= max_queries:
+            break
+
+    return queries[:max_queries]
+
+
 def search(query: str, *, use_cache: bool = True, country: str = "ae") -> FetchResult:
     """Fetch + normalize JSearch results for *query* with cache, retry, backoff.
 
