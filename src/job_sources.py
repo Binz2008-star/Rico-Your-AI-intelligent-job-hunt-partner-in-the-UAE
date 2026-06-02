@@ -164,35 +164,77 @@ def fetch_browser_jobs(save_to_db: bool = True) -> list:
     return results
 
 
-def get_jobs():
-    seen = set()
-    all_jobs = []
-    for query in _QUERIES:
-        try:
-            df = scrape_jobs(
-                site_name=["indeed"],
-                search_term=query,
-                location="United Arab Emirates",
-                results_wanted=20,
-                hours_old=48,
-                country_indeed="united arab emirates",
-            )
-            for _, row in df.iterrows():
-                link = str(row.get("job_url") or "")
-                if link and link not in seen:
-                    seen.add(link)
-                    all_jobs.append({
-                        "title": str(row.get("title", "") or ""),
-                        "company": str(row.get("company", "") or ""),
-                        "location": str(row.get("location", "") or ""),
-                        "link": link,
-                        "description": str(row.get("description", "") or ""),
-                        "source": "indeed",
-                    })
-            time.sleep(3)
-        except Exception:
-            logger.warning(f"scrape_failed query={query}", exc_info=True)
-    logger.info(f"jobs_fetched total={len(all_jobs)}")
+def get_jobs(
+    target_roles: List[str] | None = None,
+    preferred_cities: List[str] | None = None,
+) -> List[Dict[str, Any]]:
+    """Scrape jobs from Indeed + Bayt UAE via jobspy.
+
+    When *target_roles* are supplied the function builds queries from the
+    user's profile instead of the hardcoded ``_QUERIES`` list, so each
+    authenticated user gets results relevant to their own career goals.
+
+    Bayt.com is included alongside Indeed as it is the largest UAE-focused
+    job board and not covered by JSearch.
+    """
+    queries = target_roles if target_roles else _QUERIES
+    seen: set = set()
+    all_jobs: list = []
+
+    # Sources: Indeed (international) + Bayt (UAE-native)
+    _SOURCES: List[Dict[str, Any]] = [
+        {
+            "site_name": ["indeed"],
+            "extra": {"country_indeed": "united arab emirates"},
+            "source_label": "indeed",
+        },
+        {
+            "site_name": ["bayt"],
+            "extra": {},
+            "source_label": "bayt",
+        },
+    ]
+
+    location = "United Arab Emirates"
+    if preferred_cities:
+        from src.jsearch_client import _UAE_CITY_NAMES
+        uae_cities = [
+            c for c in preferred_cities
+            if any(uae.lower() in c.lower() for uae in _UAE_CITY_NAMES)
+        ]
+        if uae_cities:
+            location = uae_cities[0]  # jobspy takes a single location string
+
+    for query in queries:
+        for src in _SOURCES:
+            try:
+                df = scrape_jobs(
+                    site_name=src["site_name"],
+                    search_term=query,
+                    location=location,
+                    results_wanted=20,
+                    hours_old=48,
+                    **src["extra"],
+                )
+                for _, row in df.iterrows():
+                    link = str(row.get("job_url") or "")
+                    if link and link not in seen:
+                        seen.add(link)
+                        all_jobs.append({
+                            "title": str(row.get("title", "") or ""),
+                            "company": str(row.get("company", "") or ""),
+                            "location": str(row.get("location", "") or ""),
+                            "link": link,
+                            "description": str(row.get("description", "") or ""),
+                            "source": src["source_label"],
+                        })
+                time.sleep(2)
+            except Exception:
+                logger.warning(
+                    "scrape_failed query=%r source=%s", query, src["source_label"], exc_info=True
+                )
+
+    logger.info("jobs_fetched total=%d sources=indeed,bayt", len(all_jobs))
     return all_jobs
 
 
