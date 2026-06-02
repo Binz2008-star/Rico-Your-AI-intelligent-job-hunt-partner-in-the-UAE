@@ -575,6 +575,22 @@ _ARABIC_STANDALONE_CV_JOB_REQUEST_TERMS = frozenset([
     "جيب",
 ])
 
+# Arabic application-history / tracking indicators (normalised forms).
+# These signal a question about ALREADY-submitted applications and how to
+# follow/track them — they must route to the application tracker, never to a
+# brand-new job search.  Critical because "طلب" (request) is a substring of
+# "الطلب" (the application) and a job noun like "وظيفه" appears in questions
+# such as "كم وظيفة قمت بالتقديم عليها" ("how many jobs have I applied to"),
+# which would otherwise trip the Arabic job-search heuristic.
+_ARABIC_APPLICATION_HISTORY_TERMS = frozenset([
+    "تقديم",     # application / applying (covers التقديم, بالتقديم, تقديمي)
+    "قدمت",      # I submitted / applied (substring of تقدمت)
+    "تقدمت",     # I applied
+    "متابع",     # follow-up / track (covers متابعة, متابعته, متابعتها)
+    "طلباتي",    # my applications/requests
+    "تتبع",      # track
+])
+
 
 def _normalize_arabic(text: str) -> str:
     """Remove diacritics and normalise Arabic letter variants before phrase lookup."""
@@ -587,6 +603,12 @@ def _normalize_arabic(text: str) -> str:
     # Normalise ta marbuta ة → ha ه  (so وظيفة == وظيفه in lookups)
     text = re.sub(r"ة", "ه", text)
     return text
+
+
+def _is_arabic_application_query(normalized_lower: str) -> bool:
+    """Return True when a normalised Arabic message asks about already-submitted
+    applications or how to follow/track them (application history)."""
+    return any(t in normalized_lower for t in _ARABIC_APPLICATION_HISTORY_TERMS)
 
 
 def _is_arabic_job_search(normalized_lower: str, *, has_cv: bool = False) -> bool:
@@ -780,6 +802,14 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         for_role_m = _JOB_SEARCH_FOR_ROLE_RE.search(text)
         extracted_role = for_role_m.group(1).strip() if for_role_m else None
         return IntentResult("job_search_explicit", 0.85, "regex", extracted_role=extracted_role)
+
+    # Arabic application-history / tracking query MUST be checked before the
+    # Arabic job-search heuristic.  "طلب" (request) is a substring of "الطلب"
+    # (the application) and "وظيفه" (job) appears in history questions like
+    # "كم وظيفة قمت بالتقديم عليها" — without this guard such questions are
+    # misrouted to a brand-new job search instead of the application tracker.
+    if has_arabic and _is_arabic_application_query(lower):
+        return IntentResult("application_tracking", 0.85, "regex")
 
     # Arabic job search: request verb + job noun, or request verb + English role name
     if has_arabic and _is_arabic_job_search(lower, has_cv=has_cv_profile):

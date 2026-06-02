@@ -144,6 +144,49 @@ class TestArabicNonsenseSafeguard:
         assert result.intent == "nonsense"
 
 
+class TestArabicApplicationHistory:
+    """Arabic application-history questions must route to the application tracker,
+    NOT to a brand-new job search.
+
+    Regression: production saved an ADNOC application correctly, but when the
+    user asked in Arabic where to follow it and how many jobs they had applied
+    to, Rico misrouted to job search and reported "no live UAE matches found".
+    The substring "طلب" (request) inside "الطلب" (the application) plus the job
+    noun "وظيفة" tripped the Arabic job-search heuristic.
+    """
+
+    def test_full_application_history_question_routes_to_tracker(self):
+        """The exact production message must classify as application_tracking."""
+        msg = (
+            "انت قمت بحفظ الطلب ولكن اين استطيع متابعته "
+            "وكم وظيفة قمت بالتقديم عليها للان"
+        )
+        result = classify_intent(msg, has_cv_profile=True)
+        assert result.intent == "application_tracking", (
+            f"Arabic application-history question must route to application_tracking, "
+            f"got {result.intent!r}"
+        )
+        assert result.intent != "job_search_explicit"
+
+    @pytest.mark.parametrize("msg", [
+        "كم وظيفة قمت بالتقديم عليها",          # how many jobs have I applied to
+        "اين استطيع متابعة طلباتي",             # where can I follow up my applications
+        "ما هي الوظائف التي تقدمت لها",          # what jobs did I apply for
+        "اريد متابعة طلب التوظيف الذي قدمته",    # follow the application I submitted
+        "كيف اتابع تقديمي على الوظيفة",          # how do I track my application
+    ])
+    def test_arabic_application_history_variants(self, msg):
+        result = classify_intent(msg, has_cv_profile=True)
+        assert result.intent == "application_tracking", (
+            f"Expected application_tracking for '{msg}', got {result.intent!r}"
+        )
+
+    def test_genuine_arabic_job_search_still_works(self):
+        """The guard must not steal genuine Arabic job-search requests."""
+        result = classify_intent("ابحث لي عن وظيفة", has_cv_profile=True)
+        assert result.intent == "job_search_explicit"
+
+
 class TestArabicStandaloneRequestVerb:
     """Standalone Arabic request verb + has_cv_profile must classify as job_search_explicit."""
 
