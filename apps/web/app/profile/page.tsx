@@ -4,7 +4,9 @@ import { AppShell } from "@/components/layout/AppShell";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
-import { StatusCard } from "@/components/StatusCard";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/useToast";
@@ -14,19 +16,20 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-function Tag({ label }: { label: string }) {
+function SectionHeader({ title, badge, badgeVariant = "default" }: { title: string; badge?: string; badgeVariant?: "default" | "secondary" | "outline" | "ghost" }) {
     return (
-        <span className="rounded-md bg-surface-glass px-2 py-0.5 text-xs text-rico-text-muted">
-            {label}
-        </span>
+        <div className="flex items-center justify-between gap-3 mb-4">
+            <CardTitle className="text-base font-semibold">{title}</CardTitle>
+            {badge && <Badge variant={badgeVariant}>{badge}</Badge>}
+        </div>
     );
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
     return (
-        <div>
-            <dt className="text-rico-text-dim">{label}</dt>
-            <dd>{children}</dd>
+        <div className="flex flex-col gap-1 py-3 border-b border-border-subtle/50 last:border-0">
+            <dt className="text-xs font-medium text-text-secondary uppercase tracking-wide">{label}</dt>
+            <dd className="text-sm text-text-primary">{children}</dd>
         </div>
     );
 }
@@ -35,25 +38,26 @@ function ChatCTA({ message }: { message: string }) {
     const { language } = useLanguage();
     const t = useTranslation(language);
     return (
-        <div className="rounded-lg border border-rico-accent-border bg-rico-accent/[0.05] px-4 py-3">
-            <p className="mb-2 text-sm text-rico-text-dim">{message}</p>
+        <div className="flex flex-col gap-3 p-4 rounded-lg bg-surface-elevated/60 border border-border-soft">
+            <p className="text-sm text-text-secondary">{message}</p>
             <Link
                 href="/command"
-                className="inline-block rounded-lg bg-rico-accent px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-rico-accent-hover"
+                className="inline-flex items-center self-start gap-1.5 rounded-md bg-magenta px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-magenta-hover"
             >
-                {t("profileOpenRicoChat")} →
+                {t("profileOpenRicoChat")}
+                <span aria-hidden="true">→</span>
             </Link>
         </div>
     );
 }
 
-function ChatEditCTA({ prompt }: { prompt: string }) {
+function InlineEditLink({ prompt, label = "Edit" }: { prompt: string; label?: string }) {
     return (
         <Link
             href={`/command?prompt=${encodeURIComponent(prompt)}`}
-            className="ms-2 text-[11px] text-rico-purple hover:text-[#c4b5fd] transition-colors underline underline-offset-2"
+            className="ml-2 text-xs text-magenta hover:text-magenta-hover transition-colors underline underline-offset-2"
         >
-            Edit
+            {label}
         </Link>
     );
 }
@@ -115,7 +119,7 @@ function EditableNameField({
                         setError(null);
                         setEditing(true);
                     }}
-                    className="text-[11px] text-rico-purple underline underline-offset-2 transition-colors hover:text-[#c4b5fd]"
+                    className="text-xs text-magenta hover:text-magenta-hover transition-colors underline underline-offset-2"
                 >
                     {t("edit")}
                 </button>
@@ -133,7 +137,7 @@ function EditableNameField({
                 type="text"
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
-                className="w-full rounded-lg border border-border-soft bg-surface-glass px-3 py-2 text-sm text-text-primary outline-none transition focus:border-rico-accent"
+                className="w-full rounded-md border border-border-soft bg-surface px-3 py-2 text-sm text-text-primary outline-none transition focus:border-magenta focus:ring-1 focus:ring-magenta/20"
                 placeholder={t("profileEnterName")}
                 disabled={saving}
             />
@@ -142,7 +146,7 @@ function EditableNameField({
                 <button
                     type="submit"
                     disabled={saving}
-                    className="rounded-lg bg-rico-accent px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-rico-accent-hover disabled:opacity-60"
+                    className="rounded-md bg-magenta px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-magenta-hover disabled:opacity-60"
                 >
                     {saving ? t("profileSaving") : t("save")}
                 </button>
@@ -150,7 +154,7 @@ function EditableNameField({
                     type="button"
                     onClick={handleCancel}
                     disabled={saving}
-                    className="rounded-lg border border-border-soft px-3 py-1.5 text-xs font-semibold text-rico-text-muted transition-colors hover:border-white/20 hover:text-text-primary disabled:opacity-60"
+                    className="rounded-md border border-border-soft px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-border-medium hover:text-text-primary disabled:opacity-60"
                 >
                     {t("cancel")}
                 </button>
@@ -233,7 +237,7 @@ function EditableTextField({
                 type="text"
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
-                className="w-full rounded-lg border border-border-soft bg-surface-glass px-3 py-2 text-sm text-text-primary outline-none transition focus:border-rico-accent"
+                className="w-full rounded-md border border-border-soft bg-surface px-3 py-2 text-sm text-text-primary outline-none transition focus:border-magenta focus:ring-1 focus:ring-magenta/20"
                 placeholder={placeholder}
                 disabled={saving}
             />
@@ -242,7 +246,7 @@ function EditableTextField({
                 <button
                     type="submit"
                     disabled={saving}
-                    className="rounded-lg bg-rico-accent px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-rico-accent-hover disabled:opacity-60"
+                    className="rounded-md bg-magenta px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-magenta-hover disabled:opacity-60"
                 >
                     {saving ? t("profileSaving") : t("save")}
                 </button>
@@ -250,7 +254,7 @@ function EditableTextField({
                     type="button"
                     onClick={handleCancel}
                     disabled={saving}
-                    className="rounded-lg border border-border-soft px-3 py-1.5 text-xs font-semibold text-rico-text-muted transition-colors hover:border-white/20 hover:text-text-primary disabled:opacity-60"
+                    className="rounded-md border border-border-soft px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-border-medium hover:text-text-primary disabled:opacity-60"
                 >
                     {t("cancel")}
                 </button>
@@ -303,144 +307,179 @@ function ProfileDetail({
     const hasSkills = (profile.skills?.length ?? 0) > 0;
 
     return (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-6 max-w-3xl">
             {/* Identity */}
-            <StatusCard title={t("profileIdentity")} badge="live" badgeLabel={t("profileBadgeSynced")}>
-                <dl className="grid grid-cols-1 gap-y-3 text-sm sm:grid-cols-2 sm:gap-x-6">
-                    <Row label={t("name")}>
-                        <EditableNameField value={profile.name} onSave={onSaveName} />
-                    </Row>
-                    <Row label={t("email")}>
-                        <span className="text-text-primary">{profile.email ?? "—"}</span>
-                    </Row>
-                    <Row label={t("profilePhone")}>
-                        <EditableTextField
-                            value={profile.phone}
-                            onSave={onSavePhone}
-                            placeholder={t("profileEnterPhone")}
-                            label="phone"
-                        />
-                    </Row>
-                    <Row label={t("telegram")}>
-                        <EditableTextField
-                            value={profile.telegram_username}
-                            onSave={onSaveTelegram}
-                            placeholder={t("profileEnterTelegram")}
-                            label="telegram"
-                        />
-                    </Row>
-                    <Row label={t("profileVisa")}>
-                        <EditableTextField
-                            value={profile.visa_status}
-                            onSave={onSaveVisa}
-                            placeholder={t("profileEnterVisa")}
-                            label="visa"
-                        />
-                    </Row>
-                    <Row label={t("profileNotice")}>
-                        <EditableTextField
-                            value={profile.notice_period}
-                            onSave={onSaveNotice}
-                            placeholder={t("profileEnterNotice")}
-                            label="notice"
-                        />
-                    </Row>
-                    <Row label={t("profileCurrentCompany")}>
-                        <EditableTextField
-                            value={profile.current_company}
-                            onSave={onSaveCurrentCompany}
-                            placeholder={t("profileEnterCurrentCompany")}
-                            label="current-company"
-                        />
-                    </Row>
-                    <Row label={t("profileCurrentRole")}>
-                        <EditableTextField
-                            value={profile.current_role}
-                            onSave={onSaveCurrentRole}
-                            placeholder={t("profileEnterCurrentRole")}
-                            label="current-role"
-                        />
-                    </Row>
-                    <Row label={t("profileLinkedin")}>
-                        <EditableTextField
-                            value={profile.linkedin_url}
-                            onSave={onSaveLinkedin}
-                            placeholder={t("profileEnterLinkedin")}
-                            label="linkedin"
-                        />
-                    </Row>
-                </dl>
-            </StatusCard>
-
-            {/* Job preferences */}
-            <StatusCard title={t("profileJobPreferences")} badge={hasJobPrefs ? "live" : "pending"} badgeLabel={hasJobPrefs ? t("profileBadgeSynced") : t("profileBadgePending")}>
-                {hasJobPrefs ? (
-                    <dl className="grid grid-cols-1 gap-y-3 text-sm sm:grid-cols-2 sm:gap-x-6">
-                        <Row label={t("profileTargetRoles")}>
-                            <EditableTextField
-                                value={profile.target_roles?.join(', ') || null}
-                                onSave={onSaveTargetRoles}
-                                placeholder={t("profileEnterTargetRoles")}
-                                label="target-roles"
-                            />
-                        </Row>
-                        <Row label={t("profileCities")}>
-                            <EditableTextField
-                                value={profile.preferred_cities?.join(', ') || null}
-                                onSave={onSaveCities}
-                                placeholder={t("profileEnterCities")}
-                                label="cities"
-                            />
-                        </Row>
-                        <Row label={t("profileSalaryTarget")}>
-                            <EditableTextField
-                                value={profile.salary_expectation_aed != null ? String(profile.salary_expectation_aed) : null}
-                                onSave={onSaveSalaryTarget}
-                                placeholder={t("profileEnterSalaryTarget")}
-                                label="salary-target"
-                            />
-                        </Row>
-                        <Row label={t("profileMinimumSalary")}>
-                            <EditableTextField
-                                value={profile.minimum_salary_aed != null ? String(profile.minimum_salary_aed) : null}
-                                onSave={async (val) => {
-                                    const parsed = Number(val);
-                                    if (!Number.isFinite(parsed) || parsed < 0) {
-                                        throw new Error(t("profileInvalidSalary"));
-                                    }
-                                    return onSaveMinSalary(parsed);
-                                }}
-                                placeholder={t("profileEnterMinSalary")}
-                                label="min-salary"
-                            />
-                        </Row>
-                        <Row label={t("profileExperience")}>
-                            <EditableTextField
-                                value={profile.years_experience != null ? String(profile.years_experience) : null}
-                                onSave={onSaveExperience}
-                                placeholder={t("profileEnterExperience")}
-                                label="experience"
-                            />
-                        </Row>
+            <Card>
+                <CardHeader className="pb-2">
+                    <SectionHeader
+                        title={t("profileIdentity")}
+                        badge={t("profileBadgeSynced")}
+                        badgeVariant="default"
+                    />
+                </CardHeader>
+                <CardContent>
+                    <dl className="flex flex-col">
+                        <FieldRow label={t("name")}>
+                            <EditableNameField value={profile.name} onSave={onSaveName} />
+                        </FieldRow>
+                        <FieldRow label={t("email")}>
+                            <span className="font-medium">{profile.email ?? "—"}</span>
+                        </FieldRow>
                     </dl>
-                ) : (
-                    <ChatCTA message={t("profileJobPrefsCTA")} />
-                )}
-            </StatusCard>
+                    <Separator className="my-4" />
+                    <dl className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                        <FieldRow label={t("profilePhone")}>
+                            <EditableTextField
+                                value={profile.phone}
+                                onSave={onSavePhone}
+                                placeholder={t("profileEnterPhone")}
+                                label="phone"
+                            />
+                        </FieldRow>
+                        <FieldRow label={t("telegram")}>
+                            <EditableTextField
+                                value={profile.telegram_username}
+                                onSave={onSaveTelegram}
+                                placeholder={t("profileEnterTelegram")}
+                                label="telegram"
+                            />
+                        </FieldRow>
+                        <FieldRow label={t("profileLinkedin")}>
+                            <EditableTextField
+                                value={profile.linkedin_url}
+                                onSave={onSaveLinkedin}
+                                placeholder={t("profileEnterLinkedin")}
+                                label="linkedin"
+                            />
+                        </FieldRow>
+                        <FieldRow label={t("profileVisa")}>
+                            <EditableTextField
+                                value={profile.visa_status}
+                                onSave={onSaveVisa}
+                                placeholder={t("profileEnterVisa")}
+                                label="visa"
+                            />
+                        </FieldRow>
+                        <FieldRow label={t("profileNotice")}>
+                            <EditableTextField
+                                value={profile.notice_period}
+                                onSave={onSaveNotice}
+                                placeholder={t("profileEnterNotice")}
+                                label="notice"
+                            />
+                        </FieldRow>
+                    </dl>
+                    <Separator className="my-4" />
+                    <dl className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                        <FieldRow label={t("profileCurrentCompany")}>
+                            <EditableTextField
+                                value={profile.current_company}
+                                onSave={onSaveCurrentCompany}
+                                placeholder={t("profileEnterCurrentCompany")}
+                                label="current-company"
+                            />
+                        </FieldRow>
+                        <FieldRow label={t("profileCurrentRole")}>
+                            <EditableTextField
+                                value={profile.current_role}
+                                onSave={onSaveCurrentRole}
+                                placeholder={t("profileEnterCurrentRole")}
+                                label="current-role"
+                            />
+                        </FieldRow>
+                    </dl>
+                </CardContent>
+            </Card>
+
+            {/* Job Preferences */}
+            <Card>
+                <CardHeader className="pb-2">
+                    <SectionHeader
+                        title={t("profileJobPreferences")}
+                        badge={hasJobPrefs ? t("profileBadgeSynced") : t("profileBadgePending")}
+                        badgeVariant={hasJobPrefs ? "default" : "secondary"}
+                    />
+                </CardHeader>
+                <CardContent>
+                    {hasJobPrefs ? (
+                        <dl className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                            <FieldRow label={t("profileTargetRoles")}>
+                                <EditableTextField
+                                    value={profile.target_roles?.join(', ') || null}
+                                    onSave={onSaveTargetRoles}
+                                    placeholder={t("profileEnterTargetRoles")}
+                                    label="target-roles"
+                                />
+                            </FieldRow>
+                            <FieldRow label={t("profileCities")}>
+                                <EditableTextField
+                                    value={profile.preferred_cities?.join(', ') || null}
+                                    onSave={onSaveCities}
+                                    placeholder={t("profileEnterCities")}
+                                    label="cities"
+                                />
+                            </FieldRow>
+                            <FieldRow label={t("profileSalaryTarget")}>
+                                <EditableTextField
+                                    value={profile.salary_expectation_aed != null ? String(profile.salary_expectation_aed) : null}
+                                    onSave={onSaveSalaryTarget}
+                                    placeholder={t("profileEnterSalaryTarget")}
+                                    label="salary-target"
+                                />
+                            </FieldRow>
+                            <FieldRow label={t("profileMinimumSalary")}>
+                                <EditableTextField
+                                    value={profile.minimum_salary_aed != null ? String(profile.minimum_salary_aed) : null}
+                                    onSave={async (val) => {
+                                        const parsed = Number(val);
+                                        if (!Number.isFinite(parsed) || parsed < 0) {
+                                            throw new Error(t("profileInvalidSalary"));
+                                        }
+                                        return onSaveMinSalary(parsed);
+                                    }}
+                                    placeholder={t("profileEnterMinSalary")}
+                                    label="min-salary"
+                                />
+                            </FieldRow>
+                            <FieldRow label={t("profileExperience")}>
+                                <EditableTextField
+                                    value={profile.years_experience != null ? String(profile.years_experience) : null}
+                                    onSave={onSaveExperience}
+                                    placeholder={t("profileEnterExperience")}
+                                    label="experience"
+                                />
+                            </FieldRow>
+                        </dl>
+                    ) : (
+                        <ChatCTA message={t("profileJobPrefsCTA")} />
+                    )}
+                </CardContent>
+            </Card>
 
             {/* Skills */}
-            <StatusCard title={t("profileSkills")} badge={hasSkills ? "live" : "pending"} badgeLabel={hasSkills ? t("profileBadgeSynced") : t("profileBadgePending")}>
-                {hasSkills ? (
-                    <EditableTextField
-                        value={profile.skills?.join(', ') || null}
-                        onSave={onSaveSkills}
-                        placeholder={t("profileEnterSkills")}
-                        label="skills"
+            <Card>
+                <CardHeader className="pb-2">
+                    <SectionHeader
+                        title={t("profileSkills")}
+                        badge={hasSkills ? t("profileBadgeSynced") : t("profileBadgePending")}
+                        badgeVariant={hasSkills ? "default" : "secondary"}
                     />
-                ) : (
-                    <ChatCTA message={t("profileSkillsCTA")} />
-                )}
-            </StatusCard>
+                </CardHeader>
+                <CardContent>
+                    {hasSkills ? (
+                        <FieldRow label={t("profileSkills")}>
+                            <EditableTextField
+                                value={profile.skills?.join(', ') || null}
+                                onSave={onSaveSkills}
+                                placeholder={t("profileEnterSkills")}
+                                label="skills"
+                            />
+                        </FieldRow>
+                    ) : (
+                        <ChatCTA message={t("profileSkillsCTA")} />
+                    )}
+                </CardContent>
+            </Card>
         </div>
     );
 }
@@ -679,20 +718,22 @@ export default function ProfilePage() {
                 onLogout: handleLogout,
             }}
         >
-            <div className="max-w-2xl py-4">
+            <div className="w-full max-w-3xl py-2" dir={language === "ar" ? "rtl" : "ltr"}>
                 {loading && <LoadingState variant="card" message={t("profileLoading")} />}
 
                 {!loading && error && (
-                    <ErrorState
-                        variant={error === "auth" ? "auth" : "network"}
-                        title={error === "auth" ? t("profileAuthRequired") : t("profileConnectionFailed")}
-                        message={error === "auth" ? t("profileAuthRequiredMsg") : t("profileConnectionFailedMsg")}
-                        onRetry={handleRetry}
-                    />
+                    <Card className="p-6">
+                        <ErrorState
+                            variant={error === "auth" ? "auth" : "network"}
+                            title={error === "auth" ? t("profileAuthRequired") : t("profileConnectionFailed")}
+                            message={error === "auth" ? t("profileAuthRequiredMsg") : t("profileConnectionFailedMsg")}
+                            onRetry={handleRetry}
+                        />
+                    </Card>
                 )}
 
                 {!loading && !error && profile && !profile.profile_exists && (
-                    <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-4 max-w-3xl">
                         <EmptyState
                             title={t("profileNoProfileTitle")}
                             description={t("profileNoProfileDesc")}
@@ -700,25 +741,27 @@ export default function ProfilePage() {
                             actionHref="/command"
                         />
 
-                        <div className="rounded-xl border border-rico-border bg-rico-surface-2/60 p-5">
-                            <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-rico-text-dim">
-                                {t("profileWhatRicoSetsUp")}
-                            </h3>
-                            <ul className="flex flex-col gap-2 text-sm text-rico-text-muted">
-                                {[
-                                    t("profileSetupRoles"),
-                                    t("profileSetupCities"),
-                                    t("profileSetupSalary"),
-                                    t("profileSetupExperience"),
-                                    t("profileSetupVisa"),
-                                ].map((item) => (
-                                    <li key={item} className="flex items-start gap-2">
-                                        <span className="mt-0.5 text-rico-purple">·</span>
-                                        {item}
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
+                        <Card>
+                            <CardContent className="p-5">
+                                <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-text-secondary">
+                                    {t("profileWhatRicoSetsUp")}
+                                </h3>
+                                <ul className="flex flex-col gap-2 text-sm text-text-secondary">
+                                    {[
+                                        t("profileSetupRoles"),
+                                        t("profileSetupCities"),
+                                        t("profileSetupSalary"),
+                                        t("profileSetupExperience"),
+                                        t("profileSetupVisa"),
+                                    ].map((item) => (
+                                        <li key={item} className="flex items-start gap-2">
+                                            <span className="mt-0.5 text-magenta">•</span>
+                                            {item}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </CardContent>
+                        </Card>
                     </div>
                 )}
 
