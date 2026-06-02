@@ -208,10 +208,20 @@ _JSEARCH_QUERIES = [
 ]
 
 
-def fetch_jsearch_jobs(save_to_db: bool = True) -> List[Dict[str, Any]]:
-    """
-    Fetch jobs from JSearch (RapidAPI) for UAE-focused HSE/ESG roles.
-    Reads RAPIDAPI_KEY from environment. Returns scored job list.
+def fetch_jsearch_jobs(
+    save_to_db: bool = True,
+    target_roles: List[str] | None = None,
+    preferred_cities: List[str] | None = None,
+) -> List[Dict[str, Any]]:
+    """Fetch jobs from JSearch (RapidAPI) for UAE roles.
+
+    When *target_roles* / *preferred_cities* are supplied (typically from a user's
+    DB profile) the function builds profile-driven, city-qualified queries instead
+    of using the hardcoded ``_JSEARCH_QUERIES`` list. This produces results that
+    are personalised to the authenticated user rather than a fixed role set.
+
+    Falls back to ``_JSEARCH_QUERIES`` when no profile data is provided so the
+    legacy single-user pipeline continues to work unchanged.
     """
     api_key = os.getenv("RAPIDAPI_KEY", "").strip()
     if not api_key:
@@ -222,10 +232,23 @@ def fetch_jsearch_jobs(save_to_db: bool = True) -> List[Dict[str, Any]]:
     from src.db import save_job as db_save_job
     from src import jsearch_client
 
+    # Build query list: profile-driven when we have roles, else hardcoded fallback.
+    if target_roles:
+        queries = jsearch_client.build_queries_for_profile(
+            target_roles=target_roles,
+            preferred_cities=preferred_cities or [],
+        )
+        logger.info(
+            "jsearch_jobs: profile-driven queries count=%d roles=%r cities=%r",
+            len(queries), target_roles[:4], (preferred_cities or [])[:3],
+        )
+    else:
+        queries = _JSEARCH_QUERIES
+
     seen: set = set()
     results: List[Dict[str, Any]] = []
 
-    for query in _JSEARCH_QUERIES:
+    for query in queries:
         # Shared client adds caching, 429/5xx retry+backoff and alt_link capture.
         fetch = jsearch_client.search(query)
         if fetch.rate_limited:
