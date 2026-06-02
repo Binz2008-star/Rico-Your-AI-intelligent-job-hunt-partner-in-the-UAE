@@ -475,6 +475,30 @@ _JOB_SEARCH_FOR_ROLE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Extracts a role that sits immediately BEFORE the job noun — the natural word order
+# users type: "operations manager jobs in ajman", "find HSE manager roles",
+# "any nursing positions". _JOB_SEARCH_FOR_ROLE_RE only handles the "jobs for <role>"
+# order, so this is tried as a fallback. Leading command/filler words are stripped
+# afterwards (see _extract_role_before_noun) so the capture yields just the role phrase.
+_JOB_SEARCH_ROLE_BEFORE_NOUN_RE = re.compile(
+    r"([A-Za-z][A-Za-z '&/\-]{1,60}?)\s+(?:jobs?|roles?|positions?|openings?|vacancies?)\b",
+    re.IGNORECASE,
+)
+
+# Command / filler tokens dropped from the front of a "<...> jobs" capture so that
+# "find operations manager jobs" -> "operations manager" (not "find operations manager")
+# and pure-filler leads like "am looking for job" reduce to nothing (-> profile fallback).
+_ROLE_PREFIX_STOPWORDS = frozenset({
+    # command verbs
+    "find", "search", "searching", "show", "get", "look", "looking", "seeking",
+    "want", "need", "give", "list", "browse",
+    # filler / connectors / articles / pronouns
+    "for", "me", "some", "any", "all", "live", "new", "latest", "available",
+    "more", "the", "a", "an", "please", "kindly", "i", "i'm", "im", "we",
+    "am", "are", "is", "was", "were", "to", "of", "currently", "interested",
+    "really", "just", "good", "great", "now", "today",
+})
+
 # Matches job-card action messages sent from RicoJobMatchCard:
 #   "{action} — {title} at {company}"
 # Must be checked BEFORE generic apply/save patterns.
@@ -575,6 +599,22 @@ _ARABIC_STANDALONE_CV_JOB_REQUEST_TERMS = frozenset([
     "جيب",
 ])
 
+# Arabic role phrase that follows a job noun or "عن" (about/for), bounded by
+# "في/بـ <city>" or the end of the message. Operates on _normalize_arabic'd text.
+# e.g. "ابحث عن وظيفه مدير عمليات في عجمان" → captures "وظيفه مدير عمليات"; the leading
+# job word is then stripped in _extract_arabic_role to leave "مدير عمليات".
+_ARABIC_ROLE_AFTER_JOBWORD_RE = re.compile(
+    r"(?:وظيفه|وظائف|فرصه|فرص|شاغر|شواغر|منصب|مناصب|مسمي|عمل|شغل|عن)\s+"
+    r"([ء-ي][ء-ي\s]{1,40}?)"
+    r"(?:\s+(?:في|بـ|ب|على)\s|[\s،.!؟]*$)"
+)
+
+# Arabic job nouns / connectors stripped from the edges of a captured role phrase.
+_ARABIC_ROLE_LEAD_STOPWORDS = frozenset({
+    "وظيفه", "وظائف", "فرصه", "فرص", "شاغر", "شواغر", "منصب", "مناصب",
+    "مسمي", "عمل", "شغل", "عن", "لي", "لك", "في",
+})
+
 
 def _normalize_arabic(text: str) -> str:
     """Remove diacritics and normalise Arabic letter variants before phrase lookup."""
@@ -611,6 +651,51 @@ def _extract_english_role_from_mixed(text: str) -> Optional[str]:
         if 1 <= len(role.split()) <= _MAX_WORD_COUNT_FOR_ROLE:
             return role
     return None
+
+
+def _extract_role_before_noun(text: str) -> Optional[str]:
+    """Extract a role that appears immediately before a job noun.
+
+    Handles the natural word order users type — "operations manager jobs in ajman",
+    "find HSE manager roles", "any nursing positions" — which the "jobs for <role>"
+    pattern does not capture. Leading command/filler words ("find", "me", "any", ...)
+    are stripped so "find operations manager jobs" yields "operations manager".
+    Returns None when nothing meaningful remains (e.g. "find me jobs" -> None).
+    """
+    m = _JOB_SEARCH_ROLE_BEFORE_NOUN_RE.search(text)
+    if not m:
+        return None
+    words = m.group(1).strip().split()
+    while words and words[0].lower() in _ROLE_PREFIX_STOPWORDS:
+        words.pop(0)
+    if not (1 <= len(words) <= _MAX_WORD_COUNT_FOR_ROLE):
+        return None
+    return " ".join(words)
+
+
+def _extract_arabic_role(normalized_text: str) -> Optional[str]:
+    """Extract a pure-Arabic role phrase from a normalised Arabic job-search message.
+
+    "ابحث عن وظيفه مدير عمليات في عجمان" -> "مدير عمليات". The previous behaviour only
+    extracted a trailing *English* role, so Arabic roles were dropped and the search fell
+    back to the profile's saved roles. Input must already be passed through
+    _normalize_arabic. Returns None when no clear role phrase remains.
+    """
+    m = _ARABIC_ROLE_AFTER_JOBWORD_RE.search(normalized_text)
+    if not m:
+        return None
+    words = m.group(1).strip().split()
+    # Strip job nouns / connectors the (leftmost) match may have swept into the capture.
+    while words and words[0] in _ARABIC_ROLE_LEAD_STOPWORDS:
+        words.pop(0)
+    while words and words[-1] in _ARABIC_ROLE_LEAD_STOPWORDS:
+        words.pop()
+    if not (1 <= len(words) <= _MAX_WORD_COUNT_FOR_ROLE):
+        return None
+    role = " ".join(words)
+    if role in _ARABIC_JOB_TERMS or role in _ARABIC_REQUEST_TERMS:
+        return None
+    return role
 
 
 def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResult:
@@ -775,15 +860,20 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     # ── 4. Job search patterns ───────────────────────────────────────────
     # Check explicit job search FIRST (has job/role/position keyword)
     if _JOB_SEARCH_EXPLICIT_RE.search(text):
-        # Try to extract an explicit "find jobs for <role>" target so the handler
-        # can search for that role directly instead of falling back to profile roles.
+        # Try to extract an explicit role target so the handler can search for that role
+        # directly instead of falling back to profile target_roles. Prefer the
+        # "jobs for <role>" word order, then the natural "<role> jobs" word order.
         for_role_m = _JOB_SEARCH_FOR_ROLE_RE.search(text)
         extracted_role = for_role_m.group(1).strip() if for_role_m else None
+        if not extracted_role:
+            extracted_role = _extract_role_before_noun(text)
         return IntentResult("job_search_explicit", 0.85, "regex", extracted_role=extracted_role)
 
     # Arabic job search: request verb + job noun, or request verb + English role name
     if has_arabic and _is_arabic_job_search(lower, has_cv=has_cv_profile):
-        role = _extract_english_role_from_mixed(text)
+        # Prefer a pure-Arabic role phrase ("وظيفه مدير عمليات في عجمان" -> "مدير عمليات");
+        # fall back to a trailing English role for mixed-language messages.
+        role = _extract_arabic_role(lower) or _extract_english_role_from_mixed(text)
         return IntentResult("job_search_explicit", 0.85, "regex", extracted_role=role)
 
     # Role change — only if no explicit job-search keyword present
