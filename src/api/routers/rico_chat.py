@@ -9,7 +9,8 @@ Routes:
   GET  /api/v1/rico/settings/saved-searches     list saved searches    (JWT required)
   POST /api/v1/rico/settings/saved-searches     save a search          (JWT required)
   DELETE /api/v1/rico/settings/saved-searches/{id} delete saved search (JWT required)
-  GET  /api/v1/rico/chat/history                conversation history   (JWT required)
+  GET    /api/v1/rico/chat/history              conversation history   (JWT required)
+  DELETE /api/v1/rico/chat/history              clear chat history     (JWT required)
   POST /api/v1/rico/feedback                    feedback on matches    (JWT required)
   GET  /api/v1/rico/openai-smoke                AI runtime probe       (JWT required)
   POST /api/v1/rico/upload-cv                   CV file upload + parsing
@@ -65,7 +66,7 @@ logger = logging.getLogger(__name__)
 _UTC = timezone.utc
 
 # Constants
-_UNSAFE_CHARS_RE = re.compile(r'[<>"\';\x00-\x1f\x7f‪-‮⁦-⁩]')
+_UNSAFE_CHARS_RE = re.compile("[<>\"';\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]")
 _PDF_MAGIC = b"%PDF"
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
@@ -624,7 +625,7 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
             )
             if not decision.should_use_ai:
                 # Non-streaming path: emit full response as a single "done" event
-                result = chat_service.send_message(ctx=ctx, message=payload.message)
+                result = chat_service.send_message(ctx=ctx, message=payload.message, language=payload.language)
                 yield f'data: {_json.dumps({"type":"done","response":result})}\n\n'
                 return
 
@@ -645,6 +646,7 @@ def rico_chat_stream(request: Request, payload: RicoChatRequest) -> StreamingRes
                 profile_context=profile_context_str,
                 provider=provider,
                 conversation_history=conversation_history,
+                language=payload.language,
             ):
                 full_text.append(chunk)
                 yield f'data: {_json.dumps({"type":"token","text":chunk})}\n\n'
@@ -695,7 +697,7 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
                 profile_context_present=profile is not None,
             )
             if not decision.should_use_ai:
-                result = chat_service.send_message(ctx=ctx, message=payload.message)
+                result = chat_service.send_message(ctx=ctx, message=payload.message, language=payload.language)
                 yield f'data: {_json.dumps({"type":"done","response":result})}\n\n'
                 return
 
@@ -714,6 +716,7 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
                 profile_context=profile_context_str,
                 provider=provider,
                 conversation_history=conversation_history,
+                language=payload.language,
             ):
                 full_text.append(chunk)
                 yield f'data: {_json.dumps({"type":"token","text":chunk})}\n\n'
@@ -810,7 +813,7 @@ def rico_chat_public(request: Request, payload: RicoPublicChatRequest) -> RicoCh
 @limiter.limit(LIMIT_CHAT)
 def rico_chat_history(
     request: Request,
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(20, ge=1, le=100),
     before: str | None = None,
 ) -> dict[str, Any]:
     """Get conversation history with pagination."""
@@ -833,6 +836,15 @@ def rico_chat_history(
         "total": len(history),
         "has_more": len(history) == limit,
     }
+
+
+@router.delete("/chat/history", status_code=204)
+@limiter.limit(LIMIT_CHAT)
+def rico_clear_chat_history(request: Request) -> None:
+    """Delete all chat history for the authenticated user (chat messages only)."""
+    user = get_current_user(request)
+    user_id = user["email"]
+    chat_service.clear_chat_history(user_id)
 
 
 # ============================================================================
@@ -1041,9 +1053,13 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
     if body.skills is not None:
         updates["skills"] = [s.strip() for s in body.skills if s.strip()]
 
-    # Normalize target roles to prevent broad standalone roles (Engineer, Manager, etc.)
-    from src.role_normalization import normalize_profile_updates
-    updates = normalize_profile_updates(updates)
+    # When the user explicitly sets target_roles or skills, bump normalization_version
+    # to the current version so get_profile does not re-normalize and silently mutate
+    # adjacent fields (e.g. a skills save triggering normalization that changes
+    # target_roles). Do NOT call normalize_profile_updates — user input is saved as-is.
+    if "target_roles" in updates or "skills" in updates:
+        from src.role_normalization import NORMALIZATION_VERSION
+        updates["normalization_version"] = NORMALIZATION_VERSION
 
     logger.info("update_profile endpoint: user_id=%s updates=%s", user_id, updates)
 

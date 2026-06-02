@@ -10,7 +10,7 @@ function SessionHint() {
   const params = useSearchParams();
   if (!params.get("session_id")) return null;
   return (
-    <p className="text-[12px] text-[#5a5a7a] mt-1">Reference received.</p>
+    <p className="text-[12px] text-text-tertiary mt-1">Reference received.</p>
   );
 }
 
@@ -34,7 +34,7 @@ function PlanActivatedContent() {
   const isPremium = plan === "premium";
 
   return (
-    <div className="flex flex-col items-center gap-6 rounded-2xl border border-[rgba(0,229,255,0.2)] bg-[#13132a]/60 p-10 backdrop-blur-md text-center">
+    <div className="flex flex-col items-center gap-6 rounded-2xl border border-[rgba(0,229,255,0.2)] bg-surface-elevated/60 p-10 backdrop-blur-md text-center">
       {/* Animated icon */}
       <div className="relative">
         <div className="absolute inset-0 rounded-full animate-ping bg-[rgba(0,229,255,0.15)]" />
@@ -67,16 +67,16 @@ function PlanActivatedContent() {
             >
               {planLabel}
             </div>
-            <h2 className="text-[22px] font-bold text-white font-['Cabinet_Grotesk',sans-serif]">
+            <h2 className="text-[22px] font-bold text-text-primary font-['Cabinet_Grotesk',sans-serif]">
               You&apos;re on {planLabel}
             </h2>
           </>
         ) : (
-          <h2 className="text-[22px] font-bold text-white font-['Cabinet_Grotesk',sans-serif]">
+          <h2 className="text-[22px] font-bold text-text-primary font-['Cabinet_Grotesk',sans-serif]">
             Checkout complete
           </h2>
         )}
-        <p className="mt-2 text-[13px] text-[#8080a0] leading-relaxed max-w-sm mx-auto">
+        <p className="mt-2 text-[13px] text-text-secondary leading-relaxed max-w-sm mx-auto">
           {planLabel
             ? `Your ${planLabel} plan is active. Start using Rico with your new limits right now.`
             : "Your plan activation may take a moment to reflect in your account. Refresh or contact support if your plan has not updated."}
@@ -114,7 +114,7 @@ export default function SubscriptionSuccessPage() {
       <div className="max-w-lg flex flex-col gap-8">
         <PlanActivatedContent />
 
-        <p className="text-[11px] text-[#5a5a7a] text-center">
+        <p className="text-[11px] text-text-tertiary text-center">
           If your plan does not update within a few minutes, refresh this page
           or contact support.
         </p>

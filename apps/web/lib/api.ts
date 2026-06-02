@@ -762,7 +762,15 @@ export interface JobMatch {
   apply_url?: string;
   source_url?: string;
   alt_link?: string;
-  verification_status?: "live" | "lead_needs_verification";
+  verification_status?:
+    | "live"
+    | "live_verified"
+    | "lead_needs_verification"
+    | "needs_source_verification"
+    | "login_required"
+    | "rate_limited"
+    | "aggregator_untrusted"
+    | "google_intermediary";
 }
 
 export interface RicoOption {
@@ -1177,13 +1185,16 @@ export interface ChatStreamEvent {
 export async function* sendChatStream(
   message: string,
   signal?: AbortSignal,
+  language?: "en" | "ar",
 ): AsyncGenerator<ChatStreamEvent> {
+  const body: Record<string, unknown> = { message };
+  if (language) body.language = language;
   const res = await fetch(`${PROXY}/api/v1/rico/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
     signal,
-    body: JSON.stringify({ message }),
+    body: JSON.stringify(body),
   });
   if (!res.ok || !res.body) {
     // Fall back gracefully — caller should use sendChat instead
@@ -1197,13 +1208,16 @@ export async function* sendChatStreamPublic(
   message: string,
   sessionId: string,
   signal?: AbortSignal,
+  language?: "en" | "ar",
 ): AsyncGenerator<ChatStreamEvent> {
+  const body: Record<string, unknown> = { message, session_id: sessionId };
+  if (language) body.language = language;
   const res = await fetch(`${PROXY}/api/v1/rico/chat/stream/public`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
     signal,
-    body: JSON.stringify({ message, session_id: sessionId }),
+    body: JSON.stringify(body),
   });
   if (!res.ok || !res.body) {
     yield { type: "error", error: `${res.status}` };
@@ -1265,6 +1279,13 @@ export async function fetchChatHistory(
     data,
     "Rico chat history",
   );
+}
+
+export async function clearChatHistory(): Promise<void> {
+  await requestJson<unknown>("/api/v1/rico/chat/history", {
+    method: "DELETE",
+    credentials: "include",
+  });
 }
 
 export async function sendAgentChat(

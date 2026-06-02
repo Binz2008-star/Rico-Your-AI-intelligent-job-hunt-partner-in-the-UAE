@@ -369,3 +369,36 @@ def update_subscription_event_status(
             "subscription_repo: update_subscription_event_status failed event_id=%s", stripe_event_id
         )
         return False
+
+
+# ── Expiry maintenance ────────────────────────────────────────────────────────
+
+def expire_stale_subscriptions() -> int:
+    """Mark subscriptions whose current_period_end has passed as inactive.
+
+    Runs as a daily maintenance task. Only touches rows that are still
+    status='active' and whose period has already ended — never touches
+    canceled_at, stripe IDs, or entitlement overrides.
+
+    Returns the number of rows updated, or -1 if DB is unavailable.
+    """
+    try:
+        with _db_transaction() as conn:
+            if conn is None:
+                return -1
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE user_subscriptions
+                       SET status     = 'inactive',
+                           updated_at = NOW()
+                     WHERE status             = 'active'
+                       AND plan               IN ('pro', 'premium')
+                       AND current_period_end IS NOT NULL
+                       AND current_period_end < NOW()
+                    """,
+                )
+                return cur.rowcount
+    except Exception:
+        logger.exception("subscription_repo: expire_stale_subscriptions failed")
+        return -1

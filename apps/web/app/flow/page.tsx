@@ -14,30 +14,34 @@ import {
     updateApplicationStatus,
 } from '@/lib/api';
 import type { Application, ApplicationStatus } from '@/types';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { useTranslation } from '@/lib/translations';
 import { useCallback, useEffect, useState } from 'react';
 
-const STATUS_LABELS: Record<ApplicationStatus, string> = {
-    applied: 'Applied',
-    interview: 'Interview',
-    offer: 'Offer',
-    rejected: 'Rejected',
-    saved: 'Saved',
-    opened: 'Link opened',
-    decision_made: 'Decision',
+// Maps each canonical backend status to its display-label translation key.
+// Backend values are never changed — only the rendered label is localized.
+const STATUS_LABEL_KEYS: Record<ApplicationStatus, string> = {
+    applied: 'flowStatusApplied',
+    interview: 'flowStatusInterview',
+    offer: 'flowStatusOffer',
+    rejected: 'flowStatusRejected',
+    saved: 'flowStatusSaved',
+    opened: 'flowStatusOpened',
+    decision_made: 'flowStatusDecision',
 };
 
 const STATUS_OPTIONS: ApplicationStatus[] = [
     'saved', 'opened', 'applied', 'interview', 'offer', 'rejected', 'decision_made',
 ];
 
-const NEXT_ACTION: Record<ApplicationStatus, string> = {
-    saved: 'Verify the listing. Apply when ready.',
-    opened: 'Did you apply? Mark it as Applied.',
-    applied: 'No reply in 5–7 days? Send a follow-up.',
-    interview: 'Prep your talking points. Review the job description.',
-    offer: 'Review terms carefully. Accept, negotiate, or decline.',
-    rejected: 'Request feedback if useful. Move on.',
-    decision_made: 'Closed. No further action needed.',
+const NEXT_ACTION_KEYS: Record<ApplicationStatus, string> = {
+    saved: 'flowNextSaved',
+    opened: 'flowNextOpened',
+    applied: 'flowNextApplied',
+    interview: 'flowNextInterview',
+    offer: 'flowNextOffer',
+    rejected: 'flowNextRejected',
+    decision_made: 'flowNextDecision',
 };
 
 const STATUS_COUNT_ORDER: ApplicationStatus[] = [
@@ -48,14 +52,18 @@ function isLeadWithNoUrl(app: Application): boolean {
     return app.status === 'saved' && (!app.apply_url || app.apply_url === '#');
 }
 
-function fmtDate(iso?: string) {
+function fmtDate(iso: string | undefined, language: 'en' | 'ar') {
     if (!iso) return null;
     const d = new Date(iso);
     if (isNaN(d.getTime())) return null;
-    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    const locale = language === 'ar' ? 'ar' : 'en-GB';
+    return d.toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 export default function FlowPage() {
+    const { language } = useLanguage();
+    const t = useTranslation(language);
+    const isRTL = language === 'ar';
     const [applications, setApplications] = useState<Application[]>([]);
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(true);
@@ -104,7 +112,7 @@ export default function FlowPage() {
     const handleTrackApplication = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
         if (!formData.title.trim() || !formData.company.trim()) {
-            setFormError('Title and company are required');
+            setFormError(t('flowModalTitleRequired'));
             return;
         }
         setSaving(true);
@@ -122,11 +130,11 @@ export default function FlowPage() {
             setLoading(true);
             await loadApplications();
         } catch (err: unknown) {
-            setFormError(err instanceof Error ? err.message : 'Failed to track application');
+            setFormError(err instanceof Error ? err.message : t('flowModalFailedTrack'));
         } finally {
             setSaving(false);
         }
-    }, [formData, loadApplications]);
+    }, [formData, loadApplications, t]);
 
     useEffect(() => {
         const id = window.setTimeout(() => { void loadApplications(); }, 0);
@@ -140,8 +148,8 @@ export default function FlowPage() {
 
     return (
         <DashboardShell
-            title="Application Flow"
-            subtitle={loading ? 'Loading…' : `${total} tracked across all stages${total > applications.length ? ` (showing first ${applications.length})` : ''}`}
+            title={t('flowTitle')}
+            subtitle={loading ? t('loading') : `${total} ${t('flowTrackedAcrossStages')}${total > applications.length ? ` (${t('flowShowingFirst')} ${applications.length})` : ''}`}
         >
             {/* Page header action — always visible */}
             {!loading && (
@@ -151,17 +159,17 @@ export default function FlowPage() {
                         className="inline-flex items-center gap-2 rounded-full bg-primary/10 border border-primary/20 px-4 py-2 text-xs font-semibold text-primary transition-all hover:bg-primary/15"
                     >
                         <MaterialIcon icon="add" className="text-sm" />
-                        Track application
+                        {t('flowTrackApplication')}
                     </button>
                 </div>
             )}
 
             {loading ? (
-                <LoadingState variant="card" message="Loading application flow..." />
+                <LoadingState variant="card" message={t('flowLoadingState')} />
             ) : error ? (
                 <ErrorState
                     variant={error === 'auth' ? 'auth' : 'network'}
-                    message={error === 'auth' ? 'Session expired — please log in again.' : 'Could not load the live pipeline.'}
+                    message={error === 'auth' ? t('flowErrAuth') : t('flowErrNetwork')}
                     onRetry={error === 'auth' ? undefined : loadApplications}
                 />
             ) : (
@@ -172,13 +180,13 @@ export default function FlowPage() {
                             {STATUS_COUNT_ORDER.map((s) => (
                                 <div
                                     key={s}
-                                    className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 text-center"
+                                    className="bg-surface-glass border border-border-subtle rounded-xl p-3 text-center"
                                 >
                                     <p className="text-xl font-black tracking-tight text-on-surface">
                                         {grouped[s]}
                                     </p>
                                     <p className="text-[9px] uppercase tracking-wider text-on-surface-variant mt-1">
-                                        {STATUS_LABELS[s]}
+                                        {t(STATUS_LABEL_KEYS[s])}
                                     </p>
                                 </div>
                             ))}
@@ -187,15 +195,15 @@ export default function FlowPage() {
 
                     {applications.length === 0 ? (
                         <EmptyState
-                            title="No applications tracked yet"
-                            description="Use the button above to manually track an application, or apply to jobs from the Matches page."
+                            title={t('flowEmptyTitle')}
+                            description={t('flowEmptyDesc')}
                         />
                     ) : (
                         <div className="space-y-4">
                             {applications.map((item) => (
                                 <GlassPanel
                                     key={item.application_id}
-                                    className="p-6 rounded-xl border border-white/10 hover:border-primary/30 transition-all"
+                                    className="p-6 rounded-xl border border-border-soft hover:border-primary/30 transition-all"
                                 >
                                     {/* Card header: title/company + status badge */}
                                     <div className="flex items-start justify-between gap-4 mb-3">
@@ -206,14 +214,14 @@ export default function FlowPage() {
                                                 <p className="text-xs text-on-surface-variant/60 mt-0.5">{item.location}</p>
                                             )}
                                         </div>
-                                        <StatusBadge status={item.status} />
+                                        <StatusBadge status={item.status} label={t(STATUS_LABEL_KEYS[item.status])} />
                                     </div>
 
                                     {/* Lead heuristic warning */}
                                     {isLeadWithNoUrl(item) && (
                                         <p className="text-xs text-amber-400/80 mb-3 flex items-center gap-1">
                                             <MaterialIcon icon="warning" className="text-xs" />
-                                            No apply link — verify the listing before submitting.
+                                            {t('flowNoApplyLink')}
                                         </p>
                                     )}
 
@@ -225,14 +233,14 @@ export default function FlowPage() {
                                             rel="noreferrer"
                                             className="text-xs text-primary hover:underline mb-3 inline-block"
                                         >
-                                            View listing ↗
+                                            {t('flowViewListing')} ↗
                                         </a>
                                     )}
 
                                     {/* Divider + date + status dropdown */}
-                                    <div className="flex items-center gap-3 mt-3 pt-3 border-t border-white/[0.06]">
+                                    <div className="flex items-center gap-3 mt-3 pt-3 border-t border-border-subtle">
                                         <span className="text-xs text-on-surface-variant/50 shrink-0">
-                                            {fmtDate(item.applied_at) ?? 'No date'}
+                                            {fmtDate(item.applied_at, language) ?? t('flowNoDate')}
                                         </span>
                                         <div className="flex-1" />
                                         <select
@@ -240,17 +248,17 @@ export default function FlowPage() {
                                             onChange={(e) => changeStatus(item, e.target.value as ApplicationStatus)}
                                             disabled={!!updating}
                                             aria-label={`Change status for ${item.title}`}
-                                            className="bg-surface/60 border border-white/[0.08] rounded-lg px-2 py-1 text-[11px] text-on-surface-variant outline-none focus:border-primary/40 cursor-pointer disabled:opacity-40 transition-opacity"
+                                            className="bg-surface/60 border border-border-soft rounded-lg px-2 py-1 text-[11px] text-on-surface-variant outline-none focus:border-primary/40 cursor-pointer disabled:opacity-40 transition-opacity"
                                         >
                                             {STATUS_OPTIONS.map((s) => (
-                                                <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                                                <option key={s} value={s}>{t(STATUS_LABEL_KEYS[s])}</option>
                                             ))}
                                         </select>
                                     </div>
 
                                     {/* Per-status next-action guidance */}
                                     <p className="text-xs text-on-surface-variant/60 mt-2">
-                                        {NEXT_ACTION[item.status]}
+                                        {t(NEXT_ACTION_KEYS[item.status])}
                                     </p>
                                 </GlassPanel>
                             ))}
@@ -264,73 +272,74 @@ export default function FlowPage() {
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
                     role="dialog"
-                    aria-label="Track application"
+                    aria-label={t('flowTrackApplicationModalTitle')}
+                    dir={isRTL ? 'rtl' : 'ltr'}
                 >
-                    <GlassPanel className="w-full max-w-md p-6 rounded-xl border border-white/10">
-                        <h2 className="font-semibold text-on-surface mb-4">Track Application</h2>
+                    <GlassPanel className="w-full max-w-md p-6 rounded-xl border border-border-soft">
+                        <h2 className="font-semibold text-on-surface mb-4">{t('flowTrackApplicationModalTitle')}</h2>
                         <form onSubmit={handleTrackApplication} className="space-y-4" aria-label="Manual application form">
                             <div>
-                                <label htmlFor="title" className="block text-sm text-on-surface-variant mb-1">Job Title *</label>
+                                <label htmlFor="title" className="block text-sm text-on-surface-variant mb-1">{t('flowModalJobTitle')}</label>
                                 <input
                                     id="title"
                                     type="text"
                                     value={formData.title}
                                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                                    className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-on-surface outline-none transition focus:border-primary/40"
-                                    placeholder="e.g., HSE Manager"
+                                    className="w-full rounded-lg border border-border-soft bg-surface-glass px-3 py-2 text-sm text-on-surface outline-none transition focus:border-primary/40"
+                                    placeholder={t('flowPhTitle')}
                                     disabled={saving}
                                 />
                             </div>
                             <div>
-                                <label htmlFor="company" className="block text-sm text-on-surface-variant mb-1">Company *</label>
+                                <label htmlFor="company" className="block text-sm text-on-surface-variant mb-1">{t('flowModalCompany')}</label>
                                 <input
                                     id="company"
                                     type="text"
                                     value={formData.company}
                                     onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                                    className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-on-surface outline-none transition focus:border-primary/40"
-                                    placeholder="e.g., Aramco"
+                                    className="w-full rounded-lg border border-border-soft bg-surface-glass px-3 py-2 text-sm text-on-surface outline-none transition focus:border-primary/40"
+                                    placeholder={t('flowPhCompany')}
                                     disabled={saving}
                                 />
                             </div>
                             <div>
-                                <label htmlFor="location" className="block text-sm text-on-surface-variant mb-1">Location</label>
+                                <label htmlFor="location" className="block text-sm text-on-surface-variant mb-1">{t('flowModalLocation')}</label>
                                 <input
                                     id="location"
                                     type="text"
                                     value={formData.location}
                                     onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                                    className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-on-surface outline-none transition focus:border-primary/40"
-                                    placeholder="e.g., Abu Dhabi"
+                                    className="w-full rounded-lg border border-border-soft bg-surface-glass px-3 py-2 text-sm text-on-surface outline-none transition focus:border-primary/40"
+                                    placeholder={t('flowPhLocation')}
                                     disabled={saving}
                                 />
                             </div>
                             <div>
-                                <label htmlFor="url" className="block text-sm text-on-surface-variant mb-1">Job URL (optional)</label>
+                                <label htmlFor="url" className="block text-sm text-on-surface-variant mb-1">{t('flowModalUrl')}</label>
                                 <input
                                     id="url"
                                     type="url"
                                     value={formData.url}
                                     onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-                                    className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-on-surface outline-none transition focus:border-primary/40"
-                                    placeholder="https://..."
+                                    className="w-full rounded-lg border border-border-soft bg-surface-glass px-3 py-2 text-sm text-on-surface outline-none transition focus:border-primary/40"
+                                    placeholder={t('flowPhUrl')}
                                     disabled={saving}
                                 />
                             </div>
                             <div>
-                                <label htmlFor="status" className="block text-sm text-on-surface-variant mb-1">Status</label>
+                                <label htmlFor="status" className="block text-sm text-on-surface-variant mb-1">{t('flowModalStatus')}</label>
                                 <select
                                     id="status"
                                     value={formData.status}
                                     onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                                    className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-on-surface outline-none transition focus:border-primary/40"
+                                    className="w-full rounded-lg border border-border-soft bg-surface-glass px-3 py-2 text-sm text-on-surface outline-none transition focus:border-primary/40"
                                     disabled={saving}
                                 >
-                                    <option value="applied">Applied</option>
-                                    <option value="saved">Saved</option>
-                                    <option value="interview">Interview</option>
-                                    <option value="offer">Offer</option>
-                                    <option value="rejected">Rejected</option>
+                                    <option value="applied">{t('flowStatusApplied')}</option>
+                                    <option value="saved">{t('flowStatusSaved')}</option>
+                                    <option value="interview">{t('flowStatusInterview')}</option>
+                                    <option value="offer">{t('flowStatusOffer')}</option>
+                                    <option value="rejected">{t('flowStatusRejected')}</option>
                                 </select>
                             </div>
                             {formError && <p className="text-xs text-red-400" role="alert">{formError}</p>}
@@ -340,7 +349,7 @@ export default function FlowPage() {
                                     disabled={saving}
                                     className="flex-1 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
                                 >
-                                    {saving ? 'Saving…' : 'Save application'}
+                                    {saving ? t('saving') : t('flowModalSaveApplication')}
                                 </button>
                                 <button
                                     type="button"
@@ -350,9 +359,9 @@ export default function FlowPage() {
                                         setFormData({ title: '', company: '', location: '', url: '', status: 'applied' });
                                     }}
                                     disabled={saving}
-                                    className="flex-1 rounded-lg border border-white/10 px-4 py-2 text-sm font-semibold text-on-surface-variant transition-colors hover:border-white/20 hover:text-on-surface disabled:opacity-60"
+                                    className="flex-1 rounded-lg border border-border-soft px-4 py-2 text-sm font-semibold text-on-surface-variant transition-colors hover:border-white/20 hover:text-on-surface disabled:opacity-60"
                                 >
-                                    Cancel
+                                    {t('cancel')}
                                 </button>
                             </div>
                         </form>

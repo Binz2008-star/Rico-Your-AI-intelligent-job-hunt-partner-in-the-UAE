@@ -59,9 +59,17 @@ const UNKNOWN_CONFIG = {
   className: "text-white/30 bg-white/4 border-white/10",
 };
 
-export function StatusBadge({ status }: { status: ApplicationStatus }) {
-  const { label, className } =
+export function StatusBadge({
+  status,
+  label: labelOverride,
+}: {
+  status: ApplicationStatus;
+  // Optional localized label. Falls back to the canonical English label.
+  label?: string;
+}) {
+  const { label: defaultLabel, className } =
     config[status as keyof typeof config] ?? UNKNOWN_CONFIG;
+  const label = labelOverride ?? defaultLabel;
   return (
     <span
       className={cn(

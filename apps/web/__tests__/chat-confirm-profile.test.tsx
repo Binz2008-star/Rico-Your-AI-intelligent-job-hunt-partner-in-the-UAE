@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
+import { renderWithProviders as render } from "./test-utils";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("next/navigation", () => ({

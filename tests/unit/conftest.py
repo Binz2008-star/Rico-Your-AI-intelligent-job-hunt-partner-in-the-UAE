@@ -58,6 +58,10 @@ def mock_rico_dependencies(monkeypatch):
         patch("src.rico_chat_api._route", return_value=mock_route_result),
         # HF client
         patch("src.rico_chat_api.hf_ok", return_value=False),
+        # Chat history — prevent cross-test state leak via the DB fallback in
+        # get_chat_history, which can return messages stored by earlier tests
+        # and cause affirmative-intent resolution to fire unexpectedly.
+        patch("src.services.chat_service.get_chat_history", return_value=[]),
     ):
         yield {
             "memory":  mock_memory,

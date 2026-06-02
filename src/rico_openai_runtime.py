@@ -292,6 +292,7 @@ def call_openai_minimal(
     smoke: bool = False,
     provider: Optional[str] = None,
     conversation_history: Optional[list] = None,
+    language: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Send the simplest possible call to the active premium provider.
 
@@ -322,7 +323,7 @@ def call_openai_minimal(
     from src.rico_identity import get_rico_system_prompt
     import re as _re
     _arabic_re = _re.compile(r'[؀-ۿ]')
-    _user_lang = "ar" if _arabic_re.search(str(user_message or "")) else "en"
+    _user_lang = "ar" if (language == "ar" or _arabic_re.search(str(user_message or ""))) else "en"
     _lang_rule = (
         "\n\nIMPORTANT: The user is writing in Arabic. You MUST reply entirely in Arabic. "
         "Use natural, professional Gulf Arabic. Never switch to English mid-reply."
@@ -416,6 +417,7 @@ def call_openai_stream(
     *,
     provider: Optional[str] = None,
     conversation_history: Optional[list] = None,
+    language: Optional[str] = None,
 ) -> Generator[str, None, None]:
     """Stream text tokens from the active AI provider as they arrive.
 
@@ -429,7 +431,7 @@ def call_openai_stream(
     primary_model, fallback_model = _provider_models(active_provider)
 
     _arabic_re = _re.compile(r'[؀-ۿ]')
-    _user_lang = "ar" if _arabic_re.search(str(user_message or "")) else "en"
+    _user_lang = "ar" if (language == "ar" or _arabic_re.search(str(user_message or ""))) else "en"
     _lang_rule = (
         "\n\nIMPORTANT: The user is writing in Arabic. You MUST reply entirely in Arabic. "
         "Use natural, professional Gulf Arabic."
@@ -448,7 +450,7 @@ def call_openai_stream(
         client = _build_client(active_provider)
     except Exception:
         result = call_openai_minimal(user_message, profile_context, provider=provider,
-                                     conversation_history=conversation_history)
+                                     conversation_history=conversation_history, language=language)
         yield result.get("text", "")
         return
 
@@ -484,5 +486,5 @@ def call_openai_stream(
     except Exception:
         # Streaming failed — fall back to non-streaming
         result = call_openai_minimal(user_message, profile_context, provider=provider,
-                                     conversation_history=conversation_history)
+                                     conversation_history=conversation_history, language=language)
         yield result.get("text", "")

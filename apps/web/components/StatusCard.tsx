@@ -4,6 +4,8 @@ import Link from "next/link";
 interface StatusCardProps {
   title: string;
   badge?: "live" | "pending" | "error" | "placeholder";
+  /** Optional override for the badge text (e.g. a translated label). Falls back to the default English label. */
+  badgeLabel?: string;
   value?: string;
   href?: string;
   children?: React.ReactNode;
@@ -24,14 +26,14 @@ const BADGE_LABELS: Record<NonNullable<StatusCardProps["badge"]>, string> = {
   placeholder: "Waiting",
 };
 
-export function StatusCard({ title, badge, value, href, children, className }: StatusCardProps) {
+export function StatusCard({ title, badge, badgeLabel, value, href, children, className }: StatusCardProps) {
   const body = (
     <>
       <div className="relative z-10 flex items-center justify-between gap-3">
         <span className="rico-kicker">{title}</span>
         {badge && (
           <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] shrink-0 ${BADGE_STYLES[badge]}`}>
-            {BADGE_LABELS[badge]}
+            {badgeLabel ?? BADGE_LABELS[badge]}
           </span>
         )}
       </div>

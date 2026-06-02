@@ -117,7 +117,7 @@ class RicoOpenAIAgent:
             return os.getenv("HF_TEXT_MODEL", "HuggingFaceH4/zephyr-7b-beta")
         return os.getenv("RICO_OPENAI_MODEL") or os.getenv("OPENAI_MODEL") or OPENAI_PRIMARY_MODEL
 
-    def respond(self, user_message: str, user_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def respond(self, user_message: str, user_context: Optional[Dict[str, Any]] = None, language: Optional[str] = None) -> Dict[str, Any]:
         safety = self.safety.check_message(user_message)
         if not safety.allowed:
             return {
@@ -149,6 +149,7 @@ class RicoOpenAIAgent:
             profile_context=profile_context,
             provider=provider,
             conversation_history=conversation_history,
+            language=language,
         )
 
         if result.get("success"):

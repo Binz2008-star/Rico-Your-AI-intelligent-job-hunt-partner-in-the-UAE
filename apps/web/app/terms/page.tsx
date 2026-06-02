@@ -16,11 +16,11 @@ export default function TermsPage() {
 
       <header className="relative z-10 flex items-center justify-between border-b border-border-subtle bg-black/50 px-5 py-4 backdrop-blur-xl md:px-10">
         <Link href="/" className="flex items-center gap-2 text-lg font-black tracking-tight text-white">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-magenta to-cyan text-sm font-black shadow-[0_0_28px_rgba(255,45,142,0.28)]">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#f5a623] text-[#0a0a1a] text-sm font-black shadow-[0_0_28px_rgba(245,166,35,0.28)]">
             R
           </span>
           <span>
-            Rico<span className="text-magenta">.ai</span>
+            Rico<span className="text-[#f5a623]"> Hunt</span>
           </span>
         </Link>
         <nav className="flex items-center gap-3">

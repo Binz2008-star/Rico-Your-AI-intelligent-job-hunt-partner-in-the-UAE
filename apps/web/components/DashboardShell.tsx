@@ -3,6 +3,9 @@
 import { AuraGlow } from "@/components/ui/AuraGlow";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { logout } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -22,6 +25,8 @@ export function DashboardShell({
     actions,
 }: DashboardShellProps) {
     const router = useRouter();
+    const { language } = useLanguage();
+    const isRTL = language === "ar";
     const [signingOut, setSigningOut] = useState(false);
 
     async function handleLogout() {
@@ -35,7 +40,7 @@ export function DashboardShell({
     }
 
     return (
-        <div className="relative min-h-screen overflow-x-hidden">
+        <div className="relative min-h-screen overflow-x-hidden" dir={isRTL ? "rtl" : "ltr"}>
             <AuraGlow aria-hidden="true" variant="magenta" position="top-left" className="animate-pulse-magenta" />
             <AuraGlow aria-hidden="true" variant="cyan" position="bottom-right" className="animate-pulse-magenta" style={{ animationDelay: "-2s" }} />
             <main className="relative z-10 mx-auto max-w-7xl px-container-padding-mobile pb-24 pt-24 md:px-container-padding-desktop md:pt-28">
@@ -57,12 +62,14 @@ export function DashboardShell({
 
                             <div className="flex flex-wrap items-center gap-2">
                                 {actions}
+                                <ThemeToggle />
+                                <LanguageSwitcher />
                                 <Link
                                     href="/command"
                                     className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-[12px] font-semibold text-primary transition-all hover:bg-primary/15"
                                 >
                                     <MaterialIcon icon="auto_awesome" size={16} />
-                                    Command Center
+                                    {isRTL ? "مركز الأوامر" : "Command Center"}
                                 </Link>
                                 <button
                                     type="button"
@@ -71,7 +78,9 @@ export function DashboardShell({
                                     className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-[12px] font-semibold text-on-surface-variant transition-all hover:border-white/20 hover:text-on-surface disabled:opacity-50"
                                 >
                                     <MaterialIcon icon="logout" size={16} />
-                                    {signingOut ? "Signing out..." : "Sign out"}
+                                    {signingOut
+                                        ? (isRTL ? "جاري الخروج..." : "Signing out...")
+                                        : (isRTL ? "تسجيل الخروج" : "Sign out")}
                                 </button>
                             </div>
                         </div>

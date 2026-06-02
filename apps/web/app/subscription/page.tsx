@@ -2,6 +2,7 @@
 
 import { DashboardShell } from "@/components/DashboardShell";
 import { ToastContainer } from "@/components/ui/Toast";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
 import {
@@ -15,9 +16,10 @@ import {
     type SubscriptionPlan,
 } from "@/lib/api";
 import { buildWhatsAppManageUrl, buildWhatsAppUpgradeUrl, isManualBillingMode } from "@/lib/billing";
+import { useTranslation } from "@/lib/translations";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 
 const SUBSCRIPTION_MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === "true";
 const MANUAL_BILLING = isManualBillingMode();
@@ -73,40 +75,81 @@ const FALLBACK_PLANS: SubscriptionPlan[] = [
     },
 ];
 
+const PLAN_TIER: Record<string, number> = { free: 0, pro: 1, premium: 2 };
+
+const PLAN_NAME_KEY: Record<string, string> = {
+    Pro: "planProName",
+    Premium: "planPremiumName",
+};
+
+const PLAN_DESC_KEY: Record<string, string> = {
+    "Smart AI job hunting for active UAE professionals.": "planProDesc",
+    "Full automation and premium AI recommendations.": "planPremiumDesc",
+};
+
+const PLAN_FEATURE_KEY: Record<string, string> = {
+    "Unlimited CV analysis": "planFeatureUnlimitedCV",
+    "Smart AI role recommendations": "planFeatureSmartRec",
+    "Advanced match scoring": "planFeatureAdvancedScoring",
+    "Saved searches": "planFeatureSavedSearches",
+    "Priority support": "planFeaturePrioritySupport",
+    "Higher daily job limits": "planFeatureHigherLimits",
+    "Everything in Pro": "planFeatureEverythingPro",
+    "Auto-apply system": "planFeatureAutoApply",
+    "Priority AI ranking": "planFeaturePriorityAI",
+    "Advanced job automation": "planFeatureAdvancedAuto",
+    "Premium job pipelines": "planFeaturePremiumPipelines",
+    "Recruiter visibility (coming soon)": "planFeatureRecruiter",
+};
+
 function PlanCard({
     plan,
     currentPlan,
     isActive,
     isLoggedIn,
     loading,
+    subLoading,
     anyCheckoutPending,
     onUpgrade,
     onManage,
     onIntent,
     maintenanceMode,
     manualBilling,
+    t,
 }: {
     plan: SubscriptionPlan;
     currentPlan: string | null;
     isActive: boolean;
     isLoggedIn: boolean;
     loading: boolean;
+    subLoading: boolean;
     anyCheckoutPending: boolean;
     onUpgrade: (plan: "pro" | "premium") => void;
     onManage: () => void;
     onIntent: (plan: "pro" | "premium") => void;
     maintenanceMode: boolean;
     manualBilling: boolean;
+    t: (key: string) => string;
 }) {
-    const isCurrent = currentPlan === plan.plan && isActive;
+    const isCurrent = currentPlan === plan.plan && (isActive || manualBilling);
+    const isHigherPlan =
+        isLoggedIn &&
+        (isActive || manualBilling) &&
+        (PLAN_TIER[currentPlan ?? ""] ?? -1) > (PLAN_TIER[plan.plan] ?? 0);
     const isProPlan = plan.plan === "pro";
+
+    const localName = PLAN_NAME_KEY[plan.name] ? t(PLAN_NAME_KEY[plan.name]) : plan.name;
+    const localDesc = plan.description
+        ? (PLAN_DESC_KEY[plan.description] ? t(PLAN_DESC_KEY[plan.description]) : plan.description)
+        : undefined;
+    const localFeatures = plan.features.map(f => PLAN_FEATURE_KEY[f] ? t(PLAN_FEATURE_KEY[f]) : f);
 
     return (
         <div
             className={`relative flex flex-col rounded-2xl border p-6 backdrop-blur-md overflow-hidden transition-all ${
                 plan.is_popular
-                    ? "border-[rgba(255,45,142,0.4)] bg-[#13132a]/60 shadow-[0_0_40px_rgba(255,45,142,0.08)]"
-                    : "border-white/[0.06] bg-[#13132a]/40"
+                    ? "border-[rgba(255,45,142,0.4)] bg-surface-elevated/60 shadow-[0_0_40px_rgba(255,45,142,0.08)]"
+                    : "border-border-subtle bg-surface-elevated/40"
             }`}
         >
             {/* Glow */}
@@ -120,7 +163,7 @@ function PlanCard({
             {plan.is_popular && (
                 <div className="absolute top-4 right-4">
                     <span className="text-[10px] font-black uppercase tracking-[0.2em] px-2 py-1 rounded-full bg-[rgba(255,45,142,0.15)] text-[#ff2d8e] border border-[rgba(255,45,142,0.3)]">
-                        Most Popular
+                        {t('mostPopular')}
                     </span>
                 </div>
             )}
@@ -129,32 +172,32 @@ function PlanCard({
             {isCurrent && (
                 <div className="absolute top-4 left-4">
                     <span className="text-[10px] font-black uppercase tracking-[0.2em] px-2 py-1 rounded-full bg-[rgba(0,229,255,0.12)] text-[#00e5ff] border border-[rgba(0,229,255,0.3)]">
-                        Current Plan
+                        {t('currentPlan')}
                     </span>
                 </div>
             )}
 
             <div className={isCurrent ? "mt-8" : plan.is_popular ? "mt-6" : "mt-0"}>
-                <h2 className="text-[22px] font-bold text-white font-['Cabinet_Grotesk',sans-serif]">
-                    {plan.name}
+                <h2 className="text-[22px] font-bold text-text-primary font-['Cabinet_Grotesk',sans-serif]">
+                    {localName}
                 </h2>
-                {plan.description && (
-                    <p className="mt-1 text-[13px] text-[#8080a0]">{plan.description}</p>
+                {localDesc && (
+                    <p className="mt-1 text-[13px] text-text-secondary">{localDesc}</p>
                 )}
             </div>
 
             <div className="mt-5 flex items-baseline gap-1">
-                <span className="text-[38px] font-black text-white leading-none">
+                <span className="text-[38px] font-black text-text-primary leading-none">
                     {plan.price_monthly}
                 </span>
-                <span className="text-[13px] text-[#5a5a7a] font-medium">
+                <span className="text-[13px] text-text-tertiary font-medium">
                     {plan.currency}/mo
                 </span>
             </div>
 
             <ul className="mt-6 flex flex-col gap-2.5 flex-1">
-                {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2.5 text-[13px] text-[#c0c0d8]">
+                {localFeatures.map((feature, i) => (
+                    <li key={i} className="flex items-start gap-2.5 text-[13px] text-text-secondary">
                         <span
                             className={`mt-0.5 w-4 h-4 flex-shrink-0 rounded-full flex items-center justify-center text-[10px] font-black ${
                                 isProPlan
@@ -176,15 +219,21 @@ function PlanCard({
                         disabled
                         className="w-full py-3 rounded-xl text-[13px] font-bold transition-all opacity-50 bg-[rgba(245,166,35,0.08)] text-[#f5a623] border border-[rgba(245,166,35,0.25)]"
                     >
-                        Temporarily unavailable
+                        {t('temporarilyUnavailable')}
                     </button>
+                ) : subLoading && isLoggedIn ? (
+                    <div className="w-full py-3 rounded-xl bg-surface-glass border border-border-subtle animate-pulse h-[44px]" />
                 ) : isCurrent ? (
                     <button
                         onClick={onManage}
                         className="w-full py-3 rounded-xl text-center text-[13px] font-semibold text-[#00e5ff] bg-[rgba(0,229,255,0.06)] border border-[rgba(0,229,255,0.2)] hover:bg-[rgba(0,229,255,0.1)] transition-colors"
                     >
-                        Manage Subscription
+                        {t('manageSubscription')}
                     </button>
+                ) : isHigherPlan ? (
+                    <div className="w-full py-3 rounded-xl text-center text-[13px] font-semibold text-text-tertiary bg-surface-glass border border-border-subtle cursor-default select-none">
+                        ✓ {t('includedInYourPlan')}
+                    </div>
                 ) : isLoggedIn ? (
                     manualBilling ? (
                         <a
@@ -201,7 +250,7 @@ function PlanCard({
                             <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
                             </svg>
-                            Continue on WhatsApp
+                            {t('continueOnWhatsApp')}
                         </a>
                     ) : (
                         <button
@@ -216,10 +265,10 @@ function PlanCard({
                             {loading ? (
                                 <span className="flex items-center justify-center gap-2">
                                     <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                    Connecting…
+                                    {t('connecting')}
                                 </span>
                             ) : (
-                                `Upgrade to ${plan.name}`
+                                `${t('upgradeTo')} ${localName}`
                             )}
                         </button>
                     )
@@ -232,17 +281,17 @@ function PlanCard({
                                 : "bg-[rgba(91,79,255,0.1)] text-[#7b6fff] border border-[rgba(91,79,255,0.25)] hover:bg-[rgba(91,79,255,0.2)]"
                         }`}
                     >
-                        Log in to upgrade
+                        {t('loginToUpgrade')}
                     </a>
                 )}
             </div>
 
             {/* WhatsApp sub-copy in manual mode */}
-            {manualBilling && isLoggedIn && !isCurrent && !maintenanceMode && (
-                <p className="mt-3 text-[11px] text-[#5a5a7a] text-center leading-snug">
-                    We&apos;ll confirm payment and activate your account manually.
+            {manualBilling && isLoggedIn && !isCurrent && !isHigherPlan && !subLoading && !maintenanceMode && (
+                <p className="mt-3 text-[11px] text-text-tertiary text-center leading-snug">
+                    {t('whatsappPaymentConfirm')}
                     <br />
-                    Use your Rico account email in the message.
+                    {t('whatsappPaymentUseEmail')}
                 </p>
             )}
         </div>
@@ -253,6 +302,8 @@ function CancelBanner() {
   const params = useSearchParams();
   const router = useRouter();
   const [dismissed, setDismissed] = useState(false);
+  const { language } = useLanguage();
+  const t = useTranslation(language);
 
   if (dismissed || params.get("checkout") !== "cancelled") return null;
 
@@ -260,9 +311,9 @@ function CancelBanner() {
     <div className="flex items-start gap-3 rounded-xl border border-[rgba(245,166,35,0.35)] bg-[rgba(245,166,35,0.08)] px-5 py-4">
       <span className="text-[#f5a623] text-[18px] mt-0.5">⚠</span>
       <div>
-        <p className="text-[13px] font-semibold text-[#f5a623]">Checkout cancelled</p>
+        <p className="text-[13px] font-semibold text-[#f5a623]">{t('checkoutCancelled')}</p>
         <p className="mt-0.5 text-[12px] text-[#a08040]">
-          No payment was made. You can try again whenever you&apos;re ready.
+          {t('checkoutCancelledDesc')}
         </p>
       </div>
       <button
@@ -281,18 +332,20 @@ function CancelBanner() {
 
 function FreePlanRow({ currentPlan, isLoggedIn }: { currentPlan: string | null; isLoggedIn: boolean }) {
     const isCurrent = currentPlan === "free";
+    const { language } = useLanguage();
+    const t = useTranslation(language);
     return (
-        <div className="flex items-center justify-between rounded-xl border border-white/[0.05] bg-[#0d0d1f]/60 px-5 py-4">
+        <div className="flex items-center justify-between rounded-xl border border-border-subtle bg-surface/60 px-5 py-4">
             <div>
-                <span className="text-[13px] font-semibold text-[#c0c0d8]">Free</span>
-                <span className="ml-3 text-[12px] text-[#5a5a7a]">
-                    50 AI messages · 10 saved jobs · 1 profile optimisation/mo
+                <span className="text-[13px] font-semibold text-text-secondary">{t('freePlan')}</span>
+                <span className="ml-3 text-[12px] text-text-tertiary">
+                    {t('freePlanDesc')}
                 </span>
             </div>
             <div className="flex items-center gap-3">
                 {isCurrent && (
-                    <span className="text-[11px] font-bold uppercase tracking-widest text-[#5a5a7a] border border-white/[0.08] rounded-full px-3 py-1">
-                        Current
+                    <span className="text-[11px] font-bold uppercase tracking-widest text-text-tertiary border border-border-soft rounded-full px-3 py-1">
+                        {t('current')}
                     </span>
                 )}
                 {isCurrent && isLoggedIn ? (
@@ -300,14 +353,14 @@ function FreePlanRow({ currentPlan, isLoggedIn }: { currentPlan: string | null; 
                         href="/command"
                         className="text-[12px] font-semibold text-[#7b6fff] hover:underline whitespace-nowrap"
                     >
-                        Open Rico →
+                        {t('openRico')} →
                     </a>
                 ) : !isLoggedIn ? (
                     <a
                         href="/signup"
                         className="text-[12px] font-semibold text-[#7b6fff] hover:underline whitespace-nowrap"
                     >
-                        Sign up free →
+                        {t('signUpFree')} →
                     </a>
                 ) : null}
             </div>
@@ -318,11 +371,38 @@ function FreePlanRow({ currentPlan, isLoggedIn }: { currentPlan: string | null; 
 export default function SubscriptionPage() {
     const { user, ready } = useAuth();
     const { toasts, toast } = useToast();
+    const { language } = useLanguage();
+    const t = useTranslation(language);
     const maintenanceMode = SUBSCRIPTION_MAINTENANCE_MODE;
 
-    const [plans, setPlans] = useState<SubscriptionPlan[]>(maintenanceMode ? FALLBACK_PLANS : []);
+    const localizedFallbackPlans = useMemo((): SubscriptionPlan[] => [
+        {
+            ...FALLBACK_PLANS[0],
+            name: t('planProName'),
+            description: t('planProDesc'),
+            features: [
+                t('planFeatureUnlimitedCV'), t('planFeatureSmartRec'),
+                t('planFeatureAdvancedScoring'), t('planFeatureSavedSearches'),
+                t('planFeaturePrioritySupport'), t('planFeatureHigherLimits'),
+            ],
+        },
+        {
+            ...FALLBACK_PLANS[1],
+            name: t('planPremiumName'),
+            description: t('planPremiumDesc'),
+            features: [
+                t('planFeatureEverythingPro'), t('planFeatureAutoApply'),
+                t('planFeaturePriorityAI'), t('planFeatureAdvancedAuto'),
+                t('planFeaturePremiumPipelines'), t('planFeatureRecruiter'),
+            ],
+        },
+    ], [t]);
+
+    const [apiPlans, setApiPlans] = useState<SubscriptionPlan[]>([]);
+    const plans = maintenanceMode ? localizedFallbackPlans : apiPlans;
     const [sub, setSub] = useState<SubscriptionMeResponse | null>(null);
     const [loadingPlans, setLoadingPlans] = useState(!maintenanceMode);
+    const [subLoading, setSubLoading] = useState(false);
     const [planError, setPlanError] = useState(false);
     const [subscriptionError, setSubscriptionError] = useState(false);
     const [checkingOut, setCheckingOut] = useState<"pro" | "premium" | null>(null);
@@ -334,25 +414,25 @@ export default function SubscriptionPage() {
         setLoadingPlans(true);
         setPlanError(false);
         getSubscriptionPlans()
-            .then((r) => setPlans(r.plans))
+            .then((r) => setApiPlans(r.plans))
             .catch(() => {
                 setPlanError(true);
-                toast("Could not load plans", "error");
+                toast(t('couldNotLoadPlans'), "error");
             })
             .finally(() => setLoadingPlans(false));
-    }, [maintenanceMode, toast]);
+    }, [maintenanceMode, t, toast]);
 
     useEffect(() => {
         if (maintenanceMode) return;
         let cancelled = false;
         getSubscriptionPlans()
             .then((r) => {
-                if (!cancelled) setPlans(r.plans);
+                if (!cancelled) setApiPlans(r.plans);
             })
             .catch(() => {
                 if (cancelled) return;
                 setPlanError(true);
-                toast("Could not load plans", "error");
+                toast(t('couldNotLoadPlans'), "error");
             })
             .finally(() => {
                 if (!cancelled) setLoadingPlans(false);
@@ -360,23 +440,29 @@ export default function SubscriptionPage() {
         return () => {
             cancelled = true;
         };
-    }, [maintenanceMode, toast]);
+    }, [maintenanceMode, t, toast]);
 
     const userEmail = user?.email ?? null;
     useEffect(() => {
         if (!userEmail || maintenanceMode) return;
-        getMySubscription()
-            .then(setSub)
-            .catch(() => {
+        void (async () => {
+            setSubLoading(true);
+            try {
+                const data = await getMySubscription();
+                setSub(data);
+            } catch {
                 setSubscriptionError(true);
-                toast("Could not load subscription status", "error");
-            });
-    }, [maintenanceMode, toast, userEmail]);
+                toast(t('couldNotLoadSubscription'), "error");
+            } finally {
+                setSubLoading(false);
+            }
+        })();
+    }, [maintenanceMode, t, toast, userEmail]);
 
     const handleUpgrade = useCallback(
         async (plan: "pro" | "premium") => {
             if (maintenanceMode) {
-                toast("Checkout is paused during backend maintenance", "error");
+                toast(t('backendMaintenanceSub'), "error");
                 return;
             }
             // In manual mode the CTA is a direct WhatsApp link — this handler is only
@@ -385,7 +471,7 @@ export default function SubscriptionPage() {
             try {
                 const result = await createCheckoutSession(plan);
                 if (result.provider === "mock") {
-                    toast("Payment processing is being configured. No charge has been made.", "error");
+                    toast(t('subscriptionPaymentConfiguring'), "error");
                 } else {
                     window.location.href = result.checkout_url;
                 }
@@ -393,13 +479,13 @@ export default function SubscriptionPage() {
                 const msg =
                     err instanceof ApiError
                         ? err.message
-                        : "Checkout failed. Please try again.";
+                        : t('subscriptionCheckoutFailed');
                 toast(msg, "error");
             } finally {
                 setCheckingOut(null);
             }
         },
-        [maintenanceMode, toast]
+        [maintenanceMode, t, toast]
     );
 
     const handleIntent = useCallback((plan: "pro" | "premium") => {
@@ -408,7 +494,7 @@ export default function SubscriptionPage() {
 
     const handleManage = useCallback(async () => {
         if (maintenanceMode) {
-            toast("Subscription management is paused during backend maintenance", "error");
+            toast(t('backendMaintenanceSub'), "error");
             return;
         }
         if (MANUAL_BILLING) {
@@ -419,7 +505,7 @@ export default function SubscriptionPage() {
         try {
             const result = await createCustomerPortalSession();
             if (result.provider === "mock") {
-                toast("Subscription portal is not configured", "error");
+                toast(t('subscriptionPortalNotConfigured'), "error");
             } else {
                 window.location.href = result.checkout_url;
             }
@@ -427,19 +513,30 @@ export default function SubscriptionPage() {
             const msg =
                 err instanceof ApiError
                     ? err.message
-                    : "Failed to open subscription portal. Please try again.";
+                    : t('subscriptionPortalFailed');
             toast(msg, "error");
         }
-    }, [maintenanceMode, toast]);
+    }, [maintenanceMode, t, toast]);
 
     const currentPlan = user ? sub?.subscription?.plan ?? null : null;
     const isActive = Boolean(sub?.is_active);
     const isLoggedIn = Boolean(user);
+    const { setLanguage } = useLanguage();
 
     return (
         <DashboardShell
-            title="Subscription"
-            subtitle="Upgrade your Rico AI plan"
+            title={t('subscriptionTitle')}
+            subtitle={t('subscriptionSubtitle')}
+            actions={
+                <button
+                    type="button"
+                    onClick={() => setLanguage(language === "ar" ? "en" : "ar")}
+                    className="rounded-lg border border-border-soft px-3 py-1.5 text-[12px] font-medium text-text-secondary hover:border-white/20 hover:text-white transition-colors"
+                    aria-label="Toggle language"
+                >
+                    {language === "ar" ? "EN" : "عربي"}
+                </button>
+            }
         >
             <div className="max-w-3xl flex flex-col gap-8">
 
@@ -448,17 +545,16 @@ export default function SubscriptionPage() {
                         <div className="flex items-start gap-3 rounded-xl border border-[rgba(245,166,35,0.35)] bg-[rgba(245,166,35,0.08)] px-5 py-4">
                             <span className="text-[#f5a623] text-[18px] mt-0.5">⚠</span>
                             <div>
-                                <p className="text-[13px] font-semibold text-[#f5a623]">Backend maintenance in progress</p>
+                                <p className="text-[13px] font-semibold text-[#f5a623]">{t('backendMaintenanceSub')}</p>
                                 <p className="mt-0.5 text-[12px] text-[#a08040]">
-                                    Rico&apos;s backend service is temporarily offline.
-                                    Subscription features are paused until the backend returns.
+                                    {t('backendMaintenanceSubDesc')}
                                 </p>
                             </div>
                         </div>
-                        <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 px-5 py-4">
-                            <p className="text-[13px] font-semibold text-white">Subscription status unavailable</p>
-                            <p className="mt-1 text-[12px] text-[#8080a0]">
-                                Plan cards below are static reference information. Activation is disabled until the backend returns.
+                        <div className="rounded-xl border border-border-subtle bg-surface-elevated/40 px-5 py-4">
+                            <p className="text-[13px] font-semibold text-text-primary">{t('subscriptionStatusUnavailable')}</p>
+                            <p className="mt-1 text-[12px] text-text-secondary">
+                                {t('subscriptionStatusUnavailableDesc')}
                             </p>
                         </div>
                     </>
@@ -466,7 +562,7 @@ export default function SubscriptionPage() {
 
                 {!maintenanceMode && subscriptionError && (
                     <div className="flex items-center justify-between gap-3 rounded-xl border border-[rgba(255,94,91,0.35)] bg-[rgba(255,94,91,0.08)] px-5 py-4">
-                        <p className="text-[13px] text-[#ffaaaa]">Could not load your current subscription status.</p>
+                        <p className="text-[13px] text-[#ffaaaa]">{t('couldNotLoadSubscription')}</p>
                         <button
                             type="button"
                             onClick={() => {
@@ -477,7 +573,7 @@ export default function SubscriptionPage() {
                             }}
                             className="rounded-lg border border-[rgba(255,94,91,0.3)] px-3 py-1.5 text-[12px] font-semibold text-[#ffaaaa] hover:bg-[rgba(255,94,91,0.12)]"
                         >
-                            Retry
+                            {t('retry')}
                         </button>
                     </div>
                 )}
@@ -494,10 +590,9 @@ export default function SubscriptionPage() {
                     <div className="flex items-start gap-3 rounded-xl border border-[rgba(255,94,91,0.35)] bg-[rgba(255,94,91,0.08)] px-5 py-4">
                         <span className="text-[#ff5e5b] text-[18px] mt-0.5">⚠</span>
                         <div>
-                            <p className="text-[13px] font-semibold text-[#ff5e5b]">Payment issue</p>
+                            <p className="text-[13px] font-semibold text-[#ff5e5b]">{t('paymentIssue')}</p>
                             <p className="mt-0.5 text-[12px] text-[#ffaaaa]">
-                                There was an issue with your subscription.
-                                Please contact Rico support to resolve this.
+                                {t('paymentIssueDesc')}
                             </p>
                         </div>
                     </div>
@@ -509,13 +604,13 @@ export default function SubscriptionPage() {
                         <span className="text-[#00e5ff] text-[20px]">✦</span>
                         <div>
                             <p className="text-[13px] font-semibold text-[#00e5ff]">
-                                Active {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} Plan
+                                {t('activePlan')} {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} Plan
                             </p>
                             {sub.subscription.current_period_end && (
                                 <p className="mt-0.5 text-[12px] text-[#5a8a8a]">
                                     {sub.subscription.cancel_at
-                                        ? "Expires on "
-                                        : "Renews "}
+                                        ? `${t('expiresOn')} `
+                                        : `${t('renews')} `}
                                     {new Date(
                                         sub.subscription.cancel_at ?? sub.subscription.current_period_end
                                     ).toLocaleDateString("en-AE", {
@@ -533,19 +628,19 @@ export default function SubscriptionPage() {
                         {[0, 1].map((i) => (
                             <div
                                 key={i}
-                                className="h-72 rounded-2xl bg-[#13132a]/40 border border-white/[0.04] animate-pulse"
+                                className="h-72 rounded-2xl bg-surface-elevated/40 border border-border-subtle animate-pulse"
                             />
                         ))}
                     </div>
                 ) : planError ? (
                     <div className="flex items-center justify-between gap-3 rounded-xl border border-[rgba(255,94,91,0.35)] bg-[rgba(255,94,91,0.08)] px-5 py-4">
-                        <p className="text-[13px] text-[#ffaaaa]">Could not load subscription plans.</p>
+                        <p className="text-[13px] text-[#ffaaaa]">{t('couldNotLoadPlans')}</p>
                         <button
                             type="button"
                             onClick={loadPlans}
                             className="rounded-lg border border-[rgba(255,94,91,0.3)] px-3 py-1.5 text-[12px] font-semibold text-[#ffaaaa] hover:bg-[rgba(255,94,91,0.12)]"
                         >
-                            Retry
+                            {t('retry')}
                         </button>
                     </div>
                 ) : plans.length > 0 ? (
@@ -558,18 +653,20 @@ export default function SubscriptionPage() {
                                 isActive={isActive}
                                 isLoggedIn={ready ? isLoggedIn : false}
                                 loading={checkingOut === plan.plan}
+                                subLoading={subLoading}
                                 anyCheckoutPending={checkingOut !== null}
                                 onUpgrade={handleUpgrade}
                                 onManage={handleManage}
                                 onIntent={handleIntent}
                                 maintenanceMode={maintenanceMode}
                                 manualBilling={MANUAL_BILLING}
+                                t={t}
                             />
                         ))}
                     </div>
                 ) : (
-                    <p className="text-[13px] text-[#5a5a7a]">
-                        Could not load plans. Please refresh the page.
+                    <p className="text-[13px] text-text-tertiary">
+                        {t('couldNotLoadPlansRefresh')}
                     </p>
                 )}
 
@@ -578,46 +675,46 @@ export default function SubscriptionPage() {
 
                 {/* FAQ Section */}
                 <div className="mt-12">
-                    <h3 className="text-[18px] font-semibold text-white mb-6">Frequently Asked Questions</h3>
+                    <h3 className="text-[18px] font-semibold text-text-primary mb-6">{t('faqTitle')}</h3>
                     <div className="space-y-4">
-                        <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 p-5">
-                            <h4 className="text-[14px] font-semibold text-white mb-2">How does upgrading work?</h4>
-                            <p className="text-[13px] text-[#5a5a7a]">
+                        <div className="rounded-xl border border-border-subtle bg-surface-elevated/40 p-5">
+                            <h4 className="text-[14px] font-semibold text-text-primary mb-2">{t('faqHowUpgrade')}</h4>
+                            <p className="text-[13px] text-text-tertiary">
                                 {MANUAL_BILLING
-                                    ? "Click the WhatsApp button on your chosen plan. Send us your Rico account email and preferred plan. We'll confirm your payment and activate your account within a few hours."
-                                    : "Click Upgrade to be taken to secure checkout. After payment your plan activates immediately."}
+                                    ? t('faqHowUpgradeManual')
+                                    : t('faqHowUpgradeStripe')}
                             </p>
                         </div>
-                        <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 p-5">
-                            <h4 className="text-[14px] font-semibold text-white mb-2">What payment methods are accepted?</h4>
-                            <p className="text-[13px] text-[#5a5a7a]">
+                        <div className="rounded-xl border border-border-subtle bg-surface-elevated/40 p-5">
+                            <h4 className="text-[14px] font-semibold text-text-primary mb-2">{t('faqPaymentMethods')}</h4>
+                            <p className="text-[13px] text-text-tertiary">
                                 {MANUAL_BILLING
-                                    ? "We accept bank transfer, Ziina, and Mamo. After payment, send the receipt and your Rico account email via WhatsApp for activation."
-                                    : "We accept all major credit and debit cards. Your payment is securely processed and card details are never stored on our servers."}
+                                    ? t('faqPaymentMethodsManual')
+                                    : t('faqPaymentMethodsStripe')}
                             </p>
                         </div>
-                        <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 p-5">
-                            <h4 className="text-[14px] font-semibold text-white mb-2">How quickly is my account activated?</h4>
-                            <p className="text-[13px] text-[#5a5a7a]">
+                        <div className="rounded-xl border border-border-subtle bg-surface-elevated/40 p-5">
+                            <h4 className="text-[14px] font-semibold text-text-primary mb-2">{t('faqActivationTime')}</h4>
+                            <p className="text-[13px] text-text-tertiary">
                                 {MANUAL_BILLING
-                                    ? "After we receive your payment confirmation via WhatsApp, your Rico account is activated within a few hours. You will need to logout and log back in if premium access does not appear immediately."
-                                    : "Activation is immediate after successful payment."}
+                                    ? t('faqActivationTimeManual')
+                                    : t('faqActivationTimeStripe')}
                             </p>
                         </div>
-                        <div className="rounded-xl border border-white/[0.06] bg-[#13132a]/40 p-5">
-                            <h4 className="text-[14px] font-semibold text-white mb-2">Can I change or cancel my plan?</h4>
-                            <p className="text-[13px] text-[#5a5a7a]">
+                        <div className="rounded-xl border border-border-subtle bg-surface-elevated/40 p-5">
+                            <h4 className="text-[14px] font-semibold text-text-primary mb-2">{t('faqChangeCancel')}</h4>
+                            <p className="text-[13px] text-text-tertiary">
                                 {MANUAL_BILLING
-                                    ? "Contact Rico support via WhatsApp to adjust or cancel your subscription. Your access continues until the end of your current period."
-                                    : "You can upgrade, downgrade, or cancel at any time through the subscription management portal. When cancelling, access continues until the end of the billing period."}
+                                    ? t('faqChangeCancelManual')
+                                    : t('faqChangeCancelStripe')}
                             </p>
                         </div>
                     </div>
                 </div>
 
                 {/* Footer note */}
-                <p className="text-[11px] text-[#5a5a7a] text-center">
-                    Prices in AED. Billed monthly. Cancel any time.
+                <p className="text-[11px] text-text-tertiary text-center">
+                    {t('pricesInAED')}
                 </p>
             </div>
 

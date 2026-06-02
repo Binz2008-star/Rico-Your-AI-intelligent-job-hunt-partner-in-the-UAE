@@ -139,9 +139,9 @@ def send_message(
     )
 
     if decision.should_use_ai:
-        return _conversational_ai_reply(ctx=ctx, message=message, profile=profile)
+        return _conversational_ai_reply(ctx=ctx, message=message, profile=profile, language=language)
 
-    return _legacy_send_message(ctx=ctx, message=message, operation_id=operation_id)
+    return _legacy_send_message(ctx=ctx, message=message, operation_id=operation_id, language=language)
 
 
 def _unsupported_tool_response(policy: Any) -> Dict[str, Any]:
@@ -409,6 +409,7 @@ def _legacy_send_message(
     ctx: RicoSessionContext,
     message: str,
     operation_id: str | None = None,
+    language: str | None = None,
 ) -> Dict[str, Any]:
     """Run the existing Rico chat pipeline unchanged."""
     from src.rico_chat_api import RicoChatAPI
@@ -417,6 +418,7 @@ def _legacy_send_message(
         user_id=ctx.user_id,
         message=message,
         operation_id=operation_id,
+        language=language,
     )
 
 
@@ -425,6 +427,7 @@ def _conversational_ai_reply(
     ctx: RicoSessionContext,
     message: str,
     profile: Any,
+    language: str | None = None,
 ) -> Dict[str, Any]:
     """Use the existing Rico conversational AI fallback path directly."""
     from src.rico_chat_api import RicoChatAPI
@@ -433,6 +436,7 @@ def _conversational_ai_reply(
         user_id=ctx.user_id,
         message=message,
         profile=profile,
+        language=language,
     )
     result["response_source"] = result.get("response_source") or "ai_router"
     result["intent"] = "conversational"
@@ -650,7 +654,11 @@ def get_chat_history(user_id: str, limit: int = 50, before: datetime | None = No
     db_uid = _resolve_db_user_id(user_id)
     if db_uid:
         db_rows = _db_get_chat_history(db_uid, limit=limit, before=before)
-        if db_rows is not None:
+        # Truthy check: only use DB result when it actually has rows. An empty
+        # list (DB query succeeded but 0 rows) falls through to the JSON memory
+        # fallback so that history written before DB persistence was active is
+        # still visible on refresh.
+        if db_rows:
             return db_rows
 
     # --- Fallback: local JSON memory ---
@@ -680,3 +688,32 @@ def get_chat_history(user_id: str, limit: int = 50, before: datetime | None = No
                 "timestamp": m.timestamp.isoformat() if hasattr(m, "timestamp") else None,
             })
     return result
+
+
+def clear_chat_history(user_id: str) -> None:
+    """Delete all chat history rows for a user (chat only — profile/applications unaffected)."""
+    db_uid = _resolve_db_user_id(user_id)
+    if db_uid:
+        try:
+            from src.rico_db import RicoDB
+            db = RicoDB()
+            if db.available:
+                conn = db.connect()
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute("DELETE FROM rico_chat_history WHERE user_id = %s", (db_uid,))
+                    conn.commit()
+                finally:
+                    conn.close()
+        except Exception as exc:
+            logger.warning("chat_service: clear_chat_history failed for user=%s: %s", user_id, exc)
+
+    # Best-effort: clear the local JSON chat file as well
+    try:
+        from src.rico_memory import RicoMemoryStore
+        store = RicoMemoryStore()
+        chat_path = store._chat_path(user_id)
+        if chat_path.exists():
+            chat_path.unlink()
+    except Exception:
+        pass

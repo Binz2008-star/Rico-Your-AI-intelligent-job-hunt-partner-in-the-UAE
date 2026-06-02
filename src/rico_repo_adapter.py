@@ -228,7 +228,7 @@ class RicoSystem:
         # Generate deterministic search ID based on profile parameters
         import hashlib
         search_params = f"{profile.user_id}|{profile.target_roles}|{profile.preferred_cities}|{profile.salary_expectation_aed or 0}|{limit}"
-        search_id = hashlib.md5(search_params.encode()).hexdigest()[:8]
+        search_id = hashlib.sha256(search_params.encode()).hexdigest()[:8]
 
         logger.info(
             "job_search_start user=%s search_id=%s target_roles=%s city=%s salary=%d limit=%d",

@@ -4,11 +4,15 @@ import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { resetPassword } from "@/lib/api";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTranslation } from "@/lib/translations";
 
 function ResetPasswordForm() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const token        = searchParams.get("token") ?? "";
+  const { language } = useLanguage();
+  const t = useTranslation(language);
 
   const [password, setPassword] = useState("");
   const [confirm,  setConfirm]  = useState("");
@@ -20,7 +24,7 @@ function ResetPasswordForm() {
     e.preventDefault();
     setError("");
     if (password !== confirm) {
-      setError("Passwords do not match.");
+      setError(t("passwordsDoNotMatch"));
       return;
     }
     setLoading(true);
@@ -29,7 +33,7 @@ function ResetPasswordForm() {
       setSuccess(true);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Reset failed. The link may have expired."
+        err instanceof Error ? err.message : t("resetLinkInvalid")
       );
     } finally {
       setLoading(false);
@@ -40,13 +44,13 @@ function ResetPasswordForm() {
     return (
       <div className="flex flex-col items-center gap-4 text-center">
         <p className="text-sm text-red-400">
-          Missing reset token. Please use the link from your reset email.
+          {t("missingResetToken")}
         </p>
         <Link
           href="/forgot-password"
           className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors underline underline-offset-2"
         >
-          Request a new link
+          {t("requestNewLink")}
         </Link>
       </div>
     );
@@ -56,16 +60,16 @@ function ResetPasswordForm() {
     return (
       <div className="flex flex-col items-center gap-4 text-center">
         <div className="rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-xs text-indigo-400">
-          Password updated
+          {t("passwordUpdated")}
         </div>
         <p className="text-sm text-zinc-300">
-          You can now sign in with your new password.
+          {t("signInNewPassword")}
         </p>
         <button
           onClick={() => router.push("/login")}
           className="w-full rounded-lg bg-indigo-600 py-3 text-sm font-semibold text-white transition-colors hover:bg-indigo-500"
         >
-          Sign in
+          {t("signIn")}
         </button>
       </div>
     );
@@ -75,7 +79,7 @@ function ResetPasswordForm() {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label htmlFor="password" className="mb-1.5 block text-sm text-zinc-400">
-          New password
+          {t("newPassword")}
         </label>
         <input
           id="password"
@@ -86,14 +90,14 @@ function ResetPasswordForm() {
           minLength={8}
           maxLength={128}
           autoComplete="new-password"
-          placeholder="Minimum 8 characters"
+          placeholder={t("minChars8")}
           className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         />
       </div>
 
       <div>
         <label htmlFor="confirm" className="mb-1.5 block text-sm text-zinc-400">
-          Confirm password
+          {t("confirmPassword")}
         </label>
         <input
           id="confirm"
@@ -102,7 +106,7 @@ function ResetPasswordForm() {
           onChange={(e) => setConfirm(e.target.value)}
           required
           autoComplete="new-password"
-          placeholder="Repeat new password"
+          placeholder={t("repeatNewPassword")}
           className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         />
       </div>
@@ -119,7 +123,7 @@ function ResetPasswordForm() {
         disabled={loading || !password || !confirm}
         className="w-full rounded-lg bg-indigo-600 py-3 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {loading ? "Updating…" : "Set new password"}
+        {loading ? t("updating") : t("setNewPassword")}
       </button>
 
       <p className="text-center text-xs">
@@ -127,7 +131,7 @@ function ResetPasswordForm() {
           href="/login"
           className="text-zinc-400 hover:text-white transition-colors"
         >
-          ← Back to sign in
+          {t("backToSignIn")}
         </Link>
       </p>
     </form>
@@ -135,6 +139,8 @@ function ResetPasswordForm() {
 }
 
 export default function ResetPasswordPage() {
+  const { language } = useLanguage();
+  const t = useTranslation(language);
   return (
     <main className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
       <div className="w-full max-w-sm">
@@ -144,12 +150,12 @@ export default function ResetPasswordPage() {
             <span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-[#f5a623] text-sm font-black text-[#0a0a1a] shadow-[0_4px_12px_rgba(245,166,35,0.35)]">R</span>
             Rico <span className="text-[#f5a623]">Hunt</span>
           </Link>
-          <p className="mt-1 text-sm text-zinc-400">Set a new password</p>
+          <p className="mt-1 text-sm text-zinc-400">{t("setANewPassword")}</p>
         </div>
 
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-6">
           <Suspense
-            fallback={<p className="text-center text-sm text-zinc-500">Loading…</p>}
+            fallback={<p className="text-center text-sm text-zinc-500">{t("loading")}</p>}
           >
             <ResetPasswordForm />
           </Suspense>

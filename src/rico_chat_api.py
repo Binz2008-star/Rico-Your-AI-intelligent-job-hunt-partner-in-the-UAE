@@ -98,6 +98,14 @@ CV_FILE_RE = re.compile(r"\b[\w .()_-]+\.(?:pdf|docx?|txt)\b", re.IGNORECASE)
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PHONE_RE = re.compile(r"(?:\+?\d[\d\s().-]{7,}\d)")
 FOLLOWUP_BOUNDARY_PUNCT_RE = re.compile(r"^[\s\"'([{]+|[\s\"')\]}.,!?;:]+$")
+# Telegram username: @handle (5–32 chars, alphanumeric + underscore)
+TELEGRAM_HANDLE_RE = re.compile(r"^@[A-Za-z0-9_]{5,32}$")
+# Telegram declaration in natural language: "my telegram is @handle", "@handle" etc.
+TELEGRAM_MENTION_RE = re.compile(
+    r"(?:my\s+)?telegram(?:\s+(?:username|handle|id|account|is|:))?\s+(?:is\s+)?(@[A-Za-z0-9_]{5,32})"
+    r"|(?:^|\s)(@[A-Za-z0-9_]{5,32})(?:\s|$)",
+    re.IGNORECASE,
+)
 
 # Domain-agnostic. A bare role is a short noun phrase. Anything starting with
 # one of these tokens is a question, command, greeting, or sentence - never
@@ -146,6 +154,56 @@ ONBOARDING_FIELD_LABELS = {
 # OpenAI context limits
 MAX_CONTEXT_MESSAGES = 10
 MAX_PROFILE_TOKENS = 200  # Conservative estimate for profile summary
+
+# Acknowledgement replies — short, warm, non-restarting
+_ACKNOWLEDGEMENT_REPLIES: dict[str, str] = {
+    "thanks": "You're welcome!",
+    "thank you": "You're welcome!",
+    "thank you so much": "Happy to help anytime!",
+    "thanks a lot": "Happy to help!",
+    "thank you very much": "Happy to help!",
+    "much appreciated": "Glad I could help.",
+    "appreciate it": "Glad I could help.",
+    "appreciate that": "Glad I could help.",
+    "great": "Glad to help.",
+    "perfect": "Happy to help.",
+    "excellent": "Glad to hear that!",
+    "wonderful": "Glad to hear that!",
+    "awesome": "Great!",
+    "cool": "Good to know.",
+    "nice": "Good to know.",
+    "ok": "Of course.",
+    "okay": "Of course.",
+    "ok thanks": "You're welcome.",
+    "okay thanks": "You're welcome.",
+    "ok thank you": "You're welcome.",
+    "okay thank you": "You're welcome.",
+    "got it": "Sounds good.",
+    "understood": "Sounds good.",
+    "noted": "Noted.",
+    "sounds good": "Glad that works for you.",
+    "looks good": "Glad that works for you.",
+    "makes sense": "Great.",
+    "cheers": "Cheers!",
+    # Arabic
+    "شكرا": "عفواً!",
+    "شكراً": "عفواً!",
+    "شكرا جزيلا": "على الرحب والسعة!",
+    "شكراً جزيلاً": "على الرحب والسعة!",
+    "ممتاز": "يسعدني ذلك.",
+    "رائع": "يسعدني ذلك.",
+    "فهمت": "ممتاز.",
+    "تمام": "بالتوفيق.",
+    "ماشي": "حسناً.",
+    "حسنا": "حسناً.",
+}
+_DEFAULT_ACK_REPLY = "Of course! What would you like to do next?"
+
+
+def _acknowledgement_reply(message: str) -> str:
+    """Return a short warm reply for acknowledgement phrases."""
+    key = message.strip().lower()
+    return _ACKNOWLEDGEMENT_REPLIES.get(key, _DEFAULT_ACK_REPLY)
 
 
 class HandlerResult(NamedTuple):
@@ -284,7 +342,10 @@ class RicoChatAPI:
             essential_fields = {
                 "email", "phone", "skills", "years_experience",
                 "preferred_cities", "target_roles", "industries",
-                "salary_expectation_aed", "deal_breakers"
+                "salary_expectation_aed", "deal_breakers",
+                "telegram_username", "telegram_chat_id",
+                "name", "visa_status", "notice_period",
+                "current_company", "current_role", "linkedin_url",
             }
             ctx = {
                 "profile_exists": True,
@@ -860,7 +921,14 @@ class RicoChatAPI:
         explanation = build_match_explanation(m, profile)
 
         raw_score = m.get("rico_score") or m.get("score") or 0
-        normalized_score = max(0, min(100, int(raw_score))) if raw_score else 0
+        # Normalize to [0.0, 1.0] — frontend multiplies by 100 for display.
+        # Legacy scoring pipeline (scoring.py) emits 0–100 integers; FitScore
+        # (scorer.py) already emits 0.0–1.0 floats. Values > 1 are divided by 100.
+        if raw_score:
+            _s = float(raw_score)
+            normalized_score = round(max(0.0, min(1.0, _s / 100.0 if _s > 1.0 else _s)), 4)
+        else:
+            normalized_score = 0.0
 
         # Preserve URL fields so the frontend can surface apply links and distinguish
         # verified live postings from leads that still need a working apply URL.
@@ -873,7 +941,23 @@ class RicoChatAPI:
         source_url = str(
             m.get("source_url") or alt_link or apply_url
         ).strip()
-        verification_status = "live" if apply_url else "lead_needs_verification"
+
+        # Classify source quality from domain patterns — no network call.
+        # Google Jobs links (jobs.google.com, google.com/search) are search
+        # intermediary pages, not direct apply URLs. Move them to alt_link so
+        # the frontend can offer them as a fallback, but don't present them as
+        # the primary "Apply" action.
+        try:
+            from src.services.source_quality import classify_url, is_google_intermediary
+            if apply_url and is_google_intermediary(apply_url):
+                if not alt_link:
+                    alt_link = apply_url
+                apply_url = ""
+                verification_status = "google_intermediary"
+            else:
+                verification_status = classify_url(apply_url or source_url)
+        except Exception:
+            verification_status = "needs_source_verification" if apply_url else "lead_needs_verification"
 
         result = {
             "title": str(m.get("title") or "Untitled role"),
@@ -986,7 +1070,7 @@ class RicoChatAPI:
         )
 
     def _extract_inline_contact_updates(self, message: str) -> dict[str, Any]:
-        """Extract email and phone from message."""
+        """Extract email, phone, and Telegram handle from message."""
         updates: dict[str, Any] = {}
         emails = EMAIL_RE.findall(message)
         phones = PHONE_RE.findall(message)
@@ -994,6 +1078,11 @@ class RicoChatAPI:
             updates["email"] = emails[0]
         if phones:
             updates["phone"] = phones[0].strip()
+        m = TELEGRAM_MENTION_RE.search(message)
+        if m:
+            handle = m.group(1) or m.group(2)
+            if handle:
+                updates["telegram_username"] = handle
         return updates
 
     def _cv_first_profile_response(self, user_id: str, message: str) -> dict[str, Any]:
@@ -1418,6 +1507,103 @@ class RicoChatAPI:
 
         return None
 
+    # ── Pending field resolver ────────────────────────────────────────────────
+
+    _PENDING_FIELD_ASK_SIGNALS: dict[str, tuple[str, ...]] = {
+        "telegram_username": (
+            "telegram username", "your telegram", "@username",
+            "اسم المستخدم في تيليجرام", "تيليجرام",
+        ),
+        "phone": (
+            "phone number", "your phone", "mobile number",
+            "رقم الهاتف", "رقم جوالك",
+        ),
+        "email": (
+            "email address", "your email", "بريدك الإلكتروني",
+        ),
+    }
+
+    def _resolve_pending_field(
+        self, user_id: str, message: str, profile: Any
+    ) -> "dict[str, Any] | None":
+        """Intercept user replies to Rico's field prompts (e.g. 'What is your Telegram?').
+
+        Checks the last assistant message for known field-request signals and, if the
+        current user message looks like a valid value for that field, saves it and
+        returns a confirmation response — bypassing intent classification entirely.
+
+        Returns a response dict if a pending field was resolved, else None.
+        """
+        msg = message.strip()
+        if not msg:
+            return None
+
+        ctx = self._get_recent_context(user_id)
+        # Explicit pending field stored by an earlier turn
+        pending_field: str | None = ctx.get("_pending_field")
+
+        # Fallback: infer from last assistant message
+        if not pending_field:
+            last_msg = self._get_last_assistant_message(user_id).lower()
+            for field, signals in self._PENDING_FIELD_ASK_SIGNALS.items():
+                if any(sig in last_msg for sig in signals):
+                    pending_field = field
+                    break
+
+        if not pending_field:
+            return None
+
+        # ── Telegram handle ───────────────────────────────────────────────────
+        if pending_field == "telegram_username":
+            handle = msg if msg.startswith("@") else f"@{msg}"
+            if not TELEGRAM_HANDLE_RE.match(handle):
+                return None
+            upsert_profile(user_id=user_id, updates={"telegram_username": handle})
+            ctx.pop("_pending_field", None)
+            self._store_recent_context(user_id, ctx)
+            reply = (
+                f"Got it — I've saved your Telegram username as **{handle}**. "
+                "You'll receive job alerts and updates there."
+            )
+            self._append_chat(user_id, "assistant", reply)
+            return {
+                "type": "preferences_updated",
+                "message": reply,
+                "updated": {"telegram_username": handle},
+            }
+
+        # ── Phone number ──────────────────────────────────────────────────────
+        if pending_field == "phone":
+            if not PHONE_RE.match(msg):
+                return None
+            upsert_profile(user_id=user_id, updates={"phone": msg})
+            ctx.pop("_pending_field", None)
+            self._store_recent_context(user_id, ctx)
+            reply = f"Got it — I've saved your phone number as **{msg}**."
+            self._append_chat(user_id, "assistant", reply)
+            return {
+                "type": "preferences_updated",
+                "message": reply,
+                "updated": {"phone": msg},
+            }
+
+        # ── Email address ─────────────────────────────────────────────────────
+        if pending_field == "email":
+            if not EMAIL_RE.fullmatch(msg):
+                return None
+            upsert_profile(user_id=user_id, updates={"email": msg})
+            ctx.pop("_pending_field", None)
+            self._store_recent_context(user_id, ctx)
+            reply = f"Got it — I've saved your email as **{msg}**."
+            self._append_chat(user_id, "assistant", reply)
+            return {
+                "type": "preferences_updated",
+                "message": reply,
+                "updated": {"email": msg},
+            }
+
+        return None
+
     _JOB_SEARCH_OPTIONS = {
         "type": "options",
         "message": "Here is what I can help you with:",
@@ -1514,6 +1700,72 @@ class RicoChatAPI:
                 all_matches = filter_for_non_nationals(all_matches)
         except Exception as e:
             logger.debug("Eligibility filter unavailable: %s", e)
+
+        # Deduplicate by title+company fingerprint within this response.
+        # JSearch deduplicates by job_id, but the same role at the same company
+        # can appear under slightly different job_ids (different posting dates).
+        seen_fps: set[str] = set()
+        deduped: list[dict[str, Any]] = []
+        for m in all_matches:
+            fp = (
+                str(m.get("title") or "").lower().strip()
+                + "|"
+                + str(m.get("company") or "").lower().strip()
+            )
+            if fp and fp != "|" and fp not in seen_fps:
+                seen_fps.add(fp)
+                deduped.append(m)
+        all_matches = deduped
+
+        # Profile-fit ranking: score each result against the user's target roles,
+        # skills, and deal-breakers. Zero-latency (pure keyword matching) so it
+        # doesn't add round-trip time to the chat response.
+        try:
+            from src.llm_scorer import rank_by_profile_fit as _rbpf
+            _profile_target_roles = self._as_list(
+                self._profile_value(profile, "target_roles")
+            )
+            _profile_skills = self._as_list(
+                self._profile_value(profile, "skills")
+            )
+            _profile_deal_breakers = self._as_list(
+                self._profile_value(profile, "deal_breakers")
+            )
+            all_matches = _rbpf(
+                all_matches,
+                target_roles=[str(r) for r in _profile_target_roles if r],
+                skills=[str(s) for s in _profile_skills if s],
+                deal_breakers=[str(d) for d in _profile_deal_breakers if d],
+            )
+        except Exception:
+            pass
+
+        # Quality-sort: within same profile-fit tier, surface live/verified
+        # sources before aggregators/dead links.
+        _QUALITY_RANK: dict[str, int] = {
+            "live_verified": 0,
+            "needs_source_verification": 1,
+            "google_intermediary": 2,
+            "login_required": 3,
+            "rate_limited": 4,
+            "aggregator_untrusted": 5,
+        }
+        try:
+            from src.services.source_quality import classify_url as _cq, is_google_intermediary as _igi
+
+            def _quality_key(m: dict[str, Any]) -> int:
+                url = str(
+                    m.get("job_apply_link") or m.get("apply_link") or m.get("link") or ""
+                )
+                status = "google_intermediary" if _igi(url) else _cq(url)
+                # Secondary sort: quality within profile-fit bands
+                fit = m.get("profile_fit_score", 0)
+                fit_band = max(0, 5 - fit // 20)  # 5 bands (0=best fit, 4=worst)
+                return fit_band * 10 + _QUALITY_RANK.get(status, 1)
+
+            all_matches.sort(key=_quality_key)
+        except Exception:
+            pass
 
         top_matches = all_matches[:5]
         formatted = [self._format_match(m, profile) for m in top_matches]
@@ -1663,11 +1915,12 @@ class RicoChatAPI:
         user_id: str,
         message: str,
         operation_id: str | None = None,
+        language: str | None = None,
     ) -> dict[str, Any]:
         debug_id = _generate_debug_id()
         self._current_operation_id = operation_id
         try:
-            result = self._process_message_inner(user_id, message)
+            result = self._process_message_inner(user_id, message, language=language)
             # Guarantee debug_id on every response
             if isinstance(result, dict):
                 result.setdefault("debug_id", debug_id)
@@ -1726,6 +1979,7 @@ class RicoChatAPI:
         profile: Any,
         *,
         save_user_message: bool,
+        language: str | None = None,
     ) -> dict[str, Any]:
         """Run the single conversational AI fallback path used by chat routing."""
         if save_user_message:
@@ -1735,7 +1989,7 @@ class RicoChatAPI:
         if isinstance(user_context, dict):
             user_context["blocked_questions"] = blocked_questions
 
-        ai_response = self._get_openai_agent().respond(message, user_context=user_context)
+        ai_response = self._get_openai_agent().respond(message, user_context=user_context, language=language)
         raw_ai_message = ai_response.get("message", "")
         filtered_ai_message = self._preserve_ai_message(raw_ai_message, blocked_questions)
         ai_response["message"] = filtered_ai_message
@@ -1751,7 +2005,7 @@ class RicoChatAPI:
         result.setdefault("success", True)
         return result
 
-    def answer_conversationally(self, user_id: str, message: str, profile: Any) -> dict[str, Any]:
+    def answer_conversationally(self, user_id: str, message: str, profile: Any, language: str | None = None) -> dict[str, Any]:
         """Route directly to the existing conversational AI fallback path."""
         debug_id = _generate_debug_id()
         try:
@@ -1760,6 +2014,7 @@ class RicoChatAPI:
                 message=message,
                 profile=profile,
                 save_user_message=True,
+                language=language,
             )
             if isinstance(result, dict):
                 result.setdefault("debug_id", debug_id)
@@ -1804,7 +2059,7 @@ class RicoChatAPI:
                 user_id=user_id,
             )
 
-    def _process_message_inner(self, user_id: str, message: str) -> dict[str, Any]:
+    def _process_message_inner(self, user_id: str, message: str, language: str | None = None) -> dict[str, Any]:
         self._append_chat(user_id, "user", message)
         completed = is_onboarding_complete(user_id)
 
@@ -1824,14 +2079,18 @@ class RicoChatAPI:
             if getattr(self, "_persist", True):
                 upsert_profile(user_id=user_id, updates={"name": user_id})
                 set_onboarding_status(user_id, ONBOARDING_IN_PROGRESS)
-            response = {
-                "type": "onboarding",
-                "message": (
-                    "Welcome to Rico AI. Upload your CV or tell me your target role, UAE city "
-                    "preferences, and salary expectations. If you upload a CV, I will pre-fill "
-                    "the profile and only ask for anything missing or unclear."
-                ),
-            }
+            import re as _re
+            _is_ar = language == "ar" or bool(_re.search(r'[؀-ۿ]', message))
+            onboarding_msg = (
+                "أهلاً بك في ريكو. أرفع سيرتك الذاتية أو أخبرني بالمسمى الوظيفي الذي تستهدفه "
+                "والمدينة التي تفضل العمل فيها بالإمارات وتوقعات راتبك. "
+                "عند رفع السيرة الذاتية سأملأ الملف الشخصي تلقائيًا وأسألك فقط عن أي معلومات ناقصة."
+                if _is_ar else
+                "Welcome to Rico AI. Upload your CV or tell me your target role, UAE city "
+                "preferences, and salary expectations. If you upload a CV, I will pre-fill "
+                "the profile and only ask for anything missing or unclear."
+            )
+            response = {"type": "onboarding", "message": onboarding_msg}
             self._append_chat(user_id, "assistant", response["message"])
             return self._finalize(response, self.SOURCE_KEYWORD, profile=None)
 
@@ -1877,6 +2136,39 @@ class RicoChatAPI:
         profile = self._resolve_profile(user_id)
         has_cv = profile.has_cv
         text = self._normalize_followup_phrase(message)
+
+        # ── Pending field resolver (must run first) ───────────────────────────
+        # When Rico has just asked the user for a specific profile field (e.g.
+        # "What's your Telegram username?"), the raw value the user sends next
+        # (like "@Robin_amg") won't match any intent. Intercept it here so the
+        # field is saved and a correct confirmation is returned without falling
+        # through to the unknown/fallback handler.
+        pending_field_result = self._resolve_pending_field(user_id, message, profile)
+        if pending_field_result is not None:
+            return self._finalize(pending_field_result, self.SOURCE_KEYWORD, profile=profile)
+
+        # ── Proactive Telegram declaration: "my telegram is @handle" ─────────
+        # When the user volunteers their Telegram handle with the keyword "telegram"
+        # in the same message, save it immediately without needing a pending slot.
+        _tg_match = TELEGRAM_MENTION_RE.search(message)
+        if _tg_match and "telegram" in message.lower():
+            _tg_handle = _tg_match.group(1) or _tg_match.group(2)
+            if _tg_handle and TELEGRAM_HANDLE_RE.match(_tg_handle):
+                upsert_profile(user_id=user_id, updates={"telegram_username": _tg_handle})
+                _tg_reply = (
+                    f"Got it — I've saved your Telegram username as **{_tg_handle}**. "
+                    "You'll receive job alerts and updates there."
+                )
+                self._append_chat(user_id, "assistant", _tg_reply)
+                return self._finalize(
+                    {
+                        "type": "preferences_updated",
+                        "message": _tg_reply,
+                        "updated": {"telegram_username": _tg_handle},
+                    },
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
 
         # ── Lifecycle list follow-up: "list them" / "show them" / "اذكرهم" ───────
         # Must run before the affirmative resolver so short list-commands don't
@@ -1957,6 +2249,17 @@ class RicoChatAPI:
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
+
+        # ── Acknowledgement early check (must be before next-step followup fast path) ──
+        # Phrases like "ok", "great", "thanks" are also in _FOLLOWUP_NEXT_STEP_PHRASES
+        # and _AFFIRMATIVE_PHRASES. If no pending intent was resolved above, treat
+        # them as acknowledgements and return a short warm reply immediately.
+        _msg_lower = message.strip().lower()
+        if _msg_lower in _ACKNOWLEDGEMENT_REPLIES:
+            ack_text = _acknowledgement_reply(message)
+            response = {"type": "acknowledgement", "message": ack_text}
+            self._append_chat(user_id, "assistant", ack_text)
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # ── Deterministic follow-up phrases (must be before role classification) ──
         if text in self._FOLLOWUP_KEEP_ALL_PHRASES:
@@ -2044,12 +2347,26 @@ class RicoChatAPI:
             self._append_chat(user_id, "assistant", self._JOB_SEARCH_OPTIONS)
             return self._finalize(self._JOB_SEARCH_OPTIONS, self.SOURCE_KEYWORD, profile=profile)
 
-        # Smalltalk
+        # Acknowledgement — short warm reply; never restarts or greets
+        if legacy_intent == "acknowledgement":
+            ack_text = _acknowledgement_reply(message)
+            response = {"type": "acknowledgement", "message": ack_text}
+            self._append_chat(user_id, "assistant", ack_text)
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+
+        # Smalltalk (greetings: hi/hello/hey/bye)
+        # If the user is mid-conversation, return a brief continuation instead of
+        # the cold-start greeting — avoids the "Hi! I am Rico…" restart after a
+        # profile/details response.
         if legacy_intent == "smalltalk":
-            response = {
-                "type": "clarification",
-                "message": "Hi! I am Rico, your job search assistant. Tell me a role to search, upload your CV, or say 'help' for options.",
-            }
+            recent = self._get_recent_messages(user_id, limit=4)
+            has_active_conversation = len(recent) >= 2
+            if has_active_conversation:
+                followup = "What would you like to do next? I can search jobs, review applications, or answer questions about your profile."
+                response = {"type": "clarification", "message": followup}
+            else:
+                followup = "Hi! I am Rico, your job search assistant. Tell me a role to search, upload your CV, or say 'help' for options."
+                response = {"type": "clarification", "message": followup}
             self._append_chat(user_id, "assistant", response["message"])
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
@@ -3048,6 +3365,27 @@ class RicoChatAPI:
             upsert_matches(user_id, formatted)
         except Exception:
             logger.debug("rico_chat: failed to persist search matches to DB user=%s", user_id)
+
+        # Fire per-user Telegram notification for the top match (best-effort).
+        # Opt-in check and rate guard happen inside send_user_notification.
+        try:
+            if formatted:
+                from src.services.telegram_notifications import send_user_notification
+                top = formatted[0]
+                role = search_role or top.get("title", "your search")
+                n = len(formatted)
+                msg = (
+                    f"🔔 <b>Rico found {n} new job match{'es' if n != 1 else ''}</b> for <b>{role}</b>.\n\n"
+                    f"Open the Rico app to review and apply."
+                )
+                send_user_notification(
+                    user_id=user_id,
+                    message=msg,
+                    alert_type="job_alert",
+                    job=None,
+                )
+        except Exception:
+            logger.debug("rico_chat: failed to send Telegram job-alert user=%s", user_id)
 
     @staticmethod
     def _get_status_rank(status: str) -> int:

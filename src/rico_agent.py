@@ -22,6 +22,7 @@ class RicoAgentSettings:
     can_prepare_interview_notes: bool = True
     can_send_follow_up_reminders: bool = True
     can_create_weekly_report: bool = True
+    can_receive_telegram_notifications: bool = False
     communication_style: str = "professional"
     match_strictness: str = "balanced"
 
@@ -33,6 +34,8 @@ class RicoProfile:
     email: Optional[str] = None
     phone: Optional[str] = None
     telegram_username: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
+    telegram_notifications_enabled: bool = True
     current_location: Optional[str] = None
     target_roles: List[str] = field(default_factory=list)
     years_experience: Optional[float] = None

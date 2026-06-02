@@ -37,7 +37,8 @@ _SETTINGS_FIELDS = {f.name for f in fields(RicoAgentSettings)}
 
 # Fields that belong in the main user table (vs profile JSONB)
 _USER_TABLE_FIELDS = {
-    "external_user_id", "name", "email", "phone", "telegram_username"
+    "external_user_id", "name", "email", "phone",
+    "telegram_username", "telegram_chat_id", "telegram_notifications_enabled",
 }
 
 # Fields that go into profile JSONB
@@ -53,6 +54,7 @@ _BOOLEAN_SETTINGS = {
     "can_prepare_interview_notes",
     "can_send_follow_up_reminders",
     "can_create_weekly_report",
+    "can_receive_telegram_notifications",
 }
 
 
@@ -104,6 +106,7 @@ def _bundle_to_profile(bundle: dict[str, Any]) -> RicoProfile:
         can_prepare_interview_notes=sdata.get("can_prepare_interview_notes", True),
         can_send_follow_up_reminders=sdata.get("can_send_follow_up_reminders", True),
         can_create_weekly_report=sdata.get("can_create_weekly_report", True),
+        can_receive_telegram_notifications=sdata.get("can_receive_telegram_notifications", False),
     )
 
     # Build profile with proper type conversion
@@ -113,6 +116,7 @@ def _bundle_to_profile(bundle: dict[str, Any]) -> RicoProfile:
         email=bundle.get("email"),
         phone=bundle.get("phone"),
         telegram_username=bundle.get("telegram_username"),
+        telegram_chat_id=bundle.get("telegram_chat_id"),
         target_roles=pdata.get("target_roles") or [],
         preferred_cities=pdata.get("preferred_cities") or [],
         salary_expectation_aed=pdata.get("salary_expectation_aed"),
@@ -159,13 +163,17 @@ def get_profile(user_id: str) -> RicoProfile | None:
     if not profile:
         profile = _memory().load_profile(user_id)
 
-    # One-time cleanup: normalize broad target_roles if profile has CV evidence
-    # Also re-normalize if normalization version has changed
+    # One-time version migration: normalize broad target_roles when the stored
+    # normalization version is older than the current one. Triggered only by a
+    # version bump — NOT on every read — so explicit user edits are respected.
     if profile and profile.target_roles:
-        from src.role_normalization import should_normalize_profile, normalize_target_roles, NORMALIZATION_VERSION
+        from src.role_normalization import normalize_target_roles, NORMALIZATION_VERSION
 
-        stored_version = getattr(profile, "normalization_version", 1)
-        needs_normalization = should_normalize_profile(profile.target_roles, profile.skills) or stored_version < NORMALIZATION_VERSION
+        # `getattr` default only applies when the attribute is absent; a DB
+        # profile with a NULL normalization_version yields None, so coalesce to
+        # 1 to avoid "None < int" when comparing against the current version.
+        stored_version = getattr(profile, "normalization_version", 1) or 1
+        needs_normalization = stored_version < NORMALIZATION_VERSION
 
         if needs_normalization:
             normalized = normalize_target_roles(
@@ -229,13 +237,17 @@ def upsert_profile(user_id: str, updates: dict[str, Any]) -> RicoProfile:
                 return profile
 
             # 1. Upsert user record
-            user_payload = {
+            user_payload: dict = {
                 "external_user_id": user_id,
                 "name": filtered_updates.get("name"),
                 "email": filtered_updates.get("email"),
                 "phone": filtered_updates.get("phone"),
-                "telegram_username": filtered_updates.get("telegram_username"),
+                "telegram_username": filtered_updates.get("telegram_username") or updates.get("telegram_username"),
+                "telegram_chat_id": filtered_updates.get("telegram_chat_id") or updates.get("telegram_chat_id"),
             }
+            # telegram_notifications_enabled is boolean — keep explicit False
+            if "telegram_notifications_enabled" in filtered_updates:
+                user_payload["telegram_notifications_enabled"] = filtered_updates["telegram_notifications_enabled"]
             user_payload = {k: v for k, v in user_payload.items() if v is not None}
             logger.info("profile_repo.upsert_profile: user_id=%s user_payload=%s", user_id, user_payload)
             user_row = db.upsert_user(user_payload, conn=conn)
@@ -800,6 +812,46 @@ def find_identity_candidates(signal: IdentitySignal) -> list[Any]:
             candidates_by_id[p.user_id] = p
 
     return list(candidates_by_id.values())
+
+
+# ============================================================================
+# Telegram alert roster
+# ============================================================================
+
+def get_users_with_telegram_alerts() -> list[dict[str, Any]]:
+    """Return all users who have opted in to Telegram job alerts.
+
+    A user is considered opted-in when they have a numeric telegram_chat_id
+    stored — that ID is captured the first time they message the Rico bot.
+    Returns a list of plain dicts with keys: external_user_id, name,
+    telegram_chat_id, telegram_username.  Returns [] on DB unavailability.
+    """
+    db = _db()
+    if not db:
+        return []
+    try:
+        conn = db.connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT external_user_id,
+                           name,
+                           telegram_chat_id,
+                           telegram_username
+                      FROM rico_users
+                     WHERE telegram_chat_id IS NOT NULL
+                       AND telegram_chat_id <> ''
+                     ORDER BY updated_at DESC
+                    """
+                )
+                cols = [d[0] for d in cur.description]
+                return [dict(zip(cols, row)) for row in cur.fetchall()]
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("profile_repo: get_users_with_telegram_alerts failed")
+        return []
 
 
 # ============================================================================

@@ -210,24 +210,18 @@ class TestRicoProfileUpdateRouteExists:
 
         assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
         body = r.json()
-        assert body == {
-            "status": "ok",
-            "updated_fields": [
-                "target_roles",
-                "preferred_cities",
-                "years_experience",
-                "current_role",
-                "skills",
-            ],
-        }
+        assert body["status"] == "ok"
+        assert set(["target_roles", "preferred_cities", "years_experience", "current_role", "skills"]).issubset(
+            set(body["updated_fields"])
+        )
+        assert "normalization_version" in body["updated_fields"]
         assert captured["user_id"] == "alice@rico.ai"
-        assert captured["updates"] == {
-            "target_roles": ["HSE Manager"],
-            "preferred_cities": ["Dubai", "Abu Dhabi"],
-            "years_experience": 10.0,
-            "current_role": "HSE Lead",
-            "skills": ["HSE", "NEBOSH"],
-        }
+        assert captured["updates"]["target_roles"] == ["HSE Manager"]
+        assert captured["updates"]["preferred_cities"] == ["Dubai", "Abu Dhabi"]
+        assert captured["updates"]["years_experience"] == 10.0
+        assert captured["updates"]["current_role"] == "HSE Lead"
+        assert captured["updates"]["skills"] == ["HSE", "NEBOSH"]
+        assert "normalization_version" in captured["updates"]
 
     def test_profile_patch_route_accepts_name(self, auth_client):
         captured = {}

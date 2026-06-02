@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS rico_users (
     phone TEXT,
     telegram_username TEXT,
     telegram_chat_id TEXT,
+    telegram_notifications_enabled BOOLEAN DEFAULT TRUE,
     source TEXT DEFAULT 'rico',
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
@@ -134,6 +135,18 @@ CREATE TABLE IF NOT EXISTS rico_webhook_events (
 
 CREATE INDEX IF NOT EXISTS idx_rico_users_email ON rico_users(email);
 CREATE INDEX IF NOT EXISTS idx_rico_users_telegram ON rico_users(telegram_username);
+CREATE INDEX IF NOT EXISTS idx_rico_users_chat_id ON rico_users(telegram_chat_id);
+
+-- telegram_alert_log: duplicate guard + rate limiting for job-alert sends
+CREATE TABLE IF NOT EXISTS telegram_alert_log (
+    id          SERIAL      PRIMARY KEY,
+    user_id     TEXT        NOT NULL,
+    job_key     TEXT        NOT NULL,
+    alert_type  TEXT        NOT NULL DEFAULT 'job_match',
+    sent_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, job_key, alert_type)
+);
+CREATE INDEX IF NOT EXISTS idx_tal_user_sent ON telegram_alert_log (user_id, sent_at DESC);
 CREATE INDEX IF NOT EXISTS idx_rico_chat_user_created ON rico_chat_history(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_rico_signals_user_created ON rico_learning_signals(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_rico_recommendations_user_status ON rico_job_recommendations(user_id, status);
@@ -272,16 +285,22 @@ class RicoDB:
 
         try:
             with conn.cursor() as cur:
+                notif_enabled = payload.get("telegram_notifications_enabled")
                 cur.execute(
                     """
-                    INSERT INTO rico_users (external_user_id, name, email, phone, telegram_username, telegram_chat_id, source)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO rico_users (external_user_id, name, email, phone, telegram_username, telegram_chat_id, telegram_notifications_enabled, source)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (external_user_id) DO UPDATE SET
                         name = COALESCE(EXCLUDED.name, rico_users.name),
                         email = COALESCE(EXCLUDED.email, rico_users.email),
                         phone = COALESCE(EXCLUDED.phone, rico_users.phone),
                         telegram_username = COALESCE(EXCLUDED.telegram_username, rico_users.telegram_username),
                         telegram_chat_id = COALESCE(EXCLUDED.telegram_chat_id, rico_users.telegram_chat_id),
+                        telegram_notifications_enabled = CASE
+                            WHEN EXCLUDED.telegram_notifications_enabled IS NOT NULL
+                            THEN EXCLUDED.telegram_notifications_enabled
+                            ELSE rico_users.telegram_notifications_enabled
+                        END,
                         updated_at = now()
                     RETURNING *
                     """,
@@ -292,6 +311,7 @@ class RicoDB:
                         payload.get("phone"),
                         payload.get("telegram_username"),
                         payload.get("telegram_chat_id"),
+                        notif_enabled,
                         payload.get("source", "rico"),
                     ),
                 )
@@ -570,6 +590,84 @@ class RicoDB:
             "rejected": by_status.get("rejected", 0),
             "offer": by_status.get("offer", 0),
         }
+
+
+    def get_users_with_active_telegram_notifications(self) -> list[dict]:
+        """Return users who have a chat_id bound and notifications enabled."""
+        conn = self.connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT external_user_id, telegram_chat_id, telegram_username
+                    FROM rico_users
+                    WHERE telegram_chat_id IS NOT NULL
+                      AND (telegram_notifications_enabled IS NULL OR telegram_notifications_enabled = TRUE)
+                    """,
+                )
+                return [dict(row) for row in cur.fetchall()]
+        except Exception:
+            return []
+        finally:
+            conn.close()
+
+    def log_telegram_alert(self, user_id: str, job_key: str, alert_type: str = "job_match") -> bool:
+        """Record that this alert was sent. Returns True if newly inserted (not duplicate)."""
+        conn = self.connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO telegram_alert_log (user_id, job_key, alert_type)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (user_id, job_key, alert_type) DO NOTHING
+                    """,
+                    (user_id, job_key, alert_type),
+                )
+                inserted = cur.rowcount > 0
+            conn.commit()
+            return inserted
+        except Exception:
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
+
+    def was_alert_sent(self, user_id: str, job_key: str, alert_type: str = "job_match") -> bool:
+        """Check if this (user, job, type) combination was already sent."""
+        conn = self.connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT 1 FROM telegram_alert_log WHERE user_id=%s AND job_key=%s AND alert_type=%s",
+                    (user_id, job_key, alert_type),
+                )
+                return cur.fetchone() is not None
+        except Exception:
+            return False
+        finally:
+            conn.close()
+
+    def count_alerts_today(self, user_id: str, alert_type: str = "job_match") -> int:
+        """Count how many alerts of this type were sent today for rate-limiting."""
+        conn = self.connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT COUNT(*) AS cnt FROM telegram_alert_log
+                    WHERE user_id = %s
+                      AND alert_type = %s
+                      AND sent_at >= NOW() - INTERVAL '24 hours'
+                    """,
+                    (user_id, alert_type),
+                )
+                row = cur.fetchone()
+                return row["cnt"] if row else 0
+        except Exception:
+            return 0
+        finally:
+            conn.close()
 
 
 def init_rico_db() -> bool:
