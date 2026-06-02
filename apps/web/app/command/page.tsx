@@ -388,7 +388,9 @@ export default function CommandPage() {
         const behavior = prefersReducedMotion() ? "auto" : "smooth";
         if (typeof window !== "undefined") {
             window.requestAnimationFrame(() => {
-                bottomRef.current?.scrollIntoView({ behavior });
+                window.requestAnimationFrame(() => {
+                    bottomRef.current?.scrollIntoView({ behavior });
+                });
             });
             return;
         }
