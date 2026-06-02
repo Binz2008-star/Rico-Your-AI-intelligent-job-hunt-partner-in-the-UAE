@@ -1231,9 +1231,12 @@ async def rico_upload_cv(
 
         # Build preview data with trust controls - separate detected from existing
         detected_skills = parsed.get("skills", []) if parsed.get("skills") else []
+        # Security: CV-extracted email is profile data, not identity data.
+        # Never overwrite rico_users.email from CV content (prevents hijack via referee/old employer email).
+        cv_extracted_email = parsed.get("emails", [None])[0] if parsed.get("emails") else None
         preview = {
             "name": parsed.get("name"),
-            "email": parsed.get("emails", [None])[0] if parsed.get("emails") else None,
+            "cv_extracted_email": cv_extracted_email,
             "phone": parsed.get("phones", [None])[0] if parsed.get("phones") else None,
             "current_role": parsed.get("current_role"),
             "experience_years": parsed.get("years_experience_hint"),
@@ -1316,9 +1319,24 @@ async def confirm_cv_profile(
 
         # Build profile updates from preview - use skills_detected if available, fallback to skills
         preview_skills = payload.preview.get("skills_detected") or payload.preview.get("skills", [])
+
+        # SECURITY: Never pass CV-extracted email to user table (prevents identity hijack).
+        # CV email is stored in profile JSONB only as cv_extracted_email.
+        cv_email = payload.preview.get("cv_extracted_email")
+
+        # Log potential identity mismatch for security audit (but don't block - may be referee email)
+        if cv_email:
+            logger.info(
+                "cv_profile_confirm_email_extracted user=%s cv_email=%s request_ref=%s",
+                resolved_user_id,
+                cv_email,
+                request_ref,
+            )
+
         profile_updates = {
             "name": payload.preview.get("name"),
-            "email": payload.preview.get("email"),
+            # "email" deliberately excluded - preserve authenticated user identity
+            "cv_extracted_email": cv_email,  # Store in profile JSONB only
             "phone": payload.preview.get("phone"),
             "current_role": payload.preview.get("current_role"),
             "skills": preview_skills,
