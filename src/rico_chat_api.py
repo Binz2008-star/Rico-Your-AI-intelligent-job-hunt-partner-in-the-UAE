@@ -3031,6 +3031,7 @@ class RicoChatAPI:
                     "title": m.get("title", ""),
                     "company": m.get("company", ""),
                     "location": m.get("location", ""),
+                    "salary": m.get("salary") or m.get("salary_string") or "",
                     "apply_url": m.get("apply_url", ""),
                     "source_url": m.get("source_url", ""),
                     "link": m.get("apply_url", ""),
@@ -3038,6 +3039,8 @@ class RicoChatAPI:
                 }
                 for m in formatted
             ]
+            # Mark the match set as freshly shown (turn 0)
+            ctx["active_match_set_turn"] = 0
             self._store_recent_context(user_id, ctx)
         except Exception:
             logger.debug("rico_chat: failed to store search matches context user=%s", user_id)
@@ -3433,14 +3436,329 @@ class RicoChatAPI:
             result.append(enriched)
         return result
 
+    # ── Active application context helpers ────────────────────────────────────
+
+    # Number of assistant turns after which a match set is considered "stale"
+    # and must be re-displayed before accepting a numeric choice.
+    _MATCH_VISIBILITY_TURNS = 3
+
+    # Regex: plain digit (1–9) or ordinal (1st, 2nd, 3rd) as the entire message
+    _NUMERIC_CHOICE_RE = re.compile(
+        r"^\s*(?P<n>[1-9])(?:st|nd|rd|th)?\s*$", re.IGNORECASE
+    )
+
+    @staticmethod
+    def _is_numeric_choice(message: str) -> bool:
+        """True when the message is a bare numeric job selection like '1', '2nd'."""
+        return bool(RicoChatAPI._NUMERIC_CHOICE_RE.match(message.strip()))
+
+    def _active_match_set_is_visible(self, user_id: str) -> bool:
+        """Return True when the current match set was shown within the last few turns.
+
+        'Visible' means the assistant message that listed the numbered jobs is still
+        within _MATCH_VISIBILITY_TURNS assistant messages from the top of the thread.
+        """
+        try:
+            ctx = self._get_recent_context(user_id)
+            if not isinstance(ctx, dict):
+                return False
+            match_turn = ctx.get("active_match_set_turn")
+            if not isinstance(match_turn, int):
+                return False
+            return match_turn < self._MATCH_VISIBILITY_TURNS
+        except Exception:
+            return False
+
+    def _increment_match_set_turn(self, user_id: str) -> None:
+        """Bump the staleness counter whenever an assistant message is appended."""
+        try:
+            ctx = self._get_recent_context(user_id)
+            if not isinstance(ctx, dict):
+                return
+            current = ctx.get("active_match_set_turn")
+            if current is not None and isinstance(current, int):
+                ctx["active_match_set_turn"] = current + 1
+                self._store_recent_context(user_id, ctx)
+        except Exception:
+            pass
+
+    def _rehydrate_match_set(self, user_id: str) -> dict[str, Any] | None:
+        """Re-display the current match set so the user can make a numbered choice.
+
+        Returns a job_matches response dict, or None if no match set is cached.
+        """
+        ctx = self._get_recent_context(user_id)
+        matches = ctx.get("recent_search_matches") or []
+        if not matches:
+            return None
+        lines: list[str] = []
+        for i, m in enumerate(matches, 1):
+            title = m.get("title", "")
+            company = m.get("company", "")
+            loc = m.get("location", "")
+            salary = m.get("salary") or m.get("salary_string") or ""
+            link = m.get("apply_url") or m.get("source_url") or ""
+            parts = [f"**{title}** at **{company}**"]
+            if loc:
+                parts.append(loc)
+            if salary:
+                parts.append(salary)
+            status = m.get("verification_status", "")
+            status_badge = " ✓" if status == "live" else (" 🔗" if status == "lead_needs_verification" else "")
+            link_part = f" — [Apply]({link}){status_badge}" if link else status_badge
+            lines.append(f"{i}.{link_part} {' · '.join(parts)}")
+        role_hint = ctx.get("recent_search_role") or "your last search"
+        msg = (
+            f"Here are the jobs from **{role_hint}** — please pick a number:\n\n"
+            + "\n".join(lines)
+        )
+        # Reset staleness counter since we just re-displayed the set
+        ctx["active_match_set_turn"] = 0
+        self._store_recent_context(user_id, ctx)
+        return {"type": "job_matches", "message": msg, "jobs": matches}
+
+    def _resolve_numeric_choice(
+        self, user_id: str, message: str, profile: Any
+    ) -> dict[str, Any] | None:
+        """Resolve a bare numeric message ('1', '2', …) to the selected job.
+
+        If the match set is no longer visible (stale), re-display it first.
+        Returns a structured response or None if no match set exists.
+        """
+        m = self._NUMERIC_CHOICE_RE.match(message.strip())
+        if not m:
+            return None
+        n = int(m.group("n"))
+
+        ctx = self._get_recent_context(user_id)
+        matches = ctx.get("recent_search_matches") or []
+        if not matches:
+            return None  # No active match set — fall through to normal routing
+
+        # Stale match set — re-show first, don't accept the choice yet
+        if not self._active_match_set_is_visible(user_id):
+            rehydrated = self._rehydrate_match_set(user_id)
+            if rehydrated:
+                rehydrated["message"] = (
+                    "I listed those jobs a few messages ago — here they are again so you can pick:\n\n"
+                    + rehydrated["message"].split("\n\n", 1)[-1]
+                )
+                return rehydrated
+
+        if n < 1 or n > len(matches):
+            return {
+                "type": "clarification",
+                "message": (
+                    f"I only have {len(matches)} job{'s' if len(matches) != 1 else ''} listed. "
+                    f"Please pick a number between 1 and {len(matches)}."
+                ),
+            }
+
+        job = matches[n - 1]
+        title = job.get("title", "Unknown")
+        company = job.get("company", "Unknown")
+        loc = job.get("location", "")
+        salary = job.get("salary") or job.get("salary_string") or ""
+        apply_url = job.get("apply_url") or job.get("source_url") or ""
+
+        # Update active application context
+        active_ctx: dict[str, Any] = {
+            "selected_job": job,
+            "selected_match_number": n,
+            "title": title,
+            "company": company,
+            "location": loc,
+            "salary": salary,
+            "apply_url": apply_url,
+            "approval_to_prepare": False,
+            "favorite": True,  # default; user can override
+            "next_step": "confirm_or_prepare",
+        }
+        ctx["active_application_context"] = active_ctx
+        # Reset turn counter — this selection is the new anchor
+        ctx["active_match_set_turn"] = 0
+        self._store_recent_context(user_id, ctx)
+
+        # Build a confirmation prompt with job details
+        loc_line = f"\n📍 {loc}" if loc else ""
+        salary_line = f"\n💰 {salary}" if salary else ""
+        apply_line = f"\n🔗 [Apply link]({apply_url})" if apply_url else ""
+
+        msg = (
+            f"You selected **#{n}: {title}** at **{company}**.{loc_line}{salary_line}{apply_line}\n\n"
+            "What would you like to do?\n"
+            "• **Prepare application** — I'll draft a tailored cover letter\n"
+            "• **Open apply link** — get the direct URL\n"
+            "• **Save** — bookmark for later\n"
+            "• **Skip** — remove from active set"
+        )
+        return {
+            "type": "job_selection",
+            "message": msg,
+            "selected_job": job,
+            "selected_match_number": n,
+            "apply_url": apply_url,
+            "options": [
+                {"action": "prepare_application", "label": "Prepare application"},
+                {"action": "open_apply_link", "label": f"Open apply link — {title} at {company}",
+                 "message": f"open apply link for {title} at {company}"},
+                {"action": "save_job", "label": "Save"},
+                {"action": "skip_job", "label": "Skip"},
+            ],
+        }
+
+    @staticmethod
+    def _parse_job_constraints(message: str) -> dict[str, Any]:
+        """Parse user constraints from a message about the active job.
+
+        Handles patterns like:
+          "go ahead but don't set it as favorite"
+          "don't favorite it"
+          "proceed, no favorites"
+          "prepare but don't save as favorite"
+        """
+        text = message.lower()
+        constraints: dict[str, Any] = {}
+
+        no_favorite_patterns = [
+            r"don.?t.*(set|mark|save|add).*(as\s+)?fav(o[u]?rite)?",
+            r"no\s+fav(o[u]?rite)?",
+            r"without\s+(fav(o[u]?rite)|saving)",
+            r"don.?t\s+fav(o[u]?rite)?",
+            r"not\s+(as\s+)?fav(o[u]?rite)?",
+        ]
+        if any(re.search(p, text) for p in no_favorite_patterns):
+            constraints["favorite"] = False
+
+        # Explicit approval signal: "go ahead", "proceed", "yes", "do it"
+        approval_patterns = [
+            r"\b(go ahead|proceed|yes|do it|prepare|submit)\b",
+        ]
+        if any(re.search(p, text) for p in approval_patterns):
+            constraints["approval_to_prepare"] = True
+
+        return constraints
+
+    def _apply_active_job_constraints(
+        self, user_id: str, message: str
+    ) -> dict[str, Any] | None:
+        """If message updates constraints on the active job context, apply them.
+
+        Returns an acknowledgement response or None if no active context to update.
+        """
+        ctx = self._get_recent_context(user_id)
+        active = ctx.get("active_application_context")
+        if not isinstance(active, dict):
+            return None
+
+        constraints = self._parse_job_constraints(message)
+        if not constraints:
+            return None
+
+        active.update(constraints)
+        ctx["active_application_context"] = active
+        self._store_recent_context(user_id, ctx)
+
+        title = active.get("title", "this role")
+        company = active.get("company", "")
+        company_str = f" at {company}" if company else ""
+
+        ack_parts: list[str] = []
+        if constraints.get("favorite") is False:
+            ack_parts.append("won't set it as a favorite")
+        if constraints.get("approval_to_prepare"):
+            ack_parts.append("will prepare the application")
+
+        if not ack_parts:
+            return None
+
+        ack = " and ".join(ack_parts).capitalize()
+        next_step = active.get("next_step", "")
+
+        msg = f"Got it — {ack} for **{title}**{company_str}."
+        if constraints.get("approval_to_prepare") and not active.get("favorite", True) is False:
+            msg += "\n\nNote: application submission still requires your final confirmation."
+        elif constraints.get("approval_to_prepare"):
+            msg += (
+                "\n\nReady to prepare. Note: application submission still requires "
+                "your final confirmation — I'll show you the draft first."
+            )
+
+        return {
+            "type": "job_constraint_update",
+            "message": msg,
+            "active_application_context": active,
+        }
+
     def _build_recent_context_message(self, ctx: dict[str, Any]) -> str:
+        # If there is an active job selection in progress, lead with that.
+        active = ctx.get("active_application_context")
+        if isinstance(active, dict) and active.get("title"):
+            title = active.get("title", "Unknown")
+            company = active.get("company", "Unknown")
+            loc = active.get("location", "")
+            salary = active.get("salary", "")
+            next_step = active.get("next_step", "")
+            fav = active.get("favorite", True)
+            approval = active.get("approval_to_prepare", False)
+
+            parts = [f"We were looking at **{title}** at **{company}**"]
+            if loc:
+                parts.append(f"📍 {loc}")
+            if salary:
+                parts.append(f"💰 {salary}")
+            summary = ". ".join(parts) + "."
+
+            state_parts: list[str] = []
+            if approval:
+                state_parts.append("You approved preparing the application")
+            if fav is False:
+                state_parts.append("you asked not to set it as a favorite")
+            if state_parts:
+                summary += " " + "; ".join(state_parts) + "."
+
+            if next_step == "confirm_or_prepare":
+                summary += "\n\nNext: choose **Prepare application**, **Open apply link**, **Save**, or **Skip**."
+            elif next_step:
+                summary += f"\n\nNext step: {next_step}."
+
+            return summary
+
+        # Fallback: standard application tracking summary
         app = ctx.get("recent_application") if isinstance(ctx.get("recent_application"), dict) else {}
         job = app.get("title") or ctx.get("recent_job") or "Unknown"
         company = app.get("company") or ctx.get("recent_company") or "Unknown"
         status = app.get("status_label") or ctx.get("recent_status_label") or self._application_status_label(ctx.get("recent_status"))
-        route = app.get("route") or ctx.get("recent_route") or "/command"
         action = app.get("last_action") or ctx.get("recent_action") or "tracked"
         updated_at = app.get("updated_at")
+
+        time_hint = ""
+        if updated_at:
+            try:
+                dt = datetime.fromisoformat(str(updated_at).replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                days = (datetime.now(timezone.utc) - dt).days
+                if days == 0:
+                    time_hint = " Updated today."
+                elif days > 0:
+                    time_hint = f" Updated {days} day{'s' if days != 1 else ''} ago."
+            except (TypeError, ValueError):
+                pass
+
+        next_step = "Next step: update the status when you get a reply."
+        if (app.get("status") or ctx.get("recent_status")) == "applied":
+            next_step = "Next step: follow up if there is no response after 7 days."
+        elif (app.get("status") or ctx.get("recent_status")) == "saved":
+            next_step = "Next step: review the role and mark it as applied when you submit."
+
+        return (
+            f"Your latest application context is **{job}** at **{company}**. "
+            f"It is currently **{status}** from the last action: {action}.{time_hint} "
+            f"{next_step}"
+        )
+
+
 
         time_hint = ""
         if updated_at:
