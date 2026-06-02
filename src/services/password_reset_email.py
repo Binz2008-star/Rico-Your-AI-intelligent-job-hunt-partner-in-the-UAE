@@ -42,13 +42,10 @@ def send_password_reset_email(user_email: str, token: str) -> bool:
     try:
         ok = send_email(to_email=user_email, subject=subject, body=body)
         if not ok:
-            logger.warning(
-                "password_reset_email_delivery_failed recipient=%s (email delivery not configured or failed)",
-                user_email,
-            )
+            logger.warning("password_reset_email_delivery_failed")
         else:
-            logger.info("password_reset_email_sent recipient=%s", user_email)
+            logger.info("password_reset_email_sent")
         return ok
     except Exception:
-        logger.exception("password_reset_email_exception recipient=%s", user_email)
+        logger.exception("password_reset_email_exception")
         return False

@@ -370,7 +370,7 @@ def forgot_password(request: Request, req: ForgotPasswordRequest) -> ForgotPassw
     from src.services.password_reset_email import send_password_reset_email
     email_sent = send_password_reset_email(email, token)
     if not email_sent:
-        logger.warning("password_reset_email_failed email=%r", email)
+        logger.warning("password_reset_email_failed")
         # Still return generic success to prevent enumeration attacks
 
     return _generic
