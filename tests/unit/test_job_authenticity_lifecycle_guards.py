@@ -180,14 +180,17 @@ class TestBuildRoleSearchMessage:
             {"title": "no url"},
         ]
         msg = self._msg(matches)
-        assert "live match" in msg
-        assert "lead" in msg
-        assert "need verification" in msg
+        assert "live" in msg.lower()
+        assert "verification" in msg.lower() or "lead" in msg.lower()
 
     def test_no_matches_generic_message(self):
         msg = self._msg([])
         # Honest no-match copy (no false "keep scanning" promise).
-        assert "did not find" in msg or "No live matches found" in msg
+        assert (
+            "did not find" in msg
+            or "No live matches" in msg
+            or "No strong" in msg
+        )
 
 
 # ---------------------------------------------------------------------------

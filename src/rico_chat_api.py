@@ -1694,7 +1694,12 @@ class RicoChatAPI:
         return RicoChatAPI._search_jsearch_meta(role).items
 
     def _target_role_search_response(
-        self, user_id: str, role: str, profile: Any, from_saved_profile: bool = False
+        self,
+        user_id: str,
+        role: str,
+        profile: Any,
+        from_saved_profile: bool = False,
+        language: str | None = None,
     ) -> dict[str, Any]:
         """Handle target role search with role intelligence integration."""
         try:
@@ -1817,6 +1822,7 @@ class RicoChatAPI:
         message = self._build_role_search_message(
             normalized_role, city_text, basis_text, top_matches, role_intelligence_data,
             from_saved_profile=from_saved_profile,
+            language=language,
         )
 
         response = {
@@ -1899,12 +1905,19 @@ class RicoChatAPI:
         top_matches: list[Any],
         role_intelligence_data: dict[str, Any] | None,
         from_saved_profile: bool = False,
+        language: str | None = None,
     ) -> str:
-        """Build message for role search response."""
+        """Build message for role search response. Arabic-bilingual when language='ar'."""
+        is_ar = language == "ar"
+
         if from_saved_profile:
-            prefix = f"Searching based on your saved target role: {normalized_role}. "
+            if is_ar:
+                prefix = f"بحثت بناءً على دورك المحفوظ: {normalized_role}. "
+            else:
+                prefix = f"Searching based on your saved target role: {normalized_role}. "
         else:
             prefix = ""
+
         if top_matches:
             def _has_url(m: Any) -> bool:
                 return bool(
@@ -1912,30 +1925,59 @@ class RicoChatAPI:
                 )
             live_count = sum(1 for m in top_matches if _has_url(m))
             lead_count = len(top_matches) - live_count
-            if live_count and lead_count:
+            total = len(top_matches)
+            if is_ar:
+                if live_count and lead_count:
+                    base_message = (
+                        f"وجدت **{total}** وظيفة لـ {normalized_role}{city_text} — "
+                        f"{live_count} نتيجة مباشرة و{lead_count} تحتاج تحقق. "
+                        f"/ Found {total} results ({live_count} live, {lead_count} needs verification)."
+                    )
+                elif live_count:
+                    base_message = (
+                        f"وجدت **{live_count}** وظيفة مباشرة لـ {normalized_role}{city_text}. "
+                        f"/ Found {live_count} live match(es)."
+                    )
+                else:
+                    base_message = (
+                        f"وجدت **{lead_count}** نتيجة لـ {normalized_role} تحتاج تحقق. "
+                        f"/ Found {lead_count} lead(s) needing verification."
+                    )
+            else:
+                if live_count and lead_count:
+                    base_message = (
+                        f"Found **{total}** results for {normalized_role}{city_text}{basis_text} — "
+                        f"{live_count} live and {lead_count} needing verification."
+                    )
+                elif live_count:
+                    base_message = (
+                        f"Found **{live_count}** live match(es) for {normalized_role}{city_text}{basis_text}."
+                    )
+                else:
+                    base_message = (
+                        f"Found **{lead_count}** lead(s) for {normalized_role}{city_text}{basis_text} — "
+                        "verify apply links before submitting."
+                    )
+        else:
+            if is_ar:
                 base_message = (
-                    f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
-                    f"I found {live_count} current live match(es) and {lead_count} lead(s) that need verification."
-                )
-            elif live_count:
-                base_message = (
-                    f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
-                    f"I found {live_count} current live match(es)."
+                    f"لم أجد وظائف مباشرة لـ {normalized_role} الآن. "
+                    f"حفظت هذا الدور كهدف — يمكنك إعادة البحث لاحقاً. "
+                    f"/ No live matches for {normalized_role} right now. Saved as target role."
                 )
             else:
                 base_message = (
-                    f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
-                    f"I found {lead_count} lead(s) that need verification."
+                    f"No live matches for **{normalized_role}**{city_text} right now. "
+                    "I've saved this as your target role — run the search again anytime."
                 )
-        else:
-            base_message = f"Got it — I will target {normalized_role} roles{city_text}{basis_text}."
 
         if role_intelligence_data and role_intelligence_data.get("fit_score", 1.0) < 0.6:
             adjacent = role_intelligence_data.get("adjacent_roles", [])
             role_names = [r["role"] for r in adjacent[:3]]
-            base_message += f" Your CV is also strong for {', '.join(role_names)} roles. I'll search those too if needed."
-        elif not top_matches:
-            base_message += " No live matches found right now. I've saved this as your target role — you can run this search again anytime."
+            if is_ar:
+                base_message += f" ملفك أيضاً قوي لـ {', '.join(role_names)}."
+            else:
+                base_message += f" Your CV is also strong for {', '.join(role_names)} roles."
 
         return prefix + base_message
 
@@ -2165,6 +2207,8 @@ class RicoChatAPI:
         profile = self._resolve_profile(user_id)
         has_cv = profile.has_cv
         text = self._normalize_followup_phrase(message)
+        # Detect language from message content for bilingual responses.
+        _lang = "ar" if re.search(r"[؀-ۿ]", message) else None
 
         # ── Pending field resolver (must run first) ───────────────────────────
         # When Rico has just asked the user for a specific profile field (e.g.
@@ -2371,7 +2415,7 @@ class RicoChatAPI:
             or any(kw in _msg_for_sub for kw in _ARABIC_SUBSCRIPTION_KEYWORDS)
         ):
             return self._finalize(
-                self._handle_subscription_plans(user_id, profile),
+                self._handle_subscription_plans(user_id, profile, language=_lang),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -2442,7 +2486,7 @@ class RicoChatAPI:
                 }
                 self._append_chat(user_id, "assistant", clarify_response["message"])
                 return self._finalize(clarify_response, self.SOURCE_KEYWORD, profile=profile)
-            sub_response = self._handle_subscription_plans(user_id, profile)
+            sub_response = self._handle_subscription_plans(user_id, profile, language=_lang)
             self._append_chat(user_id, "assistant", sub_response.get("message", ""))
             return self._finalize(sub_response, self.SOURCE_KEYWORD, profile=profile)
 
@@ -2607,7 +2651,9 @@ class RicoChatAPI:
             role = target_roles[0] if target_roles else "your profile"
             return self._finalize(
                 self._target_role_search_response(
-                    user_id, role, profile, from_saved_profile=bool(target_roles)
+                    user_id, role, profile,
+                    from_saved_profile=bool(target_roles),
+                    language=_lang,
                 ),
                 self.SOURCE_KEYWORD,
                 profile=profile,
@@ -2642,7 +2688,9 @@ class RicoChatAPI:
             # Compliance Officer"), honour it and bypass profile target_roles fallback.
             if intent_result.extracted_role:
                 return self._finalize(
-                    self._classified_role_search(user_id, intent_result.extracted_role, profile),
+                    self._classified_role_search(
+                        user_id, intent_result.extracted_role, profile, language=_lang
+                    ),
                     self.SOURCE_KEYWORD,
                     profile=profile,
                 )
@@ -3919,22 +3967,62 @@ class RicoChatAPI:
         sentences.append("Ask me to 'list my applications' any time to see the full list.")
         return " ".join(sentences)
 
-    def _handle_subscription_plans(self, user_id: str, profile: Any) -> dict[str, Any]:
-        """Return Rico subscription plans and pricing."""
-        # Try to get user's current plan from subscription repo
+    def _handle_subscription_plans(
+        self, user_id: str, profile: Any, language: str | None = None
+    ) -> dict[str, Any]:
+        """Return Rico subscription plans and pricing with current-plan awareness."""
         try:
             from src.repositories.subscription_repo import get_subscription
             sub = get_subscription(user_id)
             current_plan = (sub.get("plan") or "free") if sub else "free"
+            expires_at = sub.get("current_period_end") if sub else None
+            is_active = (sub.get("status") in ("active", "trialing")) if sub else False
         except Exception:
             current_plan = "free"
+            expires_at = None
+            is_active = False
 
-        plans_msg = (
-            "Rico has two plans:\n"
-            "• **Pro** — AED 29/month (unlimited AI chats, priority alerts, CV optimization)\n"
-            "• **Premium** — AED 49/month (Pro + interview prep, cover letters, dedicated support)\n\n"
-            "Subscribe at ricohunt.com/subscription or ask me for details."
-        )
+        is_ar = language == "ar"
+
+        # Build current-plan header if user is on a paid plan
+        if current_plan in ("pro", "premium") and is_active:
+            plan_label = current_plan.capitalize()
+            expiry_text = f" (renews {expires_at})" if expires_at else ""
+            if is_ar:
+                current_plan_line = (
+                    f"باقتك الحالية: **{plan_label}**{expiry_text}\n\n"
+                )
+            else:
+                current_plan_line = (
+                    f"Your current plan: **{plan_label}**{expiry_text}\n\n"
+                )
+        else:
+            if is_ar:
+                current_plan_line = "باقتك الحالية: **مجانية** (Free)\n\n"
+            else:
+                current_plan_line = "Your current plan: **Free**\n\n"
+
+        if is_ar:
+            plans_msg = (
+                f"{current_plan_line}"
+                "باقات ريكو:\n"
+                "• **Pro** — 29 درهم / شهر (محادثات AI غير محدودة، تنبيهات أولوية، تحسين السيرة الذاتية)\n"
+                "• **Premium** — 49 درهم / شهر (كل مزايا Pro + تحضير مقابلات، خطابات تغطية، دعم مخصص)\n\n"
+                "اشترك الآن: ricohunt.com/subscription\n"
+                "— — —\n"
+                "Rico plans:\n"
+                "• **Pro** — AED 29/month\n"
+                "• **Premium** — AED 49/month"
+            )
+        else:
+            plans_msg = (
+                f"{current_plan_line}"
+                "Rico has two paid plans:\n"
+                "• **Pro** — AED 29/month (unlimited AI chats, priority alerts, CV optimization)\n"
+                "• **Premium** — AED 49/month (Pro + interview prep, cover letters, dedicated support)\n\n"
+                "Subscribe at ricohunt.com/subscription"
+            )
+
         return {
             "type": "subscription.show_plans",
             "message": plans_msg,
@@ -3943,11 +4031,25 @@ class RicoChatAPI:
                 {"name": "Premium", "price_aed": 49, "period": "monthly"},
             ],
             "current_plan": current_plan,
+            "is_active": is_active,
+            "subscription_url": "https://ricohunt.com/subscription",
             "next_action": "choose_plan_or_continue",
             "options": [
-                {"action": "subscription_pro_details", "label": "Tell me more about Pro", "message": "Tell me more about the Rico Pro plan"},
-                {"action": "subscription_premium_details", "label": "Tell me more about Premium", "message": "Tell me more about the Rico Premium plan"},
-                {"action": "subscription_how_to", "label": "How do I subscribe?", "message": "How do I subscribe to Rico Pro or Premium?"},
+                {
+                    "action": "subscription_pro_details",
+                    "label": "Tell me more about Pro" if not is_ar else "تفاصيل باقة Pro",
+                    "message": "Tell me more about the Rico Pro plan",
+                },
+                {
+                    "action": "subscription_premium_details",
+                    "label": "Tell me more about Premium" if not is_ar else "تفاصيل باقة Premium",
+                    "message": "Tell me more about the Rico Premium plan",
+                },
+                {
+                    "action": "subscription_how_to",
+                    "label": "How do I subscribe?" if not is_ar else "كيف أشترك؟",
+                    "message": "How do I subscribe to Rico Pro or Premium?",
+                },
             ],
         }
 
@@ -4245,7 +4347,9 @@ class RicoChatAPI:
             for r in result.get("roles", [])
         ]
 
-    def _classified_role_search(self, user_id: str, role_text: str, profile: Any) -> dict[str, Any]:
+    def _classified_role_search(
+        self, user_id: str, role_text: str, profile: Any, language: str | None = None
+    ) -> dict[str, Any]:
         """Use 3-tier role classifier before searching.
 
         - profile_relevant → search directly
@@ -4266,7 +4370,7 @@ class RicoChatAPI:
 
         for tr in target_roles:
             if _fuzz.ratio(role_lower, str(tr).lower()) >= 70:
-                return self._target_role_search_response(user_id, role_text.strip(), profile)
+                return self._target_role_search_response(user_id, role_text.strip(), profile, language=language)
 
         # Rico's own suggestions are always profile_relevant — they came from the CV.
         suggested = self._generate_role_suggestions(
@@ -4278,12 +4382,12 @@ class RicoChatAPI:
         )
         suggested_lower = {s["label"].lower() for s in suggested}
         if role_lower in suggested_lower:
-            return self._target_role_search_response(user_id, role_text.strip(), profile)
+            return self._target_role_search_response(user_id, role_text.strip(), profile, language=language)
 
         classification, canonical_role = classify_role_candidate(role_text, profile)
 
         if classification == "profile_relevant" and canonical_role:
-            return self._target_role_search_response(user_id, canonical_role, profile)
+            return self._target_role_search_response(user_id, canonical_role, profile, language=language)
 
         if classification == "known_but_off_profile" and canonical_role:
             response = {
