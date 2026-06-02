@@ -169,8 +169,10 @@ def get_profile(user_id: str) -> RicoProfile | None:
     if profile and profile.target_roles:
         from src.role_normalization import normalize_target_roles, NORMALIZATION_VERSION
 
-        stored_version = getattr(profile, "normalization_version", 1)
-        needs_normalization = stored_version < NORMALIZATION_VERSION
+        stored_version = getattr(profile, "normalization_version", None)
+        if stored_version is None:
+            stored_version = 1
+        needs_normalization = int(stored_version) < NORMALIZATION_VERSION
 
         if needs_normalization:
             normalized = normalize_target_roles(
