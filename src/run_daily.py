@@ -62,7 +62,7 @@ except ImportError:
 # Configure logging externally (not basicConfig in library context)
 logger = logging.getLogger("run_daily")
 
-from src.job_sources import get_jobs
+from src.job_sources import get_jobs, fetch_jsearch_jobs
 from src.scoring import score_job, get_profile_explanation
 from src.llm_scorer import score_jobs_llm
 from src.message_generator import generate_message
@@ -73,7 +73,7 @@ from src.job_history import add_jobs_to_history, load_job_history
 from src.apply_assistant import run_apply_assistant
 from src.db import init_db, save_job, is_db_available, get_top_jobs
 from src.repositories.subscription_repo import expire_stale_subscriptions
-from src.repositories.profile_repo import get_users_with_telegram_alerts
+from src.repositories.profile_repo import get_users_with_telegram_alerts, get_profile
 from src.telegram_bot import send_telegram_to_user, format_telegram_jobs
 from src.profile import get_candidate_profile, get_target_roles
 from src.applications import get_applied_jobs, get_applied_jobs_count
@@ -146,12 +146,49 @@ def _init_db() -> None:
         db_errors.labels(step="init").inc()
 
 
-def _notify_users_via_telegram(matches: list) -> None:
-    """Send today's top job matches to every user who has messaged the Rico bot.
+def _personalized_matches_for_user(
+    user_id: str, generic_matches: list, *, max_results: int = 5
+) -> list:
+    """Return profile-driven JSearch matches for *user_id* when possible.
 
-    Each user whose Telegram chat_id is recorded in the DB receives the same
-    curated top-match list that the pipeline owner already gets via the legacy
-    TELEGRAM_CHAT_ID env-var path.  Per-user role-filtered scoring is Phase 2.
+    Loads the user's target_roles and preferred_cities from the DB and runs a
+    personalised JSearch query.  Falls back silently to *generic_matches* when:
+      - the profile is missing / has no target roles
+      - JSearch returns no results
+      - any error occurs (network, quota, parse)
+
+    Results are sorted descending by ``score`` so the best match surfaces first.
+    """
+    try:
+        profile = get_profile(user_id)
+        if not profile or not profile.target_roles:
+            return generic_matches
+
+        personal_jobs = fetch_jsearch_jobs(
+            save_to_db=True,
+            target_roles=profile.target_roles,
+            preferred_cities=profile.preferred_cities or [],
+        )
+        if personal_jobs:
+            top = sorted(
+                [j for j in personal_jobs if j.get("score", 0) > 0],
+                key=lambda j: j.get("score", 0),
+                reverse=True,
+            )[:max_results]
+            if top:
+                return top
+    except Exception:
+        logger.warning("personalized_match_failed user=%s", user_id, exc_info=True)
+    return generic_matches
+
+
+def _notify_users_via_telegram(matches: list) -> None:
+    """Send personalised job matches to every user who has opted-in to Telegram alerts.
+
+    For each user with a completed profile (target_roles set), a dedicated
+    JSearch query is built from their roles and preferred cities — giving them
+    relevant results rather than a shared generic list.  Users without a profile
+    receive the same curated pipeline matches as before so no-one goes without.
 
     Failures for individual users are logged and swallowed — one bad send must
     not abort the remaining recipients or the pipeline.
@@ -170,8 +207,9 @@ def _notify_users_via_telegram(matches: list) -> None:
         logger.info("telegram_user_alerts_skipped reason=no_opted_in_users")
         return
 
+    # Pre-format the generic body so profile-less users still get a message fast.
     try:
-        alert_body = format_telegram_jobs(matches)
+        generic_body = format_telegram_jobs(matches)
     except Exception:
         logger.exception("telegram_user_alerts_skipped reason=format_failed")
         return
@@ -182,24 +220,32 @@ def _notify_users_via_telegram(matches: list) -> None:
         if not chat_id:
             continue
         name = user.get("name") or "there"
+        user_id = user.get("external_user_id", "")
         greeting = f"👋 Hi <b>{html.escape(name)}</b>! Here are today's top job matches:\n\n"
         try:
+            personal = _personalized_matches_for_user(user_id, matches)
+            if personal is matches:
+                alert_body = generic_body
+            else:
+                alert_body = format_telegram_jobs(personal)
             ok = send_telegram_to_user(chat_id, greeting + alert_body)
             if ok:
                 sent += 1
                 logger.info(
-                    "telegram_user_alert_sent user=%s chat_id=%s",
-                    user.get("external_user_id"), chat_id,
+                    "telegram_user_alert_sent user=%s chat_id=%s personalised=%s",
+                    user_id, chat_id, personal is not matches,
                 )
             else:
                 logger.warning(
                     "telegram_user_alert_failed user=%s chat_id=%s",
-                    user.get("external_user_id"), chat_id,
+                    user_id, chat_id,
                 )
         except Exception:
             logger.exception(
-                "telegram_user_alert_error user=%s", user.get("external_user_id")
+                "telegram_user_alert_error user=%s", user_id
             )
+        # Small pause between users to stay within JSearch rate limits.
+        time.sleep(1)
 
     logger.info("telegram_user_alerts_complete sent=%d total=%d", sent, len(users))
 
