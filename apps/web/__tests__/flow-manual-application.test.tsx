@@ -2,7 +2,8 @@ import "@testing-library/jest-dom/vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 
 const { fetchApplicationsMock, createManualApplicationMock, updateApplicationStatusMock } = vi.hoisted(() => ({
     fetchApplicationsMock: vi.fn(),
@@ -49,17 +50,40 @@ vi.mock("@/lib/api", () => ({
 
 import FlowPage from "@/app/flow/page";
 
+// FlowPage (and the DashboardShell it renders) read the language from
+// LanguageContext, so every render must be wrapped in a LanguageProvider.
+function renderFlow() {
+    return render(
+        <LanguageProvider>
+            <FlowPage />
+        </LanguageProvider>,
+    );
+}
+
 beforeEach(() => {
     fetchApplicationsMock.mockReset();
     createManualApplicationMock.mockReset();
     updateApplicationStatusMock.mockReset();
+    try {
+        localStorage.removeItem("rico-language");
+    } catch {
+        // ignore
+    }
+});
+
+afterEach(() => {
+    try {
+        localStorage.removeItem("rico-language");
+    } catch {
+        // ignore
+    }
 });
 
 describe("Flow manual application tracking", () => {
     it("renders Track application button", async () => {
         fetchApplicationsMock.mockResolvedValue({ applications: [] });
 
-        render(<FlowPage />);
+        renderFlow();
 
         expect(await screen.findByRole("button", { name: /Track application/i })).toBeInTheDocument();
     });
@@ -68,7 +92,7 @@ describe("Flow manual application tracking", () => {
         fetchApplicationsMock.mockResolvedValue({ applications: [] });
 
         const user = userEvent.setup();
-        render(<FlowPage />);
+        renderFlow();
 
         await user.click(await screen.findByRole("button", { name: /Track application/i }));
 
@@ -85,7 +109,7 @@ describe("Flow manual application tracking", () => {
         });
 
         const user = userEvent.setup();
-        render(<FlowPage />);
+        renderFlow();
 
         await user.click(await screen.findByRole("button", { name: /Track application/i }));
 
@@ -125,7 +149,7 @@ describe("Flow manual application tracking", () => {
         });
 
         const user = userEvent.setup();
-        render(<FlowPage />);
+        renderFlow();
 
         await user.click(await screen.findByRole("button", { name: /Track application/i }));
 
@@ -150,7 +174,7 @@ describe("Flow manual application tracking", () => {
         createManualApplicationMock.mockRejectedValue(new Error("Failed to create application"));
 
         const user = userEvent.setup();
-        render(<FlowPage />);
+        renderFlow();
 
         await user.click(await screen.findByRole("button", { name: /Track application/i }));
 
@@ -164,5 +188,76 @@ describe("Flow manual application tracking", () => {
 
         expect(await screen.findByRole("alert")).toBeInTheDocument();
         expect(screen.getByRole("alert")).toHaveTextContent(/Failed to create application/i);
+    });
+});
+
+describe("Flow Arabic / RTL localization", () => {
+    beforeEach(() => {
+        // LanguageProvider reads this on mount and switches to Arabic.
+        localStorage.setItem("rico-language", "ar");
+    });
+
+    it("renders the page title and track button in Arabic", async () => {
+        fetchApplicationsMock.mockResolvedValue({ applications: [], total: 0 });
+
+        renderFlow();
+
+        // Title = مسار الطلبات, Track application = تتبع طلب
+        expect(await screen.findByText("مسار الطلبات")).toBeInTheDocument();
+        expect(
+            await screen.findByRole("button", { name: /تتبع طلب/ }),
+        ).toBeInTheDocument();
+    });
+
+    it("sets the document direction to RTL when Arabic is selected", async () => {
+        fetchApplicationsMock.mockResolvedValue({ applications: [], total: 0 });
+
+        renderFlow();
+
+        await screen.findByText("مسار الطلبات");
+        await waitFor(() => {
+            expect(document.documentElement.dir).toBe("rtl");
+        });
+    });
+
+    it("renders the Arabic status label and next-action for an applied card", async () => {
+        fetchApplicationsMock.mockResolvedValue({
+            applications: [
+                {
+                    application_id: "1",
+                    job_id: "job-1",
+                    title: "Specialist, Petroleum Engineering",
+                    company: "ADNOC",
+                    location: "Dubai",
+                    status: "applied",
+                },
+            ],
+            total: 1,
+        });
+
+        renderFlow();
+
+        // Applied = تم التقديم (status badge + count strip + dropdown option)
+        expect((await screen.findAllByText("تم التقديم")).length).toBeGreaterThan(0);
+        // Next-action for applied = follow-up reminder in Arabic
+        expect(
+            screen.getByText("لم يصلك رد خلال 5–7 أيام؟ أرسل متابعة."),
+        ).toBeInTheDocument();
+    });
+
+    it("renders the modal labels and save button in Arabic", async () => {
+        fetchApplicationsMock.mockResolvedValue({ applications: [], total: 0 });
+
+        const user = userEvent.setup();
+        renderFlow();
+
+        await user.click(await screen.findByRole("button", { name: /تتبع طلب/ }));
+
+        // Modal dialog (aria-label) + save button + a localized field label
+        expect(screen.getByRole("dialog", { name: "تتبع طلب" })).toBeInTheDocument();
+        expect(
+            screen.getByRole("button", { name: "حفظ الطلب" }),
+        ).toBeInTheDocument();
+        expect(screen.getByLabelText("المسمى الوظيفي *")).toBeInTheDocument();
     });
 });
