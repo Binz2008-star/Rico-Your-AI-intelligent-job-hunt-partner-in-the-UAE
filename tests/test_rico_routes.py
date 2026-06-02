@@ -443,6 +443,98 @@ class TestRicoCVUploadSecurity:
         call_kwargs = mock_send.call_args[1]
         assert call_kwargs["ctx"].user_id == public_session_id
 
+
+class TestRicoPublicChatSubscriptionGate:
+    """A registered user must not dodge their monthly AI-message cap by routing through
+    /chat/public with ?email=, and an unverified email must never be escalated to
+    authenticated privileges (private-job visibility / account-subscription disclosure)."""
+
+    @staticmethod
+    def _gate(allowed: bool):
+        from src.services.subscription_gating import GateCheck
+        return GateCheck(
+            allowed=allowed,
+            feature="monthly_ai_message_limit",
+            usage=100 if not allowed else 5,
+            limit=100,
+            remaining=0 if not allowed else 95,
+            plan="free",
+            message="Monthly message limit reached." if not allowed else "ok",
+        )
+
+    def test_registered_email_over_cap_is_blocked(self, client):
+        from types import SimpleNamespace
+        with patch("src.repositories.users_repo.get_user_by_email",
+                   return_value=SimpleNamespace(email="member@x.com")), \
+             patch("src.services.subscription_gating.check_ai_message_allowed_for_user",
+                   return_value=self._gate(allowed=False)), \
+             patch("src.services.chat_service.send_message") as mock_send:
+            r = client.post(
+                "/api/v1/rico/chat/public",
+                json={"message": "find me jobs", "email": "member@x.com"},
+            )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["type"] == "subscription_limit"
+        assert body.get("next_action") == "upgrade_subscription"
+        # Capped: the AI routing path must never run.
+        mock_send.assert_not_called()
+
+    def test_registered_email_under_cap_proceeds_as_public(self, client):
+        from types import SimpleNamespace
+        with patch("src.repositories.users_repo.get_user_by_email",
+                   return_value=SimpleNamespace(email="member@x.com")), \
+             patch("src.services.subscription_gating.check_ai_message_allowed_for_user",
+                   return_value=self._gate(allowed=True)), \
+             patch("src.services.chat_service.send_message",
+                   return_value=_CHAT_RESPONSE) as mock_send:
+            r = client.post(
+                "/api/v1/rico/chat/public",
+                # Mixed-case email must canonicalize to the stored identity.
+                json={"message": "find me jobs", "email": "Member@X.com"},
+            )
+        assert r.status_code == 200, r.text
+        mock_send.assert_called_once()
+        ctx = mock_send.call_args.kwargs["ctx"]
+        # Security invariant: an unverified email is NOT promoted to authenticated.
+        assert ctx.auth_type == "public"
+        assert ctx.can_view_private_jobs is False
+        # Identity canonicalized to the registered email for consistent usage counting.
+        assert ctx.user_id == "member@x.com"
+
+    def test_unregistered_email_is_not_gated(self, client):
+        with patch("src.repositories.users_repo.get_user_by_email", return_value=None), \
+             patch("src.services.subscription_gating.check_ai_message_allowed_for_user") as mock_gate, \
+             patch("src.services.chat_service.send_message",
+                   return_value=_CHAT_RESPONSE) as mock_send:
+            r = client.post(
+                "/api/v1/rico/chat/public",
+                json={"message": "find me jobs", "email": "stranger@x.com"},
+            )
+        assert r.status_code == 200, r.text
+        # No account => no cap lookup, request proceeds as anonymous public.
+        mock_gate.assert_not_called()
+        mock_send.assert_called_once()
+        ctx = mock_send.call_args.kwargs["ctx"]
+        assert ctx.auth_type == "public"
+        assert ctx.user_id == "stranger@x.com"
+
+    def test_anonymous_session_is_not_gated(self, client):
+        with patch("src.services.subscription_gating.check_ai_message_allowed_for_user") as mock_gate, \
+             patch("src.services.chat_service.send_message",
+                   return_value=_CHAT_RESPONSE) as mock_send:
+            r = client.post(
+                "/api/v1/rico/chat/public",
+                json={"message": "find me jobs", "session_id": "anon-123"},
+            )
+        assert r.status_code == 200, r.text
+        mock_gate.assert_not_called()
+        mock_send.assert_called_once()
+        ctx = mock_send.call_args.kwargs["ctx"]
+        assert ctx.auth_type == "public"
+        assert ctx.user_id == "public:anon-123"
+
+
 class TestRicoConfirmCVProfileRoute:
     def test_confirm_cv_profile_flat_body_accepted(self, client):
         public_session_id = "public:web-confirm123xyz"
