@@ -65,7 +65,7 @@ def test_specific_hse_manager_continues_to_job_search(monkeypatch):
     monkeypatch.setattr(
         api,
         "_search_jsearch_meta",
-        lambda role: FetchResult(items=[
+        lambda role, profile=None: FetchResult(items=[
             {
                 "title": "HSE Manager",
                 "company": "ACME",

@@ -1432,23 +1432,157 @@ class RicoChatAPI:
 
     @staticmethod
     @staticmethod
-    def _search_jsearch_meta(role: str) -> Any:
+    @staticmethod
+    def _build_profile_search_queries(role: str, profile: Any) -> list[str]:
+        """Build one or more JSearch queries from the role + profile context.
+
+        Strategy (in priority order):
+          1. Preferred city from profile: "{role} {city}" (first city only).
+          2. Seniority qualifier when years_experience suggests senior level.
+          3. Fallback: "{role} UAE" — the original generic query.
+
+        Keeps queries to max 2 to avoid quota burn on every search.
+        """
+        queries: list[str] = []
+
+        # City-specific primary query
+        preferred_cities: list[str] = []
+        try:
+            preferred_cities = list(getattr(profile, "preferred_cities", None) or [])
+        except Exception:
+            pass
+
+        if preferred_cities:
+            city = preferred_cities[0].strip()
+            if city:
+                queries.append(f"{role} {city}")
+
+        # Seniority qualifier from years_experience
+        years: float | None = None
+        try:
+            years = float(getattr(profile, "years_experience", None) or 0) or None
+        except Exception:
+            pass
+
+        seniority = ""
+        if years is not None:
+            if years >= 10:
+                seniority = "senior"
+            elif years <= 2:
+                seniority = "junior"
+
+        if seniority and not queries:
+            # Only add seniority query when no city query was built
+            queries.append(f"{seniority} {role} UAE")
+
+        # Always include generic UAE fallback
+        queries.append(f"{role} UAE")
+
+        # Deduplicate while preserving order; limit to 2
+        seen: set[str] = set()
+        unique: list[str] = []
+        for q in queries:
+            if q not in seen:
+                seen.add(q)
+                unique.append(q)
+        return unique[:2]
+
+    @staticmethod
+    def _search_jsearch_meta(role: str, profile: Any = None) -> Any:
         """Query JSearch for live UAE jobs matching *role*, with cache + retry.
 
-        Returns a ``jsearch_client.FetchResult`` so the caller can tell a genuine
-        empty result apart from a rate-limited source. Never raises.
+        When *profile* is provided, uses profile cities/seniority to build a
+        more targeted primary query before falling back to the generic
+        "{role} UAE" query. Fetches 2 pages (~20 candidates) for better
+        coverage.
+
+        Returns a ``jsearch_client.FetchResult`` so the caller can tell a
+        genuine empty result apart from a rate-limited source. Never raises.
         """
         from src import jsearch_client
 
-        result = jsearch_client.search(f"{role} UAE")
-        # Stamp a default score so downstream scoring/formatting works unchanged.
-        for job in result.items:
+        queries = RicoChatAPI._build_profile_search_queries(role, profile) if profile else [f"{role} UAE"]
+
+        # Run the primary (profile-tailored) query
+        primary_query = queries[0]
+        primary = jsearch_client.search(primary_query, num_pages=2)
+        items = list(primary.items)
+
+        # Supplement with the generic UAE query when primary is thin or a
+        # second query exists (e.g. seniority+UAE after city primary).
+        if len(queries) > 1 and not primary.rate_limited:
+            fallback_query = queries[1]
+            if fallback_query != primary_query:
+                try:
+                    supplement = jsearch_client.search(fallback_query, num_pages=1)
+                    seen_ids: set = {j.get("job_id") for j in items if j.get("job_id")}
+                    seen_fps: set = {
+                        (str(j.get("title") or "").lower().strip(),
+                         str(j.get("company") or "").lower().strip())
+                        for j in items
+                    }
+                    for job in supplement.items:
+                        jid = job.get("job_id")
+                        fp = (
+                            str(job.get("title") or "").lower().strip(),
+                            str(job.get("company") or "").lower().strip(),
+                        )
+                        if (jid and jid in seen_ids) or fp in seen_fps:
+                            continue
+                        if jid:
+                            seen_ids.add(jid)
+                        seen_fps.add(fp)
+                        items.append(job)
+                except Exception:
+                    pass
+
+        # Dubai supplement when primary is still thin
+        if len(items) < 4 and not primary.rate_limited:
+            try:
+                supplement = jsearch_client.search(f"{role} Dubai", num_pages=1)
+                seen_ids = {j.get("job_id") for j in items if j.get("job_id")}
+                seen_fps = {
+                    (str(j.get("title") or "").lower().strip(),
+                     str(j.get("company") or "").lower().strip())
+                    for j in items
+                }
+                for job in supplement.items:
+                    jid = job.get("job_id")
+                    fp = (
+                        str(job.get("title") or "").lower().strip(),
+                        str(job.get("company") or "").lower().strip(),
+                    )
+                    if (jid and jid in seen_ids) or fp in seen_fps:
+                        continue
+                    if jid:
+                        seen_ids.add(jid)
+                    seen_fps.add(fp)
+                    items.append(job)
+            except Exception:
+                pass
+
+        # Title-relevance boost: jobs whose title tokens match the search role
+        # surface before loosely related results in the quality sort.
+        role_tokens = {t.lower() for t in role.split() if len(t) > 2}
+        for job in items:
             job.setdefault("score", 50)
+            title_lower = str(job.get("title") or "").lower()
+            hits = sum(1 for tok in role_tokens if tok in title_lower)
+            if hits:
+                job["score"] = min(100, job["score"] + hits * 10)
+
         logger.info(
-            "jsearch_direct role=%r results=%d cache_hit=%s rate_limited=%s",
-            role, len(result.items), result.cache_hit, result.rate_limited,
+            "jsearch_direct role=%r query=%r results=%d cache_hit=%s rate_limited=%s",
+            role, primary_query, len(items), primary.cache_hit, primary.rate_limited,
         )
-        return result
+        from src.jsearch_client import FetchResult
+        return FetchResult(
+            items=items,
+            cache_hit=primary.cache_hit,
+            rate_limited=primary.rate_limited,
+            retries=primary.retries,
+            error=primary.error,
+        )
 
     @staticmethod
     def _search_jsearch_direct(role: str) -> list[dict[str, Any]]:
@@ -1478,7 +1612,7 @@ class RicoChatAPI:
         # Falls back to the legacy scraper pipeline only when JSearch is unavailable.
         rate_limited = False
         try:
-            fetch = self._search_jsearch_meta(search_role)
+            fetch = self._search_jsearch_meta(search_role, profile=profile)
             all_matches = fetch.items
             rate_limited = fetch.rate_limited
             if not all_matches:
