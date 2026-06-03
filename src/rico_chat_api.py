@@ -1198,6 +1198,41 @@ class RicoChatAPI:
         "continue", "go on",
     })
 
+    # Multi-word continuation phrases that are never job role titles.
+    # Matched after normalisation — see _is_continuation_intent().
+    _CONTINUATION_PHRASES: frozenset[str] = frozenset({
+        # English
+        "keep going", "its ok keep going", "it's ok keep going",
+        "ok keep going", "okay keep going",
+        "go ahead", "go ahead please", "please go ahead",
+        "yes continue", "yes please continue", "sure continue",
+        "ok continue", "okay continue", "yes go ahead",
+        "continue please", "please continue", "just continue",
+        "carry on", "yes carry on", "ok carry on",
+        "sounds good continue", "let's continue", "lets continue",
+        "proceed", "yes proceed", "ok proceed", "go on",
+        # Arabic
+        "كمل", "استمر", "واصل", "ماشي كمل", "ماشي استمر",
+        "تمام كمل", "تمام استمر", "اوك كمل", "اوك استمر",
+        "يلا كمل", "يلا استمر", "نعم استمر", "نعم كمل",
+        "حسنا استمر", "طيب كمل", "طيب استمر",
+    })
+
+    # Signals in the last assistant message that indicate a post-CV/profile
+    # context where continuation means "proceed with job search".
+    _POST_CV_CONTINUATION_SIGNALS: tuple[str, ...] = (
+        "based on your cv", "from your cv", "your cv has been",
+        "cv parsed", "cv uploaded", "profile built", "profile updated",
+        "i suggest", "suggested roles", "i found the following roles",
+        "roles from your background", "roles i suggest",
+        "what would you like to do", "what should i search",
+        "shall i start searching", "shall i search",
+        "ready to search", "you can now search",
+        "want me to search", "search for roles",
+        "بناءً على سيرتك", "بناء على سيرتك", "تم تحليل سيرتك",
+        "الأدوار المقترحة", "ماذا تريد أن أفعل", "هل أبحث",
+    )
+
     # Affirmative / negative single-word replies in EN + AR
     _AFFIRMATIVE_PHRASES = frozenset({
         "yes", "yeah", "yep", "yup", "sure", "absolutely", "of course",
@@ -1229,6 +1264,29 @@ class RicoChatAPI:
         """True for yes/نعم/sure single-word affirmatives."""
         text = re.sub(r"[\s؟?.!،,]+", " ", (message or "").strip().lower()).strip()
         return text in RicoChatAPI._AFFIRMATIVE_PHRASES
+
+    @staticmethod
+    def _is_continuation_intent(message: str) -> bool:
+        """True for multi-word 'keep going / continue / كمل' phrases that are never job titles.
+
+        Catches messages like "its ok keep going", "ok keep going", "كمل", "استمر"
+        that pass _looks_like_bare_target_role because their first token is not in
+        _NON_ROLE_STARTERS, but whose intent is clearly "proceed, not a role name".
+        """
+        text = re.sub(r"[\s؟?.!،,‌‍]+", " ", (message or "").strip().lower()).strip()
+        if text in RicoChatAPI._CONTINUATION_PHRASES:
+            return True
+        # Regex patterns for common continuation structures not worth enumerating
+        if re.fullmatch(
+            r"(its?\s+ok(ay)?\s+)?keep\s+going|"
+            r"(ok(ay)?|sure|yes|alright)\s+(keep\s+going|continue|go\s+on|carry\s+on|proceed)|"
+            r"(just\s+)?(continue|proceed|carry\s+on|go\s+ahead|go\s+on)(\s+please)?|"
+            r"(كمل|استمر|واصل)(\s+من\s+فضلك)?|"
+            r"(ماشي|تمام|اوك|يلا|نعم|حسنا|طيب)\s+(كمل|استمر|واصل)",
+            text,
+        ):
+            return True
+        return False
 
     @staticmethod
     def _is_negative(message: str) -> bool:
@@ -1752,6 +1810,7 @@ class RicoChatAPI:
         job_search_signals = (
             "find live" in last or "search for" in last or "ابحث" in last
             or "وظائف حية" in last or "shall i search" in last or "want me to search" in last
+            or any(sig in last for sig in self._POST_CV_CONTINUATION_SIGNALS)
         )
         application_angle_signals = (
             "application angle" in last or "cover letter" in last or "tailor" in last
@@ -2565,12 +2624,20 @@ class RicoChatAPI:
             )
 
         # ── Pending-intent resolver: yes/no after Rico's question ──────────────
-        # Must run before generic routing so "نعم" resolves the last offered action
-        # instead of falling through to a generic action card.
-        if self._is_affirmative(message):
+        # Must run before generic routing so "نعم" / "كمل" / "keep going" resolves
+        # the last offered action instead of falling through to role classification.
+        if self._is_affirmative(message) or self._is_continuation_intent(message):
             pending = self._resolve_pending_intent(user_id, message, profile)
             if pending is not None:
                 return self._finalize(pending, self.SOURCE_KEYWORD, profile=profile)
+            # Continuation with no specific pending offer: if CV exists, proceed with
+            # the best known role; otherwise ask for one.
+            if self._is_continuation_intent(message):
+                return self._finalize(
+                    self._handle_post_cv_continuation(user_id, profile),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
         if self._is_negative(message):
             # User declined the offered action — acknowledge and let them continue
             return self._finalize(
@@ -4263,6 +4330,32 @@ class RicoChatAPI:
                 "Upload your CV or tell me your target role and preferred city."
             ),
             "next_action": "need_profile_for_delegation",
+        }
+
+    def _handle_post_cv_continuation(self, user_id: str, profile: Any) -> dict[str, Any]:
+        """Handle 'keep going / كمل / continue' after CV upload or profile-building.
+
+        Priority:
+        1. Profile has target_roles → search with the first one.
+        2. Profile has CV → suggest roles and ask user to choose.
+        3. No context → ask one concise question.
+        """
+        has_cv = bool(profile and self._profile_value(profile, "cv_status") == "parsed")
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+
+        if target_roles:
+            chosen_role = target_roles[0]
+            return self._classified_role_search(user_id, chosen_role, profile)
+
+        if has_cv:
+            return self._handle_profile_role_suggestions(profile)
+
+        clarification = "What role should I search for first?"
+        self._append_chat(user_id, "assistant", clarification)
+        return {
+            "type": "clarification",
+            "intent": "search_jobs",
+            "message": clarification,
         }
 
     def _handle_cv_creation(self, user_id: str, profile: Any) -> dict[str, Any]:
