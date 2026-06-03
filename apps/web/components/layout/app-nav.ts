@@ -36,7 +36,7 @@ export const mainNavSections: NavSection[] = [
 
 export const utilityNavItems: NavItem[] = [
     { label: "Upload CV", href: "/upload", icon: "upload_file" },
-    { label: "Settings", href: "/profile", icon: "settings" },
+    { label: "Settings", href: "/settings", icon: "settings" },
 ];
 
 // Navigation metadata for external linking

@@ -28,6 +28,7 @@ class RicoEnvReport:
     ready_for_api: bool
     ready_for_db: bool
     ready_for_telegram: bool
+    ready_for_email_notifications: bool
     openai_key_present: bool
     deepseek_key_present: bool
     hf_key_present: bool
@@ -44,6 +45,7 @@ class RicoEnvReport:
             "ready_for_api": self.ready_for_api,
             "ready_for_db": self.ready_for_db,
             "ready_for_telegram": self.ready_for_telegram,
+            "ready_for_email_notifications": self.ready_for_email_notifications,
             "openai_key_present": self.openai_key_present,
             "deepseek_key_present": self.deepseek_key_present,
             "hf_key_present": self.hf_key_present,
@@ -61,6 +63,10 @@ ENV_SPECS = [
     ("DATABASE_URL", True, "Neon/PostgreSQL persistence for Rico memory and profiles"),
     ("TELEGRAM_BOT_TOKEN", False, "Telegram bot messages and webhook replies"),
     ("TELEGRAM_CHAT_ID", False, "Legacy/default Telegram notification target"),
+    ("EMAIL_USER", False, "SMTP email sender address (Gmail for admin notifications)"),
+    ("EMAIL_PASS", False, "SMTP email password/app password for authentication"),
+    ("ENABLE_SIGNUP_EMAIL_NOTIFICATIONS", False, "Enable admin email notifications on new user signup"),
+    ("ADMIN_SIGNUP_NOTIFICATION_EMAIL", False, "Recipient email for signup notifications (default: info@ricohunt.com)"),
     ("OPENAI_API_KEY", False, "AI tool-calling, message generation, and advanced reasoning"),
     ("OPEN_AI_API", False, "Legacy OpenAI key alias"),
     ("OPENAI_MODEL", False, "OpenAI primary model"),
@@ -161,10 +167,19 @@ def get_rico_env_report() -> RicoEnvReport:
     )
     ready_for_jotform = jotform_form_id_present
 
+    # Email notifications are ready only if:
+    # 1. Signup notifications are enabled (or unset, defaults to true)
+    # 2. Both EMAIL_USER and EMAIL_PASS are configured
+    signup_notifications_enabled = env_bool("ENABLE_SIGNUP_EMAIL_NOTIFICATIONS", True)
+    email_user_present = present.get("EMAIL_USER", False)
+    email_pass_present = present.get("EMAIL_PASS", False)
+    ready_for_email_notifications = signup_notifications_enabled and email_user_present and email_pass_present
+
     return RicoEnvReport(
         ready_for_api=True,
         ready_for_db=present.get("DATABASE_URL", False),
         ready_for_telegram=present.get("TELEGRAM_BOT_TOKEN", False),
+        ready_for_email_notifications=ready_for_email_notifications,
         openai_key_present=openai_key_present,
         deepseek_key_present=deepseek_key_present,
         hf_key_present=hf_key_present,
