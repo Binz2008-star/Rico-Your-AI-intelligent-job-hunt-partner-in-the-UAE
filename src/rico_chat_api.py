@@ -479,8 +479,15 @@ class RicoChatAPI:
             return False
 
         # A message made up entirely of location terms is a location-qualified
-        # job search, not a bare job role title.
-        non_location_tokens = [t for t in tokens if t.lower() not in _LOCATION_TERMS and t.lower() not in {"jobs", "job", "roles", "role", "in", "the", "a", "an"}]
+        # job search, not a bare job role title. Check the full phrase first
+        # (handles multi-word cities like "Abu Dhabi"), then per-token.
+        if text.lower() in _LOCATION_TERMS:
+            return False
+        _loc_fillers = {"jobs", "job", "roles", "role", "in", "the", "a", "an"}
+        non_location_tokens = [
+            t for t in tokens
+            if t.lower() not in _LOCATION_TERMS and t.lower() not in _loc_fillers
+        ]
         if not non_location_tokens:
             return False
 
