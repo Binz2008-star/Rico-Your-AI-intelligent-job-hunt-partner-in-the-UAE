@@ -12,15 +12,15 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variants: Record<ButtonVariant, string> = {
     primary:
-        "bg-magenta text-white shadow-[0_4px_16px_rgba(255,45,142,0.28)] hover:bg-magenta-hover hover:-translate-y-px",
+        "bg-magenta text-white shadow-[0_4px_16px_rgba(255,45,142,0.28)] hover:bg-magenta-hover hover:-translate-y-px hover:scale-105 active:scale-95",
     ghost:
-        "bg-surface-glass text-white border border-border-soft hover:bg-surface-subtle hover:border-border-medium",
+        "bg-surface-glass text-white border border-border-soft hover:bg-surface-subtle hover:border-border-medium hover:scale-105 active:scale-95",
     teal:
-        "bg-cyan-soft text-cyan border border-cyan-dim hover:bg-cyan-dim",
+        "bg-cyan-soft text-cyan border border-cyan-dim hover:bg-cyan-dim hover:scale-105 active:scale-95",
     danger:
-        "bg-rico-red/10 text-rico-red border border-rico-red/20 hover:bg-rico-red/18",
+        "bg-rico-red/10 text-rico-red border border-rico-red/20 hover:bg-rico-red/18 hover:scale-105 active:scale-95",
     outline:
-        "border border-border-medium text-text-secondary hover:border-border-strong hover:text-white",
+        "border border-border-medium text-text-secondary hover:border-border-strong hover:text-white hover:scale-105 active:scale-95",
 };
 
 const sizes: Record<ButtonSize, string> = {
