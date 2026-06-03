@@ -386,6 +386,21 @@ function ProfileGapCard({ gaps }: { gaps: string[] }) {
     );
 }
 
+function formatCvAreas(areas: string[]): string {
+    if (areas.length === 0) return "";
+    if (areas.length === 1) return ` in **${areas[0]}**`;
+    const last = areas[areas.length - 1];
+    const rest = areas.slice(0, -1).map((a) => `**${a}**`);
+    return ` in ${rest.join(", ")} and **${last}**`;
+}
+
+const CV_READY_OPTIONS: RicoOption[] = [
+    { action: "find_jobs",       label: "Find matching UAE jobs",    message: "Find UAE jobs that match my CV and experience." },
+    { action: "profile_summary", label: "Show my profile summary",   message: "Show my profile summary" },
+    { action: "improve_cv",      label: "Improve my CV",             message: "Help me improve my CV" },
+    { action: "what_next",       label: "What should I do next?",    message: "Based on my profile and experience, what's the best next step in my job search?" },
+];
+
 function OptionButtons({ options, onAction }: { options: RicoOption[]; onAction: (prompt: string) => void }) {
     return (
         <div className="flex flex-wrap gap-2 mt-2">
@@ -785,55 +800,50 @@ export default function CommandPage() {
                 return;
             }
 
-            // Check if preview is ready for confirmation
+            // CV parsed — auto-confirm and open a Pulse-style conversation
             if (result.status === "preview_ready" && result.preview) {
                 const preview = result.preview;
-                // Handle both new (skills_detected) and old (skills) response shapes
-                const skills = preview.skills_detected ?? preview.skills ?? [];
-                const previewText = (
-                    `${t("cmdCvPreviewTitle")}\n\n` +
-                    `${t("cmdCvPreviewName")} ${preview.name || "—"}\n` +
-                    `${t("cmdCvPreviewEmail")} ${preview.email || "—"}\n` +
-                    `${t("cmdCvPreviewPhone")} ${preview.phone || "—"}\n` +
-                    `${t("cmdCvPreviewRole")} ${preview.current_role || "—"}\n` +
-                    `${t("cmdCvPreviewExp")} ${preview.experience_years ? `~${preview.experience_years} ${t("cmdCvPreviewExpYears")}` : "—"}\n` +
-                    `${t("cmdCvPreviewSkills")} ${skills.slice(0, 6).join(", ") || "—"}\n` +
-                    `${t("cmdCvPreviewQuality")} ${result.extraction_quality || "—"}\n\n` +
-                    t("cmdCvConfirmPrompt")
-                );
+                const filename = result.filename ?? "";
 
-                const message: Message = {
-                    id: nextId(),
-                    role: "rico",
-                    text: previewText,
-                    type: "profile_preview",
-                    preview: preview,
-                    filename: result.filename,
-                    extractionQuality: result.extraction_quality,
-                };
-                setMessages((prev) => [...prev, message]);
+                // Silently persist the profile so the rest of the session is live
+                const autoConfirmUserId = chatAudience === "public"
+                    ? `public:${getSessionId(sessionIdRef)}`
+                    : undefined;
+                try {
+                    await confirmCVProfile({ preview, filename }, autoConfirmUserId);
+                } catch {
+                    // Best-effort — the parse result is still usable even if persist fails
+                }
+
+                const skills: string[] = preview.skills_detected ?? preview.skills ?? [];
+                const topAreas = skills.slice(0, 3);
+                const areasPhrase = formatCvAreas(topAreas);
+                const cvReadyMsg =
+                    `Your CV is ready. I've analyzed your profile and identified your strongest areas${areasPhrase}.\n\nWhat would you like to do next?`;
+
+                setMessages((prev) => [
+                    ...prev,
+                    { id: nextId(), role: "rico", text: cvReadyMsg, type: "cv_ready", options: CV_READY_OPTIONS },
+                ]);
                 return;
             }
 
-            // Fallback for old response format (shouldn't happen with new backend)
+            // Legacy response format fallback
             const p = result.parsed;
             if (p) {
-                const skills = p.skills ?? [];
-                const summary = [
-                    skills.length ? `${t("cmdCvSkillsDetected")} ${skills.slice(0, 6).join(", ")}` : "",
-                    p.emails?.length ? `${t("cmdCvPreviewEmail")} ${p.emails[0]}` : "",
-                    p.phones?.length ? `${t("cmdCvPreviewPhone")} ${p.phones[0]}` : "",
-                ].filter(Boolean).join(" · ");
-
-                let text: string;
+                const skills: string[] = p.skills ?? [];
                 if (p.extraction_quality === "poor") {
-                    text = t("cmdCvPoor");
-                } else if (p.extraction_quality === "partial") {
-                    text = `${t("cmdCvPartial")}${summary ? `\n\n${summary}` : ""}\n\n${t("cmdCvFindMatches")}`;
+                    setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: t("cmdCvPoor") }]);
                 } else {
-                    text = `${t("cmdCvGood")}${summary ? `\n\n${summary}` : ""}\n\n${t("cmdCvFindMatches")}`;
+                    const topAreas = skills.slice(0, 3);
+                    const areasPhrase = formatCvAreas(topAreas);
+                    const cvReadyMsg =
+                        `Your CV is ready. I've analyzed your profile and identified your strongest areas${areasPhrase}.\n\nWhat would you like to do next?`;
+                    setMessages((prev) => [
+                        ...prev,
+                        { id: nextId(), role: "rico", text: cvReadyMsg, type: "cv_ready", options: CV_READY_OPTIONS },
+                    ]);
                 }
-                setMessages((prev) => [...prev, { id: nextId(), role: "rico", text }]);
             }
         } catch {
             setUploadError(t("uploadError"));
