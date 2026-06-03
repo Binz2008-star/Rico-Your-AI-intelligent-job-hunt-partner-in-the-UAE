@@ -306,34 +306,54 @@ function SourceQualityBadge({ status }: { status: VerificationStatus }) {
 function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onAction: (prompt: string) => void }) {
     const { language } = useLanguage();
     const t = useTranslation(language);
-    // Normalize to [0.0, 1.0]. New backend sends floats; legacy history may
-    // have 0–100 integers. Values > 1 are divided by 100, then clamped.
-    const _rawScore = match.score ?? 0;
-    const score = Math.min(1, Math.max(0, _rawScore > 1 ? _rawScore / 100 : _rawScore));
-    const scorePct = score > 0 ? `${Math.round(score * 100)}%` : null;
-    // Single-role palette (#325): cyan = positive signal only. Strong matches are
-    // highlighted; everything else stays neutral instead of cycling amber/magenta.
-    const scoreColor = score >= 0.8 ? "text-gold" : "text-text-muted";
+
+    // Score: only display when a real score was calculated (non-null, non-zero).
+    // Backend emits null when no scorer ran — never show a default 50%.
+    const _rawScore = match.score ?? null;
+    const score = _rawScore != null ? Math.min(1, Math.max(0, _rawScore > 1 ? _rawScore / 100 : _rawScore)) : null;
+    const scorePct = score != null && score > 0 ? `${Math.round(score * 100)}%` : null;
+    const scoreColor = score != null && score >= 0.8 ? "text-gold" : "text-text-muted";
+
     const topReason = match.match_reasons?.[0] ?? match.why ?? "";
     const vStatus = match.verification_status;
 
     const clean = (u?: string) => (u && u !== "#" ? u.trim() : "");
-    // apply_url is guaranteed to be a direct page (not a Google intermediary) — backend
-    // moves Google links to alt_link and sets verification_status="google_intermediary".
-    const primary = [clean(match.apply_url), clean(match.source_url), clean(match.alt_link)].filter(Boolean)[0] ?? "";
+    const applyUrl = clean(match.apply_url);
+    const sourceUrl = clean(match.source_url);
+    const altUrl = clean(match.alt_link);
 
-    // Downgrade known-bad primaries to the alt_link fallback
-    const isBadLink =
+    // Determine which link button to show — conditional on what the provider returned.
+    // apply_url = direct apply page (highest trust)
+    // source_url = job listing page (medium trust)
+    // alt_link   = Google Jobs fallback (lowest trust, only when primary blocked)
+    // Neither    = show "Link unavailable" text — never invent a URL
+    const isBadPrimary =
         vStatus === "login_required" ||
         vStatus === "rate_limited" ||
         vStatus === "aggregator_untrusted" ||
         vStatus === "google_intermediary";
-    const fallback = clean(match.alt_link) || clean(match.source_url) || "";
-    const applyHref = isBadLink && fallback ? fallback : primary;
-    const applyLabel =
-        vStatus === "google_intermediary" ? t("cmdApplySearch") :
-            isBadLink && fallback ? t("cmdApplyAlt") :
-                t("cmdApply");
+
+    let linkHref = "";
+    let linkLabel = "";
+    let linkTestId = "";
+    if (applyUrl && !isBadPrimary) {
+        linkHref = applyUrl;
+        linkLabel = t("cmdApply");
+        linkTestId = "job-link-apply";
+    } else if (sourceUrl && !isBadPrimary) {
+        linkHref = sourceUrl;
+        linkLabel = t("cmdViewSource");
+        linkTestId = "job-link-source";
+    } else if (vStatus === "google_intermediary" && altUrl) {
+        linkHref = altUrl;
+        linkLabel = t("cmdApplySearch");
+        linkTestId = "job-link-alt";
+    } else if (isBadPrimary && (altUrl || sourceUrl)) {
+        linkHref = altUrl || sourceUrl;
+        linkLabel = t("cmdApplyAlt");
+        linkTestId = "job-link-alt";
+    }
+    // linkHref="" → "Link unavailable" badge shown below, no <a> rendered
 
     return (
         <article
@@ -350,41 +370,61 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
                         {match.title}
                     </div>
                     <div className="mt-0.5 break-words text-[10px] text-text-muted sm:line-clamp-1">
-                        {match.company}{match.location ? ` · ${match.location}` : ""}{topReason ? ` · ${topReason}` : ""}
+                        {match.company}
+                        {match.location ? ` · ${match.location}` : ""}
+                        {/* Salary only shown when provider supplied it — never inferred */}
+                        {match.salary ? ` · ${match.salary}` : ""}
+                        {topReason ? ` · ${topReason}` : ""}
                     </div>
                 </div>
-                {scorePct && (
-                    <span className={`text-[10px] font-semibold shrink-0 tabular-nums ${scoreColor}`}>{scorePct}</span>
-                )}
-                {applyHref ? (
-                    <a
-                        href={applyHref}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        data-testid="view-job-action"
-                        aria-label={`${applyLabel}: ${match.title} at ${match.company}`}
-                        className="w-full shrink-0 rounded-md border border-gold/30 bg-gold/10 px-2 py-1 text-center text-[10px] font-medium text-gold transition-colors hover:bg-gold/20 sm:w-auto"
-                    >
-                        {applyLabel}
-                    </a>
-                ) : null}
+                <div className="flex shrink-0 items-center gap-2">
+                    {/* Score pill — hidden when no real score was calculated */}
+                    {scorePct && (
+                        <span
+                            className={`text-[10px] font-semibold tabular-nums ${scoreColor}`}
+                            data-testid="job-score"
+                        >
+                            {scorePct}
+                        </span>
+                    )}
+                    {/* Apply / Source / Alt link — conditional on what provider returned */}
+                    {linkHref ? (
+                        <a
+                            href={linkHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            data-testid={linkTestId}
+                            aria-label={`${linkLabel}: ${match.title} at ${match.company}`}
+                            className="w-full shrink-0 rounded-md border border-gold/30 bg-gold/10 px-2 py-1 text-center text-[10px] font-medium text-gold transition-colors hover:bg-gold/20 sm:w-auto"
+                        >
+                            {linkLabel}
+                        </a>
+                    ) : (
+                        <span
+                            className="text-[9px] text-text-muted italic shrink-0"
+                            data-testid="job-link-unavailable"
+                        >
+                            {t("cmdLinkUnavailable")}
+                        </span>
+                    )}
+                </div>
             </div>
 
             {/* Source quality row — only shown when there is something to say */}
             {vStatus && (
                 <div className="flex flex-wrap items-center gap-1.5">
                     <SourceQualityBadge status={vStatus} />
-                    {isBadLink && !fallback && (
+                    {isBadPrimary && !altUrl && !sourceUrl && (
                         <span className="text-[9px] text-text-muted italic">
                             {t("cmdNoDirectApply")}
                         </span>
                     )}
-                    {vStatus === "google_intermediary" && fallback && (
+                    {vStatus === "google_intermediary" && altUrl && (
                         <span className="text-[9px] text-text-muted italic">
                             {t("cmdGoogleJobsNote")}
                         </span>
                     )}
-                    {isBadLink && vStatus !== "google_intermediary" && fallback && (
+                    {isBadPrimary && vStatus !== "google_intermediary" && (altUrl || sourceUrl) && (
                         <span className="text-[9px] text-text-muted italic">
                             {t("cmdAltLinkNote")}
                         </span>

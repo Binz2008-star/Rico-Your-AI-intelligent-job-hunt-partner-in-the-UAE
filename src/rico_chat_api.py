@@ -959,15 +959,18 @@ class RicoChatAPI:
         """Return a backward-compatible chat match with v1 structured guidance."""
         explanation = build_match_explanation(m, profile)
 
-        raw_score = m.get("rico_score") or m.get("score") or 0
+        raw_score = m.get("rico_score") or m.get("score")
         # Normalize to [0.0, 1.0] — frontend multiplies by 100 for display.
         # Legacy scoring pipeline (scoring.py) emits 0–100 integers; FitScore
         # (scorer.py) already emits 0.0–1.0 floats. Values > 1 are divided by 100.
+        # None is emitted when no scorer ran — the frontend hides the score badge.
         if raw_score:
             _s = float(raw_score)
-            normalized_score = round(max(0.0, min(1.0, _s / 100.0 if _s > 1.0 else _s)), 4)
+            normalized_score: float | None = round(max(0.0, min(1.0, _s / 100.0 if _s > 1.0 else _s)), 4)
+            if normalized_score == 0.0:
+                normalized_score = None
         else:
-            normalized_score = 0.0
+            normalized_score = None
 
         # Preserve URL fields so the frontend can surface apply links and distinguish
         # verified live postings from leads that still need a working apply URL.
@@ -1912,9 +1915,6 @@ class RicoChatAPI:
         from src import jsearch_client
 
         result = jsearch_client.search(f"{role} UAE")
-        # Stamp a default score so downstream scoring/formatting works unchanged.
-        for job in result.items:
-            job.setdefault("score", 50)
         logger.info(
             "jsearch_direct role=%r results=%d cache_hit=%s rate_limited=%s",
             role, len(result.items), result.cache_hit, result.rate_limited,
@@ -2166,22 +2166,24 @@ class RicoChatAPI:
                 return bool(
                     m.get("job_apply_link") or m.get("apply_link") or m.get("link")
                 )
-            live_count = sum(1 for m in top_matches if _has_url(m))
-            lead_count = len(top_matches) - live_count
-            if live_count and lead_count:
+            link_count = sum(1 for m in top_matches if _has_url(m))
+            lead_count = len(top_matches) - link_count
+            total = len(top_matches)
+            if link_count and lead_count:
                 base_message = (
                     f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
-                    f"I found {live_count} current live match(es) and {lead_count} lead(s) that need verification."
+                    f"I found {total} candidate match(es) from the job source pipeline "
+                    f"({link_count} with provider links, {lead_count} need verification)."
                 )
-            elif live_count:
+            elif link_count:
                 base_message = (
                     f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
-                    f"I found {live_count} current live match(es)."
+                    f"I found {link_count} match(es) with provider data available."
                 )
             else:
                 base_message = (
                     f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
-                    f"I found {lead_count} lead(s) that need verification."
+                    f"I found {lead_count} candidate match(es) that need source verification."
                 )
         else:
             base_message = f"Got it — I will target {normalized_role} roles{city_text}{basis_text}."
@@ -2191,7 +2193,7 @@ class RicoChatAPI:
             role_names = [r["role"] for r in adjacent[:3]]
             base_message += f" Your CV is also strong for {', '.join(role_names)} roles. I'll search those too if needed."
         elif not top_matches:
-            base_message += " No live matches found right now. I've saved this as your target role — you can run this search again anytime."
+            base_message += " I couldn't retrieve live jobs right now. I can still suggest target searches based on your CV — or try again later."
 
         return prefix + base_message
 
