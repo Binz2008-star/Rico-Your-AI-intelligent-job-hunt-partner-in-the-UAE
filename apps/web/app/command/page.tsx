@@ -1111,6 +1111,8 @@ export default function CommandPage() {
                         // Only profile_preview gets a light panel — job cards and app cards
                         // float as attachments directly in the chat stream.
                         const isStructured = m.type === "profile_preview";
+                        // Longer Rico responses get a subtle glass backing for visual depth.
+                        const isConversational = m.role === "rico" && !isStructured && m.text.length > 80;
 
                         return (
                             <div
@@ -1128,7 +1130,9 @@ export default function CommandPage() {
                                     ? "max-w-[84%] break-words rounded-2xl rounded-tr-sm bg-magenta px-3.5 py-2.5 text-start text-[14px] leading-relaxed text-white shadow-sm sm:max-w-[72%]"
                                     : isStructured
                                         ? "flex-1 min-w-0 rounded-xl border border-border-subtle/70 bg-surface-elevated/60 p-3 text-start text-[13px] leading-relaxed text-rico-text"
-                                        : "flex-1 min-w-0 break-words text-start text-[14px] leading-relaxed text-rico-text"
+                                        : isConversational
+                                            ? "flex-1 min-w-0 break-words rounded-xl border border-overlay/6 bg-surface-elevated/30 px-3 py-2.5 text-start text-[14px] leading-relaxed text-rico-text"
+                                            : "flex-1 min-w-0 break-words text-start text-[14px] leading-relaxed text-rico-text"
                                     }`}>
 
                                     {/* Search result caption */}
