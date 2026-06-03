@@ -225,7 +225,7 @@ export default function FlowPage() {
                                 {STATUS_COUNT_ORDER.map((s) => (
                                     <Card
                                         key={s}
-                                        className="min-h-[76px] bg-surface-elevated/65 p-3 text-center"
+                                        className="min-h-[76px] bg-surface-elevated/65 p-3 text-center transition-colors hover:border-cyan/20 hover:shadow-[0_4px_20px_rgba(0,229,255,0.05)]"
                                     >
                                         <p className="text-xl font-black tracking-tight text-text-primary">
                                             {grouped[s]}
@@ -248,7 +248,7 @@ export default function FlowPage() {
                                 {applications.map((item) => (
                                     <Card
                                         key={item.application_id}
-                                        className="bg-surface-elevated/70 transition-colors hover:border-magenta/25"
+                                        className="bg-surface-elevated/70 transition-all hover:border-magenta/30 hover:shadow-[0_8px_32px_rgba(0,0,0,0.25)]"
                                     >
                                         <CardContent className="p-5">
                                             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

@@ -90,7 +90,7 @@ function MatchExplanationPanel({ explanation }: { explanation: MatchExplanation 
   return (
     <section
       aria-label="Rico match analysis"
-      className="relative z-10 mt-4 rounded-[24px] border border-white/6 bg-[rgba(255,255,255,0.03)] p-4 md:p-5"
+      className="relative z-10 mt-4 rounded-[24px] border border-overlay/8 bg-surface-elevated/50 p-4 md:p-5 backdrop-blur-sm"
     >
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -117,18 +117,18 @@ function MatchExplanationPanel({ explanation }: { explanation: MatchExplanation 
       )}
 
       <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
+        <div className="rounded-2xl border border-overlay/6 bg-surface/50 p-4">
           <p className="rico-kicker mb-2">Why Rico likes this</p>
           <BulletList items={explanation.why_this_fits} tone="cyan" />
         </div>
 
-        <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
+        <div className="rounded-2xl border border-overlay/6 bg-surface/50 p-4">
           <p className="rico-kicker mb-2">Worth checking</p>
           <BulletList items={explanation.worth_checking} tone="fuchsia" />
         </div>
       </div>
 
-      <div className="mt-4 rounded-2xl border border-fuchsia-500/10 bg-fuchsia-500/[0.04] p-4">
+      <div className="mt-4 rounded-2xl border border-magenta/20 bg-magenta/[0.05] p-4">
         <p className="rico-kicker mb-2">Recommended next step</p>
         <p className="text-[13px] leading-relaxed text-[rgba(255,255,255,0.8)]">
           {explanation.recommended_next_step}
@@ -228,7 +228,7 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
       </div>
 
       {job.reason && (
-        <section className="relative z-10 mt-4 rounded-2xl border border-white/6 bg-white/[0.035] p-4" aria-label="Rico insight">
+        <section className="relative z-10 mt-4 rounded-2xl border border-overlay/8 bg-surface-elevated/50 p-4 backdrop-blur-sm" aria-label="Rico insight">
           <p className="rico-kicker mb-2">Rico insight</p>
           <p className="text-[13px] leading-relaxed text-[rgba(255,255,255,0.68)]">
             {job.reason}
