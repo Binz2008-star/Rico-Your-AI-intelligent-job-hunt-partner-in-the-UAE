@@ -265,21 +265,67 @@ def rank_by_profile_fit(
     target_roles: List[str],
     skills: List[str],
     deal_breakers: List[str] | None = None,
+    years_experience: float | None = None,
+    industries: List[str] | None = None,
+    min_score: int = 0,
 ) -> List[Dict[str, Any]]:
     """Fast, zero-latency profile-aware ranking for a list of job dicts.
 
     Assigns a ``profile_fit_score`` (0–100) to each job using keyword
     matching against the user's ``target_roles``, ``skills``, and optionally
-    ``deal_breakers``.  Jobs that match a deal-breaker get score 0.  Results
-    are returned sorted descending by ``profile_fit_score``.
+    ``deal_breakers``, ``years_experience``, and ``industries``.
+
+    Jobs that match a deal-breaker get score 0.  Results are returned sorted
+    descending by ``profile_fit_score``.  Jobs below *min_score* are moved to
+    the end rather than dropped, so callers always get results.
 
     Intended for the chat path where HF embedding latency is unacceptable.
-    Does not mutate the existing ``score`` field so upstream callers can
-    blend or replace it as they see fit.
     """
     role_tokens = {t.lower() for r in target_roles for t in r.lower().split()}
     skill_tokens = {s.lower() for s in skills}
     breaker_tokens = {b.lower() for b in (deal_breakers or [])}
+    industry_tokens = {i.lower() for i in (industries or [])}
+
+    # Seniority bracket derived from user's experience
+    _user_bracket: str | None = None
+    if years_experience is not None:
+        if years_experience <= 2:
+            _user_bracket = "junior"
+        elif years_experience <= 5:
+            _user_bracket = "mid"
+        elif years_experience <= 9:
+            _user_bracket = "senior"
+        else:
+            _user_bracket = "executive"
+
+    # Keywords that indicate each seniority level in job titles/descriptions
+    _JUNIOR_KW  = frozenset(["junior", "entry", "graduate", "trainee", "intern", "fresher", "assistant"])
+    _SENIOR_KW  = frozenset(["senior", "lead", "principal", "head of", "specialist", "expert"])
+    _EXEC_KW    = frozenset(["director", "vp ", "vice president", "c-level", "ceo", "coo", "cfo", "chief"])
+
+    def _seniority_penalty(title: str, desc: str) -> int:
+        """Return score penalty for clear seniority mismatch (-15 max)."""
+        if _user_bracket is None:
+            return 0
+        text = f"{title} {desc[:200]}"
+        is_junior_job  = any(k in text for k in _JUNIOR_KW)
+        is_senior_job  = any(k in text for k in _SENIOR_KW)
+        is_exec_job    = any(k in text for k in _EXEC_KW)
+
+        if _user_bracket == "executive":
+            return -15 if is_junior_job else 0
+        if _user_bracket == "senior":
+            return -12 if is_junior_job else 0
+        if _user_bracket in ("mid", "junior"):
+            return -10 if is_exec_job else (-6 if is_senior_job else 0)
+        return 0
+
+    def _industry_bonus(text: str) -> int:
+        """Return up to +8 for industry keyword overlap."""
+        if not industry_tokens:
+            return 0
+        hits = sum(1 for ind in industry_tokens if ind in text)
+        return min(8, hits * 4)
 
     def _fit(job: Dict[str, Any]) -> int:
         title = str(job.get("title") or "").lower()
@@ -305,9 +351,20 @@ def rank_by_profile_fit(
         if any(city in loc for city in ("uae", "dubai", "abu dhabi", "sharjah", "ajman")):
             score += 8
 
-        return min(100, score)
+        # Seniority mismatch penalty
+        score += _seniority_penalty(title, desc)
+
+        # Industry overlap bonus
+        score += _industry_bonus(text)
+
+        return max(0, min(100, score))
 
     for job in jobs:
         job["profile_fit_score"] = _fit(job)
 
-    return sorted(jobs, key=lambda j: j.get("profile_fit_score", 0), reverse=True)
+    ranked = sorted(jobs, key=lambda j: j.get("profile_fit_score", 0), reverse=True)
+    if min_score > 0:
+        above = [j for j in ranked if j.get("profile_fit_score", 0) >= min_score]
+        below = [j for j in ranked if j.get("profile_fit_score", 0) < min_score]
+        return above + below
+    return ranked

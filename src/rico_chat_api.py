@@ -1227,6 +1227,64 @@ class RicoChatAPI:
     def _is_arabic_text(message: str) -> bool:
         return bool(re.search(r"[\u0600-\u06FF]", message or ""))
 
+    # Common UAE Arabic job role \u2192 English mapping for JSearch query translation.
+    _ARABIC_ROLE_MAP: dict[str, str] = {
+        "\u0645\u062F\u064A\u0631 \u0628\u064A\u0626\u064A": "Environmental Manager",
+        "\u0645\u062F\u064A\u0631 \u0627\u0644\u0633\u0644\u0627\u0645\u0629 \u0648\u0627\u0644\u0635\u062D\u0629 \u0627\u0644\u0645\u0647\u0646\u064A\u0629": "HSE Manager",
+        "\u0645\u062F\u064A\u0631 \u0627\u0644\u0635\u062D\u0629 \u0648\u0627\u0644\u0633\u0644\u0627\u0645\u0629": "Health and Safety Manager",
+        "\u0645\u062F\u064A\u0631 \u0627\u0644\u0627\u0633\u062A\u062F\u0627\u0645\u0629": "Sustainability Manager",
+        "\u0645\u062F\u064A\u0631 \u0645\u0634\u0627\u0631\u064A\u0639": "Project Manager",
+        "\u0645\u062F\u064A\u0631 \u0639\u0627\u0645": "General Manager",
+        "\u0645\u062F\u064A\u0631 \u062A\u0646\u0641\u064A\u0630\u064A": "Executive Director",
+        "\u0645\u062F\u064A\u0631 \u0645\u0628\u064A\u0639\u0627\u062A": "Sales Manager",
+        "\u0645\u062F\u064A\u0631 \u062A\u0633\u0648\u064A\u0642": "Marketing Manager",
+        "\u0645\u062F\u064A\u0631 \u0645\u0648\u0627\u0631\u062F \u0628\u0634\u0631\u064A\u0629": "HR Manager",
+        "\u0645\u062F\u064A\u0631 \u0645\u0627\u0644\u064A": "Finance Manager",
+        "\u0645\u062F\u064A\u0631 \u0639\u0645\u0644\u064A\u0627\u062A": "Operations Manager",
+        "\u0645\u062F\u064A\u0631 \u062A\u0642\u0646\u064A\u0629 \u0627\u0644\u0645\u0639\u0644\u0648\u0645\u0627\u062A": "IT Manager",
+        "\u0645\u0647\u0646\u062F\u0633 \u0645\u062F\u0646\u064A": "Civil Engineer",
+        "\u0645\u0647\u0646\u062F\u0633 \u0645\u064A\u0643\u0627\u0646\u064A\u0643\u064A": "Mechanical Engineer",
+        "\u0645\u0647\u0646\u062F\u0633 \u0643\u0647\u0631\u0628\u0627\u0626\u064A": "Electrical Engineer",
+        "\u0645\u0647\u0646\u062F\u0633 \u0643\u064A\u0645\u064A\u0627\u0626\u064A": "Chemical Engineer",
+        "\u0645\u0647\u0646\u062F\u0633 \u0628\u064A\u0626\u064A": "Environmental Engineer",
+        "\u0645\u0647\u0646\u062F\u0633 \u0628\u0631\u0645\u062C\u064A\u0627\u062A": "Software Engineer",
+        "\u0645\u062D\u0644\u0644 \u0628\u064A\u0627\u0646\u0627\u062A": "Data Analyst",
+        "\u0645\u062D\u0644\u0644 \u0645\u0627\u0644\u064A": "Financial Analyst",
+        "\u0645\u062D\u0644\u0644 \u0623\u0639\u0645\u0627\u0644": "Business Analyst",
+        "\u0645\u062D\u0627\u0633\u0628": "Accountant",
+        "\u0623\u062E\u0635\u0627\u0626\u064A \u0628\u064A\u0626\u0629": "Environmental Specialist",
+        "\u0623\u062E\u0635\u0627\u0626\u064A \u0633\u0644\u0627\u0645\u0629": "Safety Specialist",
+        "\u0623\u062E\u0635\u0627\u0626\u064A \u0645\u0648\u0627\u0631\u062F \u0628\u0634\u0631\u064A\u0629": "HR Specialist",
+        "\u0645\u0633\u062A\u0634\u0627\u0631": "Consultant",
+        "\u0645\u0633\u062A\u0634\u0627\u0631 \u0628\u064A\u0626\u064A": "Environmental Consultant",
+        "\u0637\u0628\u064A\u0628": "Physician",
+        "\u0645\u0645\u0631\u0636": "Nurse",
+        "\u0645\u062F\u064A\u0631": "Manager",
+        "\u0645\u0647\u0646\u062F\u0633": "Engineer",
+        "\u0645\u062D\u0644\u0644": "Analyst",
+        "\u0623\u062E\u0635\u0627\u0626\u064A": "Specialist",
+        "\u0645\u0637\u0648\u0631": "Developer",
+    }
+
+    @staticmethod
+    def _translate_arabic_role(role: str) -> str:
+        """Translate a common Arabic role name to English for JSearch.
+
+        Returns the original string unchanged if no mapping is found.
+        This avoids zero-result queries when users type their role in Arabic.
+        """
+        if not RicoChatAPI._is_arabic_text(role):
+            return role
+        stripped = role.strip()
+        # Exact match first
+        if stripped in RicoChatAPI._ARABIC_ROLE_MAP:
+            return RicoChatAPI._ARABIC_ROLE_MAP[stripped]
+        # Partial match: return first entry whose Arabic key appears in the role
+        for ar, en in RicoChatAPI._ARABIC_ROLE_MAP.items():
+            if ar in stripped:
+                return en
+        return role
+
     @staticmethod
     def _wants_no_favorite(message: str) -> bool:
         lower = (message or "").lower()
@@ -1556,9 +1614,22 @@ class RicoChatAPI:
         except Exception:
             logger.debug("rico_chat: failed to store last_turn user=%s", user_id)
 
+    _LAST_TURN_TTL_SECONDS = 8 * 3600  # 8-hour context window
+
     def _get_last_turn(self, user_id: str) -> dict[str, Any]:
         try:
-            return self.memory.get_context(user_id, "last_turn") or {}
+            turn = self.memory.get_context(user_id, "last_turn") or {}
+            if turn:
+                ts_str = turn.get("ts")
+                if ts_str:
+                    try:
+                        ts = datetime.fromisoformat(ts_str)
+                        age = (datetime.now(timezone.utc) - ts).total_seconds()
+                        if age > self._LAST_TURN_TTL_SECONDS:
+                            return {}
+                    except (ValueError, TypeError):
+                        pass
+            return turn
         except Exception:
             return {}
 
@@ -1889,8 +1960,7 @@ class RicoChatAPI:
     }
 
     @staticmethod
-    @staticmethod
-    def _search_jsearch_meta(role: str) -> Any:
+    def _search_jsearch_meta(role: str, city: str | None = None) -> Any:
         """Query JSearch for live UAE jobs matching *role*, with cache + retry.
 
         Returns a ``jsearch_client.FetchResult`` so the caller can tell a genuine
@@ -1898,20 +1968,22 @@ class RicoChatAPI:
         """
         from src import jsearch_client
 
-        result = jsearch_client.search(f"{role} UAE")
+        location = city if city else "UAE"
+        query = f"{role} {location}"
+        result = jsearch_client.search(query)
         # Stamp a default score so downstream scoring/formatting works unchanged.
         for job in result.items:
             job.setdefault("score", 50)
         logger.info(
-            "jsearch_direct role=%r results=%d cache_hit=%s rate_limited=%s",
-            role, len(result.items), result.cache_hit, result.rate_limited,
+            "jsearch_direct role=%r city=%r results=%d cache_hit=%s rate_limited=%s",
+            role, location, len(result.items), result.cache_hit, result.rate_limited,
         )
         return result
 
     @staticmethod
-    def _search_jsearch_direct(role: str) -> list[dict[str, Any]]:
+    def _search_jsearch_direct(role: str, city: str | None = None) -> list[dict[str, Any]]:
         """Backward-compatible list wrapper around :meth:`_search_jsearch_meta`."""
-        return RicoChatAPI._search_jsearch_meta(role).items
+        return RicoChatAPI._search_jsearch_meta(role, city).items
 
     def _target_role_search_response(
         self, user_id: str, role: str, profile: Any, from_saved_profile: bool = False
@@ -1929,6 +2001,19 @@ class RicoChatAPI:
             profile = upsert_profile(user_id=user_id, updates={"target_roles": target_roles})
 
         search_role = normalized_role or role
+        # Translate Arabic role names so JSearch receives English terms.
+        search_role = self._translate_arabic_role(search_role)
+
+        # Extract preferred city early so we can qualify the JSearch query.
+        cities = self._as_list(self._profile_value(profile, "preferred_cities"))
+        _uae_city_set = frozenset(["dubai", "abu dhabi", "sharjah", "ajman", "al ain",
+                                    "ras al khaimah", "fujairah", "umm al quwain"])
+        search_city: str | None = None
+        for _c in cities:
+            if str(_c).strip().lower() in _uae_city_set:
+                search_city = str(_c).strip()
+                break
+
         operation = self._begin_job_search_operation(user_id, search_role)
         operation_id = str(operation["operation_id"])
 
@@ -1936,7 +2021,7 @@ class RicoChatAPI:
         # Falls back to the legacy scraper pipeline only when JSearch is unavailable.
         rate_limited = False
         try:
-            fetch = self._search_jsearch_meta(search_role)
+            fetch = self._search_jsearch_meta(search_role, search_city)
             all_matches = fetch.items
             rate_limited = fetch.rate_limited
             if not all_matches:
@@ -2003,11 +2088,15 @@ class RicoChatAPI:
             _profile_deal_breakers = self._as_list(
                 self._profile_value(profile, "deal_breakers")
             )
+            _profile_years = self._profile_value(profile, "years_experience")
+            _profile_industries = self._as_list(self._profile_value(profile, "industries"))
             all_matches = _rbpf(
                 all_matches,
                 target_roles=[str(r) for r in _profile_target_roles if r],
                 skills=[str(s) for s in _profile_skills if s],
                 deal_breakers=[str(d) for d in _profile_deal_breakers if d],
+                years_experience=float(_profile_years) if _profile_years else None,
+                industries=[str(i) for i in _profile_industries if i],
             )
         except Exception:
             pass
@@ -2842,16 +2931,32 @@ class RicoChatAPI:
                 }
                 self._append_chat(user_id, "assistant", response["message"])
                 return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
-            # Use profile target roles for search
+            # Use profile target roles for search; fall back to current_role from CV.
             target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            current_role = str(self._profile_value(profile, "current_role") or "").strip()
             logger.info(
-                "rico_profile_match_search user=%s target_roles=%s has_cv=%s",
-                user_id, target_roles, has_cv,
+                "rico_profile_match_search user=%s target_roles=%s current_role=%r has_cv=%s",
+                user_id, target_roles, current_role, has_cv,
             )
-            role = target_roles[0] if target_roles else "your profile"
+            if target_roles:
+                role = target_roles[0]
+                from_saved = True
+            elif current_role:
+                role = current_role
+                from_saved = False
+            else:
+                response = {
+                    "type": "clarification",
+                    "message": (
+                        "I have your CV but no target role is set yet. "
+                        "What role are you looking for? (e.g., HSE Manager, ESG Specialist)"
+                    ),
+                }
+                self._append_chat(user_id, "assistant", response["message"])
+                return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
             return self._finalize(
                 self._target_role_search_response(
-                    user_id, role, profile, from_saved_profile=bool(target_roles)
+                    user_id, role, profile, from_saved_profile=from_saved
                 ),
                 self.SOURCE_KEYWORD,
                 profile=profile,
@@ -2898,8 +3003,16 @@ class RicoChatAPI:
             # Check if profile has target role before running job search
             target_roles = self._as_list(self._profile_value(profile, "target_roles"))
             if not target_roles:
+                current_role = str(self._profile_value(profile, "current_role") or "").strip()
+                if current_role:
+                    # Use CV's current role as search anchor when no target role is set
+                    return self._finalize(
+                        self._target_role_search_response(user_id, current_role, profile),
+                        self.SOURCE_KEYWORD,
+                        profile=profile,
+                    )
                 if has_cv:
-                    # CV present but no confirmed target role → suggest roles from skills
+                    # CV present but no confirmed target role and no current role
                     return self._finalize(
                         self._handle_profile_role_suggestions(profile),
                         self.SOURCE_KEYWORD,
