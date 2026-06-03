@@ -1003,7 +1003,7 @@ export default function CommandPage() {
                 <div className="flex max-w-lg flex-col items-center gap-4 rounded-2xl border border-border-subtle bg-surface/80 p-8 text-center backdrop-blur-md">
                     <p className="text-sm font-medium text-rico-text">{t("cmdSessionExpired")}</p>
                     <p className="text-sm text-text-muted">{t("cmdSessionExpiredMsg")}</p>
-                    <Link href={COMMAND_LOGIN_HREF} className="rounded-lg bg-magenta px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-magenta-hover">
+                    <Link href={COMMAND_LOGIN_HREF} className="rounded-lg bg-gold px-6 py-2.5 text-sm font-semibold text-[#0a0a1a] transition-colors hover:bg-gold-hover cursor-pointer">
                         {t("signIn")}
                     </Link>
                 </div>
@@ -1095,7 +1095,7 @@ export default function CommandPage() {
                                         key={qa.key}
                                         onClick={() => sendMessage(qa.prompt, label)}
                                         disabled={thinking || chatAudience === "checking"}
-                                        className="min-h-10 rounded-xl border border-border-subtle bg-surface-glass px-3 py-2 text-center text-[11px] text-text-secondary transition-colors hover:border-magenta/30 hover:bg-surface-subtle hover:text-rico-text disabled:opacity-50 rico-focus-strong sm:text-xs"
+                                        className="min-h-10 cursor-pointer rounded-xl border border-border-subtle bg-surface-glass px-3 py-2 text-center text-[11px] text-text-secondary transition-colors hover:border-gold/25 hover:bg-surface-subtle hover:text-rico-text disabled:opacity-50 rico-focus-strong sm:text-xs"
                                     >
                                         {label}
                                     </button>
@@ -1122,12 +1122,12 @@ export default function CommandPage() {
                             >
                                 {m.role === "rico" && (
                                     <div
-                                        className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5 ${isFirstInGroup ? "bg-[#f5a623]/15 border border-[#f5a623]/25 text-[#f5a623]" : "invisible"}`}
+                                        className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5 ${isFirstInGroup ? "bg-gold/15 border border-gold/25 text-gold" : "invisible"}`}
                                         aria-hidden="true"
                                     >R</div>
                                 )}
                                 <div dir="auto" className={`${m.role === "user"
-                                    ? "max-w-[84%] break-words rounded-2xl rounded-tr-sm bg-magenta px-3.5 py-2.5 text-start text-[14px] leading-relaxed text-white shadow-sm sm:max-w-[72%]"
+                                    ? "max-w-[84%] break-words rounded-2xl rounded-tr-sm bg-surface-elevated border border-overlay/12 px-3.5 py-2.5 text-start text-[14px] leading-relaxed text-text-primary shadow-sm sm:max-w-[72%]"
                                     : isStructured
                                         ? "flex-1 min-w-0 rounded-xl border border-border-subtle/70 bg-surface-elevated/60 p-3 text-start text-[13px] leading-relaxed text-rico-text"
                                         : isConversational
@@ -1160,8 +1160,12 @@ export default function CommandPage() {
                                     {/* Source rate-limited notice — keep the user inside Rico
                                     and point them at the alternate link on each card. */}
                                     {m.rate_limit_notice && (
-                                        <div className="mt-2 flex items-start gap-2 rounded-lg border border-rico-amber/40 bg-rico-amber/10 px-3 py-2 text-[11px] text-rico-amber">
-                                            <span aria-hidden="true">⚠️</span>
+                                        <div className="mt-2 flex items-start gap-2 rounded-lg border border-gold/30 bg-gold/8 px-3 py-2 text-[11px] text-gold">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5" aria-hidden="true">
+                                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                                                <line x1="12" y1="9" x2="12" y2="13" />
+                                                <line x1="12" y1="17" x2="12.01" y2="17" />
+                                            </svg>
                                             <span>{m.rate_limit_notice}</span>
                                         </div>
                                     )}
@@ -1344,7 +1348,7 @@ export default function CommandPage() {
                             <p className="text-[11px] text-text-muted">{t("cmdSignUpCta")}</p>
                             <Link
                                 href={COMMAND_SIGNUP_HREF}
-                                className="text-[11px] px-3 py-1 rounded-lg bg-magenta/10 border border-magenta/30 text-magenta hover:bg-magenta/20 transition-colors shrink-0 font-medium"
+                                className="text-[11px] px-3 py-1 rounded-lg bg-gold/10 border border-gold/25 text-gold hover:bg-gold/18 transition-colors shrink-0 font-medium cursor-pointer"
                             >
                                 {t("cmdSignUpFree")}
                             </Link>
@@ -1360,7 +1364,7 @@ export default function CommandPage() {
                             onClick={() => fileInputRef.current?.click()}
                             disabled={thinking || chatAudience === "checking"}
                             title={t("cmdUploadCvTitle")}
-                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-text-secondary transition-colors hover:bg-surface-subtle hover:text-rico-text disabled:opacity-30 rico-focus-strong"
+                            className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl text-text-secondary transition-colors hover:bg-surface-subtle hover:text-rico-text disabled:opacity-30 rico-focus-strong"
                             aria-label={t("cmdUploadCvAriaLabel")}
                         >
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1392,7 +1396,7 @@ export default function CommandPage() {
                                 type="button"
                                 onClick={handleSend}
                                 disabled={thinking || chatAudience === "checking" || !input.trim()}
-                                className="absolute bottom-1.5 end-1.5 top-1.5 flex h-9 w-9 items-center justify-center rounded-xl bg-magenta text-white transition-colors hover:bg-magenta-hover disabled:opacity-30 disabled:grayscale rico-focus-strong"
+                                className="absolute bottom-1.5 end-1.5 top-1.5 flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl bg-gold text-[#0a0a1a] transition-colors hover:bg-gold-hover disabled:opacity-30 disabled:grayscale rico-focus-strong"
                                 aria-label={thinking ? t("cmdSending") : t("send")}
                             >
                                 {thinking ? (
