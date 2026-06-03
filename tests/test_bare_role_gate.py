@@ -40,3 +40,36 @@ def test_accepts_real_role_titles(msg: str) -> None:
 ])
 def test_rejects_non_role_messages(msg: str) -> None:
     assert RicoChatAPI._looks_like_bare_target_role(msg) is False
+
+
+# Location-only messages must never be treated as job role titles.
+@pytest.mark.parametrize("msg", [
+    "UAE",
+    "Dubai",
+    "Abu Dhabi",
+    "Sharjah",
+    "Ajman",
+    "jobs in UAE",
+    "UAE jobs",
+    "jobs in Dubai",
+    "Dubai jobs",
+    "roles in UAE",
+    "job in the UAE",
+    "a job in Dubai",
+])
+def test_rejects_location_only_messages(msg: str) -> None:
+    assert RicoChatAPI._looks_like_bare_target_role(msg) is False, (
+        f"Expected _looks_like_bare_target_role({msg!r}) to be False — "
+        "location names are not job roles"
+    )
+
+
+# Mixed role+location messages with a real role still pass (role extraction is separate).
+@pytest.mark.parametrize("msg", [
+    "HSE Manager",
+    "Environmental Compliance Officer",
+    "Safety Engineer",
+])
+def test_accepts_role_title_even_when_uae_context_nearby(msg: str) -> None:
+    # The role title alone (without location noise) should still be accepted.
+    assert RicoChatAPI._looks_like_bare_target_role(msg) is True
