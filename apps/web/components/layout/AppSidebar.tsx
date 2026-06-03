@@ -35,7 +35,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
             >
                 {/* Brand Header */}
                 <div className="flex items-center gap-3 px-5 py-5">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#f5a623] text-sm font-black text-[#0a0a1a] shadow-lg">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gold text-sm font-black text-[#0a0a1a] shadow-[0_4px_14px_rgba(245,166,35,0.30)]">
                         {navMeta.brand.shortName}
                     </div>
                     <div className="flex flex-col">
@@ -85,7 +85,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                                                         className={cn(
                                                             "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                                                             isActive
-                                                                ? "bg-magenta/10 text-magenta ring-1 ring-magenta/20 shadow-[0_0_16px_rgba(255,45,142,0.1)]"
+                                                                ? "bg-gold/10 text-gold ring-1 ring-gold/20 shadow-[0_0_16px_rgba(245,166,35,0.12)]"
                                                                 : "text-text-secondary hover:bg-surface-subtle hover:text-text-primary"
                                                         )}
                                                     >
@@ -131,7 +131,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                                             className={cn(
                                                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                                                 isActive
-                                                    ? "bg-cyan/10 text-cyan ring-1 ring-cyan/20 shadow-[0_0_16px_rgba(0,229,255,0.1)]"
+                                                    ? "bg-gold/10 text-gold ring-1 ring-gold/20 shadow-[0_0_16px_rgba(245,166,35,0.12)]"
                                                     : "text-text-secondary hover:bg-surface-subtle hover:text-text-primary"
                                             )}
                                         >
@@ -160,7 +160,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                         onClick={onLogout}
                         className="flex w-full items-center gap-3 rounded-lg p-2 transition-colors hover:bg-surface-subtle group"
                     >
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#f5a623] text-xs font-bold text-[#0a0a1a]">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gold text-xs font-bold text-[#0a0a1a]">
                             {initials}
                         </div>
                         <div className="flex-1 min-w-0 text-left">

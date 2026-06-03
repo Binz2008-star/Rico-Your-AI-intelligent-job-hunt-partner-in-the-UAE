@@ -92,8 +92,8 @@ export function AppTopbar({
                 <Link
                     href="/command"
                     className={cn(
-                        "flex items-center gap-2 rounded-lg border border-magenta/20 bg-magenta-soft px-3 py-1.5",
-                        "text-xs font-semibold text-magenta transition-colors hover:bg-magenta/20"
+                        "flex items-center gap-2 rounded-lg border border-gold/25 bg-gold/8 px-3 py-1.5",
+                        "text-xs font-semibold text-gold transition-colors hover:bg-gold/15 cursor-pointer"
                     )}
                 >
                     <MaterialIcon icon="auto_awesome" size={16} />
