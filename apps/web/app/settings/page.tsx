@@ -179,7 +179,7 @@ export default function SettingsPage() {
                     aria-label={t("applyPacing")}
                     value={settings.max_daily_applies}
                     onChange={(e) => setSettings({ ...settings, max_daily_applies: Number(e.target.value) })}
-                    className="w-full h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer accent-[#5b4fff]"
+                    className="w-full h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer accent-magenta"
                   />
                   <div className="flex justify-between mt-2 text-[10px] text-text-tertiary font-bold uppercase tracking-tighter">
                     <span>{t("safety")}</span>
@@ -195,7 +195,7 @@ export default function SettingsPage() {
                     aria-label={t("minimumFitScore")}
                     value={settings.min_score}
                     onChange={(e) => setSettings({ ...settings, min_score: Number(e.target.value) })}
-                    className="w-full h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer accent-[#00c9a7]"
+                    className="w-full h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer accent-cyan"
                   />
                   <div className="flex justify-between mt-2 text-[10px] text-text-tertiary font-bold uppercase tracking-tighter">
                     <span>{t("general")}</span>
@@ -209,7 +209,7 @@ export default function SettingsPage() {
 
         {/* Match Thresholds */}
         <section className="bg-surface-elevated/40 border border-border-subtle rounded-2xl p-6 backdrop-blur-md relative overflow-hidden">
-          <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#5b4fff]/5 blur-3xl rounded-full pointer-events-none" />
+          <div className="absolute -top-10 -right-10 w-32 h-32 bg-magenta/5 blur-3xl rounded-full pointer-events-none" aria-hidden="true" />
 
           <h3 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[17px] text-text-primary mb-6">{t("matchThresholds")}</h3>
 
@@ -235,7 +235,7 @@ export default function SettingsPage() {
                     max={100}
                     value={settings.score_threshold_apply}
                     onChange={(e) => setSettings({ ...settings, score_threshold_apply: Number(e.target.value) })}
-                    className="bg-surface border border-border-soft rounded-lg px-3 py-2 text-[13px] text-text-secondary outline-none focus:border-[rgba(91,79,255,0.4)]"
+                    className="bg-surface border border-border-soft rounded-lg px-3 py-2 text-[13px] text-text-secondary outline-none focus:border-magenta/40"
                   />
                 </label>
                 <label className="flex flex-col gap-1.5">
@@ -246,7 +246,7 @@ export default function SettingsPage() {
                     max={100}
                     value={settings.score_threshold_watch}
                     onChange={(e) => setSettings({ ...settings, score_threshold_watch: Number(e.target.value) })}
-                    className="bg-surface border border-border-soft rounded-lg px-3 py-2 text-[13px] text-text-secondary outline-none focus:border-[rgba(91,79,255,0.4)]"
+                    className="bg-surface border border-border-soft rounded-lg px-3 py-2 text-[13px] text-text-secondary outline-none focus:border-magenta/40"
                   />
                 </label>
               </div>
@@ -257,7 +257,7 @@ export default function SettingsPage() {
                   value={settings.telegram_chat_id}
                   onChange={(e) => setSettings({ ...settings, telegram_chat_id: e.target.value })}
                   placeholder={t("telegramPlaceholder")}
-                  className="bg-surface border border-border-soft rounded-lg px-3 py-2 text-[13px] text-text-secondary outline-none focus:border-[rgba(91,79,255,0.4)] placeholder:text-text-tertiary"
+                  className="bg-surface border border-border-soft rounded-lg px-3 py-2 text-[13px] text-text-secondary outline-none focus:border-magenta/40 placeholder:text-text-tertiary"
                 />
               </label>
               <button
@@ -273,7 +273,7 @@ export default function SettingsPage() {
 
         {/* Channel Preferences — Glow Card */}
         <section className="bg-surface-elevated/40 border border-border-subtle rounded-2xl p-6 backdrop-blur-md relative overflow-hidden">
-          <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#00c9a7]/5 blur-3xl rounded-full pointer-events-none" />
+          <div className="absolute -top-10 -right-10 w-32 h-32 bg-cyan/5 blur-3xl rounded-full pointer-events-none" aria-hidden="true" />
 
           <h3 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[17px] text-text-primary mb-6">{t("channelPreferences")}</h3>
 

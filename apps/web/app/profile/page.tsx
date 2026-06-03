@@ -24,7 +24,7 @@ function Tag({ label }: { label: string }) {
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
     return (
-        <div className="min-w-0 rounded-xl border border-border-subtle bg-surface-glass p-4">
+        <div className="min-w-0 rounded-xl border border-overlay/8 bg-surface-elevated/50 p-4 backdrop-blur-sm">
             <dt className="text-start text-[11px] font-semibold uppercase tracking-[0.12em] text-text-tertiary">{label}</dt>
             <dd className="mt-2 min-w-0 text-start text-sm leading-6 text-text-primary [overflow-wrap:anywhere]">{children}</dd>
         </div>
