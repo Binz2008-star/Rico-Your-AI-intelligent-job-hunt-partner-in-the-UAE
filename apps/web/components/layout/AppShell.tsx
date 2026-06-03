@@ -26,20 +26,20 @@ export function AppShell({
     showTopbar = true,
 }: AppShellProps) {
     return (
-        <div className={cn("flex h-screen w-full bg-background", className)}>
+        <div className={cn("flex h-[100dvh] min-h-screen w-full bg-background", className)}>
             {/* Sidebar */}
             {showSidebar && <AppSidebar {...sidebarProps} />}
 
             {/* Main Content Area */}
-            <div className="flex flex-1 flex-col overflow-hidden">
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
                 {/* Topbar */}
                 {showTopbar && (
                     <AppTopbar title={title} subtitle={subtitle} {...topbarProps} />
                 )}
 
                 {/* Scrollable Content */}
-                <main className="flex-1 overflow-y-auto p-6">
-                    <div className="mx-auto max-w-6xl">
+                <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
+                    <div className="mx-auto w-full max-w-7xl">
                         {children}
                     </div>
                 </main>

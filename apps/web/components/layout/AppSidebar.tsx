@@ -29,7 +29,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
         <TooltipProvider>
             <aside
                 className={cn(
-                    "flex h-full w-64 flex-col border-r border-border-soft bg-surface",
+                    "hidden h-full w-64 flex-col border-r border-border-soft bg-surface md:flex",
                     className
                 )}
             >
@@ -42,7 +42,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                         <span className="text-sm font-semibold text-text-primary">
                             {navMeta.brand.name}
                         </span>
-                        <span className="text-[10px] text-text-muted">
+                        <span className="text-[10px] text-text-tertiary">
                             {navMeta.brand.tagline}
                         </span>
                     </div>
@@ -70,7 +70,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                 <nav className="flex-1 overflow-y-auto px-3 py-4">
                     {mainNavSections.map((section) => (
                         <div key={section.title} className="mb-6">
-                            <h3 className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                            <h3 className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
                                 {section.title}
                             </h3>
                             <ul className="space-y-0.5">
@@ -118,7 +118,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
 
                     {/* Utility Nav */}
                     <div>
-                        <h3 className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                        <h3 className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
                             Actions
                         </h3>
                         <ul className="space-y-0.5">
@@ -167,14 +167,14 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                             <p className="text-sm font-medium text-text-primary truncate">
                                 {user?.name ?? "User"}
                             </p>
-                            <p className="text-xs text-text-muted truncate">
+                            <p className="truncate text-xs text-text-tertiary">
                                 {user?.email ?? ""}
                             </p>
                         </div>
                         <MaterialIcon
                             icon="logout"
                             size={16}
-                            className="text-text-muted opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="text-text-tertiary opacity-0 transition-opacity group-hover:opacity-100"
                         />
                     </button>
                 </div>
