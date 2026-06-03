@@ -234,7 +234,6 @@ def test_jsearch_direct_coerces_nullable_strings(monkeypatch):
             "source": "jsearch",
             "salary_string": "",
             "employment_type": "",
-            "score": 50,
         }
     ]
     for field in ("title", "company", "location", "link", "description", "salary_string", "employment_type"):

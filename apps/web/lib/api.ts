@@ -751,7 +751,10 @@ export interface JobMatch {
   title: string;
   company: string;
   location?: string;
-  score?: number;
+  /** Score in [0.0, 1.0] — absent/null means no scorer ran; must not be shown as a real score. */
+  score?: number | null;
+  /** Salary string only present when the provider supplied it — never inferred. */
+  salary?: string;
   why?: string;
   actions?: string[];
   confidence?: "high" | "medium" | "low";
