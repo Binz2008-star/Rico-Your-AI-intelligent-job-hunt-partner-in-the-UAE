@@ -55,7 +55,36 @@ def _clean_apply_error(exc: Exception) -> Dict[str, str]:
     }
 
 
-def apply_to_job(job: Dict[str, Any], *, approved: bool = False) -> Dict[str, str]:
+def _enforce_automation_allowed(user_id: str) -> None:
+    """Raise HTTP 402 if the user's plan does not include application automation."""
+    from fastapi import HTTPException
+    from src.subscription_plans import resolve_effective_user_plan
+
+    resolved = resolve_effective_user_plan(user_id)
+    if not resolved.subscription.entitlements.application_automation_enabled:
+        plan = resolved.subscription.plan.value
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "type": "subscription_limit",
+                "intent": "subscription_limit",
+                "message": (
+                    f"Automated applications are not available on the {plan.title()} plan. "
+                    "Upgrade to Premium to enable this feature."
+                ),
+                "response_source": "subscription_gate",
+                "feature": "application_automation",
+                "plan": plan,
+                "next_action": "upgrade_subscription",
+                "options": [
+                    {"action": "upgrade_subscription", "label": "View plans", "message": "upgrade plan"},
+                    {"action": "subscription_status", "label": "Check current plan", "message": "what is my plan?"},
+                ],
+            },
+        )
+
+
+def apply_to_job(job: Dict[str, Any], *, approved: bool = False, user_id: str | None = None) -> Dict[str, str]:
     """
     Trigger automated application for a job.
     Returns: {"status": str, "message": str, "job_id": str (optional)}
@@ -74,6 +103,9 @@ def apply_to_job(job: Dict[str, Any], *, approved: bool = False) -> Dict[str, st
             "status": "approval_required",
             "message": "This application needs your explicit approval before Rico can submit it.",
         }
+
+    if user_id:
+        _enforce_automation_allowed(user_id)
 
     link = (job.get("link") or "").lower()
 

@@ -81,7 +81,7 @@ def apply_job(
     # This is an explicit, authenticated, per-job apply action initiated by the user
     # (they POSTed to apply to this specific job), so it carries the approval the
     # apply_to_job safety gate requires. Agent/automation paths never set approved=True.
-    result = apply_to_job(job, approved=True)
+    result = apply_to_job(job, approved=True, user_id=user_id)
 
     # Regardless of automation outcome, record the apply action in the
     # lifecycle tracker so the /flow page and application history stay
