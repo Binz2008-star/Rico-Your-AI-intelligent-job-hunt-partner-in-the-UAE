@@ -48,11 +48,11 @@ export default async function DashboardPage({
       <div className="flex flex-col gap-10">
         {/* Career Mission Header */}
         <section>
-          <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
+          <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-text-tertiary">
             Career Mission
           </h2>
           <StatusCard title="Career Mission Header" badge="live" href="/command">
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-text-tertiary">
               Rico keeps your search moving across matches, profile readiness, and active applications.
             </p>
             <span
@@ -65,7 +65,7 @@ export default async function DashboardPage({
 
         {/* Job Pipeline Summary */}
         <section>
-          <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
+          <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-text-tertiary">
             Job Pipeline
           </h2>
           <DashboardStats />
@@ -73,12 +73,12 @@ export default async function DashboardPage({
 
         {/* Next Best Actions */}
         <section>
-          <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
+          <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-text-tertiary">
             Next Best Actions
           </h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <StatusCard title="Search with Rico" badge="live" href="/command">
-              <p className="text-sm text-zinc-500">
+              <p className="text-sm text-text-tertiary">
                 Ask Rico to find matches, prepare an application, or explain what to do next.
               </p>
               <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">
@@ -86,7 +86,7 @@ export default async function DashboardPage({
               </span>
             </StatusCard>
             <StatusCard title="Review matches" badge="placeholder" href="/jobs">
-              <p className="text-sm text-zinc-500">
+              <p className="text-sm text-text-tertiary">
                 Check scored opportunities and decide which leads should move into your flow.
               </p>
               <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">
@@ -94,7 +94,7 @@ export default async function DashboardPage({
               </span>
             </StatusCard>
             <StatusCard title="Tune preferences" badge="placeholder" href="/settings">
-              <p className="text-sm text-zinc-500">
+              <p className="text-sm text-text-tertiary">
                 Adjust match thresholds, apply pacing, and alert preferences.
               </p>
               <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">
@@ -106,13 +106,13 @@ export default async function DashboardPage({
 
         {/* Profile Readiness */}
         <section>
-          <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
+          <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-text-tertiary">
             Profile Readiness
           </h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <ProfileSummaryCard />
             <StatusCard title="Profile gaps" badge="placeholder" href="/profile">
-              <p className="text-sm text-zinc-500">
+              <p className="text-sm text-text-tertiary">
                 Keep your target roles, seniority, locations, and CV details current so Rico can rank jobs accurately.
               </p>
               <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">
@@ -124,12 +124,12 @@ export default async function DashboardPage({
 
         {/* Application Momentum */}
         <section>
-          <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
+          <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-text-tertiary">
             Application Momentum
           </h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <StatusCard title="Application flow" badge="live" href="/flow">
-              <p className="text-sm text-zinc-500">
+              <p className="text-sm text-text-tertiary">
                 Track active applications, interviews, offers, and decisions in one pipeline view.
               </p>
               <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">
@@ -137,7 +137,7 @@ export default async function DashboardPage({
               </span>
             </StatusCard>
             <StatusCard title="Apply pacing" badge="placeholder" href="/settings">
-              <p className="text-sm text-zinc-500">
+              <p className="text-sm text-text-tertiary">
                 Use your daily apply limit to keep automation controlled and reviewable.
               </p>
               <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">
@@ -149,13 +149,13 @@ export default async function DashboardPage({
 
         {/* Rico Activity */}
         <section>
-          <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
+          <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-text-tertiary">
             Rico Activity
           </h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <SavedSearchesList />
             <StatusCard title="Saved leads" badge="placeholder" href="/saved-searches">
-              <p className="text-sm text-zinc-500">
+              <p className="text-sm text-text-tertiary">
                 Saved searches and leads help Rico keep future scans aligned with your priorities.
               </p>
               <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">

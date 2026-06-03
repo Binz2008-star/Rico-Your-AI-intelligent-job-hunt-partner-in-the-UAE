@@ -1,5 +1,6 @@
 "use client";
 
+import { AuraGlow } from "@/components/ui/AuraGlow";
 import { cn } from "@/lib/utils";
 import { AppSidebar } from "./AppSidebar";
 import { AppTopbar } from "./AppTopbar";
@@ -26,12 +27,16 @@ export function AppShell({
     showTopbar = true,
 }: AppShellProps) {
     return (
-        <div className={cn("flex h-[100dvh] min-h-screen w-full bg-background", className)}>
+        <div className={cn("relative flex h-[100dvh] min-h-screen w-full bg-background", className)}>
+            {/* Cinematic ambient glows — Pulse-style, same as DashboardShell */}
+            <AuraGlow aria-hidden="true" variant="magenta" position="top-left" className="animate-pulse-magenta" />
+            <AuraGlow aria-hidden="true" variant="cyan" position="bottom-right" className="animate-pulse-magenta" style={{ animationDelay: "-2s" }} />
+
             {/* Sidebar */}
             {showSidebar && <AppSidebar {...sidebarProps} />}
 
             {/* Main Content Area */}
-            <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+            <div className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
                 {/* Topbar */}
                 {showTopbar && (
                     <AppTopbar title={title} subtitle={subtitle} {...topbarProps} />
