@@ -171,7 +171,7 @@ function PlanCard({
             </div>
 
             <div className="relative z-10 mt-4 min-h-[74px]">
-                <h2 className="text-[22px] font-bold text-text-primary font-['Cabinet_Grotesk',sans-serif]">
+                <h2 className="text-[22px] font-bold text-text-primary font-display">
                     {localName}
                 </h2>
                 {localDesc && (

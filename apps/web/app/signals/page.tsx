@@ -13,9 +13,9 @@ import { useMemo, useState } from "react";
 
 function MomentumLabel({ momentum }: { momentum: "high" | "medium" | "low" }) {
   const palette = {
-    high: "text-[#5dcaa5] border-[#5dcaa5]/30",
-    medium: "text-[#facc15] border-[#facc15]/30",
-    low: "text-[#a78bfa] border-[#a78bfa]/30",
+    high: "text-cyan border-cyan/30",
+    medium: "text-rico-amber border-rico-amber/30",
+    low: "text-magenta border-magenta/30",
   } as const;
 
   return (
@@ -30,10 +30,10 @@ function MomentumLabel({ momentum }: { momentum: "high" | "medium" | "low" }) {
 function MatchScoreBadge({ score }: { score: number }) {
   const color =
     score >= 75
-      ? "text-[#5dcaa5] bg-[#5dcaa5]/10 border-[#5dcaa5]/20"
+      ? "text-cyan bg-cyan/10 border-cyan/20"
       : score >= 50
-        ? "text-[#facc15] bg-[#facc15]/10 border-[#facc15]/20"
-        : "text-[#f87171] bg-[#f87171]/10 border-[#f87171]/20";
+        ? "text-rico-amber bg-rico-amber/10 border-rico-amber/20"
+        : "text-rico-red bg-rico-red/10 border-rico-red/20";
 
   return (
     <span
@@ -53,13 +53,13 @@ function LinkStatusBadge({
   if (!status) return null;
 
   const palette = {
-    live: "text-[#5dcaa5] border-[#5dcaa5]/30",
-    expired: "text-[#f87171] border-[#f87171]/30",
-    blocked: "text-[#f87171] border-[#f87171]/30",
-    redirect: "text-[#facc15] border-[#facc15]/30",
-    source_only: "text-[#a78bfa] border-[#a78bfa]/30",
-    needs_review: "text-[#facc15] border-[#facc15]/30",
-    checking: "text-[#94a3b8] border-[#94a3b8]/30",
+    live: "text-cyan border-cyan/30",
+    expired: "text-rico-red border-rico-red/30",
+    blocked: "text-rico-red border-rico-red/30",
+    redirect: "text-rico-amber border-rico-amber/30",
+    source_only: "text-magenta border-magenta/30",
+    needs_review: "text-rico-amber border-rico-amber/30",
+    checking: "text-text-tertiary border-text-tertiary/30",
   } as const;
 
   const labels = {
