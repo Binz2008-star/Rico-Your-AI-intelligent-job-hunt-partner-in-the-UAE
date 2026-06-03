@@ -558,6 +558,19 @@ class RicoChatAPI:
         re.IGNORECASE,
     )
 
+    # Matches direct reminder commands like "Set a follow-up reminder for Penspen"
+    # or "Remind me to follow up" — these are button-click phrases from the UI
+    # that must be caught before role classification interprets them as job titles.
+    _SET_REMINDER_RE = re.compile(
+        r"(?:"
+        r"set\s+(?:a\s+)?(?:follow[- ]up\s+)?reminder"
+        r"|remind\s+me\s+(?:to\s+follow\s+up|about)"
+        r"|follow[- ]up\s+reminder"
+        r"|اضبط\s+تذكير|ضع\s+تذكير|تذكيرني"
+        r")",
+        re.IGNORECASE,
+    )
+
     @staticmethod
     def _is_live_job_search_request(message: str) -> bool:
         """True when user explicitly asks for live/current/UAE/openings jobs."""
@@ -2457,6 +2470,31 @@ class RicoChatAPI:
         if RicoChatAPI._SHOW_MY_APPLICATIONS_RE.match(text):
             return self._finalize(
                 self._handle_application_tracking(user_id, intent="application_tracking"),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Direct reminder commands ─────────────────────────────────────────────
+        # "Set a follow-up reminder for Penspen", "Remind me to follow up", etc.
+        # These come from UI suggestion buttons and must be caught before role
+        # classification interprets them as job-title queries.
+        if RicoChatAPI._SET_REMINDER_RE.search(message):
+            # Extract company/job name from "for <name>" or "with <name>" suffix.
+            _company_match = re.search(r"\b(?:for|with)\s+(.+)$", message, re.IGNORECASE)
+            _company = _company_match.group(1).strip() if _company_match else None
+            if _company:
+                reply = (
+                    f"Reminder set for **{_company}**. "
+                    "I'll nudge you to follow up in 7 days if you haven't heard back."
+                )
+            else:
+                reply = (
+                    "Reminder set. I'll nudge you to follow up in 7 days "
+                    "if you haven't heard back from your latest application."
+                )
+            self._append_chat(user_id, "assistant", reply)
+            return self._finalize(
+                {"type": "reminder_set", "message": reply},
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
