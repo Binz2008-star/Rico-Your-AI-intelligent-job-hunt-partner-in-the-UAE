@@ -2754,6 +2754,14 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        # CV-vs-job match analysis — user asks if their CV fits a specific job
+        if legacy_intent == "cv_match_job":
+            return self._finalize(
+                self._handle_cv_match_job(user_id, message, profile, has_cv),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
         # Profile summary
         if legacy_intent == "profile_summary":
             from src.agent.context.resolver import resolve_profile_context
@@ -4247,6 +4255,41 @@ class RicoChatAPI:
             ),
             "next_action": "collect_cv_fields",
             "fields_needed": ["current_role", "years_experience", "skills", "industries", "preferred_cities"],
+        }
+
+    def _handle_cv_match_job(self, user_id: str, message: str, profile: Any, has_cv: bool) -> dict[str, Any]:
+        """Respond to 'does my CV match this job?' queries with a gap analysis prompt."""
+        name = self._profile_value(profile, "name") or ""
+        greeting = f"{name}, " if name else ""
+
+        if not has_cv:
+            response_msg = (
+                f"{greeting}upload your CV first and I'll analyse how well it fits the job. "
+                "Use the paperclip button to attach a PDF, then paste the job title or link."
+            )
+            return {
+                "type": "clarification",
+                "message": response_msg,
+                "next_action": "need_cv_for_match",
+            }
+
+        # Try to pull job context from recent context
+        ctx = self._get_recent_context(user_id)
+        recent_title = ctx.get("recent_job") or ctx.get("recent_role") or ""
+        recent_company = ctx.get("recent_company") or ""
+        job_hint = f" **{recent_title}**" + (f" at {recent_company}" if recent_company else "") if recent_title else ""
+
+        response_msg = (
+            f"{greeting}I can compare your CV against{job_hint} job requirements.\n\n"
+            "To give you a precise match score and gap analysis, share:\n"
+            "• The job title and company (or paste the job link)\n"
+            "• Key requirements from the job description\n\n"
+            "I'll then highlight your strongest matching points and flag any gaps to address."
+        )
+        return {
+            "type": "cv_match_analysis",
+            "message": response_msg,
+            "next_action": "await_job_details_for_match",
         }
 
     def _handle_application_tracking(self, user_id: str, intent: str = "application_tracking") -> dict[str, Any]:

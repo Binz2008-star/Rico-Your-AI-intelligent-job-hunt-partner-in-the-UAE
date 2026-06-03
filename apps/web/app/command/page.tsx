@@ -934,7 +934,7 @@ export default function CommandPage() {
     }
 
     return (
-        <div className="min-h-screen bg-background flex flex-col relative overflow-hidden">
+        <div className="h-dvh bg-background flex flex-col relative">
             {/* Ambient glows - cinematic magenta/cyan */}
             <div className="fixed inset-0 pointer-events-none z-0">
                 <div aria-hidden="true" className="absolute -top-[250px] -left-[150px] w-[700px] h-[700px] rounded-full bg-magenta-dim blur-[140px]" />
@@ -962,7 +962,7 @@ export default function CommandPage() {
                 onChange={handleCVUpload}
             />
 
-            <div className="relative z-10 flex flex-col flex-1 h-[calc(100dvh-53px)] max-w-3xl w-full mx-auto px-2 sm:px-4">
+            <div className="relative z-10 flex flex-col flex-1 min-h-0 max-w-3xl w-full mx-auto px-2 sm:px-4">
                 {/* Messages Container */}
                 <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 py-6 space-y-5" role="log" aria-live="polite" aria-atomic="false" aria-busy={thinking}>
 

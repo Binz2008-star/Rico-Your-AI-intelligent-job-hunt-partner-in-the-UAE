@@ -425,6 +425,14 @@ _CV_CREATE_RE = re.compile(
     re.IGNORECASE,
 )
 
+_CV_MATCH_JOB_RE = re.compile(
+    r"\bcv\b.{0,40}\b(match|fit|suit|score|compatible|against|for)\b"
+    r"|\b(match|fit|compare|check|analyze|analyse)\b.{0,40}\bcv\b"
+    r"|\bhow\s+(well\s+)?(?:does|do|would)\s+my\s+(?:cv|resume)\b"
+    r"|\bсv\s+match\b",
+    re.IGNORECASE,
+)
+
 _PROFILE_UPDATE_RE = re.compile(
     r"\b(update|change|set|modify|adjust)\b.{0,40}"
     r"\b(salary|city|location|preference|role|title|industry|experience|notice|email|phone|telegram)\b",
@@ -759,6 +767,12 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     # Delegated decision (user asks Rico to choose)
     if _DELEGATED_DECISION_RE.search(text):
         return IntentResult("delegated_decision", 0.9, "regex")
+
+    # CV-vs-job match analysis — must precede lifecycle/tracking checks because messages
+    # like "does my cv match the revolut job I applied to" contain "applied to" which
+    # would otherwise fire lifecycle_show_applied incorrectly.
+    if _CV_MATCH_JOB_RE.search(text):
+        return IntentResult("cv_match_job", 0.9, "regex")
 
     # Lifecycle funnel queries regex (before application_tracking, more specific)
     if _LIFECYCLE_OPENED_NOT_APPLIED_RE.search(text):
