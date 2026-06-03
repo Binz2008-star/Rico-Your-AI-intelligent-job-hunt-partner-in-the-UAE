@@ -115,3 +115,4 @@ orchestrator_test_results.json
 test_results.json
 qa_destruction_report.txt
 bandit_out.json
+.mcp.json
