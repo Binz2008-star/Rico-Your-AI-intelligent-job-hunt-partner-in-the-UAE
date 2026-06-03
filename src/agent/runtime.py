@@ -149,9 +149,13 @@ class AgentRuntime:
                 except Exception as exc:
                     elapsed = int((time.monotonic() - wall_start) * 1000)
                     logger.info("runtime_apply_gated user=%s reason=%s", user_id, exc)
+                    detail = getattr(exc, "detail", None)
+                    user_msg = (
+                        detail.get("message") if isinstance(detail, dict) else str(exc)
+                    )
                     return RuntimeResult(
                         ok=False,
-                        message=str(exc),
+                        message=user_msg,
                         action=action, job_key=job_key, source=source, user_id=user_id,
                         error="subscription_limit",
                         duration_ms=elapsed,
