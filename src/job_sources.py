@@ -1,11 +1,11 @@
 from pathlib import Path
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse
 
 from jobspy import scrape_jobs
 import logging
 import os
 import time
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -207,18 +207,228 @@ _JSEARCH_QUERIES = [
     "Sustainability Manager UAE",
 ]
 
+_SOURCE_QUALITY_SCORE_ADJUSTMENTS = {
+    "needs_source_verification": 0,
+    "google_intermediary": -10,
+    "login_required": -12,
+    "rate_limited": -15,
+    "aggregator_untrusted": -25,
+}
+
+_DIRECT_APPLY_DOMAINS: frozenset[str] = frozenset(
+    {
+        "greenhouse.io",
+        "lever.co",
+        "workday.com",
+        "myworkdayjobs.com",
+        "smartrecruiters.com",
+        "taleo.net",
+        "icims.com",
+        "bamboohr.com",
+        "jobvite.com",
+        "recruitee.com",
+        "ashbyhq.com",
+        "rippling.com",
+    }
+)
+
+_TRUSTED_JOB_BOARD_DOMAINS: frozenset[str] = frozenset(
+    {
+        "bayt.com",
+        "dubizzle.com",
+        "indeed.com",
+        "linkedin.com",
+        "monstergulf.com",
+        "naukrigulf.com",
+    }
+)
+
+_CAREER_HOST_HINTS: tuple[str, ...] = (
+    "careers.",
+    ".careers.",
+    "jobs.",
+    ".jobs.",
+    "recruit.",
+    ".recruit.",
+    "talent.",
+    ".talent.",
+)
+
+
+def _score_bounds(score: int) -> int:
+    return max(0, min(100, int(score or 0)))
+
+
+def _job_source_quality(job: Dict[str, Any]) -> str:
+    """Classify the best available URL so profile ranking favours usable jobs."""
+    try:
+        from src.services.source_quality import classify_url, is_google_intermediary
+
+        url = str(
+            job.get("job_apply_link")
+            or job.get("apply_link")
+            or job.get("link")
+            or ""
+        ).strip()
+        if is_google_intermediary(url):
+            return "google_intermediary"
+        return classify_url(url)
+    except Exception:
+        return "needs_source_verification"
+
+
+def _job_url(job: Dict[str, Any]) -> str:
+    return str(
+        job.get("job_apply_link")
+        or job.get("apply_link")
+        or job.get("link")
+        or ""
+    ).strip()
+
+
+def _hostname(url: str) -> str:
+    try:
+        return (urlparse(url).hostname or "").lower().lstrip("www.")
+    except Exception:
+        return ""
+
+
+def _hostname_matches(hostname: str, domains: frozenset[str]) -> bool:
+    return any(hostname == domain or hostname.endswith("." + domain) for domain in domains)
+
+
+def _source_quality_adjustment(job: Dict[str, Any], source_quality: str) -> int:
+    if source_quality != "live_verified":
+        return _SOURCE_QUALITY_SCORE_ADJUSTMENTS.get(source_quality, 0)
+
+    hostname = _hostname(_job_url(job))
+    if _hostname_matches(hostname, _DIRECT_APPLY_DOMAINS) or any(hint in hostname for hint in _CAREER_HOST_HINTS):
+        return 12
+    if _hostname_matches(hostname, _TRUSTED_JOB_BOARD_DOMAINS):
+        return 3
+    return 6
+
+
+def _profile_fit_reason(
+    job: Dict[str, Any],
+    target_roles: List[str],
+    skills: List[str],
+    source_quality: str,
+) -> str:
+    title = str(job.get("title") or "").lower()
+    description = str(job.get("description") or "").lower()
+    text = f"{title} {description}"
+
+    reasons: list[str] = []
+    for role in target_roles:
+        role_text = str(role or "").strip()
+        if role_text and role_text.lower() in title:
+            reasons.append(f"Target role: {role_text}")
+            break
+
+    matched_skills = []
+    for skill in skills:
+        skill_text = str(skill or "").strip()
+        if skill_text and skill_text.lower() in text:
+            matched_skills.append(skill_text)
+        if len(matched_skills) >= 3:
+            break
+    if matched_skills:
+        reasons.append("Skills: " + ", ".join(matched_skills))
+
+    if source_quality == "live_verified":
+        reasons.append("Direct/trusted source")
+    elif source_quality in {"aggregator_untrusted", "google_intermediary", "login_required"}:
+        reasons.append(f"Source needs caution: {source_quality}")
+
+    return " | ".join(reasons) or "Profile-fit ranking"
+
+
+def _score_profile_driven_jobs(
+    jobs: List[Dict[str, Any]],
+    *,
+    target_roles: Optional[List[str]],
+    skills: Optional[List[str]],
+    deal_breakers: Optional[List[str]],
+    preferred_cities: Optional[List[str]],
+) -> List[Dict[str, Any]]:
+    """Score JSearch jobs against the requested profile instead of the legacy HSE profile."""
+    from src.llm_scorer import rank_by_profile_fit
+
+    role_list = [str(role) for role in (target_roles or []) if str(role or "").strip()]
+    skill_list = [str(skill) for skill in (skills or []) if str(skill or "").strip()]
+    breaker_list = [str(item) for item in (deal_breakers or []) if str(item or "").strip()]
+
+    ranked = rank_by_profile_fit(
+        jobs,
+        target_roles=role_list,
+        skills=skill_list,
+        deal_breakers=breaker_list,
+        preferred_cities=preferred_cities or [],
+    )
+
+    for job in ranked:
+        base_score = _score_bounds(job.get("profile_fit_score", 0))
+        source_quality = _job_source_quality(job)
+        adjusted_score = 0 if base_score <= 0 else _score_bounds(
+            base_score + _source_quality_adjustment(job, source_quality)
+        )
+        job["score"] = adjusted_score
+        job["score_source"] = "profile_fit"
+        job["source_quality"] = source_quality
+        job["profile_explanation"] = _profile_fit_reason(
+            job,
+            role_list,
+            skill_list,
+            source_quality,
+        )
+
+    sorted_jobs = sorted(
+        ranked,
+        key=lambda job: (
+            -_score_bounds(job.get("score", 0)),
+            -_score_bounds(job.get("profile_fit_score", 0)),
+            str(job.get("title") or "").lower(),
+            str(job.get("company") or "").lower(),
+        ),
+    )
+    return _dedupe_profile_ranked_jobs(sorted_jobs)
+
+
+def _dedupe_profile_ranked_jobs(jobs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    deduped: list[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for job in jobs:
+        key = _dedupe_key(job)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(job)
+    return deduped
+
+
+def _dedupe_key(job: Dict[str, Any]) -> str:
+    title = " ".join(str(job.get("title") or "").lower().split())
+    company = " ".join(str(job.get("company") or "").lower().split())
+    if title and company:
+        return f"title_company:{title}|{company}"
+    return f"job:{job.get('job_id') or _job_url(job)}"
+
 
 def fetch_jsearch_jobs(
     save_to_db: bool = True,
     target_roles: List[str] | None = None,
     preferred_cities: List[str] | None = None,
+    skills: Optional[List[str]] = None,
+    deal_breakers: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """Fetch jobs from JSearch (RapidAPI) for UAE roles.
 
     When *target_roles* / *preferred_cities* are supplied (typically from a user's
     DB profile) the function builds profile-driven, city-qualified queries instead
-    of using the hardcoded ``_JSEARCH_QUERIES`` list. This produces results that
-    are personalised to the authenticated user rather than a fixed role set.
+    of using the hardcoded ``_JSEARCH_QUERIES`` list. Those results are scored
+    with zero-latency profile-fit ranking, not the legacy single-profile HSE
+    scorer, so non-HSE roles are not discarded before they can be shown.
 
     Falls back to ``_JSEARCH_QUERIES`` when no profile data is provided so the
     legacy single-user pipeline continues to work unchanged.
@@ -228,12 +438,12 @@ def fetch_jsearch_jobs(
         logger.error("jsearch: RAPIDAPI_KEY not set — skipping")
         return []
 
-    from src.scoring import score_job
     from src.db import save_job as db_save_job
     from src import jsearch_client
 
     # Build query list: profile-driven when we have roles, else hardcoded fallback.
-    if target_roles:
+    profile_driven = bool(target_roles)
+    if profile_driven:
         queries = jsearch_client.build_queries_for_profile(
             target_roles=target_roles,
             preferred_cities=preferred_cities or [],
@@ -259,15 +469,37 @@ def fetch_jsearch_jobs(
             if not dedup_key or dedup_key in seen:
                 continue
             seen.add(dedup_key)
-            score = score_job(job)
-            job["score"] = score
-            if score > 0 and save_to_db:
-                db_save_job(job, score)
             results.append(job)
 
         # Be polite between distinct queries (cache hits return instantly anyway).
         if not fetch.cache_hit:
             time.sleep(1)
+
+    if profile_driven:
+        try:
+            results = _score_profile_driven_jobs(
+                results,
+                target_roles=target_roles,
+                skills=skills,
+                deal_breakers=deal_breakers,
+                preferred_cities=preferred_cities,
+            )
+        except Exception:
+            logger.warning("jsearch_jobs: profile-fit scoring failed; falling back to legacy scorer", exc_info=True)
+            profile_driven = False
+
+    if not profile_driven:
+        from src.scoring import score_job
+
+        for job in results:
+            score = score_job(job)
+            job["score"] = score
+
+    if save_to_db:
+        for job in results:
+            score = _score_bounds(job.get("score", 0))
+            if score > 0:
+                db_save_job(job, score)
 
     passed = sum(1 for j in results if j["score"] > 0)
     logger.info(

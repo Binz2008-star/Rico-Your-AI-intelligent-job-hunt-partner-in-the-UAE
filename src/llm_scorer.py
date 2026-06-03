@@ -17,6 +17,7 @@ import json
 import logging
 import math
 import os
+import re
 import tempfile
 import threading
 import time
@@ -49,6 +50,38 @@ _BAD = (
     "call center receptionist driver cleaner UAE national only "
     "swimming pool aluminum facade joinery"
 )
+
+_TOKEN_RE = re.compile(r"[a-z0-9+#]+")
+_GENERIC_ROLE_TOKENS = {
+    "assistant",
+    "associate",
+    "consultant",
+    "coordinator",
+    "developer",
+    "director",
+    "engineer",
+    "executive",
+    "head",
+    "junior",
+    "lead",
+    "manager",
+    "officer",
+    "principal",
+    "senior",
+    "specialist",
+    "staff",
+    "supervisor",
+}
+_UAE_LOCATION_ALIASES = {
+    "dubai": {"dubai", "dxb"},
+    "abu dhabi": {"abu dhabi", "abudhabi", "auh"},
+    "sharjah": {"sharjah", "shj"},
+    "ajman": {"ajman"},
+    "ras al khaimah": {"ras al khaimah", "rak"},
+    "fujairah": {"fujairah"},
+    "al ain": {"al ain", "alain"},
+    "umm al quwain": {"umm al quwain", "uaq"},
+}
 
 
 # ─── Cache fingerprint ───────────────────────────────────────────────────────
@@ -265,6 +298,7 @@ def rank_by_profile_fit(
     target_roles: List[str],
     skills: List[str],
     deal_breakers: List[str] | None = None,
+    preferred_cities: List[str] | None = None,
 ) -> List[Dict[str, Any]]:
     """Fast, zero-latency profile-aware ranking for a list of job dicts.
 
@@ -277,33 +311,57 @@ def rank_by_profile_fit(
     Does not mutate the existing ``score`` field so upstream callers can
     blend or replace it as they see fit.
     """
-    role_tokens = {t.lower() for r in target_roles for t in r.lower().split()}
-    skill_tokens = {s.lower() for s in skills}
-    breaker_tokens = {b.lower() for b in (deal_breakers or [])}
+    role_phrases = _clean_phrases(target_roles)
+    role_token_groups = [
+        _meaningful_role_tokens(role)
+        for role in role_phrases
+    ]
+    skill_phrases = _clean_phrases(skills)
+    breaker_phrases = _clean_phrases(deal_breakers or [])
+    city_phrases = _clean_phrases(preferred_cities or [])
 
     def _fit(job: Dict[str, Any]) -> int:
         title = str(job.get("title") or "").lower()
-        desc = str(job.get("description") or "")[:400].lower()
-        text = f"{title} {desc}"
+        desc = str(job.get("description") or "")[:800].lower()
+        loc = str(job.get("location") or "").lower()
+        text = f"{title} {desc} {loc}"
+        title_tokens = set(_TOKEN_RE.findall(title))
+        desc_tokens = set(_TOKEN_RE.findall(desc))
 
         # Hard-reject on deal-breakers (title only to avoid false positives).
-        if any(b in title for b in breaker_tokens):
+        if any(b in title for b in breaker_phrases):
             return 0
 
         score = 0
-        # Role match (title weighted 2×, description 1×)
-        role_hits_title = sum(1 for t in role_tokens if t in title)
-        role_hits_desc  = sum(1 for t in role_tokens if t in desc)
-        score += role_hits_title * 12 + role_hits_desc * 4
+
+        # Role match: exact role phrase is strongest. Generic words such as
+        # "manager" do not score by themselves, which avoids job-board noise.
+        role_score = 0
+        for role, meaningful_tokens in zip(role_phrases, role_token_groups):
+            if role and role in title:
+                role_score = max(role_score, 45)
+            elif role and role in desc:
+                role_score = max(role_score, 18)
+
+            if meaningful_tokens:
+                title_hits = len(meaningful_tokens & title_tokens)
+                desc_hits = len(meaningful_tokens & desc_tokens)
+                token_score = title_hits * 14 + desc_hits * 5
+                if title_hits == len(meaningful_tokens) and len(meaningful_tokens) > 1:
+                    token_score += 10
+                role_score = max(role_score, token_score)
+
+        score += role_score
 
         # Skill match
-        skill_hits = sum(1 for s in skill_tokens if s in text)
-        score += skill_hits * 5
+        for skill in skill_phrases:
+            if skill in title:
+                score += 8
+            elif skill in text:
+                score += 5
 
-        # UAE location bonus
-        loc = str(job.get("location") or "").lower()
-        if any(city in loc for city in ("uae", "dubai", "abu dhabi", "sharjah", "ajman")):
-            score += 8
+        if score > 0:
+            score += _location_score(loc, city_phrases)
 
         return min(100, score)
 
@@ -311,3 +369,50 @@ def rank_by_profile_fit(
         job["profile_fit_score"] = _fit(job)
 
     return sorted(jobs, key=lambda j: j.get("profile_fit_score", 0), reverse=True)
+
+
+def _clean_phrases(values: List[str]) -> List[str]:
+    phrases: list[str] = []
+    seen: set[str] = set()
+    for value in values or []:
+        text = str(value or "").strip().lower()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        phrases.append(text)
+    return phrases
+
+
+def _meaningful_role_tokens(role: str) -> set[str]:
+    return {
+        token
+        for token in _TOKEN_RE.findall(role)
+        if len(token) >= 2 and token not in _GENERIC_ROLE_TOKENS
+    }
+
+
+def _location_score(location: str, preferred_cities: List[str]) -> int:
+    if not location:
+        return 0
+
+    for city in preferred_cities:
+        if _location_matches_preference(location, city):
+            return 16
+
+    if any(city in location for city in ("uae", "dubai", "abu dhabi", "sharjah", "ajman")):
+        return 8
+    return 0
+
+
+def _location_matches_preference(location: str, preferred_city: str) -> bool:
+    if not preferred_city:
+        return False
+    if preferred_city == "remote":
+        return "remote" in location
+    if preferred_city in location or location in preferred_city:
+        return True
+
+    aliases = _UAE_LOCATION_ALIASES.get(preferred_city)
+    if not aliases:
+        return False
+    return any(alias in location for alias in aliases)

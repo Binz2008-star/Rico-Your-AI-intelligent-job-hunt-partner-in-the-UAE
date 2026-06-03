@@ -32,6 +32,25 @@ logger = logging.getLogger("rico_repo_adapter")
 _UTC = timezone.utc
 
 
+def _as_text_list(value: Any) -> List[str]:
+    if not value:
+        return []
+    if isinstance(value, str):
+        values = [value]
+    else:
+        try:
+            values = list(value)
+        except TypeError:
+            values = [value]
+
+    result: List[str] = []
+    for item in values:
+        text = str(item or "").strip()
+        if text:
+            result.append(text)
+    return result
+
+
 # ─── Domain Models (TypedDict for clarity) ────────────────────────────────────
 
 @dataclass
@@ -215,6 +234,38 @@ class RicoSystem:
         self.agent = RicoAgent()
         self.config = config or AdapterConfig()
 
+    def _fetch_profile_driven_jobs(self, profile: RicoProfile) -> List[Dict[str, Any]]:
+        target_roles = _as_text_list(getattr(profile, "target_roles", []))
+        if not target_roles:
+            return []
+
+        try:
+            from src.job_sources import fetch_jsearch_jobs
+
+            jobs = fetch_jsearch_jobs(
+                save_to_db=False,
+                target_roles=target_roles,
+                preferred_cities=_as_text_list(getattr(profile, "preferred_cities", [])),
+                skills=_as_text_list(getattr(profile, "skills", [])),
+                deal_breakers=_as_text_list(getattr(profile, "deal_breakers", [])),
+            )
+            if jobs:
+                logger.info(
+                    "profile_driven_jsearch_success user=%s jobs=%d roles=%s",
+                    profile.user_id,
+                    len(jobs),
+                    target_roles[:3],
+                )
+            return jobs
+        except Exception:
+            logger.warning(
+                "profile_driven_jsearch_failed user=%s roles=%s",
+                profile.user_id,
+                target_roles[:3],
+                exc_info=True,
+            )
+            return []
+
     def run_for_profile(
         self,
         profile: RicoProfile,
@@ -257,17 +308,33 @@ class RicoSystem:
         final_matches = []
         try:
             # Fetch and score jobs
-            jobs = self.repo.fetch_jobs()
-            scored = self.repo.score_jobs_with_existing_engine(jobs)
+            jobs = self._fetch_profile_driven_jobs(profile)
+            using_profile_jsearch = bool(jobs)
+            if not using_profile_jsearch:
+                jobs = self.repo.fetch_jobs()
+
+            if using_profile_jsearch:
+                scored = [(job, int(job.get("score", 0) or 0)) for job in jobs]
+            else:
+                scored = self.repo.score_jobs_with_existing_engine(jobs)
             self.repo.persist_jobs(scored)
 
-            # Make agent decisions
-            decisions = self.repo.make_agent_decisions(scored)
             selected: List[Tuple[Dict[str, Any], int]] = []
+            if using_profile_jsearch:
+                selected = [
+                    (job, int(score))
+                    for job, score in scored
+                    if int(score or 0) > 0
+                ]
+            else:
+                # Make agent decisions. The current decision layer is specialised
+                # for the legacy HSE/ESG profile, so profile-driven JSearch uses
+                # its own profile-fit scores instead.
+                decisions = self.repo.make_agent_decisions(scored)
 
-            for decision in decisions:
-                if getattr(decision, "decision", None) in {"apply", "watch"}:
-                    selected.append((decision.job, int(decision.final_score)))
+                for decision in decisions:
+                    if getattr(decision, "decision", None) in {"apply", "watch"}:
+                        selected.append((decision.job, int(decision.final_score)))
 
             # Deterministic sorting: primary by score, secondary by title, tertiary by company
             selected = sorted(
@@ -283,7 +350,7 @@ class RicoSystem:
 
             # Enrich with decision engine probability if enabled
             enriched = []
-            if self.config.enable_decision_engine:
+            if self.config.enable_decision_engine and not using_profile_jsearch:
                 try:
                     from src.decision_engine import JobDecisionEngine
                     from src.profile import get_candidate_profile, get_target_roles
@@ -358,9 +425,22 @@ class RicoSystem:
                         "repo_score": score,
                         "rico_score": job.get("rico_score"),
                         "score": max(0, min(100, int(job.get("rico_score") or job.get("score") or score))),  # Normalized score
-                        "rico_explanation": job.get("rico_explanation"),
+                        "rico_explanation": job.get("rico_explanation") or job.get("profile_explanation"),
+                        "profile_explanation": job.get("profile_explanation"),
+                        "profile_fit_score": job.get("profile_fit_score"),
+                        "score_source": job.get("score_source"),
+                        "source_quality": job.get("source_quality"),
                         "success_probability": job.get("success_probability"),
-                        "url": job.get("url") or job.get("job_url"),
+                        "url": (
+                            job.get("url")
+                            or job.get("job_url")
+                            or job.get("link")
+                            or job.get("apply_link")
+                        ),
+                        "link": job.get("link") or job.get("apply_link") or job.get("url") or job.get("job_url"),
+                        "apply_link": job.get("apply_link") or job.get("job_apply_link"),
+                        "alt_link": job.get("alt_link") or job.get("job_google_link"),
+                        "source": job.get("source"),
                     }
                     for job, score in final_matches
                 ],
@@ -369,6 +449,7 @@ class RicoSystem:
                     "learning_repo_enabled": self.config.enable_learning_repo,
                     "caching_enabled": self.config.enable_caching,
                     "llm_enabled": self.config.enable_llm,
+                    "profile_driven_jsearch": using_profile_jsearch,
                 },
             }
         except Exception as exc:
