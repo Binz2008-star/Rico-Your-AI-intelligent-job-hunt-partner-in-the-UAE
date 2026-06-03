@@ -1,6 +1,7 @@
 "use client";
 
 import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
+import { AppSidebar } from "@/components/layout/AppSidebar";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, RicoOption, UploadCVResponse } from "@/lib/api";
 import { clearChatHistory, confirmCVProfile, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, uploadCV } from "@/lib/api";
@@ -239,7 +240,7 @@ function CvReadyOnboardingPanel({
                                 key={qa.key}
                                 onClick={() => onAction(qa.prompt, label)}
                                 disabled={disabled}
-                                className="min-h-10 rounded-xl border border-magenta/25 bg-magenta/5 px-3 py-2.5 text-center text-[12px] font-medium text-magenta transition-colors hover:border-magenta/40 hover:bg-magenta/10 disabled:opacity-50 rico-focus-strong"
+                                className="min-h-10 rounded-xl border border-gold/25 bg-gold/5 px-3 py-2.5 text-center text-[12px] font-medium text-gold transition-colors hover:border-gold/40 hover:bg-gold/10 disabled:opacity-50 rico-focus-strong"
                             >
                                 {label}
                             </button>
@@ -472,7 +473,7 @@ function OptionButtons({ options, onAction }: { options: RicoOption[]; onAction:
                     type="button"
                     key={opt.action}
                     onClick={() => onAction(opt.message ?? opt.label)}
-                    className="text-[12px] px-3 py-2 rounded-xl border border-magenta/30 text-magenta hover:bg-magenta-soft hover:border-magenta/60 transition-colors rico-focus-strong"
+                    className="text-[12px] px-3 py-2 rounded-xl border border-gold/30 text-gold hover:bg-gold/10 hover:border-gold/50 transition-colors rico-focus-strong"
                 >
                     {opt.label}
                 </button>
@@ -505,6 +506,7 @@ export default function CommandPage() {
     const [draftProfile, setDraftProfile] = useState<ProfilePreview | null>(null);
     const [clearingHistory, setClearingHistory] = useState(false);
     const [confirmClear, setConfirmClear] = useState(false);
+    const [sidebarUser, setSidebarUser] = useState<{ email?: string } | null>(null);
 
     useEffect(() => {
         if (typeof window !== "undefined") {
@@ -540,6 +542,7 @@ export default function CommandPage() {
                 if (cancelled) return;
                 clearTimeout(fallbackId);
                 setChatAudience(me.authenticated ? "authenticated" : "public");
+                setSidebarUser(me.authenticated ? { email: me.email ?? undefined } : null);
             })
             .catch(() => {
                 if (cancelled) return;
@@ -1013,18 +1016,32 @@ export default function CommandPage() {
 
     return (
         <div
-            className="relative flex h-[100dvh] min-h-[100dvh] flex-col overflow-hidden bg-background"
+            className="relative flex h-[100dvh] min-h-[100dvh] overflow-hidden bg-background"
             dir={language === "ar" ? "rtl" : "ltr"}
         >
-            {/* Mobile command header */}
-            <MobileCommandHeader
-                chatAudience={chatAudience}
-                onLogout={handleLogout}
-                onNewChat={handleNewChat}
-                onClearChat={handleClearChat}
-                loginHref={COMMAND_LOGIN_HREF}
-                signupHref={COMMAND_SIGNUP_HREF}
-            />
+            {/* Desktop sidebar — md+ only, hidden on mobile. Shown when authenticated or
+                checking (so there's no layout jump when auth resolves). Hides for public. */}
+            {chatAudience !== "public" && (
+                <AppSidebar
+                    className="hidden md:flex shrink-0"
+                    user={sidebarUser ?? undefined}
+                    onLogout={chatAudience === "authenticated" ? handleLogout : undefined}
+                />
+            )}
+
+            {/* Main column — fills remaining width */}
+            <div className="flex flex-1 min-w-0 flex-col overflow-hidden">
+            {/* Top nav: always on mobile; on desktop only when no sidebar (public/checking→public) */}
+            <div className={chatAudience === "authenticated" ? "md:hidden" : ""}>
+                <MobileCommandHeader
+                    chatAudience={chatAudience}
+                    onLogout={handleLogout}
+                    onNewChat={handleNewChat}
+                    onClearChat={handleClearChat}
+                    loginHref={COMMAND_LOGIN_HREF}
+                    signupHref={COMMAND_SIGNUP_HREF}
+                />
+            </div>
 
             {/* Hidden file input for CV upload */}
             <input
@@ -1213,7 +1230,7 @@ export default function CommandPage() {
                                                 type="button"
                                                 onClick={() => handleConfirmProfile(m.preview!, m.filename!, m.id)}
                                                 disabled={thinking}
-                                                className="text-[12px] px-4 py-2 rounded-lg bg-magenta text-white font-medium hover:bg-magenta-hover transition-colors disabled:opacity-50"
+                                                className="text-[12px] px-4 py-2 rounded-lg bg-gold text-[#0a0a1a] font-medium hover:bg-gold-hover transition-colors disabled:opacity-50"
                                             >
                                                 {t("cmdProfileUseThis")}
                                             </button>
@@ -1312,7 +1329,7 @@ export default function CommandPage() {
                                                             type="button"
                                                             key={na.action}
                                                             onClick={() => sendMessage(na.message ?? na.label)}
-                                                            className="text-[11px] px-3 py-1.5 rounded-xl border border-magenta/30 text-magenta hover:bg-magenta-soft hover:border-magenta/60 transition-colors rico-focus-strong"
+                                                            className="text-[11px] px-3 py-1.5 rounded-xl border border-gold/30 text-gold hover:bg-gold/10 hover:border-gold/50 transition-colors rico-focus-strong"
                                                         >
                                                             {na.label}
                                                         </button>
@@ -1414,6 +1431,7 @@ export default function CommandPage() {
                     </p>
                 </div>
             </div>
+            </div>{/* end main column */}
         </div>
     );
 }
