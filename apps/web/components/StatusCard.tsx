@@ -44,7 +44,7 @@ export function StatusCard({ title, badge, badgeLabel, value, href, children, cl
           <p className="font-headline text-[36px] font-semibold leading-none tracking-tight text-text-primary md:text-[42px]">
             {value}
           </p>
-          <span className="mb-1.5 h-1.5 w-1.5 rounded-full bg-cyan shadow-[0_0_18px_rgba(0,229,255,0.6)]" />
+          <span className="mb-1.5 h-2 w-2 rounded-full bg-cyan shadow-[0_0_22px_rgba(0,229,255,0.7)]" />
         </div>
       )}
       <div className="relative z-10 min-w-0 text-sm leading-relaxed text-text-secondary">
