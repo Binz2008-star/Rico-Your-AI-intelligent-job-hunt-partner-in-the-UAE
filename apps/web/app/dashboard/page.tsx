@@ -81,7 +81,7 @@ export default async function DashboardPage({
               <p className="text-sm text-text-tertiary">
                 Ask Rico to find matches, prepare an application, or explain what to do next.
               </p>
-              <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">
+              <span className="mt-3 inline-flex text-[12px] font-semibold text-gold">
                 Open Command Center
               </span>
             </StatusCard>
@@ -89,7 +89,7 @@ export default async function DashboardPage({
               <p className="text-sm text-text-tertiary">
                 Check scored opportunities and decide which leads should move into your flow.
               </p>
-              <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">
+              <span className="mt-3 inline-flex text-[12px] font-semibold text-gold">
                 View Matches
               </span>
             </StatusCard>
@@ -97,7 +97,7 @@ export default async function DashboardPage({
               <p className="text-sm text-text-tertiary">
                 Adjust match thresholds, apply pacing, and alert preferences.
               </p>
-              <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">
+              <span className="mt-3 inline-flex text-[12px] font-semibold text-gold">
                 Review Settings
               </span>
             </StatusCard>
@@ -115,7 +115,7 @@ export default async function DashboardPage({
               <p className="text-sm text-text-tertiary">
                 Keep your target roles, seniority, locations, and CV details current so Rico can rank jobs accurately.
               </p>
-              <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">
+              <span className="mt-3 inline-flex text-[12px] font-semibold text-gold">
                 Update Career Profile
               </span>
             </StatusCard>
@@ -132,7 +132,7 @@ export default async function DashboardPage({
               <p className="text-sm text-text-tertiary">
                 Track active applications, interviews, offers, and decisions in one pipeline view.
               </p>
-              <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">
+              <span className="mt-3 inline-flex text-[12px] font-semibold text-gold">
                 Open Flow
               </span>
             </StatusCard>
@@ -140,7 +140,7 @@ export default async function DashboardPage({
               <p className="text-sm text-text-tertiary">
                 Use your daily apply limit to keep automation controlled and reviewable.
               </p>
-              <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">
+              <span className="mt-3 inline-flex text-[12px] font-semibold text-gold">
                 Adjust Pacing
               </span>
             </StatusCard>
@@ -158,7 +158,7 @@ export default async function DashboardPage({
               <p className="text-sm text-text-tertiary">
                 Saved searches and leads help Rico keep future scans aligned with your priorities.
               </p>
-              <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">
+              <span className="mt-3 inline-flex text-[12px] font-semibold text-gold">
                 View Saved Leads
               </span>
             </StatusCard>
