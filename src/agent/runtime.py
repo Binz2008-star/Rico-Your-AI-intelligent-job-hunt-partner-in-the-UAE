@@ -134,21 +134,28 @@ class AgentRuntime:
                 duration_ms=int((time.monotonic() - wall_start) * 1000),
             )
 
-        # 5. Subscription gate for apply actions
+        # 5. Subscription gate for apply actions.
+        #    Only enforced when RICO_ENABLE_AUTO_APPLY=true. When the global flag is off,
+        #    apply_to_job() itself returns manual_required — no upgrade prompt for a feature
+        #    that cannot run in the current environment.
         if action == "apply":
-            try:
-                from src.services.apply_service import _enforce_automation_allowed
-                _enforce_automation_allowed(user_id)
-            except Exception as exc:
-                elapsed = int((time.monotonic() - wall_start) * 1000)
-                logger.info("runtime_apply_gated user=%s reason=%s", user_id, exc)
-                return RuntimeResult(
-                    ok=False,
-                    message=str(exc),
-                    action=action, job_key=job_key, source=source, user_id=user_id,
-                    error="subscription_limit",
-                    duration_ms=elapsed,
-                )
+            from src.services.apply_service import (
+                _auto_apply_globally_enabled,
+                _enforce_automation_allowed,
+            )
+            if _auto_apply_globally_enabled():
+                try:
+                    _enforce_automation_allowed(user_id)
+                except Exception as exc:
+                    elapsed = int((time.monotonic() - wall_start) * 1000)
+                    logger.info("runtime_apply_gated user=%s reason=%s", user_id, exc)
+                    return RuntimeResult(
+                        ok=False,
+                        message=str(exc),
+                        action=action, job_key=job_key, source=source, user_id=user_id,
+                        error="subscription_limit",
+                        duration_ms=elapsed,
+                    )
 
         # 6. Execute tool
         tool_name = ACTION_TO_TOOL[action]
