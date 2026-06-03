@@ -1,6 +1,6 @@
 "use client";
 
-import { DashboardShell } from "@/components/DashboardShell";
+import { AppShell } from "@/components/layout/AppShell";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { StatusCard } from "@/components/StatusCard";
 import { ToastContainer } from "@/components/ui/Toast";
@@ -153,7 +153,7 @@ export default function SettingsPage() {
   const isMock = process.env.NEXT_PUBLIC_USE_MOCK === "true";
 
   return (
-    <DashboardShell
+    <AppShell
       title={t("settings")}
       subtitle={t("settingsSubtitle")}
     >
@@ -179,7 +179,7 @@ export default function SettingsPage() {
                     aria-label={t("applyPacing")}
                     value={settings.max_daily_applies}
                     onChange={(e) => setSettings({ ...settings, max_daily_applies: Number(e.target.value) })}
-                    className="w-full h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer accent-magenta"
+                    className="w-full h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer accent-gold"
                   />
                   <div className="flex justify-between mt-2 text-[10px] text-text-tertiary font-bold uppercase tracking-tighter">
                     <span>{t("safety")}</span>
@@ -195,7 +195,7 @@ export default function SettingsPage() {
                     aria-label={t("minimumFitScore")}
                     value={settings.min_score}
                     onChange={(e) => setSettings({ ...settings, min_score: Number(e.target.value) })}
-                    className="w-full h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer accent-cyan"
+                    className="w-full h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer accent-gold"
                   />
                   <div className="flex justify-between mt-2 text-[10px] text-text-tertiary font-bold uppercase tracking-tighter">
                     <span>{t("general")}</span>
@@ -285,7 +285,7 @@ export default function SettingsPage() {
                   {telegramDescription}
                 </p>
               </div>
-              <span className="text-xs text-[#5b4fff] font-medium">{telegramStatus}</span>
+              <span className="text-xs text-gold font-medium">{telegramStatus}</span>
             </div>
 
             <div className="pt-6 border-t border-border-subtle flex items-center justify-between">
@@ -294,7 +294,7 @@ export default function SettingsPage() {
                   ? t("statusPaused")
                   : saving ? t("statusSyncing") : t("statusSynced")}
               </span>
-              {saving && <div className="w-3 h-3 border-2 border-[#5b4fff] border-t-transparent rounded-full animate-spin" />}
+              {saving && <div className="w-3 h-3 border-2 border-gold border-t-transparent rounded-full animate-spin" />}
             </div>
           </div>
         </section>
@@ -391,6 +391,6 @@ export default function SettingsPage() {
 
       </div>
       <ToastContainer toasts={toasts} />
-    </DashboardShell>
+    </AppShell>
   );
 }
