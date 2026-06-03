@@ -7,7 +7,7 @@ import { clearChatHistory, confirmCVProfile, fetchChatHistory, fetchMe, logout, 
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { buildAuthHref } from "@/lib/redirect";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
-import { translations, useTranslation, type TranslationKey } from "@/lib/translations";
+import { useTranslation, translations, type TranslationKey } from "@/lib/translations";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -212,18 +212,18 @@ function CvReadyOnboardingPanel({
 
                 {/* Status insight cards — individual dark mini-rows */}
                 <div className="relative mt-4 space-y-1.5">
-                    <div className="flex items-center gap-2.5 rounded-lg border border-overlay/8 bg-surface-elevated/50 px-3 py-2 transition-all duration-300 hover:bg-surface-elevated/70">
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cyan shadow-[0_0_6px_rgba(0,229,255,0.6)] animate-pulse" aria-hidden="true" />
+                    <div className="flex items-center gap-2.5 rounded-lg border border-overlay/8 bg-surface-elevated/50 px-3 py-2">
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cyan shadow-[0_0_6px_rgba(0,229,255,0.6)]" aria-hidden="true" />
                         <span className="flex-1 text-[12px] text-text-secondary">{t("cmdCvReadyCard1Label")}</span>
                         <span className="text-[10px] font-medium text-cyan">{t("cmdCvReadyCard1Badge")}</span>
                     </div>
-                    <div className="flex items-center gap-2.5 rounded-lg border border-overlay/8 bg-surface-elevated/50 px-3 py-2 transition-all duration-300 hover:bg-surface-elevated/70">
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cyan shadow-[0_0_6px_rgba(0,229,255,0.6)] animate-pulse" aria-hidden="true" />
+                    <div className="flex items-center gap-2.5 rounded-lg border border-overlay/8 bg-surface-elevated/50 px-3 py-2">
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cyan shadow-[0_0_6px_rgba(0,229,255,0.6)]" aria-hidden="true" />
                         <span className="flex-1 text-[12px] text-text-secondary">{t("cmdCvReadyCard2Label")}</span>
                         <span className="text-[10px] font-medium text-cyan">{t("cmdCvReadyCard2Badge")}</span>
                     </div>
-                    <div className="flex items-center gap-2.5 rounded-lg border border-overlay/8 bg-surface-elevated/50 px-3 py-2 transition-all duration-300 hover:bg-surface-elevated/70">
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-magenta shadow-[0_0_6px_rgba(255,45,142,0.6)] animate-pulse" aria-hidden="true" />
+                    <div className="flex items-center gap-2.5 rounded-lg border border-overlay/8 bg-surface-elevated/50 px-3 py-2">
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-magenta shadow-[0_0_6px_rgba(255,45,142,0.6)]" aria-hidden="true" />
                         <span className="flex-1 text-[12px] text-text-secondary">{t("cmdCvReadyCard3Label")}</span>
                         <span className="text-[10px] font-medium text-magenta">{t("cmdCvReadyCard3Badge")}</span>
                     </div>
@@ -331,8 +331,8 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
     const applyHref = isBadLink && fallback ? fallback : primary;
     const applyLabel =
         vStatus === "google_intermediary" ? t("cmdApplySearch") :
-            isBadLink && fallback ? t("cmdApplyAlt") :
-                t("cmdApply");
+        isBadLink && fallback ? t("cmdApplyAlt") :
+        t("cmdApply");
 
     return (
         <article
@@ -1039,7 +1039,7 @@ export default function CommandPage() {
 
             <div className="relative z-10 mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col px-2 sm:px-4 lg:px-6">
                 {/* Messages Container */}
-                <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 py-5 space-y-4 scroll-pb-32 sm:px-4 sm:py-7" role="log" aria-live="polite" aria-atomic="false">
+                <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 py-5 space-y-4 scroll-pb-32 sm:px-4 sm:py-7" role="log" aria-live="polite" aria-atomic="false" aria-busy={thinking}>
 
                     {/* Clear history control — shown at top when authenticated with loaded history */}
                     {chatAudience === "authenticated" && messages.length > 1 && (
@@ -1171,7 +1171,7 @@ export default function CommandPage() {
                                         m.stale ? (
                                             <details className="mt-2 group">
                                                 <summary className="cursor-pointer text-[11px] text-text-muted hover:text-text-secondary transition-colors select-none list-none flex items-center gap-1">
-                                                    <svg width="10" height="10" viewBox="0 0 10 10" className="transition-transform group-open:rotate-90" fill="currentColor"><path d="M3 2l4 3-4 3V2z" /></svg>
+                                                    <svg width="10" height="10" viewBox="0 0 10 10" className="transition-transform group-open:rotate-90" fill="currentColor"><path d="M3 2l4 3-4 3V2z"/></svg>
                                                     {t("cmdShowOld")} {m.matches.length} {m.matches.length === 1 ? t("cmdMatch") : t("cmdMatches")} {t("cmdStaleNote")}
                                                 </summary>
                                                 <div className="mt-2 space-y-2 opacity-70">
