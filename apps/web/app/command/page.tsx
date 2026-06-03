@@ -210,8 +210,27 @@ function CvReadyOnboardingPanel({
                     </div>
                 </div>
 
+                {/* Status insight cards — Pulse data-row pattern */}
+                <div className="relative mt-4 overflow-hidden rounded-xl border border-border-subtle/60 bg-surface-glass/60 divide-y divide-border-subtle/40">
+                    <div className="flex items-center gap-3 px-3 py-2">
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-cyan/70" aria-hidden="true" />
+                        <span className="flex-1 text-[12px] text-rico-text">{t("cmdCvReadyCard1Label")}</span>
+                        <span className="text-[10px] font-medium text-cyan">{t("cmdCvReadyCard1Badge")}</span>
+                    </div>
+                    <div className="flex items-center gap-3 px-3 py-2">
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-cyan/70" aria-hidden="true" />
+                        <span className="flex-1 text-[12px] text-rico-text">{t("cmdCvReadyCard2Label")}</span>
+                        <span className="text-[10px] font-medium text-cyan">{t("cmdCvReadyCard2Badge")}</span>
+                    </div>
+                    <div className="flex items-center gap-3 px-3 py-2">
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-magenta/70" aria-hidden="true" />
+                        <span className="flex-1 text-[12px] text-rico-text">{t("cmdCvReadyCard3Label")}</span>
+                        <span className="text-[10px] font-medium text-magenta">{t("cmdCvReadyCard3Badge")}</span>
+                    </div>
+                </div>
+
                 {/* Action chips */}
-                <div className="relative mt-4 grid grid-cols-1 gap-2 min-[480px]:grid-cols-2">
+                <div className="relative mt-3 grid grid-cols-1 gap-2 min-[480px]:grid-cols-2">
                     {CV_READY_CHIP_DEFS.map((qa) => {
                         const label = t(qa.key as TranslationKey);
                         return (
