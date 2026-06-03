@@ -1,7 +1,7 @@
 export { PageHeader } from "./PageHeader";
 export type { PageHeaderProps } from "./PageHeader";
 
-export { LoadingState, Spinner, SkeletonBar } from "./LoadingState";
+export { LoadingState, Spinner, SkeletonLine, SkeletonCard } from "./LoadingState";
 export type { LoadingStateProps } from "./LoadingState";
 
 export { EmptyState } from "./EmptyState";
