@@ -604,8 +604,8 @@ export default function SubscriptionPage() {
 
                 {/* Current plan banner for active paid subscribers */}
                 {!maintenanceMode && sub && isActive && currentPlan && currentPlan !== "free" && (
-                    <div className="flex items-center gap-3 rounded-xl border border-cyan/30 bg-cyan-soft px-5 py-4">
-                        <span className="text-cyan text-[20px]">✦</span>
+                    <div className="flex items-center gap-3 rounded-xl border border-gold/30 bg-gold/10 px-5 py-4">
+                        <span className="text-gold text-[20px]">✦</span>
                         <div>
                             <p className="text-[13px] font-semibold text-text-primary">
                                 {t('activePlan')} {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} Plan

@@ -39,7 +39,7 @@ function BrandHeader() {
 function SpinnerCard({ label }: { label: string }) {
   return (
     <GlassPanel className="w-full max-w-lg p-8 text-center">
-      <div className="mb-4 mx-auto w-10 h-10 rounded-full border-2 border-magenta/30 border-t-magenta animate-spin" />
+      <div className="mb-4 mx-auto w-10 h-10 rounded-full border-2 border-gold/30 border-t-gold animate-spin" />
       <p className="text-sm text-text-secondary">{label}</p>
     </GlassPanel>
   );
@@ -50,8 +50,8 @@ function SpinnerCard({ label }: { label: string }) {
 function CompletionCard({ onGo }: { onGo: () => void }) {
   return (
     <div className="w-full max-w-lg text-center">
-      <div className="mb-6 mx-auto w-14 h-14 rounded-full bg-cyan-soft border border-cyan/20 flex items-center justify-center">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-cyan">
+      <div className="mb-6 mx-auto w-14 h-14 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-gold">
           <polyline points="20 6 9 17 4 12" />
         </svg>
       </div>
@@ -229,12 +229,12 @@ export default function OnboardingPage() {
               <div
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={handleDrop}
-                className="w-full rounded-xl border-2 border-dashed border-border-medium p-10 text-center transition-colors hover:border-magenta/40"
+                className="w-full rounded-xl border-2 border-dashed border-border-medium p-10 text-center transition-colors hover:border-gold/40"
               >
                 <input type="file" accept="application/pdf" onChange={handleFileInput} className="hidden" id="cv-upload" />
                 <label htmlFor="cv-upload" className="flex flex-col items-center gap-3 cursor-pointer">
-                  <div className="w-12 h-12 rounded-full bg-magenta-soft flex items-center justify-center">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-magenta">
+                  <div className="w-12 h-12 rounded-full bg-gold/10 flex items-center justify-center">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gold">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                       <polyline points="17 8 12 3 7 8" />
                       <line x1="12" y1="3" x2="12" y2="15" />
