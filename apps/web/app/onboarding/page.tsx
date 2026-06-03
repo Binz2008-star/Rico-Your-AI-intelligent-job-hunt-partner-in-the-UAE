@@ -19,6 +19,61 @@ const MISSING_FIELDS: { key: keyof OnboardingPayload; label: string; placeholder
   { key: "skills", label: "Additional skills (if any missed)", placeholder: "Comma-separated", isList: true },
 ];
 
+// ── Step indicator ────────────────────────────────────────────────────────────
+
+const STEPS = ["Upload CV", "Complete Profile", "Ready"] as const;
+
+function StepIndicator({ current }: { current: 0 | 1 | 2 }) {
+  return (
+    <div className="mb-8 flex items-center gap-0" aria-label="Onboarding progress">
+      {STEPS.map((label, idx) => {
+        const done = idx < current;
+        const active = idx === current;
+        return (
+          <div key={label} className="flex items-center">
+            <div className="flex flex-col items-center gap-1.5">
+              <div
+                className={[
+                  "flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-bold transition-all duration-300",
+                  done
+                    ? "border-gold bg-gold text-[#0a0a1a]"
+                    : active
+                    ? "border-gold bg-gold/15 text-gold shadow-[0_0_12px_rgba(245,166,35,0.25)]"
+                    : "border-overlay/20 bg-surface-elevated/40 text-text-tertiary",
+                ].join(" ")}
+                aria-current={active ? "step" : undefined}
+              >
+                {done ? (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                ) : (
+                  idx + 1
+                )}
+              </div>
+              <span className={[
+                "text-[10px] font-semibold tracking-wide whitespace-nowrap",
+                active ? "text-gold" : done ? "text-text-secondary" : "text-text-tertiary",
+              ].join(" ")}>
+                {label}
+              </span>
+            </div>
+            {idx < STEPS.length - 1 && (
+              <div
+                className={[
+                  "mx-2 mb-4 h-px w-12 transition-all duration-500",
+                  idx < current ? "bg-gold/60" : "bg-overlay/15",
+                ].join(" ")}
+                aria-hidden="true"
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Brand header ─────────────────────────────────────────────────────────────
 
 function BrandHeader() {
@@ -63,7 +118,7 @@ function CompletionCard({ onGo }: { onGo: () => void }) {
       </p>
       <button
         onClick={onGo}
-        className="inline-flex items-center gap-2 rounded-lg bg-primary/10 text-primary px-6 py-3 text-sm font-semibold uppercase tracking-widest hover:bg-primary/20 transition-all"
+        className="inline-flex items-center gap-2 rounded-lg bg-gold text-[#0a0a1a] px-6 py-3 text-sm font-semibold uppercase tracking-widest hover:bg-gold-hover transition-all shadow-[0_4px_16px_rgba(245,166,35,0.28)]"
       >
         Go to dashboard →
       </button>
@@ -79,7 +134,7 @@ function ErrorCard({ message, onRetry }: { message: string; onRetry: () => void 
       <p className="mb-4 text-sm text-error">{message}</p>
       <button
         onClick={onRetry}
-        className="rounded-lg bg-primary/10 text-primary px-5 py-2.5 text-sm font-semibold uppercase tracking-widest hover:bg-primary/20 transition-all"
+        className="rounded-lg bg-gold text-[#0a0a1a] px-5 py-2.5 text-sm font-semibold uppercase tracking-widest hover:bg-gold-hover transition-all"
       >
         Try again
       </button>
@@ -214,6 +269,17 @@ export default function OnboardingPage() {
 
       {authState === "ready" && (
         <>
+          {/* ── Step progress ── */}
+          {pageState !== "error" && (
+            <StepIndicator
+              current={
+                pageState === "upload" || pageState === "parsing" ? 0
+                : pageState === "form" || pageState === "submitting" ? 1
+                : 2
+              }
+            />
+          )}
+
           {/* ── Upload zone ── */}
           {pageState === "upload" && (
             <GlassPanel className="w-full max-w-md p-8">
@@ -331,7 +397,7 @@ export default function OnboardingPage() {
                 </button>
                 <button
                   onClick={handleSubmit}
-                  className="inline-flex items-center gap-2 rounded-lg bg-primary/10 text-primary px-6 py-3 text-sm font-semibold uppercase tracking-widest hover:bg-primary/20 transition-all"
+                  className="inline-flex items-center gap-2 rounded-lg bg-gold text-[#0a0a1a] px-6 py-3 text-sm font-semibold uppercase tracking-widest hover:bg-gold-hover transition-all shadow-[0_4px_16px_rgba(245,166,35,0.28)]"
                 >
                   Complete profile →
                 </button>
