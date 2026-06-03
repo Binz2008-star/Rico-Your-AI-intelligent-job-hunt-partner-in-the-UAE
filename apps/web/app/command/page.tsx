@@ -258,19 +258,19 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
 
     return (
         <article
-            className="rounded-lg border border-border-subtle/50 px-2.5 py-2 space-y-1.5"
+            className="space-y-2 rounded-xl border border-border-subtle/70 bg-surface-elevated/50 px-3 py-2.5"
             aria-label={`Job match: ${match.title} at ${match.company}`}
             data-testid="opportunity-card"
         >
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2.5">
                 <div className="flex-1 min-w-0">
                     <div
-                        className="text-[12px] font-semibold text-rico-text break-normal line-clamp-1"
+                        className="break-words text-[12px] font-semibold text-rico-text sm:line-clamp-1"
                         data-testid="opportunity-card-title"
                     >
                         {match.title}
                     </div>
-                    <div className="text-[10px] text-text-muted mt-0.5 line-clamp-1">
+                    <div className="mt-0.5 break-words text-[10px] text-text-muted sm:line-clamp-1">
                         {match.company}{match.location ? ` · ${match.location}` : ""}{topReason ? ` · ${topReason}` : ""}
                     </div>
                 </div>
@@ -284,7 +284,7 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
                         rel="noopener noreferrer"
                         data-testid="view-job-action"
                         aria-label={`${applyLabel}: ${match.title} at ${match.company}`}
-                        className="text-[10px] px-2 py-1 rounded-md bg-magenta/10 border border-magenta/30 text-magenta hover:bg-magenta/20 transition-colors shrink-0 font-medium"
+                        className="w-full shrink-0 rounded-md border border-magenta/30 bg-magenta/10 px-2 py-1 text-center text-[10px] font-medium text-magenta transition-colors hover:bg-magenta/20 sm:w-auto"
                     >
                         {applyLabel}
                     </a>
@@ -293,7 +293,7 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
 
             {/* Source quality row — only shown when there is something to say */}
             {vStatus && (
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
                     <SourceQualityBadge status={vStatus} />
                     {isBadLink && !fallback && (
                         <span className="text-[9px] text-text-muted italic">
@@ -336,7 +336,7 @@ function ApplicationStatusCard({ applications, followUpNeeded }: {
     const activeStages = stageDefs.filter((s) => counts[s.key] > 0);
 
     return (
-        <div className="mt-1.5 rounded-lg border border-border-subtle/50 px-2.5 py-2 space-y-1.5">
+        <div className="mt-2 space-y-2 rounded-xl border border-border-subtle/70 bg-surface-elevated/50 px-3 py-2.5">
             {activeStages.length > 0 && (
                 <div className="flex flex-wrap gap-3">
                     {activeStages.map((s) => (
@@ -370,7 +370,7 @@ function ProfileGapCard({ gaps }: { gaps: string[] }) {
     const { language } = useLanguage();
     const t = useTranslation(language);
     return (
-        <div className="mt-1.5 rounded-lg border border-border-subtle/50 px-2.5 py-1.5 flex items-center gap-2">
+        <div className="mt-2 flex flex-col gap-2 rounded-xl border border-border-subtle/70 bg-surface-elevated/50 px-3 py-2.5 sm:flex-row sm:items-center">
             <div className="flex-1 min-w-0 text-[11px] text-text-secondary line-clamp-1">
                 <span className="text-rico-amber font-medium">{t("cmdIncompletePrefix")}</span>
                 {gaps.slice(0, 2).join(", ")}
@@ -934,13 +934,10 @@ export default function CommandPage() {
     }
 
     return (
-        <div className="min-h-screen bg-background flex flex-col relative overflow-hidden">
-            {/* Ambient glows - cinematic magenta/cyan */}
-            <div className="fixed inset-0 pointer-events-none z-0">
-                <div aria-hidden="true" className="absolute -top-[250px] -left-[150px] w-[700px] h-[700px] rounded-full bg-magenta-dim blur-[140px]" />
-                <div aria-hidden="true" className="absolute bottom-0 -right-[100px] w-[500px] h-[500px] rounded-full bg-cyan-dim blur-[140px]" />
-            </div>
-
+        <div
+            className="relative flex h-[100dvh] min-h-[100dvh] flex-col overflow-hidden bg-background"
+            dir={language === "ar" ? "rtl" : "ltr"}
+        >
             {/* Mobile command header */}
             <MobileCommandHeader
                 chatAudience={chatAudience}
@@ -962,9 +959,9 @@ export default function CommandPage() {
                 onChange={handleCVUpload}
             />
 
-            <div className="relative z-10 flex flex-col flex-1 h-[calc(100dvh-53px)] max-w-3xl w-full mx-auto px-2 sm:px-4">
+            <div className="relative z-10 mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col px-2 sm:px-4 lg:px-6">
                 {/* Messages Container */}
-                <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 py-6 space-y-5" role="log" aria-live="polite" aria-atomic="false" aria-busy={thinking}>
+                <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 py-5 space-y-4 scroll-pb-32 sm:px-4 sm:py-7" role="log" aria-live="polite" aria-atomic="false" aria-busy={thinking}>
 
                     {/* Clear history control — shown at top when authenticated with loaded history */}
                     {chatAudience === "authenticated" && messages.length > 1 && (
@@ -1003,7 +1000,7 @@ export default function CommandPage() {
 
                     {/* Quick start (shown above first message) */}
                     {messages.length <= 1 && !thinking && (
-                        <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:justify-center gap-2 pb-4">
+                        <div className="grid grid-cols-1 gap-2 pb-4 min-[480px]:grid-cols-2 sm:flex sm:flex-wrap sm:justify-center">
                             {QUICK_ACTION_DEFS.map((qa) => {
                                 const label = t(qa.key as TranslationKey);
                                 return (
@@ -1012,7 +1009,7 @@ export default function CommandPage() {
                                         key={qa.key}
                                         onClick={() => sendMessage(qa.prompt, label)}
                                         disabled={thinking || chatAudience === "checking"}
-                                        className="rounded-xl border border-border-subtle bg-surface-glass px-3 py-2 text-[11px] sm:text-xs text-text-secondary transition-colors hover:border-magenta/30 hover:bg-surface-subtle hover:text-rico-text disabled:opacity-50 rico-focus-strong text-center"
+                                        className="min-h-10 rounded-xl border border-border-subtle bg-surface-glass px-3 py-2 text-center text-[11px] text-text-secondary transition-colors hover:border-magenta/30 hover:bg-surface-subtle hover:text-rico-text disabled:opacity-50 rico-focus-strong sm:text-xs"
                                     >
                                         {label}
                                     </button>
@@ -1042,10 +1039,10 @@ export default function CommandPage() {
                                     >R</div>
                                 )}
                                 <div dir="auto" className={`${m.role === "user"
-                                    ? "max-w-[75%] sm:max-w-[68%] rounded-2xl rounded-tr-sm bg-magenta px-3.5 py-2.5 text-[14px] text-white leading-relaxed shadow-sm"
+                                    ? "max-w-[84%] break-words rounded-2xl rounded-tr-sm bg-magenta px-3.5 py-2.5 text-start text-[14px] leading-relaxed text-white shadow-sm sm:max-w-[72%]"
                                     : isStructured
-                                        ? "flex-1 min-w-0 rounded-xl bg-surface/20 border border-border-subtle/40 p-3 text-[13px] text-rico-text leading-relaxed"
-                                        : "flex-1 min-w-0 text-[14px] text-rico-text leading-relaxed"
+                                        ? "flex-1 min-w-0 rounded-xl border border-border-subtle/70 bg-surface-elevated/60 p-3 text-start text-[13px] leading-relaxed text-rico-text"
+                                        : "flex-1 min-w-0 break-words text-start text-[14px] leading-relaxed text-rico-text"
                                     }`}>
 
                                     {/* Search result caption */}
@@ -1251,7 +1248,7 @@ export default function CommandPage() {
 
                 {/* Input bar — shrink-0 flex child keeps it below the scroll area;
                     safe-area padding covers iOS home indicator. */}
-                <div className="shrink-0 px-4 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom))] bg-gradient-to-t from-background via-background/95 to-transparent">
+                <div className="shrink-0 px-2 pt-3 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:px-4">
                     {chatAudience === "public" && messages.filter((m) => m.role === "rico").length >= 2 && (
                         <div className="mb-2 flex items-center justify-between gap-3 px-1">
                             <p className="text-[11px] text-text-muted">{t("cmdSignUpCta")}</p>
@@ -1266,14 +1263,14 @@ export default function CommandPage() {
                     {uploadError && (
                         <p className="text-[11px] text-rico-red mb-2 text-center" role="alert">{uploadError}</p>
                     )}
-                    <div className="flex items-end gap-2">
+                    <div className="flex items-end gap-2 rounded-2xl border border-border-soft bg-surface-elevated/95 p-1.5 shadow-xl shadow-black/10 backdrop-blur-md">
                         {/* CV upload button */}
                         <button
                             type="button"
                             onClick={() => fileInputRef.current?.click()}
                             disabled={thinking || chatAudience === "checking"}
                             title={t("cmdUploadCvTitle")}
-                            className="w-10 h-10 rounded-xl border border-border-soft bg-surface/80 text-text-secondary flex items-center justify-center hover:border-magenta/40 hover:text-rico-text transition-all disabled:opacity-30 shrink-0 rico-focus-strong"
+                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-text-secondary transition-colors hover:bg-surface-subtle hover:text-rico-text disabled:opacity-30 rico-focus-strong"
                             aria-label={t("cmdUploadCvAriaLabel")}
                         >
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1299,13 +1296,13 @@ export default function CommandPage() {
                                 placeholder={chatAudience === "checking"
                                     ? t("cmdPlaceholderChecking")
                                     : t("cmdPlaceholderReady")}
-                                className="w-full resize-none bg-surface border border-border-soft hover:border-border-strong focus:border-magenta/60 backdrop-blur-xl rounded-2xl py-3 pl-4 pr-12 text-sm text-rico-text placeholder:text-text-muted transition-all shadow-2xl"
+                                className="max-h-[120px] w-full resize-none rounded-xl border-0 bg-transparent py-3 pe-12 ps-3 text-sm text-rico-text placeholder:text-text-muted outline-none transition-all"
                             />
                             <button
                                 type="button"
                                 onClick={handleSend}
                                 disabled={thinking || chatAudience === "checking" || !input.trim()}
-                                className="absolute right-2 top-1.5 bottom-1.5 w-9 h-9 rounded-xl bg-magenta text-white flex items-center justify-center hover:bg-magenta-hover transition-all disabled:opacity-30 disabled:grayscale rico-focus-strong"
+                                className="absolute bottom-1.5 end-1.5 top-1.5 flex h-9 w-9 items-center justify-center rounded-xl bg-magenta text-white transition-colors hover:bg-magenta-hover disabled:opacity-30 disabled:grayscale rico-focus-strong"
                                 aria-label={thinking ? t("cmdSending") : t("send")}
                             >
                                 {thinking ? (
