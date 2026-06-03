@@ -29,7 +29,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
         <TooltipProvider>
             <aside
                 className={cn(
-                    "hidden h-full w-64 flex-col border-r border-border-soft bg-surface md:flex",
+                    "hidden h-full w-64 flex-col border-e border-overlay/10 bg-surface/80 backdrop-blur-xl shadow-[inset_-1px_0_0_rgba(255,255,255,0.04)] md:flex",
                     className
                 )}
             >
@@ -85,7 +85,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                                                         className={cn(
                                                             "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                                                             isActive
-                                                                ? "bg-magenta-soft text-magenta"
+                                                                ? "bg-magenta/10 text-magenta ring-1 ring-magenta/20 shadow-[0_0_16px_rgba(255,45,142,0.1)]"
                                                                 : "text-text-secondary hover:bg-surface-subtle hover:text-text-primary"
                                                         )}
                                                     >
@@ -131,7 +131,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                                             className={cn(
                                                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                                                 isActive
-                                                    ? "bg-cyan-soft text-cyan"
+                                                    ? "bg-cyan/10 text-cyan ring-1 ring-cyan/20 shadow-[0_0_16px_rgba(0,229,255,0.1)]"
                                                     : "text-text-secondary hover:bg-surface-subtle hover:text-text-primary"
                                             )}
                                         >

@@ -55,7 +55,7 @@ export function StatusCard({ title, badge, badgeLabel, value, href, children, cl
 
   const cardClass = cn(
     "rico-card rounded-2xl border border-border-soft bg-surface-elevated/70 p-5 shadow-sm md:p-6 flex min-h-[148px] min-w-0 flex-col justify-between gap-5 transition-colors duration-200",
-    isInteractive && "group hover:border-cyan/30 hover:shadow-[0_24px_70px_rgba(0,0,0,0.28)]",
+    isInteractive && "group hover:border-cyan/30 hover:shadow-[0_24px_70px_rgba(0,0,0,0.28),0_0_0_1px_rgba(0,229,255,0.06)]",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
     className
   );
