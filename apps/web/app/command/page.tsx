@@ -322,9 +322,9 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
     const sourceUrl = clean(match.source_url);
     const altUrl = clean(match.alt_link);
 
-    // Determine which link button to show — conditional on what the provider returned.
+    // Determine which link button(s) to show — conditional on what the provider returned.
     // apply_url = direct apply page (highest trust)
-    // source_url = job listing page (medium trust)
+    // source_url = job listing page (medium trust, shown as secondary button when differs from apply)
     // alt_link   = Google Jobs fallback (lowest trust, only when primary blocked)
     // Neither    = show "Link unavailable" text — never invent a URL
     const isBadPrimary =
@@ -333,6 +333,7 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
         vStatus === "aggregator_untrusted" ||
         vStatus === "google_intermediary";
 
+    // Primary link: apply_url when clean, fall back to alt_link when primary is bad
     let linkHref = "";
     let linkLabel = "";
     let linkTestId = "";
@@ -353,6 +354,8 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
         linkLabel = t("cmdApplyAlt");
         linkTestId = "job-link-alt";
     }
+    // Secondary source link — shown when source_url exists and differs from the primary link
+    const showSource = !!sourceUrl && sourceUrl !== linkHref && !isBadPrimary && !!applyUrl;
     // linkHref="" → "Link unavailable" badge shown below, no <a> rendered
 
     return (
@@ -361,10 +364,11 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
             aria-label={`Job match: ${match.title} at ${match.company}`}
             data-testid="opportunity-card"
         >
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2.5">
+            {/* Title + score */}
+            <div className="flex items-start gap-2">
                 <div className="flex-1 min-w-0">
                     <div
-                        className="break-words text-[12px] font-semibold text-rico-text sm:line-clamp-1"
+                        className="break-words text-[12px] font-semibold text-rico-text line-clamp-2"
                         data-testid="opportunity-card-title"
                     >
                         {match.title}
@@ -374,43 +378,64 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
                         {match.location ? ` · ${match.location}` : ""}
                         {/* Salary only shown when provider supplied it — never inferred */}
                         {match.salary ? ` · ${match.salary}` : ""}
-                        {topReason ? ` · ${topReason}` : ""}
                     </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
-                    {/* Score pill — hidden when no real score was calculated */}
-                    {scorePct && (
-                        <span
-                            className={`text-[10px] font-semibold tabular-nums ${scoreColor}`}
-                            data-testid="job-score"
-                        >
-                            {scorePct}
-                        </span>
-                    )}
-                    {/* Apply / Source / Alt link — conditional on what provider returned */}
-                    {linkHref ? (
-                        <a
-                            href={linkHref}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            data-testid={linkTestId}
-                            aria-label={`${linkLabel}: ${match.title} at ${match.company}`}
-                            className="w-full shrink-0 rounded-md border border-gold/30 bg-gold/10 px-2 py-1 text-center text-[10px] font-medium text-gold transition-colors hover:bg-gold/20 sm:w-auto"
-                        >
-                            {linkLabel}
-                        </a>
-                    ) : (
-                        <span
-                            className="text-[9px] text-text-muted italic shrink-0"
-                            data-testid="job-link-unavailable"
-                        >
-                            {t("cmdLinkUnavailable")}
-                        </span>
-                    )}
-                </div>
+                {/* Score pill — hidden when no real score was calculated */}
+                {scorePct && (
+                    <span
+                        className={`text-[10px] font-semibold shrink-0 tabular-nums mt-0.5 ${scoreColor}`}
+                        data-testid="job-score"
+                    >
+                        {scorePct}
+                    </span>
+                )}
             </div>
 
-            {/* Source quality row — only shown when there is something to say */}
+            {/* Match reason — dedicated readable block, only when backend supplies one */}
+            {topReason && (
+                <p className="text-[11px] leading-relaxed text-text-secondary rounded-lg border border-border-subtle/40 bg-surface-glass px-2.5 py-1.5">
+                    {topReason}
+                </p>
+            )}
+
+            {/* Action links — flex row; Apply + optional Source secondary */}
+            <div className="flex flex-wrap items-center gap-1.5">
+                {/* Apply / Source / Alt link — conditional on what provider returned */}
+                {linkHref ? (
+                    <a
+                        href={linkHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid={linkTestId}
+                        aria-label={`${linkLabel}: ${match.title} at ${match.company}`}
+                        className="rounded-md border border-gold/30 bg-gold/10 px-2 py-1 text-[10px] font-medium text-gold transition-colors hover:bg-gold/20"
+                    >
+                        {linkLabel}
+                    </a>
+                ) : (
+                    <span
+                        className="text-[9px] text-text-muted italic"
+                        data-testid="job-link-unavailable"
+                    >
+                        {t("cmdLinkUnavailable")}
+                    </span>
+                )}
+                {/* Secondary source link when apply and source both exist and differ */}
+                {showSource && (
+                    <a
+                        href={sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid="job-link-source"
+                        aria-label={`View source: ${match.title} at ${match.company}`}
+                        className="rounded-md border border-border-soft bg-surface-glass px-2 py-1 text-[10px] text-text-secondary transition-colors hover:border-border-subtle hover:text-rico-text"
+                    >
+                        {t("cmdViewSource")}
+                    </a>
+                )}
+            </div>
+
+            {/* Source quality indicator */}
             {vStatus && (
                 <div className="flex flex-wrap items-center gap-1.5">
                     <SourceQualityBadge status={vStatus} />
@@ -1184,7 +1209,7 @@ export default function CommandPage() {
                                     >R</div>
                                 )}
                                 <div dir="auto" className={`${m.role === "user"
-                                    ? "max-w-[84%] break-words rounded-2xl rounded-tr-sm bg-surface-elevated border border-overlay/12 px-3.5 py-2.5 text-start text-[14px] leading-relaxed text-text-primary shadow-sm sm:max-w-[72%]"
+                                    ? "max-w-[84%] break-words rounded-2xl rounded-tr-sm bg-gold px-3.5 py-2.5 text-start text-[14px] font-medium leading-relaxed text-[#0a0a1a] sm:max-w-[72%]"
                                     : isStructured
                                         ? "flex-1 min-w-0 rounded-xl border border-border-subtle/70 bg-surface-elevated/60 p-3 text-start text-[13px] leading-relaxed text-rico-text"
                                         : isConversational
