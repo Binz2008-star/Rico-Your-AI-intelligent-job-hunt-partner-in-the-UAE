@@ -44,8 +44,10 @@ apps/web/.vercel/
 .vercel/
 *.tsbuildinfo
 
-# Local tooling
-.claude/
+# Local tooling (skills are shared; only settings/secrets stay local)
+.claude/settings.json
+.claude/settings.local.json
+.claude/todos.md
 
 # Gmail OAuth credentials
 credentials.json

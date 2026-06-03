@@ -16,6 +16,111 @@ interface MobileCommandHeaderProps {
     signupHref: string;
 }
 
+// ── Inline SVG icon components ──────────────────────────────────────────────
+
+function IconPerson() {
+    return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="8" r="4" />
+            <path d="M4 20a8 8 0 0 1 16 0" />
+        </svg>
+    );
+}
+
+function IconDocument() {
+    return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+        </svg>
+    );
+}
+
+function IconClipboard() {
+    return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="9" y="2" width="6" height="4" rx="1" />
+            <path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2" />
+            <path d="M9 12h6M9 16h4" />
+        </svg>
+    );
+}
+
+function IconStar() {
+    return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+        </svg>
+    );
+}
+
+function IconGlobe() {
+    return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="2" y1="12" x2="22" y2="12" />
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+        </svg>
+    );
+}
+
+function IconSun() {
+    return (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+        </svg>
+    );
+}
+
+function IconMoon() {
+    return (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+        </svg>
+    );
+}
+
+function IconTrash() {
+    return (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+        </svg>
+    );
+}
+
+function IconHistory() {
+    return (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+            <path d="M12 7v5l4 2" />
+        </svg>
+    );
+}
+
+function IconSettings() {
+    return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+    );
+}
+
+function IconLogout() {
+    return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+        </svg>
+    );
+}
+
 export function MobileCommandHeader({
     chatAudience,
     onLogout,
@@ -34,7 +139,6 @@ export function MobileCommandHeader({
     const overflowRef = useRef<HTMLDivElement>(null);
     const drawerRef = useRef<HTMLDivElement>(null);
 
-    // Lock body scroll while drawer is open
     useEffect(() => {
         if (drawerOpen) {
             document.body.style.overflow = "hidden";
@@ -46,7 +150,6 @@ export function MobileCommandHeader({
         };
     }, [drawerOpen]);
 
-    // Close overflow on outside click
     useEffect(() => {
         if (!overflowOpen) return;
         function handle(e: MouseEvent) {
@@ -58,7 +161,6 @@ export function MobileCommandHeader({
         return () => document.removeEventListener("mousedown", handle);
     }, [overflowOpen]);
 
-    // Close drawer on outside click
     useEffect(() => {
         if (!drawerOpen) return;
         function handle(e: MouseEvent) {
@@ -73,23 +175,20 @@ export function MobileCommandHeader({
     const drawerItems =
         chatAudience === "authenticated"
             ? [
-                  { label: language === "ar" ? "الملف الشخصي" : "Profile", href: "/profile", icon: "👤" },
-                  { label: language === "ar" ? "رفع السيرة الذاتية" : "Upload CV", href: "/upload", icon: "📄" },
-                  { label: language === "ar" ? "الطلبات" : "Applications", href: "/flow", icon: "📋" },
-                  { label: language === "ar" ? "الاشتراك" : "Subscription", href: "/subscription", icon: "✦" },
+                  { label: language === "ar" ? "الملف الشخصي" : "Profile", href: "/profile", icon: <IconPerson /> },
+                  { label: language === "ar" ? "رفع السيرة الذاتية" : "Upload CV", href: "/upload", icon: <IconDocument /> },
+                  { label: language === "ar" ? "الطلبات" : "Applications", href: "/flow", icon: <IconClipboard /> },
+                  { label: language === "ar" ? "الاشتراك" : "Subscription", href: "/subscription", icon: <IconStar /> },
               ]
             : chatAudience === "public"
             ? [
-                  { label: language === "ar" ? "رفع السيرة الذاتية" : "Upload CV", href: "/upload", icon: "📄" },
-                  { label: language === "ar" ? "الاشتراك" : "Subscription", href: "/subscription", icon: "✦" },
+                  { label: language === "ar" ? "رفع السيرة الذاتية" : "Upload CV", href: "/upload", icon: <IconDocument /> },
+                  { label: language === "ar" ? "الاشتراك" : "Subscription", href: "/subscription", icon: <IconStar /> },
               ]
             : [];
 
     return (
         <>
-            {/* Header bar — full-width divider/background, content aligned to the
-                same centred column as the chat body so desktop doesn't pin the
-                brand/icons to the far screen edges (#325). */}
             <header
                 className="relative z-10 border-b border-border-subtle bg-background/80 backdrop-blur-sm"
                 dir={isRTL ? "rtl" : "ltr"}
@@ -108,7 +207,7 @@ export function MobileCommandHeader({
                             aria-label={language === "ar" ? "فتح القائمة" : "Open menu"}
                             aria-expanded={drawerOpen}
                             onClick={() => setDrawerOpen(true)}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
+                            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                         >
                             <svg width="18" height="14" viewBox="0 0 18 14" fill="none" aria-hidden="true">
                                 <rect width="18" height="2" rx="1" fill="currentColor" />
@@ -119,47 +218,40 @@ export function MobileCommandHeader({
                     )}
                 </div>
 
-                {/* Center: brand (absolute so it's always truly centred) */}
+                {/* Center: brand */}
                 <div className="absolute inset-x-0 flex justify-center pointer-events-none">
                     <Link
                         href="/"
                         className="pointer-events-auto flex items-center gap-1.5 text-text-primary font-black text-[15px] tracking-tight"
                         tabIndex={-1}
                     >
-                        <div className="w-6 h-6 rounded-[7px] bg-[#f5a623] flex items-center justify-center text-[11px] font-black text-[#0a0a1a] shadow-[0_3px_10px_rgba(245,166,35,0.35)]">
+                        <div className="w-6 h-6 rounded-[7px] bg-gold flex items-center justify-center text-[11px] font-black text-[#0a0a1a] shadow-[0_3px_10px_rgba(245,166,35,0.30)]">
                             R
                         </div>
-                        Rico<span className="text-[#f5a623]"> Hunt</span>
+                        Rico<span className="text-gold"> Hunt</span>
                     </Link>
                 </div>
 
-                {/* Right side — content depends on auth state */}
+                {/* Right side */}
                 <div className="flex items-center gap-1 ms-auto" style={{ minWidth: 80, justifyContent: "flex-end" }}>
-                    {/* Theme toggle — always visible */}
+                    {/* Theme toggle */}
                     <button
                         type="button"
                         onClick={() => setTheme(isDark ? "light" : "dark")}
-                        aria-label={isDark ? (language === "ar" ? "تبديل إلى الوضع الفاتح" : "Switch to light mode") : (language === "ar" ? "تبديل إلى الوضع الداكن" : "Switch to dark mode")}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
+                        aria-label={isDark
+                            ? (language === "ar" ? "تبديل إلى الوضع الفاتح" : "Switch to light mode")
+                            : (language === "ar" ? "تبديل إلى الوضع الداكن" : "Switch to dark mode")}
+                        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                     >
-                        {isDark ? (
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <circle cx="12" cy="12" r="4" />
-                                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
-                            </svg>
-                        ) : (
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                            </svg>
-                        )}
+                        {isDark ? <IconSun /> : <IconMoon />}
                     </button>
 
-                    {/* Language toggle — always visible */}
+                    {/* Language toggle */}
                     <button
                         type="button"
                         onClick={() => setLanguage(language === "en" ? "ar" : "en")}
                         aria-label={language === "ar" ? "EN – Switch to English" : "AR – التبديل إلى العربية"}
-                        className="h-7 rounded-md border border-border-subtle px-2 text-[11px] font-medium text-text-muted transition-colors hover:border-border-strong hover:text-text-primary"
+                        className="h-7 cursor-pointer rounded-md border border-border-subtle px-2 text-[11px] font-medium text-text-muted transition-colors hover:border-border-strong hover:text-text-primary"
                     >
                         {language === "ar" ? "EN" : "AR"}
                     </button>
@@ -171,7 +263,7 @@ export function MobileCommandHeader({
                                 type="button"
                                 aria-label={language === "ar" ? "محادثة جديدة" : "New chat"}
                                 onClick={onNewChat}
-                                className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
+                                className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                             >
                                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                                     <path d="M14 1H2C1.45 1 1 1.45 1 2v9c0 .55.45 1 1 1h2v2.5l3.5-2.5H14c.55 0 1-.45 1-1V2c0-.55-.45-1-1-1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
@@ -186,7 +278,7 @@ export function MobileCommandHeader({
                                     aria-label={language === "ar" ? "المزيد" : "More"}
                                     aria-expanded={overflowOpen}
                                     onClick={() => setOverflowOpen((o) => !o)}
-                                    className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
+                                    className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                                 >
                                     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
                                         <circle cx="8" cy="2.5" r="1.5" />
@@ -204,18 +296,18 @@ export function MobileCommandHeader({
                                             type="button"
                                             role="menuitem"
                                             onClick={() => { onClearChat(); setOverflowOpen(false); }}
-                                            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-[13px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
+                                            className="flex w-full cursor-pointer items-center gap-2.5 px-4 py-2.5 text-[13px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                                         >
-                                            <span aria-hidden="true">🗑</span>
+                                            <span className="text-text-tertiary"><IconTrash /></span>
                                             {language === "ar" ? "مسح المحادثة" : "Clear chat"}
                                         </button>
                                         <Link
                                             href="/archive"
                                             role="menuitem"
                                             onClick={() => setOverflowOpen(false)}
-                                            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-[13px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
+                                            className="flex w-full cursor-pointer items-center gap-2.5 px-4 py-2.5 text-[13px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                                         >
-                                            <span aria-hidden="true">📜</span>
+                                            <span className="text-text-tertiary"><IconHistory /></span>
                                             {language === "ar" ? "تاريخ المحادثات" : "Chat history"}
                                         </Link>
                                     </div>
@@ -235,7 +327,7 @@ export function MobileCommandHeader({
                             </Link>
                             <Link
                                 href={signupHref}
-                                className="text-[11px] px-2.5 py-1.5 rounded-lg bg-magenta text-white hover:bg-magenta-hover transition-colors font-medium whitespace-nowrap"
+                                className="text-[11px] px-2.5 py-1.5 rounded-lg bg-gold text-[#0a0a1a] hover:bg-gold-hover transition-colors font-semibold whitespace-nowrap"
                             >
                                 {language === "ar" ? "سجّل" : "Sign up"}
                             </Link>
@@ -256,7 +348,7 @@ export function MobileCommandHeader({
             {/* Drawer backdrop */}
             {drawerOpen && (
                 <div
-                    className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+                    className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
                     aria-hidden="true"
                     onClick={() => setDrawerOpen(false)}
                 />
@@ -268,7 +360,7 @@ export function MobileCommandHeader({
                 role="dialog"
                 aria-label={language === "ar" ? "القائمة الرئيسية" : "Main menu"}
                 aria-modal="true"
-                className={`fixed top-0 z-50 h-full w-72 max-w-[85vw] bg-surface border-border-subtle flex flex-col shadow-2xl transition-transform duration-300 ease-out safe-top ${
+                className={`fixed top-0 z-50 h-full w-72 max-w-[85vw] bg-surface border-border-subtle flex flex-col shadow-2xl transition-transform duration-300 ease-out ${
                     isRTL
                         ? `right-0 border-s ${drawerOpen ? "translate-x-0" : "translate-x-full"}`
                         : `left-0 border-r ${drawerOpen ? "translate-x-0" : "-translate-x-full"}`
@@ -282,51 +374,55 @@ export function MobileCommandHeader({
                         onClick={() => setDrawerOpen(false)}
                         className="flex items-center gap-2 text-text-primary font-black text-[15px] tracking-tight"
                     >
-                        <div className="w-6 h-6 rounded-[7px] bg-[#f5a623] flex items-center justify-center text-[11px] font-black text-[#0a0a1a]">
+                        <div className="w-6 h-6 rounded-[7px] bg-gold flex items-center justify-center text-[11px] font-black text-[#0a0a1a]">
                             R
                         </div>
-                        Rico<span className="text-[#f5a623]"> Hunt</span>
+                        Rico<span className="text-gold"> Hunt</span>
                     </Link>
                     <button
                         type="button"
                         aria-label={language === "ar" ? "إغلاق" : "Close"}
                         onClick={() => setDrawerOpen(false)}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-lg text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
+                        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                     >
-                        ×
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
                     </button>
                 </div>
 
                 {/* Drawer nav */}
-                <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+                <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
                     {drawerItems.map((item) => (
                         <Link
                             key={item.href}
                             href={item.href}
                             onClick={() => setDrawerOpen(false)}
-                            className="flex items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
+                            className="flex items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary cursor-pointer"
                         >
-                            <span className="text-[16px] w-5 text-center" aria-hidden="true">{item.icon}</span>
+                            <span className="text-text-tertiary flex-shrink-0">{item.icon}</span>
                             {item.label}
                         </Link>
                     ))}
 
-                    {/* Language + theme toggles */}
-                    <div className="my-2 border-t border-border-subtle" />
+                    <div className="my-2 border-t border-border-subtle pt-1" />
+
                     <button
                         type="button"
                         onClick={() => setLanguage(language === "en" ? "ar" : "en")}
-                        className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
+                        className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                     >
-                        <span className="text-[16px] w-5 text-center" aria-hidden="true">🌐</span>
+                        <span className="text-text-tertiary flex-shrink-0"><IconGlobe /></span>
                         {language === "ar" ? "English" : "العربية"}
                     </button>
+
                     <button
                         type="button"
                         onClick={() => setTheme(isDark ? "light" : "dark")}
-                        className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
+                        className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                     >
-                        <span className="text-[16px] w-5 text-center" aria-hidden="true">{isDark ? "☀️" : "🌙"}</span>
+                        <span className="text-text-tertiary flex-shrink-0">{isDark ? <IconSun /> : <IconMoon />}</span>
                         {isDark
                             ? (language === "ar" ? "الوضع الفاتح" : "Light mode")
                             : (language === "ar" ? "الوضع الداكن" : "Dark mode")
@@ -336,22 +432,22 @@ export function MobileCommandHeader({
                     <Link
                         href="/settings"
                         onClick={() => setDrawerOpen(false)}
-                        className="flex items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
+                        className="flex items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary cursor-pointer"
                     >
-                        <span className="text-[16px] w-5 text-center" aria-hidden="true">⚙</span>
+                        <span className="text-text-tertiary flex-shrink-0"><IconSettings /></span>
                         {language === "ar" ? "الإعدادات" : "Settings"}
                     </Link>
                 </nav>
 
-                {/* Auth section at bottom */}
+                {/* Auth section */}
                 <div className="border-t border-border-subtle px-3 py-4" style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom, 0px))" }}>
                     {chatAudience === "authenticated" ? (
                         <button
                             type="button"
                             onClick={() => { setDrawerOpen(false); onLogout(); }}
-                            className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-[#ff5e5b] hover:bg-[rgba(255,94,91,0.08)] transition-colors"
+                            className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-[#ff5e5b] hover:bg-[rgba(255,94,91,0.08)] transition-colors"
                         >
-                            <span className="text-[16px] w-5 text-center" aria-hidden="true">→</span>
+                            <span className="flex-shrink-0"><IconLogout /></span>
                             {language === "ar" ? "تسجيل الخروج" : "Sign out"}
                         </button>
                     ) : chatAudience === "public" ? (
@@ -359,14 +455,14 @@ export function MobileCommandHeader({
                             <Link
                                 href={signupHref}
                                 onClick={() => setDrawerOpen(false)}
-                                className="flex w-full items-center justify-center rounded-xl px-3 py-2.5 text-[13px] font-semibold bg-magenta text-white hover:bg-magenta-hover transition-colors"
+                                className="flex w-full items-center justify-center rounded-xl px-3 py-2.5 text-[13px] font-semibold bg-gold text-[#0a0a1a] hover:bg-gold-hover transition-colors cursor-pointer"
                             >
                                 {language === "ar" ? "سجّل مجانًا" : "Sign up free"}
                             </Link>
                             <Link
                                 href={loginHref}
                                 onClick={() => setDrawerOpen(false)}
-                                className="flex w-full items-center justify-center rounded-xl px-3 py-2.5 text-[13px] text-text-muted transition-colors hover:text-text-primary"
+                                className="flex w-full items-center justify-center rounded-xl px-3 py-2.5 text-[13px] text-text-muted transition-colors hover:text-text-primary cursor-pointer"
                             >
                                 {language === "ar" ? "تسجيل الدخول" : "Sign in"}
                             </Link>

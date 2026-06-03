@@ -13,9 +13,9 @@ import { useMemo, useState } from "react";
 
 function MomentumLabel({ momentum }: { momentum: "high" | "medium" | "low" }) {
   const palette = {
-    high: "text-cyan border-cyan/30",
+    high: "text-gold border-gold/30",
     medium: "text-rico-amber border-rico-amber/30",
-    low: "text-magenta border-magenta/30",
+    low: "text-text-tertiary border-text-tertiary/30",
   } as const;
 
   return (
@@ -30,7 +30,7 @@ function MomentumLabel({ momentum }: { momentum: "high" | "medium" | "low" }) {
 function MatchScoreBadge({ score }: { score: number }) {
   const color =
     score >= 75
-      ? "text-cyan bg-cyan/10 border-cyan/20"
+      ? "text-gold bg-gold/10 border-gold/20"
       : score >= 50
         ? "text-rico-amber bg-rico-amber/10 border-rico-amber/20"
         : "text-rico-red bg-rico-red/10 border-rico-red/20";
@@ -53,11 +53,11 @@ function LinkStatusBadge({
   if (!status) return null;
 
   const palette = {
-    live: "text-cyan border-cyan/30",
+    live: "text-gold border-gold/30",
     expired: "text-rico-red border-rico-red/30",
     blocked: "text-rico-red border-rico-red/30",
     redirect: "text-rico-amber border-rico-amber/30",
-    source_only: "text-magenta border-magenta/30",
+    source_only: "text-text-tertiary border-text-tertiary/30",
     needs_review: "text-rico-amber border-rico-amber/30",
     checking: "text-text-tertiary border-text-tertiary/30",
   } as const;
@@ -115,7 +115,7 @@ function PrimaryAction({
       <Link
         data-testid="find-similar-action"
         href={commandHref(`Find similar live jobs — ${titleCompany}`)}
-        className="inline-flex items-center gap-1.5 rounded-full border border-cyan/25 bg-cyan/10 px-4 py-2 text-[13px] font-semibold text-cyan hover:bg-cyan/15"
+        className="inline-flex items-center gap-1.5 rounded-full border border-gold/25 bg-gold/10 px-4 py-2 text-[13px] font-semibold text-gold hover:bg-gold/15"
       >
         <MaterialIcon icon="rocket_launch" size={14} />
         Find similar live jobs
@@ -139,7 +139,7 @@ function PrimaryAction({
         href={signal.applyUrl}
         target="_blank"
         rel="noreferrer"
-        className="inline-flex items-center gap-1.5 rounded-full border border-cyan/25 bg-cyan/10 px-4 py-2 text-[13px] font-semibold text-cyan hover:bg-cyan/15"
+        className="inline-flex items-center gap-1.5 rounded-full border border-gold/25 bg-gold/10 px-4 py-2 text-[13px] font-semibold text-gold hover:bg-gold/15"
       >
         <MaterialIcon icon="arrow_forward" size={14} />
         View job
@@ -425,7 +425,7 @@ export default function SignalsPage() {
             <button
               type="button"
               onClick={() => void refetchSignals()}
-              className="mt-4 rounded-full border border-cyan/25 bg-cyan/10 px-4 py-2 text-sm font-semibold text-cyan hover:bg-cyan/15"
+              className="mt-4 rounded-full border border-gold/25 bg-gold/10 px-4 py-2 text-sm font-semibold text-gold hover:bg-gold/15"
             >
               Retry signals
             </button>
@@ -466,7 +466,7 @@ export default function SignalsPage() {
           <GlassPanel className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/10 p-6">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <p className="text-label-caps text-[10px] text-cyan">
+                <p className="text-label-caps text-[10px] text-gold">
                   {selectedSignal.source || "Rico job search"} ·{" "}
                   {signalDate(selectedSignal)}
                 </p>

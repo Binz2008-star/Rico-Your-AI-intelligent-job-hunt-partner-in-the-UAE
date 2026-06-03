@@ -154,7 +154,7 @@ function renderMarkdown(text: string): React.ReactNode {
         if (line.startsWith("- ") || line.startsWith("• ")) {
             return (
                 <div key={i} className="flex gap-1.5 leading-relaxed">
-                    <span className="text-magenta shrink-0 mt-0.5">•</span>
+                    <span className="text-gold shrink-0 mt-0.5">•</span>
                     <span>{renderInline(line.slice(2))}</span>
                 </div>
             );
@@ -192,12 +192,12 @@ function CvReadyOnboardingPanel({
         <div className="pb-4 animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none">
             <div className="relative overflow-hidden rounded-2xl border border-border-subtle/70 bg-surface-elevated/60 p-5 backdrop-blur-sm sm:p-6">
                 {/* Pulse-style ambient glow */}
-                <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-magenta/[0.08] blur-2xl" aria-hidden="true" />
+                <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-gold/[0.08] blur-2xl" aria-hidden="true" />
 
                 {/* Header */}
                 <div className="relative flex items-start gap-3">
                     <div
-                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-magenta/20 bg-magenta/10 text-[15px] font-black text-magenta"
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gold/20 bg-gold/10 text-[15px] font-black text-gold"
                         aria-hidden="true"
                     >✓</div>
                     <div className="min-w-0">
@@ -213,19 +213,19 @@ function CvReadyOnboardingPanel({
                 {/* Status insight cards — individual dark mini-rows */}
                 <div className="relative mt-4 space-y-1.5">
                     <div className="flex items-center gap-2.5 rounded-lg border border-overlay/8 bg-surface-elevated/50 px-3 py-2 transition-all duration-300 hover:bg-surface-elevated/70">
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cyan shadow-[0_0_6px_rgba(0,229,255,0.6)] animate-pulse" aria-hidden="true" />
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold shadow-[0_0_6px_rgba(245,166,35,0.6)] animate-pulse" aria-hidden="true" />
                         <span className="flex-1 text-[12px] text-text-secondary">{t("cmdCvReadyCard1Label")}</span>
-                        <span className="text-[10px] font-medium text-cyan">{t("cmdCvReadyCard1Badge")}</span>
+                        <span className="text-[10px] font-medium text-gold">{t("cmdCvReadyCard1Badge")}</span>
                     </div>
                     <div className="flex items-center gap-2.5 rounded-lg border border-overlay/8 bg-surface-elevated/50 px-3 py-2 transition-all duration-300 hover:bg-surface-elevated/70">
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cyan shadow-[0_0_6px_rgba(0,229,255,0.6)] animate-pulse" aria-hidden="true" />
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold shadow-[0_0_6px_rgba(245,166,35,0.6)] animate-pulse" aria-hidden="true" />
                         <span className="flex-1 text-[12px] text-text-secondary">{t("cmdCvReadyCard2Label")}</span>
-                        <span className="text-[10px] font-medium text-cyan">{t("cmdCvReadyCard2Badge")}</span>
+                        <span className="text-[10px] font-medium text-gold">{t("cmdCvReadyCard2Badge")}</span>
                     </div>
                     <div className="flex items-center gap-2.5 rounded-lg border border-overlay/8 bg-surface-elevated/50 px-3 py-2 transition-all duration-300 hover:bg-surface-elevated/70">
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-magenta shadow-[0_0_6px_rgba(255,45,142,0.6)] animate-pulse" aria-hidden="true" />
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold/60 shadow-[0_0_6px_rgba(245,166,35,0.4)] animate-pulse" aria-hidden="true" />
                         <span className="flex-1 text-[12px] text-text-secondary">{t("cmdCvReadyCard3Label")}</span>
-                        <span className="text-[10px] font-medium text-magenta">{t("cmdCvReadyCard3Badge")}</span>
+                        <span className="text-[10px] font-medium text-gold/80">{t("cmdCvReadyCard3Badge")}</span>
                     </div>
                 </div>
 
@@ -259,7 +259,7 @@ function SourceQualityBadge({ status }: { status: VerificationStatus }) {
     if (!status) return null;
     if (status === "live_verified") {
         return (
-            <span title={t("cmdBadgeVerifiedTitle")} className="text-[9px] px-1.5 py-0.5 rounded border border-cyan/40 text-cyan shrink-0">
+            <span title={t("cmdBadgeVerifiedTitle")} className="text-[9px] px-1.5 py-0.5 rounded border border-gold/40 text-gold shrink-0">
                 {t("cmdBadgeVerifiedLabel")}
             </span>
         );
@@ -312,7 +312,7 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
     const scorePct = score > 0 ? `${Math.round(score * 100)}%` : null;
     // Single-role palette (#325): cyan = positive signal only. Strong matches are
     // highlighted; everything else stays neutral instead of cycling amber/magenta.
-    const scoreColor = score >= 0.8 ? "text-cyan" : "text-text-muted";
+    const scoreColor = score >= 0.8 ? "text-gold" : "text-text-muted";
     const topReason = match.match_reasons?.[0] ?? match.why ?? "";
     const vStatus = match.verification_status;
 
@@ -362,7 +362,7 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
                         rel="noopener noreferrer"
                         data-testid="view-job-action"
                         aria-label={`${applyLabel}: ${match.title} at ${match.company}`}
-                        className="w-full shrink-0 rounded-md border border-magenta/30 bg-magenta/10 px-2 py-1 text-center text-[10px] font-medium text-magenta transition-colors hover:bg-magenta/20 sm:w-auto"
+                        className="w-full shrink-0 rounded-md border border-gold/30 bg-gold/10 px-2 py-1 text-center text-[10px] font-medium text-gold transition-colors hover:bg-gold/20 sm:w-auto"
                     >
                         {applyLabel}
                     </a>
@@ -456,7 +456,7 @@ function ProfileGapCard({ gaps }: { gaps: string[] }) {
             </div>
             <Link
                 href="/profile"
-                className="text-[10px] px-2 py-1 rounded-md bg-magenta/10 border border-magenta/30 text-magenta hover:bg-magenta/20 transition-colors shrink-0"
+                className="text-[10px] px-2 py-1 rounded-md bg-gold/10 border border-gold/30 text-gold hover:bg-gold/20 transition-colors shrink-0"
             >
                 {t("cmdFillProfile")}
             </Link>
@@ -1003,7 +1003,7 @@ export default function CommandPage() {
                 <div className="flex max-w-lg flex-col items-center gap-4 rounded-2xl border border-border-subtle bg-surface/80 p-8 text-center backdrop-blur-md">
                     <p className="text-sm font-medium text-rico-text">{t("cmdSessionExpired")}</p>
                     <p className="text-sm text-text-muted">{t("cmdSessionExpiredMsg")}</p>
-                    <Link href={COMMAND_LOGIN_HREF} className="rounded-lg bg-magenta px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-magenta-hover">
+                    <Link href={COMMAND_LOGIN_HREF} className="rounded-lg bg-gold px-6 py-2.5 text-sm font-semibold text-[#0a0a1a] transition-colors hover:bg-gold-hover cursor-pointer">
                         {t("signIn")}
                     </Link>
                 </div>
@@ -1095,7 +1095,7 @@ export default function CommandPage() {
                                         key={qa.key}
                                         onClick={() => sendMessage(qa.prompt, label)}
                                         disabled={thinking || chatAudience === "checking"}
-                                        className="min-h-10 rounded-xl border border-border-subtle bg-surface-glass px-3 py-2 text-center text-[11px] text-text-secondary transition-colors hover:border-magenta/30 hover:bg-surface-subtle hover:text-rico-text disabled:opacity-50 rico-focus-strong sm:text-xs"
+                                        className="min-h-10 cursor-pointer rounded-xl border border-border-subtle bg-surface-glass px-3 py-2 text-center text-[11px] text-text-secondary transition-colors hover:border-gold/25 hover:bg-surface-subtle hover:text-rico-text disabled:opacity-50 rico-focus-strong sm:text-xs"
                                     >
                                         {label}
                                     </button>
@@ -1122,12 +1122,12 @@ export default function CommandPage() {
                             >
                                 {m.role === "rico" && (
                                     <div
-                                        className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5 ${isFirstInGroup ? "bg-[#f5a623]/15 border border-[#f5a623]/25 text-[#f5a623]" : "invisible"}`}
+                                        className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5 ${isFirstInGroup ? "bg-gold/15 border border-gold/25 text-gold" : "invisible"}`}
                                         aria-hidden="true"
                                     >R</div>
                                 )}
                                 <div dir="auto" className={`${m.role === "user"
-                                    ? "max-w-[84%] break-words rounded-2xl rounded-tr-sm bg-magenta px-3.5 py-2.5 text-start text-[14px] leading-relaxed text-white shadow-sm sm:max-w-[72%]"
+                                    ? "max-w-[84%] break-words rounded-2xl rounded-tr-sm bg-surface-elevated border border-overlay/12 px-3.5 py-2.5 text-start text-[14px] leading-relaxed text-text-primary shadow-sm sm:max-w-[72%]"
                                     : isStructured
                                         ? "flex-1 min-w-0 rounded-xl border border-border-subtle/70 bg-surface-elevated/60 p-3 text-start text-[13px] leading-relaxed text-rico-text"
                                         : isConversational
@@ -1160,8 +1160,12 @@ export default function CommandPage() {
                                     {/* Source rate-limited notice — keep the user inside Rico
                                     and point them at the alternate link on each card. */}
                                     {m.rate_limit_notice && (
-                                        <div className="mt-2 flex items-start gap-2 rounded-lg border border-rico-amber/40 bg-rico-amber/10 px-3 py-2 text-[11px] text-rico-amber">
-                                            <span aria-hidden="true">⚠️</span>
+                                        <div className="mt-2 flex items-start gap-2 rounded-lg border border-gold/30 bg-gold/8 px-3 py-2 text-[11px] text-gold">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5" aria-hidden="true">
+                                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                                                <line x1="12" y1="9" x2="12" y2="13" />
+                                                <line x1="12" y1="17" x2="12.01" y2="17" />
+                                            </svg>
                                             <span>{m.rate_limit_notice}</span>
                                         </div>
                                     )}
@@ -1220,7 +1224,7 @@ export default function CommandPage() {
                                                     setDraftProfile(m.preview!);
                                                 }}
                                                 disabled={thinking}
-                                                className="text-[12px] px-4 py-2 rounded-lg border border-border-soft text-text-secondary hover:border-magenta/40 hover:text-rico-text transition-colors disabled:opacity-50"
+                                                className="text-[12px] px-4 py-2 rounded-lg border border-border-soft text-text-secondary hover:border-gold/40 hover:text-rico-text transition-colors disabled:opacity-50"
                                             >
                                                 {t("cmdProfileEditBefore")}
                                             </button>
@@ -1228,7 +1232,7 @@ export default function CommandPage() {
                                     )}
                                     {m.type === "profile_preview" && editingProfileId === m.id && draftProfile && (
                                         <div className="mt-3 space-y-2 border-t border-border-soft pt-3">
-                                            <p className="text-[11px] font-semibold text-magenta">{t("cmdProfileEditLabel")}</p>
+                                            <p className="text-[11px] font-semibold text-gold">{t("cmdProfileEditLabel")}</p>
                                             {(
                                                 [
                                                     ["name", t("name")],
@@ -1244,7 +1248,7 @@ export default function CommandPage() {
                                                         onChange={(e) =>
                                                             setDraftProfile((prev) => (prev ? { ...prev, [field]: e.target.value } : prev))
                                                         }
-                                                        className="w-full rounded-lg bg-surface-subtle border border-border-soft px-3 py-1.5 text-[12px] text-rico-text placeholder:text-text-muted focus:outline-none focus:border-magenta/60"
+                                                        className="w-full rounded-lg bg-surface-subtle border border-border-soft px-3 py-1.5 text-[12px] text-rico-text placeholder:text-text-muted focus:outline-none focus:border-gold/60"
                                                     />
                                                 </label>
                                             ))}
@@ -1258,7 +1262,7 @@ export default function CommandPage() {
                                                             prev ? { ...prev, skills_detected: skills, skills } : prev
                                                         );
                                                     }}
-                                                    className="w-full rounded-lg bg-surface-subtle border border-border-soft px-3 py-1.5 text-[12px] text-rico-text placeholder:text-text-muted focus:outline-none focus:border-magenta/60"
+                                                    className="w-full rounded-lg bg-surface-subtle border border-border-soft px-3 py-1.5 text-[12px] text-rico-text placeholder:text-text-muted focus:outline-none focus:border-gold/60"
                                                 />
                                             </label>
                                             <div className="flex gap-2 pt-1">
@@ -1270,7 +1274,7 @@ export default function CommandPage() {
                                                         setDraftProfile(null);
                                                     }}
                                                     disabled={thinking}
-                                                    className="text-[12px] px-4 py-2 rounded-lg bg-magenta text-white font-medium hover:bg-magenta-hover transition-colors disabled:opacity-50"
+                                                    className="text-[12px] px-4 py-2 rounded-lg bg-gold text-[#0a0a1a] font-medium hover:bg-gold-hover transition-colors disabled:opacity-50"
                                                 >
                                                     {t("cmdProfileSave")}
                                                 </button>
@@ -1280,7 +1284,7 @@ export default function CommandPage() {
                                                         setEditingProfileId(null);
                                                         setDraftProfile(null);
                                                     }}
-                                                    className="text-[12px] px-4 py-2 rounded-lg border border-border-soft text-text-secondary hover:border-magenta/40 hover:text-rico-text transition-colors"
+                                                    className="text-[12px] px-4 py-2 rounded-lg border border-border-soft text-text-secondary hover:border-gold/40 hover:text-rico-text transition-colors"
                                                 >
                                                     {t("cancel")}
                                                 </button>
@@ -1344,7 +1348,7 @@ export default function CommandPage() {
                             <p className="text-[11px] text-text-muted">{t("cmdSignUpCta")}</p>
                             <Link
                                 href={COMMAND_SIGNUP_HREF}
-                                className="text-[11px] px-3 py-1 rounded-lg bg-magenta/10 border border-magenta/30 text-magenta hover:bg-magenta/20 transition-colors shrink-0 font-medium"
+                                className="text-[11px] px-3 py-1 rounded-lg bg-gold/10 border border-gold/25 text-gold hover:bg-gold/18 transition-colors shrink-0 font-medium cursor-pointer"
                             >
                                 {t("cmdSignUpFree")}
                             </Link>
@@ -1360,7 +1364,7 @@ export default function CommandPage() {
                             onClick={() => fileInputRef.current?.click()}
                             disabled={thinking || chatAudience === "checking"}
                             title={t("cmdUploadCvTitle")}
-                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-text-secondary transition-colors hover:bg-surface-subtle hover:text-rico-text disabled:opacity-30 rico-focus-strong"
+                            className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl text-text-secondary transition-colors hover:bg-surface-subtle hover:text-rico-text disabled:opacity-30 rico-focus-strong"
                             aria-label={t("cmdUploadCvAriaLabel")}
                         >
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1392,7 +1396,7 @@ export default function CommandPage() {
                                 type="button"
                                 onClick={handleSend}
                                 disabled={thinking || chatAudience === "checking" || !input.trim()}
-                                className="absolute bottom-1.5 end-1.5 top-1.5 flex h-9 w-9 items-center justify-center rounded-xl bg-magenta text-white transition-colors hover:bg-magenta-hover disabled:opacity-30 disabled:grayscale rico-focus-strong"
+                                className="absolute bottom-1.5 end-1.5 top-1.5 flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl bg-gold text-[#0a0a1a] transition-colors hover:bg-gold-hover disabled:opacity-30 disabled:grayscale rico-focus-strong"
                                 aria-label={thinking ? t("cmdSending") : t("send")}
                             >
                                 {thinking ? (

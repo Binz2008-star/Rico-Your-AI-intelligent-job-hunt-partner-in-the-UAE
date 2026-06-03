@@ -214,12 +214,12 @@ export function DashboardStats() {
                                 setLoading(true);
                                 void loadData();
                             }}
-                            className="rounded-full border border-cyan/25 bg-cyan/10 px-3 py-1.5 text-[12px] font-semibold text-cyan transition-colors hover:bg-cyan/15"
+                            className="rounded-full border border-gold/25 bg-gold/10 px-3 py-1.5 text-[12px] font-semibold text-gold transition-colors hover:bg-gold/15"
                         >
                             Retry jobs
                         </button>
                     ) : (
-                        <span className="text-[12px] font-semibold text-cyan">Review matches</span>
+                        <span className="text-[12px] font-semibold text-gold">Review matches</span>
                     )}
                 </div>
             </StatusCard>
@@ -232,7 +232,7 @@ export function DashboardStats() {
                 <p className="text-sm text-on-surface-variant">
                     {getApplicationsCopy(stats)}
                 </p>
-                <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">Open Flow</span>
+                <span className="mt-3 inline-flex text-[12px] font-semibold text-gold">Open Flow</span>
             </StatusCard>
             <StatusCard
                 title="Apply pacing"
@@ -241,7 +241,7 @@ export function DashboardStats() {
                 href="/settings"
             >
                 <p className="text-sm text-on-surface-variant">{getDailyLimitCopy(stats)}</p>
-                <span className="mt-3 inline-flex text-[12px] font-semibold text-cyan">Review settings</span>
+                <span className="mt-3 inline-flex text-[12px] font-semibold text-gold">Review settings</span>
             </StatusCard>
         </div>
     );

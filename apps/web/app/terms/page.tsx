@@ -141,7 +141,7 @@ export default function TermsPage() {
           <Link href="/privacy" className="text-xs text-text-tertiary transition-colors hover:text-white">Privacy</Link>
           <Link href="/refund-policy" className="text-xs text-text-tertiary transition-colors hover:text-white">Refunds</Link>
         </div>
-        <p className="mb-2 text-xs text-text-tertiary">For inquiries, support, and business communication: <a href="mailto:info@ricohunt.com" className="text-cyan transition-colors hover:text-white">info@ricohunt.com</a></p>
+        <p className="mb-2 text-xs text-text-tertiary">For inquiries, support, and business communication: <a href="mailto:info@ricohunt.com" className="text-gold transition-colors hover:text-gold-hover">info@ricohunt.com</a></p>
         <p className="text-xs text-text-tertiary">© 2026 Rico Hunt. All rights reserved.</p>
       </footer>
     </div>

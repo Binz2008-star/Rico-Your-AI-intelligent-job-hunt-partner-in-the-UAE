@@ -202,7 +202,7 @@ export default function FlowPage() {
                         </div>
                         <button
                             onClick={() => setShowModal(true)}
-                            className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-magenta/25 bg-magenta-soft px-4 py-2 text-xs font-semibold text-magenta transition-colors hover:bg-magenta/20 sm:w-auto"
+                            className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-gold/25 bg-gold/[0.06] px-4 py-2 text-xs font-semibold text-gold transition-colors hover:bg-gold/15 sm:w-auto"
                         >
                             <MaterialIcon icon="add" className="text-sm" />
                             {t('flowTrackApplication')}
@@ -225,7 +225,7 @@ export default function FlowPage() {
                                 {STATUS_COUNT_ORDER.map((s) => (
                                     <Card
                                         key={s}
-                                        className="min-h-[76px] bg-surface-elevated/65 p-3 text-center transition-colors hover:border-cyan/20 hover:shadow-[0_4px_20px_rgba(0,229,255,0.05)]"
+                                        className="min-h-[76px] bg-surface-elevated/65 p-3 text-center transition-colors hover:border-gold/20 hover:shadow-[0_4px_20px_rgba(245,166,35,0.05)]"
                                     >
                                         <p className="text-xl font-black tracking-tight text-text-primary">
                                             {grouped[s]}
@@ -248,7 +248,7 @@ export default function FlowPage() {
                                 {applications.map((item) => (
                                     <Card
                                         key={item.application_id}
-                                        className="bg-surface-elevated/70 transition-all hover:border-magenta/30 hover:shadow-[0_8px_32px_rgba(0,0,0,0.25)]"
+                                        className="bg-surface-elevated/70 transition-all hover:border-gold/20 hover:shadow-[0_8px_32px_rgba(0,0,0,0.25)]"
                                     >
                                         <CardContent className="p-5">
                                             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -278,7 +278,7 @@ export default function FlowPage() {
                                                     href={item.apply_url}
                                                     target="_blank"
                                                     rel="noreferrer"
-                                                    className="mt-3 inline-flex max-w-full items-center gap-1 text-xs font-semibold text-magenta hover:text-magenta-hover"
+                                                    className="mt-3 inline-flex max-w-full items-center gap-1 text-xs font-semibold text-gold hover:text-gold-hover"
                                                 >
                                                     <span className="truncate">{t('flowViewListing')}</span>
                                                     <span aria-hidden="true">↗</span>
@@ -298,7 +298,7 @@ export default function FlowPage() {
                                                     value={item.status}
                                                     onChange={(e) => changeStatus(item, e.target.value as ApplicationStatus)}
                                                     disabled={!!updating}
-                                                    className="min-h-9 w-full rounded-lg border border-border-soft bg-surface px-3 py-1.5 text-xs text-text-primary outline-none transition-colors focus:border-magenta/40 disabled:opacity-40 sm:w-auto"
+                                                    className="min-h-9 w-full rounded-lg border border-border-soft bg-surface px-3 py-1.5 text-xs text-text-primary outline-none transition-colors focus:border-gold/40 disabled:opacity-40 sm:w-auto"
                                                 >
                                                     {STATUS_OPTIONS.map((s) => (
                                                         <option key={s} value={s}>{t(STATUS_LABEL_KEYS[s])}</option>

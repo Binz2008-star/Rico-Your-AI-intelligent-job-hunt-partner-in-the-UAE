@@ -16,7 +16,7 @@ interface JobCardProps {
 type JobAction = "apply" | "mark_applied" | "save" | "ignore";
 
 const LOGO_COLORS = [
-    "from-cyan-500/20 to-cyan-400/10 text-cyan-200",
+    "from-amber-500/20 to-amber-400/10 text-amber-200",
     "from-fuchsia-500/20 to-pink-400/10 text-pink-200",
     "from-violet-500/20 to-fuchsia-400/10 text-violet-200",
     "from-emerald-500/20 to-cyan-400/10 text-emerald-200",
@@ -65,7 +65,7 @@ function hasUsableUrl(value?: string): boolean {
     return Boolean(normalized && normalized !== "#");
 }
 
-function BulletList({ items, tone }: { items: string[]; tone: "cyan" | "fuchsia" }) {
+function BulletList({ items, tone }: { items: string[]; tone: "gold" | "fuchsia" }) {
     if (items.length === 0) return null;
 
     return (
@@ -76,7 +76,7 @@ function BulletList({ items, tone }: { items: string[]; tone: "cyan" | "fuchsia"
                         aria-hidden="true"
                         className={cn(
                             "mt-1 h-1.5 w-1.5 shrink-0 rounded-full",
-                            tone === "cyan" ? "bg-cyan-300" : "bg-fuchsia-300"
+                            tone === "gold" ? "bg-gold" : "bg-fuchsia-300"
                         )}
                     />
                     <span>{item}</span>
@@ -105,7 +105,7 @@ function MatchExplanationPanel({ explanation }: { explanation: MatchExplanation 
                     </span>
                 </div>
 
-                <div className="rounded-full border border-cyan-400/10 bg-cyan-400/5 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-cyan-100">
+                <div className="rounded-full border border-gold/15 bg-gold/5 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-gold/80">
                     {explanation.confidence} confidence
                 </div>
             </div>
@@ -119,7 +119,7 @@ function MatchExplanationPanel({ explanation }: { explanation: MatchExplanation 
             <div className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-2xl border border-overlay/6 bg-surface/50 p-4">
                     <p className="rico-kicker mb-2">Why Rico likes this</p>
-                    <BulletList items={explanation.why_this_fits} tone="cyan" />
+                    <BulletList items={explanation.why_this_fits} tone="gold" />
                 </div>
 
                 <div className="rounded-2xl border border-overlay/6 bg-surface/50 p-4">
@@ -128,7 +128,7 @@ function MatchExplanationPanel({ explanation }: { explanation: MatchExplanation 
                 </div>
             </div>
 
-            <div className="mt-4 rounded-2xl border border-magenta/20 bg-magenta/[0.05] p-4">
+            <div className="mt-4 rounded-2xl border border-gold/15 bg-gold/[0.05] p-4">
                 <p className="rico-kicker mb-2">Recommended next step</p>
                 <p className="text-[13px] leading-relaxed text-[rgba(255,255,255,0.8)]">
                     {explanation.recommended_next_step}
@@ -181,14 +181,14 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
             aria-label={`${job.title || "Untitled role"} at ${job.company || "Unknown company"}`}
             className={cn(
                 "rico-card group rounded-[28px] p-5 md:p-6 transition-all duration-300",
-                "hover:-translate-y-1 hover:scale-[1.01] hover:border-[rgba(255,45,142,0.18)] hover:shadow-[0_30px_90px_rgba(0,0,0,0.42)]",
+                "hover:-translate-y-1 hover:scale-[1.01] hover:border-[rgba(245,166,35,0.18)] hover:shadow-[0_30px_90px_rgba(0,0,0,0.42)]",
                 isDone && "opacity-60 grayscale-[0.3]",
                 className
             )}
         >
             <div className="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                <div className="absolute left-0 top-0 h-40 w-40 rounded-full bg-fuchsia-500/10 blur-3xl animate-pulse" />
-                <div className="absolute bottom-0 right-0 h-40 w-40 rounded-full bg-cyan-500/10 blur-3xl animate-pulse" />
+                <div className="absolute left-0 top-0 h-40 w-40 rounded-full bg-gold/[0.06] blur-3xl animate-pulse" />
+                <div className="absolute bottom-0 right-0 h-40 w-40 rounded-full bg-gold/[0.04] blur-3xl animate-pulse" />
             </div>
 
             <div className="relative z-10 flex gap-4 items-start">

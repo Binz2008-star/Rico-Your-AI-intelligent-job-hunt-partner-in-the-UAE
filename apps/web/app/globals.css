@@ -2,8 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Rico AI Cinematic Design System v2
- * Based on DESIGN.md spec: pure black + magenta + cyan
+/* Rico AI Cinematic Design System v3
+ * Primary: Gold/Amber (#f5a623) — premium AI product
+ * Secondary: Magenta (#ff2d8e) — energy + action
+ * Tertiary: Cyan (#00e5ff) — data + intelligence
  */
 
 /* ───────────────────────────────────────────────────────────────────────────
@@ -31,6 +33,8 @@
     --overlay: 255 255 255;
 
     /* Accents */
+    --gold: 245 166 35;
+    --gold-hover: 251 191 36;
     --magenta: 255 45 142;
     --magenta-hover: 255 74 158;
     --cyan: 0 229 255;
@@ -43,9 +47,9 @@
     --text-muted: 71 71 71;
     --text-disabled: 41 41 41;
 
-    /* Ambient canvas glow (magenta TL, cyan BR) */
-    --canvas-glow-1: 255 45 142;
-    --canvas-glow-2: 0 229 255;
+    /* Ambient canvas glow (gold TL, magenta BR) — premium warmth */
+    --canvas-glow-1: 245 166 35;
+    --canvas-glow-2: 255 45 142;
 
     /* Glass panel base (navy translucent) */
     --glass-top: 19 19 42;
@@ -54,11 +58,11 @@
     /* Ambient drop-shadow color (near-black on the dark canvas) */
     --shadow-color: 5 5 16;
 
-    /* Focus ring - cyan accent */
-    --focus-ring: rgb(var(--cyan));
-    --focus-ring-shadow: rgb(var(--cyan) / 0.16);
+    /* Focus ring - gold accent (premium, high contrast) */
+    --focus-ring: rgb(var(--gold));
+    --focus-ring-shadow: rgb(var(--gold) / 0.20);
     --focus-ring-offset: 3px;
-    --focus-ring-width: 3px;
+    --focus-ring-width: 2px;
 
     /* ── Rico Command (--rico-*) alias layer ───────────────────────────────────
      * The Command page and Rico UI primitives consume a parallel --rico-* token
@@ -76,13 +80,17 @@
     --rico-border-subtle: rgb(var(--overlay) / 0.06);
     --rico-border-soft: rgb(var(--overlay) / 0.1);
     --rico-border-medium: rgb(var(--overlay) / 0.16);
-    --rico-primary: rgb(var(--magenta));
-    --rico-primary-container: rgb(var(--magenta) / 0.2);
-    --rico-on-primary: #ffffff;
-    --rico-secondary-dim: rgb(var(--cyan) / 0.6);
+    /* Primary accent → gold (premium) */
+    --rico-primary: rgb(var(--gold));
+    --rico-primary-container: rgb(var(--gold) / 0.15);
+    --rico-on-primary: #0a0a0f;
+    /* Secondary accent → magenta */
+    --rico-secondary: rgb(var(--magenta));
+    --rico-secondary-dim: rgb(var(--magenta) / 0.6);
     --rico-magenta-glow: rgb(var(--magenta) / 0.3);
     --rico-cyan-glow: rgb(var(--cyan) / 0.3);
-    --rico-focus-ring: rgb(var(--cyan));
+    --rico-gold-glow: rgb(var(--gold) / 0.25);
+    --rico-focus-ring: rgb(var(--gold));
     --rico-error: #ff5e5b;
     --rico-error-bg: rgb(255 94 91 / 0.1);
 
@@ -101,6 +109,8 @@
     --overlay: 17 17 24;
 
     /* Darkened accents for AA on light surfaces */
+    --gold: 161 87 0;
+    --gold-hover: 133 68 0;
     --magenta: 197 24 96;
     --magenta-hover: 168 18 80;
     --cyan: 13 110 135;
@@ -112,8 +122,8 @@
     --text-muted: 150 150 165;
     --text-disabled: 190 190 200;
 
-    --canvas-glow-1: 255 45 142;
-    --canvas-glow-2: 0 229 255;
+    --canvas-glow-1: 245 166 35;
+    --canvas-glow-2: 255 45 142;
 
     /* Light glass = near-white translucent */
     --glass-top: 255 255 255;
@@ -142,6 +152,8 @@
     --surface-elevated: 17 17 22;
     --overlay: 255 255 255;
 
+    --gold: 245 166 35;
+    --gold-hover: 251 191 36;
     --magenta: 255 45 142;
     --magenta-hover: 255 74 158;
     --cyan: 0 229 255;
@@ -157,6 +169,12 @@
     --glass-bottom: 10 10 24;
 
     --shadow-color: 5 5 16;
+
+    --focus-ring: rgb(var(--gold));
+    --focus-ring-shadow: rgb(var(--gold) / 0.20);
+    --rico-primary: rgb(var(--gold));
+    --rico-primary-container: rgb(var(--gold) / 0.15);
+    --rico-focus-ring: rgb(var(--gold));
 }
 
 html,
@@ -200,22 +218,48 @@ body>div:first-child {
 }
 
 /* Aura glow effects */
+.aura-glow-gold {
+    background: radial-gradient(circle, rgba(245, 166, 35, 0.14) 0%, rgba(0, 0, 0, 0) 70%);
+}
+
 .aura-glow-cyan {
-    background: radial-gradient(circle, rgba(0, 221, 221, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
+    background: radial-gradient(circle, rgba(0, 221, 221, 0.12) 0%, rgba(0, 0, 0, 0) 70%);
 }
 
 .aura-glow-magenta {
-    background: radial-gradient(circle, rgba(254, 0, 254, 0.1) 0%, rgba(0, 0, 0, 0) 70%);
+    background: radial-gradient(circle, rgba(254, 0, 254, 0.09) 0%, rgba(0, 0, 0, 0) 70%);
 }
 
 .glow-aura {
     filter: blur(140px);
-    background: radial-gradient(circle, rgba(255, 45, 142, 0.18) 0%, rgba(255, 45, 142, 0) 70%);
+    background: radial-gradient(circle, rgba(245, 166, 35, 0.16) 0%, rgba(245, 166, 35, 0) 70%);
+}
+
+.glow-gold-point {
+    filter: blur(40px);
+    background: rgba(245, 166, 35, 0.12);
 }
 
 .glow-cyan-point {
     filter: blur(40px);
-    background: rgba(0, 229, 255, 0.12);
+    background: rgba(0, 229, 255, 0.10);
+}
+
+/* Skeleton shimmer animation */
+@keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+.skeleton-shimmer {
+    background: linear-gradient(
+        90deg,
+        rgb(var(--overlay) / 0.05) 0%,
+        rgb(var(--overlay) / 0.10) 50%,
+        rgb(var(--overlay) / 0.05) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.8s ease-in-out infinite;
 }
 
 /* Scrollbar */
@@ -278,20 +322,20 @@ body::after {
 
 @keyframes glowPulse {
     0%, 100% {
-        box-shadow: 0 0 20px rgba(255, 45, 142, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        box-shadow: 0 0 20px rgba(245, 166, 35, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.05);
     }
     50% {
-        box-shadow: 0 0 32px rgba(255, 45, 142, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        box-shadow: 0 0 32px rgba(245, 166, 35, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.08);
     }
 }
 
 /* Glass panel interactive states */
 .glass-panel:focus-within {
-    border-color: rgb(var(--cyan) / 0.18);
+    border-color: rgb(var(--gold) / 0.22);
     box-shadow:
         0 20px 60px rgb(var(--shadow-color) / 0.28),
         inset 0 1px 0 rgb(var(--overlay) / 0.05),
-        0 0 40px rgb(var(--cyan) / 0.04);
+        0 0 40px rgb(var(--gold) / 0.06);
 }
 
 .glass-panel:hover {
@@ -317,51 +361,53 @@ body::after {
     margin: 8px 0 10px;
 }
 .rico-orb {
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     border-radius: 999px;
     display: grid;
     place-items: center;
-    color: #fff;
-    font-weight: 500;
-    font-size: 15px;
+    color: #0a0a0f;
+    font-weight: 700;
+    font-size: 13px;
     background:
-        radial-gradient(circle at center, rgba(255, 43, 150, 0.22), rgba(255, 43, 150, 0.04)),
-        #09090f;
-    border: 1px solid rgba(255, 43, 150, 0.7);
+        radial-gradient(circle at center, rgba(245, 166, 35, 0.9), rgba(245, 166, 35, 0.7)),
+        #f5a623;
+    border: 1px solid rgba(245, 166, 35, 0.8);
     box-shadow:
-        0 0 12px rgba(255, 43, 150, 0.35),
-        inset 0 0 10px rgba(255, 43, 150, 0.14);
-    animation: ricoOrbPulse 1.4s ease-in-out infinite;
+        0 0 12px rgba(245, 166, 35, 0.30),
+        inset 0 1px 0 rgba(255, 255, 255, 0.20);
+    animation: ricoOrbPulse 2s ease-in-out infinite;
     flex-shrink: 0;
 }
 .rico-orb span {
     display: inline-block;
-    animation: ricoRSpin 1.6s linear infinite;
+    letter-spacing: -0.02em;
 }
 .rico-thinking-label {
     display: flex;
     align-items: center;
     gap: 8px;
-    color: rgba(255, 255, 255, 0.68);
+    color: rgba(255, 255, 255, 0.60);
     font-size: 13px;
+    letter-spacing: -0.01em;
 }
 .rico-dots {
     display: inline-flex;
-    gap: 4px;
+    gap: 3px;
+    align-items: center;
 }
 .rico-dots i {
     display: block;
-    width: 5px;
-    height: 5px;
+    width: 4px;
+    height: 4px;
     border-radius: 999px;
-    background: #ff2b96;
-    opacity: 0.35;
+    background: rgb(var(--gold));
+    opacity: 0.4;
     font-style: normal;
-    animation: ricoDot 1.2s ease-in-out infinite;
+    animation: ricoDot 1.4s ease-in-out infinite;
 }
-.rico-dots i:nth-child(2) { animation-delay: 0.15s; }
-.rico-dots i:nth-child(3) { animation-delay: 0.3s; }
+.rico-dots i:nth-child(2) { animation-delay: 0.18s; }
+.rico-dots i:nth-child(3) { animation-delay: 0.36s; }
 
 @keyframes ricoRSpin {
     from { transform: rotate(0deg); }
@@ -370,14 +416,14 @@ body::after {
 @keyframes ricoOrbPulse {
     0%, 100% {
         transform: scale(1);
-        box-shadow: 0 0 10px rgba(255, 43, 150, 0.28);
+        box-shadow: 0 0 8px rgba(245, 166, 35, 0.25);
     }
     50% {
-        transform: scale(1.04);
-        box-shadow: 0 0 18px rgba(255, 43, 150, 0.5);
+        transform: scale(1.05);
+        box-shadow: 0 0 16px rgba(245, 166, 35, 0.45);
     }
 }
 @keyframes ricoDot {
-    0%, 100% { opacity: 0.25; transform: translateY(0); }
+    0%, 100% { opacity: 0.30; transform: translateY(0); }
     50%       { opacity: 1;    transform: translateY(-2px); }
 }

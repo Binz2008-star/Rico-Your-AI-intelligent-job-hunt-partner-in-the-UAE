@@ -716,7 +716,7 @@ export default function ProfilePage() {
                                     t("profileSetupVisa"),
                                 ].map((item) => (
                                     <li key={item} className="flex items-start gap-2">
-                                        <span className="mt-0.5 text-rico-purple">·</span>
+                                        <span className="mt-0.5 text-gold">·</span>
                                         {item}
                                     </li>
                                 ))}

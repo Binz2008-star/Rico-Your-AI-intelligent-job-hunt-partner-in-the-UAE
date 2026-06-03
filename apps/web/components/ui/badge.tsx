@@ -9,8 +9,8 @@ export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
 }
 
 const variantClasses: Record<BadgeVariant, string> = {
-    default: "border-transparent bg-magenta text-white hover:bg-magenta-hover",
-    secondary: "border-transparent bg-cyan-soft text-cyan hover:bg-cyan-dim",
+    default: "border-transparent bg-gold text-[#0a0a1a] hover:bg-gold-hover",
+    secondary: "border-transparent bg-gold/10 text-gold hover:bg-gold/15",
     outline: "border-border-medium text-text-secondary hover:border-border-strong hover:text-white",
     ghost: "border-transparent text-text-muted hover:text-text-secondary",
 }

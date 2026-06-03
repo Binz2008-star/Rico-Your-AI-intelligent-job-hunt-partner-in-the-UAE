@@ -10,10 +10,12 @@ const config: Config = {
     theme: {
         extend: {
             colors: {
-                // Rico AI Cinematic Design System v2
-                // Based on DESIGN.md spec: pure black + magenta + cyan
+                // Rico AI Cinematic Design System v3
+                // Primary: Gold/Amber — premium AI product
+                // Secondary: Magenta — energy + action
+                // Tertiary: Cyan — data + intelligence
 
-                // Rico Site v2 token system — all semantic colors resolve through
+                // Rico Site v3 token system — all semantic colors resolve through
                 // CSS variables (channels) so they switch with the .light theme and
                 // still support Tailwind alpha modifiers via `/ <alpha-value>`.
 
@@ -26,7 +28,18 @@ const config: Config = {
                     glass: "rgb(var(--overlay) / 0.04)",
                 },
 
-                // Primary System - Magenta
+                // Primary System - Gold/Amber
+                gold: {
+                    DEFAULT: "rgb(var(--gold) / <alpha-value>)",
+                    hover: "rgb(var(--gold-hover) / <alpha-value>)",
+                    glow: "rgb(var(--gold) / 0.25)",
+                    soft: "rgb(var(--gold) / 0.10)",
+                    muted: "rgb(var(--gold) / 0.15)",
+                    dim: "rgb(var(--gold) / 0.05)",
+                    border: "rgb(var(--gold) / 0.35)",
+                },
+
+                // Secondary System - Magenta
                 magenta: {
                     DEFAULT: "rgb(var(--magenta) / <alpha-value>)",
                     glow: "rgb(var(--magenta) / 0.3)",
@@ -35,7 +48,7 @@ const config: Config = {
                     hover: "rgb(var(--magenta-hover) / <alpha-value>)",
                 },
 
-                // Secondary System - Cyan
+                // Tertiary System - Cyan
                 cyan: {
                     DEFAULT: "rgb(var(--cyan) / <alpha-value>)",
                     glow: "rgb(var(--cyan) / 0.3)",
@@ -44,11 +57,12 @@ const config: Config = {
                     hover: "rgb(var(--cyan-hover) / <alpha-value>)",
                 },
 
-                // Gradient System (kept as literal gradients; accent endpoints fixed)
+                // Gradient System
                 gradient: {
+                    gold: "linear-gradient(135deg, #f5a623 0%, #fbbf24 100%)",
                     magenta: "linear-gradient(135deg, #ff2d8e 0%, #ff1a5c 100%)",
                     cyan: "linear-gradient(135deg, #00e5ff 0%, #00b8cc 100%)",
-                    duo: "linear-gradient(135deg, #ff2d8e 0%, #00e5ff 100%)",
+                    duo: "linear-gradient(135deg, #f5a623 0%, #ff2d8e 100%)",
                     subtle: "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 100%)",
                 },
 
@@ -82,18 +96,24 @@ const config: Config = {
                     surface: "rgb(var(--surface) / <alpha-value>)",
                     "surface-2": "rgb(var(--surface-elevated) / <alpha-value>)",
                     border: "rgb(var(--overlay) / 0.06)",
-                    accent: "rgb(var(--magenta) / <alpha-value>)",
-                    "accent-hover": "rgb(var(--magenta-hover) / <alpha-value>)",
-                    "accent-muted": "rgb(var(--magenta) / 0.1)",
-                    "accent-border": "rgb(var(--magenta) / 0.4)",
-                    "accent-glow": "rgb(var(--magenta) / 0.2)",
+                    // Primary accent → gold
+                    accent: "rgb(var(--gold) / <alpha-value>)",
+                    "accent-hover": "rgb(var(--gold-hover) / <alpha-value>)",
+                    "accent-muted": "rgb(var(--gold) / 0.10)",
+                    "accent-border": "rgb(var(--gold) / 0.35)",
+                    "accent-glow": "rgb(var(--gold) / 0.20)",
+                    // Secondary accent → magenta
+                    magenta: "rgb(var(--magenta) / <alpha-value>)",
+                    "magenta-muted": "rgb(var(--magenta) / 0.10)",
                     text: "rgb(var(--text-primary) / <alpha-value>)",
                     "text-muted": "rgb(var(--text-secondary) / <alpha-value>)",
                     "text-dim": "rgb(var(--text-tertiary) / <alpha-value>)",
                     purple: "rgb(var(--magenta) / <alpha-value>)",
                     teal: "rgb(var(--cyan) / <alpha-value>)",
                     red: "#ff5e5b",
-                    amber: "#f5a623",
+                    // Gold aliases
+                    amber: "rgb(var(--gold) / <alpha-value>)",
+                    gold: "rgb(var(--gold) / <alpha-value>)",
                 },
             },
             borderRadius: {
@@ -131,14 +151,21 @@ const config: Config = {
             animation: {
                 float: "float 14s ease-in-out infinite",
                 "float-delayed": "float 16s ease-in-out infinite -4s",
+                "pulse-gold": "pulse-gold 8s ease-in-out infinite",
                 "pulse-magenta": "pulse-magenta 10s ease-in-out infinite",
                 "pulse-slow": "pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite",
                 thinking: "thinking 3s ease-in-out infinite",
+                shimmer: "shimmer 1.8s ease-in-out infinite",
+                "fade-up": "fadeUp 0.4s ease-out forwards",
             },
             keyframes: {
                 float: {
                     "0%, 100%": { transform: "translateY(0px) rotate(0deg)" },
                     "50%": { transform: "translateY(-30px) rotate(0.8deg)" },
+                },
+                "pulse-gold": {
+                    "0%, 100%": { opacity: "0.25", filter: "blur(120px)" },
+                    "50%": { opacity: "0.55", filter: "blur(160px)" },
                 },
                 "pulse-magenta": {
                     "0%, 100%": { opacity: "0.3", filter: "blur(140px)" },
@@ -147,6 +174,14 @@ const config: Config = {
                 thinking: {
                     "0%, 100%": { opacity: "0.15", transform: "scale(1)" },
                     "50%": { opacity: "0.25", transform: "scale(1.05)" },
+                },
+                shimmer: {
+                    "0%": { backgroundPosition: "-200% 0" },
+                    "100%": { backgroundPosition: "200% 0" },
+                },
+                fadeUp: {
+                    "0%": { opacity: "0", transform: "translateY(6px)" },
+                    "100%": { opacity: "1", transform: "translateY(0)" },
                 },
             },
             backdropBlur: {

@@ -4,6 +4,7 @@ import { AuraGlow } from "@/components/ui/AuraGlow";
 import { cn } from "@/lib/utils";
 import { AppSidebar } from "./AppSidebar";
 import { AppTopbar } from "./AppTopbar";
+import { MobileBottomNav } from "./MobileBottomNav";
 
 interface AppShellProps {
     children: React.ReactNode;
@@ -43,12 +44,15 @@ export function AppShell({
                 )}
 
                 {/* Scrollable Content */}
-                <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
+                <main className="flex-1 overflow-y-auto px-4 py-5 pb-24 sm:px-6 sm:pb-5 lg:px-8">
                     <div className="mx-auto w-full max-w-7xl">
                         {children}
                     </div>
                 </main>
             </div>
+
+            {/* Mobile bottom dock — only rendered below md breakpoint */}
+            <MobileBottomNav />
         </div>
     );
 }
