@@ -43,7 +43,7 @@ function SectionHeading({
             transition={{ duration: 0.7, ease: "easeOut" }}
             className="mx-auto mb-10 max-w-3xl text-center"
         >
-            <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.28em] text-cyan">
+            <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.28em] text-gold">
                 {eyebrow}
             </p>
             <h2 className="font-display text-3xl font-semibold text-white md:text-5xl">
@@ -438,12 +438,12 @@ export default function LandingPage() {
                             transition={{ duration: 0.75, ease: "easeOut" }}
                             className="max-w-3xl"
                         >
-                            <p className="mb-5 inline-flex rounded-full border border-cyan/25 bg-cyan/10 px-4 py-2 font-mono text-[11px] uppercase tracking-[0.26em] text-cyan">
+                            <p className="mb-5 inline-flex rounded-full border border-gold/25 bg-gold/10 px-4 py-2 font-mono text-[11px] uppercase tracking-[0.26em] text-gold">
                                 {t.heroBadge}
                             </p>
                             <h1 className="font-display text-[clamp(2.5rem,7vw,5.5rem)] font-semibold leading-[1.02] tracking-tight text-text-primary">
                                 {t.heroH1Line1}{" "}
-                                <span className="bg-gradient-to-r from-magenta to-cyan bg-clip-text text-transparent">
+                                <span className="bg-gradient-to-r from-gold to-gold-hover bg-clip-text text-transparent">
                                     {t.heroH1Line2}
                                 </span>
                             </h1>
@@ -457,7 +457,7 @@ export default function LandingPage() {
                                 <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
                                     <Link
                                         href="/upload"
-                                        className="inline-flex w-full items-center justify-center rounded-full bg-gradient-to-r from-magenta to-cyan px-8 py-4 text-base font-semibold text-black transition-opacity hover:opacity-90 shadow-[0_0_40px_rgba(245,166,35,0.25)] sm:w-auto"
+                                        className="inline-flex w-full items-center justify-center rounded-full bg-gold px-8 py-4 text-base font-semibold text-[#0a0a1a] transition-colors hover:bg-gold-hover shadow-[0_0_40px_rgba(245,166,35,0.25)] sm:w-auto"
                                     >
                                         {t.ctaUploadCV}
                                     </Link>
@@ -486,7 +486,7 @@ export default function LandingPage() {
                                         {t.cardTitle}
                                     </h2>
                                 </div>
-                                <span className="rounded-full border border-cyan/30 bg-cyan/10 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.2em] text-cyan">
+                                <span className="rounded-full border border-gold/25 bg-gold/10 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.2em] text-gold">
                                     {t.online}
                                 </span>
                             </div>
@@ -511,7 +511,7 @@ export default function LandingPage() {
                                                     delay: 0.25 + index * 0.1,
                                                     ease: "easeOut",
                                                 }}
-                                                className="h-full rounded-full bg-gradient-to-r from-magenta to-cyan"
+                                                className="h-full rounded-full bg-gradient-to-r from-gold to-gold-hover"
                                             />
                                         </div>
                                     </div>
@@ -532,7 +532,7 @@ export default function LandingPage() {
                                         transition={{ duration: 0.5, delay: i * 0.07, ease: "easeOut" }}
                                         className="flex items-center gap-2.5"
                                     >
-                                        <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-border-subtle bg-surface-elevated font-mono text-[10px] font-bold text-cyan shrink-0">
+                                        <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-border-subtle bg-surface-elevated font-mono text-[10px] font-bold text-gold shrink-0">
                                             {p.icon}
                                         </span>
                                         <span className="text-[13px] font-medium text-text-secondary">
@@ -555,7 +555,7 @@ export default function LandingPage() {
                             <div className="relative grid gap-4 md:grid-cols-5">
                                 <div
                                     aria-hidden="true"
-                                    className="pointer-events-none absolute left-0 right-0 top-[34px] hidden h-px bg-gradient-to-r from-magenta/40 via-cyan/40 to-magenta/40 md:block"
+                                    className="pointer-events-none absolute left-0 right-0 top-[34px] hidden h-px bg-gradient-to-r from-gold/30 via-gold/50 to-gold/30 md:block"
                                 />
                                 {productFlow.map((node, index) => (
                                     <motion.div
@@ -566,10 +566,10 @@ export default function LandingPage() {
                                         className="relative flex flex-col items-center text-center"
                                     >
                                         <div className="relative z-10 flex h-[68px] w-[68px] items-center justify-center rounded-2xl border border-border-soft bg-surface-elevated shadow-[0_12px_40px_rgba(0,0,0,0.35)]">
-                                            <span className="h-7 w-7 text-cyan [&>svg]:h-full [&>svg]:w-full">
+                                            <span className="h-7 w-7 text-gold [&>svg]:h-full [&>svg]:w-full">
                                                 {node.icon}
                                             </span>
-                                            <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-magenta to-cyan font-mono text-[10px] font-bold text-black">
+                                            <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-gold font-mono text-[10px] font-bold text-black">
                                                 {index + 1}
                                             </span>
                                         </div>
@@ -582,7 +582,7 @@ export default function LandingPage() {
                                         {index < productFlow.length - 1 && (
                                             <div
                                                 aria-hidden="true"
-                                                className="my-3 h-5 w-px bg-gradient-to-b from-cyan/50 to-transparent md:hidden"
+                                                className="my-3 h-5 w-px bg-gradient-to-b from-gold/40 to-transparent md:hidden"
                                             />
                                         )}
                                     </motion.div>
@@ -595,7 +595,7 @@ export default function LandingPage() {
                     <section className="px-5 py-16 md:px-10 lg:px-16">
                         <div className="mx-auto grid max-w-7xl gap-5 lg:grid-cols-[0.9fr_1.1fr]">
                             <RicoCardPanel>
-                                <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-magenta">
+                                <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-gold">
                                     {t.memoryEyebrow}
                                 </p>
                                 <h2 className="mt-4 text-3xl font-semibold text-white md:text-4xl">
@@ -612,7 +612,7 @@ export default function LandingPage() {
                                             key={item}
                                             className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-4"
                                         >
-                                            <div className="mb-4 h-1 w-10 rounded-full bg-gradient-to-r from-magenta to-cyan" />
+                                            <div className="mb-4 h-1 w-10 rounded-full bg-gold" />
                                             <p className="text-sm font-medium text-white">{item}</p>
                                         </div>
                                     ))}
@@ -627,14 +627,14 @@ export default function LandingPage() {
                             <RicoCardPanel>
                                 <div className="mb-6 flex items-center justify-between gap-4">
                                     <div>
-                                        <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-cyan">
+                                        <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-gold">
                                             {t.matchingEyebrow}
                                         </p>
                                         <h2 className="mt-4 text-3xl font-semibold text-white md:text-4xl">
                                             {t.matchingTitle}
                                         </h2>
                                     </div>
-                                    <span className="hidden rounded-full border border-magenta/30 bg-magenta/10 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-magenta sm:inline-flex">
+                                    <span className="hidden rounded-full border border-gold/30 bg-gold/10 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-gold sm:inline-flex">
                                         {t.uaeJobsBadge}
                                     </span>
                                 </div>
@@ -654,7 +654,7 @@ export default function LandingPage() {
                                                     </p>
                                                 </div>
                                                 <div className={isAr ? "text-left" : "text-right"}>
-                                                    <p className="font-mono text-2xl text-cyan">
+                                                    <p className="font-mono text-2xl text-gold">
                                                         {match.score}
                                                     </p>
                                                     <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-muted">
@@ -667,7 +667,7 @@ export default function LandingPage() {
                                 </div>
                             </RicoCardPanel>
                             <RicoCardPanel delay={0.08}>
-                                <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-magenta">
+                                <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-gold">
                                     {t.alertEyebrow}
                                 </p>
                                 <h2 className="mt-4 text-3xl font-semibold text-white md:text-4xl">
@@ -676,8 +676,8 @@ export default function LandingPage() {
                                 <p className="mt-5 text-base leading-7 text-text-secondary">
                                     {t.alertBody}
                                 </p>
-                                <div className="mt-8 rounded-lg border border-cyan/[0.18] bg-cyan/10 p-4">
-                                    <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-cyan">
+                                <div className="mt-8 rounded-lg border border-gold/25 bg-gold/10 p-4">
+                                    <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-gold">
                                         {t.latestAlert}
                                     </p>
                                     <p className="mt-3 text-sm leading-6 text-white">
@@ -692,7 +692,7 @@ export default function LandingPage() {
                     <section className="px-5 py-16 md:px-10 lg:px-16">
                         <div className="mx-auto grid max-w-7xl gap-5 lg:grid-cols-[0.9fr_1.1fr]">
                             <RicoCardPanel>
-                                <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-cyan">
+                                <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-gold">
                                     {t.controlEyebrow}
                                 </p>
                                 <h2 className="mt-4 text-3xl font-semibold text-white md:text-4xl">
@@ -710,7 +710,7 @@ export default function LandingPage() {
                                             className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-4"
                                         >
                                             <p className="text-sm font-semibold text-white">{item}</p>
-                                            <div className="mt-5 h-1 rounded-full bg-gradient-to-r from-magenta to-cyan" />
+                                            <div className="mt-5 h-1 rounded-full bg-gold" />
                                         </div>
                                     ))}
                                 </div>
@@ -737,7 +737,7 @@ export default function LandingPage() {
                                                     <a
                                                         key={cta.label}
                                                         href={cta.href}
-                                                        className="text-[12px] font-medium text-magenta hover:underline"
+                                                        className="text-[12px] font-medium text-gold hover:underline"
                                                     >
                                                         {cta.label}
                                                     </a>
@@ -760,9 +760,9 @@ export default function LandingPage() {
                         <div className="mx-auto grid max-w-5xl gap-4 md:grid-cols-2">
                             <RicoCardPanel
                                 delay={0.08}
-                                className="border-magenta/30 bg-magenta/[0.03]"
+                                className="border-gold/30 bg-gold/[0.03]"
                             >
-                                <div className="mb-4 inline-flex rounded-full border border-magenta/30 bg-magenta/10 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-magenta">
+                                <div className="mb-4 inline-flex rounded-full border border-gold/30 bg-gold/10 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-gold">
                                     {t.pricingPopular}
                                 </div>
                                 <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-text-tertiary">
@@ -779,7 +779,7 @@ export default function LandingPage() {
                                 </ul>
                                 <Link
                                     href="/subscription"
-                                    className="mt-8 inline-flex w-full items-center justify-center rounded-full bg-gradient-to-r from-magenta to-cyan px-6 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90"
+                                    className="mt-8 inline-flex w-full items-center justify-center rounded-full bg-gold px-6 py-3 text-sm font-semibold text-[#0a0a1a] transition-colors hover:bg-gold-hover"
                                 >
                                     {t.upgradePro}
                                 </Link>
@@ -817,7 +817,7 @@ export default function LandingPage() {
                                 </div>
                                 <Link
                                     href="/signup"
-                                    className="text-[12px] font-semibold text-[#7b6fff] hover:underline whitespace-nowrap"
+                                    className="text-[12px] font-semibold text-gold hover:underline whitespace-nowrap"
                                 >
                                     {t.signUpFreeArrow}
                                 </Link>
@@ -828,7 +828,7 @@ export default function LandingPage() {
                     {/* Bottom CTA */}
                     <section className="px-5 pb-20 pt-10 md:px-10 lg:px-16">
                         <RicoCardPanel className="mx-auto max-w-5xl text-center">
-                            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-magenta">
+                            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-gold">
                                 {t.ctaSectionEyebrow}
                             </p>
                             <h2 className="mx-auto mt-4 max-w-3xl text-3xl font-semibold text-white md:text-5xl">
@@ -840,7 +840,7 @@ export default function LandingPage() {
                             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
                                 <Link
                                     href="/upload"
-                                    className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-magenta to-cyan px-7 py-4 text-base font-semibold text-black transition-opacity hover:opacity-90"
+                                    className="inline-flex items-center justify-center rounded-full bg-gold px-7 py-4 text-base font-semibold text-[#0a0a1a] transition-colors hover:bg-gold-hover"
                                 >
                                     {t.ctaUploadCV}
                                 </Link>
