@@ -94,7 +94,7 @@ export default function UploadPage() {
                     <PageTransition>
                         <Card className="bg-surface-elevated/70">
                             <CardContent className="flex flex-col items-center px-5 py-12 text-center sm:px-8">
-                                <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-magenta-soft text-magenta">
+                                <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gold/10 text-gold">
                                     <MaterialIcon icon="check_circle" className="text-4xl" />
                                 </div>
                                 <h1 className="text-2xl font-bold text-text-primary sm:text-3xl">
@@ -103,7 +103,7 @@ export default function UploadPage() {
                                 <p className="mt-3 max-w-xl text-sm leading-6 text-text-secondary sm:text-base">
                                     {t('uploadReadyBody')}
                                 </p>
-                                <div className="mt-6 h-1 w-10 rounded-full bg-magenta animate-pulse" />
+                                <div className="mt-6 h-1 w-10 rounded-full bg-gold animate-pulse" />
                             </CardContent>
                         </Card>
                     </PageTransition>
@@ -131,7 +131,7 @@ export default function UploadPage() {
                             )}
 
                             <Card
-                                className={`bg-surface-elevated/70 transition-colors ${isDragging ? 'border-magenta/50 bg-magenta-soft/40' : 'hover:border-magenta/25'
+                                className={`bg-surface-elevated/70 transition-colors ${isDragging ? 'border-gold/50 bg-gold/[0.04]' : 'hover:border-gold/25'
                                     }`}
                                 onDragOver={handleDragOver}
                                 onDragLeave={handleDragLeave}
@@ -155,7 +155,7 @@ export default function UploadPage() {
                                                 className="sr-only"
                                                 disabled={isUploading}
                                             />
-                                            <span className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-magenta px-6 py-3 text-sm font-bold text-background transition-colors hover:bg-magenta-hover aria-disabled:opacity-60">
+                                            <span className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-gold px-6 py-3 text-sm font-bold text-[#0a0a1a] transition-colors hover:bg-gold-hover aria-disabled:opacity-60">
                                                 {isUploading ? (
                                                     <>
                                                         <MaterialIcon icon="hourglass_empty" className="animate-spin" />
