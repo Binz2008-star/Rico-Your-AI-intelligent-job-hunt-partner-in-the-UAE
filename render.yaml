@@ -34,6 +34,10 @@ services:
         sync: false
       - key: EMAIL_TO
         sync: false
+      - key: ENABLE_SIGNUP_EMAIL_NOTIFICATIONS
+        value: "true"
+      - key: ADMIN_SIGNUP_NOTIFICATION_EMAIL
+        value: "info@ricohunt.com"
 
       # ── Public contact addresses ──────────────────────────────────────────────
       - key: APP_PUBLIC_EMAIL
