@@ -55,16 +55,67 @@ def _clean_apply_error(exc: Exception) -> Dict[str, str]:
     }
 
 
-def apply_to_job(job: Dict[str, Any], *, approved: bool = False) -> Dict[str, str]:
+_AUTO_APPLY_DISABLED_STATUSES = {"no_result", "disabled", "unsupported"}
+
+
+def _auto_apply_globally_enabled() -> bool:
+    return env_bool("RICO_ENABLE_AUTO_APPLY", False)
+
+
+def _manual_required_response(job: Dict[str, Any]) -> Dict[str, str]:
+    """User-safe response when automation cannot run for any reason."""
+    link = job.get("link") or job.get("apply_link") or ""
+    msg = "Automated apply is not currently enabled."
+    if link:
+        msg += f" You can apply manually here: {link}"
+    return {"status": "manual_required", "message": msg, "apply_url": link}
+
+
+def _enforce_automation_allowed(user_id: str) -> None:
+    """Raise HTTP 402 if the user's plan does not include application automation.
+
+    Only called when RICO_ENABLE_AUTO_APPLY=true. Never called when the global
+    flag is off — we return manual_required instead of an upgrade prompt for a
+    feature that cannot actually run.
+    """
+    from fastapi import HTTPException
+    from src.subscription_plans import resolve_effective_user_plan
+
+    resolved = resolve_effective_user_plan(user_id)
+    if not resolved.subscription.entitlements.application_automation_enabled:
+        plan = resolved.subscription.plan.value
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "type": "subscription_limit",
+                "intent": "subscription_limit",
+                "message": (
+                    f"Automated applications are not available on the {plan.title()} plan. "
+                    "Upgrade to Premium to enable this feature."
+                ),
+                "response_source": "subscription_gate",
+                "feature": "application_automation",
+                "plan": plan,
+                "next_action": "upgrade_subscription",
+                "options": [
+                    {"action": "upgrade_subscription", "label": "View plans", "message": "upgrade plan"},
+                    {"action": "subscription_status", "label": "Check current plan", "message": "what is my plan?"},
+                ],
+            },
+        )
+
+
+def apply_to_job(job: Dict[str, Any], *, approved: bool = False, user_id: str | None = None) -> Dict[str, str]:
     """
     Trigger automated application for a job.
     Returns: {"status": str, "message": str, "job_id": str (optional)}
 
-    Safety: this is the single chokepoint for real application submission. When approval
-    mode is enabled (RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true, the default), the caller
-    MUST pass approved=True — i.e. the user explicitly approved THIS application. Agent /
-    automation callers leave approved=False, so they can never auto-submit on the user's
-    behalf; they receive an "approval_required" result instead.
+    Order of gates:
+    1. Approval guard — agent paths cannot auto-submit without explicit user approval.
+    2. Global flag (RICO_ENABLE_AUTO_APPLY) — if false, return manual_required for ALL
+       users regardless of plan. No upgrade prompt is shown for a feature that cannot run.
+    3. Subscription entitlement — only checked when the global flag is on; Free/Pro get 402.
+    4. Engine routing — Premium users reach the actual apply engines.
     """
     if _approval_required() and not approved:
         logger.warning(
@@ -75,30 +126,34 @@ def apply_to_job(job: Dict[str, Any], *, approved: bool = False) -> Dict[str, st
             "message": "This application needs your explicit approval before Rico can submit it.",
         }
 
+    if not _auto_apply_globally_enabled():
+        logger.info("auto_apply_globally_disabled user=%s", user_id or "anonymous")
+        return _manual_required_response(job)
+
+    if user_id:
+        _enforce_automation_allowed(user_id)
+
     link = (job.get("link") or "").lower()
 
     if not link:
         return {"status": "error", "message": "Job is missing a link"}
 
     if "naukrigulf.com" in link:
-        return _apply_naukrigulf(job)
+        return _normalize_engine_result(_apply_naukrigulf(job), job)
 
     if "indeed.com" in link:
-        return _apply_indeed(job)
+        return _normalize_engine_result(_apply_indeed(job), job)
 
-    if "linkedin.com" in link:
-        return {
-            "status": "unsupported",
-            "message": "LinkedIn Easy Apply is not enabled in this environment",
-        }
+    # LinkedIn and all other sources: no active engine
+    return _manual_required_response(job)
 
-    return {
-        "status": "unsupported",
-        "message": (
-            f"No automated apply engine is available for this source. "
-            f"Open manually: {job.get('link', '')}"
-        ),
-    }
+
+def _normalize_engine_result(result: Dict[str, str], job: Dict[str, Any]) -> Dict[str, str]:
+    """Convert opaque engine-disabled statuses into a user-safe manual_required response."""
+    if result.get("status") in _AUTO_APPLY_DISABLED_STATUSES:
+        logger.info("engine_not_active status=%s", result.get("status"))
+        return _manual_required_response(job)
+    return result
 
 
 def _apply_naukrigulf(job: Dict[str, Any]) -> Dict[str, str]:
