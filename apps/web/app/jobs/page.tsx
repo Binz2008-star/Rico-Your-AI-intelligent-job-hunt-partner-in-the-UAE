@@ -4,7 +4,7 @@ import { DashboardShell } from "@/components/DashboardShell";
 import { JobCard } from "@/components/jobs/JobCard";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
-import { LoadingState } from "@/components/shared/LoadingState";
+import { SkeletonCard } from "@/components/shared/LoadingState";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
@@ -185,7 +185,7 @@ export default function JobsPage() {
                     className={cn(
                         "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
                         filter === f
-                            ? "bg-rico-accent-muted text-rico-purple border border-rico-accent-border"
+                            ? "bg-gold/10 text-gold border border-gold/30"
                             : "text-rico-text-dim hover:text-rico-text hover:bg-white/[0.04]"
                     )}
                 >
@@ -204,7 +204,7 @@ export default function JobsPage() {
             {loading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {Array.from({ length: 6 }).map((_, i) => (
-                        <LoadingState key={i} variant="card" />
+                        <SkeletonCard key={i} />
                     ))}
                 </div>
             ) : error ? (

@@ -263,7 +263,7 @@ export default function SettingsPage() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="self-start px-4 py-2 rounded-lg bg-rico-accent-muted text-rico-purple border border-rico-accent-border text-[13px] font-semibold hover:bg-rico-accent/25 transition-all disabled:opacity-40"
+                className="self-start px-4 py-2 rounded-lg bg-gold/10 text-gold border border-gold/30 text-[13px] font-semibold hover:bg-gold/20 transition-all disabled:opacity-40"
               >
                 {saving ? t("saving") : t("saveSettings")}
               </button>
