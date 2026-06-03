@@ -1201,7 +1201,9 @@ class RicoChatAPI:
     # Multi-word continuation phrases that are never job role titles.
     # Matched after normalisation — see _is_continuation_intent().
     _CONTINUATION_PHRASES: frozenset[str] = frozenset({
-        # English
+        # English multi-word — bare "continue" / "go on" are intentionally excluded
+        # because they are already in _FOLLOWUP_NEXT_STEP_PHRASES and route to the
+        # options menu via _looks_like_next_step_followup (which strips punctuation).
         "keep going", "its ok keep going", "it's ok keep going",
         "ok keep going", "okay keep going",
         "go ahead", "go ahead please", "please go ahead",
@@ -1210,7 +1212,7 @@ class RicoChatAPI:
         "continue please", "please continue", "just continue",
         "carry on", "yes carry on", "ok carry on",
         "sounds good continue", "let's continue", "lets continue",
-        "proceed", "yes proceed", "ok proceed", "go on",
+        "proceed", "yes proceed", "ok proceed",
         # Arabic
         "كمل", "استمر", "واصل", "ماشي كمل", "ماشي استمر",
         "تمام كمل", "تمام استمر", "اوك كمل", "اوك استمر",
@@ -1280,7 +1282,9 @@ class RicoChatAPI:
         if re.fullmatch(
             r"(its?\s+ok(ay)?\s+)?keep\s+going|"
             r"(ok(ay)?|sure|yes|alright)\s+(keep\s+going|continue|go\s+on|carry\s+on|proceed)|"
-            r"(just\s+)?(continue|proceed|carry\s+on|go\s+ahead|go\s+on)(\s+please)?|"
+            r"(just\s+)(continue|proceed|carry\s+on|go\s+ahead)(\s+please)?|"
+            r"(continue|proceed|carry\s+on|go\s+ahead)\s+please|"
+            r"please\s+(continue|proceed|carry\s+on|go\s+ahead)|"
             r"(كمل|استمر|واصل)(\s+من\s+فضلك)?|"
             r"(ماشي|تمام|اوك|يلا|نعم|حسنا|طيب)\s+(كمل|استمر|واصل)",
             text,

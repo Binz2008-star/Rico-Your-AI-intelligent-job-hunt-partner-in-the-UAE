@@ -17,12 +17,13 @@ from src.rico_chat_api import RicoChatAPI
 
 @pytest.mark.parametrize("msg", [
     # English multi-word
+    # Bare "continue" and "go on" are NOT in this list — they are in
+    # _FOLLOWUP_NEXT_STEP_PHRASES and route correctly to the options menu.
     "its ok keep going",
     "it's ok keep going",
     "ok keep going",
     "okay keep going",
     "keep going",
-    "continue",
     "continue please",
     "please continue",
     "just continue",
@@ -40,7 +41,6 @@ from src.rico_chat_api import RicoChatAPI
     "proceed",
     "yes proceed",
     "ok proceed",
-    "go on",
     "sounds good continue",
     "lets continue",
     "let's continue",
@@ -106,7 +106,6 @@ def test_is_continuation_intent_false(msg: str) -> None:
 @pytest.mark.parametrize("msg", [
     "its ok keep going",
     "keep going",
-    "continue",
     "go ahead",
     "carry on",
     "proceed",
