@@ -147,24 +147,24 @@ function PlanCard({
     return (
         <div
             className={`relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border p-6 backdrop-blur-md transition-colors duration-200 ${plan.is_popular
-                ? "border-magenta/40 bg-surface-elevated/75 shadow-[0_0_40px_rgba(255,45,142,0.08)]"
+                ? "border-gold/40 bg-surface-elevated/75 shadow-[0_0_40px_rgba(245,166,35,0.08)]"
                 : "border-border-soft bg-surface-elevated/65"
                 }`}
         >
             {/* Glow */}
             <div
-                className={`absolute right-0 top-0 h-28 w-28 rounded-full blur-3xl pointer-events-none ${plan.is_popular ? "bg-magenta/10" : "bg-cyan/5"
+                className={`absolute right-0 top-0 h-28 w-28 rounded-full blur-3xl pointer-events-none ${plan.is_popular ? "bg-gold/10" : "bg-gold/5"
                     }`}
             />
 
             <div className="relative z-10 flex min-h-7 flex-wrap items-start gap-2">
                 {isCurrent && (
-                    <span className="rounded-full border border-cyan/30 bg-cyan-soft px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-text-primary">
+                    <span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-text-primary">
                         {t('currentPlan')}
                     </span>
                 )}
                 {plan.is_popular && (
-                    <span className="rounded-full border border-magenta/35 bg-magenta-soft px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-text-primary">
+                    <span className="rounded-full border border-gold/35 bg-gold/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-text-primary">
                         {t('mostPopular')}
                     </span>
                 )}
@@ -193,8 +193,8 @@ function PlanCard({
                     <li key={i} className="flex items-start gap-2.5 text-[13px] text-text-secondary">
                         <span
                             className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-black ring-1 ${isProPlan
-                                ? "bg-magenta-soft text-text-primary ring-magenta/25"
-                                : "bg-cyan-soft text-text-primary ring-cyan/25"
+                                ? "bg-gold/10 text-text-primary ring-gold/25"
+                                : "bg-gold/[0.06] text-text-primary ring-gold/15"
                                 }`}
                         >
                             ✓
@@ -218,7 +218,7 @@ function PlanCard({
                 ) : isCurrent ? (
                     <button
                         onClick={onManage}
-                        className="min-h-11 w-full rounded-xl border border-cyan/25 bg-cyan-soft px-4 py-3 text-center text-[13px] font-semibold text-text-primary transition-colors hover:bg-cyan/15"
+                        className="min-h-11 w-full rounded-xl border border-gold/25 bg-gold/10 px-4 py-3 text-center text-[13px] font-semibold text-text-primary transition-colors hover:bg-gold/15"
                     >
                         {t('manageSubscription')}
                     </button>
@@ -234,8 +234,8 @@ function PlanCard({
                             rel="noopener noreferrer"
                             onClick={() => onIntent(plan.plan)}
                             className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-[13px] font-bold transition-colors ${plan.is_popular
-                                ? "bg-magenta text-background hover:bg-magenta-hover shadow-[0_0_20px_rgba(255,45,142,0.3)]"
-                                : "border border-cyan/30 bg-cyan-soft text-text-primary hover:bg-cyan/15"
+                                ? "bg-gold text-[#0a0a1a] hover:bg-gold-hover shadow-[0_0_20px_rgba(245,166,35,0.3)]"
+                                : "border border-gold/30 bg-gold/10 text-text-primary hover:bg-gold/15"
                                 }`}
                         >
                             <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
@@ -248,8 +248,8 @@ function PlanCard({
                             onClick={() => { onIntent(plan.plan); onUpgrade(plan.plan); }}
                             disabled={anyCheckoutPending}
                             className={`min-h-11 w-full rounded-xl px-4 py-3 text-[13px] font-bold transition-colors disabled:opacity-40 ${plan.is_popular
-                                ? "bg-magenta text-background hover:bg-magenta-hover shadow-[0_0_20px_rgba(255,45,142,0.3)]"
-                                : "border border-cyan/30 bg-cyan-soft text-text-primary hover:bg-cyan/15"
+                                ? "bg-gold text-[#0a0a1a] hover:bg-gold-hover shadow-[0_0_20px_rgba(245,166,35,0.3)]"
+                                : "border border-gold/30 bg-gold/10 text-text-primary hover:bg-gold/15"
                                 }`}
                         >
                             {loading ? (
@@ -266,8 +266,8 @@ function PlanCard({
                     <a
                         href="/login"
                         className={`flex min-h-11 w-full items-center justify-center rounded-xl px-4 py-3 text-center text-[13px] font-bold transition-colors ${plan.is_popular
-                            ? "border border-magenta/35 bg-magenta-soft text-text-primary hover:bg-magenta/20"
-                            : "border border-cyan/25 bg-cyan-soft text-text-primary hover:bg-cyan/15"
+                            ? "border border-gold/35 bg-gold/10 text-text-primary hover:bg-gold/20"
+                            : "border border-gold/25 bg-gold/[0.06] text-text-primary hover:bg-gold/15"
                             }`}
                     >
                         {t('loginToUpgrade')}
@@ -340,14 +340,14 @@ function FreePlanRow({ currentPlan, isLoggedIn }: { currentPlan: string | null; 
                 {isCurrent && isLoggedIn ? (
                     <a
                         href="/command"
-                        className="text-[12px] font-semibold text-cyan hover:underline whitespace-nowrap"
+                        className="text-[12px] font-semibold text-gold hover:underline whitespace-nowrap"
                     >
                         {t('openRico')} →
                     </a>
                 ) : !isLoggedIn ? (
                     <a
                         href="/signup"
-                        className="text-[12px] font-semibold text-cyan hover:underline whitespace-nowrap"
+                        className="text-[12px] font-semibold text-gold hover:underline whitespace-nowrap"
                     >
                         {t('signUpFree')} →
                     </a>
