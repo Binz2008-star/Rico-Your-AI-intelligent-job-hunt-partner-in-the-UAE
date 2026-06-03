@@ -1,35 +1,48 @@
 "use client";
 
-import { DashboardShell } from "@/components/DashboardShell";
+import { AppShell } from "@/components/layout/AppShell";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { StatusCard } from "@/components/StatusCard";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { ApiError, fetchMe, getHealth, getSettings, updateSettings } from "@/lib/api";
+import { ApiError, fetchMe, getHealth, getSettings, logout, updateSettings } from "@/lib/api";
 import { useTranslation } from "@/lib/translations";
 import type { HealthResponse, SettingsResponse } from "@/types";
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 const SETTINGS_BACKEND_MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === "true";
 
 function Row({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
   return (
     <div className="flex items-center justify-between py-3 border-b border-border-subtle last:border-0">
-      <span className="text-[13px] text-rico-text-dim">{label}</span>
-      <span className={`text-[13px] font-medium flex items-center gap-1.5 ${ok === true ? "text-rico-teal" : ok === false ? "text-rico-red" : "text-rico-text-muted"
-        }`}>
-        {ok === true && <span className="w-1.5 h-1.5 rounded-full bg-rico-teal" />}
-        {ok === false && <span className="w-1.5 h-1.5 rounded-full bg-rico-red" />}
+      <span className="text-[13px] text-text-tertiary">{label}</span>
+      <span className={`text-[13px] font-medium flex items-center gap-1.5 ${
+        ok === true ? "text-emerald-400" : ok === false ? "text-red-400" : "text-text-secondary"
+      }`}>
+        {ok === true && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+        {ok === false && <span className="w-1.5 h-1.5 rounded-full bg-red-400" />}
         {value}
       </span>
     </div>
   );
 }
 
+function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-2xl border border-border-subtle bg-surface-elevated/40 p-6 backdrop-blur-md relative overflow-hidden">
+      <div className="absolute -top-12 -right-12 w-36 h-36 bg-gold/5 blur-3xl rounded-full pointer-events-none" aria-hidden="true" />
+      <h2 className="text-[11px] font-black text-text-tertiary uppercase tracking-[0.18em] mb-5">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
 export default function SettingsPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const { toasts, toast } = useToast();
   const { language } = useLanguage();
   const t = useTranslation(language);
@@ -40,6 +53,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<"auth" | "other" | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [sidebarUser, setSidebarUser] = useState<{ name?: string; email?: string } | undefined>(undefined);
 
   const isAdmin = userRole === "admin";
   const telegramConfigured = Boolean(settings?.telegram_chat_id?.trim());
@@ -54,10 +68,16 @@ export default function SettingsPage() {
       ? t("telegramPaused")
       : t("telegramNotConfigured");
 
-  useEffect(() => {
-    if (SETTINGS_BACKEND_MAINTENANCE_MODE) {
-      return;
+  const handleLogout = useCallback(async () => {
+    try {
+      await logout();
+    } finally {
+      router.push("/login");
     }
+  }, [router]);
+
+  useEffect(() => {
+    if (SETTINGS_BACKEND_MAINTENANCE_MODE) return;
     getHealth()
       .then(setHealth)
       .catch(() => toast(t("backendUnreachable"), "error"))
@@ -65,9 +85,7 @@ export default function SettingsPage() {
   }, [toast, t]);
 
   const loadSettings = useCallback(async () => {
-    if (SETTINGS_BACKEND_MAINTENANCE_MODE) {
-      return;
-    }
+    if (SETTINGS_BACKEND_MAINTENANCE_MODE) return;
     if (!user) return;
     try {
       const response = await getSettings();
@@ -85,36 +103,27 @@ export default function SettingsPage() {
   useEffect(() => {
     if (SETTINGS_BACKEND_MAINTENANCE_MODE) return;
     if (!user) return;
-    const timeoutId = window.setTimeout(() => {
-      void loadSettings();
-    }, 0);
-    return () => window.clearTimeout(timeoutId);
+    const id = window.setTimeout(() => { void loadSettings(); }, 0);
+    return () => window.clearTimeout(id);
   }, [loadSettings, user]);
 
   useEffect(() => {
     if (!user || SETTINGS_BACKEND_MAINTENANCE_MODE) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUserRole(null);
+      setSidebarUser(undefined);
       return;
     }
-
     let active = true;
-
     fetchMe()
       .then((me) => {
-        if (active) {
-          setUserRole(me.role || null);
-        }
+        if (!active) return;
+        setUserRole(me.role ?? null);
+        setSidebarUser(me.authenticated ? { email: me.email ?? undefined } : undefined);
       })
       .catch(() => {
-        if (active) {
-          setUserRole(null);
-        }
+        if (active) { setUserRole(null); }
       });
-
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, [user]);
 
   const handleRetrySettings = useCallback(() => {
@@ -153,24 +162,26 @@ export default function SettingsPage() {
   const isMock = process.env.NEXT_PUBLIC_USE_MOCK === "true";
 
   return (
-    <DashboardShell
+    <AppShell
       title={t("settings")}
       subtitle={t("settingsSubtitle")}
+      sidebarProps={{ user: sidebarUser, onLogout: handleLogout }}
     >
-      <div className="max-w-3xl flex flex-col gap-8">
+      <div className="max-w-3xl flex flex-col gap-6">
+
+        {/* Maintenance banner */}
         {SETTINGS_BACKEND_MAINTENANCE_MODE && (
-          <section className="rounded-2xl border border-[rgba(245,166,35,0.35)] bg-[rgba(245,166,35,0.08)] px-5 py-4">
-            <p className="text-[13px] font-semibold text-[#f5a623]">{t("backendMaintenance")}</p>
-            <p className="mt-1 text-[12px] leading-relaxed text-[#a08040]">
+          <div className="rounded-2xl border border-gold/30 bg-gold/8 px-5 py-4">
+            <p className="text-[13px] font-semibold text-gold">{t("backendMaintenance")}</p>
+            <p className="mt-1 text-[12px] leading-relaxed text-gold/60">
               {t("backendMaintenanceDescription")}
             </p>
-          </section>
+          </div>
         )}
 
         {/* Job Matching Preferences */}
         {settings && (
-          <section className="space-y-4">
-            <h2 className="text-[11px] font-black text-text-tertiary uppercase tracking-[0.2em] ms-1">{t("jobMatchingPreferences")}</h2>
+          <SectionCard title={t("jobMatchingPreferences")}>
             <div className="grid gap-4 sm:grid-cols-2">
               <StatusCard title={t("applyPacing")} value={String(settings.max_daily_applies)}>
                 <div className="mt-2">
@@ -179,7 +190,7 @@ export default function SettingsPage() {
                     aria-label={t("applyPacing")}
                     value={settings.max_daily_applies}
                     onChange={(e) => setSettings({ ...settings, max_daily_applies: Number(e.target.value) })}
-                    className="w-full h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer accent-magenta"
+                    className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#f5a623] bg-white/5"
                   />
                   <div className="flex justify-between mt-2 text-[10px] text-text-tertiary font-bold uppercase tracking-tighter">
                     <span>{t("safety")}</span>
@@ -195,7 +206,7 @@ export default function SettingsPage() {
                     aria-label={t("minimumFitScore")}
                     value={settings.min_score}
                     onChange={(e) => setSettings({ ...settings, min_score: Number(e.target.value) })}
-                    className="w-full h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer accent-cyan"
+                    className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#f5a623] bg-white/5"
                   />
                   <div className="flex justify-between mt-2 text-[10px] text-text-tertiary font-bold uppercase tracking-tighter">
                     <span>{t("general")}</span>
@@ -204,15 +215,11 @@ export default function SettingsPage() {
                 </div>
               </StatusCard>
             </div>
-          </section>
+          </SectionCard>
         )}
 
         {/* Match Thresholds */}
-        <section className="bg-surface-elevated/40 border border-border-subtle rounded-2xl p-6 backdrop-blur-md relative overflow-hidden">
-          <div className="absolute -top-10 -right-10 w-32 h-32 bg-gold/5 blur-3xl rounded-full pointer-events-none" aria-hidden="true" />
-
-          <h3 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[17px] text-text-primary mb-6">{t("matchThresholds")}</h3>
-
+        <SectionCard title={t("matchThresholds")}>
           {loadingSettings ? (
             <div className="flex flex-col gap-3">
               {Array.from({ length: 4 }).map((_, i) => (
@@ -230,26 +237,23 @@ export default function SettingsPage() {
                 <label className="flex flex-col gap-1.5">
                   <span className="text-[11px] text-text-tertiary uppercase tracking-wider font-semibold">{t("applyThreshold")}</span>
                   <input
-                    type="number"
-                    min={0}
-                    max={100}
+                    type="number" min={0} max={100}
                     value={settings.score_threshold_apply}
                     onChange={(e) => setSettings({ ...settings, score_threshold_apply: Number(e.target.value) })}
-                    className="bg-surface border border-border-soft rounded-lg px-3 py-2 text-[13px] text-text-secondary outline-none focus:border-gold/40"
+                    className="bg-surface border border-border-soft rounded-lg px-3 py-2 text-[13px] text-text-secondary outline-none focus:border-gold/40 transition-colors"
                   />
                 </label>
                 <label className="flex flex-col gap-1.5">
                   <span className="text-[11px] text-text-tertiary uppercase tracking-wider font-semibold">{t("watchThreshold")}</span>
                   <input
-                    type="number"
-                    min={0}
-                    max={100}
+                    type="number" min={0} max={100}
                     value={settings.score_threshold_watch}
                     onChange={(e) => setSettings({ ...settings, score_threshold_watch: Number(e.target.value) })}
-                    className="bg-surface border border-border-soft rounded-lg px-3 py-2 text-[13px] text-text-secondary outline-none focus:border-gold/40"
+                    className="bg-surface border border-border-soft rounded-lg px-3 py-2 text-[13px] text-text-secondary outline-none focus:border-gold/40 transition-colors"
                   />
                 </label>
               </div>
+
               <label className="flex flex-col gap-1.5">
                 <span className="text-[11px] text-text-tertiary uppercase tracking-wider font-semibold">{t("telegramChatId")}</span>
                 <input
@@ -257,52 +261,54 @@ export default function SettingsPage() {
                   value={settings.telegram_chat_id}
                   onChange={(e) => setSettings({ ...settings, telegram_chat_id: e.target.value })}
                   placeholder={t("telegramPlaceholder")}
-                  className="bg-surface border border-border-soft rounded-lg px-3 py-2 text-[13px] text-text-secondary outline-none focus:border-gold/40 placeholder:text-text-tertiary"
+                  className="bg-surface border border-border-soft rounded-lg px-3 py-2 text-[13px] text-text-secondary outline-none focus:border-gold/40 transition-colors placeholder:text-text-tertiary"
                 />
               </label>
+
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="self-start px-4 py-2 rounded-lg bg-gold/10 text-gold border border-gold/30 text-[13px] font-semibold hover:bg-gold/20 transition-all disabled:opacity-40"
+                className="self-start px-4 py-2 rounded-lg bg-gold/10 text-gold border border-gold/30 text-[13px] font-semibold hover:bg-gold/20 transition-all disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
               >
                 {saving ? t("saving") : t("saveSettings")}
               </button>
             </div>
           ) : null}
-        </section>
+        </SectionCard>
 
-        {/* Channel Preferences — Glow Card */}
-        <section className="bg-surface-elevated/40 border border-border-subtle rounded-2xl p-6 backdrop-blur-md relative overflow-hidden">
-          <div className="absolute -top-10 -right-10 w-32 h-32 bg-gold/5 blur-3xl rounded-full pointer-events-none" aria-hidden="true" />
-
-          <h3 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[17px] text-text-primary mb-6">{t("channelPreferences")}</h3>
-
+        {/* Channel Preferences */}
+        <SectionCard title={t("channelPreferences")}>
           <div className="space-y-6">
             <div className="flex items-center justify-between group">
               <div className="space-y-1">
-                <p className="text-sm font-bold text-text-primary group-hover:text-white transition-colors">{t("telegramNotifications")}</p>
-                <p className="text-xs text-text-tertiary">
-                  {telegramDescription}
-                </p>
+                <p className="text-sm font-bold text-text-primary">{t("telegramNotifications")}</p>
+                <p className="text-xs text-text-tertiary">{telegramDescription}</p>
               </div>
-              <span className="text-xs text-[#5b4fff] font-medium">{telegramStatus}</span>
+              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                telegramConfigured
+                  ? "bg-gold/10 text-gold border border-gold/20"
+                  : "bg-surface-glass text-text-tertiary border border-border-soft"
+              }`}>
+                {telegramStatus}
+              </span>
             </div>
 
-            <div className="pt-6 border-t border-border-subtle flex items-center justify-between">
+            <div className="pt-5 border-t border-border-subtle flex items-center justify-between">
               <span className="text-[11px] text-text-tertiary font-medium uppercase tracking-widest">
                 {SETTINGS_BACKEND_MAINTENANCE_MODE
                   ? t("statusPaused")
                   : saving ? t("statusSyncing") : t("statusSynced")}
               </span>
-              {saving && <div className="w-3 h-3 border-2 border-[#5b4fff] border-t-transparent rounded-full animate-spin" />}
+              {saving && (
+                <div className="w-3 h-3 border-2 border-gold border-t-transparent rounded-full animate-spin" />
+              )}
             </div>
           </div>
-        </section>
+        </SectionCard>
 
-        {/* Backend Status — Admin Only */}
+        {/* Backend Status — Admin only */}
         {isAdmin && (
-          <section className="bg-surface-elevated/80 border border-border-subtle rounded-2xl p-6">
-            <h2 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[15px] mb-4 text-text-primary">{t("backendStatus")}</h2>
+          <SectionCard title={t("backendStatus")}>
             {loadingHealth ? (
               <div className="flex flex-col gap-2">
                 {Array.from({ length: 5 }).map((_, i) => (
@@ -313,84 +319,52 @@ export default function SettingsPage() {
               (() => {
                 const rico = health.rico;
                 const readyForHf = health.ready_for_hf ?? rico?.ready_for_hf ?? false;
-                const readyForOpenAI =
-                  health.ready_for_openai ?? rico?.ready_for_openai ?? health.openai ?? false;
-                const readyForDeepSeek =
-                  health.ready_for_deepseek ?? rico?.ready_for_deepseek ?? false;
-                const readyForJotform =
-                  health.ready_for_jotform ?? rico?.ready_for_jotform ?? false;
-                const readyForTelegram =
-                  health.telegram ?? rico?.ready_for_telegram ?? false;
+                const readyForOpenAI = health.ready_for_openai ?? rico?.ready_for_openai ?? health.openai ?? false;
+                const readyForDeepSeek = health.ready_for_deepseek ?? rico?.ready_for_deepseek ?? false;
+                const readyForJotform = health.ready_for_jotform ?? rico?.ready_for_jotform ?? false;
+                const readyForTelegram = health.telegram ?? rico?.ready_for_telegram ?? false;
                 const aiProvider = health.ai_provider ?? rico?.ai_provider ?? "unknown";
-                const dbStatus =
-                  health.database ?? health.db ?? (rico?.ready_for_db ? "connected" : "unknown");
-
+                const dbStatus = health.database ?? health.db ?? (rico?.ready_for_db ? "connected" : "unknown");
                 return (
                   <>
                     <Row label={t("service")} value={health.service ?? "—"} />
                     <Row label={t("status")} value={health.status} ok={health.status === "ok" || health.status === "healthy"} />
                     <Row label={t("environment")} value={health.environment ?? "—"} />
                     <Row label={t("database")} value={dbStatus} ok={dbStatus === "connected"} />
-                    <Row
-                      label={t("aiProvider")}
-                      value={aiProvider}
-                      ok={readyForHf || readyForOpenAI || readyForDeepSeek}
-                    />
-                    <Row
-                      label={t("huggingFace")}
-                      value={readyForHf ? t("configured") : t("notConfigured")}
-                      ok={readyForHf}
-                    />
-                    <Row
-                      label={t("deepSeek")}
-                      value={readyForDeepSeek ? t("active") : t("notActive")}
-                      ok={readyForDeepSeek}
-                    />
-                    <Row
-                      label={t("openai")}
-                      value={readyForOpenAI ? t("active") : t("notActive")}
-                      ok={readyForOpenAI}
-                    />
-                    <Row
-                      label={t("jotform")}
-                      value={readyForJotform ? t("configured") : t("notConfigured")}
-                      ok={readyForJotform}
-                    />
-                    <Row
-                      label={t("telegram")}
-                      value={readyForTelegram ? t("connected") : t("notConfigured")}
-                      ok={readyForTelegram}
-                    />
+                    <Row label={t("aiProvider")} value={aiProvider} ok={readyForHf || readyForOpenAI || readyForDeepSeek} />
+                    <Row label={t("huggingFace")} value={readyForHf ? t("configured") : t("notConfigured")} ok={readyForHf} />
+                    <Row label={t("deepSeek")} value={readyForDeepSeek ? t("active") : t("notActive")} ok={readyForDeepSeek} />
+                    <Row label={t("openai")} value={readyForOpenAI ? t("active") : t("notActive")} ok={readyForOpenAI} />
+                    <Row label={t("jotform")} value={readyForJotform ? t("configured") : t("notConfigured")} ok={readyForJotform} />
+                    <Row label={t("telegram")} value={readyForTelegram ? t("connected") : t("notConfigured")} ok={readyForTelegram} />
                     <Row label={t("version")} value={`v${health.version ?? "0"}`} />
                   </>
                 );
               })()
             ) : (
-              <p className="text-[13px] text-[#ff5e5b]">{t("couldNotReachBackend")}</p>
+              <p className="text-[13px] text-red-400">{t("couldNotReachBackend")}</p>
             )}
-          </section>
+          </SectionCard>
         )}
 
-        {/* Frontend Config — Admin Only */}
+        {/* Frontend Config — Admin only */}
         {isAdmin && (
-          <section className="bg-surface-elevated/80 border border-border-subtle rounded-2xl p-6">
-            <h2 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[15px] mb-4 text-text-primary">{t("frontendConfig")}</h2>
+          <SectionCard title={t("frontendConfig")}>
             <Row label={t("mockMode")} value={isMock ? t("mockEnabled") : t("mockDisabled")} ok={!isMock} />
-          </section>
+          </SectionCard>
         )}
 
         {/* Legal */}
-        <section className="bg-surface-elevated/80 border border-border-subtle rounded-2xl p-6">
-          <h2 className="font-['Cabinet_Grotesk',sans-serif] font-bold text-[15px] mb-4 text-text-primary">{t("legal")}</h2>
+        <SectionCard title={t("legal")}>
           <div className="flex flex-wrap gap-4">
             <a href="/terms" className="text-[13px] text-text-tertiary hover:text-text-primary transition-colors">{t("termsOfService")}</a>
             <a href="/privacy" className="text-[13px] text-text-tertiary hover:text-text-primary transition-colors">{t("privacyPolicy")}</a>
             <a href="/refund-policy" className="text-[13px] text-text-tertiary hover:text-text-primary transition-colors">{t("refundPolicy")}</a>
           </div>
-        </section>
+        </SectionCard>
 
       </div>
       <ToastContainer toasts={toasts} />
-    </DashboardShell>
+    </AppShell>
   );
 }
