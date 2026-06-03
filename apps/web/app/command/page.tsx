@@ -84,6 +84,12 @@ const QUICK_ACTION_DEFS = [
     { key: "cmdQaApplications", prompt: "Show my job applications and their status." },
     { key: "cmdQaInterview", prompt: "Help me prepare for an upcoming job interview." },
 ];
+const CV_READY_CHIP_DEFS = [
+    { key: "cmdCvReadyChipFindJobs", prompt: "Find UAE jobs that match my CV and experience." },
+    { key: "cmdCvReadyChipImproveProfile", prompt: "Review my CV profile for gaps and tell me the highest-impact improvements I can make." },
+    { key: "cmdCvReadyChipStrengths", prompt: "Based on my CV, what are my strongest skills and most marketable experiences?" },
+    { key: "cmdCvReadyChipWhatNext", prompt: "Based on my CV and experience, what's the best next step in my job search?" },
+];
 const COMMAND_LOGIN_HREF = buildAuthHref("/login", "/command");
 const COMMAND_SIGNUP_HREF = buildAuthHref("/signup", "/command");
 
@@ -998,24 +1004,43 @@ export default function CommandPage() {
                         </div>
                     )}
 
-                    {/* Quick start (shown above first message) */}
+                    {/* Quick start / CV-ready chips */}
                     {messages.length <= 1 && !thinking && (
-                        <div className="grid grid-cols-1 gap-2 pb-4 min-[480px]:grid-cols-2 sm:flex sm:flex-wrap sm:justify-center">
-                            {QUICK_ACTION_DEFS.map((qa) => {
-                                const label = t(qa.key as TranslationKey);
-                                return (
-                                    <button
-                                        type="button"
-                                        key={qa.key}
-                                        onClick={() => sendMessage(qa.prompt, label)}
-                                        disabled={thinking || chatAudience === "checking"}
-                                        className="min-h-10 rounded-xl border border-border-subtle bg-surface-glass px-3 py-2 text-center text-[11px] text-text-secondary transition-colors hover:border-magenta/30 hover:bg-surface-subtle hover:text-rico-text disabled:opacity-50 rico-focus-strong sm:text-xs"
-                                    >
-                                        {label}
-                                    </button>
-                                );
-                            })}
-                        </div>
+                        cvReady ? (
+                            <div className="grid grid-cols-1 gap-2 pb-4 min-[480px]:grid-cols-2">
+                                {CV_READY_CHIP_DEFS.map((qa) => {
+                                    const label = t(qa.key as TranslationKey);
+                                    return (
+                                        <button
+                                            type="button"
+                                            key={qa.key}
+                                            onClick={() => sendMessage(qa.prompt, label)}
+                                            disabled={thinking || chatAudience === "checking"}
+                                            className="min-h-10 rounded-xl border border-magenta/30 bg-magenta/5 px-3 py-2 text-center text-[11px] text-magenta transition-colors hover:border-magenta/50 hover:bg-magenta/10 disabled:opacity-50 rico-focus-strong sm:text-xs"
+                                        >
+                                            {label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 gap-2 pb-4 min-[480px]:grid-cols-2 sm:flex sm:flex-wrap sm:justify-center">
+                                {QUICK_ACTION_DEFS.map((qa) => {
+                                    const label = t(qa.key as TranslationKey);
+                                    return (
+                                        <button
+                                            type="button"
+                                            key={qa.key}
+                                            onClick={() => sendMessage(qa.prompt, label)}
+                                            disabled={thinking || chatAudience === "checking"}
+                                            className="min-h-10 rounded-xl border border-border-subtle bg-surface-glass px-3 py-2 text-center text-[11px] text-text-secondary transition-colors hover:border-magenta/30 hover:bg-surface-subtle hover:text-rico-text disabled:opacity-50 rico-focus-strong sm:text-xs"
+                                        >
+                                            {label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )
                     )}
 
                     {/* Messages */}
