@@ -130,7 +130,7 @@ export function LoginForm() {
                         <button
                             type="submit"
                             disabled={isLoading || maintenanceMode}
-                            className="w-full bg-primary/10 text-primary rounded-lg px-6 py-4 font-label-caps uppercase tracking-widest hover:bg-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            className="w-full bg-gold text-[#0a0a1a] rounded-lg px-6 py-4 font-label-caps uppercase tracking-widest font-semibold hover:bg-gold-hover transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-[0_4px_16px_rgba(245,166,35,0.28)]"
                         >
                             {maintenanceMode ? (
                                 <span>{t('backendMaintenance')}</span>
