@@ -210,21 +210,21 @@ function CvReadyOnboardingPanel({
                     </div>
                 </div>
 
-                {/* Status insight cards — Pulse data-row pattern */}
-                <div className="relative mt-4 overflow-hidden rounded-xl border border-border-subtle/60 bg-surface-glass/60 divide-y divide-border-subtle/40">
-                    <div className="flex items-center gap-3 px-3 py-2">
-                        <span className="h-2 w-2 shrink-0 rounded-full bg-cyan/70" aria-hidden="true" />
-                        <span className="flex-1 text-[12px] text-rico-text">{t("cmdCvReadyCard1Label")}</span>
+                {/* Status insight cards — individual dark mini-rows */}
+                <div className="relative mt-4 space-y-1.5">
+                    <div className="flex items-center gap-2.5 rounded-lg border border-overlay/8 bg-surface-elevated/50 px-3 py-2">
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cyan shadow-[0_0_6px_rgba(0,229,255,0.6)]" aria-hidden="true" />
+                        <span className="flex-1 text-[12px] text-text-secondary">{t("cmdCvReadyCard1Label")}</span>
                         <span className="text-[10px] font-medium text-cyan">{t("cmdCvReadyCard1Badge")}</span>
                     </div>
-                    <div className="flex items-center gap-3 px-3 py-2">
-                        <span className="h-2 w-2 shrink-0 rounded-full bg-cyan/70" aria-hidden="true" />
-                        <span className="flex-1 text-[12px] text-rico-text">{t("cmdCvReadyCard2Label")}</span>
+                    <div className="flex items-center gap-2.5 rounded-lg border border-overlay/8 bg-surface-elevated/50 px-3 py-2">
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cyan shadow-[0_0_6px_rgba(0,229,255,0.6)]" aria-hidden="true" />
+                        <span className="flex-1 text-[12px] text-text-secondary">{t("cmdCvReadyCard2Label")}</span>
                         <span className="text-[10px] font-medium text-cyan">{t("cmdCvReadyCard2Badge")}</span>
                     </div>
-                    <div className="flex items-center gap-3 px-3 py-2">
-                        <span className="h-2 w-2 shrink-0 rounded-full bg-magenta/70" aria-hidden="true" />
-                        <span className="flex-1 text-[12px] text-rico-text">{t("cmdCvReadyCard3Label")}</span>
+                    <div className="flex items-center gap-2.5 rounded-lg border border-overlay/8 bg-surface-elevated/50 px-3 py-2">
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-magenta shadow-[0_0_6px_rgba(255,45,142,0.6)]" aria-hidden="true" />
+                        <span className="flex-1 text-[12px] text-text-secondary">{t("cmdCvReadyCard3Label")}</span>
                         <span className="text-[10px] font-medium text-magenta">{t("cmdCvReadyCard3Badge")}</span>
                     </div>
                 </div>
