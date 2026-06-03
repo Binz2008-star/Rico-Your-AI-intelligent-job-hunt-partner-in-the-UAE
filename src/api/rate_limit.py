@@ -68,6 +68,8 @@ LIMIT_UPLOAD   = "10/minute"    # CV upload — heavy parsing, keep low
 LIMIT_WEBHOOK  = "60/minute"    # Jotform / Telegram — servers may burst
 LIMIT_PASSWORD_RESET = "3/minute"  # forgot/reset — anti-enumeration & token brute-force
 LIMIT_VERIFY_EMAIL   = "5/minute"  # verify + resend — prevent token-brute-force & spam
+LIMIT_PROFILE  = "20/minute"    # profile reads/writes — prevent storage DoS
+LIMIT_ADMIN    = "10/minute"    # admin endpoints — low ceiling, sensitive operations
 
 # ── 429 response handler ──────────────────────────────────────────────────────
 

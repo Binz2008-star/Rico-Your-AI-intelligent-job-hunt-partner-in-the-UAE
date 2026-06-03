@@ -46,7 +46,7 @@ from src.api.public_identity import (
     is_valid_public_user_id,
     normalize_public_email,
 )
-from src.api.rate_limit import LIMIT_CHAT, LIMIT_UPLOAD, LIMIT_WEBHOOK, limiter
+from src.api.rate_limit import LIMIT_ADMIN, LIMIT_CHAT, LIMIT_PROFILE, LIMIT_UPLOAD, LIMIT_WEBHOOK, limiter
 from src.repositories import onboarding_repo, profile_repo
 from src.repositories.learning_repo import get_learning_repository
 from src.agent.responses.schema import RicoResponse, build_error_response, _generate_debug_id
@@ -281,10 +281,12 @@ def _validate_jotform_secret(request: Request) -> None:
         logger.warning("jotform_webhook: JOTFORM_WEBHOOK_SECRET missing; allowing dev request")
         return
 
+    # Accept secret only from headers — never from query params (they appear in server logs,
+    # proxy logs, and browser history, making them an easy credential leak vector).
     provided = (
         request.headers.get("X-Jotform-Signature")
         or request.headers.get("X-Webhook-Secret")
-        or request.query_params.get("secret", "")
+        or ""
     )
 
     if not provided or not secrets.compare_digest(provided, webhook_secret):
@@ -973,6 +975,7 @@ def rico_openai_smoke(request: Request) -> dict[str, Any]:
 # ============================================================================
 
 @router.get("/admin/health/ai-provider")
+@limiter.limit(LIMIT_ADMIN)
 def rico_ai_provider_health_admin(request: Request) -> dict[str, Any]:
     """Admin-only health check endpoint exposing current AI provider availability and state."""
     require_admin_user(get_current_user(request))
@@ -1020,23 +1023,24 @@ def rico_ai_provider_health_public(request: Request) -> dict[str, Any]:
 # ============================================================================
 
 class ProfileUpdateRequest(BaseModel):
-    name: Optional[str] = None
-    phone: Optional[str] = None
-    telegram_username: Optional[str] = None
-    target_roles: Optional[list[str]] = None
-    preferred_cities: Optional[list[str]] = None
-    salary_expectation_aed: Optional[int] = None
-    minimum_salary_aed: Optional[int] = None
-    years_experience: Optional[float] = None
-    current_role: Optional[str] = None
-    current_company: Optional[str] = None
-    linkedin_url: Optional[str] = None
-    visa_status: Optional[str] = None
-    notice_period: Optional[str] = None
-    skills: Optional[list[str]] = None
+    name: Optional[str] = Field(None, max_length=200)
+    phone: Optional[str] = Field(None, max_length=30)
+    telegram_username: Optional[str] = Field(None, max_length=100)
+    target_roles: Optional[list[str]] = Field(None, max_length=50)
+    preferred_cities: Optional[list[str]] = Field(None, max_length=20)
+    salary_expectation_aed: Optional[int] = Field(None, ge=0, le=10_000_000)
+    minimum_salary_aed: Optional[int] = Field(None, ge=0, le=10_000_000)
+    years_experience: Optional[float] = Field(None, ge=0, le=60)
+    current_role: Optional[str] = Field(None, max_length=200)
+    current_company: Optional[str] = Field(None, max_length=200)
+    linkedin_url: Optional[str] = Field(None, max_length=500)
+    visa_status: Optional[str] = Field(None, max_length=100)
+    notice_period: Optional[str] = Field(None, max_length=100)
+    skills: Optional[list[str]] = Field(None, max_length=100)
 
 
 @router.patch("/profile")
+@limiter.limit(LIMIT_PROFILE)
 def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, Any]:
     """Direct profile update endpoint for inline edits."""
     user = get_current_user(request)
