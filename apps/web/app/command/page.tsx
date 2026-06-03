@@ -84,6 +84,12 @@ const QUICK_ACTION_DEFS = [
     { key: "cmdQaApplications", prompt: "Show my job applications and their status." },
     { key: "cmdQaInterview", prompt: "Help me prepare for an upcoming job interview." },
 ];
+const CV_READY_CHIP_DEFS = [
+    { key: "cmdCvReadyChipFindJobs", prompt: "Find UAE jobs that match my CV and experience." },
+    { key: "cmdCvReadyChipImproveProfile", prompt: "Review my CV profile for gaps and tell me the highest-impact improvements I can make." },
+    { key: "cmdCvReadyChipStrengths", prompt: "Based on my CV, what are my strongest skills and most marketable experiences?" },
+    { key: "cmdCvReadyChipWhatNext", prompt: "Based on my CV and experience, what's the best next step in my job search?" },
+];
 const COMMAND_LOGIN_HREF = buildAuthHref("/login", "/command");
 const COMMAND_SIGNUP_HREF = buildAuthHref("/signup", "/command");
 
@@ -168,6 +174,78 @@ function WorkingIndicator({ message }: { message: string }) {
             <div className="rico-thinking-label">
                 <span>{message}</span>
                 <span className="rico-dots" aria-hidden="true"><i /><i /><i /></span>
+            </div>
+        </div>
+    );
+}
+
+function CvReadyOnboardingPanel({
+    onAction,
+    disabled,
+}: {
+    onAction: (prompt: string, label: string) => void;
+    disabled: boolean;
+}) {
+    const { language } = useLanguage();
+    const t = useTranslation(language);
+    return (
+        <div className="pb-4 animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none">
+            <div className="relative overflow-hidden rounded-2xl border border-border-subtle/70 bg-surface-elevated/60 p-5 backdrop-blur-sm sm:p-6">
+                {/* Pulse-style ambient glow */}
+                <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-magenta/[0.08] blur-2xl" aria-hidden="true" />
+
+                {/* Header */}
+                <div className="relative flex items-start gap-3">
+                    <div
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-magenta/20 bg-magenta/10 text-[15px] font-black text-magenta"
+                        aria-hidden="true"
+                    >✓</div>
+                    <div className="min-w-0">
+                        <p className="text-[14px] font-semibold leading-snug text-rico-text">
+                            {t("cmdCvReadyPanelTitle")}
+                        </p>
+                        <p className="mt-1 text-[12px] leading-relaxed text-text-muted">
+                            {t("cmdCvReadyPanelSubtext")}
+                        </p>
+                    </div>
+                </div>
+
+                {/* Status insight cards — Pulse data-row pattern */}
+                <div className="relative mt-4 overflow-hidden rounded-xl border border-border-subtle/60 bg-surface-glass/60 divide-y divide-border-subtle/40">
+                    <div className="flex items-center gap-3 px-3 py-2">
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-cyan/70" aria-hidden="true" />
+                        <span className="flex-1 text-[12px] text-rico-text">{t("cmdCvReadyCard1Label")}</span>
+                        <span className="text-[10px] font-medium text-cyan">{t("cmdCvReadyCard1Badge")}</span>
+                    </div>
+                    <div className="flex items-center gap-3 px-3 py-2">
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-cyan/70" aria-hidden="true" />
+                        <span className="flex-1 text-[12px] text-rico-text">{t("cmdCvReadyCard2Label")}</span>
+                        <span className="text-[10px] font-medium text-cyan">{t("cmdCvReadyCard2Badge")}</span>
+                    </div>
+                    <div className="flex items-center gap-3 px-3 py-2">
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-magenta/70" aria-hidden="true" />
+                        <span className="flex-1 text-[12px] text-rico-text">{t("cmdCvReadyCard3Label")}</span>
+                        <span className="text-[10px] font-medium text-magenta">{t("cmdCvReadyCard3Badge")}</span>
+                    </div>
+                </div>
+
+                {/* Action chips */}
+                <div className="relative mt-3 grid grid-cols-1 gap-2 min-[480px]:grid-cols-2">
+                    {CV_READY_CHIP_DEFS.map((qa) => {
+                        const label = t(qa.key as TranslationKey);
+                        return (
+                            <button
+                                type="button"
+                                key={qa.key}
+                                onClick={() => onAction(qa.prompt, label)}
+                                disabled={disabled}
+                                className="min-h-10 rounded-xl border border-magenta/25 bg-magenta/5 px-3 py-2.5 text-center text-[12px] font-medium text-magenta transition-colors hover:border-magenta/40 hover:bg-magenta/10 disabled:opacity-50 rico-focus-strong"
+                            >
+                                {label}
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
         </div>
     );
@@ -731,7 +809,7 @@ export default function CommandPage() {
                 return;
             }
             if (cvReady) {
-                setMessages([{ id: 1, role: "rico", text: t("cmdWelcomeCvReady") }]);
+                // CvReadyOnboardingPanel renders instead of a static message.
                 return;
             }
             if (chatAudience === "authenticated") {
@@ -998,8 +1076,16 @@ export default function CommandPage() {
                         </div>
                     )}
 
-                    {/* Quick start (shown above first message) */}
-                    {messages.length <= 1 && !thinking && (
+                    {/* CV-ready onboarding panel — Pulse-style glass card with action chips */}
+                    {cvReady && messages.length === 0 && chatAudience !== "checking" && !thinking && (
+                        <CvReadyOnboardingPanel
+                            onAction={(prompt, label) => sendMessage(prompt, label)}
+                            disabled={thinking}
+                        />
+                    )}
+
+                    {/* Quick start (shown above first message on non-cv-ready entry) */}
+                    {messages.length <= 1 && !thinking && !cvReady && (
                         <div className="grid grid-cols-1 gap-2 pb-4 min-[480px]:grid-cols-2 sm:flex sm:flex-wrap sm:justify-center">
                             {QUICK_ACTION_DEFS.map((qa) => {
                                 const label = t(qa.key as TranslationKey);
