@@ -94,7 +94,7 @@ export function MobileCommandHeader({
                 className="relative z-10 border-b border-border-subtle bg-background/80 backdrop-blur-sm"
                 dir={isRTL ? "rtl" : "ltr"}
             >
-              <div className="relative flex items-center w-full max-w-3xl mx-auto px-3 py-2.5">
+              <div className="relative mx-auto flex w-full max-w-5xl items-center px-3 py-2.5 sm:px-5 lg:px-7">
                 {/* Left: hamburger */}
                 <div className="flex items-center" style={{ minWidth: 80 }}>
                     {chatAudience === "checking" ? (
@@ -108,7 +108,7 @@ export function MobileCommandHeader({
                             aria-label={language === "ar" ? "فتح القائمة" : "Open menu"}
                             aria-expanded={drawerOpen}
                             onClick={() => setDrawerOpen(true)}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted hover:text-white hover:bg-surface/60 transition-colors"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                         >
                             <svg width="18" height="14" viewBox="0 0 18 14" fill="none" aria-hidden="true">
                                 <rect width="18" height="2" rx="1" fill="currentColor" />
@@ -140,7 +140,7 @@ export function MobileCommandHeader({
                         type="button"
                         onClick={() => setTheme(isDark ? "light" : "dark")}
                         aria-label={isDark ? (language === "ar" ? "تبديل إلى الوضع الفاتح" : "Switch to light mode") : (language === "ar" ? "تبديل إلى الوضع الداكن" : "Switch to dark mode")}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted hover:text-white hover:bg-surface/60 transition-colors"
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                     >
                         {isDark ? (
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -159,7 +159,7 @@ export function MobileCommandHeader({
                         type="button"
                         onClick={() => setLanguage(language === "en" ? "ar" : "en")}
                         aria-label={language === "ar" ? "EN – Switch to English" : "AR – التبديل إلى العربية"}
-                        className="h-7 px-2 rounded-md border border-border-subtle text-[11px] font-medium text-text-muted hover:text-white hover:border-border-strong transition-colors"
+                        className="h-7 rounded-md border border-border-subtle px-2 text-[11px] font-medium text-text-muted transition-colors hover:border-border-strong hover:text-text-primary"
                     >
                         {language === "ar" ? "EN" : "AR"}
                     </button>
@@ -171,7 +171,7 @@ export function MobileCommandHeader({
                                 type="button"
                                 aria-label={language === "ar" ? "محادثة جديدة" : "New chat"}
                                 onClick={onNewChat}
-                                className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted hover:text-white hover:bg-surface/60 transition-colors"
+                                className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                             >
                                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                                     <path d="M14 1H2C1.45 1 1 1.45 1 2v9c0 .55.45 1 1 1h2v2.5l3.5-2.5H14c.55 0 1-.45 1-1V2c0-.55-.45-1-1-1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
@@ -186,7 +186,7 @@ export function MobileCommandHeader({
                                     aria-label={language === "ar" ? "المزيد" : "More"}
                                     aria-expanded={overflowOpen}
                                     onClick={() => setOverflowOpen((o) => !o)}
-                                    className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted hover:text-white hover:bg-surface/60 transition-colors"
+                                    className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                                 >
                                     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
                                         <circle cx="8" cy="2.5" r="1.5" />
@@ -204,7 +204,7 @@ export function MobileCommandHeader({
                                             type="button"
                                             role="menuitem"
                                             onClick={() => { onClearChat(); setOverflowOpen(false); }}
-                                            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-[13px] text-text-muted hover:text-white hover:bg-surface/60 transition-colors"
+                                            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-[13px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                                         >
                                             <span aria-hidden="true">🗑</span>
                                             {language === "ar" ? "مسح المحادثة" : "Clear chat"}
@@ -213,7 +213,7 @@ export function MobileCommandHeader({
                                             href="/archive"
                                             role="menuitem"
                                             onClick={() => setOverflowOpen(false)}
-                                            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-[13px] text-text-muted hover:text-white hover:bg-surface/60 transition-colors"
+                                            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-[13px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                                         >
                                             <span aria-hidden="true">📜</span>
                                             {language === "ar" ? "تاريخ المحادثات" : "Chat history"}
@@ -229,7 +229,7 @@ export function MobileCommandHeader({
                         <div className="flex items-center gap-1.5">
                             <Link
                                 href={loginHref}
-                                className="text-[12px] text-text-muted hover:text-white transition-colors px-2"
+                                className="px-2 text-[12px] text-text-muted transition-colors hover:text-text-primary"
                             >
                                 {language === "ar" ? "دخول" : "Sign in"}
                             </Link>
@@ -270,7 +270,7 @@ export function MobileCommandHeader({
                 aria-modal="true"
                 className={`fixed top-0 z-50 h-full w-72 max-w-[85vw] bg-surface border-border-subtle flex flex-col shadow-2xl transition-transform duration-300 ease-out safe-top ${
                     isRTL
-                        ? `left-0 border-e ${drawerOpen ? "translate-x-0" : "-translate-x-full"}`
+                        ? `right-0 border-s ${drawerOpen ? "translate-x-0" : "translate-x-full"}`
                         : `left-0 border-r ${drawerOpen ? "translate-x-0" : "-translate-x-full"}`
                 }`}
                 style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
@@ -291,7 +291,7 @@ export function MobileCommandHeader({
                         type="button"
                         aria-label={language === "ar" ? "إغلاق" : "Close"}
                         onClick={() => setDrawerOpen(false)}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted hover:text-white hover:bg-surface/60 transition-colors text-lg"
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-lg text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                     >
                         ×
                     </button>
@@ -304,7 +304,7 @@ export function MobileCommandHeader({
                             key={item.href}
                             href={item.href}
                             onClick={() => setDrawerOpen(false)}
-                            className="flex items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted hover:text-white hover:bg-surface/60 transition-colors"
+                            className="flex items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                         >
                             <span className="text-[16px] w-5 text-center" aria-hidden="true">{item.icon}</span>
                             {item.label}
@@ -316,7 +316,7 @@ export function MobileCommandHeader({
                     <button
                         type="button"
                         onClick={() => setLanguage(language === "en" ? "ar" : "en")}
-                        className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted hover:text-white hover:bg-surface/60 transition-colors"
+                        className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                     >
                         <span className="text-[16px] w-5 text-center" aria-hidden="true">🌐</span>
                         {language === "ar" ? "English" : "العربية"}
@@ -324,7 +324,7 @@ export function MobileCommandHeader({
                     <button
                         type="button"
                         onClick={() => setTheme(isDark ? "light" : "dark")}
-                        className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted hover:text-white hover:bg-surface/60 transition-colors"
+                        className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                     >
                         <span className="text-[16px] w-5 text-center" aria-hidden="true">{isDark ? "☀️" : "🌙"}</span>
                         {isDark
@@ -336,7 +336,7 @@ export function MobileCommandHeader({
                     <Link
                         href="/settings"
                         onClick={() => setDrawerOpen(false)}
-                        className="flex items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted hover:text-white hover:bg-surface/60 transition-colors"
+                        className="flex items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                     >
                         <span className="text-[16px] w-5 text-center" aria-hidden="true">⚙</span>
                         {language === "ar" ? "الإعدادات" : "Settings"}
@@ -366,7 +366,7 @@ export function MobileCommandHeader({
                             <Link
                                 href={loginHref}
                                 onClick={() => setDrawerOpen(false)}
-                                className="flex w-full items-center justify-center rounded-xl px-3 py-2.5 text-[13px] text-text-muted hover:text-white transition-colors"
+                                className="flex w-full items-center justify-center rounded-xl px-3 py-2.5 text-[13px] text-text-muted transition-colors hover:text-text-primary"
                             >
                                 {language === "ar" ? "تسجيل الدخول" : "Sign in"}
                             </Link>
