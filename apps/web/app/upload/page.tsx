@@ -1,7 +1,8 @@
 'use client';
 
-import { AuraGlow } from '@/components/ui/AuraGlow';
-import { GlassPanel } from '@/components/ui/GlassPanel';
+import { AppShell } from '@/components/layout/AppShell';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { PageTransition } from '@/components/ui/PageTransition';
 import { ProcessingOverlay } from '@/components/ui/ProcessingOverlay';
@@ -9,7 +10,7 @@ import { uploadCV } from '@/lib/api';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useTranslation } from '@/lib/translations';
 import { useRouter } from 'next/navigation';
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 
 function getGuestUploadUserId(): string {
     let sessionId = window.localStorage.getItem('rico_sid');
@@ -29,39 +30,9 @@ export default function UploadPage() {
     const router = useRouter();
     const { language } = useLanguage();
     const t = useTranslation(language);
+    const isRTL = language === 'ar';
 
-    const handleDragOver = (e: React.DragEvent) => {
-        e.preventDefault();
-        setIsDragging(true);
-    };
-
-    const handleDragLeave = () => {
-        setIsDragging(false);
-    };
-
-    const handleDrop = async (e: React.DragEvent) => {
-        e.preventDefault();
-        setIsDragging(false);
-        const file = e.dataTransfer.files[0];
-        if (file) {
-            await handleUpload(file);
-        }
-    };
-
-    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            await handleUpload(file);
-        }
-    };
-
-    const handleProcessingComplete = () => {
-        setIsProcessing(false);
-        setUploadComplete(true);
-        setTimeout(() => router.push('/command?cv=ready'), 2000);
-    };
-
-    const handleUpload = async (file: File) => {
+    const handleUpload = useCallback(async (file: File) => {
         setIsUploading(true);
         setError('');
         try {
@@ -73,115 +44,156 @@ export default function UploadPage() {
             setError(err instanceof Error ? err.message : t('uploadError'));
             setIsUploading(false);
         }
-    };
+    }, [t]);
+
+    const handleDragOver = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(true);
+    }, []);
+
+    const handleDragLeave = useCallback(() => {
+        setIsDragging(false);
+    }, []);
+
+    const handleDrop = useCallback(async (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+        const file = e.dataTransfer.files[0];
+        if (file) {
+            await handleUpload(file);
+        }
+    }, [handleUpload]);
+
+    const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            await handleUpload(file);
+        }
+        e.target.value = '';
+    }, [handleUpload]);
+
+    const handleProcessingComplete = useCallback(() => {
+        setIsProcessing(false);
+        setUploadComplete(true);
+        setTimeout(() => router.push('/command?cv=ready'), 2000);
+    }, [router]);
 
     return (
-        <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
+        <AppShell
+            title={t('uploadYourCV')}
+            subtitle={t('uploadCvSubtitle')}
+        >
             {/* Cinematic processing overlay */}
             <ProcessingOverlay active={isProcessing} onComplete={handleProcessingComplete} />
 
-            {/* Atmospheric Background */}
-            <AuraGlow variant="magenta" position="top-right" className="animate-pulse-magenta" />
-            <AuraGlow variant="cyan" position="bottom-left" className="animate-pulse-magenta" style={{ animationDelay: '-2s' }} />
-
-            {/* Main Content */}
-            <main className="relative z-10 w-full max-w-2xl px-container-padding-mobile md:px-container-padding-desktop">
+            <div
+                dir={isRTL ? 'rtl' : 'ltr'}
+                className="flex w-full max-w-5xl flex-col gap-6 text-start"
+            >
                 {uploadComplete ? (
                     <PageTransition>
-                        <GlassPanel className="p-12 rounded-2xl border border-border-soft text-center">
-                            <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
-                                <MaterialIcon icon="check_circle" className="text-primary text-5xl" />
-                            </div>
-                            <h1 className="font-headline-xl text-headline-xl text-on-surface mb-4">{t('uploadReadyHeading')}</h1>
-                            <p className="text-body-lg text-on-surface-variant mb-4">
-                                {t('uploadReadyBody')}
-                            </p>
-                            <div className="flex justify-center">
-                                <div className="w-8 h-0.5 bg-[var(--magenta)] rounded-full animate-pulse" />
-                            </div>
-                        </GlassPanel>
+                        <Card className="bg-surface-elevated/70">
+                            <CardContent className="flex flex-col items-center px-5 py-12 text-center sm:px-8">
+                                <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-magenta-soft text-magenta">
+                                    <MaterialIcon icon="check_circle" className="text-4xl" />
+                                </div>
+                                <h1 className="text-2xl font-bold text-text-primary sm:text-3xl">
+                                    {t('uploadReadyHeading')}
+                                </h1>
+                                <p className="mt-3 max-w-xl text-sm leading-6 text-text-secondary sm:text-base">
+                                    {t('uploadReadyBody')}
+                                </p>
+                                <div className="mt-6 h-1 w-10 rounded-full bg-magenta animate-pulse" />
+                            </CardContent>
+                        </Card>
                     </PageTransition>
                 ) : (
                     <PageTransition>
                         <>
-                            <div className="text-center mb-12">
-                                <h1 className="font-headline-xl text-headline-xl text-on-surface mb-4 tracking-tight">
-                                    {t('uploadYourCV')}
-                                </h1>
-                                <p className="font-body-lg text-body-lg text-on-surface-variant">
-                                    {t('uploadCvSubtitle')}
-                                </p>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="min-w-0">
+                                    <h2 className="text-xl font-semibold text-text-primary">
+                                        {t('uploadYourCV')}
+                                    </h2>
+                                    <p className="mt-1 max-w-2xl text-sm leading-6 text-text-secondary">
+                                        {t('uploadCvSubtitle')}
+                                    </p>
+                                </div>
+                                <Badge variant="secondary" className="text-[11px]">
+                                    {t('uploadPDF')}
+                                </Badge>
                             </div>
 
                             {error && (
-                                <div className="mb-6 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center animate-[fadeSlideIn_0.3s_ease-out]">
+                                <div className="rounded-lg border border-rico-red/25 bg-rico-red/10 p-3 text-center text-sm text-rico-red" role="alert">
                                     {error}
                                 </div>
                             )}
 
-                            <GlassPanel
-                                className={`p-16 rounded-2xl border border-border-soft text-center transition-all ${isDragging ? 'border-primary/50 bg-primary/5' : 'hover:border-primary/30'
+                            <Card
+                                className={`bg-surface-elevated/70 transition-colors ${isDragging ? 'border-magenta/50 bg-magenta-soft/40' : 'hover:border-magenta/25'
                                     }`}
                                 onDragOver={handleDragOver}
                                 onDragLeave={handleDragLeave}
                                 onDrop={handleDrop}
                             >
-                                <div className="mb-8">
-                                    <MaterialIcon icon="upload_file" className="text-6xl text-on-surface-variant/40 mb-4" />
-                                    <p className="text-body-lg text-on-surface-variant mb-2">
-                                        {isDragging ? t('uploadDropHere') : t('uploadDragDrop')}
-                                    </p>
-                                    <p className="text-sm text-on-surface-variant/60">{t('uploadOr')}</p>
-                                </div>
+                                <CardContent className="p-5 sm:p-8 lg:p-10">
+                                    <div className="flex min-h-[360px] flex-col items-center justify-center rounded-xl border border-dashed border-border-soft bg-surface-glass px-4 py-8 text-center sm:px-8">
+                                        <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-surface-subtle text-text-secondary">
+                                            <MaterialIcon icon="upload_file" className="text-4xl" />
+                                        </div>
+                                        <p className="text-base font-semibold text-text-primary sm:text-lg">
+                                            {isDragging ? t('uploadDropHere') : t('uploadDragDrop')}
+                                        </p>
+                                        <p className="mt-2 text-sm text-text-secondary">{t('uploadOr')}</p>
 
-                                <label className="inline-block cursor-pointer">
-                                    <input
-                                        type="file"
-                                        accept=".pdf"
-                                        onChange={handleFileSelect}
-                                        className="hidden"
-                                        disabled={isUploading}
-                                    />
-                                    <span className="inline-flex items-center gap-2 px-8 py-4 bg-primary/10 text-primary rounded-full hover:bg-primary/20 transition-all">
-                                        {isUploading ? (
-                                            <>
-                                                <MaterialIcon icon="hourglass_empty" className="animate-spin" />
-                                                <span className="text-label-caps">{t('uploadProcessing')}</span>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <span className="text-label-caps">{t('uploadSelectFile')}</span>
-                                                <MaterialIcon icon="folder_open" />
-                                            </>
-                                        )}
-                                    </span>
-                                </label>
+                                        <label className="mt-6 inline-flex cursor-pointer">
+                                            <input
+                                                type="file"
+                                                accept=".pdf"
+                                                onChange={handleFileSelect}
+                                                className="sr-only"
+                                                disabled={isUploading}
+                                            />
+                                            <span className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-magenta px-6 py-3 text-sm font-bold text-background transition-colors hover:bg-magenta-hover aria-disabled:opacity-60">
+                                                {isUploading ? (
+                                                    <>
+                                                        <MaterialIcon icon="hourglass_empty" className="animate-spin" />
+                                                        <span>{t('uploadProcessing')}</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <span>{t('uploadSelectFile')}</span>
+                                                        <MaterialIcon icon="folder_open" />
+                                                    </>
+                                                )}
+                                            </span>
+                                        </label>
 
-                                <div className="mt-8 pt-8 border-t border-border-subtle">
-                                    <p className="text-[10px] text-on-surface-variant/40 uppercase tracking-widest mb-4">
-                                        {t('uploadSupportedFormats')}
-                                    </p>
-                                    <div className="flex justify-center gap-4">
-                                        <span className="text-label-caps text-[10px] px-3 py-1 border border-border-soft rounded-full">{t('uploadPDF')}</span>
+                                        <div className="mt-8 w-full max-w-sm border-t border-border-subtle pt-6">
+                                            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-tertiary">
+                                                {t('uploadSupportedFormats')}
+                                            </p>
+                                            <div className="mt-3 flex justify-center">
+                                                <Badge variant="outline" className="text-[10px]">
+                                                    {t('uploadPDF')}
+                                                </Badge>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                            </GlassPanel>
+                                </CardContent>
+                            </Card>
 
-                            <div className="mt-8 flex items-center justify-center gap-3">
-                                <MaterialIcon icon="lock" className="text-on-surface-variant/40 text-sm" />
-                                <p className="text-[10px] text-on-surface-variant/40 uppercase tracking-widest">
+                            <div className="flex items-start justify-center gap-2 text-center">
+                                <MaterialIcon icon="lock" className="mt-0.5 text-sm text-text-tertiary" />
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-text-tertiary">
                                     {t('uploadSecureProcessing')}
                                 </p>
                             </div>
                         </>
                     </PageTransition>
                 )}
-            </main>
-
-            {/* Decoration */}
-            <div className="fixed top-0 left-0 w-full h-full pointer-events-none">
-                <div className="absolute inset-0 opacity-[0.04] bg-[url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27%3E%3Cfilter id=%27n%27%3E%3CfeTurbulence type=%27fractalNoise%27 baseFrequency=%27.85%27 numOctaves=%274%27 stitchTiles=%27stitch%27/%3E%3C/filter%3E%3Crect width=%27100%25%27 height=%27100%25%27 filter=%27url(%23n)%27 opacity=%27.025%27/%3E%3C/svg%3E')]" />
             </div>
-        </div>
+        </AppShell>
     );
 }
