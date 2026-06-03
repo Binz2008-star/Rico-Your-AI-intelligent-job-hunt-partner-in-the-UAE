@@ -1,6 +1,6 @@
 "use client";
 
-import { DashboardShell } from "@/components/DashboardShell";
+import { AppShell } from "@/components/layout/AppShell";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/hooks/useAuth";
@@ -11,15 +11,15 @@ import {
     createCustomerPortalSession,
     getMySubscription,
     getSubscriptionPlans,
+    logout,
     recordSubscriptionIntent,
     type SubscriptionMeResponse,
     type SubscriptionPlan,
 } from "@/lib/api";
 import { buildWhatsAppManageUrl, buildWhatsAppUpgradeUrl, isManualBillingMode } from "@/lib/billing";
 import { useTranslation } from "@/lib/translations";
-import { useRouter } from "next/navigation";
-import { useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const SUBSCRIPTION_MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === "true";
 const MANUAL_BILLING = isManualBillingMode();
@@ -146,38 +146,31 @@ function PlanCard({
 
     return (
         <div
-            className={`relative flex flex-col rounded-2xl border p-6 backdrop-blur-md overflow-hidden transition-all ${
-                plan.is_popular
-                    ? "border-[rgba(255,45,142,0.4)] bg-surface-elevated/60 shadow-[0_0_40px_rgba(255,45,142,0.08)]"
-                    : "border-border-subtle bg-surface-elevated/40"
-            }`}
+            className={`relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border p-6 backdrop-blur-md transition-colors duration-200 ${plan.is_popular
+                ? "border-magenta/40 bg-surface-elevated/75 shadow-[0_0_40px_rgba(255,45,142,0.08)]"
+                : "border-border-soft bg-surface-elevated/65"
+                }`}
         >
             {/* Glow */}
             <div
-                className={`absolute -top-10 -right-10 w-36 h-36 blur-3xl rounded-full pointer-events-none ${
-                    plan.is_popular ? "bg-[#ff2d8e]/8" : "bg-[#5b4fff]/5"
-                }`}
+                className={`absolute right-0 top-0 h-28 w-28 rounded-full blur-3xl pointer-events-none ${plan.is_popular ? "bg-magenta/10" : "bg-cyan/5"
+                    }`}
             />
 
-            {/* Popular badge */}
-            {plan.is_popular && (
-                <div className="absolute top-4 right-4">
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] px-2 py-1 rounded-full bg-[rgba(255,45,142,0.15)] text-[#ff2d8e] border border-[rgba(255,45,142,0.3)]">
-                        {t('mostPopular')}
-                    </span>
-                </div>
-            )}
-
-            {/* Current plan badge */}
-            {isCurrent && (
-                <div className="absolute top-4 left-4">
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] px-2 py-1 rounded-full bg-[rgba(0,229,255,0.12)] text-[#00e5ff] border border-[rgba(0,229,255,0.3)]">
+            <div className="relative z-10 flex min-h-7 flex-wrap items-start gap-2">
+                {isCurrent && (
+                    <span className="rounded-full border border-cyan/30 bg-cyan-soft px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-text-primary">
                         {t('currentPlan')}
                     </span>
-                </div>
-            )}
+                )}
+                {plan.is_popular && (
+                    <span className="rounded-full border border-magenta/35 bg-magenta-soft px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-text-primary">
+                        {t('mostPopular')}
+                    </span>
+                )}
+            </div>
 
-            <div className={isCurrent ? "mt-8" : plan.is_popular ? "mt-6" : "mt-0"}>
+            <div className="relative z-10 mt-4 min-h-[74px]">
                 <h2 className="text-[22px] font-bold text-text-primary font-['Cabinet_Grotesk',sans-serif]">
                     {localName}
                 </h2>
@@ -186,24 +179,23 @@ function PlanCard({
                 )}
             </div>
 
-            <div className="mt-5 flex items-baseline gap-1">
+            <div className="relative z-10 mt-5 flex items-baseline gap-1">
                 <span className="text-[38px] font-black text-text-primary leading-none">
                     {plan.price_monthly}
                 </span>
-                <span className="text-[13px] text-text-tertiary font-medium">
+                <span className="text-[13px] text-text-secondary font-medium">
                     {plan.currency}/mo
                 </span>
             </div>
 
-            <ul className="mt-6 flex flex-col gap-2.5 flex-1">
+            <ul className="relative z-10 mt-6 flex flex-1 flex-col gap-2.5">
                 {localFeatures.map((feature, i) => (
                     <li key={i} className="flex items-start gap-2.5 text-[13px] text-text-secondary">
                         <span
-                            className={`mt-0.5 w-4 h-4 flex-shrink-0 rounded-full flex items-center justify-center text-[10px] font-black ${
-                                isProPlan
-                                    ? "bg-[rgba(255,45,142,0.2)] text-[#ff2d8e]"
-                                    : "bg-[rgba(91,79,255,0.2)] text-[#7b6fff]"
-                            }`}
+                            className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-black ring-1 ${isProPlan
+                                ? "bg-magenta-soft text-text-primary ring-magenta/25"
+                                : "bg-cyan-soft text-text-primary ring-cyan/25"
+                                }`}
                         >
                             ✓
                         </span>
@@ -212,26 +204,26 @@ function PlanCard({
                 ))}
             </ul>
 
-            <div className="mt-8">
+            <div className="relative z-10 mt-8">
                 {maintenanceMode ? (
                     <button
                         type="button"
                         disabled
-                        className="w-full py-3 rounded-xl text-[13px] font-bold transition-all opacity-50 bg-[rgba(245,166,35,0.08)] text-[#f5a623] border border-[rgba(245,166,35,0.25)]"
+                        className="min-h-11 w-full rounded-xl border border-rico-amber/25 bg-rico-amber/10 px-4 py-3 text-[13px] font-bold text-text-primary opacity-70"
                     >
                         {t('temporarilyUnavailable')}
                     </button>
                 ) : subLoading && isLoggedIn ? (
-                    <div className="w-full py-3 rounded-xl bg-surface-glass border border-border-subtle animate-pulse h-[44px]" />
+                    <div className="h-11 w-full rounded-xl border border-border-soft bg-surface-glass animate-pulse" />
                 ) : isCurrent ? (
                     <button
                         onClick={onManage}
-                        className="w-full py-3 rounded-xl text-center text-[13px] font-semibold text-[#00e5ff] bg-[rgba(0,229,255,0.06)] border border-[rgba(0,229,255,0.2)] hover:bg-[rgba(0,229,255,0.1)] transition-colors"
+                        className="min-h-11 w-full rounded-xl border border-cyan/25 bg-cyan-soft px-4 py-3 text-center text-[13px] font-semibold text-text-primary transition-colors hover:bg-cyan/15"
                     >
                         {t('manageSubscription')}
                     </button>
                 ) : isHigherPlan ? (
-                    <div className="w-full py-3 rounded-xl text-center text-[13px] font-semibold text-text-tertiary bg-surface-glass border border-border-subtle cursor-default select-none">
+                    <div className="flex min-h-11 w-full items-center justify-center rounded-xl border border-border-soft bg-surface-glass px-4 py-3 text-center text-[13px] font-semibold text-text-secondary cursor-default select-none">
                         ✓ {t('includedInYourPlan')}
                     </div>
                 ) : isLoggedIn ? (
@@ -241,14 +233,13 @@ function PlanCard({
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={() => onIntent(plan.plan)}
-                            className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-[13px] font-bold transition-all ${
-                                plan.is_popular
-                                    ? "bg-[#ff2d8e] text-white hover:bg-[#ff4a9e] shadow-[0_0_20px_rgba(255,45,142,0.3)]"
-                                    : "bg-[rgba(91,79,255,0.15)] text-[#7b6fff] border border-[rgba(91,79,255,0.35)] hover:bg-[rgba(91,79,255,0.25)]"
-                            }`}
+                            className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-[13px] font-bold transition-colors ${plan.is_popular
+                                ? "bg-magenta text-background hover:bg-magenta-hover shadow-[0_0_20px_rgba(255,45,142,0.3)]"
+                                : "border border-cyan/30 bg-cyan-soft text-text-primary hover:bg-cyan/15"
+                                }`}
                         >
                             <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
                             </svg>
                             {t('continueOnWhatsApp')}
                         </a>
@@ -256,11 +247,10 @@ function PlanCard({
                         <button
                             onClick={() => { onIntent(plan.plan); onUpgrade(plan.plan); }}
                             disabled={anyCheckoutPending}
-                            className={`w-full py-3 rounded-xl text-[13px] font-bold transition-all disabled:opacity-40 ${
-                                plan.is_popular
-                                    ? "bg-[#ff2d8e] text-white hover:bg-[#ff4a9e] shadow-[0_0_20px_rgba(255,45,142,0.3)]"
-                                    : "bg-[rgba(91,79,255,0.15)] text-[#7b6fff] border border-[rgba(91,79,255,0.35)] hover:bg-[rgba(91,79,255,0.25)]"
-                            }`}
+                            className={`min-h-11 w-full rounded-xl px-4 py-3 text-[13px] font-bold transition-colors disabled:opacity-40 ${plan.is_popular
+                                ? "bg-magenta text-background hover:bg-magenta-hover shadow-[0_0_20px_rgba(255,45,142,0.3)]"
+                                : "border border-cyan/30 bg-cyan-soft text-text-primary hover:bg-cyan/15"
+                                }`}
                         >
                             {loading ? (
                                 <span className="flex items-center justify-center gap-2">
@@ -275,11 +265,10 @@ function PlanCard({
                 ) : (
                     <a
                         href="/login"
-                        className={`block w-full py-3 rounded-xl text-center text-[13px] font-bold transition-all ${
-                            plan.is_popular
-                                ? "bg-[rgba(255,45,142,0.15)] text-[#ff2d8e] border border-[rgba(255,45,142,0.35)] hover:bg-[rgba(255,45,142,0.25)]"
-                                : "bg-[rgba(91,79,255,0.1)] text-[#7b6fff] border border-[rgba(91,79,255,0.25)] hover:bg-[rgba(91,79,255,0.2)]"
-                        }`}
+                        className={`flex min-h-11 w-full items-center justify-center rounded-xl px-4 py-3 text-center text-[13px] font-bold transition-colors ${plan.is_popular
+                            ? "border border-magenta/35 bg-magenta-soft text-text-primary hover:bg-magenta/20"
+                            : "border border-cyan/25 bg-cyan-soft text-text-primary hover:bg-cyan/15"
+                            }`}
                     >
                         {t('loginToUpgrade')}
                     </a>
@@ -288,7 +277,7 @@ function PlanCard({
 
             {/* WhatsApp sub-copy in manual mode */}
             {manualBilling && isLoggedIn && !isCurrent && !isHigherPlan && !subLoading && !maintenanceMode && (
-                <p className="mt-3 text-[11px] text-text-tertiary text-center leading-snug">
+                <p className="relative z-10 mt-3 text-center text-[11px] leading-snug text-text-secondary">
                     {t('whatsappPaymentConfirm')}
                     <br />
                     {t('whatsappPaymentUseEmail')}
@@ -299,35 +288,35 @@ function PlanCard({
 }
 
 function CancelBanner() {
-  const params = useSearchParams();
-  const router = useRouter();
-  const [dismissed, setDismissed] = useState(false);
-  const { language } = useLanguage();
-  const t = useTranslation(language);
+    const params = useSearchParams();
+    const router = useRouter();
+    const [dismissed, setDismissed] = useState(false);
+    const { language } = useLanguage();
+    const t = useTranslation(language);
 
-  if (dismissed || params.get("checkout") !== "cancelled") return null;
+    if (dismissed || params.get("checkout") !== "cancelled") return null;
 
-  return (
-    <div className="flex items-start gap-3 rounded-xl border border-[rgba(245,166,35,0.35)] bg-[rgba(245,166,35,0.08)] px-5 py-4">
-      <span className="text-[#f5a623] text-[18px] mt-0.5">⚠</span>
-      <div>
-        <p className="text-[13px] font-semibold text-[#f5a623]">{t('checkoutCancelled')}</p>
-        <p className="mt-0.5 text-[12px] text-[#a08040]">
-          {t('checkoutCancelledDesc')}
-        </p>
-      </div>
-      <button
-        onClick={() => {
-          setDismissed(true);
-          router.replace("/subscription");
-        }}
-        className="ml-auto text-[#a08040] hover:text-[#f5a623] text-[18px] leading-none flex-shrink-0"
-        aria-label="Dismiss"
-      >
-        ×
-      </button>
-    </div>
-  );
+    return (
+        <div className="flex items-start gap-3 rounded-xl border border-rico-amber/35 bg-rico-amber/10 px-5 py-4">
+            <span className="text-rico-amber text-[18px] mt-0.5">⚠</span>
+            <div>
+                <p className="text-[13px] font-semibold text-text-primary">{t('checkoutCancelled')}</p>
+                <p className="mt-0.5 text-[12px] text-text-secondary">
+                    {t('checkoutCancelledDesc')}
+                </p>
+            </div>
+            <button
+                onClick={() => {
+                    setDismissed(true);
+                    router.replace("/subscription");
+                }}
+                className="ml-auto text-text-secondary hover:text-text-primary text-[18px] leading-none flex-shrink-0"
+                aria-label="Dismiss"
+            >
+                ×
+            </button>
+        </div>
+    );
 }
 
 function FreePlanRow({ currentPlan, isLoggedIn }: { currentPlan: string | null; isLoggedIn: boolean }) {
@@ -335,30 +324,30 @@ function FreePlanRow({ currentPlan, isLoggedIn }: { currentPlan: string | null; 
     const { language } = useLanguage();
     const t = useTranslation(language);
     return (
-        <div className="flex items-center justify-between rounded-xl border border-border-subtle bg-surface/60 px-5 py-4">
-            <div>
+        <div className="flex flex-col gap-3 rounded-xl border border-border-soft bg-surface/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
                 <span className="text-[13px] font-semibold text-text-secondary">{t('freePlan')}</span>
-                <span className="ml-3 text-[12px] text-text-tertiary">
+                <span className="ms-3 text-[12px] text-text-secondary">
                     {t('freePlanDesc')}
                 </span>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
                 {isCurrent && (
-                    <span className="text-[11px] font-bold uppercase tracking-widest text-text-tertiary border border-border-soft rounded-full px-3 py-1">
+                    <span className="text-[11px] font-bold uppercase tracking-widest text-text-secondary border border-border-soft rounded-full px-3 py-1">
                         {t('current')}
                     </span>
                 )}
                 {isCurrent && isLoggedIn ? (
                     <a
                         href="/command"
-                        className="text-[12px] font-semibold text-[#7b6fff] hover:underline whitespace-nowrap"
+                        className="text-[12px] font-semibold text-cyan hover:underline whitespace-nowrap"
                     >
                         {t('openRico')} →
                     </a>
                 ) : !isLoggedIn ? (
                     <a
                         href="/signup"
-                        className="text-[12px] font-semibold text-[#7b6fff] hover:underline whitespace-nowrap"
+                        className="text-[12px] font-semibold text-cyan hover:underline whitespace-nowrap"
                     >
                         {t('signUpFree')} →
                     </a>
@@ -373,7 +362,12 @@ export default function SubscriptionPage() {
     const { toasts, toast } = useToast();
     const { language } = useLanguage();
     const t = useTranslation(language);
+    const tRef = useRef(t);
     const maintenanceMode = SUBSCRIPTION_MAINTENANCE_MODE;
+
+    useEffect(() => {
+        tRef.current = t;
+    }, [t]);
 
     const localizedFallbackPlans = useMemo((): SubscriptionPlan[] => [
         {
@@ -396,7 +390,7 @@ export default function SubscriptionPage() {
                 t('planFeaturePremiumPipelines'), t('planFeatureRecruiter'),
             ],
         },
-    ], [t]);
+    ], [language]);
 
     const [apiPlans, setApiPlans] = useState<SubscriptionPlan[]>([]);
     const plans = maintenanceMode ? localizedFallbackPlans : apiPlans;
@@ -406,6 +400,11 @@ export default function SubscriptionPage() {
     const [planError, setPlanError] = useState(false);
     const [subscriptionError, setSubscriptionError] = useState(false);
     const [checkingOut, setCheckingOut] = useState<"pro" | "premium" | null>(null);
+    const backendMaintenanceSubMessage = t('backendMaintenanceSub');
+    const subscriptionCheckoutFailedMessage = t('subscriptionCheckoutFailed');
+    const subscriptionPaymentConfiguringMessage = t('subscriptionPaymentConfiguring');
+    const subscriptionPortalFailedMessage = t('subscriptionPortalFailed');
+    const subscriptionPortalNotConfiguredMessage = t('subscriptionPortalNotConfigured');
 
     const loadPlans = useCallback(() => {
         if (maintenanceMode) {
@@ -417,10 +416,10 @@ export default function SubscriptionPage() {
             .then((r) => setApiPlans(r.plans))
             .catch(() => {
                 setPlanError(true);
-                toast(t('couldNotLoadPlans'), "error");
+                toast(tRef.current('couldNotLoadPlans'), "error");
             })
             .finally(() => setLoadingPlans(false));
-    }, [maintenanceMode, t, toast]);
+    }, [maintenanceMode, toast]);
 
     useEffect(() => {
         if (maintenanceMode) return;
@@ -432,7 +431,7 @@ export default function SubscriptionPage() {
             .catch(() => {
                 if (cancelled) return;
                 setPlanError(true);
-                toast(t('couldNotLoadPlans'), "error");
+                toast(tRef.current('couldNotLoadPlans'), "error");
             })
             .finally(() => {
                 if (!cancelled) setLoadingPlans(false);
@@ -440,7 +439,7 @@ export default function SubscriptionPage() {
         return () => {
             cancelled = true;
         };
-    }, [maintenanceMode, t, toast]);
+    }, [maintenanceMode, toast]);
 
     const userEmail = user?.email ?? null;
     useEffect(() => {
@@ -452,17 +451,17 @@ export default function SubscriptionPage() {
                 setSub(data);
             } catch {
                 setSubscriptionError(true);
-                toast(t('couldNotLoadSubscription'), "error");
+                toast(tRef.current('couldNotLoadSubscription'), "error");
             } finally {
                 setSubLoading(false);
             }
         })();
-    }, [maintenanceMode, t, toast, userEmail]);
+    }, [maintenanceMode, toast, userEmail]);
 
     const handleUpgrade = useCallback(
         async (plan: "pro" | "premium") => {
             if (maintenanceMode) {
-                toast(t('backendMaintenanceSub'), "error");
+                toast(backendMaintenanceSubMessage, "error");
                 return;
             }
             // In manual mode the CTA is a direct WhatsApp link — this handler is only
@@ -471,7 +470,7 @@ export default function SubscriptionPage() {
             try {
                 const result = await createCheckoutSession(plan);
                 if (result.provider === "mock") {
-                    toast(t('subscriptionPaymentConfiguring'), "error");
+                    toast(subscriptionPaymentConfiguringMessage, "error");
                 } else {
                     window.location.href = result.checkout_url;
                 }
@@ -479,13 +478,13 @@ export default function SubscriptionPage() {
                 const msg =
                     err instanceof ApiError
                         ? err.message
-                        : t('subscriptionCheckoutFailed');
+                        : subscriptionCheckoutFailedMessage;
                 toast(msg, "error");
             } finally {
                 setCheckingOut(null);
             }
         },
-        [maintenanceMode, t, toast]
+        [backendMaintenanceSubMessage, maintenanceMode, subscriptionCheckoutFailedMessage, subscriptionPaymentConfiguringMessage, toast]
     );
 
     const handleIntent = useCallback((plan: "pro" | "premium") => {
@@ -494,7 +493,7 @@ export default function SubscriptionPage() {
 
     const handleManage = useCallback(async () => {
         if (maintenanceMode) {
-            toast(t('backendMaintenanceSub'), "error");
+            toast(backendMaintenanceSubMessage, "error");
             return;
         }
         if (MANUAL_BILLING) {
@@ -505,7 +504,7 @@ export default function SubscriptionPage() {
         try {
             const result = await createCustomerPortalSession();
             if (result.provider === "mock") {
-                toast(t('subscriptionPortalNotConfigured'), "error");
+                toast(subscriptionPortalNotConfiguredMessage, "error");
             } else {
                 window.location.href = result.checkout_url;
             }
@@ -513,40 +512,45 @@ export default function SubscriptionPage() {
             const msg =
                 err instanceof ApiError
                     ? err.message
-                    : t('subscriptionPortalFailed');
+                    : subscriptionPortalFailedMessage;
             toast(msg, "error");
         }
-    }, [maintenanceMode, t, toast]);
+    }, [backendMaintenanceSubMessage, maintenanceMode, subscriptionPortalFailedMessage, subscriptionPortalNotConfiguredMessage, toast]);
 
     const currentPlan = user ? sub?.subscription?.plan ?? null : null;
     const isActive = Boolean(sub?.is_active);
     const isLoggedIn = Boolean(user);
-    const { setLanguage } = useLanguage();
+    const router = useRouter();
+
+    const handleLogout = useCallback(async () => {
+        try {
+            await logout();
+        } finally {
+            router.push("/login");
+        }
+    }, [router]);
 
     return (
-        <DashboardShell
+        <AppShell
             title={t('subscriptionTitle')}
             subtitle={t('subscriptionSubtitle')}
-            actions={
-                <button
-                    type="button"
-                    onClick={() => setLanguage(language === "ar" ? "en" : "ar")}
-                    className="rounded-lg border border-border-soft px-3 py-1.5 text-[12px] font-medium text-text-secondary hover:border-white/20 hover:text-white transition-colors"
-                    aria-label="Toggle language"
-                >
-                    {language === "ar" ? "EN" : "عربي"}
-                </button>
-            }
+            sidebarProps={{
+                user: user ? { name: user.name ?? undefined, email: user.email } : undefined,
+                onLogout: handleLogout,
+            }}
         >
-            <div className="max-w-3xl flex flex-col gap-8">
+            <div
+                dir={language === "ar" ? "rtl" : "ltr"}
+                className="flex w-full max-w-6xl flex-col gap-6 text-start sm:gap-8"
+            >
 
                 {maintenanceMode && (
                     <>
-                        <div className="flex items-start gap-3 rounded-xl border border-[rgba(245,166,35,0.35)] bg-[rgba(245,166,35,0.08)] px-5 py-4">
-                            <span className="text-[#f5a623] text-[18px] mt-0.5">⚠</span>
+                        <div className="flex items-start gap-3 rounded-xl border border-rico-amber/35 bg-rico-amber/10 px-5 py-4">
+                            <span className="text-rico-amber text-[18px] mt-0.5">⚠</span>
                             <div>
-                                <p className="text-[13px] font-semibold text-[#f5a623]">{t('backendMaintenanceSub')}</p>
-                                <p className="mt-0.5 text-[12px] text-[#a08040]">
+                                <p className="text-[13px] font-semibold text-text-primary">{t('backendMaintenanceSub')}</p>
+                                <p className="mt-0.5 text-[12px] text-text-secondary">
                                     {t('backendMaintenanceSubDesc')}
                                 </p>
                             </div>
@@ -561,8 +565,8 @@ export default function SubscriptionPage() {
                 )}
 
                 {!maintenanceMode && subscriptionError && (
-                    <div className="flex items-center justify-between gap-3 rounded-xl border border-[rgba(255,94,91,0.35)] bg-[rgba(255,94,91,0.08)] px-5 py-4">
-                        <p className="text-[13px] text-[#ffaaaa]">{t('couldNotLoadSubscription')}</p>
+                    <div className="flex flex-col gap-3 rounded-xl border border-rico-red/35 bg-rico-red/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-[13px] text-text-primary">{t('couldNotLoadSubscription')}</p>
                         <button
                             type="button"
                             onClick={() => {
@@ -571,7 +575,7 @@ export default function SubscriptionPage() {
                                     .then(setSub)
                                     .catch(() => setSubscriptionError(true));
                             }}
-                            className="rounded-lg border border-[rgba(255,94,91,0.3)] px-3 py-1.5 text-[12px] font-semibold text-[#ffaaaa] hover:bg-[rgba(255,94,91,0.12)]"
+                            className="rounded-lg border border-rico-red/30 px-3 py-1.5 text-[12px] font-semibold text-text-primary hover:bg-rico-red/10"
                         >
                             {t('retry')}
                         </button>
@@ -587,11 +591,11 @@ export default function SubscriptionPage() {
 
                 {/* Past-due payment warning */}
                 {!maintenanceMode && sub && sub.subscription.subscription_status === "past_due" && (
-                    <div className="flex items-start gap-3 rounded-xl border border-[rgba(255,94,91,0.35)] bg-[rgba(255,94,91,0.08)] px-5 py-4">
-                        <span className="text-[#ff5e5b] text-[18px] mt-0.5">⚠</span>
+                    <div className="flex items-start gap-3 rounded-xl border border-rico-red/35 bg-rico-red/10 px-5 py-4">
+                        <span className="text-rico-red text-[18px] mt-0.5">⚠</span>
                         <div>
-                            <p className="text-[13px] font-semibold text-[#ff5e5b]">{t('paymentIssue')}</p>
-                            <p className="mt-0.5 text-[12px] text-[#ffaaaa]">
+                            <p className="text-[13px] font-semibold text-text-primary">{t('paymentIssue')}</p>
+                            <p className="mt-0.5 text-[12px] text-text-secondary">
                                 {t('paymentIssueDesc')}
                             </p>
                         </div>
@@ -600,14 +604,14 @@ export default function SubscriptionPage() {
 
                 {/* Current plan banner for active paid subscribers */}
                 {!maintenanceMode && sub && isActive && currentPlan && currentPlan !== "free" && (
-                    <div className="flex items-center gap-3 rounded-xl border border-[rgba(0,229,255,0.3)] bg-[rgba(0,229,255,0.06)] px-5 py-4">
-                        <span className="text-[#00e5ff] text-[20px]">✦</span>
+                    <div className="flex items-center gap-3 rounded-xl border border-cyan/30 bg-cyan-soft px-5 py-4">
+                        <span className="text-cyan text-[20px]">✦</span>
                         <div>
-                            <p className="text-[13px] font-semibold text-[#00e5ff]">
+                            <p className="text-[13px] font-semibold text-text-primary">
                                 {t('activePlan')} {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} Plan
                             </p>
                             {sub.subscription.current_period_end && (
-                                <p className="mt-0.5 text-[12px] text-[#5a8a8a]">
+                                <p className="mt-0.5 text-[12px] text-text-secondary">
                                     {sub.subscription.cancel_at
                                         ? `${t('expiresOn')} `
                                         : `${t('renews')} `}
@@ -624,27 +628,27 @@ export default function SubscriptionPage() {
 
                 {/* Plan cards */}
                 {loadingPlans ? (
-                    <div className="grid gap-5 sm:grid-cols-2">
+                    <div className="grid gap-5 lg:grid-cols-2">
                         {[0, 1].map((i) => (
                             <div
                                 key={i}
-                                className="h-72 rounded-2xl bg-surface-elevated/40 border border-border-subtle animate-pulse"
+                                className="min-h-[520px] rounded-2xl bg-surface-elevated/65 border border-border-soft animate-pulse"
                             />
                         ))}
                     </div>
                 ) : planError ? (
-                    <div className="flex items-center justify-between gap-3 rounded-xl border border-[rgba(255,94,91,0.35)] bg-[rgba(255,94,91,0.08)] px-5 py-4">
-                        <p className="text-[13px] text-[#ffaaaa]">{t('couldNotLoadPlans')}</p>
+                    <div className="flex flex-col gap-3 rounded-xl border border-rico-red/35 bg-rico-red/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-[13px] text-text-primary">{t('couldNotLoadPlans')}</p>
                         <button
                             type="button"
                             onClick={loadPlans}
-                            className="rounded-lg border border-[rgba(255,94,91,0.3)] px-3 py-1.5 text-[12px] font-semibold text-[#ffaaaa] hover:bg-[rgba(255,94,91,0.12)]"
+                            className="rounded-lg border border-rico-red/30 px-3 py-1.5 text-[12px] font-semibold text-text-primary hover:bg-rico-red/10"
                         >
                             {t('retry')}
                         </button>
                     </div>
                 ) : plans.length > 0 ? (
-                    <div className="grid gap-5 sm:grid-cols-2">
+                    <div className="grid items-stretch gap-5 lg:grid-cols-2">
                         {plans.map((plan) => (
                             <PlanCard
                                 key={plan.id}
@@ -665,7 +669,7 @@ export default function SubscriptionPage() {
                         ))}
                     </div>
                 ) : (
-                    <p className="text-[13px] text-text-tertiary">
+                    <p className="text-[13px] text-text-secondary">
                         {t('couldNotLoadPlansRefresh')}
                     </p>
                 )}
@@ -679,7 +683,7 @@ export default function SubscriptionPage() {
                     <div className="space-y-4">
                         <div className="rounded-xl border border-border-subtle bg-surface-elevated/40 p-5">
                             <h4 className="text-[14px] font-semibold text-text-primary mb-2">{t('faqHowUpgrade')}</h4>
-                            <p className="text-[13px] text-text-tertiary">
+                            <p className="text-[13px] text-text-secondary">
                                 {MANUAL_BILLING
                                     ? t('faqHowUpgradeManual')
                                     : t('faqHowUpgradeStripe')}
@@ -687,7 +691,7 @@ export default function SubscriptionPage() {
                         </div>
                         <div className="rounded-xl border border-border-subtle bg-surface-elevated/40 p-5">
                             <h4 className="text-[14px] font-semibold text-text-primary mb-2">{t('faqPaymentMethods')}</h4>
-                            <p className="text-[13px] text-text-tertiary">
+                            <p className="text-[13px] text-text-secondary">
                                 {MANUAL_BILLING
                                     ? t('faqPaymentMethodsManual')
                                     : t('faqPaymentMethodsStripe')}
@@ -695,7 +699,7 @@ export default function SubscriptionPage() {
                         </div>
                         <div className="rounded-xl border border-border-subtle bg-surface-elevated/40 p-5">
                             <h4 className="text-[14px] font-semibold text-text-primary mb-2">{t('faqActivationTime')}</h4>
-                            <p className="text-[13px] text-text-tertiary">
+                            <p className="text-[13px] text-text-secondary">
                                 {MANUAL_BILLING
                                     ? t('faqActivationTimeManual')
                                     : t('faqActivationTimeStripe')}
@@ -703,7 +707,7 @@ export default function SubscriptionPage() {
                         </div>
                         <div className="rounded-xl border border-border-subtle bg-surface-elevated/40 p-5">
                             <h4 className="text-[14px] font-semibold text-text-primary mb-2">{t('faqChangeCancel')}</h4>
-                            <p className="text-[13px] text-text-tertiary">
+                            <p className="text-[13px] text-text-secondary">
                                 {MANUAL_BILLING
                                     ? t('faqChangeCancelManual')
                                     : t('faqChangeCancelStripe')}
@@ -713,12 +717,12 @@ export default function SubscriptionPage() {
                 </div>
 
                 {/* Footer note */}
-                <p className="text-[11px] text-text-tertiary text-center">
+                <p className="text-center text-[11px] text-text-secondary">
                     {t('pricesInAED')}
                 </p>
             </div>
 
             <ToastContainer toasts={toasts} />
-        </DashboardShell>
+        </AppShell>
     );
 }
