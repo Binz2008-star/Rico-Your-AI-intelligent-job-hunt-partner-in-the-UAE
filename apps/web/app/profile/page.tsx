@@ -16,7 +16,7 @@ import { useCallback, useEffect, useState } from "react";
 
 function Tag({ label }: { label: string }) {
     return (
-        <span className="rounded-md bg-surface-glass px-2 py-0.5 text-xs text-rico-text-muted">
+        <span className="rounded-md bg-surface-glass px-2 py-0.5 text-xs text-text-secondary">
             {label}
         </span>
     );
@@ -24,9 +24,9 @@ function Tag({ label }: { label: string }) {
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
     return (
-        <div>
-            <dt className="text-rico-text-dim">{label}</dt>
-            <dd>{children}</dd>
+        <div className="min-w-0 rounded-xl border border-border-subtle bg-surface-glass p-4">
+            <dt className="text-start text-[11px] font-semibold uppercase tracking-[0.12em] text-text-tertiary">{label}</dt>
+            <dd className="mt-2 min-w-0 text-start text-sm leading-6 text-text-primary [overflow-wrap:anywhere]">{children}</dd>
         </div>
     );
 }
@@ -36,7 +36,7 @@ function ChatCTA({ message }: { message: string }) {
     const t = useTranslation(language);
     return (
         <div className="rounded-lg border border-rico-accent-border bg-rico-accent/[0.05] px-4 py-3">
-            <p className="mb-2 text-sm text-rico-text-dim">{message}</p>
+            <p className="mb-2 text-sm text-text-secondary">{message}</p>
             <Link
                 href="/command"
                 className="inline-block rounded-lg bg-rico-accent px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-rico-accent-hover"
@@ -51,7 +51,7 @@ function ChatEditCTA({ prompt }: { prompt: string }) {
     return (
         <Link
             href={`/command?prompt=${encodeURIComponent(prompt)}`}
-            className="ms-2 text-[11px] text-rico-purple hover:text-[#c4b5fd] transition-colors underline underline-offset-2"
+            className="ms-2 text-[11px] font-semibold text-magenta hover:text-magenta-hover transition-colors underline underline-offset-2"
         >
             Edit
         </Link>
@@ -105,8 +105,8 @@ function EditableNameField({
 
     if (!editing) {
         return (
-            <span className="inline-flex items-center gap-2">
-                <span className="text-text-primary">{displayValue}</span>
+            <span className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 align-top">
+                <span className="min-w-0 text-text-primary [overflow-wrap:anywhere]">{displayValue}</span>
                 <button
                     type="button"
                     aria-label={`${t("edit")} ${t("name").toLowerCase()}`}
@@ -115,7 +115,7 @@ function EditableNameField({
                         setError(null);
                         setEditing(true);
                     }}
-                    className="text-[11px] text-rico-purple underline underline-offset-2 transition-colors hover:text-[#c4b5fd]"
+                    className="text-[11px] font-semibold text-magenta underline underline-offset-2 transition-colors hover:text-magenta-hover"
                 >
                     {t("edit")}
                 </button>
@@ -124,7 +124,7 @@ function EditableNameField({
     }
 
     return (
-        <form className="mt-2 flex max-w-sm flex-col gap-2" onSubmit={handleSave}>
+        <form className="mt-2 flex w-full max-w-lg flex-col gap-2" onSubmit={handleSave}>
             <label htmlFor="profile-name" className="sr-only">
                 {t("name")}
             </label>
@@ -138,7 +138,7 @@ function EditableNameField({
                 disabled={saving}
             />
             {error && <p className="text-xs text-rico-red" role="alert">{error}</p>}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
                 <button
                     type="submit"
                     disabled={saving}
@@ -150,7 +150,7 @@ function EditableNameField({
                     type="button"
                     onClick={handleCancel}
                     disabled={saving}
-                    className="rounded-lg border border-border-soft px-3 py-1.5 text-xs font-semibold text-rico-text-muted transition-colors hover:border-white/20 hover:text-text-primary disabled:opacity-60"
+                    className="rounded-lg border border-border-soft px-3 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:border-border-strong hover:text-text-primary disabled:opacity-60"
                 >
                     {t("cancel")}
                 </button>
@@ -206,7 +206,7 @@ function EditableTextField({
     if (!editing) {
         return (
             <>
-                <span className="text-text-primary">{displayValue}</span>
+                <span className="inline-block max-w-full text-text-primary [overflow-wrap:anywhere]">{displayValue}</span>
                 <button
                     type="button"
                     aria-label={`${t("edit")} ${label}`}
@@ -215,7 +215,7 @@ function EditableTextField({
                         setError(null);
                         setEditing(true);
                     }}
-                    className="ms-2 text-[11px] text-rico-purple underline underline-offset-2 transition-colors hover:text-[#c4b5fd]"
+                    className="ms-2 text-[11px] font-semibold text-magenta underline underline-offset-2 transition-colors hover:text-magenta-hover"
                 >
                     {t("edit")}
                 </button>
@@ -224,7 +224,7 @@ function EditableTextField({
     }
 
     return (
-        <form className="mt-2 flex max-w-sm flex-col gap-2" onSubmit={handleSave}>
+        <form className="mt-2 flex w-full max-w-lg flex-col gap-2" onSubmit={handleSave}>
             <label htmlFor={`profile-${label}`} className="sr-only">
                 {label}
             </label>
@@ -238,7 +238,7 @@ function EditableTextField({
                 disabled={saving}
             />
             {error && <p className="text-xs text-rico-red" role="alert">{error}</p>}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
                 <button
                     type="submit"
                     disabled={saving}
@@ -250,7 +250,7 @@ function EditableTextField({
                     type="button"
                     onClick={handleCancel}
                     disabled={saving}
-                    className="rounded-lg border border-border-soft px-3 py-1.5 text-xs font-semibold text-rico-text-muted transition-colors hover:border-white/20 hover:text-text-primary disabled:opacity-60"
+                    className="rounded-lg border border-border-soft px-3 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:border-border-strong hover:text-text-primary disabled:opacity-60"
                 >
                     {t("cancel")}
                 </button>
@@ -303,10 +303,10 @@ function ProfileDetail({
     const hasSkills = (profile.skills?.length ?? 0) > 0;
 
     return (
-        <div className="flex flex-col gap-4">
+        <div className="flex w-full flex-col gap-5">
             {/* Identity */}
             <StatusCard title={t("profileIdentity")} badge="live" badgeLabel={t("profileBadgeSynced")}>
-                <dl className="grid grid-cols-1 gap-y-3 text-sm sm:grid-cols-2 sm:gap-x-6">
+                <dl className="grid min-w-0 grid-cols-1 gap-3 text-sm lg:grid-cols-2">
                     <Row label={t("name")}>
                         <EditableNameField value={profile.name} onSave={onSaveName} />
                     </Row>
@@ -375,7 +375,7 @@ function ProfileDetail({
             {/* Job preferences */}
             <StatusCard title={t("profileJobPreferences")} badge={hasJobPrefs ? "live" : "pending"} badgeLabel={hasJobPrefs ? t("profileBadgeSynced") : t("profileBadgePending")}>
                 {hasJobPrefs ? (
-                    <dl className="grid grid-cols-1 gap-y-3 text-sm sm:grid-cols-2 sm:gap-x-6">
+                    <dl className="grid min-w-0 grid-cols-1 gap-3 text-sm lg:grid-cols-2">
                         <Row label={t("profileTargetRoles")}>
                             <EditableTextField
                                 value={profile.target_roles?.join(', ') || null}
@@ -679,7 +679,10 @@ export default function ProfilePage() {
                 onLogout: handleLogout,
             }}
         >
-            <div className="max-w-2xl py-4">
+            <div
+                dir={language === "ar" ? "rtl" : "ltr"}
+                className="w-full max-w-5xl py-3 text-start sm:py-4 lg:max-w-6xl"
+            >
                 {loading && <LoadingState variant="card" message={t("profileLoading")} />}
 
                 {!loading && error && (
@@ -700,11 +703,11 @@ export default function ProfilePage() {
                             actionHref="/command"
                         />
 
-                        <div className="rounded-xl border border-rico-border bg-rico-surface-2/60 p-5">
-                            <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-rico-text-dim">
+                        <div className="rounded-xl border border-border-soft bg-surface-elevated/70 p-5">
+                            <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-text-tertiary">
                                 {t("profileWhatRicoSetsUp")}
                             </h3>
-                            <ul className="flex flex-col gap-2 text-sm text-rico-text-muted">
+                            <ul className="flex flex-col gap-2 text-sm text-text-secondary">
                                 {[
                                     t("profileSetupRoles"),
                                     t("profileSetupCities"),

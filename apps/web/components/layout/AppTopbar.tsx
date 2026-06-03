@@ -44,16 +44,16 @@ export function AppTopbar({
     return (
         <header
             className={cn(
-                "sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border-soft bg-surface/95 px-6 backdrop-blur-sm",
+                "sticky top-0 z-30 flex min-h-16 items-center justify-between gap-3 border-b border-border-soft bg-surface/95 px-4 py-3 backdrop-blur-sm sm:px-6",
                 className
             )}
         >
             {/* Left: Breadcrumb / Title */}
-            <div className="flex items-center gap-4">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-4">
                 {showNav && (
                     <Link
                         href="/dashboard"
-                        className="flex items-center gap-2 text-text-muted transition-colors hover:text-text-primary"
+                        className="hidden items-center gap-2 text-text-secondary transition-colors hover:text-text-primary sm:flex"
                     >
                         <MaterialIcon icon="dashboard" size={18} />
                         <span className="text-sm font-medium">Home</span>
@@ -62,10 +62,10 @@ export function AppTopbar({
 
                 {showNav && displayTitle && (
                     <>
-                        <MaterialIcon icon="chevron_right" size={16} className="text-text-muted" />
-                        <div className="flex items-center gap-2">
+                        <MaterialIcon icon="chevron_right" size={16} className="hidden text-text-tertiary sm:block" />
+                        <div className="flex min-w-0 items-center gap-2">
                             <MaterialIcon icon={breadcrumb.icon} size={18} className="text-text-secondary" />
-                            <h1 className="text-sm font-semibold text-text-primary">{displayTitle}</h1>
+                            <h1 className="truncate text-sm font-semibold text-text-primary">{displayTitle}</h1>
                             {subtitle && (
                                 <Badge variant="ghost" className="hidden sm:inline-flex">
                                     {subtitle}
@@ -81,7 +81,7 @@ export function AppTopbar({
             </div>
 
             {/* Right: Actions */}
-            <div className="flex items-center gap-3">
+            <div className="flex shrink-0 items-center gap-2 sm:gap-3">
                 {actions}
 
                 {/* Language & Theme */}

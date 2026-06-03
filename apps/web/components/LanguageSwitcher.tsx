@@ -19,7 +19,7 @@ export function LanguageSwitcher() {
           className={`relative flex items-center justify-center w-10 h-10 rounded-lg transition-all ${
             language === lang.value
               ? "bg-primary/20 text-primary border border-primary/30"
-              : "bg-surface-glass text-text-muted border border-border-subtle hover:bg-surface-glass/80"
+              : "bg-surface-glass text-text-secondary border border-border-subtle hover:bg-surface-glass/80"
           }`}
           title={lang.label}
         >
