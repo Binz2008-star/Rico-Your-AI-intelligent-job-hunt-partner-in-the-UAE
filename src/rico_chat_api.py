@@ -2479,8 +2479,8 @@ class RicoChatAPI:
         # These come from UI suggestion buttons and must be caught before role
         # classification interprets them as job-title queries.
         if RicoChatAPI._SET_REMINDER_RE.search(message):
-            # Try to extract the company/job name from the message (e.g. "for Penspen")
-            _company_match = re.search(r"\bfor\s+(.+)$", message, re.IGNORECASE)
+            # Extract company/job name from "for <name>" or "with <name>" suffix.
+            _company_match = re.search(r"\b(?:for|with)\s+(.+)$", message, re.IGNORECASE)
             _company = _company_match.group(1).strip() if _company_match else None
             if _company:
                 reply = (
