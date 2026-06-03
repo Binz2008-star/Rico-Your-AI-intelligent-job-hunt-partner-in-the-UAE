@@ -136,6 +136,24 @@ _NON_ROLE_STARTERS: frozenset[str] = frozenset({
 })
 _QUESTION_CHARS: frozenset[str] = frozenset("?？!！;:")
 _MAX_ROLE_WORDS: int = 6
+
+# Location names that are never valid job-role titles. A message consisting
+# entirely of these terms (e.g. "UAE", "Dubai", "jobs in UAE") should redirect
+# to a profile-based search, not a role-classification error.
+_LOCATION_TERMS: frozenset[str] = frozenset({
+    # Country / region
+    "uae", "emirates", "united arab emirates",
+    # UAE cities / emirates
+    "dubai", "abu dhabi", "abudhabi", "sharjah", "ajman",
+    "ras al khaimah", "ras al-khaimah", "fujairah", "umm al quwain",
+    "umm al-quwain",
+    # GCC / region
+    "gcc", "gulf", "middle east", "mena",
+    # Arabic equivalents (normalised, no diacritics)
+    "الإمارات", "الامارات", "دبي", "أبوظبي", "ابوظبي",
+    "الشارقة", "الشارقه", "عجمان", "رأس الخيمة", "راس الخيمه",
+    "الفجيرة", "الفجيره", "أم القيوين", "ام القيوين",
+})
 _MIN_TOKEN_ALPHA: int = 2
 
 def generate_error_ref() -> str:
@@ -458,6 +476,12 @@ class RicoChatAPI:
 
         tokens = text.split()
         if not tokens or len(tokens) > _MAX_ROLE_WORDS:
+            return False
+
+        # A message made up entirely of location terms is a location-qualified
+        # job search, not a bare job role title.
+        non_location_tokens = [t for t in tokens if t.lower() not in _LOCATION_TERMS and t.lower() not in {"jobs", "job", "roles", "role", "in", "the", "a", "an"}]
+        if not non_location_tokens:
             return False
 
         # Contractions (e.g. "can't", "don't") start with a verb, not a job title.
@@ -4530,6 +4554,25 @@ class RicoChatAPI:
         profile_relevant without running them through the taxonomy classifier,
         because they are already derived from the user's CV.
         """
+        # Location guard: if role_text is just a location (UAE, Dubai, etc.) redirect to
+        # profile-based search rather than returning a misleading "I don't recognise X as a role".
+        role_tokens = role_text.strip().lower().split()
+        _loc_fillers = {"jobs", "job", "roles", "role", "in", "the", "a", "an", "for"}
+        if role_tokens and all(t in _LOCATION_TERMS or t in _loc_fillers for t in role_tokens):
+            saved_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            if saved_roles:
+                return self._target_role_search_response(user_id, str(saved_roles[0]), profile)
+            response = {
+                "type": "clarification",
+                "message": (
+                    f"I can search for jobs in the UAE. "
+                    "What role are you looking for? (e.g. HSE Manager, Project Engineer, Finance Analyst)"
+                ),
+                "options": [{"action": "upload_cv", "label": "Upload CV to auto-detect role"}],
+            }
+            self._append_chat(user_id, "assistant", response["message"])
+            return response
+
         # Self-reference guard: "my target role / my saved role / دوري المستهدف" etc.
         # Resolve to the user's saved profile roles instead of treating the phrase as a job title.
         if RicoChatAPI._SELF_REF_ROLE_RE.match(role_text.strip()):

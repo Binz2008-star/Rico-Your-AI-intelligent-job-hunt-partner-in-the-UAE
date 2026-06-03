@@ -609,6 +609,19 @@ _ARABIC_ROLE_AFTER_JOBWORD_RE = re.compile(
     r"(?:\s+(?:في|بـ|ب|على)\s|[\s،.!؟]*$)"
 )
 
+# Location names (Arabic-normalised) that are never valid role candidates.
+# Used to reject location-only captures from _extract_arabic_role.
+_ARABIC_LOCATION_TERMS = frozenset({
+    # UAE country / full name
+    "الامارات", "الإمارات", "الامارات العربيه المتحده",
+    # UAE emirates
+    "دبي", "ابوظبي", "أبوظبي", "الشارقه", "الشارقة",
+    "عجمان", "راس الخيمه", "الفجيره", "ام القيوين",
+    # GCC / region
+    "السعوديه", "الكويت", "قطر", "البحرين", "عمان",
+    "الخليج", "الشرق الاوسط",
+})
+
 # Arabic job nouns / connectors stripped from the edges of a captured role phrase.
 _ARABIC_ROLE_LEAD_STOPWORDS = frozenset({
     "وظيفه", "وظائف", "فرصه", "فرص", "شاغر", "شواغر", "منصب", "مناصب",
@@ -694,6 +707,9 @@ def _extract_arabic_role(normalized_text: str) -> Optional[str]:
         return None
     role = " ".join(words)
     if role in _ARABIC_JOB_TERMS or role in _ARABIC_REQUEST_TERMS:
+        return None
+    # A phrase made up entirely of location terms is a location qualifier, not a role.
+    if all(w in _ARABIC_LOCATION_TERMS for w in words):
         return None
     return role
 
