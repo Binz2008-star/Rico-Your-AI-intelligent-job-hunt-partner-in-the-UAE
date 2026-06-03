@@ -422,7 +422,7 @@ export default function LandingPage() {
                         </Link>
                         <Link
                             href="/signup"
-                            className="rounded-full border border-magenta/40 bg-magenta/10 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-magenta/25"
+                            className="rounded-full border border-gold/40 bg-gold/10 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-gold/25"
                         >
                             {t.signUpFree}
                         </Link>
