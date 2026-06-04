@@ -19,7 +19,7 @@ import {
 import { useTranslation } from "@/lib/translations";
 import type { SettingsResponse, TelegramStatusResponse } from "@/types";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 function splitKeywords(value: string): string[] {
   return value
@@ -71,6 +71,8 @@ export default function SettingsPage() {
 
   // Telegram status loads independently and must never block the page.
   const [telegram, setTelegram] = useState<TelegramStatusResponse | null>(null);
+  // useRef so rapid clicks cannot slip through between state batches.
+  const telegramBusyRef = useRef(false);
   const [telegramBusy, setTelegramBusy] = useState(false);
 
   const handleLogout = useCallback(async () => {
@@ -145,9 +147,10 @@ export default function SettingsPage() {
   };
 
   const handleToggleTelegram = async () => {
-    if (telegramBusy) return;
-    const turningOn = !telegram?.opted_in;
+    if (telegramBusyRef.current) return;
+    telegramBusyRef.current = true;
     setTelegramBusy(true);
+    const turningOn = !telegram?.opted_in;
     try {
       const next = turningOn
         ? await telegramOptIn(settings?.telegram_chat_id || undefined)
@@ -157,6 +160,7 @@ export default function SettingsPage() {
       const is401 = err instanceof ApiError && err.statusCode === 401;
       toast(is401 ? t("sessionExpiredLogIn") : t("saveFailed"), "error");
     } finally {
+      telegramBusyRef.current = false;
       setTelegramBusy(false);
     }
   };
