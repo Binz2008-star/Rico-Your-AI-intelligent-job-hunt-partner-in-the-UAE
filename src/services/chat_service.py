@@ -541,7 +541,11 @@ def handle_jotform_submission(payload: Dict[str, Any]) -> Dict[str, Any]:
 def _resolve_db_user_id(user_id: str):
     """Resolve external user_id (email/public-id) to rico_users UUID string.
 
-    Returns None when DB is unavailable or user doesn't exist.
+    For web-app users registered via /auth/register (present in `users` table but
+    absent from `rico_users`), auto-provisions the rico_users row on first access so
+    that chat history and profile data persist correctly.
+
+    Returns None when DB is unavailable or user cannot be resolved/created.
     """
     try:
         from src.rico_db import RicoDB
@@ -560,7 +564,38 @@ def _resolve_db_user_id(user_id: str):
                     (user_id, user_id, user_id),
                 )
                 row = cur.fetchone()
-            return row["id"] if row else None
+            if row:
+                return row["id"]
+
+            # Not found — auto-provision if this is a verified web-app user (email).
+            # Public/guest user_ids start with "public:" and are intentionally excluded.
+            if not user_id or user_id.startswith("public:") or "@" not in user_id:
+                return None
+
+            conn2 = db.connect()
+            try:
+                with conn2.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO rico_users (external_user_id, email, source)
+                        VALUES (%s, %s, 'web')
+                        ON CONFLICT (external_user_id) DO UPDATE SET email = EXCLUDED.email
+                        RETURNING id::text
+                        """,
+                        (user_id, user_id),
+                    )
+                    new_row = cur.fetchone()
+                conn2.commit()
+                return new_row["id"] if new_row else None
+            except Exception as exc:
+                logger.warning("chat_service: rico_users auto-provision failed user=%s: %s", user_id, exc)
+                try:
+                    conn2.rollback()
+                except Exception:
+                    pass
+                return None
+            finally:
+                conn2.close()
         finally:
             conn.close()
     except Exception as exc:

@@ -378,11 +378,14 @@ _SUBSCRIPTION_PHRASES = frozenset([
     "buy a subscription", "purchase a plan",
     "how much is it", "how much is the subscription",
     "i want to upgrade", "how to upgrade",
-    # Arabic (normalised forms)
+    # Arabic (normalised forms) — exact short phrases
     "كم الاسعار", "كيف اشترك", "كيف يمكنني الاشتراك",
     "اشتراكي", "باقتي", "الاسعار", "السعر", "خطه الاشتراك",
     "ابي اشترك", "كيف اشتري", "ابي اشتري", "كم السعر",
     "اريد الاشتراك", "اريد ان اشترك",
+    "الباقة", "باقتك", "باقة", "الاشتراك", "خطتي",
+    "كم الاشتراك", "سعر الاشتراك", "مجاني", "مدفوع",
+    "خطة الاشتراك", "باقة برو", "باقة بريميوم",
 ])
 
 _FOLLOW_UP_CONFIRMATION_PHRASES = frozenset([
@@ -441,8 +444,14 @@ _SUBSCRIPTION_RE = re.compile(
     # Catch "how can I subscribe", "I want to buy/subscribe", "buy a plan" etc.
     r"|\b(how\s+(can|do|to|could)\s+(i\s+)?subscribe)\b"
     r"|\b(i\s+want\s+to\s+(subscribe|buy|purchase|upgrade))\b"
-    r"|\b(buy|purchase)\b.{0,20}\b(subscription|plan|access|package)\b",
-    re.IGNORECASE,
+    r"|\b(buy|purchase)\b.{0,20}\b(subscription|plan|access|package)\b"
+    # Arabic contextual patterns — catches "ماهي باقتي اذا؟", "شو باقتي", "وين اشوف باقتي" etc.
+    r"|(باقت[يكه]|اشتراك[يكه]|خطت[يكه])"  # possessive subscription nouns (my/your/his plan)
+    r"|(كم\s+(سعر|تكلفة|ثمن|يكلف))"  # "how much does it cost" in Arabic
+    r"|(هل\s+(هو|هناك|في|توجد)\s+(نسخة|نسخ|باقة|خطة)\s+(مجانية|مدفوعة|بريميوم|برو))"
+    r"|(اشترك|اشتركت|اشتري|اشتريت|اتحقق|احقق).{0,25}(باقة|خطة|اشتراك)"
+    r"|(باقة|خطة|اشتراك).{0,25}(مجاني|مدفوع|شهري|سنوي|بريميوم|برو|اساسي)",
+    re.IGNORECASE | re.UNICODE,
 )
 
 _DELEGATED_DECISION_RE = re.compile(
