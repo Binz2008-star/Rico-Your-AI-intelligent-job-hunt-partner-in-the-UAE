@@ -94,6 +94,42 @@ const CV_READY_CHIP_DEFS = [
 const COMMAND_LOGIN_HREF = buildAuthHref("/login", "/command");
 const COMMAND_SIGNUP_HREF = buildAuthHref("/signup", "/command");
 
+const WELCOME_BACK_VARIANTS = [
+    {
+        en: "Hi {name}! I'm Rico — your AI job-hunt partner in the UAE. Ready to find your next opportunity?",
+        ar: "مرحبًا {name}! أنا ريكو — جاهز لمساعدتك في إيجاد فرصتك القادمة بالإمارات.",
+        enAnon: "Hi! I'm Rico — your AI job-hunt partner in the UAE. Ready to find your next opportunity?",
+        arAnon: "مرحبًا! أنا ريكو — جاهز لمساعدتك في إيجاد فرصتك القادمة بالإمارات.",
+    },
+    {
+        en: "Welcome back, {name}! What would you like to work on today?",
+        ar: "أهلًا بعودتك {name}! بماذا تريد أن أساعدك اليوم؟",
+        enAnon: "Welcome back! What would you like to work on today?",
+        arAnon: "أهلًا بعودتك! بماذا تريد أن أساعدك اليوم؟",
+    },
+    {
+        en: "Great to see you, {name}! Your next career move in the UAE is just a message away.",
+        ar: "يسعدني لقاؤك مجددًا {name}! خطوتك المهنية القادمة في الإمارات على بُعد رسالة.",
+        enAnon: "Great to see you! Your next career move in the UAE is just a message away.",
+        arAnon: "أهلًا بك! خطوتك المهنية القادمة في الإمارات على بُعد رسالة.",
+    },
+    {
+        en: "Hey {name}! Rico here — let's make progress on your job search today.",
+        ar: "مرحبًا {name}! ريكو هنا — لنحقق تقدمًا في بحثك عن عمل اليوم.",
+        enAnon: "Hey! Rico here — let's make progress on your job search today.",
+        arAnon: "مرحبًا! ريكو هنا — لنحقق تقدمًا في بحثك عن عمل اليوم.",
+    },
+] as const;
+
+function buildWelcomeMessage(lang: "en" | "ar", name: string | null, idx: number): string {
+    const variant = WELCOME_BACK_VARIANTS[idx % WELCOME_BACK_VARIANTS.length];
+    if (name) {
+        const firstName = name.trim().split(/\s+/)[0];
+        return (lang === "ar" ? variant.ar : variant.en).replace("{name}", firstName);
+    }
+    return lang === "ar" ? variant.arAnon : variant.enAnon;
+}
+
 const QUICK_ACTION_ICONS: Record<string, React.ReactNode> = {
     cmdQaFindJobs: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -606,6 +642,7 @@ export default function CommandPage() {
     const [clearingHistory, setClearingHistory] = useState(false);
     const [confirmClear, setConfirmClear] = useState(false);
     const [sidebarUser, setSidebarUser] = useState<{ email?: string } | null>(null);
+    const [userName, setUserName] = useState<string | null>(null);
 
     useEffect(() => {
         if (typeof window !== "undefined") {
@@ -618,6 +655,8 @@ export default function CommandPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const promptSentRef = useRef(false);
     const sessionIdRef = useRef<string | null>(null);
+    const welcomeMessageRef = useRef("");
+    const welcomeVariantIdxRef = useRef(-1);
 
     useEffect(() => {
         ensureSessionId(sessionIdRef);
@@ -642,6 +681,7 @@ export default function CommandPage() {
                 clearTimeout(fallbackId);
                 setChatAudience(me.authenticated ? "authenticated" : "public");
                 setSidebarUser(me.authenticated ? { email: me.email ?? undefined } : null);
+                setUserName(me.authenticated && me.name ? me.name : null);
             })
             .catch(() => {
                 if (cancelled) return;
@@ -915,29 +955,44 @@ export default function CommandPage() {
                 return;
             }
             if (chatAudience === "authenticated") {
-                setMessages([{ id: 1, role: "rico", text: t("cmdWelcomeBack") }]);
+                const idx = Math.floor(Math.random() * WELCOME_BACK_VARIANTS.length);
+                welcomeVariantIdxRef.current = idx;
+                const msg = buildWelcomeMessage(language, userName, idx);
+                welcomeMessageRef.current = msg;
+                setMessages([{ id: 1, role: "rico", text: msg }]);
                 return;
             }
             setMessages([{ id: 1, role: "rico", text: t("cmdWelcomePublic") }]);
         }, 0);
         return () => window.clearTimeout(timeoutId);
-    }, [chatAudience, cvReady, prompt, sendMessage, t]);
+    }, [chatAudience, cvReady, prompt, sendMessage, t, language, userName]);
 
     // Re-translate the welcome message when language changes while chat is still at welcome state
     useEffect(() => {
-        void (async () => {
-            setMessages((prev) => {
-                if (prev.length !== 1 || prev[0].role !== "rico") return prev;
-                const welcomeKeys: TranslationKey[] = ["cmdWelcomeCvReady", "cmdWelcomeBack", "cmdWelcomePublic"];
-                const isWelcome = welcomeKeys.some(
-                    (k) => prev[0].text === translations.en[k] || prev[0].text === translations.ar[k],
-                );
-                if (!isWelcome) return prev;
-                const key = cvReady ? "cmdWelcomeCvReady" : chatAudience === "authenticated" ? "cmdWelcomeBack" : "cmdWelcomePublic";
-                return [{ ...prev[0], text: translations[language][key] }];
-            });
-        })();
-    }, [language, chatAudience, cvReady]);
+        setMessages((prev) => {
+            if (prev.length !== 1 || prev[0].role !== "rico") return prev;
+
+            // Personalized authenticated welcome — rebuild with new language
+            if (
+                chatAudience === "authenticated" &&
+                welcomeVariantIdxRef.current >= 0 &&
+                prev[0].text === welcomeMessageRef.current
+            ) {
+                const msg = buildWelcomeMessage(language, userName, welcomeVariantIdxRef.current);
+                welcomeMessageRef.current = msg;
+                return [{ ...prev[0], text: msg }];
+            }
+
+            // Translation-key-based welcome messages (cvReady panel intro, public)
+            const welcomeKeys: TranslationKey[] = ["cmdWelcomeCvReady", "cmdWelcomePublic"];
+            const isWelcome = welcomeKeys.some(
+                (k) => prev[0].text === translations.en[k] || prev[0].text === translations.ar[k],
+            );
+            if (!isWelcome) return prev;
+            const key = cvReady ? "cmdWelcomeCvReady" : "cmdWelcomePublic";
+            return [{ ...prev[0], text: translations[language][key] }];
+        });
+    }, [language, chatAudience, cvReady, userName]);
 
     async function handleCVUpload(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
