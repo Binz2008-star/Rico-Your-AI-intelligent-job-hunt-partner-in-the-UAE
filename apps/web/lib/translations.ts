@@ -53,6 +53,24 @@ export const translations = {
     paused: "Paused",
     sessionExpiredLogIn: "Session expired — please log in again",
 
+    // Settings — Job Filters / Notifications / Account
+    jobFilters: "Job Filters",
+    jobFiltersSubtitle: "Control which jobs Rico surfaces for you",
+    includeKeywords: "Included keywords",
+    includeKeywordsHint: "Jobs matching these are prioritized",
+    excludeKeywords: "Excluded keywords",
+    excludeKeywordsHint: "Jobs matching these are hidden",
+    keywordsPlaceholder: "Comma-separated, e.g. HSE, ESG, Sustainability",
+    dailyApplyLimit: "Daily application limit",
+    notifications: "Notifications",
+    notificationsSubtitle: "Where Rico reaches you about matches",
+    telegramAlerts: "Telegram job alerts",
+    telegramConnected: "Connected",
+    telegramNotConnected: "Not connected",
+    telegramChatIdHint: "Where Rico sends your job alerts",
+    account: "Account",
+    changePassword: "Change password",
+
     // Forgot / Reset password
     forgotPasswordTitle: "Reset Password",
     forgotPasswordSubtitle: "Enter your email to receive reset instructions",
@@ -754,6 +772,24 @@ export const translations = {
     settingsSaved: "تم حفظ الإعدادات",
     paused: "متوقف",
     sessionExpiredLogIn: "انتهت الجلسة — يرجى تسجيل الدخول مرة أخرى",
+
+    // Settings — Job Filters / Notifications / Account
+    jobFilters: "فلاتر الوظائف",
+    jobFiltersSubtitle: "تحكّم في الوظائف التي يعرضها ريكو لك",
+    includeKeywords: "كلمات مفتاحية مُضمّنة",
+    includeKeywordsHint: "الوظائف المطابقة لها تحصل على أولوية",
+    excludeKeywords: "كلمات مفتاحية مُستبعدة",
+    excludeKeywordsHint: "الوظائف المطابقة لها يتم إخفاؤها",
+    keywordsPlaceholder: "مفصولة بفواصل، مثل: HSE، ESG، الاستدامة",
+    dailyApplyLimit: "الحد اليومي للتقديم",
+    notifications: "الإشعارات",
+    notificationsSubtitle: "أين يصل إليك ريكو بشأن المطابقات",
+    telegramAlerts: "تنبيهات تيليجرام للوظائف",
+    telegramConnected: "متصل",
+    telegramNotConnected: "غير متصل",
+    telegramChatIdHint: "حيث يرسل ريكو تنبيهات الوظائف",
+    account: "الحساب",
+    changePassword: "تغيير كلمة المرور",
 
     // Forgot / Reset password
     forgotPasswordTitle: "إعادة تعيين كلمة المرور",

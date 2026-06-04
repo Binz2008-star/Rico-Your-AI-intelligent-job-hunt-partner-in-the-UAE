@@ -162,3 +162,10 @@ export interface SettingsUpdateRequest {
   score_threshold_apply?: number;
   score_threshold_watch?: number;
 }
+
+// GET  /api/v1/settings/telegram/status
+// POST /api/v1/settings/telegram/opt-in | /opt-out
+export interface TelegramStatusResponse {
+  opted_in: boolean;
+  telegram_username: string | null;
+}
