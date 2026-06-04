@@ -23,6 +23,7 @@ rq
 # python-jose with [cryptography] extra uses cryptography backend for JWT signing.
 # This avoids the pure-python ecdsa path vulnerable to CVE-2024-23342 (Minerva).
 python-jose[cryptography]
+cryptography>=46.0.7
 passlib[bcrypt]
 alembic
 httpx
