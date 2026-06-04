@@ -118,6 +118,6 @@ def process_telegram_update(update: Dict[str, Any]) -> Dict[str, Any]:
         response = {"message": "Rico is unavailable right now."}
 
     return {
-        "chat_id": chat_id,
+        "chat_id": chat.get("id"),
         "reply": response,
     }
