@@ -1,17 +1,25 @@
 "use client";
 
-import { DashboardShell } from "@/components/DashboardShell";
+import { AppShell } from "@/components/layout/AppShell";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { StatusCard } from "@/components/StatusCard";
-import { fetchSavedSearches, type SavedSearch } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
+import { fetchSavedSearches, logout as apiLogout, type SavedSearch } from "@/lib/api";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 export default function SavedSearchesPage() {
     const [searches, setSearches] = useState<SavedSearch[]>([]);
     const [error, setError] = useState(false);
     const [loading, setLoading] = useState(true);
+    const { user } = useAuth();
+    const router = useRouter();
+
+    const handleLogout = useCallback(async () => {
+        try { await apiLogout(); } finally { router.push("/login"); }
+    }, [router]);
 
     const loadSearches = useCallback(async () => {
         try {
@@ -39,7 +47,13 @@ export default function SavedSearchesPage() {
     }, [loadSearches]);
 
     return (
-        <DashboardShell title="Saved Searches">
+        <AppShell
+            title="Saved Searches"
+            sidebarProps={{
+                user: user ? { name: user.name, email: user.email } : undefined,
+                onLogout: handleLogout,
+            }}
+        >
             <div className="max-w-2xl">
                 {loading && <LoadingState variant="card" message="Loading saved searches…" />}
 
@@ -83,6 +97,6 @@ export default function SavedSearchesPage() {
                     </StatusCard>
                 )}
             </div>
-        </DashboardShell>
+        </AppShell>
     );
 }

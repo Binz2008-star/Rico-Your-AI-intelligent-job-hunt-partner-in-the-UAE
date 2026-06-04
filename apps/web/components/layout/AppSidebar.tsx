@@ -3,13 +3,31 @@
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { useSidebarStatus } from "@/hooks/useSidebarStatus";
 import { buildWhatsAppManageUrl } from "@/lib/billing";
+import { useTranslation, type TranslationKey } from "@/lib/translations";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MaterialIcon } from "../ui/MaterialIcon";
 import { mainNavSections, navMeta } from "./app-nav";
+
+const NAV_SECTION_KEYS: Record<string, TranslationKey> = {
+    "Search": "navSectionSearch",
+    "Career": "navSectionCareer",
+    "Account": "navSectionAccount",
+};
+
+const NAV_ITEM_KEYS: Record<string, TranslationKey> = {
+    "/command": "navAskRico",
+    "/flow": "navPipeline",
+    "/queue": "applications",
+    "/profile": "profileTitle",
+    "/upload": "navMyCv",
+    "/subscription": "navProPlan",
+    "/settings": "settings",
+};
 
 interface AppSidebarProps {
     className?: string;
@@ -22,6 +40,8 @@ interface AppSidebarProps {
 
 export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
     const pathname = usePathname();
+    const { language } = useLanguage();
+    const t = useTranslation(language);
 
     // onLogout is threaded through only for authenticated sessions (the command
     // page ties it to chatAudience==="authenticated"; AppShell pages are
@@ -52,7 +72,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                             {navMeta.brand.name}
                         </span>
                         <span className="text-[10px] text-text-tertiary">
-                            {navMeta.brand.tagline}
+                            {t("navBrandTagline")}
                         </span>
                     </div>
                 </div>
@@ -69,7 +89,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                         className="text-xs font-medium"
                         style={{ color: navMeta.status.color }}
                     >
-                        {navMeta.status.label} · {navMeta.status.region}
+                        {t("navStatusLive")} · {navMeta.status.region}
                     </span>
                 </div>
 
@@ -83,14 +103,14 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                         ) : status.readiness ? (
                             <div>
                                 <h3 className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-                                    Readiness
+                                    {t("navModuleReadiness")}
                                 </h3>
                                 <Link
                                     href="/profile"
                                     className="block rounded-lg border border-overlay/10 bg-surface-subtle/40 p-3 transition-colors hover:border-gold/25 hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                                 >
                                     <div className="flex items-center justify-between">
-                                        <span className="text-xs font-medium text-text-secondary">Profile</span>
+                                        <span className="text-xs font-medium text-text-secondary">{t("navModuleProfile")}</span>
                                         {status.readiness.completeness != null && (
                                             <span className="text-xs font-semibold text-gold">
                                                 {status.readiness.completeness}%
@@ -108,7 +128,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                                     <p className="mt-2 text-[10px] text-text-tertiary">
                                         {status.readiness.targetRoles > 0
                                             ? `${status.readiness.targetRoles} target role${status.readiness.targetRoles === 1 ? "" : "s"} set`
-                                            : "Add a target role"}
+                                            : t("navAddTargetRole")}
                                     </p>
                                 </Link>
                             </div>
@@ -119,28 +139,28 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                         ) : status.pipeline ? (
                             <div>
                                 <h3 className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-                                    Pipeline
+                                    {t("navModulePipeline")}
                                 </h3>
                                 <Link
                                     href="/flow"
                                     className="block rounded-lg border border-overlay/10 bg-surface-subtle/40 p-3 transition-colors hover:border-gold/25 hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                                 >
                                     <div className="flex items-baseline justify-between">
-                                        <span className="text-xs font-medium text-text-secondary">In pipeline</span>
+                                        <span className="text-xs font-medium text-text-secondary">{t("navModuleInPipeline")}</span>
                                         <span className="text-sm font-semibold text-text-primary">
                                             {status.pipeline.total}
                                         </span>
                                     </div>
                                     <div className="mt-2 grid grid-cols-3 gap-1 text-center">
                                         {([
-                                            ["Applied", status.pipeline.applied],
-                                            ["Interview", status.pipeline.interview],
-                                            ["Offer", status.pipeline.offer],
-                                        ] as const).map(([label, n]) => (
-                                            <div key={label} className="rounded-md bg-overlay/5 py-1.5">
+                                            ["navApplied", status.pipeline.applied],
+                                            ["navInterview", status.pipeline.interview],
+                                            ["navOffer", status.pipeline.offer],
+                                        ] as const).map(([key, n]) => (
+                                            <div key={key} className="rounded-md bg-overlay/5 py-1.5">
                                                 <div className="text-sm font-semibold text-text-primary">{n}</div>
                                                 <div className="text-[9px] uppercase tracking-wide text-text-tertiary">
-                                                    {label}
+                                                    {t(key)}
                                                 </div>
                                             </div>
                                         ))}
@@ -156,7 +176,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                     {mainNavSections.map((section) => (
                         <div key={section.title} className="mb-6">
                             <h3 className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-                                {section.title}
+                                {NAV_SECTION_KEYS[section.title] ? t(NAV_SECTION_KEYS[section.title]) : section.title}
                             </h3>
                             <ul className="space-y-0.5">
                                 {section.items.map((item) => {
@@ -183,7 +203,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                                                                 isActive ? "opacity-100" : "opacity-60"
                                                             )}
                                                         />
-                                                        <span className="flex-1">{item.label}</span>
+                                                        <span className="flex-1">{NAV_ITEM_KEYS[item.href] ? t(NAV_ITEM_KEYS[item.href]) : item.label}</span>
                                                         {item.href === "/subscription" && status.plan ? (
                                                             <span
                                                                 className={cn(
@@ -207,7 +227,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                                                     </Link>
                                                 </TooltipTrigger>
                                                 <TooltipContent>
-                                                    {item.label}
+                                                    {NAV_ITEM_KEYS[item.href] ? t(NAV_ITEM_KEYS[item.href]) : item.label}
                                                 </TooltipContent>
                                             </Tooltip>
                                         </li>
@@ -229,7 +249,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                             className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-subtle hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                         >
                             <MaterialIcon icon="chat" size={18} className="flex-shrink-0 opacity-60" />
-                            <span>Support on WhatsApp</span>
+                            <span>{t("navSupportWhatsapp")}</span>
                         </a>
                     </div>
                 )}
@@ -240,7 +260,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                 <div className="p-4">
                     <button
                         onClick={onLogout}
-                        aria-label={onLogout ? "Log out" : undefined}
+                        aria-label={onLogout ? t("logout") : undefined}
                         className="flex w-full items-center gap-3 rounded-lg p-2 transition-colors hover:bg-surface-subtle group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                     >
                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gold text-xs font-bold text-[#0a0a1a]">

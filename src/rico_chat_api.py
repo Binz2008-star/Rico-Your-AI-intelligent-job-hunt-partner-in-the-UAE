@@ -2921,6 +2921,49 @@ class RicoChatAPI:
 
         # Generic follow-up confirmations should never fall into role classification.
         if legacy_intent == "follow_up_confirmation":
+            # Priority 1: resume a pending apply confirmation (user said "yes"/"1"/"go ahead"
+            # after Rico asked "Did you apply? Confirm you submitted.")
+            try:
+                _ctx = self._get_recent_context(user_id)
+                _pending = _ctx.get("_pending_confirm_apply")
+                if _pending and _pending.get("title") and _pending.get("company"):
+                    from src.repositories.applications_repo import create_manual as _create_manual_app
+                    _title = _pending["title"]
+                    _company = _pending["company"]
+                    # Clear the flag — user has now confirmed
+                    _ctx.pop("_pending_confirm_apply", None)
+                    self._store_recent_context(user_id, _ctx)
+                    try:
+                        _create_manual_app(title=_title, company=_company, status="applied", user_id=user_id)
+                        _msg = (
+                            f"Got it — **{_title}** at **{_company}** is marked as applied. "
+                            "I'll track it as your latest application. Good luck!"
+                        )
+                        self._store_recent_context(
+                            user_id,
+                            self._build_recent_application_context(
+                                title=_title,
+                                company=_company,
+                                status="applied",
+                                action="mark_applied",
+                            ),
+                        )
+                    except Exception:
+                        _msg = (
+                            f"Noted — I'll treat **{_title}** at **{_company}** as applied, "
+                            "but I couldn't write to the database right now. "
+                            "Try again from the Pipeline page if it doesn't appear."
+                        )
+                    self._append_chat(user_id, "assistant", _msg)
+                    return self._finalize(
+                        {"type": "mark_applied", "intent": "mark_applied", "message": _msg,
+                         "job_title": _title, "job_company": _company},
+                        self.SOURCE_KEYWORD,
+                        profile=profile,
+                    )
+            except Exception:
+                pass  # fall through to generic confirmation handling
+
             if text == "all":
                 return self._finalize(
                     self._handle_keep_all_target_roles(user_id, profile),

@@ -231,12 +231,12 @@ export interface ProfileResponse {
   name?: string | null;
   phone?: string | null;
   telegram_username?: string | null;
-  target_roles?: string[];
-  preferred_cities?: string[];
+  target_roles?: string[] | null;
+  preferred_cities?: string[] | null;
   salary_expectation_aed?: number | null;
   minimum_salary_aed?: number | null;
-  skills?: string[];
-  industries?: string[];
+  skills?: string[] | null;
+  industries?: string[] | null;
   visa_status?: string | null;
   notice_period?: string | null;
   years_experience?: number | null;
@@ -664,7 +664,7 @@ export async function getApplicationStats(
     };
   }
 
-  const data = await requestJson<Record<string, number>>(
+  const data = await requestJson<Record<string, unknown>>(
     "/api/v1/applications/stats",
     {
       method: "GET",
@@ -674,6 +674,9 @@ export async function getApplicationStats(
   const normalized: Record<string, number> = {};
 
   for (const [key, value] of Object.entries(data)) {
+    // Skip the nested by_status object and the pre-summed total to avoid
+    // type coercion bugs (number + object = "[object Object]") and double-counting.
+    if (key === "by_status" || key === "total" || typeof value !== "number") continue;
     const normalizedKey = APPLICATION_STATUS_ALIASES[key] ?? key;
     normalized[normalizedKey] = (normalized[normalizedKey] ?? 0) + value;
   }
@@ -1113,6 +1116,7 @@ export async function register(
   email: string,
   password: string,
   publicUserIdToMerge?: string | null,
+  name?: string | null,
 ): Promise<{
   email: string;
   role: string;
@@ -1121,6 +1125,9 @@ export async function register(
   const body: Record<string, unknown> = { email, password };
   if (publicUserIdToMerge) {
     body.public_user_id_to_merge = publicUserIdToMerge;
+  }
+  if (name && name.trim()) {
+    body.name = name.trim();
   }
   const res = await fetch(`${PROXY}/api/v1/auth/register`, {
     method: "POST",

@@ -106,7 +106,9 @@ def _cookie_secure() -> bool:
 
 
 def _cookie_samesite() -> str:
-    return "none" if _cookie_secure() else "lax"
+    # All browser requests go through the same-origin /proxy rewrite, so Lax
+    # is sufficient and prevents CSRF without breaking any first-party flow.
+    return "lax"
 
 
 def _cookie_domain() -> Optional[str]:
@@ -486,9 +488,37 @@ def register(
         except Exception:
             logger.exception("public_profile_merge_failed public_user_id=%s", req.public_user_id_to_merge)
 
+    # Persist display name to rico_users if provided (best-effort, never fails registration)
+    display_name = req.name.strip() if req.name and req.name.strip() else None
+    if display_name:
+        try:
+            from src.db import get_db_connection
+            conn2 = get_db_connection()
+            if conn2:
+                try:
+                    with conn2.cursor() as cur:
+                        cur.execute(
+                            """
+                            INSERT INTO rico_users (external_user_id, email, name, source)
+                            VALUES (%s, %s, %s, 'web')
+                            ON CONFLICT (external_user_id) DO UPDATE
+                            SET email = EXCLUDED.email,
+                                name  = COALESCE(EXCLUDED.name, rico_users.name)
+                            """,
+                            (user.email, user.email, display_name),
+                        )
+                    conn2.commit()
+                except Exception:
+                    logger.exception("register_rico_users_upsert_failed email=%s", email)
+                    conn2.rollback()
+                finally:
+                    conn2.close()
+        except Exception:
+            logger.exception("register_name_persist_failed email=%s", email)
+
     try:
         from src.services.signup_notifications import send_admin_signup_notification
-        background_tasks.add_task(send_admin_signup_notification, user=user, name=None, plan="free")
+        background_tasks.add_task(send_admin_signup_notification, user=user, name=display_name, plan="free")
     except Exception:
         logger.exception(
             "signup_notification_schedule_failed user_id=%s",
