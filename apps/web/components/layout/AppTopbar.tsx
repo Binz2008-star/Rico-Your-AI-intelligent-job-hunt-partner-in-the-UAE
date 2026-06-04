@@ -3,6 +3,8 @@
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Badge } from "@/components/ui/badge";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTranslation, type TranslationKey } from "@/lib/translations";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -16,17 +18,17 @@ interface AppTopbarProps {
     showNav?: boolean;
 }
 
-const breadcrumbMap: Record<string, { label: string; icon: string }> = {
-    "/dashboard": { label: "Overview", icon: "dashboard" },
-    "/profile": { label: "Profile", icon: "person" },
-    "/settings": { label: "Settings", icon: "settings" },
-    "/subscription": { label: "Subscription", icon: "workspace_premium" },
-    "/jobs": { label: "Jobs", icon: "work" },
-    "/saved-searches": { label: "Saved", icon: "bookmark" },
-    "/upload": { label: "Upload", icon: "upload_file" },
-    "/flow": { label: "Flow", icon: "waves" },
-    "/signals": { label: "Signals", icon: "insights" },
-    "/archive": { label: "Archive", icon: "history" },
+const breadcrumbMap: Record<string, { labelKey: TranslationKey; icon: string }> = {
+    "/dashboard": { labelKey: "navBreadcrumbOverview", icon: "dashboard" },
+    "/profile": { labelKey: "profileTitle", icon: "person" },
+    "/settings": { labelKey: "settings", icon: "settings" },
+    "/subscription": { labelKey: "subscriptionTitle", icon: "workspace_premium" },
+    "/jobs": { labelKey: "navBreadcrumbJobs", icon: "work" },
+    "/saved-searches": { labelKey: "navBreadcrumbSaved", icon: "bookmark" },
+    "/upload": { labelKey: "navBreadcrumbUpload", icon: "upload_file" },
+    "/flow": { labelKey: "navBreadcrumbFlow", icon: "waves" },
+    "/signals": { labelKey: "navBreadcrumbSignals", icon: "insights" },
+    "/archive": { labelKey: "navBreadcrumbArchive", icon: "history" },
 };
 
 export function AppTopbar({
@@ -37,9 +39,11 @@ export function AppTopbar({
     showNav = true,
 }: AppTopbarProps) {
     const pathname = usePathname();
-    const breadcrumb = breadcrumbMap[pathname] ?? { label: "", icon: "chevron_right" };
+    const { language } = useLanguage();
+    const t = useTranslation(language);
+    const breadcrumb = breadcrumbMap[pathname];
 
-    const displayTitle = title ?? breadcrumb.label;
+    const displayTitle = title ?? (breadcrumb ? t(breadcrumb.labelKey) : "");
 
     return (
         <header
@@ -56,7 +60,7 @@ export function AppTopbar({
                         className="hidden items-center gap-2 text-text-secondary transition-colors hover:text-text-primary sm:flex"
                     >
                         <MaterialIcon icon="dashboard" size={18} />
-                        <span className="text-sm font-medium">Home</span>
+                        <span className="text-sm font-medium">{t("navHome")}</span>
                     </Link>
                 )}
 
@@ -64,7 +68,7 @@ export function AppTopbar({
                     <>
                         <MaterialIcon icon="chevron_right" size={16} className="hidden text-text-tertiary sm:block" />
                         <div className="flex min-w-0 items-center gap-2">
-                            <MaterialIcon icon={breadcrumb.icon} size={18} className="text-text-secondary" />
+                            <MaterialIcon icon={breadcrumb?.icon ?? "chevron_right"} size={18} className="text-text-secondary" />
                             <h1 className="truncate text-sm font-semibold text-text-primary">{displayTitle}</h1>
                             {subtitle && (
                                 <Badge variant="ghost" className="hidden sm:inline-flex">
