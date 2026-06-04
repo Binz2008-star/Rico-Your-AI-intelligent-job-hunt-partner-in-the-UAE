@@ -1999,7 +1999,6 @@ class RicoChatAPI:
     }
 
     @staticmethod
-    @staticmethod
     def _search_jsearch_meta(role: str) -> Any:
         """Query JSearch for live UAE jobs matching *role*, with cache + retry.
 
