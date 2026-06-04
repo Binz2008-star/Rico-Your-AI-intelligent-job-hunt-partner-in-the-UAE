@@ -538,6 +538,8 @@ export const translations = {
     uploadSecureProcessing: "Secure CV processing — your CV is used only to build your Rico profile",
 
     // Command page (chat interface)
+    cmdHeroTitle: "Hi, I'm Rico",
+    cmdHeroSubtitle: "Your AI job-hunt partner in the UAE. Ask me anything.",
     cmdQaFindJobs: "Find UAE jobs that match my CV",
     cmdQaUploadCv: "Upload my CV",
     cmdQaWhatNext: "What should I do next?",
@@ -1234,6 +1236,8 @@ export const translations = {
     uploadSecureProcessing: "معالجة آمنة للسيرة الذاتية — تُستخدم سيرتك فقط لبناء ملفك في ريكو",
 
     // Command page (chat interface)
+    cmdHeroTitle: "مرحباً، أنا ريكو",
+    cmdHeroSubtitle: "شريكك الذكي في البحث عن عمل في الإمارات. اسألني أي شيء.",
     cmdQaFindJobs: "ابحث عن وظائف في الإمارات تناسب سيرتي الذاتية",
     cmdQaUploadCv: "ارفع سيرتي الذاتية",
     cmdQaWhatNext: "ماذا يجب أن أفعل بعد ذلك؟",
