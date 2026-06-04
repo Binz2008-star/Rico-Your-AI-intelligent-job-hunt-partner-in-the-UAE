@@ -1,6 +1,7 @@
 "use client";
 
 import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
+import { AppSidebar } from "@/components/layout/AppSidebar";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, RicoOption, UploadCVResponse } from "@/lib/api";
 import { clearChatHistory, confirmCVProfile, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, uploadCV } from "@/lib/api";
@@ -92,6 +93,40 @@ const CV_READY_CHIP_DEFS = [
 ];
 const COMMAND_LOGIN_HREF = buildAuthHref("/login", "/command");
 const COMMAND_SIGNUP_HREF = buildAuthHref("/signup", "/command");
+
+const QUICK_ACTION_ICONS: Record<string, React.ReactNode> = {
+    cmdQaFindJobs: (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+        </svg>
+    ),
+    cmdQaUploadCv: (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
+        </svg>
+    ),
+    cmdQaWhatNext: (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" /><path d="M12 8v4l3 3" />
+        </svg>
+    ),
+    cmdQaCareerMove: (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /><polyline points="16 7 22 7 22 13" />
+        </svg>
+    ),
+    cmdQaApplications: (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
+            <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+        </svg>
+    ),
+    cmdQaInterview: (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+    ),
+};
 
 const _BARE_SEARCH_ROLES = new Set([
     "engineer", "manager", "specialist", "consultant", "officer",
@@ -239,7 +274,7 @@ function CvReadyOnboardingPanel({
                                 key={qa.key}
                                 onClick={() => onAction(qa.prompt, label)}
                                 disabled={disabled}
-                                className="min-h-10 rounded-xl border border-magenta/25 bg-magenta/5 px-3 py-2.5 text-center text-[12px] font-medium text-magenta transition-colors hover:border-magenta/40 hover:bg-magenta/10 disabled:opacity-50 rico-focus-strong"
+                                className="min-h-10 rounded-xl border border-gold/25 bg-gold/5 px-3 py-2.5 text-center text-[12px] font-medium text-gold transition-colors hover:border-gold/40 hover:bg-gold/10 disabled:opacity-50 rico-focus-strong"
                             >
                                 {label}
                             </button>
@@ -305,34 +340,57 @@ function SourceQualityBadge({ status }: { status: VerificationStatus }) {
 function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onAction: (prompt: string) => void }) {
     const { language } = useLanguage();
     const t = useTranslation(language);
-    // Normalize to [0.0, 1.0]. New backend sends floats; legacy history may
-    // have 0–100 integers. Values > 1 are divided by 100, then clamped.
-    const _rawScore = match.score ?? 0;
-    const score = Math.min(1, Math.max(0, _rawScore > 1 ? _rawScore / 100 : _rawScore));
-    const scorePct = score > 0 ? `${Math.round(score * 100)}%` : null;
-    // Single-role palette (#325): cyan = positive signal only. Strong matches are
-    // highlighted; everything else stays neutral instead of cycling amber/magenta.
-    const scoreColor = score >= 0.8 ? "text-gold" : "text-text-muted";
+
+    // Score: only display when a real score was calculated (non-null, non-zero).
+    // Backend emits null when no scorer ran — never show a default 50%.
+    const _rawScore = match.score ?? null;
+    const score = _rawScore != null ? Math.min(1, Math.max(0, _rawScore > 1 ? _rawScore / 100 : _rawScore)) : null;
+    const scorePct = score != null && score > 0 ? `${Math.round(score * 100)}%` : null;
+    const scoreColor = score != null && score >= 0.8 ? "text-gold" : "text-text-muted";
+
     const topReason = match.match_reasons?.[0] ?? match.why ?? "";
     const vStatus = match.verification_status;
 
     const clean = (u?: string) => (u && u !== "#" ? u.trim() : "");
-    // apply_url is guaranteed to be a direct page (not a Google intermediary) — backend
-    // moves Google links to alt_link and sets verification_status="google_intermediary".
-    const primary = [clean(match.apply_url), clean(match.source_url), clean(match.alt_link)].filter(Boolean)[0] ?? "";
+    const applyUrl = clean(match.apply_url);
+    const sourceUrl = clean(match.source_url);
+    const altUrl = clean(match.alt_link);
 
-    // Downgrade known-bad primaries to the alt_link fallback
-    const isBadLink =
+    // Determine which link button(s) to show — conditional on what the provider returned.
+    // apply_url = direct apply page (highest trust)
+    // source_url = job listing page (medium trust, shown as secondary button when differs from apply)
+    // alt_link   = Google Jobs fallback (lowest trust, only when primary blocked)
+    // Neither    = show "Link unavailable" text — never invent a URL
+    const isBadPrimary =
         vStatus === "login_required" ||
         vStatus === "rate_limited" ||
         vStatus === "aggregator_untrusted" ||
         vStatus === "google_intermediary";
-    const fallback = clean(match.alt_link) || clean(match.source_url) || "";
-    const applyHref = isBadLink && fallback ? fallback : primary;
-    const applyLabel =
-        vStatus === "google_intermediary" ? t("cmdApplySearch") :
-            isBadLink && fallback ? t("cmdApplyAlt") :
-                t("cmdApply");
+
+    // Primary link: apply_url when clean, fall back to alt_link when primary is bad
+    let linkHref = "";
+    let linkLabel = "";
+    let linkTestId = "";
+    if (applyUrl && !isBadPrimary) {
+        linkHref = applyUrl;
+        linkLabel = t("cmdApply");
+        linkTestId = "job-link-apply";
+    } else if (sourceUrl && !isBadPrimary) {
+        linkHref = sourceUrl;
+        linkLabel = t("cmdViewSource");
+        linkTestId = "job-link-source";
+    } else if (vStatus === "google_intermediary" && altUrl) {
+        linkHref = altUrl;
+        linkLabel = t("cmdApplySearch");
+        linkTestId = "job-link-alt";
+    } else if (isBadPrimary && (altUrl || sourceUrl)) {
+        linkHref = altUrl || sourceUrl;
+        linkLabel = t("cmdApplyAlt");
+        linkTestId = "job-link-alt";
+    }
+    // Secondary source link — shown when source_url exists and differs from the primary link
+    const showSource = !!sourceUrl && sourceUrl !== linkHref && !isBadPrimary && !!applyUrl;
+    // linkHref="" → "Link unavailable" badge shown below, no <a> rendered
 
     return (
         <article
@@ -340,50 +398,92 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
             aria-label={`Job match: ${match.title} at ${match.company}`}
             data-testid="opportunity-card"
         >
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2.5">
+            {/* Title + score */}
+            <div className="flex items-start gap-2">
                 <div className="flex-1 min-w-0">
                     <div
-                        className="break-words text-[12px] font-semibold text-rico-text sm:line-clamp-1"
+                        className="break-words text-[12px] font-semibold text-rico-text line-clamp-2"
                         data-testid="opportunity-card-title"
                     >
                         {match.title}
                     </div>
                     <div className="mt-0.5 break-words text-[10px] text-text-muted sm:line-clamp-1">
-                        {match.company}{match.location ? ` · ${match.location}` : ""}{topReason ? ` · ${topReason}` : ""}
+                        {match.company}
+                        {match.location ? ` · ${match.location}` : ""}
+                        {/* Salary only shown when provider supplied it — never inferred */}
+                        {match.salary ? ` · ${match.salary}` : ""}
                     </div>
                 </div>
+                {/* Score pill — hidden when no real score was calculated */}
                 {scorePct && (
-                    <span className={`text-[10px] font-semibold shrink-0 tabular-nums ${scoreColor}`}>{scorePct}</span>
+                    <span
+                        className={`text-[10px] font-semibold shrink-0 tabular-nums mt-0.5 ${scoreColor}`}
+                        data-testid="job-score"
+                    >
+                        {scorePct}
+                    </span>
                 )}
-                {applyHref ? (
+            </div>
+
+            {/* Match reason — dedicated readable block, only when backend supplies one */}
+            {topReason && (
+                <p className="text-[11px] leading-relaxed text-text-secondary rounded-lg border border-border-subtle/40 bg-surface-glass px-3 py-2">
+                    {topReason}
+                </p>
+            )}
+
+            {/* Action links — flex row; Apply + optional Source secondary */}
+            <div className="flex flex-wrap items-center gap-1.5">
+                {/* Apply / Source / Alt link — conditional on what provider returned */}
+                {linkHref ? (
                     <a
-                        href={applyHref}
+                        href={linkHref}
                         target="_blank"
                         rel="noopener noreferrer"
-                        data-testid="view-job-action"
-                        aria-label={`${applyLabel}: ${match.title} at ${match.company}`}
-                        className="w-full shrink-0 rounded-md border border-gold/30 bg-gold/10 px-2 py-1 text-center text-[10px] font-medium text-gold transition-colors hover:bg-gold/20 sm:w-auto"
+                        data-testid={linkTestId}
+                        aria-label={`${linkLabel}: ${match.title} at ${match.company}`}
+                        className="rounded-md border border-gold/30 bg-gold/10 px-2.5 py-1.5 text-[10px] font-medium text-gold transition-colors hover:bg-gold/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-1 focus-visible:ring-offset-surface"
                     >
-                        {applyLabel}
+                        {linkLabel}
                     </a>
-                ) : null}
+                ) : (
+                    <span
+                        className="text-[9px] text-text-muted italic"
+                        data-testid="job-link-unavailable"
+                    >
+                        {t("cmdLinkUnavailable")}
+                    </span>
+                )}
+                {/* Secondary source link when apply and source both exist and differ */}
+                {showSource && (
+                    <a
+                        href={sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid="job-link-source"
+                        aria-label={`View source: ${match.title} at ${match.company}`}
+                        className="rounded-md border border-border-soft bg-surface-glass px-2.5 py-1.5 text-[10px] text-text-secondary transition-colors hover:border-border-subtle hover:text-rico-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-1 focus-visible:ring-offset-surface"
+                    >
+                        {t("cmdViewSource")}
+                    </a>
+                )}
             </div>
 
             {/* Source quality row — only shown when there is something to say */}
             {vStatus && (
                 <div className="flex flex-wrap items-center gap-1.5">
                     <SourceQualityBadge status={vStatus} />
-                    {isBadLink && !fallback && (
+                    {isBadPrimary && !altUrl && !sourceUrl && (
                         <span className="text-[9px] text-text-muted italic">
                             {t("cmdNoDirectApply")}
                         </span>
                     )}
-                    {vStatus === "google_intermediary" && fallback && (
+                    {vStatus === "google_intermediary" && altUrl && (
                         <span className="text-[9px] text-text-muted italic">
                             {t("cmdGoogleJobsNote")}
                         </span>
                     )}
-                    {isBadLink && vStatus !== "google_intermediary" && fallback && (
+                    {isBadPrimary && vStatus !== "google_intermediary" && (altUrl || sourceUrl) && (
                         <span className="text-[9px] text-text-muted italic">
                             {t("cmdAltLinkNote")}
                         </span>
@@ -472,7 +572,7 @@ function OptionButtons({ options, onAction }: { options: RicoOption[]; onAction:
                     type="button"
                     key={opt.action}
                     onClick={() => onAction(opt.message ?? opt.label)}
-                    className="text-[12px] px-3 py-2 rounded-xl border border-magenta/30 text-magenta hover:bg-magenta-soft hover:border-magenta/60 transition-colors rico-focus-strong"
+                    className="text-[12px] px-3 py-2 rounded-xl border border-gold/30 text-gold hover:bg-gold/10 hover:border-gold/50 transition-colors rico-focus-strong"
                 >
                     {opt.label}
                 </button>
@@ -505,6 +605,7 @@ export default function CommandPage() {
     const [draftProfile, setDraftProfile] = useState<ProfilePreview | null>(null);
     const [clearingHistory, setClearingHistory] = useState(false);
     const [confirmClear, setConfirmClear] = useState(false);
+    const [sidebarUser, setSidebarUser] = useState<{ email?: string } | null>(null);
 
     useEffect(() => {
         if (typeof window !== "undefined") {
@@ -540,6 +641,7 @@ export default function CommandPage() {
                 if (cancelled) return;
                 clearTimeout(fallbackId);
                 setChatAudience(me.authenticated ? "authenticated" : "public");
+                setSidebarUser(me.authenticated ? { email: me.email ?? undefined } : null);
             })
             .catch(() => {
                 if (cancelled) return;
@@ -1013,18 +1115,32 @@ export default function CommandPage() {
 
     return (
         <div
-            className="relative flex h-[100dvh] min-h-[100dvh] flex-col overflow-hidden bg-background"
+            className="relative flex h-[100dvh] min-h-[100dvh] overflow-hidden bg-background"
             dir={language === "ar" ? "rtl" : "ltr"}
         >
-            {/* Mobile command header */}
-            <MobileCommandHeader
-                chatAudience={chatAudience}
-                onLogout={handleLogout}
-                onNewChat={handleNewChat}
-                onClearChat={handleClearChat}
-                loginHref={COMMAND_LOGIN_HREF}
-                signupHref={COMMAND_SIGNUP_HREF}
-            />
+            {/* Desktop sidebar — md+ only, hidden on mobile. Shown when authenticated or
+                checking (so there's no layout jump when auth resolves). Hides for public. */}
+            {chatAudience !== "public" && (
+                <AppSidebar
+                    className="hidden md:flex shrink-0"
+                    user={sidebarUser ?? undefined}
+                    onLogout={chatAudience === "authenticated" ? handleLogout : undefined}
+                />
+            )}
+
+            {/* Main column — fills remaining width */}
+            <div className="flex flex-1 min-w-0 flex-col overflow-hidden">
+            {/* Top nav: always on mobile; on desktop only when no sidebar (public/checking→public) */}
+            <div className={chatAudience === "authenticated" ? "md:hidden" : ""}>
+                <MobileCommandHeader
+                    chatAudience={chatAudience}
+                    onLogout={handleLogout}
+                    onNewChat={handleNewChat}
+                    onClearChat={handleClearChat}
+                    loginHref={COMMAND_LOGIN_HREF}
+                    signupHref={COMMAND_SIGNUP_HREF}
+                />
+            </div>
 
             {/* Hidden file input for CV upload */}
             <input
@@ -1084,20 +1200,62 @@ export default function CommandPage() {
                         />
                     )}
 
-                    {/* Quick start (shown above first message on non-cv-ready entry) */}
-                    {messages.length <= 1 && !thinking && !cvReady && (
-                        <div className="grid grid-cols-1 gap-2 pb-4 min-[480px]:grid-cols-2 sm:flex sm:flex-wrap sm:justify-center">
+                    {/* Welcome hero + quick start chips */}
+                    {messages.length === 0 && !thinking && !cvReady && (
+                        <div className="flex flex-col items-center gap-5 pb-4 pt-6 sm:pt-10 animate-in fade-in slide-in-from-bottom-3 motion-reduce:animate-none">
+                            {/* Hero */}
+                            <div className="flex flex-col items-center gap-3 text-center">
+                                <div className="rico-orb !w-12 !h-12 !text-[18px]" aria-hidden="true"><span>R</span></div>
+                                <div>
+                                    <p className="text-[22px] font-bold tracking-tight text-text-primary sm:text-[26px]">
+                                        {t("cmdHeroTitle")}
+                                    </p>
+                                    <p className="mt-1.5 text-[13px] leading-relaxed text-text-secondary sm:text-[14px]">
+                                        {t("cmdHeroSubtitle")}
+                                    </p>
+                                </div>
+                            </div>
+                            {/* Chips */}
+                            <div className="grid w-full max-w-xl grid-cols-1 gap-2 min-[480px]:grid-cols-2">
+                                {QUICK_ACTION_DEFS.map((qa) => {
+                                    const label = t(qa.key as TranslationKey);
+                                    const icon = QUICK_ACTION_ICONS[qa.key];
+                                    return (
+                                        <button
+                                            type="button"
+                                            key={qa.key}
+                                            onClick={() => sendMessage(qa.prompt, label)}
+                                            disabled={thinking || chatAudience === "checking"}
+                                            className="group flex min-h-[52px] cursor-pointer items-center gap-3 rounded-2xl border border-border-subtle bg-surface-glass px-4 py-3 text-start text-[12px] text-text-secondary transition-all hover:border-gold/30 hover:bg-surface-subtle hover:text-text-primary disabled:opacity-50 rico-focus-strong"
+                                        >
+                                            <span className="shrink-0 text-text-muted transition-colors group-hover:text-gold" aria-hidden="true">
+                                                {icon}
+                                            </span>
+                                            <span>{label}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                    {/* Chips only (no hero) when there's already one message */}
+                    {messages.length === 1 && !thinking && !cvReady && (
+                        <div className="grid grid-cols-1 gap-2 pb-4 min-[480px]:grid-cols-2">
                             {QUICK_ACTION_DEFS.map((qa) => {
                                 const label = t(qa.key as TranslationKey);
+                                const icon = QUICK_ACTION_ICONS[qa.key];
                                 return (
                                     <button
                                         type="button"
                                         key={qa.key}
                                         onClick={() => sendMessage(qa.prompt, label)}
                                         disabled={thinking || chatAudience === "checking"}
-                                        className="min-h-10 cursor-pointer rounded-xl border border-border-subtle bg-surface-glass px-3 py-2 text-center text-[11px] text-text-secondary transition-colors hover:border-gold/25 hover:bg-surface-subtle hover:text-rico-text disabled:opacity-50 rico-focus-strong sm:text-xs"
+                                        className="group flex min-h-[44px] cursor-pointer items-center gap-3 rounded-xl border border-border-subtle bg-surface-glass px-3 py-2.5 text-start text-[11px] text-text-secondary transition-all hover:border-gold/25 hover:bg-surface-subtle hover:text-text-primary disabled:opacity-50 rico-focus-strong"
                                     >
-                                        {label}
+                                        <span className="shrink-0 text-text-muted transition-colors group-hover:text-gold" aria-hidden="true">
+                                            {icon}
+                                        </span>
+                                        <span>{label}</span>
                                     </button>
                                 );
                             })}
@@ -1108,11 +1266,9 @@ export default function CommandPage() {
                     {messages.map((m, idx) => {
                         const prevMsg = messages[idx - 1];
                         const isFirstInGroup = !prevMsg || prevMsg.role !== m.role;
-                        // Only profile_preview gets a light panel — job cards and app cards
-                        // float as attachments directly in the chat stream.
+                        // Only profile_preview gets a light panel — all other Rico responses
+                        // render as flowing text with no backing bubble.
                         const isStructured = m.type === "profile_preview";
-                        // Longer Rico responses get a subtle glass backing for visual depth.
-                        const isConversational = m.role === "rico" && !isStructured && m.text.length > 80;
 
                         return (
                             <div
@@ -1122,17 +1278,15 @@ export default function CommandPage() {
                             >
                                 {m.role === "rico" && (
                                     <div
-                                        className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5 ${isFirstInGroup ? "bg-gold/15 border border-gold/25 text-gold" : "invisible"}`}
+                                        className={`rico-orb !w-6 !h-6 !text-[10px] mt-0.5 shrink-0 ${isFirstInGroup ? "" : "invisible"}`}
                                         aria-hidden="true"
-                                    >R</div>
+                                    ><span>R</span></div>
                                 )}
                                 <div dir="auto" className={`${m.role === "user"
-                                    ? "max-w-[84%] break-words rounded-2xl rounded-tr-sm bg-surface-elevated border border-overlay/12 px-3.5 py-2.5 text-start text-[14px] leading-relaxed text-text-primary shadow-sm sm:max-w-[72%]"
+                                    ? "max-w-[84%] break-words rounded-2xl rounded-tr-sm bg-gold px-3.5 py-2.5 text-start text-[14px] font-medium leading-relaxed text-[#0a0a1a] sm:max-w-[72%]"
                                     : isStructured
                                         ? "flex-1 min-w-0 rounded-xl border border-border-subtle/70 bg-surface-elevated/60 p-3 text-start text-[13px] leading-relaxed text-rico-text"
-                                        : isConversational
-                                            ? "flex-1 min-w-0 break-words rounded-xl border border-overlay/6 bg-surface-elevated/30 px-3 py-2.5 text-start text-[14px] leading-relaxed text-rico-text"
-                                            : "flex-1 min-w-0 break-words text-start text-[14px] leading-relaxed text-rico-text"
+                                        : "flex-1 min-w-0 break-words text-start text-[14px] leading-relaxed text-rico-text"
                                     }`}>
 
                                     {/* Search result caption */}
@@ -1213,7 +1367,7 @@ export default function CommandPage() {
                                                 type="button"
                                                 onClick={() => handleConfirmProfile(m.preview!, m.filename!, m.id)}
                                                 disabled={thinking}
-                                                className="text-[12px] px-4 py-2 rounded-lg bg-magenta text-white font-medium hover:bg-magenta-hover transition-colors disabled:opacity-50"
+                                                className="text-[12px] px-4 py-2 rounded-lg bg-gold text-[#0a0a1a] font-medium hover:bg-gold-hover transition-colors disabled:opacity-50"
                                             >
                                                 {t("cmdProfileUseThis")}
                                             </button>
@@ -1312,7 +1466,7 @@ export default function CommandPage() {
                                                             type="button"
                                                             key={na.action}
                                                             onClick={() => sendMessage(na.message ?? na.label)}
-                                                            className="text-[11px] px-3 py-1.5 rounded-xl border border-magenta/30 text-magenta hover:bg-magenta-soft hover:border-magenta/60 transition-colors rico-focus-strong"
+                                                            className="text-[11px] px-3 py-1.5 rounded-xl border border-gold/30 text-gold hover:bg-gold/10 hover:border-gold/50 transition-colors rico-focus-strong"
                                                         >
                                                             {na.label}
                                                         </button>
@@ -1357,7 +1511,7 @@ export default function CommandPage() {
                     {uploadError && (
                         <p className="text-[11px] text-rico-red mb-2 text-center" role="alert">{uploadError}</p>
                     )}
-                    <div className="flex items-end gap-2 rounded-2xl border border-border-soft bg-surface-elevated/95 p-1.5 shadow-xl shadow-black/10 backdrop-blur-md">
+                    <div className="flex items-end gap-2 rounded-2xl border border-border-soft bg-surface-elevated/95 p-1.5 shadow-xl shadow-black/10 backdrop-blur-md transition-[border-color,box-shadow] focus-within:border-gold/30 focus-within:shadow-[0_0_0_3px_rgba(245,166,35,0.07),0_8px_32px_rgba(0,0,0,0.12)]">
                         {/* CV upload button */}
                         <button
                             type="button"
@@ -1414,6 +1568,7 @@ export default function CommandPage() {
                     </p>
                 </div>
             </div>
+            </div>{/* end main column */}
         </div>
     );
 }

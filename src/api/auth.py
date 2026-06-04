@@ -46,16 +46,22 @@ logger = logging.getLogger(__name__)
 _ALGORITHM = "HS256"
 _COOKIE_NAME = "access_token"
 
+# Pre-computed dummy hash used to normalize bcrypt timing when no hash is stored.
+# Without this an attacker can distinguish "account doesn't exist" from "wrong password"
+# by measuring response time (bcrypt skipped vs bcrypt run).
+_DUMMY_HASH = _bcrypt.hashpw(b"_rico_timing_normalization_dummy_", _bcrypt.gensalt(12)).decode()
+
 
 def _hash_password(plain: str) -> str:
     return _bcrypt.hashpw(plain.encode(), _bcrypt.gensalt(12)).decode()
 
 
 def _verify_password(plain: str, hashed: str) -> bool:
-    if not hashed:
-        return False
+    # Always run bcrypt even when hashed is absent so response time is constant.
+    reference = hashed if hashed else _DUMMY_HASH
     try:
-        return _bcrypt.checkpw(plain.encode(), hashed.encode())
+        result = _bcrypt.checkpw(plain.encode(), reference.encode())
+        return bool(hashed) and result
     except Exception:
         return False
 
@@ -65,6 +71,11 @@ def _verify_password(plain: str, hashed: str) -> bool:
 def _jwt_secret() -> str:
     secret = os.getenv("JWT_SECRET", "").strip()
     if not secret:
+        if _is_production():
+            raise RuntimeError(
+                "JWT_SECRET is not set in production. "
+                "Set a strong secret (32+ random bytes) in the environment before serving traffic."
+            )
         if not hasattr(_jwt_secret, "_ephemeral"):
             _jwt_secret._ephemeral = secrets.token_hex(32)  # type: ignore[attr-defined]
             logger.warning(
@@ -329,13 +340,19 @@ def _is_production() -> bool:
 
 
 def _dispatch_password_reset_email(email: str) -> None:
-    """Create a reset token and email it.
+    """Look up user, create a reset token, and email it — all in a background task.
 
-    Runs in a background task so /forgot-password returns at the same time whether or not
-    the email is registered — the synchronous SMTP send for real accounts previously made
-    the response measurably slower, leaking which emails exist (an enumeration oracle).
+    Both the DB lookup and the SMTP send run here so /forgot-password always returns
+    at the same time regardless of whether the email is registered (closes the
+    timing-based enumeration oracle that existed when the lookup was synchronous).
     """
+    from src.repositories.users_repo import get_user_by_email
     from src.repositories.password_reset_repo import create_reset_token
+
+    user = get_user_by_email(email)
+    if user is None:
+        logger.info("password_reset_request email=%r user_not_found", email)
+        return
 
     try:
         token = create_reset_token(email)
@@ -374,21 +391,13 @@ def forgot_password(
     does not depend on whether the email is registered.
     Dev/local: logs reset URL to stdout. Production: token suppressed unless RESET_TOKEN_LOG=true.
     """
-    from src.repositories.users_repo import get_user_by_email
-
-    _generic = ForgotPasswordResponse(
+    email = req.email.strip().lower()
+    # Always schedule the background task — DB lookup and SMTP run inside it so
+    # this endpoint returns at the same time for registered and unregistered emails.
+    background_tasks.add_task(_dispatch_password_reset_email, email)
+    return ForgotPasswordResponse(
         message="If that email is registered, a reset link has been sent."
     )
-    email = req.email.strip().lower()
-    user  = get_user_by_email(email)
-    if user is None:
-        logger.info("password_reset_request email=%r user_not_found", email)
-        return _generic
-
-    # Defer the slow work (token insert + SMTP) so registered and unregistered emails
-    # return at the same time — closes the timing-based enumeration oracle.
-    background_tasks.add_task(_dispatch_password_reset_email, email)
-    return _generic
 
 
 @router.post("/reset-password", response_model=ResetPasswordResponse)

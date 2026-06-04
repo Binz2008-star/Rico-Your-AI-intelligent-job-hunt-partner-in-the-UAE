@@ -18,6 +18,7 @@ from src.services.jobs_service import (
     save_job,
     skip_job,
 )
+from src.services.subscription_gating import enforce_saved_job_allowed
 
 router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
 
@@ -80,7 +81,7 @@ def apply_job(
     # This is an explicit, authenticated, per-job apply action initiated by the user
     # (they POSTed to apply to this specific job), so it carries the approval the
     # apply_to_job safety gate requires. Agent/automation paths never set approved=True.
-    result = apply_to_job(job, approved=True)
+    result = apply_to_job(job, approved=True, user_id=user_id)
 
     # Regardless of automation outcome, record the apply action in the
     # lifecycle tracker so the /flow page and application history stay
@@ -144,6 +145,7 @@ def save_job_route(
     current_user: dict = Depends(get_current_user),
 ) -> JobActionResponse:
     user_id = _current_user_id(current_user)
+    enforce_saved_job_allowed(user_id)
     job = _resolve_action_job(job_id, req)
     saved = save_job(job, user_id=user_id)
     if saved:

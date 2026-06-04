@@ -1,4 +1,4 @@
-// App navigation configuration for Pulse-inspired shell
+// App navigation configuration — career-workflow IA
 // Icons use MaterialIcon names for consistency
 
 export interface NavItem {
@@ -13,31 +13,34 @@ export interface NavSection {
     items: NavItem[];
 }
 
-// Phase 3: Navigation configured for active routes only
-// Redirected routes excluded per next.config.js:
-// /jobs, /signals, /archive, /saved-searches, /settings -> /profile or /command
+// Active routes only — /jobs, /signals, /archive, /saved-searches redirect to /command or /profile
 
 export const mainNavSections: NavSection[] = [
     {
-        title: "Core",
+        title: "Search",
         items: [
-            { label: "Command", href: "/command", icon: "auto_awesome" },
-            { label: "Flow", href: "/flow", icon: "waves" },
+            { label: "Ask Rico",    href: "/command", icon: "auto_awesome"    },
+            { label: "Pipeline",    href: "/flow",    icon: "insights"        },
+            { label: "Applications", href: "/queue",   icon: "rocket_launch"   },
+        ],
+    },
+    {
+        title: "Career",
+        items: [
+            { label: "Profile", href: "/profile", icon: "person"      },
+            { label: "My CV",   href: "/upload",  icon: "upload_file" },
         ],
     },
     {
         title: "Account",
         items: [
-            { label: "Profile", href: "/profile", icon: "person" },
-            { label: "Subscription", href: "/subscription", icon: "workspace_premium" },
+            { label: "Pro Plan", href: "/subscription", icon: "workspace_premium" },
+            { label: "Settings", href: "/settings",     icon: "settings"          },
         ],
     },
 ];
 
-export const utilityNavItems: NavItem[] = [
-    { label: "Upload CV", href: "/upload", icon: "upload_file" },
-    { label: "Settings", href: "/settings", icon: "settings" },
-];
+export const utilityNavItems: NavItem[] = [];
 
 // Navigation metadata for external linking
 export const navMeta = {

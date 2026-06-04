@@ -40,6 +40,7 @@ from src.api.routers.stats import router as stats_router
 from src.api.routers.subscription import router as subscription_router
 from src.api.routers.admin_subscriptions import router as admin_subscriptions_router
 from src.api.routers.job_lifecycle import router as job_lifecycle_router
+from src.api.routers.apply_queue import router as apply_queue_router
 from src.api.routers.user import router as user_router
 
 logging.basicConfig(
@@ -240,6 +241,7 @@ app.include_router(pipeline_router)
 app.include_router(subscription_router)
 app.include_router(admin_subscriptions_router)
 app.include_router(job_lifecycle_router)
+app.include_router(apply_queue_router)
 
 
 @app.get("/health")

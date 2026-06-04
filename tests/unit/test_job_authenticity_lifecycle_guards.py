@@ -163,14 +163,16 @@ class TestBuildRoleSearchMessage:
             {"job_apply_link": "https://b.com"},
         ]
         msg = self._msg(matches)
-        assert "live match" in msg
-        assert "lead" not in msg
+        # New wording: "provider data available" for all-link results
+        assert "provider data available" in msg
+        assert "need verification" not in msg
 
     def test_all_lead_matches(self):
         matches = [{"title": "no url"}, {"title": "also no url"}]
         msg = self._msg(matches)
-        assert "lead" in msg
-        assert "live match" not in msg
+        # New wording: "need source verification" for lead-only results
+        assert "need source verification" in msg
+        assert "provider data available" not in msg
 
     def test_mixed_live_and_lead(self):
         matches = [
@@ -178,14 +180,15 @@ class TestBuildRoleSearchMessage:
             {"title": "no url"},
         ]
         msg = self._msg(matches)
-        assert "live match" in msg
-        assert "lead" in msg
+        # New wording: "job source pipeline" with both counts
+        assert "job source pipeline" in msg
         assert "need verification" in msg
 
     def test_no_matches_generic_message(self):
         msg = self._msg([])
-        # Honest no-match copy (no false "keep scanning" promise).
-        assert "did not find" in msg or "No live matches found" in msg
+        # Honest no-match copy — does not claim live results
+        assert "live match" not in msg
+        assert "retrieve" in msg or "couldn't" in msg or "suggest" in msg
 
 
 # ---------------------------------------------------------------------------

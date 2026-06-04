@@ -136,6 +136,24 @@ _NON_ROLE_STARTERS: frozenset[str] = frozenset({
 })
 _QUESTION_CHARS: frozenset[str] = frozenset("?？!！;:")
 _MAX_ROLE_WORDS: int = 6
+
+# Location names that are never valid job-role titles. A message consisting
+# entirely of these terms (e.g. "UAE", "Dubai", "jobs in UAE") should redirect
+# to a profile-based search, not a role-classification error.
+_LOCATION_TERMS: frozenset[str] = frozenset({
+    # Country / region
+    "uae", "emirates", "united arab emirates",
+    # UAE cities / emirates
+    "dubai", "abu dhabi", "abudhabi", "sharjah", "ajman",
+    "ras al khaimah", "ras al-khaimah", "fujairah", "umm al quwain",
+    "umm al-quwain",
+    # GCC / region
+    "gcc", "gulf", "middle east", "mena",
+    # Arabic equivalents (normalised, no diacritics)
+    "الإمارات", "الامارات", "دبي", "أبوظبي", "ابوظبي",
+    "الشارقة", "الشارقه", "عجمان", "رأس الخيمة", "راس الخيمه",
+    "الفجيرة", "الفجيره", "أم القيوين", "ام القيوين",
+})
 _MIN_TOKEN_ALPHA: int = 2
 
 def generate_error_ref() -> str:
@@ -460,6 +478,19 @@ class RicoChatAPI:
         if not tokens or len(tokens) > _MAX_ROLE_WORDS:
             return False
 
+        # A message made up entirely of location terms is a location-qualified
+        # job search, not a bare job role title. Check the full phrase first
+        # (handles multi-word cities like "Abu Dhabi"), then per-token.
+        if text.lower() in _LOCATION_TERMS:
+            return False
+        _loc_fillers = {"jobs", "job", "roles", "role", "in", "the", "a", "an"}
+        non_location_tokens = [
+            t for t in tokens
+            if t.lower() not in _LOCATION_TERMS and t.lower() not in _loc_fillers
+        ]
+        if not non_location_tokens:
+            return False
+
         # Contractions (e.g. "can't", "don't") start with a verb, not a job title.
         # They never appear in English role names, so reject on apostrophe in first token.
         first_raw = tokens[0].lower()
@@ -555,6 +586,19 @@ class RicoChatAPI:
         r"|(?:اعرض|أعرض|عرض|اظهر|أظهر|ارني|أريني)\s+طلباتي"
         r"|طلباتي"
         r")$",
+        re.IGNORECASE,
+    )
+
+    # Matches direct reminder commands like "Set a follow-up reminder for Penspen"
+    # or "Remind me to follow up" — these are button-click phrases from the UI
+    # that must be caught before role classification interprets them as job titles.
+    _SET_REMINDER_RE = re.compile(
+        r"(?:"
+        r"set\s+(?:a\s+)?(?:follow[- ]up\s+)?reminder"
+        r"|remind\s+me\s+(?:to\s+follow\s+up|about)"
+        r"|follow[- ]up\s+reminder"
+        r"|اضبط\s+تذكير|ضع\s+تذكير|تذكيرني"
+        r")",
         re.IGNORECASE,
     )
 
@@ -946,15 +990,18 @@ class RicoChatAPI:
         """Return a backward-compatible chat match with v1 structured guidance."""
         explanation = build_match_explanation(m, profile)
 
-        raw_score = m.get("rico_score") or m.get("score") or 0
+        raw_score = m.get("rico_score") or m.get("score")
         # Normalize to [0.0, 1.0] — frontend multiplies by 100 for display.
         # Legacy scoring pipeline (scoring.py) emits 0–100 integers; FitScore
         # (scorer.py) already emits 0.0–1.0 floats. Values > 1 are divided by 100.
+        # None is emitted when no scorer ran — the frontend hides the score badge.
         if raw_score:
             _s = float(raw_score)
-            normalized_score = round(max(0.0, min(1.0, _s / 100.0 if _s > 1.0 else _s)), 4)
+            normalized_score: float | None = round(max(0.0, min(1.0, _s / 100.0 if _s > 1.0 else _s)), 4)
+            if normalized_score == 0.0:
+                normalized_score = None
         else:
-            normalized_score = 0.0
+            normalized_score = None
 
         # Preserve URL fields so the frontend can surface apply links and distinguish
         # verified live postings from leads that still need a working apply URL.
@@ -1185,6 +1232,43 @@ class RicoChatAPI:
         "continue", "go on",
     })
 
+    # Multi-word continuation phrases that are never job role titles.
+    # Matched after normalisation — see _is_continuation_intent().
+    _CONTINUATION_PHRASES: frozenset[str] = frozenset({
+        # English multi-word — bare "continue" / "go on" are intentionally excluded
+        # because they are already in _FOLLOWUP_NEXT_STEP_PHRASES and route to the
+        # options menu via _looks_like_next_step_followup (which strips punctuation).
+        "keep going", "its ok keep going", "it's ok keep going",
+        "ok keep going", "okay keep going",
+        "go ahead", "go ahead please", "please go ahead",
+        "yes continue", "yes please continue", "sure continue",
+        "ok continue", "okay continue", "yes go ahead",
+        "continue please", "please continue", "just continue",
+        "carry on", "yes carry on", "ok carry on",
+        "sounds good continue", "let's continue", "lets continue",
+        "proceed", "yes proceed", "ok proceed",
+        # Arabic
+        "كمل", "استمر", "واصل", "ماشي كمل", "ماشي استمر",
+        "تمام كمل", "تمام استمر", "اوك كمل", "اوك استمر",
+        "يلا كمل", "يلا استمر", "نعم استمر", "نعم كمل",
+        "حسنا استمر", "طيب كمل", "طيب استمر",
+    })
+
+    # Signals in the last assistant message that indicate a post-CV/profile
+    # context where continuation means "proceed with job search".
+    _POST_CV_CONTINUATION_SIGNALS: tuple[str, ...] = (
+        "based on your cv", "from your cv", "your cv has been",
+        "cv parsed", "cv uploaded", "profile built", "profile updated",
+        "i suggest", "suggested roles", "i found the following roles",
+        "roles from your background", "roles i suggest",
+        "what would you like to do", "what should i search",
+        "shall i start searching", "shall i search",
+        "ready to search", "you can now search",
+        "want me to search", "search for roles",
+        "بناءً على سيرتك", "بناء على سيرتك", "تم تحليل سيرتك",
+        "الأدوار المقترحة", "ماذا تريد أن أفعل", "هل أبحث",
+    )
+
     # Affirmative / negative single-word replies in EN + AR
     _AFFIRMATIVE_PHRASES = frozenset({
         "yes", "yeah", "yep", "yup", "sure", "absolutely", "of course",
@@ -1216,6 +1300,31 @@ class RicoChatAPI:
         """True for yes/نعم/sure single-word affirmatives."""
         text = re.sub(r"[\s؟?.!،,]+", " ", (message or "").strip().lower()).strip()
         return text in RicoChatAPI._AFFIRMATIVE_PHRASES
+
+    @staticmethod
+    def _is_continuation_intent(message: str) -> bool:
+        """True for multi-word 'keep going / continue / كمل' phrases that are never job titles.
+
+        Catches messages like "its ok keep going", "ok keep going", "كمل", "استمر"
+        that pass _looks_like_bare_target_role because their first token is not in
+        _NON_ROLE_STARTERS, but whose intent is clearly "proceed, not a role name".
+        """
+        text = re.sub(r"[\s؟?.!،,‌‍]+", " ", (message or "").strip().lower()).strip()
+        if text in RicoChatAPI._CONTINUATION_PHRASES:
+            return True
+        # Regex patterns for common continuation structures not worth enumerating
+        if re.fullmatch(
+            r"(its?\s+ok(ay)?\s+)?keep\s+going|"
+            r"(ok(ay)?|sure|yes|alright)\s+(keep\s+going|continue|go\s+on|carry\s+on|proceed)|"
+            r"(just\s+)(continue|proceed|carry\s+on|go\s+ahead)(\s+please)?|"
+            r"(continue|proceed|carry\s+on|go\s+ahead)\s+please|"
+            r"please\s+(continue|proceed|carry\s+on|go\s+ahead)|"
+            r"(كمل|استمر|واصل)(\s+من\s+فضلك)?|"
+            r"(ماشي|تمام|اوك|يلا|نعم|حسنا|طيب)\s+(كمل|استمر|واصل)",
+            text,
+        ):
+            return True
+        return False
 
     @staticmethod
     def _is_negative(message: str) -> bool:
@@ -1739,6 +1848,7 @@ class RicoChatAPI:
         job_search_signals = (
             "find live" in last or "search for" in last or "ابحث" in last
             or "وظائف حية" in last or "shall i search" in last or "want me to search" in last
+            or any(sig in last for sig in self._POST_CV_CONTINUATION_SIGNALS)
         )
         application_angle_signals = (
             "application angle" in last or "cover letter" in last or "tailor" in last
@@ -1899,9 +2009,6 @@ class RicoChatAPI:
         from src import jsearch_client
 
         result = jsearch_client.search(f"{role} UAE")
-        # Stamp a default score so downstream scoring/formatting works unchanged.
-        for job in result.items:
-            job.setdefault("score", 50)
         logger.info(
             "jsearch_direct role=%r results=%d cache_hit=%s rate_limited=%s",
             role, len(result.items), result.cache_hit, result.rate_limited,
@@ -2153,22 +2260,24 @@ class RicoChatAPI:
                 return bool(
                     m.get("job_apply_link") or m.get("apply_link") or m.get("link")
                 )
-            live_count = sum(1 for m in top_matches if _has_url(m))
-            lead_count = len(top_matches) - live_count
-            if live_count and lead_count:
+            link_count = sum(1 for m in top_matches if _has_url(m))
+            lead_count = len(top_matches) - link_count
+            total = len(top_matches)
+            if link_count and lead_count:
                 base_message = (
                     f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
-                    f"I found {live_count} current live match(es) and {lead_count} lead(s) that need verification."
+                    f"I found {total} candidate match(es) from the job source pipeline "
+                    f"({link_count} with provider links, {lead_count} need verification)."
                 )
-            elif live_count:
+            elif link_count:
                 base_message = (
                     f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
-                    f"I found {live_count} current live match(es)."
+                    f"I found {link_count} match(es) with provider data available."
                 )
             else:
                 base_message = (
                     f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
-                    f"I found {lead_count} lead(s) that need verification."
+                    f"I found {lead_count} candidate match(es) that need source verification."
                 )
         else:
             base_message = f"Got it — I will target {normalized_role} roles{city_text}{basis_text}."
@@ -2178,7 +2287,7 @@ class RicoChatAPI:
             role_names = [r["role"] for r in adjacent[:3]]
             base_message += f" Your CV is also strong for {', '.join(role_names)} roles. I'll search those too if needed."
         elif not top_matches:
-            base_message += " No live matches found right now. I've saved this as your target role — you can run this search again anytime."
+            base_message += " I couldn't retrieve live jobs right now. I can still suggest target searches based on your CV — or try again later."
 
         return prefix + base_message
 
@@ -2461,6 +2570,31 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        # ── Direct reminder commands ─────────────────────────────────────────────
+        # "Set a follow-up reminder for Penspen", "Remind me to follow up", etc.
+        # These come from UI suggestion buttons and must be caught before role
+        # classification interprets them as job-title queries.
+        if RicoChatAPI._SET_REMINDER_RE.search(message):
+            # Extract company/job name from "for <name>" or "with <name>" suffix.
+            _company_match = re.search(r"\b(?:for|with)\s+(.+)$", message, re.IGNORECASE)
+            _company = _company_match.group(1).strip() if _company_match else None
+            if _company:
+                reply = (
+                    f"Reminder set for **{_company}**. "
+                    "I'll nudge you to follow up in 7 days if you haven't heard back."
+                )
+            else:
+                reply = (
+                    "Reminder set. I'll nudge you to follow up in 7 days "
+                    "if you haven't heard back from your latest application."
+                )
+            self._append_chat(user_id, "assistant", reply)
+            return self._finalize(
+                {"type": "reminder_set", "message": reply},
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
         # ── Lifecycle list follow-up: "list them" / "show them" / "اذكرهم" ───────
         # Must run before the affirmative resolver so short list-commands don't
         # fall through to the AI and crash on ambiguous short input.
@@ -2527,12 +2661,20 @@ class RicoChatAPI:
             )
 
         # ── Pending-intent resolver: yes/no after Rico's question ──────────────
-        # Must run before generic routing so "نعم" resolves the last offered action
-        # instead of falling through to a generic action card.
-        if self._is_affirmative(message):
+        # Must run before generic routing so "نعم" / "كمل" / "keep going" resolves
+        # the last offered action instead of falling through to role classification.
+        if self._is_affirmative(message) or self._is_continuation_intent(message):
             pending = self._resolve_pending_intent(user_id, message, profile)
             if pending is not None:
                 return self._finalize(pending, self.SOURCE_KEYWORD, profile=profile)
+            # Continuation with no specific pending offer: if CV exists, proceed with
+            # the best known role; otherwise ask for one.
+            if self._is_continuation_intent(message):
+                return self._finalize(
+                    self._handle_post_cv_continuation(user_id, profile),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
         if self._is_negative(message):
             # User declined the offered action — acknowledge and let them continue
             return self._finalize(
@@ -4227,6 +4369,32 @@ class RicoChatAPI:
             "next_action": "need_profile_for_delegation",
         }
 
+    def _handle_post_cv_continuation(self, user_id: str, profile: Any) -> dict[str, Any]:
+        """Handle 'keep going / كمل / continue' after CV upload or profile-building.
+
+        Priority:
+        1. Profile has target_roles → search with the first one.
+        2. Profile has CV → suggest roles and ask user to choose.
+        3. No context → ask one concise question.
+        """
+        has_cv = bool(profile and self._profile_value(profile, "cv_status") == "parsed")
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+
+        if target_roles:
+            chosen_role = target_roles[0]
+            return self._classified_role_search(user_id, chosen_role, profile)
+
+        if has_cv:
+            return self._handle_profile_role_suggestions(profile)
+
+        clarification = "What role should I search for first?"
+        self._append_chat(user_id, "assistant", clarification)
+        return {
+            "type": "clarification",
+            "intent": "search_jobs",
+            "message": clarification,
+        }
+
     def _handle_cv_creation(self, user_id: str, profile: Any) -> dict[str, Any]:
         """Start the no-CV profile builder / CV draft flow."""
         name = self._profile_value(profile, "name") or ""
@@ -4492,6 +4660,25 @@ class RicoChatAPI:
         profile_relevant without running them through the taxonomy classifier,
         because they are already derived from the user's CV.
         """
+        # Location guard: if role_text is just a location (UAE, Dubai, etc.) redirect to
+        # profile-based search rather than returning a misleading "I don't recognise X as a role".
+        role_tokens = role_text.strip().lower().split()
+        _loc_fillers = {"jobs", "job", "roles", "role", "in", "the", "a", "an", "for"}
+        if role_tokens and all(t in _LOCATION_TERMS or t in _loc_fillers for t in role_tokens):
+            saved_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            if saved_roles:
+                return self._target_role_search_response(user_id, str(saved_roles[0]), profile)
+            response = {
+                "type": "clarification",
+                "message": (
+                    f"I can search for jobs in the UAE. "
+                    "What role are you looking for? (e.g. HSE Manager, Project Engineer, Finance Analyst)"
+                ),
+                "options": [{"action": "upload_cv", "label": "Upload CV to auto-detect role"}],
+            }
+            self._append_chat(user_id, "assistant", response["message"])
+            return response
+
         # Self-reference guard: "my target role / my saved role / دوري المستهدف" etc.
         # Resolve to the user's saved profile roles instead of treating the phrase as a job title.
         if RicoChatAPI._SELF_REF_ROLE_RE.match(role_text.strip()):

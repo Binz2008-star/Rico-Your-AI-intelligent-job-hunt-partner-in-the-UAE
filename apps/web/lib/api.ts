@@ -751,7 +751,10 @@ export interface JobMatch {
   title: string;
   company: string;
   location?: string;
-  score?: number;
+  /** Score in [0.0, 1.0] — absent/null means no scorer ran; must not be shown as a real score. */
+  score?: number | null;
+  /** Salary string only present when the provider supplied it — never inferred. */
+  salary?: string;
   why?: string;
   actions?: string[];
   confidence?: "high" | "medium" | "low";
@@ -1422,6 +1425,107 @@ export async function createCheckoutSession(
 export async function createCustomerPortalSession(): Promise<CheckoutResponse> {
   return requestJson<CheckoutResponse>("/api/v1/subscription/portal", {
     method: "POST",
+  });
+}
+
+// ── Apply Queue (job agent) ───────────────────────────────────────────────────
+
+export interface ApplicationDraft {
+  id: string;
+  job_key: string;
+  job_title: string;
+  company: string;
+  apply_url?: string | null;
+  tailored_cv: string;
+  cover_letter: string;
+  status: "pending" | "approved" | "rejected";
+  follow_up_at?: string | null;
+  created_at: string;
+}
+
+export interface PrepareApplicationRequest {
+  job_key: string;
+  title: string;
+  company: string;
+  description?: string;
+  apply_url?: string;
+  location?: string;
+  why?: string;
+}
+
+export async function prepareApplication(
+  req: PrepareApplicationRequest,
+  signal?: AbortSignal,
+): Promise<ApplicationDraft> {
+  return requestJson<ApplicationDraft>("/api/v1/apply/prepare", {
+    method: "POST",
+    body: JSON.stringify(req),
+    signal,
+  });
+}
+
+const MOCK_QUEUE: ApplicationDraft[] = [
+  {
+    id: "mock-draft-1",
+    job_key: "mock-job-1",
+    job_title: "Senior Sustainability Manager",
+    company: "Masdar City",
+    apply_url: "https://example.com/apply",
+    tailored_cv: "ROBEN EDWAN\nSenior ESG & Sustainability Professional\n\nSUMMARY\nSeasoned sustainability leader with 8+ years driving environmental strategy across UAE energy and infrastructure projects. Expert in carbon accounting, ESG reporting, and ISO 14001 implementation — directly aligned with Masdar City's net-zero mandate.\n\nEXPERIENCE\n\nHead of Sustainability | ADNOC Group | 2019–2024\n• Led GHG inventory for 12 operating assets, achieving 18% Scope 1 reduction ahead of 2030 target\n• Secured ISO 14001:2015 certification across 4 facilities within 14 months\n• Authored annual ESG disclosure aligned with GRI Standards and TCFD framework\n\nEnvironmental Consultant | AECOM | 2016–2019\n• Delivered Environmental Impact Assessments for AED 2.3B infrastructure projects in Abu Dhabi\n• Developed waste management plans compliant with UAE Federal Law No. 12\n\nEDUCATION\nMSc Environmental Management | University of Sharjah | 2016\nBSc Environmental Science | Lebanese American University | 2014\n\nSKILLS\nCarbon accounting · GRI Standards · TCFD · ISO 14001 · ESG reporting · UAE regulatory compliance · Stakeholder engagement · Life cycle assessment",
+    cover_letter: "Dear Hiring Manager,\n\nI am writing to express my strong interest in the Senior Sustainability Manager role at Masdar City. As the world's most ambitious sustainable urban development, Masdar represents exactly the environment where my 8 years of UAE-focused sustainability leadership can have real impact.\n\nAt ADNOC Group, I led the GHG inventory programme across 12 operating assets and delivered an 18% Scope 1 emissions reduction ahead of schedule. I also secured ISO 14001:2015 certification for four facilities in under 14 months — a track record of execution that translates directly to Masdar's net-zero commitments. My AECOM experience delivering Environmental Impact Assessments for AED 2.3B projects gives me a deep understanding of UAE regulatory frameworks and stakeholder landscapes.\n\nI would welcome the opportunity to discuss how my background aligns with Masdar City's sustainability vision.\n\nSincerely,\nRoben Edwan",
+    status: "pending",
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: "mock-draft-2",
+    job_key: "mock-job-2",
+    job_title: "ESG Analyst",
+    company: "First Abu Dhabi Bank",
+    apply_url: null,
+    tailored_cv: "ROBEN EDWAN\nESG & Sustainability Analyst\n\nSUMMARY\nEnvironmental professional with proven experience translating sustainability data into investor-grade ESG disclosures. Skilled in SASB, GRI, and TCFD frameworks with deep understanding of UAE financial sector regulatory requirements.\n\nEXPERIENCE\n\nHead of Sustainability | ADNOC Group | 2019–2024\n• Authored annual ESG report distributed to 3,000+ institutional investors — zero material restatements over 5 years\n• Built internal ESG data management system integrating 45 operational KPIs\n• Engaged rating agencies (MSCI, Sustainalytics) to improve ESG scores by 12 points\n\nEnvironmental Consultant | AECOM | 2016–2019\n• Supported ESG due diligence for PE-backed infrastructure investments in UAE\n• Developed climate risk assessment models for AED 1.8B asset portfolio\n\nEDUCATION\nMSc Environmental Management | University of Sharjah | 2016\n\nSKILLS\nESG data analytics · GRI · SASB · TCFD · Bloomberg ESG · Investor relations · Climate risk · UAE banking regulation",
+    cover_letter: "Dear Hiring Manager,\n\nFirst Abu Dhabi Bank's commitment to responsible finance and its position as the UAE's largest bank make this ESG Analyst role an exceptional opportunity to apply my sustainability expertise within a high-impact financial institution.\n\nOver five years at ADNOC Group, I built and maintained the ESG reporting infrastructure for one of the region's largest energy companies — engaging MSCI and Sustainalytics and improving composite ESG scores by 12 points. My experience translating complex operational data into investor-grade disclosures aligns directly with FAB's growing ESG reporting obligations under UAE Central Bank sustainable finance guidelines.\n\nI am confident I can contribute to FAB's ESG strategy from day one and look forward to discussing this further.\n\nSincerely,\nRoben Edwan",
+    status: "pending",
+    created_at: new Date(Date.now() - 3600000).toISOString(),
+  },
+];
+
+export async function getApplicationQueue(
+  signal?: AbortSignal,
+): Promise<ApplicationDraft[]> {
+  if (USE_MOCK) return MOCK_QUEUE;
+  return requestJson<ApplicationDraft[]>("/api/v1/apply/queue", {
+    method: "GET",
+    signal,
+  });
+}
+
+export async function approveApplication(
+  draftId: string,
+  signal?: AbortSignal,
+): Promise<{ ok: boolean; status: string }> {
+  return requestJson<{ ok: boolean; status: string }>(
+    `/api/v1/apply/approve/${draftId}`,
+    { method: "POST", signal },
+  );
+}
+
+export async function rejectApplication(
+  draftId: string,
+  signal?: AbortSignal,
+): Promise<{ ok: boolean; status: string }> {
+  return requestJson<{ ok: boolean; status: string }>(
+    `/api/v1/apply/reject/${draftId}`,
+    { method: "DELETE", signal },
+  );
+}
+
+export async function getFollowUpReminders(
+  signal?: AbortSignal,
+): Promise<ApplicationDraft[]> {
+  if (USE_MOCK) return [];
+  return requestJson<ApplicationDraft[]>("/api/v1/apply/follow-ups", {
+    method: "GET",
+    signal,
   });
 }
 

@@ -233,14 +233,26 @@ def enforce_saved_job_allowed(user_id: str) -> None:
         raise HTTPException(status_code=402, detail=check.to_response())
 
 
-def enforce_profile_optimization_allowed(user_id: str) -> None:
+def enforce_profile_optimization_allowed(user_id: str, *, is_first_upload: bool = False) -> None:
+    """Raise HTTP 402 if the user has exceeded their CV analysis limit.
+
+    Pass ``is_first_upload=True`` during the initial onboarding CV confirm so that
+    brand-new users are never blocked on their very first upload regardless of plan.
+    Subsequent uploads are gated normally.
+    """
     from fastapi import HTTPException
     resolved = resolve_effective_user_plan(user_id)
     since = _usage_window_start(resolved)
+    usage = count_profile_optimizations(user_id, since)
+
+    # Always allow the very first CV upload — blocking onboarding is never correct.
+    if is_first_upload and usage == 0:
+        return
+
     check = _build_gate_check(
         user_id,
         "profile_optimization_limit",
-        count_profile_optimizations(user_id, since),
+        usage,
         resolved,
     )
     if not check.allowed:

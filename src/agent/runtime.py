@@ -134,7 +134,34 @@ class AgentRuntime:
                 duration_ms=int((time.monotonic() - wall_start) * 1000),
             )
 
-        # 5. Execute tool
+        # 5. Subscription gate for apply actions.
+        #    Only enforced when RICO_ENABLE_AUTO_APPLY=true. When the global flag is off,
+        #    apply_to_job() itself returns manual_required — no upgrade prompt for a feature
+        #    that cannot run in the current environment.
+        if action == "apply":
+            from src.services.apply_service import (
+                _auto_apply_globally_enabled,
+                _enforce_automation_allowed,
+            )
+            if _auto_apply_globally_enabled():
+                try:
+                    _enforce_automation_allowed(user_id)
+                except Exception as exc:
+                    elapsed = int((time.monotonic() - wall_start) * 1000)
+                    logger.info("runtime_apply_gated user=%s reason=%s", user_id, exc)
+                    detail = getattr(exc, "detail", None)
+                    user_msg = (
+                        detail.get("message") if isinstance(detail, dict) else str(exc)
+                    )
+                    return RuntimeResult(
+                        ok=False,
+                        message=user_msg,
+                        action=action, job_key=job_key, source=source, user_id=user_id,
+                        error="subscription_limit",
+                        duration_ms=elapsed,
+                    )
+
+        # 6. Execute tool
         tool_name = ACTION_TO_TOOL[action]
         try:
             tool_def = tool_registry.get(tool_name)
@@ -165,17 +192,17 @@ class AgentRuntime:
         tool_ok = bool(tool_result and tool_result.success)
         tool_data = (tool_result.data or {}) if tool_result else {}
 
-        # 6. Build message
+        # 7. Build message
         message = self._build_message(action, tool_ok, tool_data, error_str)
 
-        # 7. Audit log
+        # 8. Audit log
         self._audit(
             action_id=action_id, action=action, user_id=user_id,
             job=resolved_job, source=source, ok=tool_ok,
             message=message, error=error_str, duration_ms=elapsed,
         )
 
-        # 8. Persist per-job interaction so Rico can recall it across sessions.
+        # 9. Persist per-job interaction so Rico can recall it across sessions.
         #    Fire-and-forget: never let a context-write failure affect the action.
         if tool_ok and resolved_job.get("title") and resolved_job.get("company"):
             try:
