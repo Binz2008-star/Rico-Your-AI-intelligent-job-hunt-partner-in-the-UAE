@@ -53,6 +53,21 @@ const ICONS: Record<string, IconRenderer> = {
     chat: () => (
         <path d="M21 11.5a8.5 8.5 0 0 1-12.5 7.5L3 20.5l1.5-5.5A8.5 8.5 0 1 1 21 11.5Z" />
     ),
+    close: () => (
+        <path d="M18 6 6 18M6 6l12 12" />
+    ),
+    edit: () => (
+        <>
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+            <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" />
+        </>
+    ),
+    task_alt: () => (
+        <>
+            <path d="M9 12.5 11.5 15 15 10" />
+            <path d="M20.8 14a9 9 0 1 1-6.8-10.8" />
+        </>
+    ),
     check_circle: () => (
         <>
             <circle cx="12" cy="12" r="9" />

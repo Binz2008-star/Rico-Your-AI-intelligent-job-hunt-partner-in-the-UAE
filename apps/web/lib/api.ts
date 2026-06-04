@@ -1428,6 +1428,70 @@ export async function createCustomerPortalSession(): Promise<CheckoutResponse> {
   });
 }
 
+// ── Apply Queue (job agent) ───────────────────────────────────────────────────
+
+export interface ApplicationDraft {
+  id: string;
+  job_key: string;
+  job_title: string;
+  company: string;
+  apply_url?: string | null;
+  tailored_cv: string;
+  cover_letter: string;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+}
+
+export interface PrepareApplicationRequest {
+  job_key: string;
+  title: string;
+  company: string;
+  description?: string;
+  apply_url?: string;
+  location?: string;
+  why?: string;
+}
+
+export async function prepareApplication(
+  req: PrepareApplicationRequest,
+  signal?: AbortSignal,
+): Promise<ApplicationDraft> {
+  return requestJson<ApplicationDraft>("/api/v1/apply/prepare", {
+    method: "POST",
+    body: JSON.stringify(req),
+    signal,
+  });
+}
+
+export async function getApplicationQueue(
+  signal?: AbortSignal,
+): Promise<ApplicationDraft[]> {
+  return requestJson<ApplicationDraft[]>("/api/v1/apply/queue", {
+    method: "GET",
+    signal,
+  });
+}
+
+export async function approveApplication(
+  draftId: string,
+  signal?: AbortSignal,
+): Promise<{ ok: boolean; status: string }> {
+  return requestJson<{ ok: boolean; status: string }>(
+    `/api/v1/apply/approve/${draftId}`,
+    { method: "POST", signal },
+  );
+}
+
+export async function rejectApplication(
+  draftId: string,
+  signal?: AbortSignal,
+): Promise<{ ok: boolean; status: string }> {
+  return requestJson<{ ok: boolean; status: string }>(
+    `/api/v1/apply/reject/${draftId}`,
+    { method: "DELETE", signal },
+  );
+}
+
 export async function recordSubscriptionIntent(
   plan: string,
   billingMode: "manual" | "stripe" = "manual",
