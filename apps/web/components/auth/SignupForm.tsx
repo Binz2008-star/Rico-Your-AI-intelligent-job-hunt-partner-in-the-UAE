@@ -51,7 +51,7 @@ export function SignupForm() {
         setError('');
         setShowLoginLink(false);
         try {
-            const result = await register(email, password);
+            const result = await register(email, password, null, name);
             if (result.email_verification_required) {
                 setRegisteredEmail(result.email);
                 setVerificationSent(true);

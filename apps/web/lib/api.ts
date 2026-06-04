@@ -1080,6 +1080,7 @@ export async function register(
   email: string,
   password: string,
   publicUserIdToMerge?: string | null,
+  name?: string | null,
 ): Promise<{
   email: string;
   role: string;
@@ -1088,6 +1089,9 @@ export async function register(
   const body: Record<string, unknown> = { email, password };
   if (publicUserIdToMerge) {
     body.public_user_id_to_merge = publicUserIdToMerge;
+  }
+  if (name && name.trim()) {
+    body.name = name.trim();
   }
   const res = await fetch(`${PROXY}/api/v1/auth/register`, {
     method: "POST",
