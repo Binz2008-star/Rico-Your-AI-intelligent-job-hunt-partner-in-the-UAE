@@ -15,6 +15,11 @@ on:
           - "false"
           - "true"
 
+# Prevent overlapping scheduled/manual runs
+concurrency:
+  group: daily-job-bot
+  cancel-in-progress: false
+
 jobs:
   # ── Job 1: Intelligence — GitHub-hosted ───────────────────────────────────
   intelligence:
@@ -22,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write
+      contents: read   # pipeline only reads; dashboard deploy job handles write
 
     steps:
       - name: Checkout
@@ -47,16 +52,17 @@ jobs:
 
       - name: Run intelligence pipeline
         env:
-          DATABASE_URL:           ${{ secrets.DATABASE_URL }}
-          HF_TOKEN:               ${{ secrets.HF_TOKEN }}
-          TELEGRAM_BOT_TOKEN:     ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID:       ${{ secrets.TELEGRAM_CHAT_ID }}
-          EMAIL_USER:             ${{ secrets.EMAIL_USER }}
-          EMAIL_PASS:             ${{ secrets.EMAIL_PASS }}
-          EMAIL_TO:               ${{ secrets.EMAIL_TO }}
-          EXCLUDE_KEYWORDS:       ${{ secrets.EXCLUDE_KEYWORDS }}
-          NG_ENABLED:             "false"
-          AUTO_APPLY_ENABLED:     "false"
+          DATABASE_URL:             ${{ secrets.DATABASE_URL }}
+          HF_TOKEN:                 ${{ secrets.HF_TOKEN }}
+          TELEGRAM_BOT_TOKEN:       ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:         ${{ secrets.TELEGRAM_CHAT_ID }}
+          EMAIL_USER:               ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS:               ${{ secrets.EMAIL_PASS }}
+          EMAIL_TO:                 ${{ secrets.EMAIL_TO }}
+          EXCLUDE_KEYWORDS:         ${{ secrets.EXCLUDE_KEYWORDS }}
+          RICO_REDIS_URL:           ${{ secrets.RICO_REDIS_URL }}
+          NG_ENABLED:               "false"
+          RICO_ENABLE_AUTO_APPLY:   "false"
         run: python -m src.run_daily
 
       - name: Run follow-up reminders
@@ -67,8 +73,38 @@ jobs:
           HF_TOKEN:           ${{ secrets.HF_TOKEN }}
         run: python -m src.follow_up
 
-      - name: Deploy dashboard to GitHub Pages
+      - name: Clean up Gmail OAuth files
         if: always()
+        run: rm -f data/gmail_credentials.json data/gmail_token.json
+
+      - name: Upload dashboard artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-html
+          path: dashboard.html
+          retention-days: 1
+
+  # ── Job 2: Dashboard deploy — separate job with write permission ───────────
+  deploy-dashboard:
+    name: Deploy Dashboard
+    needs: intelligence
+    if: success()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download dashboard artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dashboard-html
+
+      - name: Deploy to GitHub Pages
         run: |
           if [ ! -f dashboard.html ]; then
             echo "dashboard.html not found — skipping deploy"
@@ -83,10 +119,7 @@ jobs:
           git pull --rebase origin main
           git push --force-with-lease origin main || echo "Dashboard push failed — likely concurrent main update"
 
-  # ── Job 2: Apply — self-hosted runner ─────────────────────────────────────
-  # Secrets cannot be used in job-level `if` in GitHub Actions.
-  # Job always triggers; continue-on-error prevents workflow failure if
-  # self-hosted runner is offline or session is missing.
+  # ── Job 3: Apply — self-hosted runner ─────────────────────────────────────
   apply:
     name: NaukriGulf Apply
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_apply == 'true' }}
@@ -183,10 +216,7 @@ jobs:
               )
           "
 
-  # ── Job 3: Indeed Apply — self-hosted runner ────────────────────────────────
-  # Secrets cannot be used in job level `if` in GitHub Actions.
-  # Job always triggers; continue-on-error prevents workflow failure if
-  # self-hosted runner is offline or session is missing.
+  # ── Job 4: Indeed Apply — self-hosted runner ────────────────────────────────
   indeed-apply:
     name: Indeed Apply
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_apply == 'true' }}
