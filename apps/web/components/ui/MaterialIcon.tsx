@@ -50,6 +50,9 @@ const ICONS: Record<string, IconRenderer> = {
             <path d="M15 14h.01" />
         </>
     ),
+    chat: () => (
+        <path d="M21 11.5a8.5 8.5 0 0 1-12.5 7.5L3 20.5l1.5-5.5A8.5 8.5 0 1 1 21 11.5Z" />
+    ),
     check_circle: () => (
         <>
             <circle cx="12" cy="12" r="9" />
