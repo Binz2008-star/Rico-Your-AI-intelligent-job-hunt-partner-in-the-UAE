@@ -78,13 +78,17 @@ async function loadStatus(): Promise<StatusData> {
 
     let pipeline: SidebarPipeline | null = null;
     if (stats) {
-        const total = Object.values(stats).reduce((a, b) => a + (b ?? 0), 0);
+        const applied = stats.applied ?? 0;
+        const interview = stats.interview ?? 0;
+        const offer = stats.offer ?? 0;
+        const saved = stats.saved ?? 0;
+        const rejected = stats.rejected ?? 0;
         pipeline = {
-            applied: stats.applied ?? 0,
-            interview: stats.interview ?? 0,
-            offer: stats.offer ?? 0,
-            saved: stats.saved ?? 0,
-            total,
+            applied,
+            interview,
+            offer,
+            saved,
+            total: applied + interview + offer + saved + rejected,
         };
     }
 
