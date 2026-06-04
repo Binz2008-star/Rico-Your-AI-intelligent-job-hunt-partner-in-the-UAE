@@ -165,6 +165,12 @@ const ICONS: Record<string, IconRenderer> = {
             <path d="M21 12H9" />
         </>
     ),
+    email: () => (
+        <>
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <path d="m3 7 9 6 9-6" />
+        </>
+    ),
     mark_email_unread: () => (
         <>
             <path d="M20 9.5V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h8" />
