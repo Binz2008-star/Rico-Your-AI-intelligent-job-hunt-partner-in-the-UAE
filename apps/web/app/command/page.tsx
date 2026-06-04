@@ -427,7 +427,7 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
 
             {/* Match reason — dedicated readable block, only when backend supplies one */}
             {topReason && (
-                <p className="text-[11px] leading-relaxed text-text-secondary rounded-lg border border-border-subtle/40 bg-surface-glass px-2.5 py-1.5">
+                <p className="text-[11px] leading-relaxed text-text-secondary rounded-lg border border-border-subtle/40 bg-surface-glass px-3 py-2">
                     {topReason}
                 </p>
             )}
@@ -442,7 +442,7 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
                         rel="noopener noreferrer"
                         data-testid={linkTestId}
                         aria-label={`${linkLabel}: ${match.title} at ${match.company}`}
-                        className="rounded-md border border-gold/30 bg-gold/10 px-2 py-1 text-[10px] font-medium text-gold transition-colors hover:bg-gold/20"
+                        className="rounded-md border border-gold/30 bg-gold/10 px-2.5 py-1.5 text-[10px] font-medium text-gold transition-colors hover:bg-gold/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-1 focus-visible:ring-offset-surface"
                     >
                         {linkLabel}
                     </a>
@@ -462,7 +462,7 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
                         rel="noopener noreferrer"
                         data-testid="job-link-source"
                         aria-label={`View source: ${match.title} at ${match.company}`}
-                        className="rounded-md border border-border-soft bg-surface-glass px-2 py-1 text-[10px] text-text-secondary transition-colors hover:border-border-subtle hover:text-rico-text"
+                        className="rounded-md border border-border-soft bg-surface-glass px-2.5 py-1.5 text-[10px] text-text-secondary transition-colors hover:border-border-subtle hover:text-rico-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-1 focus-visible:ring-offset-surface"
                     >
                         {t("cmdViewSource")}
                     </a>
