@@ -1037,6 +1037,7 @@ class ProfileUpdateRequest(BaseModel):
     visa_status: Optional[str] = Field(None, max_length=100)
     notice_period: Optional[str] = Field(None, max_length=100)
     skills: Optional[list[str]] = Field(None, max_length=100)
+    industries: Optional[list[str]] = Field(None, max_length=50)
 
 
 @router.patch("/profile")
@@ -1081,6 +1082,8 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
         updates["notice_period"] = body.notice_period.strip()
     if body.skills is not None:
         updates["skills"] = [s.strip() for s in body.skills if s.strip()]
+    if body.industries is not None:
+        updates["industries"] = [i.strip() for i in body.industries if i.strip()]
 
     # When the user explicitly sets target_roles or skills, bump normalization_version
     # to the current version so get_profile does not re-normalize and silently mutate
