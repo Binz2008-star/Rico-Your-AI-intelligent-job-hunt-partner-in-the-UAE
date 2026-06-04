@@ -171,6 +171,7 @@ export interface MeResponse {
   role: string;
   authenticated: boolean;
   guest?: boolean;
+  name?: string | null;
 }
 
 export async function fetchMe(signal?: AbortSignal): Promise<MeResponse> {

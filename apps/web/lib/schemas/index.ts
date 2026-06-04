@@ -241,6 +241,7 @@ export const MeResponseSchema = z.object({
     role: z.string(),
     authenticated: z.boolean(),
     guest: z.boolean().optional(),
+    name: z.string().nullable().optional(),
 });
 
 export const JobMatchSchema = z.object({
