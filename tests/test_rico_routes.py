@@ -1116,6 +1116,39 @@ class TestMeRoute:
         r = auth_client.get("/api/v1/me")
         assert "role" in r.json()
 
+    # ── name field (added for personalized welcome) ───────────────────────────
+
+    def test_authenticated_returns_name_when_rico_users_has_row(self, auth_client):
+        """name is returned when rico_users has a matching row with a non-null name."""
+        with patch("src.api.routers.user._fetch_display_name", return_value="Alice"):
+            r = auth_client.get("/api/v1/me")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["name"] == "Alice"
+        assert body["authenticated"] is True
+
+    def test_authenticated_returns_null_name_when_no_rico_users_row(self, auth_client):
+        """name is null when rico_users has no matching row or name is NULL — request still succeeds."""
+        with patch("src.api.routers.user._fetch_display_name", return_value=None):
+            r = auth_client.get("/api/v1/me")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["name"] is None
+        assert body["authenticated"] is True
+
+    def test_guest_response_has_no_name_field(self, client):
+        """Guest /me contract is unaffected by the name field — exact shape preserved."""
+        r = client.get("/api/v1/me")
+        assert r.status_code == 200
+        body = r.json()
+        assert "name" not in body
+        assert body == {
+            "email": None,
+            "role": "guest",
+            "authenticated": False,
+            "guest": True,
+        }
+
 
 class TestVersionRoute:
     def test_versioned_route_returns_deployment_metadata(self, client, monkeypatch):
