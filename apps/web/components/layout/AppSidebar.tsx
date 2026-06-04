@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MaterialIcon } from "../ui/MaterialIcon";
-import { mainNavSections, navMeta, utilityNavItems } from "./app-nav";
+import { mainNavSections, navMeta } from "./app-nav";
 
 interface AppSidebarProps {
     className?: string;
@@ -116,40 +116,6 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                         </div>
                     ))}
 
-                    {/* Utility Nav */}
-                    <div>
-                        <h3 className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-                            Actions
-                        </h3>
-                        <ul className="space-y-0.5">
-                            {utilityNavItems.map((item) => {
-                                const isActive = pathname === item.href;
-                                return (
-                                    <li key={item.href}>
-                                        <Link
-                                            href={item.href}
-                                            className={cn(
-                                                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                                                isActive
-                                                    ? "bg-gold/10 text-gold ring-1 ring-gold/20 shadow-[0_0_16px_rgba(245,166,35,0.12)]"
-                                                    : "text-text-secondary hover:bg-surface-subtle hover:text-text-primary"
-                                            )}
-                                        >
-                                            <MaterialIcon
-                                                icon={item.icon}
-                                                size={18}
-                                                className={cn(
-                                                    "flex-shrink-0",
-                                                    isActive ? "opacity-100" : "opacity-60"
-                                                )}
-                                            />
-                                            <span>{item.label}</span>
-                                        </Link>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    </div>
                 </nav>
 
                 <Separator />
