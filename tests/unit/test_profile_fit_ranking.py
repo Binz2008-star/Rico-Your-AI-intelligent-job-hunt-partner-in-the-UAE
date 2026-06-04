@@ -78,3 +78,25 @@ class TestRankByProfileFit:
         ]
         ranked = rank_by_profile_fit(jobs, target_roles=["HSE Manager"], skills=[])
         assert ranked[0]["title"] == "HSE Manager"
+
+    def test_generic_role_token_does_not_create_false_match(self):
+        jobs = [
+            {"title": "Finance Manager", "location": "Dubai UAE", "description": "Finance controls"},
+            {"title": "Operations Manager", "location": "Dubai UAE", "description": "Operations leadership"},
+        ]
+        ranked = rank_by_profile_fit(jobs, target_roles=["Operations Manager"], skills=[])
+        by_title = {job["title"]: job["profile_fit_score"] for job in ranked}
+        assert by_title["Operations Manager"] > by_title["Finance Manager"]
+
+    def test_preferred_city_beats_generic_uae_location(self):
+        jobs = [
+            {"title": "Operations Manager", "location": "Abu Dhabi UAE", "description": "Operations"},
+            {"title": "Operations Manager", "location": "Dubai UAE", "description": "Operations"},
+        ]
+        ranked = rank_by_profile_fit(
+            jobs,
+            target_roles=["Operations Manager"],
+            skills=[],
+            preferred_cities=["Dubai"],
+        )
+        assert ranked[0]["location"] == "Dubai UAE"
