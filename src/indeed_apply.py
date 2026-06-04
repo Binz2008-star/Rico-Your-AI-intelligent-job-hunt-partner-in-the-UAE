@@ -741,8 +741,12 @@ class IndeedApplyEngine:
 
     def _fill_apply_form(self, frame: Frame, job: Dict[str, Any]) -> bool:
         """Navigate Indeed's multi-step Easy Apply wizard."""
-        name  = "Roben Edwan"
-        email = os.getenv("INDEED_EMAIL", "robenedwan@gmail.com")
+        # Applicant identity is read from env only — never hardcode PII in source.
+        # When unset (the default in all environments since auto-apply is gated
+        # off by RICO_ENABLE_AUTO_APPLY), these stay empty and the wizard is not
+        # filled with anyone's personal data.
+        name  = os.getenv("INDEED_NAME", "")
+        email = os.getenv("INDEED_EMAIL", "")
         phone = os.getenv("INDEED_PHONE", "")
 
         max_steps = 12
