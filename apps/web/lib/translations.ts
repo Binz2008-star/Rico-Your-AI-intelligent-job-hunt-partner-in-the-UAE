@@ -1,3 +1,5 @@
+import { useCallback } from "react";
+
 export type TranslationKey = keyof typeof translations.en;
 
 export const translations = {
@@ -1404,7 +1406,14 @@ export const translations = {
 } as const;
 
 export function useTranslation(language: "en" | "ar") {
-  return (key: string): string => {
-    return translations[language][key as keyof typeof translations.en];
-  };
+  // Memoize on language so the returned `t` keeps a stable reference across
+  // renders. Without this, every render produces a new function, which makes
+  // any useEffect/useCallback that depends on `t` re-run on every render —
+  // causing request loops (e.g. repeated /health and /settings polling).
+  return useCallback(
+    (key: string): string => {
+      return translations[language][key as keyof typeof translations.en];
+    },
+    [language],
+  );
 }
