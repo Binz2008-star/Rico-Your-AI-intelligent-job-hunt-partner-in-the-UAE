@@ -24,6 +24,7 @@ import type {
   JobListResponse,
   SettingsResponse,
   SettingsUpdateRequest,
+  TelegramStatusResponse,
 } from "@/types";
 import type { ZodType } from "zod";
 
@@ -712,6 +713,41 @@ export async function updateSettings(
   return requestJson<SettingsResponse>("/api/v1/settings", {
     method: "PUT",
     body: JSON.stringify(payload),
+  });
+}
+
+// ── Telegram notifications ──────────────────────────────────────────────────
+// Backend endpoints already exist in src/api/routers/settings.py.
+
+const MOCK_TELEGRAM_STATUS: TelegramStatusResponse = {
+  opted_in: false,
+  telegram_username: null,
+};
+
+export async function getTelegramStatus(
+  signal?: AbortSignal,
+): Promise<TelegramStatusResponse> {
+  if (USE_MOCK) return MOCK_TELEGRAM_STATUS;
+  return requestJson<TelegramStatusResponse>("/api/v1/settings/telegram/status", {
+    method: "GET",
+    signal,
+  });
+}
+
+export async function telegramOptIn(
+  telegram_chat_id?: string,
+): Promise<TelegramStatusResponse> {
+  if (USE_MOCK) return { ...MOCK_TELEGRAM_STATUS, opted_in: true };
+  return requestJson<TelegramStatusResponse>("/api/v1/settings/telegram/opt-in", {
+    method: "POST",
+    body: JSON.stringify(telegram_chat_id ? { telegram_chat_id } : {}),
+  });
+}
+
+export async function telegramOptOut(): Promise<TelegramStatusResponse> {
+  if (USE_MOCK) return { ...MOCK_TELEGRAM_STATUS, opted_in: false };
+  return requestJson<TelegramStatusResponse>("/api/v1/settings/telegram/opt-out", {
+    method: "POST",
   });
 }
 
