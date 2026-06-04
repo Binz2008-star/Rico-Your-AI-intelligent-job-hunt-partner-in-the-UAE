@@ -69,7 +69,7 @@ export function ApplicationDraftCard({
                     </span>
                 ) : (
                     <span className="shrink-0 rounded-full bg-gold/10 px-2.5 py-1 text-xs font-semibold text-gold">
-                        Ready to apply
+                        Awaiting review
                     </span>
                 )}
             </div>

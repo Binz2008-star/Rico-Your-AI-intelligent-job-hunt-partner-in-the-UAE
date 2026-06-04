@@ -57,8 +57,8 @@ export default function QueuePage() {
 
     return (
         <AppShell
-            title="Apply Queue"
-            subtitle="AI-prepared applications ready for your approval"
+            title="Tailored Application Queue"
+            subtitle="Your CV rewritten, your cover letter written — review and approve before Rico sends"
             sidebarProps={{ user: user ?? undefined, onLogout: handleLogout }}
         >
             {loading ? (
@@ -87,9 +87,12 @@ export default function QueuePage() {
                         <MaterialIcon icon="rocket_launch" size={32} className="text-gold" />
                     </div>
                     <div>
-                        <h2 className="text-lg font-semibold text-text-primary">Queue is empty</h2>
-                        <p className="mt-1 max-w-sm text-sm text-text-secondary">
-                            Ask Rico to prepare applications for jobs in your Pipeline. Rico will tailor your CV and write a cover letter — you approve before anything is sent.
+                        <h2 className="text-lg font-semibold text-text-primary">No applications in queue</h2>
+                        <p className="mt-2 max-w-md text-sm leading-relaxed text-text-secondary">
+                            Generic applications get no replies. Tell Rico which job to prepare — Rico reads the job description, rewrites your CV around its keywords, writes a tailored cover letter, and queues the package here for your review.
+                        </p>
+                        <p className="mt-1.5 max-w-md text-sm text-text-tertiary">
+                            You approve. Then Rico sends.
                         </p>
                     </div>
                     <a
@@ -97,17 +100,16 @@ export default function QueuePage() {
                         className="mt-2 flex items-center gap-2 rounded-lg bg-gold px-5 py-2.5 text-sm font-semibold text-[#0a0a1a] transition-opacity hover:opacity-90"
                     >
                         <MaterialIcon icon="auto_awesome" size={16} />
-                        Ask Rico to prepare applications
+                        Ask Rico to prepare an application
                     </a>
                 </div>
             ) : (
                 <div className="space-y-5">
-                    <div className="flex items-center justify-between">
-                        <p className="text-sm text-text-secondary">
-                            <span className="font-semibold text-text-primary">{drafts.length}</span>{" "}
-                            application{drafts.length === 1 ? "" : "s"} ready for review
-                        </p>
-                    </div>
+                    <p className="text-sm text-text-secondary">
+                        <span className="font-semibold text-text-primary">{drafts.length}</span>{" "}
+                        tailored application{drafts.length === 1 ? "" : "s"} ready for your review —{" "}
+                        <span className="text-text-tertiary">approve to send, decline to remove</span>
+                    </p>
                     {drafts.map((draft) => (
                         <ApplicationDraftCard
                             key={draft.id}

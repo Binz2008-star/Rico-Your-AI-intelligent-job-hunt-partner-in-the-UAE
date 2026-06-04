@@ -21,7 +21,7 @@ export const mainNavSections: NavSection[] = [
         items: [
             { label: "Ask Rico",    href: "/command", icon: "auto_awesome"    },
             { label: "Pipeline",    href: "/flow",    icon: "insights"        },
-            { label: "Apply Queue", href: "/queue",   icon: "rocket_launch"   },
+            { label: "Applications", href: "/queue",   icon: "rocket_launch"   },
         ],
     },
     {
