@@ -35,7 +35,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
             >
                 {/* Brand Header */}
                 <div className="flex items-center gap-3 px-5 py-5">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gold text-sm font-black text-[#0a0a1a] shadow-[0_4px_14px_rgba(245,166,35,0.30)]">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gold text-sm font-black text-[#0a0a1a] shadow-[0_2px_10px_rgba(245,166,35,0.18)]">
                         {navMeta.brand.shortName}
                     </div>
                     <div className="flex flex-col">
@@ -53,7 +53,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                 {/* Status Indicator */}
                 <div className="flex items-center gap-2 px-5 py-3">
                     <span
-                        className="h-2 w-2 rounded-full animate-pulse"
+                        className="h-2 w-2 rounded-full animate-pulse motion-reduce:animate-none"
                         style={{ backgroundColor: navMeta.status.color }}
                     />
                     <span
@@ -82,11 +82,12 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                                                 <TooltipTrigger asChild>
                                                     <Link
                                                         href={item.href}
+                                                        aria-current={isActive ? "page" : undefined}
                                                         className={cn(
-                                                            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                                                            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
                                                             isActive
                                                                 ? "bg-gold/10 text-gold ring-1 ring-gold/20 shadow-[0_0_16px_rgba(245,166,35,0.12)]"
-                                                                : "text-text-secondary hover:bg-surface-subtle hover:text-text-primary"
+                                                                : "text-text-secondary hover:bg-surface-subtle hover:text-text-primary hover:ring-1 hover:ring-overlay/10"
                                                         )}
                                                     >
                                                         <MaterialIcon
@@ -124,7 +125,8 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                 <div className="p-4">
                     <button
                         onClick={onLogout}
-                        className="flex w-full items-center gap-3 rounded-lg p-2 transition-colors hover:bg-surface-subtle group"
+                        aria-label={onLogout ? "Log out" : undefined}
+                        className="flex w-full items-center gap-3 rounded-lg p-2 transition-colors hover:bg-surface-subtle group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                     >
                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gold text-xs font-bold text-[#0a0a1a]">
                             {initials}

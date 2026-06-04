@@ -168,8 +168,15 @@ export function MobileCommandHeader({
                 setDrawerOpen(false);
             }
         }
+        function handleKey(e: KeyboardEvent) {
+            if (e.key === "Escape") setDrawerOpen(false);
+        }
         document.addEventListener("mousedown", handle);
-        return () => document.removeEventListener("mousedown", handle);
+        document.addEventListener("keydown", handleKey);
+        return () => {
+            document.removeEventListener("mousedown", handle);
+            document.removeEventListener("keydown", handleKey);
+        };
     }, [drawerOpen]);
 
     const drawerItems =
@@ -177,7 +184,7 @@ export function MobileCommandHeader({
             ? [
                   { label: language === "ar" ? "الملف الشخصي" : "Profile", href: "/profile", icon: <IconPerson /> },
                   { label: language === "ar" ? "رفع السيرة الذاتية" : "Upload CV", href: "/upload", icon: <IconDocument /> },
-                  { label: language === "ar" ? "الطلبات" : "Applications", href: "/flow", icon: <IconClipboard /> },
+                  { label: language === "ar" ? "المسار" : "Pipeline", href: "/flow", icon: <IconClipboard /> },
                   { label: language === "ar" ? "الاشتراك" : "Subscription", href: "/subscription", icon: <IconStar /> },
               ]
             : chatAudience === "public"

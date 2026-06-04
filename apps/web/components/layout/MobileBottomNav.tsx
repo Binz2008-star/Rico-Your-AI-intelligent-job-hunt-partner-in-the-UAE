@@ -14,7 +14,7 @@ interface DockTab {
 const TABS: DockTab[] = [
     {
         href: "/command",
-        label: "Command",
+        label: "Ask Rico",
         icon: (
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M12 2a10 10 0 1 0 10 10" />
@@ -32,7 +32,7 @@ const TABS: DockTab[] = [
     },
     {
         href: "/flow",
-        label: "Flow",
+        label: "Pipeline",
         icon: (
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
