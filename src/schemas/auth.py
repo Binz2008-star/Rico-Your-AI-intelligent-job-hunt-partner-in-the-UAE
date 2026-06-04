@@ -34,6 +34,7 @@ class RegisterRequest(BaseModel):
     email: str = Field(..., min_length=3, max_length=256)
     password: str = Field(..., min_length=8, max_length=128,
                           description="Minimum 8 characters")
+    name: str | None = Field(None, max_length=200, description="Optional display name")
     role: Literal["admin", "user"] = Field("user", description="User role")
     public_user_id_to_merge: str | None = Field(
         None,
