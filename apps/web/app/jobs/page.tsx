@@ -1,6 +1,6 @@
 "use client";
 
-import { DashboardShell } from "@/components/DashboardShell";
+import { AppShell } from "@/components/layout/AppShell";
 import { JobCard } from "@/components/jobs/JobCard";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -8,8 +8,9 @@ import { SkeletonCard } from "@/components/shared/LoadingState";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
-import { ApiError, createApplication, getJobs, saveJob, skipJob, updateApplication } from "@/lib/api";
+import { ApiError, createApplication, getJobs, logout as apiLogout, saveJob, skipJob, updateApplication } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
 import type { Job } from "@/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -38,6 +39,11 @@ function getJobLink(job: Job): string {
 export default function JobsPage() {
     const { user } = useAuth();
     const { toasts, toast } = useToast();
+    const router = useRouter();
+
+    const handleLogout = useCallback(async () => {
+        try { await apiLogout(); } finally { router.push("/login"); }
+    }, [router]);
     const [jobs, setJobs] = useState<Job[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<"auth" | "other" | null>(null);
@@ -196,10 +202,14 @@ export default function JobsPage() {
     );
 
     return (
-        <DashboardShell
+        <AppShell
             title="Job Matches"
             subtitle={loading ? "Loading…" : `${jobs.length} roles matched your profile`}
-            actions={filterBar}
+            sidebarProps={{
+                user: user ? { name: user.name, email: user.email } : undefined,
+                onLogout: handleLogout,
+            }}
+            topbarProps={{ actions: filterBar }}
         >
             {loading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -227,6 +237,6 @@ export default function JobsPage() {
                 />
             )}
             <ToastContainer toasts={toasts} />
-        </DashboardShell>
+        </AppShell>
     );
 }

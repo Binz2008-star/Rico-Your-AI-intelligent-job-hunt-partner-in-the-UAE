@@ -106,7 +106,9 @@ def _cookie_secure() -> bool:
 
 
 def _cookie_samesite() -> str:
-    return "none" if _cookie_secure() else "lax"
+    # All browser requests go through the same-origin /proxy rewrite, so Lax
+    # is sufficient and prevents CSRF without breaking any first-party flow.
+    return "lax"
 
 
 def _cookie_domain() -> Optional[str]:

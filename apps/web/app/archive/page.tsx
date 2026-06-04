@@ -1,12 +1,14 @@
 'use client';
 
-import { DashboardShell } from '@/components/DashboardShell';
+import { AppShell } from '@/components/layout/AppShell';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { LoadingState } from '@/components/shared/LoadingState';
-import { fetchChatHistory, type ChatHistoryMessage } from '@/lib/api';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { useAuth } from '@/hooks/useAuth';
+import { fetchChatHistory, logout as apiLogout, type ChatHistoryMessage } from '@/lib/api';
+import { useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useState } from 'react';
 
 type StructuredArchiveMessage = {
@@ -57,6 +59,12 @@ export default function ArchivePage() {
   const [messages, setMessages] = useState<ChatHistoryMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const { user } = useAuth();
+  const router = useRouter();
+
+  const handleLogout = useCallback(async () => {
+    try { await apiLogout(); } finally { router.push('/login'); }
+  }, [router]);
 
   const loadArchive = useCallback(async () => {
     try {
@@ -78,9 +86,13 @@ export default function ArchivePage() {
   }, [loadArchive]);
 
   return (
-    <DashboardShell
+    <AppShell
       title="Memory Archive"
-      subtitle="Live strategic memory from Rico's recent conversation history, preserved as operational context rather than decorative placeholders."
+      subtitle="Live strategic memory from Rico's recent conversation history."
+      sidebarProps={{
+        user: user ? { name: user.name, email: user.email } : undefined,
+        onLogout: handleLogout,
+      }}
     >
       {loading ? (
         <LoadingState variant="card" message="Loading memory history..." />
@@ -141,6 +153,6 @@ export default function ArchivePage() {
             })}
           </div>
         )}
-    </DashboardShell>
+    </AppShell>
   );
 }
