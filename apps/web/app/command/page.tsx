@@ -94,40 +94,16 @@ const CV_READY_CHIP_DEFS = [
 const COMMAND_LOGIN_HREF = buildAuthHref("/login", "/command");
 const COMMAND_SIGNUP_HREF = buildAuthHref("/signup", "/command");
 
-const WELCOME_BACK_VARIANTS = [
-    {
-        en: "Hi {name}! I'm Rico — your AI job-hunt partner in the UAE. Ready to find your next opportunity?",
-        ar: "مرحبًا {name}! أنا ريكو — جاهز لمساعدتك في إيجاد فرصتك القادمة بالإمارات.",
-        enAnon: "Hi! I'm Rico — your AI job-hunt partner in the UAE. Ready to find your next opportunity?",
-        arAnon: "مرحبًا! أنا ريكو — جاهز لمساعدتك في إيجاد فرصتك القادمة بالإمارات.",
-    },
-    {
-        en: "Welcome back, {name}! What would you like to work on today?",
-        ar: "أهلًا بعودتك {name}! بماذا تريد أن أساعدك اليوم؟",
-        enAnon: "Welcome back! What would you like to work on today?",
-        arAnon: "أهلًا بعودتك! بماذا تريد أن أساعدك اليوم؟",
-    },
-    {
-        en: "Great to see you, {name}! Your next career move in the UAE is just a message away.",
-        ar: "يسعدني لقاؤك مجددًا {name}! خطوتك المهنية القادمة في الإمارات على بُعد رسالة.",
-        enAnon: "Great to see you! Your next career move in the UAE is just a message away.",
-        arAnon: "أهلًا بك! خطوتك المهنية القادمة في الإمارات على بُعد رسالة.",
-    },
-    {
-        en: "Hey {name}! Rico here — let's make progress on your job search today.",
-        ar: "مرحبًا {name}! ريكو هنا — لنحقق تقدمًا في بحثك عن عمل اليوم.",
-        enAnon: "Hey! Rico here — let's make progress on your job search today.",
-        arAnon: "مرحبًا! ريكو هنا — لنحقق تقدمًا في بحثك عن عمل اليوم.",
-    },
-] as const;
-
-function buildWelcomeMessage(lang: "en" | "ar", name: string | null, idx: number): string {
-    const variant = WELCOME_BACK_VARIANTS[idx % WELCOME_BACK_VARIANTS.length];
-    if (name) {
-        const firstName = name.trim().split(/\s+/)[0];
-        return (lang === "ar" ? variant.ar : variant.en).replace("{name}", firstName);
+function buildWelcomeMessage(lang: "en" | "ar", name: string | null): string {
+    const firstName = name ? name.trim().split(/\s+/)[0] : null;
+    if (lang === "ar") {
+        return firstName
+            ? `أهلًا بعودتك ${firstName}. بماذا تريد أن أساعدك اليوم؟`
+            : "أهلًا بعودتك. بماذا تريد أن أساعدك اليوم؟";
     }
-    return lang === "ar" ? variant.arAnon : variant.enAnon;
+    return firstName
+        ? `Welcome back, ${firstName}. What would you like to work on today?`
+        : "Welcome back. What would you like to work on today?";
 }
 
 const QUICK_ACTION_ICONS: Record<string, React.ReactNode> = {
@@ -643,6 +619,8 @@ export default function CommandPage() {
     const [confirmClear, setConfirmClear] = useState(false);
     const [sidebarUser, setSidebarUser] = useState<{ email?: string } | null>(null);
     const [userName, setUserName] = useState<string | null>(null);
+    // "pending" = history not yet checked; "has_history" = history loaded; "empty" = no history
+    const [historyState, setHistoryState] = useState<"pending" | "has_history" | "empty">("pending");
 
     useEffect(() => {
         if (typeof window !== "undefined") {
@@ -656,7 +634,6 @@ export default function CommandPage() {
     const promptSentRef = useRef(false);
     const sessionIdRef = useRef<string | null>(null);
     const welcomeMessageRef = useRef("");
-    const welcomeVariantIdxRef = useRef(-1);
 
     useEffect(() => {
         ensureSessionId(sessionIdRef);
@@ -696,9 +673,10 @@ export default function CommandPage() {
         };
     }, [useMock]);
 
-    // Load chat history for authenticated users
+    // Load chat history for authenticated users; result gates the welcome message
     useEffect(() => {
-        if (chatAudience !== "authenticated" || useMock) return;
+        if (chatAudience !== "authenticated") return;
+        if (useMock) { setHistoryState("empty"); return; }
 
         let cancelled = false;
 
@@ -723,11 +701,14 @@ export default function CommandPage() {
                         }
                     });
                     setMessages(mappedMessages);
-                    promptSentRef.current = true; // Skip welcome message
+                    promptSentRef.current = true;
+                    setHistoryState("has_history");
+                    return;
                 }
             } catch {
-                // If history fetch fails, continue with empty state (show welcome)
+                // If history fetch fails, fall through to show welcome
             }
+            if (!cancelled) setHistoryState("empty");
         })();
 
         return () => {
@@ -943,8 +924,12 @@ export default function CommandPage() {
     }, [chatAudience, language, scrollBottom, thinking, t]);
 
     useEffect(() => {
-        if (chatAudience === "checking" || promptSentRef.current) return;
+        if (chatAudience === "checking") return;
+        // For authenticated users wait until we know whether history exists
+        if (chatAudience === "authenticated" && historyState === "pending") return;
+        if (promptSentRef.current) return;
         promptSentRef.current = true;
+
         const timeoutId = window.setTimeout(() => {
             if (prompt) {
                 void sendMessage(prompt);
@@ -955,9 +940,9 @@ export default function CommandPage() {
                 return;
             }
             if (chatAudience === "authenticated") {
-                const idx = Math.floor(Math.random() * WELCOME_BACK_VARIANTS.length);
-                welcomeVariantIdxRef.current = idx;
-                const msg = buildWelcomeMessage(language, userName, idx);
+                // History exists — messages already set; no welcome needed.
+                if (historyState === "has_history") return;
+                const msg = buildWelcomeMessage(language, userName);
                 welcomeMessageRef.current = msg;
                 setMessages([{ id: 1, role: "rico", text: msg }]);
                 return;
@@ -965,20 +950,16 @@ export default function CommandPage() {
             setMessages([{ id: 1, role: "rico", text: t("cmdWelcomePublic") }]);
         }, 0);
         return () => window.clearTimeout(timeoutId);
-    }, [chatAudience, cvReady, prompt, sendMessage, t, language, userName]);
+    }, [chatAudience, historyState, cvReady, prompt, sendMessage, t, language, userName]);
 
     // Re-translate the welcome message when language changes while chat is still at welcome state
     useEffect(() => {
         setMessages((prev) => {
             if (prev.length !== 1 || prev[0].role !== "rico") return prev;
 
-            // Personalized authenticated welcome — rebuild with new language
-            if (
-                chatAudience === "authenticated" &&
-                welcomeVariantIdxRef.current >= 0 &&
-                prev[0].text === welcomeMessageRef.current
-            ) {
-                const msg = buildWelcomeMessage(language, userName, welcomeVariantIdxRef.current);
+            // Personalized authenticated welcome — rebuild deterministically
+            if (welcomeMessageRef.current && prev[0].text === welcomeMessageRef.current) {
+                const msg = buildWelcomeMessage(language, userName);
                 welcomeMessageRef.current = msg;
                 return [{ ...prev[0], text: msg }];
             }
@@ -992,7 +973,7 @@ export default function CommandPage() {
             const key = cvReady ? "cmdWelcomeCvReady" : "cmdWelcomePublic";
             return [{ ...prev[0], text: translations[language][key] }];
         });
-    }, [language, chatAudience, cvReady, userName]);
+    }, [language, cvReady, userName]);
 
     async function handleCVUpload(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
