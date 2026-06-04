@@ -1439,6 +1439,7 @@ export interface ApplicationDraft {
   tailored_cv: string;
   cover_letter: string;
   status: "pending" | "approved" | "rejected";
+  follow_up_at?: string | null;
   created_at: string;
 }
 
@@ -1516,6 +1517,16 @@ export async function rejectApplication(
     `/api/v1/apply/reject/${draftId}`,
     { method: "DELETE", signal },
   );
+}
+
+export async function getFollowUpReminders(
+  signal?: AbortSignal,
+): Promise<ApplicationDraft[]> {
+  if (USE_MOCK) return [];
+  return requestJson<ApplicationDraft[]>("/api/v1/apply/follow-ups", {
+    method: "GET",
+    signal,
+  });
 }
 
 export async function recordSubscriptionIntent(

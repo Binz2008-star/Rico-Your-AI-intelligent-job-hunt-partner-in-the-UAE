@@ -167,11 +167,13 @@ CREATE TABLE IF NOT EXISTS application_drafts (
     tailored_cv TEXT NOT NULL,
     cover_letter TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
+    follow_up_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_application_drafts_user_status
     ON application_drafts(user_id, status);
+ALTER TABLE application_drafts ADD COLUMN IF NOT EXISTS follow_up_at TIMESTAMPTZ;
 """
 
 
@@ -761,15 +763,27 @@ class RicoDB:
             conn = self.connect()
         try:
             with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    UPDATE application_drafts
-                    SET status = %s, updated_at = now()
-                    WHERE id = %s AND user_id = %s
-                    RETURNING id
-                    """,
-                    (status, draft_id, user_id),
-                )
+                if status == "approved":
+                    cur.execute(
+                        """
+                        UPDATE application_drafts
+                        SET status = %s, updated_at = now(),
+                            follow_up_at = now() + INTERVAL '7 days'
+                        WHERE id = %s AND user_id = %s
+                        RETURNING id
+                        """,
+                        (status, draft_id, user_id),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        UPDATE application_drafts
+                        SET status = %s, updated_at = now()
+                        WHERE id = %s AND user_id = %s
+                        RETURNING id
+                        """,
+                        (status, draft_id, user_id),
+                    )
                 updated = cur.fetchone() is not None
             if should_close:
                 conn.commit()
@@ -781,6 +795,27 @@ class RicoDB:
                 except Exception:
                     pass
             raise
+        finally:
+            if should_close:
+                conn.close()
+
+    def get_follow_up_drafts(self, user_id: str, conn=None) -> List[Dict[str, Any]]:
+        """Return approved drafts where follow-up reminder is due (follow_up_at <= now())."""
+        should_close = conn is None
+        if conn is None:
+            conn = self.connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT * FROM application_drafts
+                    WHERE user_id = %s AND status = 'approved'
+                      AND follow_up_at IS NOT NULL AND follow_up_at <= now()
+                    ORDER BY follow_up_at ASC
+                    """,
+                    (user_id,),
+                )
+                return [dict(r) for r in cur.fetchall()]
         finally:
             if should_close:
                 conn.close()

@@ -1,11 +1,12 @@
 """
 src/api/routers/apply_queue.py
-Apply-queue endpoints: prepare → queue → approve/reject.
+Apply-queue endpoints: prepare → queue → approve/reject → follow-ups.
 
-POST /api/v1/apply/prepare         — AI-tailor CV + cover letter for a job
-GET  /api/v1/apply/queue           — list pending drafts
-POST /api/v1/apply/approve/{id}    — approve draft
-DELETE /api/v1/apply/reject/{id}   — reject draft
+POST /api/v1/apply/prepare          — AI-tailor CV + cover letter for a job
+GET  /api/v1/apply/queue            — list pending drafts
+POST /api/v1/apply/approve/{id}     — approve draft (wires lifecycle tracking)
+DELETE /api/v1/apply/reject/{id}    — reject draft
+GET  /api/v1/apply/follow-ups       — list approved drafts with follow-up due
 """
 from __future__ import annotations
 
@@ -44,6 +45,7 @@ class DraftResponse(BaseModel):
     tailored_cv: str
     cover_letter: str
     status: str
+    follow_up_at: Optional[str] = None
     created_at: str
 
 
@@ -108,6 +110,7 @@ def prepare_application(
         tailored_cv=draft["tailored_cv"],
         cover_letter=draft["cover_letter"],
         status=draft["status"],
+        follow_up_at=str(draft["follow_up_at"]) if draft.get("follow_up_at") else None,
         created_at=str(draft["created_at"]),
     )
 
@@ -130,6 +133,7 @@ def get_queue(
             tailored_cv=d["tailored_cv"],
             cover_letter=d["cover_letter"],
             status=d["status"],
+            follow_up_at=str(d["follow_up_at"]) if d.get("follow_up_at") else None,
             created_at=str(d["created_at"]),
         )
         for d in drafts
@@ -141,12 +145,39 @@ def approve_draft(
     draft_id: str,
     user: dict = Depends(get_current_user),
 ) -> dict:
-    """Approve a prepared application draft."""
+    """Approve a prepared application draft and wire lifecycle tracking."""
     user_id = _user_id(user)
     db = _db()
+
+    # Fetch draft details before status update so we have title/company/apply_url
+    drafts = db.get_application_drafts(user_id, status="pending")
+    draft = next((d for d in drafts if str(d["id"]) == draft_id), None)
+
     updated = db.update_draft_status(draft_id, user_id, "approved")
     if not updated:
         raise HTTPException(status_code=404, detail="Draft not found or already actioned.")
+
+    # Wire into lifecycle pipeline — never raises, best-effort
+    if draft:
+        try:
+            from src.repositories.user_job_context_repo import (
+                record_interaction,
+                set_lifecycle_status,
+            )
+            job_title = draft.get("job_title") or ""
+            company = draft.get("company") or ""
+            apply_url = draft.get("apply_url") or ""
+            record_interaction(user_id=user_id, title=job_title, company=company, action="apply")
+            set_lifecycle_status(
+                user_id=user_id,
+                title=job_title,
+                company=company,
+                status="applied",
+                apply_url=apply_url,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("lifecycle wire failed for draft %s: %s", draft_id, exc)
+
     return {"ok": True, "status": "approved"}
 
 
@@ -162,3 +193,28 @@ def reject_draft(
     if not updated:
         raise HTTPException(status_code=404, detail="Draft not found or already actioned.")
     return {"ok": True, "status": "rejected"}
+
+
+@router.get("/follow-ups", response_model=List[DraftResponse])
+def get_follow_ups(
+    user: dict = Depends(get_current_user),
+) -> List[DraftResponse]:
+    """Return approved drafts where a follow-up reminder is due (7 days after approval)."""
+    user_id = _user_id(user)
+    db = _db()
+    drafts = db.get_follow_up_drafts(user_id)
+    return [
+        DraftResponse(
+            id=str(d["id"]),
+            job_key=d["job_key"],
+            job_title=d["job_title"],
+            company=d["company"],
+            apply_url=d.get("apply_url"),
+            tailored_cv=d["tailored_cv"],
+            cover_letter=d["cover_letter"],
+            status=d["status"],
+            follow_up_at=str(d["follow_up_at"]) if d.get("follow_up_at") else None,
+            created_at=str(d["created_at"]),
+        )
+        for d in drafts
+    ]

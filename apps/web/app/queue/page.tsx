@@ -5,9 +5,9 @@ import { MaterialIcon } from "@/components/ui/MaterialIcon";
 import { ApplicationDraftCard } from "@/components/queue/ApplicationDraftCard";
 import {
     getApplicationQueue,
+    getFollowUpReminders,
     approveApplication,
     rejectApplication,
-    logout,
     type ApplicationDraft,
 } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
@@ -18,6 +18,7 @@ export default function QueuePage() {
     const { user, ready, logout: doLogout } = useAuth();
     const router = useRouter();
     const [drafts, setDrafts] = useState<ApplicationDraft[]>([]);
+    const [followUps, setFollowUps] = useState<ApplicationDraft[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -29,9 +30,13 @@ export default function QueuePage() {
         }
         const ctrl = new AbortController();
         setLoading(true);
-        getApplicationQueue(ctrl.signal)
-            .then((data) => {
-                setDrafts(data);
+        Promise.all([
+            getApplicationQueue(ctrl.signal),
+            getFollowUpReminders(ctrl.signal).catch(() => [] as ApplicationDraft[]),
+        ])
+            .then(([queue, reminders]) => {
+                setDrafts(queue);
+                setFollowUps(reminders);
                 setError(null);
             })
             .catch((err) => {
@@ -104,7 +109,52 @@ export default function QueuePage() {
                     </a>
                 </div>
             ) : (
-                <div className="space-y-5">
+                <div className="space-y-6">
+                    {/* Prominent "You approve. Rico sends." callout */}
+                    <div className="flex items-center gap-3 rounded-xl border border-gold/20 bg-gold/5 px-5 py-4">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gold/15">
+                            <MaterialIcon icon="task_alt" size={18} className="text-gold" />
+                        </div>
+                        <div>
+                            <p className="text-sm font-semibold text-gold">You approve. Rico sends.</p>
+                            <p className="mt-0.5 text-xs leading-relaxed text-text-tertiary">
+                                Every application below has a CV rewritten for this job and a tailored cover letter. Nothing goes out until you tap Approve.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Follow-up reminders */}
+                    {followUps.length > 0 && (
+                        <div className="rounded-xl border border-overlay/10 bg-surface-subtle/40 px-5 py-4">
+                            <div className="mb-3 flex items-center gap-2">
+                                <MaterialIcon icon="history" size={16} className="text-text-tertiary" />
+                                <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                                    Follow-up due
+                                </p>
+                            </div>
+                            <div className="space-y-2">
+                                {followUps.map((fu) => (
+                                    <div key={fu.id} className="flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <span className="truncate text-sm font-medium text-text-primary">{fu.job_title}</span>
+                                            <span className="ml-2 text-xs text-text-tertiary">{fu.company}</span>
+                                        </div>
+                                        {fu.apply_url && (
+                                            <a
+                                                href={fu.apply_url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="shrink-0 text-xs text-gold underline-offset-2 hover:underline"
+                                            >
+                                                Send follow-up ↗
+                                            </a>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     <p className="text-sm text-text-secondary">
                         <span className="font-semibold text-text-primary">{drafts.length}</span>{" "}
                         tailored application{drafts.length === 1 ? "" : "s"} ready for your review —{" "}
