@@ -564,6 +564,51 @@ class TestOrchestratorNoArgTools:
 class TestApplyServiceIndeedMethod:
     """apply_service must call IndeedApplyEngine.apply_one(), not .apply()."""
 
+    def test_apply_to_job_uses_apply_link_when_link_missing(self):
+        from src.services import apply_service
+
+        with patch.object(
+            apply_service,
+            "_apply_indeed",
+            return_value={"status": "success", "message": "ok", "job_id": "jk=abc"},
+        ) as mock_apply:
+            result = apply_service.apply_to_job({
+                "apply_link": "https://indeed.com/viewjob?jk=abc",
+                "title": "HSE Manager",
+                "company": "ACME",
+            }, approved=True)
+
+        assert result["status"] == "success"
+        mock_apply.assert_called_once()
+        assert mock_apply.call_args.args[0]["link"] == "https://indeed.com/viewjob?jk=abc"
+
+    def test_apply_to_job_uses_nested_job_apply_link(self):
+        from src.services import apply_service
+
+        with patch.object(
+            apply_service,
+            "_apply_indeed",
+            return_value={"status": "success", "message": "ok", "job_id": "jk=nested"},
+        ) as mock_apply:
+            result = apply_service.apply_to_job({
+                "title": "HSE Manager",
+                "job_data": {"job_apply_link": "https://indeed.com/viewjob?jk=nested"},
+            }, approved=True)
+
+        assert result["status"] == "success"
+        assert mock_apply.call_args.args[0]["link"] == "https://indeed.com/viewjob?jk=nested"
+
+    def test_apply_to_job_manual_message_uses_alt_link(self):
+        from src.services import apply_service
+
+        result = apply_service.apply_to_job({
+            "title": "HSE Manager",
+            "alt_link": "https://jobs.example.com/posting/123",
+        }, approved=True)
+
+        assert result["status"] == "unsupported"
+        assert "https://jobs.example.com/posting/123" in result["message"]
+
     def test_indeed_apply_calls_apply_one(self):
         from src.services import apply_service
 
