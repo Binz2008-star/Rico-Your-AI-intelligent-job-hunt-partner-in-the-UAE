@@ -1,6 +1,6 @@
 "use client";
 
-import { fetchProfile, getApplicationStats, getMySubscription } from "@/lib/api";
+import { fetchProfile, getApplicationStats, getMySubscription, getApplicationQueue } from "@/lib/api";
 import { useEffect, useState } from "react";
 
 // Read-only career-status feed for the desktop sidebar workspace.
@@ -30,6 +30,7 @@ export interface SidebarStatus {
     readiness: SidebarReadiness | null;
     pipeline: SidebarPipeline | null;
     plan: SidebarPlan | null;
+    queueCount: number;
     loading: boolean;
 }
 
@@ -55,14 +56,16 @@ async function loadStatus(): Promise<StatusData> {
             readiness: { completeness: 72, targetRoles: 3 },
             pipeline: { applied: 5, interview: 2, offer: 1, saved: 3, total: 11 },
             plan: { plan: "free", active: false },
+            queueCount: 2,
         };
     }
 
     // Isolated so one rejection only hides its own module.
-    const [profile, stats, sub] = await Promise.all([
+    const [profile, stats, sub, queue] = await Promise.all([
         fetchProfile().catch(() => null),
         getApplicationStats().catch(() => null),
         getMySubscription().catch(() => null),
+        getApplicationQueue().catch(() => null),
     ]);
 
     const readiness: SidebarReadiness | null =
@@ -89,7 +92,9 @@ async function loadStatus(): Promise<StatusData> {
         ? { plan: sub.subscription.plan, active: sub.is_active }
         : null;
 
-    return { readiness, pipeline, plan };
+    const queueCount = Array.isArray(queue) ? queue.length : 0;
+
+    return { readiness, pipeline, plan, queueCount };
 }
 
 function getStatus(): Promise<StatusData> {
@@ -116,6 +121,7 @@ export function useSidebarStatus(enabled: boolean): SidebarStatus {
         readiness: cache?.data.readiness ?? null,
         pipeline: cache?.data.pipeline ?? null,
         plan: cache?.data.plan ?? null,
+        queueCount: cache?.data.queueCount ?? 0,
         loading: enabled && !cache,
     }));
 

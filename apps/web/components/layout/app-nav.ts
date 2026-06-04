@@ -19,8 +19,9 @@ export const mainNavSections: NavSection[] = [
     {
         title: "Search",
         items: [
-            { label: "Ask Rico", href: "/command", icon: "auto_awesome" },
-            { label: "Pipeline",  href: "/flow",    icon: "insights"      },
+            { label: "Ask Rico",    href: "/command", icon: "auto_awesome"    },
+            { label: "Pipeline",    href: "/flow",    icon: "insights"        },
+            { label: "Apply Queue", href: "/queue",   icon: "rocket_launch"   },
         ],
     },
     {

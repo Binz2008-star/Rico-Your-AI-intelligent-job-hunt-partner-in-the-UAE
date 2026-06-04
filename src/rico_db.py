@@ -155,6 +155,25 @@ CREATE INDEX IF NOT EXISTS idx_rico_webhook_events_submission ON rico_webhook_ev
 CREATE INDEX IF NOT EXISTS idx_rico_webhook_events_user ON rico_webhook_events(user_id);
 """
 
+_APPLY_DRAFTS_DDL = """
+CREATE TABLE IF NOT EXISTS application_drafts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL,
+    job_key TEXT NOT NULL,
+    job_title TEXT,
+    company TEXT,
+    job_description TEXT,
+    apply_url TEXT,
+    tailored_cv TEXT NOT NULL,
+    cover_letter TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_application_drafts_user_status
+    ON application_drafts(user_id, status);
+"""
+
 
 class RicoDB:
     """Thin PostgreSQL wrapper for Rico AI multi-user memory."""
@@ -180,6 +199,7 @@ class RicoDB:
                 return
             with conn.cursor() as cur:
                 cur.execute(_RICO_SCHEMA_DDL)
+                cur.execute(_APPLY_DRAFTS_DDL)
             conn.commit()
             self._schema_ready_urls.add(self.database_url)
 
@@ -217,6 +237,7 @@ class RicoDB:
         with self._transaction(ensure_schema=False) as conn:
             with conn.cursor() as cur:
                 cur.execute(_RICO_SCHEMA_DDL)
+                cur.execute(_APPLY_DRAFTS_DDL)
         if self.database_url:
             self._schema_ready_urls.add(self.database_url)
 
@@ -668,6 +689,101 @@ class RicoDB:
             return 0
         finally:
             conn.close()
+
+
+    def create_application_draft(
+        self,
+        user_id: str,
+        job_key: str,
+        job_title: str,
+        company: str,
+        job_description: str,
+        apply_url: str,
+        tailored_cv: str,
+        cover_letter: str,
+        conn=None,
+    ) -> Dict[str, Any]:
+        should_close = conn is None
+        if conn is None:
+            conn = self.connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO application_drafts
+                        (user_id, job_key, job_title, company, job_description, apply_url, tailored_cv, cover_letter)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING *
+                    """,
+                    (user_id, job_key, job_title, company, job_description, apply_url, tailored_cv, cover_letter),
+                )
+                row = dict(cur.fetchone())
+            if should_close:
+                conn.commit()
+            return row
+        except Exception:
+            if should_close:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            raise
+        finally:
+            if should_close:
+                conn.close()
+
+    def get_application_drafts(
+        self, user_id: str, status: str = "pending", conn=None
+    ) -> List[Dict[str, Any]]:
+        should_close = conn is None
+        if conn is None:
+            conn = self.connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT * FROM application_drafts
+                    WHERE user_id = %s AND status = %s
+                    ORDER BY created_at DESC
+                    """,
+                    (user_id, status),
+                )
+                return [dict(r) for r in cur.fetchall()]
+        finally:
+            if should_close:
+                conn.close()
+
+    def update_draft_status(
+        self, draft_id: str, user_id: str, status: str, conn=None
+    ) -> bool:
+        should_close = conn is None
+        if conn is None:
+            conn = self.connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE application_drafts
+                    SET status = %s, updated_at = now()
+                    WHERE id = %s AND user_id = %s
+                    RETURNING id
+                    """,
+                    (status, draft_id, user_id),
+                )
+                updated = cur.fetchone() is not None
+            if should_close:
+                conn.commit()
+            return updated
+        except Exception:
+            if should_close:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            raise
+        finally:
+            if should_close:
+                conn.close()
 
 
 def init_rico_db() -> bool:

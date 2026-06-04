@@ -195,6 +195,10 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                                                             >
                                                                 {status.plan.plan}
                                                             </span>
+                                                        ) : item.href === "/queue" && status.queueCount > 0 ? (
+                                                            <span className="rounded-full bg-gold px-1.5 py-0.5 text-[9px] font-bold text-[#0a0a1a]">
+                                                                {status.queueCount}
+                                                            </span>
                                                         ) : item.badge ? (
                                                             <Badge variant={isActive ? "default" : "secondary"}>
                                                                 {item.badge}
