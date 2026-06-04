@@ -1304,10 +1304,13 @@ export default function CommandPage() {
                                         </div>
                                     )}
 
-                                    {/* Message text */}
+                                    {/* Message text — plain during stream to prevent markdown flicker,
+                                        fully rendered once the response is complete */}
                                     {m.text && (
                                         m.role === "rico"
-                                            ? <div className="space-y-0.5 text-[13px]">{renderMarkdown(m.text)}</div>
+                                            ? m.streaming
+                                                ? <p className="text-[13px] leading-relaxed whitespace-pre-wrap">{m.text}</p>
+                                                : <div className="space-y-0.5 text-[13px]">{renderMarkdown(m.text)}</div>
                                             : <div className="whitespace-pre-wrap">{m.text}</div>
                                     )}
 
