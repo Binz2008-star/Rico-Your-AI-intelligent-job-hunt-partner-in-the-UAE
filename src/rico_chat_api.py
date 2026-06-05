@@ -427,6 +427,23 @@ class RicoChatAPI:
             if summary:
                 ctx["recently_discussed_jobs"] = summary
 
+            # Inject verification status for recent search matches to prevent hallucination
+            try:
+                recent_ctx = self._get_recent_context(user_id)
+                recent_matches = recent_ctx.get("recent_search_matches", [])
+                if recent_matches:
+                    ctx["recent_job_verification_status"] = [
+                        {
+                            "title": m.get("title", ""),
+                            "company": m.get("company", ""),
+                            "verification_status": m.get("verification_status", "unknown"),
+                        }
+                        for m in recent_matches
+                        if m.get("title")
+                    ]
+            except Exception:
+                pass
+
         return ctx
 
     def _recent_jobs_summary(self, user_id: str, limit: int = 3) -> str:
