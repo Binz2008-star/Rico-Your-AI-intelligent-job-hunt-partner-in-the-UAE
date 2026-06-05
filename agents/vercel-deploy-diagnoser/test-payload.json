@@ -1,0 +1,90 @@
+{
+  "deployment": {
+    "id": "dpl_abc123xyz456",
+    "url": "https://example.vercel.app",
+    "name": "rico-hunt-frontend",
+    "project": {
+      "id": "prj_xyz789",
+      "name": "rico-hunt-frontend"
+    },
+    "team": {
+      "id": "team_def456",
+      "name": "Rico Team"
+    },
+    "user": {
+      "id": "user_ghi789",
+      "username": "loyal",
+      "email": "loyal@example.com"
+    },
+    "creator": {
+      "id": "user_ghi789",
+      "username": "loyal",
+      "email": "loyal@example.com"
+    },
+    "regions": ["iad1"],
+    "state": "ERROR",
+    "error": {
+      "code": "BUILD_FAILED",
+      "message": "Build failed with exit code 1",
+      "stack": "Error: Build failed with exit code 1\n    at /vercel/build/build.js:123:45"
+    },
+    "createdAt": 1717483200000,
+    "updatedAt": 1717483260000,
+    "readyState": "ERROR",
+    "build": {
+      "id": "bld_jkl012",
+      "state": "ERROR",
+      "error": "Error: Type 'undefined' is not assignable to type 'string'.\n  at apps/web/components/Dashboard.tsx:45:23",
+      "logs": [
+        {
+          "level": "error",
+          "message": "Error: Type 'undefined' is not assignable to type 'string'.",
+          "timestamp": 1717483250000
+        },
+        {
+          "level": "error",
+          "message": "Build failed with exit code 1",
+          "timestamp": 1717483260000
+        }
+      ]
+    },
+    "deploymentType": "git",
+    "meta": {
+      "githubCommitAuthorLogin": "loyal",
+      "githubCommitMessage": "fix: update dashboard component types",
+      "githubCommitOrg": "Binz2008-star",
+      "githubCommitRef": "codex/job-quality-core-profile-jsearch",
+      "githubCommitRepoName": "Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE",
+      "githubCommitSha": "abc123def456789",
+      "githubDeployment": "1",
+      "githubOrg": "Binz2008-star",
+      "githubPrId": "123",
+      "githubPullRequestRequest": {
+        "id": 123,
+        "number": 123,
+        "title": "Update dashboard types",
+        "state": "open",
+        "url": "https://github.com/Binz2008-star/Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE/pull/123"
+      }
+    },
+    "target": "production",
+    "alias": ["ricohunt.com"],
+    "public": true,
+    "gitSource": {
+      "type": "github",
+      "org": "Binz2008-star",
+      "repo": "Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE",
+      "ref": "codex/job-quality-core-profile-jsearch",
+      "sha": "abc123def456789",
+      "prId": 123,
+      "isDirty": false
+    }
+  },
+  "projectSettings": {
+    "framework": "nextjs",
+    "buildCommand": "npm run build",
+    "outputDirectory": ".next",
+    "installCommand": "npm install",
+    "devCommand": "npm run dev"
+  }
+}
