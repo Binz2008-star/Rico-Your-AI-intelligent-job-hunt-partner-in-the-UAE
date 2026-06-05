@@ -83,6 +83,7 @@ _LEGACY_INTENT_MAP = {
     "profile.update": "profile_update",
     "profile.update_target_roles": "save_target_role",
     "cv.create": "cv_create",
+    "cv.generate": "cv_generate",
     # Career prep
     "career_prep.interview": "interview_prep",
     "career_prep.application_angle": "draft_message",
@@ -2899,8 +2900,24 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        # CV generation — user wants a new CV draft from their existing parsed profile
+        if legacy_intent == "cv_generate":
+            return self._finalize(
+                self._handle_cv_generate_from_profile(user_id, profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
         # CV creation — user asks to create a CV (no existing CV)
         if legacy_intent == "cv_create":
+            # If CV is already parsed, treat this as a generate request instead
+            # of asking the user to start from scratch.
+            if self._has_cv_profile(profile):
+                return self._finalize(
+                    self._handle_cv_generate_from_profile(user_id, profile),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
             return self._finalize(
                 self._handle_cv_creation(user_id, profile),
                 self.SOURCE_KEYWORD,
@@ -4469,6 +4486,104 @@ class RicoChatAPI:
             ),
             "next_action": "collect_cv_fields",
             "fields_needed": ["current_role", "years_experience", "skills", "industries", "preferred_cities"],
+        }
+
+    def _handle_cv_generate_from_profile(self, user_id: str, profile: Any) -> dict[str, Any]:
+        """Generate a professional CV draft from the user's already-parsed profile.
+
+        Uses extracted fields: name, email, phone, skills, experience, target roles,
+        certifications, preferred cities. Asks only for genuinely missing fields.
+        """
+        if not self._has_cv_profile(profile):
+            # No parsed profile — redirect to upload or manual creation
+            return {
+                "type": "cv_creation",
+                "message": (
+                    "I don't have your CV data yet. "
+                    "Please upload your CV (PDF or Word) and I'll use it to build a new one, "
+                    "or tell me your work history and I'll format it for you."
+                ),
+                "next_action": "upload_cv",
+            }
+
+        name = self._profile_value(profile, "name") or ""
+        email = self._profile_value(profile, "email") or ""
+        phone = self._profile_value(profile, "phone") or ""
+        skills = self._as_list(self._profile_value(profile, "skills"))
+        years_exp = self._profile_value(profile, "years_experience")
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        certifications = self._as_list(self._profile_value(profile, "certifications"))
+        preferred_cities = self._as_list(self._profile_value(profile, "preferred_cities"))
+        industries = self._as_list(self._profile_value(profile, "preferred_industries"))
+        current_role = self._profile_value(profile, "current_role") or (target_roles[0] if target_roles else "")
+
+        # Identify genuinely missing fields that would improve the CV
+        missing: list[str] = []
+        if not current_role:
+            missing.append("current or most recent job title")
+        if years_exp is None:
+            missing.append("years of experience")
+        if not skills:
+            missing.append("key skills and certifications")
+        if not preferred_cities:
+            missing.append("preferred cities (e.g. Dubai, Abu Dhabi)")
+
+        # Build the CV draft from extracted data
+        sections: list[str] = []
+
+        header_parts = [name] if name else []
+        contact_parts = [p for p in [email, phone] if p]
+        if contact_parts:
+            header_parts.append(" | ".join(contact_parts))
+        if preferred_cities:
+            header_parts.append(", ".join(preferred_cities[:2]))
+        if header_parts:
+            sections.append("\n".join(header_parts))
+
+        if current_role or years_exp is not None:
+            summary_parts: list[str] = []
+            if current_role:
+                summary_parts.append(current_role)
+            if years_exp is not None:
+                summary_parts.append(f"{years_exp} years of experience")
+            if industries:
+                summary_parts.append(f"in {', '.join(industries[:2])}")
+            sections.append("**Professional Summary**\n" + " · ".join(summary_parts))
+
+        if skills:
+            sections.append("**Key Skills**\n" + " · ".join(skills[:12]))
+
+        if certifications:
+            sections.append("**Certifications**\n" + "\n".join(f"• {c}" for c in certifications[:6]))
+
+        if target_roles:
+            sections.append("**Target Roles**\n" + " · ".join(target_roles[:4]))
+
+        cv_draft = "\n\n".join(sections)
+
+        greeting = f"Here is your CV draft, {name}:" if name else "Here is your CV draft:"
+
+        if missing:
+            missing_note = (
+                "\n\n**To complete the CV I still need:**\n"
+                + "\n".join(f"• {f}" for f in missing)
+                + "\n\nReply with these details and I'll add them."
+            )
+        else:
+            missing_note = (
+                "\n\nAll key fields are filled. "
+                "Tell me if you'd like to add a specific section (e.g. Education, Projects) "
+                "or tailor this CV for a particular role."
+            )
+
+        message = f"{greeting}\n\n---\n\n{cv_draft}\n\n---{missing_note}"
+        self._append_chat(user_id, "assistant", message)
+        return {
+            "type": "cv_draft",
+            "message": message,
+            "cv_draft": cv_draft,
+            "missing_fields": missing,
+            "next_action": "collect_missing_cv_fields" if missing else "cv_ready",
         }
 
     def _handle_application_tracking(self, user_id: str, intent: str = "application_tracking") -> dict[str, Any]:
