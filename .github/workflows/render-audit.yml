@@ -1,0 +1,254 @@
+name: Render Optimization Audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      render_api_key:
+        description: 'Render API Key (rnd_...)'
+        required: true
+
+jobs:
+  audit:
+    name: Render Optimization Audit
+    runs-on: ubuntu-latest
+    env:
+      RENDER_KEY: ${{ github.event.inputs.render_api_key }}
+      BACKEND_URL: https://rico-job-automation-api.onrender.com
+
+    steps:
+      - name: 1. List all services
+        run: |
+          echo "=== ALL RENDER SERVICES ==="
+          curl -sf -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services?limit=50" \
+            > /tmp/services.json
+          python3 - /tmp/services.json << 'PYEOF'
+          import sys, json
+          with open(sys.argv[1]) as f:
+              data = json.load(f)
+          print("Total services:", len(data))
+          for item in data:
+              s = item.get("service", item)
+              print(" ", s.get("id"), "|", s.get("name"), "| type=" + str(s.get("type")), "| plan=" + str(s.get("plan")), "| suspended=" + str(s.get("suspended")))
+          PYEOF
+
+      - name: 2. Service details -- rico-job-automation-api
+        id: svc_details
+        run: |
+          echo "=== SERVICE DETAILS ==="
+          curl -sf -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services?limit=50" \
+            > /tmp/services.json
+
+          SVC_ID=$(python3 - /tmp/services.json << 'PYEOF'
+          import sys, json
+          with open(sys.argv[1]) as f:
+              data = json.load(f)
+          for item in data:
+              s = item.get("service", item)
+              if s.get("name") == "rico-job-automation-api":
+                  print(s.get("id"))
+          PYEOF
+          )
+          echo "Service ID: $SVC_ID"
+          echo "svc_id=$SVC_ID" >> "$GITHUB_OUTPUT"
+
+          curl -sf -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services/$SVC_ID" \
+            > /tmp/svc_detail.json
+
+          python3 - /tmp/svc_detail.json << 'PYEOF'
+          import sys, json
+          with open(sys.argv[1]) as f:
+              data = json.load(f)
+          s = data.get("service", data)
+          sd = s.get("serviceDetails", {})
+          print("Name:        ", s.get("name"))
+          print("Type:        ", s.get("type"))
+          print("Plan:        ", s.get("plan"))
+          print("Status:      ", "suspended" if s.get("suspended") else "active")
+          print("Service URL: ", sd.get("url", "N/A"))
+          print("PR previews: ", sd.get("pullRequestPreviewsEnabled", "N/A"))
+          print("Branch:      ", sd.get("branch", "N/A"))
+          repo = s.get("repo", {})
+          print("Repo:        ", repo.get("name", "N/A") if isinstance(repo, dict) else str(repo))
+          print("Region:      ", s.get("region", "N/A"))
+          print("Created:     ", s.get("createdAt", "N/A"))
+          print("Updated:     ", s.get("updatedAt", "N/A"))
+          PYEOF
+
+      - name: 3. Env var keys -- presence check (no values logged)
+        env:
+          SVC_ID: ${{ steps.svc_details.outputs.svc_id }}
+        run: |
+          echo "=== ENV VAR KEYS PRESENT ==="
+          curl -sf -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services/$SVC_ID/env-vars?limit=200" \
+            > /tmp/envvars.json
+
+          python3 - /tmp/envvars.json << 'PYEOF'
+          import sys, json
+          with open(sys.argv[1]) as f:
+              data = json.load(f)
+          keys = sorted(e.get("envVar", e).get("key", "") for e in data)
+          print("Total env vars:", len(keys))
+          critical = [
+              "DATABASE_URL", "JWT_SECRET",
+              "JOTFORM_WEBHOOK_SECRET", "JOTFORM_FORM_ID",
+              "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "TELEGRAM_WEBHOOK_SECRET",
+              "OPENAI_API_KEY", "DEEPSEEK_API_KEY", "HF_TOKEN",
+              "RAPIDAPI_KEY", "GITHUB_WEBHOOK_SECRET",
+              "COOKIE_SECURE", "CORS_ORIGINS", "RESET_BASE_URL",
+              "RICO_AI_PROVIDER", "RICO_ENV",
+          ]
+          print("")
+          print("Critical key presence:")
+          for k in critical:
+              status = "PRESENT" if k in keys else "MISSING"
+              print(" ", k + ":", status)
+          print("")
+          print("All keys:", keys)
+          PYEOF
+
+      - name: 4. Recent deploys (last 5)
+        env:
+          SVC_ID: ${{ steps.svc_details.outputs.svc_id }}
+        run: |
+          echo "=== RECENT DEPLOYS ==="
+          curl -sf -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services/$SVC_ID/deploys?limit=5" \
+            > /tmp/deploys.json
+
+          python3 - /tmp/deploys.json << 'PYEOF'
+          import sys, json
+          with open(sys.argv[1]) as f:
+              data = json.load(f)
+          print("Last", len(data), "deploys:")
+          for d in data:
+              dep = d.get("deploy", d)
+              trigger = dep.get("trigger", {})
+              ttype = trigger.get("type", "?") if isinstance(trigger, dict) else str(trigger)
+              print(" ", dep.get("id", "?"), "| status=" + str(dep.get("status", "?")),
+                    "| trigger=" + ttype, "|", str(dep.get("createdAt", "?"))[:19])
+          PYEOF
+
+      - name: 5. Health check -- /health
+        run: |
+          echo "=== HEALTH CHECK ==="
+          HTTP=$(curl -s -o /tmp/health.json -w "%{http_code}" \
+            --max-time 30 "$BACKEND_URL/health")
+          echo "HTTP status: $HTTP"
+          echo "Response:"
+          cat /tmp/health.json
+          if [ "$HTTP" = "200" ]; then
+            echo "OK: health endpoint responding"
+          else
+            echo "WARNING: health check returned $HTTP"
+          fi
+
+      - name: 6. Version check -- /version
+        run: |
+          echo "=== VERSION ==="
+          HTTP=$(curl -s -o /tmp/version.json -w "%{http_code}" \
+            --max-time 30 "$BACKEND_URL/version")
+          echo "HTTP $HTTP"
+          cat /tmp/version.json
+
+      - name: 7. JotForm webhook route probe (OPTIONS -- no payload)
+        run: |
+          echo "=== JOTFORM WEBHOOK ROUTE ==="
+          HTTP=$(curl -s -o /tmp/jf.json -w "%{http_code}" \
+            --max-time 10 \
+            -X OPTIONS "$BACKEND_URL/api/v1/rico/webhooks/jotform")
+          echo "OPTIONS /api/v1/rico/webhooks/jotform -> HTTP $HTTP"
+          if [ "$HTTP" = "404" ]; then
+            echo "ERROR: JotForm webhook route not found"
+          else
+            echo "OK: route registered (HTTP $HTTP)"
+          fi
+
+      - name: 8. Telegram webhook route probe (OPTIONS -- no payload)
+        run: |
+          echo "=== TELEGRAM WEBHOOK ROUTE ==="
+          HTTP=$(curl -s -o /tmp/tg.json -w "%{http_code}" \
+            --max-time 10 \
+            -X OPTIONS "$BACKEND_URL/api/v1/rico/webhooks/telegram")
+          echo "OPTIONS /api/v1/rico/webhooks/telegram -> HTTP $HTTP"
+          if [ "$HTTP" = "404" ]; then
+            echo "ERROR: Telegram webhook route not found"
+          else
+            echo "OK: route registered (HTTP $HTTP)"
+          fi
+
+      - name: 9. Cron and worker check
+        run: |
+          echo "=== SERVICE TYPES IN ACCOUNT ==="
+          curl -sf -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services?limit=50" \
+            > /tmp/services.json
+
+          python3 - /tmp/services.json << 'PYEOF'
+          import sys, json
+          with open(sys.argv[1]) as f:
+              data = json.load(f)
+          types = sorted(set(item.get("service", item).get("type", "unknown") for item in data))
+          print("Service types in use:", types)
+          print("Note: cron_job = Render Cron, worker = Background Worker")
+          cron_svcs = [item.get("service", item) for item in data if item.get("service", item).get("type") == "cron_job"]
+          worker_svcs = [item.get("service", item) for item in data if item.get("service", item).get("type") == "worker"]
+          print("Cron jobs found:", len(cron_svcs))
+          print("Workers found:", len(worker_svcs))
+          PYEOF
+
+      - name: 10. Workspace / owner info
+        run: |
+          echo "=== WORKSPACE INFO ==="
+          HTTP=$(curl -s -o /tmp/owners.json -w "%{http_code}" \
+            -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/owners?limit=10")
+          echo "HTTP $HTTP"
+
+          python3 - /tmp/owners.json << 'PYEOF'
+          import sys, json
+          try:
+              with open(sys.argv[1]) as f:
+                  data = json.load(f)
+              for item in data:
+                  o = item.get("owner", item)
+                  print("Owner:", o.get("name"), "| type=" + str(o.get("type")), "| email=" + str(o.get("email", "N/A")), "| id=" + str(o.get("id")))
+          except Exception as e:
+              print("Could not parse owners response:", e)
+          PYEOF
+
+      - name: 11. Summary
+        env:
+          SVC_ID: ${{ steps.svc_details.outputs.svc_id }}
+        run: |
+          echo ""
+          echo "========================================="
+          echo "   RENDER OPTIMIZATION AUDIT SUMMARY"
+          echo "========================================="
+          echo ""
+          echo "Production backend : rico-job-automation-api"
+          echo "Backend URL        : $BACKEND_URL"
+          echo "Service ID         : $SVC_ID"
+          echo ""
+          echo "Cleanup completed:"
+          echo "  - 7 PR preview services : DELETED"
+          echo "  - eco-pipeline-webhook  : DELETED"
+          echo "  - PR auto-previews      : DISABLED"
+          echo ""
+          echo "Webhook URLs:"
+          echo "  JotForm  : $BACKEND_URL/api/v1/rico/webhooks/jotform"
+          echo "  Telegram : $BACKEND_URL/api/v1/rico/webhooks/telegram"
+          echo "  GitHub   : $BACKEND_URL/api/v1/rico/webhooks/github"
+          echo ""
+          echo "Vercel proxy: https://ricohunt.com/proxy/* -> $BACKEND_URL/*"
+          echo "/command    : uses proxy for all API calls"
+          echo ""
+          echo "Expected monthly cost: ~7 USD (Starter web service only)"
+          echo ""
+          echo "Cron: No cron jobs exist. Starter plan supports cron_job services."
+          echo "Future cron plan: follow-up reminders at 7-day intervals is feasible."
+          echo ""
+          echo "render.yaml: plan free -> should be updated to starter (see PR 462)"
