@@ -1,0 +1,238 @@
+name: Render Cleanup — One-Time
+
+on:
+  workflow_dispatch:
+    inputs:
+      render_api_key:
+        description: 'Render API Key (rnd_...)'
+        required: true
+      dry_run:
+        description: 'dry_run=true lists targets only, no deletions'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+jobs:
+  cleanup:
+    name: Render Cleanup
+    runs-on: ubuntu-latest
+    env:
+      RENDER_KEY: ${{ github.event.inputs.render_api_key }}
+      DRY_RUN: ${{ github.event.inputs.dry_run }}
+
+    steps:
+      - name: List all current services
+        id: list
+        run: |
+          echo "=== ALL RENDER SERVICES ==="
+          curl -sf -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services?limit=50" \
+            | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          for item in data:
+              s = item.get('service', item)
+              print(f\"{s.get('id')} | {s.get('name')} | {s.get('type')} | plan={s.get('plan')} | suspended={s.get('suspended')}\")
+          "
+
+      - name: Inspect eco-pipeline-webhook
+        run: |
+          echo "=== ECO-PIPELINE-WEBHOOK SAFETY CHECK ==="
+          SVC_ID=$(curl -sf -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services?limit=50" \
+            | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          for item in data:
+              s = item.get('service', item)
+              if 'eco-pipeline-webhook' in (s.get('name') or ''):
+                  print(s.get('id'))
+          " 2>/dev/null)
+
+          if [ -z "$SVC_ID" ]; then
+            echo "eco-pipeline-webhook: NOT FOUND — already gone or name differs"
+            exit 0
+          fi
+
+          echo "Service ID: $SVC_ID"
+
+          echo "--- Full service detail ---"
+          curl -sf -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services/$SVC_ID" | python3 -m json.tool
+
+          echo "--- Custom domains ---"
+          curl -sf -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services/$SVC_ID/custom-domains" \
+            | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          domains = [d.get('customDomain', {}).get('name') for d in data if d.get('customDomain')]
+          print('Custom domains:', domains if domains else 'NONE')
+          " 2>/dev/null || echo "Custom domains: NONE or endpoint unavailable"
+
+          echo "--- Recent deploys (last 3) ---"
+          curl -sf -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services/$SVC_ID/deploys?limit=3" \
+            | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          for d in data:
+            dep = d.get('deploy', d)
+            print(dep.get('id'), dep.get('status'), dep.get('createdAt','')[:16])
+          " 2>/dev/null || echo "No deploys found"
+
+      - name: Identify PR preview services
+        id: previews
+        run: |
+          echo "=== PR PREVIEW SERVICES TO DELETE ==="
+          PR_IDS=$(curl -sf -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services?limit=50" \
+            | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          ids = []
+          for item in data:
+              s = item.get('service', item)
+              name = s.get('name') or ''
+              stype = s.get('type') or ''
+              # PR previews: match known PR numbers, never match main production service
+              if name == 'rico-job-automation-api':
+                  continue
+              pr_nums = ['pr-443','pr-444','pr-448','pr-449','pr-450','pr-451','pr-452']
+              if any(p in name.lower() for p in pr_nums):
+                  ids.append(s.get('id'))
+                  print(f\"  WILL DELETE: {s.get('id')} | {name} | {stype}\", file=sys.stderr)
+          print(' '.join(ids))
+          " 2>&1 >/tmp/pr_ids.txt; cat /tmp/pr_ids.txt)
+          echo "PR preview IDs: $PR_IDS"
+          echo "pr_ids=$PR_IDS" >> $GITHUB_OUTPUT
+
+      - name: DRY RUN — show what would be deleted
+        if: env.DRY_RUN == 'true'
+        run: |
+          echo "=== DRY RUN — no deletions performed ==="
+          echo "Set dry_run=false to execute."
+          echo ""
+          echo "Targets:"
+          curl -sf -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services?limit=50" \
+            | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          keep = []
+          delete = []
+          pr_nums = ['pr-443','pr-444','pr-448','pr-449','pr-450','pr-451','pr-452']
+          for item in data:
+              s = item.get('service', item)
+              name = s.get('name') or ''
+              if name == 'rico-job-automation-api':
+                  keep.append(name)
+              elif any(p in name.lower() for p in pr_nums) or 'eco-pipeline-webhook' in name:
+                  delete.append(f\"{s.get('id')} | {name}\")
+              else:
+                  keep.append(f\"{s.get('id')} | {name} (UNEXPECTED — not in delete list)\")
+          print('KEEP:')
+          for x in keep: print(' ', x)
+          print('DELETE:')
+          for x in delete: print(' ', x)
+          "
+
+      - name: Delete PR preview services
+        if: env.DRY_RUN == 'false'
+        run: |
+          echo "=== DELETING PR PREVIEW SERVICES ==="
+          PR_TARGETS=$(curl -sf -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services?limit=50" \
+            | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          pr_nums = ['pr-443','pr-444','pr-448','pr-449','pr-450','pr-451','pr-452']
+          for item in data:
+              s = item.get('service', item)
+              name = s.get('name') or ''
+              if name == 'rico-job-automation-api':
+                  continue
+              if any(p in name.lower() for p in pr_nums):
+                  print(s.get('id') + '|' + name)
+          ")
+
+          echo "$PR_TARGETS" | while IFS='|' read -r svc_id svc_name; do
+            [ -z "$svc_id" ] && continue
+            echo "Deleting: $svc_id ($svc_name)"
+            HTTP=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
+              -H "Authorization: Bearer $RENDER_KEY" \
+              "https://api.render.com/v1/services/$svc_id")
+            echo "  Result: HTTP $HTTP"
+          done
+
+      - name: Delete eco-pipeline-webhook
+        if: env.DRY_RUN == 'false'
+        run: |
+          echo "=== DELETING eco-pipeline-webhook ==="
+          SVC_ID=$(curl -sf -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services?limit=50" \
+            | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          for item in data:
+              s = item.get('service', item)
+              if 'eco-pipeline-webhook' in (s.get('name') or ''):
+                  print(s.get('id'))
+          " 2>/dev/null)
+
+          if [ -z "$SVC_ID" ]; then
+            echo "eco-pipeline-webhook not found — skipping"
+          else
+            echo "Deleting eco-pipeline-webhook: $SVC_ID"
+            HTTP=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
+              -H "Authorization: Bearer $RENDER_KEY" \
+              "https://api.render.com/v1/services/$SVC_ID")
+            echo "Result: HTTP $HTTP"
+          fi
+
+      - name: Disable PR preview creation on rico-job-automation-api
+        if: env.DRY_RUN == 'false'
+        run: |
+          echo "=== DISABLING PR PREVIEWS ON rico-job-automation-api ==="
+          SVC_ID=$(curl -sf -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services?limit=50" \
+            | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          for item in data:
+              s = item.get('service', item)
+              if s.get('name') == 'rico-job-automation-api':
+                  print(s.get('id'))
+          ")
+
+          if [ -z "$SVC_ID" ]; then
+            echo "ERROR: rico-job-automation-api not found — aborting"
+            exit 1
+          fi
+
+          echo "Service ID: $SVC_ID"
+          HTTP=$(curl -s -o /tmp/patch_resp.json -w "%{http_code}" \
+            -X PATCH \
+            -H "Authorization: Bearer $RENDER_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"serviceDetails":{"pullRequestPreviewsEnabled":false}}' \
+            "https://api.render.com/v1/services/$SVC_ID")
+          echo "Result: HTTP $HTTP"
+          cat /tmp/patch_resp.json | python3 -m json.tool 2>/dev/null || cat /tmp/patch_resp.json
+
+      - name: Final service list
+        run: |
+          echo "=== REMAINING RENDER SERVICES AFTER CLEANUP ==="
+          curl -sf -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services?limit=50" \
+            | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          print(f'Total services: {len(data)}')
+          for item in data:
+              s = item.get('service', item)
+              print(f\"  {s.get('id')} | {s.get('name')} | {s.get('type')} | plan={s.get('plan')}\")
+          "
