@@ -1184,7 +1184,7 @@ class RicoChatAPI:
 
     def _looks_like_cv_upload(self, message: str) -> bool:
         lower = message.lower()
-        return bool(CV_FILE_RE.search(message)) or any(
+        if bool(CV_FILE_RE.search(message)) or any(
             phrase in lower
             for phrase in [
                 "uploaded cv",
@@ -1196,7 +1196,30 @@ class RicoChatAPI:
                 "resume attached",
                 "cv attached",
             ]
-        )
+        ):
+            return True
+        # Detect raw pasted CV text: long message with structural CV sections
+        return self._looks_like_pasted_cv_text(message)
+
+    _PASTED_CV_SECTION_RE = re.compile(
+        r"\b(work\s+experience|professional\s+experience|employment\s+history"
+        r"|education|qualifications|skills|certifications|objective|summary"
+        r"|خبرات?\s+عمل|المؤهلات|مهارات|تعليم|الخبرة\s+العملية)\b",
+        re.IGNORECASE | re.UNICODE,
+    )
+    _PASTED_CV_DATE_RE = re.compile(
+        r"\b(19|20)\d{2}\s*[-–—]\s*((19|20)\d{2}|present|current|now|حتى\s+الآن)\b",
+        re.IGNORECASE | re.UNICODE,
+    )
+
+    def _looks_like_pasted_cv_text(self, message: str) -> bool:
+        """Heuristic: long message containing CV structural signals → treat as pasted CV."""
+        if len(message) < 400:
+            return False
+        section_hits = len(self._PASTED_CV_SECTION_RE.findall(message))
+        date_hits = len(self._PASTED_CV_DATE_RE.findall(message))
+        # Require at least 2 section keywords OR 1 section + 1 date range
+        return section_hits >= 2 or (section_hits >= 1 and date_hits >= 1)
 
     def _extract_inline_contact_updates(self, message: str) -> dict[str, Any]:
         """Extract email, phone, and Telegram handle from message."""
@@ -1255,6 +1278,32 @@ class RicoChatAPI:
             ),
         }
         self._append_chat(user_id, "assistant", response)
+        return response
+
+    def _handle_pasted_cv_text(self, user_id: str, message: str, profile: Any) -> dict[str, Any]:
+        """Handle raw pasted CV text from an active user.
+
+        Extracts inline contact details, stores the CV text for async parsing,
+        and returns a structured acknowledgement without sending the blob to AI.
+        """
+        updates: dict[str, Any] = {"pasted_cv_pending": True}
+        updates.update(self._extract_inline_contact_updates(message))
+        # Truncate stored text to 8000 chars to avoid DB size issues
+        updates["pasted_cv_text"] = message[:8000]
+        upsert_profile(user_id=user_id, updates=updates)
+
+        response_msg = (
+            "I can see your CV details. I'll extract your profile from this text — "
+            "give me a moment to parse your experience, skills, and education.\n\n"
+            "Once extracted, I'll show you a profile summary and you can confirm or edit any field. "
+            "You can also upload a PDF or Word CV for more accurate extraction."
+        )
+        response = {
+            "type": "cv_text_received",
+            "message": response_msg,
+            "next_action": "parse_pasted_cv_text",
+        }
+        self._append_chat(user_id, "assistant", response_msg)
         return response
 
     _WHATS_NEXT_PHRASES = frozenset([
@@ -2584,6 +2633,17 @@ class RicoChatAPI:
         profile = self._resolve_profile(user_id)
         has_cv = profile.has_cv
         text = self._normalize_followup_phrase(message)
+
+        # ── Pasted CV text detection ──────────────────────────────────────────
+        # A user may paste raw CV text instead of uploading a file.  Detect it
+        # early so the long blob never reaches the AI provider (avoiding both
+        # context-window errors and generic crash responses).
+        if self._looks_like_pasted_cv_text(message):
+            return self._finalize(
+                self._handle_pasted_cv_text(user_id, message, profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
 
         # ── Pending field resolver (must run first) ───────────────────────────
         # When Rico has just asked the user for a specific profile field (e.g.
