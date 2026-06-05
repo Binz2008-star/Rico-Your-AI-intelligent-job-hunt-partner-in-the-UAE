@@ -358,7 +358,11 @@ class RicoChatAPI:
                 raw = {k: getattr(profile, k) for k in dir(profile) if not k.startswith("_")}
 
             essential_fields = {
-                "email", "phone", "skills", "years_experience",
+                # Deliberately excludes "email": the user's identity is established
+                # by the JWT, not the profile record. Including email in the AI
+                # context risks leaking a stale or cross-user email into the
+                # model's reply (e.g. "you have a profile on record as X@Y.com").
+                "phone", "skills", "years_experience",
                 "preferred_cities", "target_roles", "industries",
                 "salary_expectation_aed", "deal_breakers",
                 "telegram_username", "telegram_chat_id",
@@ -1126,21 +1130,40 @@ class RicoChatAPI:
             "jotform_form_id": jotform_form_id or "",
         }
 
+    # Phrases that signal the user wants to provide a CV — either uploading now
+    # or announcing that they have one. None of these require an actual file to
+    # be present in the message; they trigger a redirect to the upload button.
+    _CV_INTENT_PHRASES: tuple[str, ...] = (
+        "uploaded cv", "upload cv", "uploaded resume", "upload resume",
+        "my cv", "my resume", "resume attached", "cv attached",
+        "i have a cv", "i have a resume", "have a cv", "have a resume",
+        "have my cv", "have my resume",
+        "i'll upload", "ill upload", "will upload", "going to upload",
+        "upload it", "uploading my cv", "uploading my resume",
+        "attach my cv", "attach my resume",
+        "سيرتي الذاتية", "رفع السيرة", "لدي سيرة",
+    )
+
     def _looks_like_cv_upload(self, message: str) -> bool:
         lower = message.lower()
         return bool(CV_FILE_RE.search(message)) or any(
-            phrase in lower
-            for phrase in [
-                "uploaded cv",
-                "upload cv",
-                "uploaded resume",
-                "upload resume",
-                "my cv",
-                "my resume",
-                "resume attached",
-                "cv attached",
-            ]
+            phrase in lower for phrase in self._CV_INTENT_PHRASES
         )
+
+    def _looks_like_cv_intent_no_file(self, message: str) -> bool:
+        """True when user announces they have a CV but hasn't attached a file yet."""
+        lower = message.lower()
+        if CV_FILE_RE.search(message):
+            return False  # actual filename present — handled by cv_first_profile_response
+        announce_phrases = (
+            "i have a cv", "i have a resume", "have a cv", "have a resume",
+            "have my cv", "have my resume",
+            "i'll upload", "ill upload", "will upload", "going to upload",
+            "upload it", "uploading my cv", "uploading my resume",
+            "attach my cv", "attach my resume",
+            "سيرتي الذاتية", "رفع السيرة", "لدي سيرة",
+        )
+        return any(phrase in lower for phrase in announce_phrases)
 
     def _extract_inline_contact_updates(self, message: str) -> dict[str, Any]:
         """Extract email, phone, and Telegram handle from message."""
@@ -2447,6 +2470,35 @@ class RicoChatAPI:
             return self._handle_active_user(user_id, message)
 
         if self._looks_like_cv_upload(message):
+            # If the user has announced they have a CV but hasn't attached a file,
+            # direct them to the Upload CV button instead of faking a filename.
+            if self._looks_like_cv_intent_no_file(message):
+                arabic = self._is_arabic_text(message)
+                cv_guidance = (
+                    "ممتاز! لرفع سيرتك الذاتية استخدم زر **رفع السيرة الذاتية** في الصفحة. "
+                    "بعد الرفع سأقرأ السيرة تلقائياً وأملأ ملفك المهني."
+                    if arabic else
+                    "Use the **Upload CV** button on this page to upload your CV. "
+                    "Once uploaded, I will read it automatically and pre-fill your career profile "
+                    "with your experience, skills, and target roles — no manual questionnaire needed."
+                )
+                self._append_chat(user_id, "assistant", cv_guidance)
+                return self._finalize(
+                    {
+                        "type": "cv_upload_guidance",
+                        "message": cv_guidance,
+                        "next_action": "upload_cv",
+                        "options": [
+                            {
+                                "action": "upload_cv",
+                                "label": "رفع السيرة الذاتية" if arabic else "Upload CV",
+                                "message": "upload cv",
+                            },
+                        ],
+                    },
+                    self.SOURCE_KEYWORD,
+                    profile=None,
+                )
             mark_onboarding_complete(user_id)
             return self._finalize(
                 self._cv_first_profile_response(user_id, message),
@@ -2557,6 +2609,43 @@ class RicoChatAPI:
         application_channel_result = self._handle_application_channel_followup(user_id, message, profile)
         if application_channel_result is not None:
             return self._finalize(application_channel_result, self.SOURCE_KEYWORD, profile=profile)
+
+        # ── CV upload announcement: "i have a cv" / "ill upload it" ─────────────
+        # When a user announces a CV without attaching a file, they need to be
+        # directed to the Upload CV button. Saying "this chat doesn't support
+        # file uploads" is wrong — the platform has a dedicated upload page.
+        # This guard runs before any AI call so the user always gets a clear,
+        # deterministic direction instead of a questionnaire or false refusal.
+        if self._looks_like_cv_intent_no_file(message):
+            arabic = self._is_arabic_text(message)
+            if arabic:
+                cv_guidance = (
+                    "ممتاز! لرفع سيرتك الذاتية استخدم زر **رفع السيرة الذاتية** في الصفحة. "
+                    "بعد الرفع سأقرأ السيرة تلقائياً وأملأ ملفك المهني."
+                )
+            else:
+                cv_guidance = (
+                    "Use the **Upload CV** button on this page to upload your CV. "
+                    "Once uploaded, I will read it automatically and pre-fill your career profile "
+                    "with your experience, skills, and target roles — no manual questionnaire needed."
+                )
+            self._append_chat(user_id, "assistant", cv_guidance)
+            return self._finalize(
+                {
+                    "type": "cv_upload_guidance",
+                    "message": cv_guidance,
+                    "next_action": "upload_cv",
+                    "options": [
+                        {
+                            "action": "upload_cv",
+                            "label": "Upload CV" if not arabic else "رفع السيرة الذاتية",
+                            "message": "upload cv",
+                        },
+                    ],
+                },
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
 
         # ── Explicit "show my applications" guard ────────────────────────────────
         # "show my applications", "my applications", "اعرض طلباتي", "طلباتي", etc.
