@@ -902,58 +902,6 @@ export default function CommandPage() {
             }
             if (err instanceof Error) {
                 if (err.name === "AbortError") {
-                    // For job-search queries, retry once with a longer timeout
-                    // before giving up so cold-start Render delays don't drop results.
-                    const isJobSearch = /\b(job|find|search|vacanc|opening|role|position|hiring)\b/i.test(trimmed)
-                        || /ابحث|وظيف|بحث/.test(trimmed);
-                    if (isJobSearch) {
-                        const retryId = nextId();
-                        setMessages((prev) => [...prev, { id: retryId, role: "rico", text: t("cmdRetryingSearch") }]);
-                        try {
-                            const retryController = new AbortController();
-                            const retryTimeoutId = setTimeout(() => retryController.abort(), 90_000);
-                            const retryRes: ChatApiResponse =
-                                chatAudience === "authenticated"
-                                    ? await sendChat(trimmed, retryController.signal, undefined, language)
-                                    : await sendChatPublic(trimmed, getSessionId(sessionIdRef), retryController.signal, undefined, language);
-                            clearTimeout(retryTimeoutId);
-                            const retryReply =
-                                retryRes.response ?? retryRes.reply ?? retryRes.message ?? retryRes.content ??
-                                retryRes.answer ?? retryRes.text ??
-                                retryRes.data?.response ?? retryRes.data?.reply ?? retryRes.data?.message ??
-                                retryRes.data?.content ?? retryRes.data?.text ?? "";
-                            setMessages((prev) => prev.map((m) =>
-                                m.id === retryId
-                                    ? {
-                                        ...m,
-                                        text: retryReply,
-                                        type: retryRes.type,
-                                        matches: retryRes.matches as JobMatch[] | undefined,
-                                        options: retryRes.options as RicoOption[] | undefined,
-                                        roleName: retryRes.role,
-                                        next_action: retryRes.next_action,
-                                        streaming: false,
-                                    }
-                                    : m
-                            ));
-                            return;
-                        } catch {
-                            // Retry also failed — replace hint with actionable fallback
-                            setMessages((prev) => prev.map((m) =>
-                                m.id === retryId
-                                    ? {
-                                        ...m,
-                                        text: t("cmdSearchFailedFallback"),
-                                        options: [
-                                            { action: "suggest_roles", label: t("cmdOptSuggestRoles"), message: "Suggest roles similar to my target based on my CV" },
-                                            { action: "find_jobs", label: t("cmdCvReadyChipFindJobs") ?? "Find jobs from my CV", message: "Find UAE jobs that match my CV" },
-                                        ] as RicoOption[],
-                                    }
-                                    : m
-                            ));
-                            return;
-                        }
-                    }
                     setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: t("cmdErrTimeout") }]);
                     return;
                 }
