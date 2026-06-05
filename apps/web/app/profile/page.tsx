@@ -31,21 +31,6 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
     );
 }
 
-function ChatCTA({ message }: { message: string }) {
-    const { language } = useLanguage();
-    const t = useTranslation(language);
-    return (
-        <div className="rounded-lg border border-rico-accent-border bg-rico-accent/[0.05] px-4 py-3">
-            <p className="mb-2 text-sm text-text-secondary">{message}</p>
-            <Link
-                href="/command"
-                className="inline-block rounded-lg bg-rico-accent px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-rico-accent-hover"
-            >
-                {t("profileOpenRicoChat")} →
-            </Link>
-        </div>
-    );
-}
 
 function ChatEditCTA({ prompt }: { prompt: string }) {
     return (
@@ -374,72 +359,64 @@ function ProfileDetail({
 
             {/* Job preferences */}
             <StatusCard title={t("profileJobPreferences")} badge={hasJobPrefs ? "live" : "pending"} badgeLabel={hasJobPrefs ? t("profileBadgeSynced") : t("profileBadgePending")}>
-                {hasJobPrefs ? (
-                    <dl className="grid min-w-0 grid-cols-1 gap-3 text-sm lg:grid-cols-2">
-                        <Row label={t("profileTargetRoles")}>
-                            <EditableTextField
-                                value={profile.target_roles?.join(', ') || null}
-                                onSave={onSaveTargetRoles}
-                                placeholder={t("profileEnterTargetRoles")}
-                                label="target-roles"
-                            />
-                        </Row>
-                        <Row label={t("profileCities")}>
-                            <EditableTextField
-                                value={profile.preferred_cities?.join(', ') || null}
-                                onSave={onSaveCities}
-                                placeholder={t("profileEnterCities")}
-                                label="cities"
-                            />
-                        </Row>
-                        <Row label={t("profileSalaryTarget")}>
-                            <EditableTextField
-                                value={profile.salary_expectation_aed != null ? String(profile.salary_expectation_aed) : null}
-                                onSave={onSaveSalaryTarget}
-                                placeholder={t("profileEnterSalaryTarget")}
-                                label="salary-target"
-                            />
-                        </Row>
-                        <Row label={t("profileMinimumSalary")}>
-                            <EditableTextField
-                                value={profile.minimum_salary_aed != null ? String(profile.minimum_salary_aed) : null}
-                                onSave={async (val) => {
-                                    const parsed = Number(val);
-                                    if (!Number.isFinite(parsed) || parsed < 0) {
-                                        throw new Error(t("profileInvalidSalary"));
-                                    }
-                                    return onSaveMinSalary(parsed);
-                                }}
-                                placeholder={t("profileEnterMinSalary")}
-                                label="min-salary"
-                            />
-                        </Row>
-                        <Row label={t("profileExperience")}>
-                            <EditableTextField
-                                value={profile.years_experience != null ? String(profile.years_experience) : null}
-                                onSave={onSaveExperience}
-                                placeholder={t("profileEnterExperience")}
-                                label="experience"
-                            />
-                        </Row>
-                    </dl>
-                ) : (
-                    <ChatCTA message={t("profileJobPrefsCTA")} />
-                )}
+                <dl className="grid min-w-0 grid-cols-1 gap-3 text-sm lg:grid-cols-2">
+                    <Row label={t("profileTargetRoles")}>
+                        <EditableTextField
+                            value={profile.target_roles?.join(', ') || null}
+                            onSave={onSaveTargetRoles}
+                            placeholder={t("profileEnterTargetRoles")}
+                            label="target-roles"
+                        />
+                    </Row>
+                    <Row label={t("profileCities")}>
+                        <EditableTextField
+                            value={profile.preferred_cities?.join(', ') || null}
+                            onSave={onSaveCities}
+                            placeholder={t("profileEnterCities")}
+                            label="cities"
+                        />
+                    </Row>
+                    <Row label={t("profileSalaryTarget")}>
+                        <EditableTextField
+                            value={profile.salary_expectation_aed != null ? String(profile.salary_expectation_aed) : null}
+                            onSave={onSaveSalaryTarget}
+                            placeholder={t("profileEnterSalaryTarget")}
+                            label="salary-target"
+                        />
+                    </Row>
+                    <Row label={t("profileMinimumSalary")}>
+                        <EditableTextField
+                            value={profile.minimum_salary_aed != null ? String(profile.minimum_salary_aed) : null}
+                            onSave={async (val) => {
+                                const parsed = Number(val);
+                                if (!Number.isFinite(parsed) || parsed < 0) {
+                                    throw new Error(t("profileInvalidSalary"));
+                                }
+                                return onSaveMinSalary(parsed);
+                            }}
+                            placeholder={t("profileEnterMinSalary")}
+                            label="min-salary"
+                        />
+                    </Row>
+                    <Row label={t("profileExperience")}>
+                        <EditableTextField
+                            value={profile.years_experience != null ? String(profile.years_experience) : null}
+                            onSave={onSaveExperience}
+                            placeholder={t("profileEnterExperience")}
+                            label="experience"
+                        />
+                    </Row>
+                </dl>
             </StatusCard>
 
             {/* Skills */}
             <StatusCard title={t("profileSkills")} badge={hasSkills ? "live" : "pending"} badgeLabel={hasSkills ? t("profileBadgeSynced") : t("profileBadgePending")}>
-                {hasSkills ? (
-                    <EditableTextField
-                        value={profile.skills?.join(', ') || null}
-                        onSave={onSaveSkills}
-                        placeholder={t("profileEnterSkills")}
-                        label="skills"
-                    />
-                ) : (
-                    <ChatCTA message={t("profileSkillsCTA")} />
-                )}
+                <EditableTextField
+                    value={profile.skills?.join(', ') || null}
+                    onSave={onSaveSkills}
+                    placeholder={t("profileEnterSkills")}
+                    label="skills"
+                />
             </StatusCard>
         </div>
     );
