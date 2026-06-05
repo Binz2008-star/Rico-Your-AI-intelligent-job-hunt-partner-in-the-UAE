@@ -418,14 +418,34 @@ _CV_UPLOAD_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Phrases that signal the user wants to CREATE a CV (no existing one)
 _CV_CREATE_RE = re.compile(
     r"\b(create|make|build|draft|write|generate)\b.{0,30}\b(cv|resume|cv for me|resume for me)\b"
     r"|\b(no\s+cv|no\s+resume|don't\s+have\s+a\s+cv|dont\s+have\s+a\s+cv)\b"
     r"|\b(create\s+cv|make\s+me\s+a\s+cv|create\s+resume|make\s+me\s+a\s+resume)\b"
-    r"|لا\s+يوجد\s+لدي\s+سيره\s+ذاتيه"
-    r"|انشاء\s+سيره\s+ذاتيه"
-    r"|اصنع\s+لي\s+سيره\s+ذاتيه",
-    re.IGNORECASE,
+    r"|لا\s+يوجد\s+لدي\s+سير[هة]\s+ذاتي[هة]"
+    r"|انشاء\s+سير[هة]\s+ذاتي[هة]"
+    r"|اصنع\s+لي\s+سير[هة]\s+ذاتي[هة]",
+    re.IGNORECASE | re.UNICODE,
+)
+
+# Phrases that signal the user wants to GENERATE / REWRITE their existing CV
+# (colloquial Arabic + English "rewrite / refresh / update my CV")
+_CV_GENERATE_RE = re.compile(
+    # English: rewrite / redo / refresh / update / remake my CV/resume
+    r"\b(rewrite|redo|refresh|remake|regenerate|update|revamp|improve|fix)\b.{0,30}\b(my\s+)?(cv|resume)\b"
+    r"|\b(new\s+(cv|resume)|cv\s+again|resume\s+again)\b"
+    # Arabic colloquial imperative forms for "make me" / "write me" + CV
+    # اعملي / اعمل لي / اكتبلي / اكتب لي / اعدلي / جدد / حدث / اعيد
+    r"|اعمل[يل][يي]?\s*(?:لي\s+)?(?:سير[هة]\s+ذاتي[هة]|cv|سي\s*في|سيفي)"
+    r"|اعمل\s+لي\s+(?:سير[هة]\s+ذاتي[هة]|cv|سي\s*في|سيفي)"
+    r"|اكتب[لي]{0,2}\s*(?:لي\s+)?(?:سير[هة]\s+ذاتي[هة]|cv|سي\s*في|سيفي)"
+    r"|اكتب\s+لي\s+(?:سير[هة]\s+ذاتي[هة]|cv|سي\s*في|سيفي)"
+    r"|(?:جدد|حدث|اعيد|اعد)\s*(?:ال)?(?:سير[هة]\s+الذاتي[هة]|cv|سي\s*في|سيفي)"
+    r"|(?:سير[هة]\s+ذاتي[هة]|cv|سي\s*في|سيفي)\s+جديد[هة]?"
+    r"|اريد\s+(?:سير[هة]\s+ذاتي[هة]|cv|سي\s*في|سيفي)\s+جديد[هة]?"
+    r"|(?:عمل|كتابة|تحديث|تجديد)\s+(?:ال)?(?:سير[هة]\s+الذاتي[هة]|cv|سي\s*في)",
+    re.IGNORECASE | re.UNICODE,
 )
 
 _PROFILE_UPDATE_RE = re.compile(
@@ -803,6 +823,11 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
 
     if _CV_UPLOAD_RE.search(text):
         return IntentResult("cv_upload_or_parse", 0.95, "regex")
+
+    # cv_generate must be checked BEFORE cv_create — rewrite/refresh/اعملي phrases
+    # should route to the generate-from-profile handler, not the scratch builder.
+    if _CV_GENERATE_RE.search(text):
+        return IntentResult("cv_generate", 0.92, "regex")
 
     if _CV_CREATE_RE.search(text):
         return IntentResult("cv_create", 0.9, "regex")
