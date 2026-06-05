@@ -123,7 +123,12 @@ class RicoMemoryStore:
         self.save_profile(profile)
         return profile
 
+    _ALLOWED_ROLES: frozenset[str] = frozenset({"user", "assistant", "system"})
+
     def append_chat_message(self, user_id: str, role: str, message: str) -> None:
+        if role not in self._ALLOWED_ROLES:
+            logger.warning("rico_memory: rejected unknown role=%r user=%s", role, user_id)
+            return
         if not _JSON_WRITE_ENABLED:
             return
         try:

@@ -173,6 +173,39 @@ ONBOARDING_FIELD_LABELS = {
 MAX_CONTEXT_MESSAGES = 10
 MAX_PROFILE_TOKENS = 200  # Conservative estimate for profile summary
 
+# Phrases that identify pipeline-generated artifacts. Messages containing these
+# must never be fed back to the LLM as authentic user statements.
+_PIPELINE_ARTIFACT_PHRASES: tuple[str, ...] = (
+    "i have uae experience in executive operations",
+    "ceo support",
+    "i am interested in the",  # generated_message template prefix
+)
+
+_ALLOWED_LLM_ROLES: frozenset[str] = frozenset({"user", "assistant"})
+
+
+def _sanitize_history_for_llm(messages: list[dict]) -> list[dict]:
+    """Return only safe, authentic conversation turns for LLM context injection.
+
+    Drops:
+    - Any message whose role is not 'user' or 'assistant'
+    - Any user-role message whose content matches a known pipeline artifact phrase
+      (guards against generated drafts stored with wrong role)
+    """
+    safe = []
+    for m in messages:
+        role = str(m.get("role", "")).lower()
+        if role not in _ALLOWED_LLM_ROLES:
+            continue
+        content = str(m.get("content") or m.get("message") or "").strip().lower()
+        if not content:
+            continue
+        if role == "user" and any(phrase in content for phrase in _PIPELINE_ARTIFACT_PHRASES):
+            logger.warning("chat_sanitizer: dropped pipeline artifact stored as role=user")
+            continue
+        safe.append(m)
+    return safe
+
 # Acknowledgement replies — short, warm, non-restarting
 _ACKNOWLEDGEMENT_REPLIES: dict[str, str] = {
     "thanks": "You're welcome!",
@@ -314,6 +347,8 @@ class RicoChatAPI:
         self._current_operation_id = str(operation["operation_id"])
         return operation
 
+    _ALLOWED_CHAT_ROLES: frozenset[str] = frozenset({"user", "assistant", "system"})
+
     def _append_chat(self, user_id: str, role: str, message: str | dict[str, Any]) -> None:
         """Append chat message to memory (sync) and DB (async fire-and-forget).
 
@@ -321,6 +356,9 @@ class RicoChatAPI:
         DB write is dispatched to a background thread to avoid blocking the request
         path on remote PostgreSQL latency (~1s round-trip on Neon).
         """
+        if role not in self._ALLOWED_CHAT_ROLES:
+            logger.warning("rico_chat_api: _append_chat rejected unknown role=%r user=%s", role, user_id)
+            return
         payload = json.dumps(message) if isinstance(message, dict) else message
         try:
             self.memory.append_chat_message(user_id, role, payload)
@@ -2457,7 +2495,7 @@ class RicoChatAPI:
         profile = get_profile(user_id)
         if profile is None:
             if getattr(self, "_persist", True):
-                upsert_profile(user_id=user_id, updates={"name": user_id})
+                upsert_profile(user_id=user_id, updates={})
                 set_onboarding_status(user_id, ONBOARDING_IN_PROGRESS)
             import re as _re
             _is_ar = language == "ar" or bool(_re.search(r'[؀-ۿ]', message))
@@ -4802,25 +4840,32 @@ class RicoChatAPI:
         """Get recent messages for context, respecting token limits.
 
         Prefers DB-backed chat history for authenticated users, falls back to memory.
+        Messages are sanitized before return: only user/assistant roles are kept and
+        any message whose content matches known pipeline-generated artifacts is dropped
+        so generated drafts can never be fed back to the LLM as user statements.
         """
+        raw: list[dict] = []
         try:
             # Try DB-backed history first (primary for authenticated users)
             from src.services.chat_service import get_chat_history
             db_messages = get_chat_history(user_id, limit=limit)
             if db_messages:
-                return db_messages[-limit:] if len(db_messages) > limit else db_messages
+                raw = db_messages[-limit:] if len(db_messages) > limit else db_messages
         except Exception as e:
             logger.warning("Failed to get recent messages from DB, falling back to memory",
                          extra={"user_id": user_id, "error": str(e)}, exc_info=True)
 
-        # Fallback to memory store (JSON-backed local storage)
-        try:
-            messages = self.memory.get_chat_messages(user_id, limit=limit)
-            return messages[-limit:] if len(messages) > limit else messages
-        except Exception as e:
-            logger.warning("Failed to get recent messages from memory",
-                         extra={"user_id": user_id, "error": str(e)}, exc_info=True)
-            return []
+        if not raw:
+            # Fallback to memory store (JSON-backed local storage)
+            try:
+                messages = self.memory.get_chat_messages(user_id, limit=limit)
+                raw = messages[-limit:] if len(messages) > limit else messages
+            except Exception as e:
+                logger.warning("Failed to get recent messages from memory",
+                             extra={"user_id": user_id, "error": str(e)}, exc_info=True)
+                return []
+
+        return _sanitize_history_for_llm(raw)
 
     def _get_blocked_questions(self, profile: Any) -> list[str]:
         """Return list of question types that should not be asked based on profile data."""

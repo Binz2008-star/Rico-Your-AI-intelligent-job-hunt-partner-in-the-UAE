@@ -8,12 +8,15 @@ beside the current jobs/applications tables safely.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
 from threading import Lock
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 from dotenv import load_dotenv
 
@@ -438,13 +441,14 @@ class RicoDB:
                     LEFT JOIN rico_agent_settings s ON s.user_id = u.id
                     WHERE u.id::text = %s OR u.external_user_id = %s OR u.email = %s OR u.telegram_username = %s
                     ORDER BY
-                        CASE WHEN u.external_user_id = %s THEN 0 ELSE 1 END,
+                        CASE WHEN u.id::text = %s THEN 0 ELSE 1 END,
                         CASE WHEN u.email = %s THEN 0 ELSE 1 END,
+                        CASE WHEN u.external_user_id = %s THEN 0 ELSE 1 END,
                         CASE WHEN u.telegram_username = %s THEN 0 ELSE 1 END,
                         u.updated_at DESC
                     LIMIT 1
                     """,
-                    (user_id, user_id, user_id, user_id, user_id, user_id, user_id),
+                    (user_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id),
                 )
                 row = cur.fetchone()
             return dict(row) if row else None
@@ -452,7 +456,12 @@ class RicoDB:
             if should_close:
                 conn.close()
 
+    _ALLOWED_CHAT_ROLES: frozenset = frozenset({"user", "assistant", "system"})
+
     def append_chat(self, user_id: str, role: str, message: str, metadata: Optional[Dict[str, Any]] = None) -> None:
+        if role not in self._ALLOWED_CHAT_ROLES:
+            logger.warning("rico_db: append_chat rejected unknown role=%r user=%s", role, user_id)
+            return
         with self._transaction() as conn:
             with conn.cursor() as cur:
                 cur.execute(
