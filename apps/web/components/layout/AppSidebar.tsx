@@ -58,7 +58,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
         <TooltipProvider>
             <aside
                 className={cn(
-                    "hidden h-full w-64 flex-col border-e border-overlay/10 bg-surface/80 backdrop-blur-xl shadow-[inset_-1px_0_0_rgba(255,255,255,0.04)] md:flex",
+                    "hidden h-full w-64 flex-col border-e border-overlay/10 bg-surface backdrop-blur-none shadow-[inset_-1px_0_0_rgba(255,255,255,0.04)] md:flex",
                     className
                 )}
             >
