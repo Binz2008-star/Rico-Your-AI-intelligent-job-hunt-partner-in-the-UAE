@@ -24,12 +24,12 @@ def _timed(tool_name: str, success: bool, payload, elapsed: int) -> ToolExecutio
     return ToolExecutionResult(success=False, tool_name=tool_name, error=str(payload), execution_time_ms=elapsed)
 
 
-def draft_message(job: Dict[str, Any]) -> ToolExecutionResult:
-    """Generate a tailored application message for a job."""
+def draft_message(job: Dict[str, Any], profile: Any = None) -> ToolExecutionResult:
+    """Generate a tailored cover letter for a job using verified profile identity."""
     start = time.monotonic()
     try:
         from src.message_generator import generate_message
-        text = generate_message(job)
+        text = generate_message(job, profile=profile)
         return _timed("draft_message", True, {"draft": text, "title": job.get("title", "")},
                       int((time.monotonic() - start) * 1000))
     except Exception as exc:
