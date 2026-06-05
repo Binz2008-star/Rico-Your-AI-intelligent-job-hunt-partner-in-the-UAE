@@ -19,7 +19,7 @@ jobs:
       - name: 1. List all services
         run: |
           echo "=== ALL RENDER SERVICES ==="
-          curl -sf -H "Authorization: Bearer $RENDER_KEY" \
+          curl -s -H "Authorization: Bearer $RENDER_KEY" \
             "https://api.render.com/v1/services?limit=50" \
             > /tmp/services.json
           python3 - /tmp/services.json << 'PYEOF'
@@ -33,34 +33,42 @@ jobs:
           PYEOF
 
       - name: 2. Service details -- rico-job-automation-api
-        id: svc_details
         run: |
           echo "=== SERVICE DETAILS ==="
-          curl -sf -H "Authorization: Bearer $RENDER_KEY" \
+          curl -s -H "Authorization: Bearer $RENDER_KEY" \
             "https://api.render.com/v1/services?limit=50" \
             > /tmp/services.json
 
-          SVC_ID=$(python3 - /tmp/services.json << 'PYEOF'
+          python3 - /tmp/services.json /tmp/svc_id.txt << 'PYEOF'
           import sys, json
           with open(sys.argv[1]) as f:
               data = json.load(f)
+          svc_id = ""
           for item in data:
               s = item.get("service", item)
               if s.get("name") == "rico-job-automation-api":
-                  print(s.get("id"))
+                  svc_id = s.get("id", "")
+          with open(sys.argv[2], "w") as f:
+              f.write(svc_id)
+          print("Service ID:", svc_id)
           PYEOF
-          )
-          echo "Service ID: $SVC_ID"
-          echo "svc_id=$SVC_ID" >> "$GITHUB_OUTPUT"
 
-          curl -sf -H "Authorization: Bearer $RENDER_KEY" \
+          SVC_ID=$(cat /tmp/svc_id.txt)
+          echo "Using SVC_ID: $SVC_ID"
+
+          curl -s -H "Authorization: Bearer $RENDER_KEY" \
             "https://api.render.com/v1/services/$SVC_ID" \
             > /tmp/svc_detail.json
 
           python3 - /tmp/svc_detail.json << 'PYEOF'
           import sys, json
           with open(sys.argv[1]) as f:
-              data = json.load(f)
+              raw = f.read()
+          try:
+              data = json.loads(raw)
+          except Exception:
+              print("Raw response:", raw[:500])
+              sys.exit(0)
           s = data.get("service", data)
           sd = s.get("serviceDetails", {})
           print("Name:        ", s.get("name"))
@@ -78,18 +86,27 @@ jobs:
           PYEOF
 
       - name: 3. Env var keys -- presence check (no values logged)
-        env:
-          SVC_ID: ${{ steps.svc_details.outputs.svc_id }}
         run: |
+          SVC_ID=$(cat /tmp/svc_id.txt)
           echo "=== ENV VAR KEYS PRESENT ==="
-          curl -sf -H "Authorization: Bearer $RENDER_KEY" \
-            "https://api.render.com/v1/services/$SVC_ID/env-vars?limit=200" \
-            > /tmp/envvars.json
+          echo "Service ID: $SVC_ID"
+          HTTP=$(curl -s -o /tmp/envvars.json -w "%{http_code}" \
+            -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services/$SVC_ID/env-vars?limit=200")
+          echo "HTTP status: $HTTP"
 
           python3 - /tmp/envvars.json << 'PYEOF'
           import sys, json
           with open(sys.argv[1]) as f:
-              data = json.load(f)
+              raw = f.read()
+          try:
+              data = json.loads(raw)
+          except Exception:
+              print("Raw response:", raw[:300])
+              sys.exit(0)
+          if not isinstance(data, list):
+              print("Unexpected response format:", type(data).__name__, str(data)[:300])
+              sys.exit(0)
           keys = sorted(e.get("envVar", e).get("key", "") for e in data)
           print("Total env vars:", len(keys))
           critical = [
@@ -111,18 +128,26 @@ jobs:
           PYEOF
 
       - name: 4. Recent deploys (last 5)
-        env:
-          SVC_ID: ${{ steps.svc_details.outputs.svc_id }}
         run: |
+          SVC_ID=$(cat /tmp/svc_id.txt)
           echo "=== RECENT DEPLOYS ==="
-          curl -sf -H "Authorization: Bearer $RENDER_KEY" \
-            "https://api.render.com/v1/services/$SVC_ID/deploys?limit=5" \
-            > /tmp/deploys.json
+          HTTP=$(curl -s -o /tmp/deploys.json -w "%{http_code}" \
+            -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services/$SVC_ID/deploys?limit=5")
+          echo "HTTP status: $HTTP"
 
           python3 - /tmp/deploys.json << 'PYEOF'
           import sys, json
           with open(sys.argv[1]) as f:
-              data = json.load(f)
+              raw = f.read()
+          try:
+              data = json.loads(raw)
+          except Exception:
+              print("Raw response:", raw[:300])
+              sys.exit(0)
+          if not isinstance(data, list):
+              print("Unexpected:", str(data)[:300])
+              sys.exit(0)
           print("Last", len(data), "deploys:")
           for d in data:
               dep = d.get("deploy", d)
@@ -183,11 +208,11 @@ jobs:
       - name: 9. Cron and worker check
         run: |
           echo "=== SERVICE TYPES IN ACCOUNT ==="
-          curl -sf -H "Authorization: Bearer $RENDER_KEY" \
+          curl -s -H "Authorization: Bearer $RENDER_KEY" \
             "https://api.render.com/v1/services?limit=50" \
-            > /tmp/services.json
+            > /tmp/services2.json
 
-          python3 - /tmp/services.json << 'PYEOF'
+          python3 - /tmp/services2.json << 'PYEOF'
           import sys, json
           with open(sys.argv[1]) as f:
               data = json.load(f)
@@ -221,9 +246,8 @@ jobs:
           PYEOF
 
       - name: 11. Summary
-        env:
-          SVC_ID: ${{ steps.svc_details.outputs.svc_id }}
         run: |
+          SVC_ID=$(cat /tmp/svc_id.txt 2>/dev/null || echo "unknown")
           echo ""
           echo "========================================="
           echo "   RENDER OPTIMIZATION AUDIT SUMMARY"
