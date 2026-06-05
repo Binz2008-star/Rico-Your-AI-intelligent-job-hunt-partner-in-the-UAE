@@ -2041,10 +2041,17 @@ class RicoChatAPI:
         # Primary path: live JSearch query for the exact requested role.
         # Falls back to the legacy scraper pipeline only when JSearch is unavailable.
         rate_limited = False
+        import time as _time
+        _search_start = _time.monotonic()
         try:
             fetch = self._search_jsearch_meta(search_role)
             all_matches = fetch.items
             rate_limited = fetch.rate_limited
+            _search_elapsed = _time.monotonic() - _search_start
+            logger.info(
+                "job_search: role=%r results=%d rate_limited=%s elapsed=%.2fs op=%s",
+                search_role, len(all_matches), rate_limited, _search_elapsed, operation_id,
+            )
             if not all_matches:
                 search_profile = (
                     _dc_replace(profile, target_roles=[search_role])
@@ -2054,6 +2061,11 @@ class RicoChatAPI:
                 workflow_result = self.system.run_for_profile(search_profile)
                 all_matches = workflow_result.get("matches", [])
         except Exception as exc:
+            _search_elapsed = _time.monotonic() - _search_start
+            logger.warning(
+                "job_search_failed: role=%r elapsed=%.2fs op=%s err=%s",
+                search_role, _search_elapsed, operation_id, type(exc).__name__,
+            )
             mark_failed(user_id, operation_id, str(exc))
             raise
 
