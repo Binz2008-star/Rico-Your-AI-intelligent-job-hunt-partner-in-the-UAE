@@ -154,49 +154,56 @@ Sincerely,
 """
 
 
-def generate_cover_letter(job: Dict[str, Any]) -> str:
-    title = _clean(job.get("title")) or "the advertised role"
-    company = _clean(job.get("company")) or "your organization"
-    location = _clean(job.get("location")) or "the UAE"
-    role_lines = _role_specific_lines(job)
-    title_lower = title.lower()
+def generate_cover_letter(
+    job: Dict[str, Any],
+    identity: Optional[CoverLetterIdentity] = None
+) -> str:
+    """Generate a cover letter using verified identity information.
 
-    if "esg" in title_lower or "sustain" in title_lower:
-        opening_focus = "ESG, sustainability strategy, environmental reporting, and compliance governance"
-    elif "hse" in title_lower or "ehs" in title_lower or "qhse" in title_lower or "hsse" in title_lower:
-        opening_focus = "HSE leadership, risk control, compliance, and operational safety systems"
-    elif "environment" in title_lower:
-        opening_focus = "environmental compliance, waste operations, regulatory approvals, and site performance"
-    else:
-        opening_focus = "environmental compliance, HSE leadership, and UAE operational execution"
+    Args:
+        job: Job posting data with title, company, description, etc.
+        identity: Structured identity object with verified user data (required)
 
-    bullets = "\n".join(f"- {line.capitalize()}." for line in role_lines)
+    Returns:
+        Personalized cover letter string
 
-    return f"""Dear Hiring Manager,
+    Raises:
+        CoverLetterIdentityError: If identity is not provided or validation fails
+    """
+    if identity is None:
+        raise CoverLetterIdentityError(
+            "Verified identity is required for cover letter generation. "
+            "Use generate_cover_letter_with_identity(job, CoverLetterIdentity(...)) "
+            "or provide a valid identity object."
+        )
 
-I am writing to express my interest in the {title} position at {company} in {location}.
-
-I bring 10+ years in environmental management, HSE leadership, UAE regulatory compliance, and multi-site operations. This background aligns strongly with the role's focus on {opening_focus}.
-
-Relevant experience I would bring to {company}:
-{bullets}
-- Led multi-site operations involving 80+ locations and coordinated teams across compliance, service delivery, and reporting requirements.
-
-I would welcome the opportunity to discuss how my UAE environmental compliance and HSE experience can support {company}'s operational and sustainability goals.
-
-Sincerely,
-Roben Edwan
-Ajman, UAE
-"""
+    return generate_cover_letter_with_identity(job, identity)
 
 
-def generate_batch_cover_letters(jobs: List[Dict[str, Any]]) -> Dict[str, str]:
-    letters: Dict[str, str] = {}
-    for job in jobs:
-        key = job.get("link") or f"{job.get('company','')}_{job.get('title','')}"
-        letters[str(key)] = generate_cover_letter(job)
-    logger.info("batch_cover_letters_complete total=%s", len(letters))
-    return letters
+def generate_batch_cover_letters(
+    jobs: List[Dict[str, Any]],
+    identity: Optional[CoverLetterIdentity] = None
+) -> Dict[str, str]:
+    """Generate cover letters for multiple jobs using verified identity.
+
+    Args:
+        jobs: List of job posting data
+        identity: Structured identity object with verified user data (required)
+
+    Returns:
+        Dictionary mapping job keys to cover letter strings
+
+    Raises:
+        CoverLetterIdentityError: If identity is not provided
+    """
+    if identity is None:
+        raise CoverLetterIdentityError(
+            "Verified identity is required for cover letter generation. "
+            "Use generate_batch_cover_letters_with_identity(jobs, CoverLetterIdentity(...)) "
+            "or provide a valid identity object."
+        )
+
+    return generate_batch_cover_letters_with_identity(jobs, identity)
 
 
 def generate_batch_cover_letters_with_identity(
