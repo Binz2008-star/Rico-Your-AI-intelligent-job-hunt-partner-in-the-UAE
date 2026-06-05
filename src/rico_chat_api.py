@@ -2457,7 +2457,7 @@ class RicoChatAPI:
         profile = get_profile(user_id)
         if profile is None:
             if getattr(self, "_persist", True):
-                upsert_profile(user_id=user_id, updates={"name": user_id})
+                upsert_profile(user_id=user_id, updates={})
                 set_onboarding_status(user_id, ONBOARDING_IN_PROGRESS)
             import re as _re
             _is_ar = language == "ar" or bool(_re.search(r'[؀-ۿ]', message))

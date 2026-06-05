@@ -555,13 +555,21 @@ def _resolve_db_user_id(user_id: str):
         conn = db.connect()
         try:
             with conn.cursor() as cur:
+                # Prefer id > email > external_user_id to avoid returning a
+                # Jotform/Telegram row whose external_user_id happens to equal
+                # this web user's email address (cross-user contamination).
                 cur.execute(
                     """
                     SELECT id::text FROM rico_users
                     WHERE external_user_id = %s OR email = %s OR id::text = %s
+                    ORDER BY
+                        CASE WHEN id::text = %s THEN 0 ELSE 1 END,
+                        CASE WHEN email = %s THEN 0 ELSE 1 END,
+                        CASE WHEN external_user_id = %s THEN 0 ELSE 1 END,
+                        updated_at DESC
                     LIMIT 1
                     """,
-                    (user_id, user_id, user_id),
+                    (user_id, user_id, user_id, user_id, user_id, user_id),
                 )
                 row = cur.fetchone()
             if row:
@@ -575,6 +583,39 @@ def _resolve_db_user_id(user_id: str):
             conn2 = db.connect()
             try:
                 with conn2.cursor() as cur:
+                    # Use DO NOTHING to avoid overwriting a Jotform/Telegram row
+                    # that already occupies external_user_id = this email. If a
+                    # conflict exists, fall back to an email-keyed lookup so the
+                    # web user gets the correct row and not another user's profile.
+                    cur.execute(
+                        """
+                        INSERT INTO rico_users (external_user_id, email, source)
+                        VALUES (%s, %s, 'web')
+                        ON CONFLICT (external_user_id) DO NOTHING
+                        RETURNING id::text
+                        """,
+                        (user_id, user_id),
+                    )
+                    new_row = cur.fetchone()
+                conn2.commit()
+                if new_row:
+                    return new_row["id"]
+
+                # Conflict: external_user_id taken by a non-web row. Look up by
+                # email instead so this web user is never linked to a different
+                # user's profile row.
+                with conn2.cursor() as cur:
+                    cur.execute(
+                        "SELECT id::text FROM rico_users WHERE email = %s ORDER BY updated_at DESC LIMIT 1",
+                        (user_id,),
+                    )
+                    email_row = cur.fetchone()
+                if email_row:
+                    return email_row["id"]
+
+                # Still nothing — create a fresh row keyed by a web-namespaced
+                # external_user_id that cannot collide with Jotform/Telegram rows.
+                with conn2.cursor() as cur:
                     cur.execute(
                         """
                         INSERT INTO rico_users (external_user_id, email, source)
@@ -582,11 +623,11 @@ def _resolve_db_user_id(user_id: str):
                         ON CONFLICT (external_user_id) DO UPDATE SET email = EXCLUDED.email
                         RETURNING id::text
                         """,
-                        (user_id, user_id),
+                        (f"web:{user_id}", user_id),
                     )
-                    new_row = cur.fetchone()
+                    fallback_row = cur.fetchone()
                 conn2.commit()
-                return new_row["id"] if new_row else None
+                return fallback_row["id"] if fallback_row else None
             except Exception as exc:
                 logger.warning("chat_service: rico_users auto-provision failed user=%s: %s", user_id, exc)
                 try:

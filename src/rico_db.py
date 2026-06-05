@@ -438,13 +438,14 @@ class RicoDB:
                     LEFT JOIN rico_agent_settings s ON s.user_id = u.id
                     WHERE u.id::text = %s OR u.external_user_id = %s OR u.email = %s OR u.telegram_username = %s
                     ORDER BY
-                        CASE WHEN u.external_user_id = %s THEN 0 ELSE 1 END,
+                        CASE WHEN u.id::text = %s THEN 0 ELSE 1 END,
                         CASE WHEN u.email = %s THEN 0 ELSE 1 END,
+                        CASE WHEN u.external_user_id = %s THEN 0 ELSE 1 END,
                         CASE WHEN u.telegram_username = %s THEN 0 ELSE 1 END,
                         u.updated_at DESC
                     LIMIT 1
                     """,
-                    (user_id, user_id, user_id, user_id, user_id, user_id, user_id),
+                    (user_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id),
                 )
                 row = cur.fetchone()
             return dict(row) if row else None
