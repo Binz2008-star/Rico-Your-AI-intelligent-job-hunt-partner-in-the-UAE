@@ -41,6 +41,16 @@ export const translations = {
     general: "General",
     highMatchOnly: "High Match Only",
 
+    // Job Filters
+    jobFilters: "Job Filters",
+    jobFiltersDescription: "Control which jobs Rico surfaces for you.",
+    includeKeywords: "Must-have keywords",
+    includeKeywordsPlaceholder: "e.g. React, remote, fintech",
+    includeKeywordsHint: "Rico only shows jobs that contain at least one of these terms.",
+    excludeKeywords: "Block keywords",
+    excludeKeywordsPlaceholder: "e.g. junior, intern, commission",
+    excludeKeywordsHint: "Jobs containing any of these terms are hidden.",
+
     // Match Thresholds
     matchThresholds: "Match thresholds",
     applyThreshold: "Apply threshold",
@@ -788,6 +798,16 @@ export const translations = {
     aggressive: "نشط",
     general: "عام",
     highMatchOnly: "مطابقة عالية فقط",
+
+    // Job Filters
+    jobFilters: "فلاتر الوظائف",
+    jobFiltersDescription: "تحكم في الوظائف التي يعرضها ريكو لك.",
+    includeKeywords: "كلمات مفتاحية مطلوبة",
+    includeKeywordsPlaceholder: "مثال: React، عن بُعد، فينتك",
+    includeKeywordsHint: "ريكو يعرض فقط الوظائف التي تحتوي على إحدى هذه الكلمات.",
+    excludeKeywords: "كلمات مفتاحية محظورة",
+    excludeKeywordsPlaceholder: "مثال: مبتدئ، متدرب، عمولة",
+    excludeKeywordsHint: "الوظائف التي تحتوي على هذه الكلمات تُخفى تلقائياً.",
 
     // Match Thresholds
     matchThresholds: "عتبات المطابقة",
