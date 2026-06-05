@@ -199,6 +199,34 @@ class TestCoverLetterWriter:
             generate_batch_cover_letters(jobs)
         assert "Verified identity is required" in str(exc_info.value)
 
+    def test_no_hardcoded_roben_identity_anywhere(self):
+        """Test that safe generated output contains no hardcoded identity."""
+        job = {
+            "title": "HSE Manager",
+            "company": "Test Company"
+        }
+
+        identity = CoverLetterIdentity(
+            name="Safe User",
+            location="Safe Location, UAE",
+            years_experience=5.0,
+            profile_line="5+ years in environmental management"
+        )
+
+        cover_letter = generate_cover_letter_with_identity(job, identity)
+
+        # Comprehensive list of forbidden hardcoded identity phrases
+        forbidden_phrases = [
+            "Roben Edwan",
+            "Ajman, UAE",
+            "80+ locations",
+            "10+ years in environmental management",
+            "Professional Candidate"
+        ]
+
+        for phrase in forbidden_phrases:
+            assert phrase not in cover_letter, f"Hardcoded phrase '{phrase}' should not appear in safe output"
+
     def test_no_roben_identity_in_output(self):
         """Test that Roben Edwan identity does not appear unless explicitly passed."""
         job = {
