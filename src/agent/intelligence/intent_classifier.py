@@ -562,8 +562,17 @@ _INTERVIEW_PREP_RE = re.compile(
 )
 
 _DRAFT_RE = re.compile(
-    r"\b(draft|write|generate|create)\b.{0,40}\b(cover letter|message|email|letter)\b",
-    re.IGNORECASE,
+    # English: draft/write/generate/create/make/prepare/build + cover letter / message / email
+    r"\b(draft|write|generate|create|make|prepare|build)\b.{0,40}\b(cover\s+letter|message|email|letter)\b"
+    # Standalone "cover letter" — user says it with no verb
+    r"|\bcover\s+letter\b"
+    # Arabic cover letter phrases
+    r"|خطاب\s+(تغطية|تقديم|عمل|وظيفي)"
+    r"|رسالة\s+(تغطية|تقديم|تعريفية|وظيفية)"
+    r"|اكتب\s+(?:لي\s+)?(?:خطاب|رسالة)"
+    r"|اعمل\s+(?:لي\s+)?(?:خطاب|رسالة)"
+    r"|(?:cover\s+letter|خطاب|رسالة)\s+(?:لي|لوظيفة|للوظيفة)",
+    re.IGNORECASE | re.UNICODE,
 )
 
 # ── Nonsense / safety heuristics ─────────────────────────────────────────────
