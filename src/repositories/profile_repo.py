@@ -236,23 +236,52 @@ def upsert_profile(user_id: str, updates: dict[str, Any]) -> RicoProfile:
             if not conn:
                 return profile
 
-            # 1. Upsert user record
-            user_payload: dict = {
-                "external_user_id": user_id,
-                "name": filtered_updates.get("name"),
-                "email": filtered_updates.get("email"),
-                "phone": filtered_updates.get("phone"),
-                "telegram_username": filtered_updates.get("telegram_username") or updates.get("telegram_username"),
-                "telegram_chat_id": filtered_updates.get("telegram_chat_id") or updates.get("telegram_chat_id"),
-            }
-            # telegram_notifications_enabled is boolean — keep explicit False
-            if "telegram_notifications_enabled" in filtered_updates:
-                user_payload["telegram_notifications_enabled"] = filtered_updates["telegram_notifications_enabled"]
-            user_payload = {k: v for k, v in user_payload.items() if v is not None}
-            logger.info("profile_repo.upsert_profile: user_id=%s user_payload=%s", user_id, user_payload)
-            user_row = db.upsert_user(user_payload, conn=conn)
-            db_user_id = str(user_row["id"])
-            logger.info("profile_repo.upsert_profile: db_user_id=%s returned_name=%s", db_user_id, user_row.get("name"))
+            # 1. Resolve the DB user record.
+            # Web users are identified by email (from JWT); their external_user_id is a
+            # UUID, not the email string.  Using the email as external_user_id would create
+            # a duplicate row and silently discard the save.  Look up by email first.
+            db_user_id: str | None = None
+            if "@" in user_id:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT id FROM rico_users WHERE email = %s ORDER BY id LIMIT 1",
+                        (user_id,),
+                    )
+                    existing = cur.fetchone()
+                    if existing:
+                        db_user_id = str(existing["id"])
+                        updatable = {
+                            k: filtered_updates[k]
+                            for k in ("name", "phone", "telegram_username", "telegram_chat_id")
+                            if k in filtered_updates and filtered_updates[k] is not None
+                        }
+                        if "telegram_notifications_enabled" in filtered_updates:
+                            updatable["telegram_notifications_enabled"] = filtered_updates["telegram_notifications_enabled"]
+                        if updatable:
+                            set_clause = ", ".join(f"{k} = %s" for k in updatable)
+                            cur.execute(
+                                f"UPDATE rico_users SET {set_clause}, updated_at = now() WHERE id = %s",
+                                [*updatable.values(), db_user_id],
+                            )
+                        logger.info("profile_repo.upsert_profile: email lookup db_user_id=%s", db_user_id)
+
+            if db_user_id is None:
+                # Jotform / Telegram users: upsert by external_user_id
+                user_payload: dict = {
+                    "external_user_id": user_id,
+                    "name": filtered_updates.get("name"),
+                    "email": filtered_updates.get("email"),
+                    "phone": filtered_updates.get("phone"),
+                    "telegram_username": filtered_updates.get("telegram_username") or updates.get("telegram_username"),
+                    "telegram_chat_id": filtered_updates.get("telegram_chat_id") or updates.get("telegram_chat_id"),
+                }
+                if "telegram_notifications_enabled" in filtered_updates:
+                    user_payload["telegram_notifications_enabled"] = filtered_updates["telegram_notifications_enabled"]
+                user_payload = {k: v for k, v in user_payload.items() if v is not None}
+                logger.info("profile_repo.upsert_profile: user_id=%s user_payload=%s", user_id, user_payload)
+                user_row = db.upsert_user(user_payload, conn=conn)
+                db_user_id = str(user_row["id"])
+            logger.info("profile_repo.upsert_profile: db_user_id=%s", db_user_id)
 
             # 2. Upsert profile JSONB
             profile_data = {
