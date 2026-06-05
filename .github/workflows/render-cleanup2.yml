@@ -1,0 +1,203 @@
+name: Render Cleanup 2 -- Fix PR Previews
+
+on:
+  workflow_dispatch:
+    inputs:
+      render_api_key:
+        description: 'Render API Key (rnd_...)'
+        required: true
+      dry_run:
+        description: 'dry_run: true = list only, false = execute'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+jobs:
+  cleanup:
+    name: Render Cleanup 2
+    runs-on: ubuntu-latest
+    env:
+      RENDER_KEY: ${{ github.event.inputs.render_api_key }}
+      DRY_RUN: ${{ github.event.inputs.dry_run }}
+
+    steps:
+      - name: 1. List all services
+        run: |
+          echo "=== ALL RENDER SERVICES ==="
+          curl -s -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services?limit=50" \
+            > /tmp/services.json
+          python3 - /tmp/services.json << 'PYEOF'
+          import sys, json
+          with open(sys.argv[1]) as f:
+              data = json.load(f)
+          print("Total services:", len(data))
+          for item in data:
+              s = item.get("service", item)
+              name = s.get("name", "")
+              keep = name == "rico-job-automation-api"
+              tag = "KEEP" if keep else "DELETE"
+              print(" ", tag, s.get("id"), "|", name)
+          PYEOF
+
+      - name: 2. Get production service ID
+        run: |
+          curl -s -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services?limit=50" \
+            > /tmp/services.json
+          python3 - /tmp/services.json /tmp/svc_id.txt << 'PYEOF'
+          import sys, json
+          with open(sys.argv[1]) as f:
+              data = json.load(f)
+          svc_id = ""
+          for item in data:
+              s = item.get("service", item)
+              if s.get("name") == "rico-job-automation-api":
+                  svc_id = s.get("id", "")
+          with open(sys.argv[2], "w") as f:
+              f.write(svc_id)
+          print("Production service ID:", svc_id)
+          PYEOF
+
+      - name: 3. Disable PR preview creation (string no)
+        if: env.DRY_RUN == 'false'
+        run: |
+          SVC_ID=$(cat /tmp/svc_id.txt)
+          echo "Disabling PR previews on $SVC_ID"
+          HTTP=$(curl -s -o /tmp/patch_resp.json -w "%{http_code}" \
+            -X PATCH \
+            -H "Authorization: Bearer $RENDER_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"serviceDetails":{"pullRequestPreviewsEnabled":"no"}}' \
+            "https://api.render.com/v1/services/$SVC_ID")
+          echo "PATCH HTTP $HTTP"
+          python3 - /tmp/patch_resp.json << 'PYEOF'
+          import sys, json
+          with open(sys.argv[1]) as f:
+              raw = f.read()
+          try:
+              data = json.loads(raw)
+              s = data.get("service", data)
+              sd = s.get("serviceDetails", {})
+              print("PR previews after PATCH:", sd.get("pullRequestPreviewsEnabled", "N/A"))
+          except Exception as e:
+              print("Response:", raw[:300])
+          PYEOF
+
+      - name: 4. Delete all non-production services
+        if: env.DRY_RUN == 'false'
+        run: |
+          echo "=== DELETING NON-PRODUCTION SERVICES ==="
+          curl -s -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services?limit=50" \
+            > /tmp/services.json
+
+          python3 - /tmp/services.json << 'PYEOF'
+          import sys, json
+          with open(sys.argv[1]) as f:
+              data = json.load(f)
+          targets = []
+          for item in data:
+              s = item.get("service", item)
+              name = s.get("name", "")
+              if name != "rico-job-automation-api":
+                  targets.append((s.get("id", ""), name))
+          for svc_id, name in targets:
+              print(f"{svc_id} | {name}")
+          PYEOF
+
+          python3 - /tmp/services.json << 'PYEOF'
+          import sys, json, subprocess
+          import os
+          with open(sys.argv[1]) as f:
+              data = json.load(f)
+          key = os.environ.get("RENDER_KEY", "")
+          for item in data:
+              s = item.get("service", item)
+              name = s.get("name", "")
+              svc_id = s.get("id", "")
+              if name == "rico-job-automation-api":
+                  continue
+              result = subprocess.run(
+                  ["curl", "-s", "-o", "/tmp/del_resp.json", "-w", "%{http_code}",
+                   "-X", "DELETE",
+                   "-H", f"Authorization: Bearer {key}",
+                   f"https://api.render.com/v1/services/{svc_id}"],
+                  capture_output=True, text=True
+              )
+              http_code = result.stdout.strip()
+              with open("/tmp/del_resp.json") as rf:
+                  resp = rf.read()
+              print(f"DELETE {svc_id} ({name}) -> HTTP {http_code} | {resp[:80]}")
+          PYEOF
+
+      - name: 5. DRY RUN -- show targets
+        if: env.DRY_RUN == 'true'
+        run: |
+          echo "=== DRY RUN: would delete ==="
+          curl -s -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services?limit=50" \
+            > /tmp/services.json
+          python3 - /tmp/services.json << 'PYEOF'
+          import sys, json
+          with open(sys.argv[1]) as f:
+              data = json.load(f)
+          keep = []
+          delete = []
+          for item in data:
+              s = item.get("service", item)
+              name = s.get("name", "")
+              svc_id = s.get("id", "")
+              if name == "rico-job-automation-api":
+                  keep.append(f"{svc_id} | {name}")
+              else:
+                  delete.append(f"{svc_id} | {name}")
+          print("KEEP:")
+          for x in keep:
+              print(" ", x)
+          print("DELETE:")
+          for x in delete:
+              print(" ", x)
+          print("")
+          print("Set dry_run=false to execute.")
+          PYEOF
+
+      - name: 6. Verify final state
+        run: |
+          echo "=== FINAL SERVICE LIST ==="
+          curl -s -H "Authorization: Bearer $RENDER_KEY" \
+            "https://api.render.com/v1/services?limit=50" \
+            > /tmp/services_final.json
+          python3 - /tmp/services_final.json << 'PYEOF'
+          import sys, json
+          with open(sys.argv[1]) as f:
+              data = json.load(f)
+          print("Total services remaining:", len(data))
+          for item in data:
+              s = item.get("service", item)
+              print(" ", s.get("id"), "|", s.get("name"))
+          PYEOF
+
+          SVC_ID=$(cat /tmp/svc_id.txt 2>/dev/null || echo "")
+          if [ -n "$SVC_ID" ]; then
+            echo ""
+            echo "=== PRODUCTION SERVICE PR PREVIEW STATUS ==="
+            HTTP=$(curl -s -o /tmp/svc_check.json -w "%{http_code}" \
+              -H "Authorization: Bearer $RENDER_KEY" \
+              "https://api.render.com/v1/services/$SVC_ID")
+            python3 - /tmp/svc_check.json << 'PYEOF'
+            import sys, json
+            with open(sys.argv[1]) as f:
+                raw = f.read()
+            try:
+                data = json.loads(raw)
+                s = data.get("service", data)
+                sd = s.get("serviceDetails", {})
+                print("PR previews enabled:", sd.get("pullRequestPreviewsEnabled", "N/A"))
+            except Exception:
+                print("Response:", raw[:200])
+            PYEOF
+          fi
