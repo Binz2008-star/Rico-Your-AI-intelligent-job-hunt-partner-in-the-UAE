@@ -3796,7 +3796,7 @@ class RicoChatAPI:
                 self._append_chat(user_id, "assistant", result.message)
                 return self._finalize(response, routed.source, profile=profile)
 
-        # Draft message
+        # Draft message / cover letter
         if legacy_intent == "draft_message":
             context = self._build_router_context(user_id, profile)
             routed = _route(message, user_id=user_id, context=context)
@@ -3812,6 +3812,31 @@ class RicoChatAPI:
                 }
                 self._append_chat(user_id, "assistant", result.message)
                 return self._finalize(response, routed.source, profile=profile)
+            # No specific job in context — guide user to pick a role or job first
+            name = self._profile_value(profile, "name") or ""
+            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            if target_roles:
+                roles_hint = ", ".join(target_roles[:3])
+                msg = (
+                    f"I can write a cover letter for you{', ' + name if name else ''}. "
+                    f"Which role should I tailor it for?\n\n"
+                    f"Your target roles: **{roles_hint}**\n\n"
+                    "Reply with a role name, or paste a job posting and I'll tailor it directly."
+                )
+            else:
+                msg = (
+                    f"I can write a cover letter for you{', ' + name if name else ''}. "
+                    "Which role and company should I target?\n\n"
+                    "Reply with:\n"
+                    "• Role title and company name\n"
+                    "• Or paste the job posting directly"
+                )
+            self._append_chat(user_id, "assistant", msg)
+            return self._finalize(
+                {"type": "cover_letter_prompt", "message": msg, "next_action": "provide_job_for_cover_letter"},
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
 
         # Interview prep
         if legacy_intent == "interview_prep":
