@@ -686,8 +686,14 @@ def _db_get_chat_history(
         return None
 
 
+_ALLOWED_CHAT_ROLES: frozenset[str] = frozenset({"user", "assistant", "system"})
+
+
 def db_append_chat(user_id: str, role: str, message: str) -> None:
     """Best-effort write of a chat message to PostgreSQL."""
+    if role not in _ALLOWED_CHAT_ROLES:
+        logger.warning("chat_service: db_append_chat rejected unknown role=%r user=%s", role, user_id)
+        return
     try:
         from src.rico_db import RicoDB
         db = RicoDB()

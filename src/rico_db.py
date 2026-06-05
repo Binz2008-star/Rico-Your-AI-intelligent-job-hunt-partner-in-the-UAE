@@ -8,12 +8,15 @@ beside the current jobs/applications tables safely.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
 from threading import Lock
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 from dotenv import load_dotenv
 
@@ -453,7 +456,12 @@ class RicoDB:
             if should_close:
                 conn.close()
 
+    _ALLOWED_CHAT_ROLES: frozenset = frozenset({"user", "assistant", "system"})
+
     def append_chat(self, user_id: str, role: str, message: str, metadata: Optional[Dict[str, Any]] = None) -> None:
+        if role not in self._ALLOWED_CHAT_ROLES:
+            logger.warning("rico_db: append_chat rejected unknown role=%r user=%s", role, user_id)
+            return
         with self._transaction() as conn:
             with conn.cursor() as cur:
                 cur.execute(
