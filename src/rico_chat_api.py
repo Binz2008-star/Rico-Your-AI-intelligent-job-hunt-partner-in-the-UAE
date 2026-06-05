@@ -3802,6 +3802,16 @@ class RicoChatAPI:
             routed = _route(message, user_id=user_id, context=context)
             if routed.tool_name:
                 job_key = routed.tool_args.get("job_key", "")
+                # Resolve job dict so generate_message gets full context + profile identity
+                _routed_job = self._resolve_recent_application_job(user_id) or {}
+                if _routed_job:
+                    from src.message_generator import generate_message as _gen_msg
+                    cover = _gen_msg(_routed_job, profile=profile)
+                    self._append_chat(user_id, "assistant", cover)
+                    return self._finalize(
+                        {"type": "draft_message", "intent": "draft_message", "message": cover},
+                        routed.source, profile=profile,
+                    )
                 result = agent_runtime.handle_action(
                     user_id=user_id, action="draft", job_key=job_key, source="chat",
                 )
@@ -3812,7 +3822,18 @@ class RicoChatAPI:
                 }
                 self._append_chat(user_id, "assistant", result.message)
                 return self._finalize(response, routed.source, profile=profile)
-            # No specific job in context — guide user to pick a role or job first
+            # Try latest-job context before asking user to specify
+            _latest_job = self._resolve_recent_application_job(user_id)
+            if _latest_job and (_latest_job.get("title") or _latest_job.get("company")):
+                from src.message_generator import generate_message
+                cover = generate_message(_latest_job, profile=profile)
+                self._append_chat(user_id, "assistant", cover)
+                return self._finalize(
+                    {"type": "draft_message", "intent": "draft_message", "message": cover},
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
+            # No job in context at all — guide user to pick a role or job first
             name = self._profile_value(profile, "name") or ""
             target_roles = self._as_list(self._profile_value(profile, "target_roles"))
             if target_roles:
