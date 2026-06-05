@@ -2,7 +2,7 @@ services:
   - type: web
     name: rico-api
     runtime: python
-    plan: free
+    plan: starter
     buildCommand: pip install -r requirements.txt
     # --proxy-headers + --forwarded-allow-ips lets uvicorn trust Render's load balancer
     # and populate request.client.host from X-Forwarded-For (real client IP), so per-client
