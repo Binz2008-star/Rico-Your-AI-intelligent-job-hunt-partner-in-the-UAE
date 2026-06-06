@@ -87,21 +87,21 @@ services:
 
       # ── Billing mode ─────────────────────────────────────────────────────────
       - key: BILLING_MODE
-        value: "manual"
+        value: "stripe"
       - key: RICO_PRO_PRICE_AED
         value: "29"
       - key: RICO_PREMIUM_PRICE_AED
         value: "49"
 
-      # ── Stripe (dormant in manual mode; activate by setting BILLING_MODE=stripe)
+      # ── Stripe ────────────────────────────────────────────────────────────────
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
       - key: STRIPE_PRO_PRICE_ID
-        sync: false
+        value: "price_1Tf9N0DjGoun5RObhfGUBgeh"
       - key: STRIPE_PREMIUM_PRICE_ID
-        sync: false
+        value: "price_1Tf9LJDjGoun5RObhGBUOPFo"
 
       # ── Job search API (secret) ───────────────────────────────────────────────
       - key: RAPIDAPI_KEY
