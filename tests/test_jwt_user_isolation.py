@@ -238,6 +238,39 @@ class TestSettingsRouteIsolation:
         call_kwargs = mock_update.call_args[1]
         assert call_kwargs.get("user_id") == "alice@rico.ai"
 
+    def test_settings_put_then_get_returns_saved_values(self):
+        """PUT /api/v1/settings must persist values returned by the next GET."""
+        saved_rows = {}
+
+        def _upsert(data: dict, user_id: str | None = None) -> None:
+            key = user_id or "default"
+            saved_rows[key] = {**saved_rows.get(key, {}), **data}
+
+        def _read(user_id: str | None = None) -> dict | None:
+            return saved_rows.get(user_id or "default")
+
+        tc = _client_with_token("alice@rico.ai")
+        payload = {
+            "include_keywords": ["hse", "safety"],
+            "min_score": 65,
+            "max_daily_applies": 7,
+        }
+
+        with patch("src.services.settings_service.is_db_available", return_value=True), \
+             patch("src.services.settings_service.settings_repo.upsert", side_effect=_upsert) as mock_upsert, \
+             patch("src.services.settings_service.settings_repo.read", side_effect=_read):
+            put_response = tc.put("/api/v1/settings", json=payload)
+            get_response = tc.get("/api/v1/settings")
+
+        assert put_response.status_code == 200
+        assert get_response.status_code == 200
+        assert put_response.json()["min_score"] == 65
+        assert get_response.json()["min_score"] == 65
+        assert get_response.json()["max_daily_applies"] == 7
+        assert get_response.json()["include_keywords"] == ["hse", "safety"]
+        mock_upsert.assert_called_once()
+        assert mock_upsert.call_args.kwargs["user_id"] == "alice@rico.ai"
+
     def test_two_users_get_different_settings(self):
         """Settings read for alice must not leak bob's data."""
         _base = {
