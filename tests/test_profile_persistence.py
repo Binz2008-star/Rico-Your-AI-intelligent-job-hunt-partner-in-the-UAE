@@ -838,6 +838,72 @@ def test_canonical_row_selection_with_duplicate_emails():
             conn.commit()
 
 
+def test_email_external_user_id_fallback_row_still_roundtrips():
+    """Regression test: email users with only external_user_id=email still PATCH/GET correctly."""
+    import os
+    from src.rico_db import RicoDB
+
+    db_url = os.getenv("DATABASE_URL", "")
+    test_mode = os.getenv("TEST_MODE", "0")
+    if test_mode != "1" and "neondb" in db_url and not ("test" in db_url.lower() or "localhost" in db_url or "127.0.0.1" in db_url):
+        pytest.skip("Skipping email fallback row test: DATABASE_URL appears to be production")
+
+    db = RicoDB()
+    test_email = "email_external_fallback_test@example.com"
+
+    try:
+        db.init()
+    except Exception:
+        pass
+
+    with db.connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM rico_users WHERE email = %s OR external_user_id = %s",
+                (test_email, test_email),
+            )
+        conn.commit()
+
+    try:
+        with db.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO rico_users (external_user_id, name, email, created_at, updated_at)
+                    VALUES (%s, 'Fallback Email User', NULL, NOW() - INTERVAL '1 day', NOW() - INTERVAL '1 day')
+                    """,
+                    (test_email,),
+                )
+            conn.commit()
+
+        bundle = db.get_user_bundle(test_email)
+        assert bundle is not None, "external_user_id=email fallback row should still resolve"
+        assert bundle["external_user_id"] == test_email
+        assert bundle["email"] is None
+
+        upsert_profile(test_email, {
+            "preferred_cities": ["Dubai", "Sharjah"],
+            "notice_period": "Immediate",
+        })
+
+        profile = get_profile(test_email)
+        assert profile is not None
+        assert profile.preferred_cities == ["Dubai", "Sharjah"]
+        assert profile.notice_period == "Immediate"
+
+        bundle_after = db.get_user_bundle(test_email)
+        assert bundle_after is not None
+        assert bundle_after["email"] == test_email
+    finally:
+        with db.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM rico_users WHERE email = %s OR external_user_id = %s",
+                    (test_email, test_email),
+                )
+            conn.commit()
+
+
 def test_non_email_identifiers_still_work():
     """Regression test: non-email identifiers (Telegram/JotForm/external_user_id) path is not broken by canonical email fix.
 
@@ -1033,3 +1099,167 @@ def test_api_patch_get_consistency_with_duplicate_rows(monkeypatch):
             with conn.cursor() as cur:
                 cur.execute("DELETE FROM rico_users WHERE email = %s", (test_email,))
             conn.commit()
+
+
+def test_upsert_profile_uses_bundle_resolver_for_email_users(monkeypatch):
+    """Unit regression: email PATCH writes to the same bundle row GET resolves."""
+    import src.repositories.profile_repo as profile_repo
+
+    captured = {}
+
+    class FakeConn:
+        def commit(self):
+            captured["committed"] = True
+
+        def rollback(self):
+            captured["rolled_back"] = True
+
+        def close(self):
+            captured["closed"] = True
+
+    class FakeDB:
+        available = True
+
+        def connect(self):
+            return FakeConn()
+
+        def get_user_bundle(self, user_id, conn=None):
+            captured["bundle_user_id"] = user_id
+            captured["bundle_conn"] = conn
+            return {
+                "id": "canonical-db-user-id",
+                "external_user_id": "6d1df84a-e69a-46d1-9f1e-48c44577e380",
+                "email": user_id,
+                "profile": {"preferred_cities": ["Old City"]},
+                "settings": {},
+            }
+
+        def upsert_profile(self, user_id, profile_data, conn=None):
+            captured["profile_user_id"] = user_id
+            captured["profile_data"] = profile_data
+            captured["profile_conn"] = conn
+            return {"user_id": user_id, "profile": profile_data}
+
+    class FakeMemory:
+        def upsert_profile_from_dict(self, user_id, updates):
+            return RicoProfile(user_id=user_id, email=user_id, **updates)
+
+    fake_db = FakeDB()
+    monkeypatch.setattr(profile_repo, "RicoDB", lambda: fake_db)
+    monkeypatch.setattr(profile_repo, "_memory", lambda: FakeMemory())
+
+    profile_repo.upsert_profile(
+        "person@example.com",
+        {"preferred_cities": ["Dubai"], "notice_period": "Immediate"},
+    )
+
+    assert captured["bundle_user_id"] == "person@example.com"
+    assert captured["profile_user_id"] == "canonical-db-user-id"
+    assert captured["profile_data"] == {
+        "preferred_cities": ["Dubai"],
+        "notice_period": "Immediate",
+    }
+    assert captured["committed"] is True
+    assert captured["closed"] is True
+
+
+def test_upsert_profile_creates_email_user_with_email_column(monkeypatch):
+    """Unit regression: new web email users are readable by GET after fallback creation."""
+    import src.repositories.profile_repo as profile_repo
+
+    captured = {}
+
+    class FakeConn:
+        def commit(self):
+            captured["committed"] = True
+
+        def rollback(self):
+            captured["rolled_back"] = True
+
+        def close(self):
+            captured["closed"] = True
+
+    class FakeDB:
+        available = True
+
+        def connect(self):
+            return FakeConn()
+
+        def get_user_bundle(self, user_id, conn=None):
+            captured["bundle_user_id"] = user_id
+            return None
+
+        def upsert_user(self, payload, conn=None):
+            captured["user_payload"] = payload
+            return {"id": "new-db-user-id"}
+
+        def upsert_profile(self, user_id, profile_data, conn=None):
+            captured["profile_user_id"] = user_id
+            captured["profile_data"] = profile_data
+            return {"user_id": user_id, "profile": profile_data}
+
+    class FakeMemory:
+        def upsert_profile_from_dict(self, user_id, updates):
+            return RicoProfile(user_id=user_id, email=user_id, **updates)
+
+    fake_db = FakeDB()
+    monkeypatch.setattr(profile_repo, "RicoDB", lambda: fake_db)
+    monkeypatch.setattr(profile_repo, "_memory", lambda: FakeMemory())
+
+    profile_repo.upsert_profile(
+        "new-person@example.com",
+        {"preferred_cities": ["Abu Dhabi"], "notice_period": "2 weeks"},
+    )
+
+    assert captured["user_payload"]["external_user_id"] == "new-person@example.com"
+    assert captured["user_payload"]["email"] == "new-person@example.com"
+    assert captured["profile_user_id"] == "new-db-user-id"
+    assert captured["profile_data"] == {
+        "preferred_cities": ["Abu Dhabi"],
+        "notice_period": "2 weeks",
+    }
+    assert captured["committed"] is True
+    assert captured["closed"] is True
+
+
+def test_get_user_bundle_email_path_keeps_external_user_id_fallback():
+    """Unit regression: email lookup still sees external_user_id=email rows."""
+    from src.rico_db import RicoDB
+
+    captured = {}
+
+    class FakeCursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, sql, params):
+            captured["sql"] = sql
+            captured["params"] = params
+
+        def fetchone(self):
+            return {
+                "id": "row-id",
+                "external_user_id": "person@example.com",
+                "email": None,
+                "profile": {},
+                "settings": {},
+            }
+
+    class FakeConn:
+        def cursor(self):
+            return FakeCursor()
+
+    db = RicoDB("postgresql://unused")
+    bundle = db.get_user_bundle("person@example.com", conn=FakeConn())
+
+    assert bundle is not None
+    assert bundle["external_user_id"] == "person@example.com"
+    assert "LOWER(u.external_user_id) = LOWER(%s)" in captured["sql"]
+    assert captured["params"] == (
+        "person@example.com",
+        "person@example.com",
+        "person@example.com",
+    )
