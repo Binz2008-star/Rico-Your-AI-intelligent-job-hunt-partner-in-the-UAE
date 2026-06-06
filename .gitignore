@@ -54,6 +54,10 @@ credentials.json
 token.json
 data/gmail_review_queue.json
 
+# Zoho OAuth credentials
+zoho_token.json
+*.token.json
+
 # Coverage / logs / debug
 .coverage
 logs/
