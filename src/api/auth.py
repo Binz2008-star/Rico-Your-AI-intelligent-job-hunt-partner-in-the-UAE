@@ -460,6 +460,11 @@ def register(
         )
 
     # No cookie set — user must verify email before logging in.
+    # Clear any stale authenticated session from a previous browser user.
+    response.delete_cookie(
+        key=_COOKIE_NAME,
+        **_cookie_delete_kwargs(),
+    )
 
     # Schedule verification email (best-effort, never fails registration)
     try:

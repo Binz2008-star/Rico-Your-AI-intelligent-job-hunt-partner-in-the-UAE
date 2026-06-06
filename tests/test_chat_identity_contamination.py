@@ -111,6 +111,23 @@ class TestSanitizeHistoryForLLM:
         assert len(result) == 1
 
 
+class TestOpenAIContextIdentitySafety:
+    def test_profile_email_is_not_sent_to_openai_context(self):
+        from src.rico_chat_api import RicoChatAPI
+
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        ctx = api._build_openai_context({
+            "email": "private@rico.ai",
+            "phone": "+971501234567",
+            "skills": ["Python", "Compliance"],
+        })
+
+        assert ctx["profile_exists"] is True
+        assert "email" not in ctx
+        assert ctx["phone"] == "+971501234567"
+        assert ctx["skills"] == ["Python", "Compliance"]
+
+
 # ---------------------------------------------------------------------------
 # message_generator — no "None role"
 # ---------------------------------------------------------------------------
