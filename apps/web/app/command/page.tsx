@@ -74,6 +74,8 @@ interface Message {
 
 type ChatAudience = "checking" | "authenticated" | "public";
 
+// Module-level counter replaced by component-local ref (see _idRef below).
+// Kept for import compatibility only; do not use outside CommandPage.
 let _id = 0;
 function nextId() { return ++_id; }
 
@@ -598,13 +600,10 @@ export default function CommandPage() {
     const { language } = useLanguage();
     const t = useTranslation(language);
     const useMock = process.env.NEXT_PUBLIC_USE_MOCK === "true";
-    const cvReady = typeof window === "undefined"
-        ? false
-        : new URLSearchParams(window.location.search).get("cv") === "ready";
-
-    const prompt = typeof window === "undefined"
-        ? null
-        : new URLSearchParams(window.location.search).get("prompt");
+    // SSR-safe: always false/null on server and first client render.
+    // Populated by useEffect after hydration so server and client initial HTML match.
+    const [cvReady, setCvReady] = useState(false);
+    const [prompt, setPrompt] = useState<string | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
     const [thinking, setThinking] = useState(false);
@@ -617,6 +616,7 @@ export default function CommandPage() {
     const [draftProfile, setDraftProfile] = useState<ProfilePreview | null>(null);
     const [clearingHistory, setClearingHistory] = useState(false);
     const [confirmClear, setConfirmClear] = useState(false);
+    const [clearHistoryError, setClearHistoryError] = useState<string | null>(null);
     const [sidebarUser, setSidebarUser] = useState<{ email?: string } | null>(null);
     const [userName, setUserName] = useState<string | null>(null);
     // "pending" = history not yet checked; "has_history" = history loaded; "empty" = no history
@@ -628,6 +628,15 @@ export default function CommandPage() {
             document.documentElement.lang = language;
         }
     }, [language]);
+
+    // Read URL params client-side only so SSR and first client render both produce
+    // cvReady=false / prompt=null, preventing a hydration mismatch.
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        setCvReady(params.get("cv") === "ready");
+        setPrompt(params.get("prompt") ?? null);
+    }, []);
+
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1163,18 +1172,28 @@ export default function CommandPage() {
     async function handleClearHistory() {
         if (!confirmClear) {
             setConfirmClear(true);
+            setClearHistoryError(null);
             return;
         }
         setClearingHistory(true);
         setConfirmClear(false);
+        setClearHistoryError(null);
         try {
             await clearChatHistory();
             setMessages([]);
             promptSentRef.current = false;
-        } catch {
-            // Best-effort — silently swallow; history still cleared locally
+        } catch (err) {
+            // Server-side delete failed — keep local UI cleared but warn the user
+            // so they know history may reappear on next load.
             setMessages([]);
             promptSentRef.current = false;
+            const msg = err instanceof Error ? err.message : String(err);
+            const isAuth = msg.includes("401") || msg.toLowerCase().includes("unauthorized");
+            setClearHistoryError(
+                isAuth
+                    ? "Session expired — history cleared locally. Sign in again to clear server history."
+                    : "Could not clear server history. It may reappear on next load."
+            );
         } finally {
             setClearingHistory(false);
         }
@@ -1204,7 +1223,6 @@ export default function CommandPage() {
     return (
         <div
             className="relative flex h-[100dvh] min-h-[100dvh] overflow-hidden bg-background"
-            dir={language === "ar" ? "rtl" : "ltr"}
         >
             {/* Desktop sidebar — md+ only, hidden on mobile. Shown when authenticated or
                 checking (so there's no layout jump when auth resolves). Hides for public. */}
@@ -1278,6 +1296,13 @@ export default function CommandPage() {
                                 </button>
                             )}
                         </div>
+                    )}
+
+                    {/* Clear-history error — shown if server DELETE failed */}
+                    {clearHistoryError && (
+                        <p className="px-4 py-1.5 text-[11px] text-amber-400/90 text-center">
+                            {clearHistoryError}
+                        </p>
                     )}
 
                     {/* CV-ready onboarding panel — Pulse-style glass card with action chips */}
