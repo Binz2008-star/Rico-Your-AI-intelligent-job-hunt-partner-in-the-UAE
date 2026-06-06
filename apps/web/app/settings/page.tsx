@@ -2,7 +2,7 @@
 
 import { AppShell } from "@/components/layout/AppShell";
 import { ErrorState } from "@/components/shared/ErrorState";
-import { MaterialIcon } from "@/components/ui/MaterialIcon";
+import { StatusCard } from "@/components/StatusCard";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
@@ -26,33 +26,6 @@ function splitKeywords(value: string): string[] {
     .split(",")
     .map((k) => k.trim())
     .filter(Boolean);
-}
-
-interface SectionCardProps {
-  icon: string;
-  title: string;
-  subtitle?: string;
-  children: React.ReactNode;
-}
-
-function SectionCard({ icon, title, subtitle, children }: SectionCardProps) {
-  return (
-    <section className="relative overflow-hidden rounded-2xl border border-overlay/10 bg-surface/60 p-5 backdrop-blur-sm sm:p-6">
-      <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-gold/5 blur-3xl" aria-hidden="true" />
-      <header className="mb-5 flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gold/10">
-          <MaterialIcon icon={icon} size={18} className="text-gold" />
-        </div>
-        <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold text-text-primary">{title}</h2>
-          {subtitle && (
-            <p className="mt-0.5 text-[13px] text-text-tertiary">{subtitle}</p>
-          )}
-        </div>
-      </header>
-      {children}
-    </section>
-  );
 }
 
 export default function SettingsPage() {
@@ -167,7 +140,7 @@ export default function SettingsPage() {
 
   const telegramOn = Boolean(telegram?.opted_in);
   const inputClass =
-    "w-full rounded-lg border border-overlay/10 bg-surface-subtle/60 px-3 py-2.5 text-[13px] text-text-primary outline-none transition-colors focus:border-gold/40 placeholder:text-text-tertiary";
+    "w-full rounded-lg border border-border-soft bg-surface-glass px-3 py-2 text-sm text-text-primary outline-none transition focus:border-rico-accent placeholder:text-text-tertiary";
 
   return (
     <AppShell
@@ -183,10 +156,9 @@ export default function SettingsPage() {
         className="flex w-full max-w-2xl flex-col gap-6 text-start"
       >
         {/* ── Section A: Job Filters ─────────────────────────────────── */}
-        <SectionCard
-          icon="work"
+        <StatusCard
           title={t("jobFilters")}
-          subtitle={t("jobFiltersSubtitle")}
+          className="min-h-0"
         >
           {loading ? (
             <div className="flex flex-col gap-3">
@@ -239,7 +211,7 @@ export default function SettingsPage() {
               <label className="flex flex-col gap-2">
                 <span className="flex items-center justify-between text-[12px] font-semibold text-text-secondary">
                   {t("minimumFitScore")}
-                  <span className="text-gold">{settings.min_score}%</span>
+                  <span className="text-rico-accent">{settings.min_score}%</span>
                 </span>
                 <input
                   type="range"
@@ -251,7 +223,7 @@ export default function SettingsPage() {
                   onChange={(e) =>
                     setSettings({ ...settings, min_score: Number(e.target.value) })
                   }
-                  className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-white/5 accent-gold"
+                  className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-white/5 accent-rico-accent"
                 />
                 <div className="flex justify-between text-[10px] font-bold uppercase tracking-tight text-text-tertiary">
                   <span>{t("general")}</span>
@@ -262,7 +234,7 @@ export default function SettingsPage() {
               <label className="flex flex-col gap-2">
                 <span className="flex items-center justify-between text-[12px] font-semibold text-text-secondary">
                   {t("dailyApplyLimit")}
-                  <span className="text-gold">{settings.max_daily_applies}</span>
+                  <span className="text-rico-accent">{settings.max_daily_applies}</span>
                 </span>
                 <input
                   type="range"
@@ -277,7 +249,7 @@ export default function SettingsPage() {
                       max_daily_applies: Number(e.target.value),
                     })
                   }
-                  className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-white/5 accent-gold"
+                  className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-white/5 accent-rico-accent"
                 />
                 <div className="flex justify-between text-[10px] font-bold uppercase tracking-tight text-text-tertiary">
                   <span>{t("safety")}</span>
@@ -288,7 +260,7 @@ export default function SettingsPage() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="mt-1 inline-flex items-center gap-2 self-start rounded-lg bg-gold px-4 py-2.5 text-[13px] font-semibold text-[#0a0a1a] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 disabled:opacity-40"
+                className="mt-1 inline-flex items-center gap-2 self-start rounded-lg bg-rico-accent px-4 py-2.5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rico-accent/50 disabled:opacity-40"
               >
                 {saving && (
                   <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#0a0a1a] border-t-transparent motion-reduce:hidden" />
@@ -297,13 +269,12 @@ export default function SettingsPage() {
               </button>
             </div>
           ) : null}
-        </SectionCard>
+        </StatusCard>
 
         {/* ── Section B: Notifications ───────────────────────────────── */}
-        <SectionCard
-          icon="send"
+        <StatusCard
           title={t("notifications")}
-          subtitle={t("notificationsSubtitle")}
+          className="min-h-0"
         >
           <div className="flex flex-col gap-5">
             <div className="flex items-center justify-between gap-4">
@@ -325,7 +296,7 @@ export default function SettingsPage() {
                 onClick={handleToggleTelegram}
                 disabled={telegramBusy}
                 className={`relative h-6 w-11 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 disabled:opacity-50 ${
-                  telegramOn ? "bg-gold" : "bg-white/15"
+                  telegramOn ? "bg-rico-accent" : "bg-white/15"
                 }`}
               >
                 <span
@@ -356,10 +327,10 @@ export default function SettingsPage() {
               </label>
             )}
           </div>
-        </SectionCard>
+        </StatusCard>
 
         {/* ── Section C: Account ─────────────────────────────────────── */}
-        <SectionCard icon="account_circle" title={t("account")}>
+        <StatusCard title={t("account")} className="min-h-0">
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <span className="text-[12px] font-semibold text-text-secondary">
@@ -370,9 +341,8 @@ export default function SettingsPage() {
 
             <a
               href="/forgot-password"
-              className="inline-flex items-center gap-1.5 self-start text-[13px] text-gold underline-offset-2 hover:underline"
+              className="inline-flex items-center gap-1.5 self-start text-[13px] text-magenta underline-offset-2 hover:underline hover:text-magenta-hover transition-colors"
             >
-              <MaterialIcon icon="lock_reset" size={15} />
               {t("changePassword")}
             </a>
 
@@ -397,7 +367,7 @@ export default function SettingsPage() {
               </a>
             </div>
           </div>
-        </SectionCard>
+        </StatusCard>
       </div>
       <ToastContainer toasts={toasts} />
     </AppShell>
