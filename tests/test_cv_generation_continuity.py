@@ -131,6 +131,22 @@ class TestPreferredCitiesPendingField:
         result = self.api._resolve_pending_field("user-1", "dubai", self._profile)
         assert result is None
 
+    def test_intent_phrase_not_intercepted_as_city(self):
+        """'find me jobs' must not be consumed as a city answer."""
+        self.api._get_recent_context = MagicMock(return_value=dict(self._ctx))
+        self.api._get_last_assistant_message = MagicMock(return_value="preferred cities (e.g. Dubai)")
+        result = self.api._resolve_pending_field("user-1", "find me jobs", self._profile)
+        assert result is None
+
+    def test_long_message_not_intercepted_as_city(self):
+        """A message with more than 6 words must not be consumed as a city."""
+        self.api._get_recent_context = MagicMock(return_value=dict(self._ctx))
+        self.api._get_last_assistant_message = MagicMock(return_value="preferred cities (e.g. Dubai)")
+        result = self.api._resolve_pending_field(
+            "user-1", "I want to work in Dubai or Abu Dhabi preferably", self._profile
+        )
+        assert result is None
+
 
 class TestCVDraftNoPlaeholders:
 

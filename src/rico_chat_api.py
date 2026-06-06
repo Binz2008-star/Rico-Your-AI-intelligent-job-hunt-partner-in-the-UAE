@@ -2054,6 +2054,18 @@ class RicoChatAPI:
 
         # ── Preferred cities (CV flow) ────────────────────────────────────────
         if pending_field == "preferred_cities":
+            # Reject messages that look like intents rather than city answers.
+            # A city reply is short and does not contain intent-bearing verbs.
+            _INTENT_VERBS = re.compile(
+                r"\b(find|search|show|get|help|apply|generate|create|make|write|"
+                r"update|start|look|resume|cv|cover|letter|job|jobs|work)\b",
+                re.IGNORECASE,
+            )
+            if _INTENT_VERBS.search(msg):
+                return None
+            # Also reject long free-text answers unlikely to be city names
+            if len(msg.split()) > 6:
+                return None
             # Accept any non-empty text as city input — normalise and save
             raw_cities = [c.strip() for c in re.split(r"[,،/|]+", msg) if c.strip()]
             if not raw_cities:
