@@ -432,24 +432,60 @@ class RicoDB:
 
         try:
             with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT u.id, u.external_user_id, u.name, u.email, u.phone, u.telegram_username, u.telegram_chat_id, u.source, u.created_at, u.updated_at,
-                           p.profile, p.cv_file_url, p.cv_text, p.cv_structured, s.settings
-                    FROM rico_users u
-                    LEFT JOIN rico_profiles p ON p.user_id = u.id
-                    LEFT JOIN rico_agent_settings s ON s.user_id = u.id
-                    WHERE u.id::text = %s OR u.external_user_id = %s OR u.email = %s OR u.telegram_username = %s
-                    ORDER BY
-                        CASE WHEN u.id::text = %s THEN 0 ELSE 1 END,
-                        CASE WHEN u.email = %s THEN 0 ELSE 1 END,
-                        CASE WHEN u.external_user_id = %s THEN 0 ELSE 1 END,
-                        CASE WHEN u.telegram_username = %s THEN 0 ELSE 1 END,
-                        u.updated_at DESC
-                    LIMIT 1
-                    """,
-                    (user_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id),
-                )
+                # For email-authenticated web users, apply canonical selection rule
+                # For non-email identifiers (UUID, telegram_username), prefer exact match
+                is_email = "@" in user_id
+                if is_email:
+                    cur.execute(
+                        """
+                        SELECT u.id, u.external_user_id, u.name, u.email, u.phone, u.telegram_username, u.telegram_chat_id, u.source, u.created_at, u.updated_at,
+                               p.profile, p.cv_file_url, p.cv_text, p.cv_structured, s.settings
+                        FROM rico_users u
+                        LEFT JOIN rico_profiles p ON p.user_id = u.id
+                        LEFT JOIN rico_agent_settings s ON s.user_id = u.id
+                        WHERE LOWER(u.email) = LOWER(%s) OR LOWER(u.external_user_id) = LOWER(%s)
+                        ORDER BY
+                            -- 1. Prefer rows with the email stored in the email column.
+                            CASE WHEN LOWER(u.email) = LOWER(%s) THEN 0 ELSE 1 END,
+                            -- 2. Prefer rows where external_user_id != email (canonical UUID rows)
+                            CASE WHEN LOWER(u.external_user_id) = LOWER(u.email) THEN 1 ELSE 0 END,
+                            -- 3. Prefer UUID-like external_user_id
+                            CASE WHEN u.external_user_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN 0 ELSE 1 END,
+                            -- 4. Prefer row with existing profile
+                            CASE WHEN p.id IS NOT NULL THEN 0 ELSE 1 END,
+                            -- 5. Prefer most recently updated
+                            u.updated_at DESC,
+                            -- 6. Deterministic id tie-breaker
+                            u.id ASC
+                        LIMIT 1
+                        """,
+                        (user_id, user_id, user_id),
+                    )
+                else:
+                    # Non-email identifiers: prefer exact match (id, external_user_id, telegram_username)
+                    cur.execute(
+                        """
+                        SELECT u.id, u.external_user_id, u.name, u.email, u.phone, u.telegram_username, u.telegram_chat_id, u.source, u.created_at, u.updated_at,
+                               p.profile, p.cv_file_url, p.cv_text, p.cv_structured, s.settings
+                        FROM rico_users u
+                        LEFT JOIN rico_profiles p ON p.user_id = u.id
+                        LEFT JOIN rico_agent_settings s ON s.user_id = u.id
+                        WHERE u.id::text = %s OR u.external_user_id = %s OR u.telegram_username = %s
+                        ORDER BY
+                            -- 1. Prefer exact id match
+                            CASE WHEN u.id::text = %s THEN 0 ELSE 1 END,
+                            -- 2. Prefer exact external_user_id match
+                            CASE WHEN u.external_user_id = %s THEN 0 ELSE 1 END,
+                            -- 3. Prefer exact telegram_username match
+                            CASE WHEN u.telegram_username = %s THEN 0 ELSE 1 END,
+                            -- 4. Prefer most recently updated
+                            u.updated_at DESC,
+                            -- 5. Deterministic id tie-breaker
+                            u.id ASC
+                        LIMIT 1
+                        """,
+                        (user_id, user_id, user_id, user_id, user_id, user_id),
+                    )
                 row = cur.fetchone()
             return dict(row) if row else None
         finally:

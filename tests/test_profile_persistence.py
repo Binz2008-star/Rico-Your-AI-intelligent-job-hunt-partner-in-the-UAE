@@ -721,3 +721,315 @@ def test_api_patch_to_db_to_get_roundtrip(monkeypatch):
             with conn.cursor() as cur:
                 cur.execute("DELETE FROM rico_users WHERE external_user_id = %s", (user_id,))
             conn.commit()
+
+
+def test_canonical_row_selection_with_duplicate_emails():
+    """Regression test: PATCH and GET must choose same canonical row when duplicate email rows exist.
+
+    Scenario:
+    - Row A: canonical UUID external_user_id, has profile data
+    - Row B: bad duplicate external_user_id=email, no profile data
+
+    Verify:
+    - upsert_profile writes to Row A (canonical)
+    - get_profile reads from Row A (canonical)
+    - PATCH/GET consistency through API
+
+    Safety: Skips if DATABASE_URL appears to be production.
+    """
+    import os
+    from src.rico_db import RicoDB
+    import uuid
+
+    # Safety guard: skip if DATABASE_URL appears to be production
+    # Allow override with TEST_MODE=1 for local development testing
+    db_url = os.getenv("DATABASE_URL", "")
+    test_mode = os.getenv("TEST_MODE", "0")
+    if test_mode != "1" and "neondb" in db_url and not ("test" in db_url.lower() or "localhost" in db_url or "127.0.0.1" in db_url):
+        pytest.skip("Skipping canonical row test: DATABASE_URL appears to be production")
+
+    db = RicoDB()
+    test_email = "canonical_selection_test@example.com"
+    canonical_uuid = str(uuid.uuid4())
+
+    # Bootstrap schema if needed
+    try:
+        db.init()
+    except Exception:
+        pass  # Schema may already exist
+
+    # Cleanup before test
+    with db.connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM rico_users WHERE email = %s", (test_email,))
+        conn.commit()
+
+    try:
+        # Step 1: Create canonical row (Row A) with UUID external_user_id and profile data
+        with db.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO rico_users (id, external_user_id, name, email, created_at, updated_at)
+                    VALUES (%s, %s, 'Canonical User', %s, NOW() - INTERVAL '2 days', NOW() - INTERVAL '2 days')
+                    """,
+                    (canonical_uuid, canonical_uuid, test_email)
+                )
+                cur.execute(
+                    """
+                    INSERT INTO rico_profiles (user_id, profile, created_at, updated_at)
+                    VALUES (%s, %s, NOW() - INTERVAL '2 days', NOW() - INTERVAL '2 days')
+                    """,
+                    (canonical_uuid, '{"target_roles": ["HSE Manager"], "preferred_cities": ["Dubai"]}')
+                )
+            conn.commit()
+
+        # Step 2: Create bad duplicate row (Row B) with external_user_id=email, no profile
+        with db.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO rico_users (external_user_id, name, email, created_at, updated_at)
+                    VALUES (%s, NULL, %s, NOW() - INTERVAL '1 day', NOW() - INTERVAL '1 day')
+                    """,
+                    (test_email, test_email)
+                )
+            conn.commit()
+
+        # Step 3: Verify get_user_bundle returns canonical row (Row A)
+        bundle = db.get_user_bundle(test_email)
+        assert bundle is not None, "get_user_bundle returned None"
+        assert bundle["external_user_id"] == canonical_uuid, \
+            f"Expected canonical UUID {canonical_uuid}, got {bundle.get('external_user_id')}"
+        assert bundle["name"] == "Canonical User", \
+            f"Expected name from canonical row, got {bundle.get('name')}"
+        profile_data = bundle.get("profile") or {}
+        assert profile_data.get("target_roles") == ["HSE Manager"], \
+            f"Expected profile data from canonical row, got {profile_data}"
+
+        # Step 4: Verify upsert_profile writes to canonical row (Row A)
+        upsert_profile(test_email, {
+            "preferred_cities": ["Dubai", "Abu Dhabi"],
+            "notice_period": "1 month"
+        })
+
+        # Step 5: Verify the canonical row was updated (not the bad duplicate)
+        bundle_after = db.get_user_bundle(canonical_uuid)
+        assert bundle_after is not None, "get_user_bundle for canonical UUID returned None"
+        profile_after = bundle_after.get("profile") or {}
+        assert profile_after.get("preferred_cities") == ["Dubai", "Abu Dhabi"], \
+            f"Expected updated cities in canonical row, got {profile_after.get('preferred_cities')}"
+        assert profile_after.get("notice_period") == "1 month", \
+            f"Expected notice_period in canonical row, got {profile_after.get('notice_period')}"
+
+        # Step 6: Verify get_profile reads from canonical row
+        profile = get_profile(test_email)
+        assert profile is not None, "get_profile returned None"
+        assert profile.preferred_cities == ["Dubai", "Abu Dhabi"], \
+            f"Expected updated cities from canonical row, got {profile.preferred_cities}"
+        assert profile.notice_period == "1 month", \
+            f"Expected notice_period from canonical row, got {profile.notice_period}"
+
+    finally:
+        # Cleanup
+        with db.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM rico_users WHERE email = %s", (test_email,))
+            conn.commit()
+
+
+def test_non_email_identifiers_still_work():
+    """Regression test: non-email identifiers (Telegram/JotForm/external_user_id) path is not broken by canonical email fix.
+
+    Verify:
+    - get_user_bundle by external_user_id (UUID) works
+    - get_user_bundle by telegram_username works
+    - upsert_profile by non-email external_user_id works
+    """
+    import os
+    from src.rico_db import RicoDB
+    import uuid
+
+    # Safety guard: skip if DATABASE_URL appears to be production
+    # Allow override with TEST_MODE=1 for local development testing
+    db_url = os.getenv("DATABASE_URL", "")
+    test_mode = os.getenv("TEST_MODE", "0")
+    if test_mode != "1" and "neondb" in db_url and not ("test" in db_url.lower() or "localhost" in db_url or "127.0.0.1" in db_url):
+        pytest.skip("Skipping non-email identifier test: DATABASE_URL appears to be production")
+
+    db = RicoDB()
+    test_uuid = str(uuid.uuid4())
+    test_telegram = "test_telegram_user"
+
+    # Bootstrap schema if needed
+    try:
+        db.init()
+    except Exception:
+        pass  # Schema may already exist
+
+    # Ensure telegram_notifications_enabled column exists (for older DB schemas)
+    try:
+        with db.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    ALTER TABLE rico_users
+                    ADD COLUMN IF NOT EXISTS telegram_notifications_enabled BOOLEAN DEFAULT TRUE
+                """)
+                conn.commit()
+    except Exception:
+        pass  # Column may already exist
+
+    # Cleanup before test
+    with db.connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM rico_users WHERE external_user_id = %s", (test_uuid,))
+            cur.execute("DELETE FROM rico_users WHERE telegram_username = %s", (test_telegram,))
+        conn.commit()
+
+    try:
+        # Test 1: upsert by external_user_id (UUID)
+        user_row = db.upsert_user({
+            "external_user_id": test_uuid,
+            "name": "UUID User",
+            "email": "uuid@example.com"
+        })
+        assert user_row["external_user_id"] == test_uuid
+        assert user_row["name"] == "UUID User"
+
+        # Test 2: get_user_bundle by external_user_id
+        bundle = db.get_user_bundle(test_uuid)
+        assert bundle is not None
+        assert bundle["external_user_id"] == test_uuid
+        assert bundle["name"] == "UUID User"
+
+        # Test 3: upsert by telegram_username
+        telegram_row = db.upsert_user({
+            "external_user_id": test_telegram,
+            "telegram_username": test_telegram,
+            "name": "Telegram User"
+        })
+        assert telegram_row["telegram_username"] == test_telegram
+        assert telegram_row["name"] == "Telegram User"
+
+        # Test 4: get_user_bundle by telegram_username
+        telegram_bundle = db.get_user_bundle(test_telegram)
+        assert telegram_bundle is not None
+        assert telegram_bundle["telegram_username"] == test_telegram
+        assert telegram_bundle["name"] == "Telegram User"
+
+        # Test 5: upsert_profile by non-email external_user_id
+        upsert_profile(test_uuid, {
+            "preferred_cities": ["Dubai"],
+            "notice_period": "1 month"
+        })
+
+        # Test 6: get_profile by non-email external_user_id
+        profile = get_profile(test_uuid)
+        assert profile is not None
+        assert profile.preferred_cities == ["Dubai"]
+        assert profile.notice_period == "1 month"
+
+    finally:
+        # Cleanup
+        with db.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM rico_users WHERE external_user_id = %s", (test_uuid,))
+                cur.execute("DELETE FROM rico_users WHERE telegram_username = %s", (test_telegram,))
+            conn.commit()
+
+
+def test_api_patch_get_consistency_with_duplicate_rows(monkeypatch):
+    """Regression test: PATCH /api/v1/rico/profile then GET /api/v1/rico/profile must return saved data when duplicate rows exist.
+
+    This tests the full API path with the canonical selection fix.
+
+    Safety: Skips if DATABASE_URL appears to be production.
+    """
+    import os
+    import src.api.routers.rico_chat as rico_chat_router
+    from src.rico_db import RicoDB
+    import uuid
+
+    # Safety guard: skip if DATABASE_URL appears to be production
+    # Allow override with TEST_MODE=1 for local development testing
+    db_url = os.getenv("DATABASE_URL", "")
+    test_mode = os.getenv("TEST_MODE", "0")
+    if test_mode != "1" and "neondb" in db_url and not ("test" in db_url.lower() or "localhost" in db_url or "127.0.0.1" in db_url):
+        pytest.skip("Skipping API duplicate test: DATABASE_URL appears to be production")
+
+    db = RicoDB()
+    test_email = "api_duplicate_test@example.com"
+    canonical_uuid = str(uuid.uuid4())
+
+    def mock_get_user(request):
+        user = {"email": test_email, "role": "user"}
+        request.state.current_user = user
+        request.state.user_id = test_email
+        return user
+
+    monkeypatch.setattr(rico_chat_router, "get_current_user", mock_get_user)
+
+    client = TestClient(app)
+
+    # Cleanup before test
+    with db.connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM rico_users WHERE email = %s", (test_email,))
+        conn.commit()
+
+    try:
+        # Create canonical row with profile data
+        with db.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO rico_users (id, external_user_id, name, email, created_at, updated_at)
+                    VALUES (%s, %s, 'API Test User', %s, NOW() - INTERVAL '2 days', NOW() - INTERVAL '2 days')
+                    """,
+                    (canonical_uuid, canonical_uuid, test_email)
+                )
+                cur.execute(
+                    """
+                    INSERT INTO rico_profiles (user_id, profile, created_at, updated_at)
+                    VALUES (%s, %s, NOW() - INTERVAL '2 days', NOW() - INTERVAL '2 days')
+                    """,
+                    (canonical_uuid, '{"target_roles": ["Engineer"]}')
+                )
+            conn.commit()
+
+        # Create bad duplicate row
+        with db.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO rico_users (external_user_id, name, email, created_at, updated_at)
+                    VALUES (%s, NULL, %s, NOW() - INTERVAL '1 day', NOW() - INTERVAL '1 day')
+                    """,
+                    (test_email, test_email)
+                )
+            conn.commit()
+
+        # PATCH preferred_cities and notice_period
+        response = client.patch("/api/v1/rico/profile", json={
+            "preferred_cities": ["Dubai", "Sharjah"],
+            "notice_period": "2 months"
+        })
+        assert response.status_code == 200
+        assert "preferred_cities" in response.json()["updated_fields"]
+        assert "notice_period" in response.json()["updated_fields"]
+
+        # GET profile and verify data persisted
+        response = client.get("/api/v1/rico/profile")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["preferred_cities"] == ["Dubai", "Sharjah"], \
+            f"Expected saved cities, got {data.get('preferred_cities')}"
+        assert data["notice_period"] == "2 months", \
+            f"Expected saved notice_period, got {data.get('notice_period')}"
+
+    finally:
+        # Cleanup
+        with db.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM rico_users WHERE email = %s", (test_email,))
+            conn.commit()
