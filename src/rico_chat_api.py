@@ -99,6 +99,7 @@ CV_FILE_RE = re.compile(r"\b[\w .()_-]+\.(?:pdf|docx?|txt)\b", re.IGNORECASE)
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PHONE_RE = re.compile(r"(?:\+?\d[\d\s().-]{7,}\d)")
 FOLLOWUP_BOUNDARY_PUNCT_RE = re.compile(r"^[\s\"'([{]+|[\s\"')\]}.,!?;:]+$")
+PROFILE_LIST_SPLIT_RE = re.compile(r"[,;\n\r|]+")
 # Telegram username: @handle (5–32 chars, alphanumeric + underscore)
 TELEGRAM_HANDLE_RE = re.compile(r"^@[A-Za-z0-9_]{5,32}$")
 # Telegram declaration in natural language: "my telegram is @handle", "@handle" etc.
@@ -567,16 +568,27 @@ class RicoChatAPI:
 
     @staticmethod
     def _as_list(value: Any) -> list[Any]:
-        """Convert value to list if not already."""
+        """Convert profile values to a flat list.
+
+        Profile data can arrive from older forms as comma/newline-separated
+        strings. Flatten those before role search so one stored text blob never
+        becomes one giant job title.
+        """
         if value is None:
             return []
-        if isinstance(value, list):
-            return value
-        if isinstance(value, tuple):
-            return list(value)
-        if isinstance(value, str) and value.strip():
-            return [value.strip()]
-        return []
+        items = value if isinstance(value, (list, tuple)) else [value]
+        result: list[Any] = []
+        for item in items:
+            if item is None:
+                continue
+            if isinstance(item, str):
+                for part in PROFILE_LIST_SPLIT_RE.split(item):
+                    cleaned = part.strip().strip("-*\u2022").strip()
+                    if cleaned:
+                        result.append(cleaned)
+                continue
+            result.append(item)
+        return result
 
     @staticmethod
     def normalize_role_label(text: str) -> str:
