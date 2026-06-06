@@ -1959,7 +1959,19 @@ class RicoChatAPI:
         "email": (
             "email address", "your email", "بريدك الإلكتروني",
         ),
+        "preferred_cities": (
+            "preferred cities", "preferred city", "which city", "what city",
+            "city (e.g.", "city preference", "المدن المفضلة", "المدينة المفضلة",
+        ),
     }
+
+    # Known UAE cities for preferred_cities field resolution
+    _UAE_CITIES: frozenset[str] = frozenset({
+        "dubai", "abu dhabi", "sharjah", "ajman", "ras al khaimah",
+        "fujairah", "umm al quwain", "al ain", "deira", "bur dubai",
+        "دبي", "أبوظبي", "الشارقة", "عجمان", "رأس الخيمة",
+        "الفجيرة", "أم القيوين", "العين",
+    })
 
     def _resolve_pending_field(
         self, user_id: str, message: str, profile: Any
@@ -2039,6 +2051,27 @@ class RicoChatAPI:
                 "message": reply,
                 "updated": {"email": msg},
             }
+
+        # ── Preferred cities (CV flow) ────────────────────────────────────────
+        if pending_field == "preferred_cities":
+            # Accept any non-empty text as city input — normalise and save
+            raw_cities = [c.strip() for c in re.split(r"[,،/|]+", msg) if c.strip()]
+            if not raw_cities:
+                return None
+            # Title-case known UAE cities; keep others as entered
+            normalised = []
+            for c in raw_cities:
+                if c.lower() in self._UAE_CITIES:
+                    normalised.append(c.title())
+                else:
+                    normalised.append(c)
+            upsert_profile(user_id=user_id, updates={"preferred_cities": normalised})
+            ctx.pop("_pending_field", None)
+            ctx.pop("_pending_cv_generate", None)
+            self._store_recent_context(user_id, ctx)
+            # Reload profile so the CV draft picks up the new cities
+            updated_profile = self._resolve_profile(user_id)
+            return self._handle_cv_generate_from_profile(user_id, updated_profile)
 
         return None
 
@@ -4597,6 +4630,10 @@ class RicoChatAPI:
         industries = self._as_list(self._profile_value(profile, "preferred_industries"))
         current_role = self._profile_value(profile, "current_role") or (target_roles[0] if target_roles else "")
 
+        # Pull extended parsed-CV fields to check what sections are actually stored
+        work_experience = self._as_list(self._profile_value(profile, "work_experience"))
+        education = self._as_list(self._profile_value(profile, "education"))
+
         # Identify genuinely missing fields that would improve the CV
         missing: list[str] = []
         if not current_role:
@@ -4608,7 +4645,21 @@ class RicoChatAPI:
         if not preferred_cities:
             missing.append("preferred cities (e.g. Dubai, Abu Dhabi)")
 
-        # Build the CV draft from extracted data
+        # Sections absent from parsed CV — do not generate placeholders for these
+        unparsed_sections: list[str] = []
+        if not work_experience:
+            unparsed_sections.append("Work Experience")
+        if not education:
+            unparsed_sections.append("Education")
+
+        # If cities are missing, store pending field so the next reply is captured
+        if not preferred_cities:
+            ctx = self._get_recent_context(user_id)
+            ctx["_pending_field"] = "preferred_cities"
+            ctx["_pending_cv_generate"] = True
+            self._store_recent_context(user_id, ctx)
+
+        # Build the CV draft from extracted data only — no placeholders
         sections: list[str] = []
 
         header_parts = [name] if name else []
@@ -4649,11 +4700,18 @@ class RicoChatAPI:
                 + "\n".join(f"• {f}" for f in missing)
                 + "\n\nReply with these details and I'll add them."
             )
+        elif unparsed_sections:
+            # Profile is present but parsed CV lacks full sections — be honest
+            missing_note = (
+                "\n\n**Sections not yet available from your parsed CV:** "
+                + ", ".join(unparsed_sections)
+                + ".\n\nTo add these, upload your CV file (PDF or Word) "
+                "or paste your work history and I'll format it."
+            )
         else:
             missing_note = (
-                "\n\nAll key fields are filled. "
-                "Tell me if you'd like to add a specific section (e.g. Education, Projects) "
-                "or tailor this CV for a particular role."
+                "\n\nAll available profile sections are included. "
+                "Tell me if you'd like to tailor this CV for a specific role."
             )
 
         message = f"{greeting}\n\n---\n\n{cv_draft}\n\n---{missing_note}"
@@ -4663,6 +4721,7 @@ class RicoChatAPI:
             "message": message,
             "cv_draft": cv_draft,
             "missing_fields": missing,
+            "unparsed_sections": unparsed_sections,
             "next_action": "collect_missing_cv_fields" if missing else "cv_ready",
         }
 
