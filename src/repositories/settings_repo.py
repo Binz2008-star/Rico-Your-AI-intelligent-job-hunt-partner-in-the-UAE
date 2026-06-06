@@ -85,7 +85,14 @@ def upsert(data: Dict[str, Any], user_id: Optional[str] = None) -> None:
                     data.get("score_threshold_watch"),
                 ),
             )
+        conn.commit()
     except Exception:
         logger.exception("settings_repo_upsert_failed")
+        rollback = getattr(conn, "rollback", None)
+        if callable(rollback):
+            try:
+                rollback()
+            except Exception:
+                logger.exception("settings_repo_rollback_failed")
     finally:
         conn.close()

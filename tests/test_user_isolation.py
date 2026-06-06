@@ -279,6 +279,48 @@ class TestUserSettingsIsolation:
         call_args = cur.execute.call_args[0][1]
         assert call_args[0] == "alice@rico.ai"
 
+    def test_settings_repo_upsert_commits_on_success(self):
+        """settings_repo.upsert must commit successful writes before closing."""
+        from src.repositories import settings_repo
+
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+        with patch("src.repositories.settings_repo.get_db_connection", return_value=conn):
+            settings_repo.upsert(
+                {"min_score": 72, "max_daily_applies": 3},
+                user_id="alice@rico.ai",
+            )
+
+        params = cur.execute.call_args[0][1]
+        assert params[0] == "alice@rico.ai"
+        assert params[3] == 72
+        assert params[4] == 3
+        conn.commit.assert_called_once()
+        conn.rollback.assert_not_called()
+        conn.close.assert_called_once()
+
+    def test_settings_repo_upsert_rolls_back_on_exception(self):
+        """settings_repo.upsert must roll back failed writes and keep logging."""
+        from src.repositories import settings_repo
+
+        conn = MagicMock()
+        cur = MagicMock()
+        cur.execute.side_effect = RuntimeError("insert failed")
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+        with patch("src.repositories.settings_repo.get_db_connection", return_value=conn), \
+             patch("src.repositories.settings_repo.logger.exception") as mock_log:
+            settings_repo.upsert({"min_score": 72}, user_id="alice@rico.ai")
+
+        conn.commit.assert_not_called()
+        conn.rollback.assert_called_once()
+        conn.close.assert_called_once()
+        mock_log.assert_called_with("settings_repo_upsert_failed")
+
     def test_settings_service_returns_user_specific_values(self):
         """settings_service.get_settings must return the user's DB row when available."""
         from src.services import settings_service
