@@ -9,31 +9,45 @@ load_dotenv()
 
 
 def send_email(subject: str, content: str) -> bool:
-    """Send email using SMTP (Gmail). Returns True if successful, False otherwise."""
-    email_user = os.getenv("EMAIL_USER")
-    email_pass = os.getenv("EMAIL_PASS", "").replace(" ", "").strip()
+    """Send email using SMTP. Returns True if successful, False otherwise."""
+    # Support both legacy and new SMTP config
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "465"))
+    smtp_user = os.getenv("SMTP_USER", os.getenv("EMAIL_USER", "")).strip()
+    smtp_password = os.getenv("SMTP_PASSWORD", os.getenv("EMAIL_PASS", "")).replace(" ", "").strip()
     email_to = os.getenv("EMAIL_TO")
 
-    if not all([email_user, email_pass, email_to]):
-        print("Error: EMAIL_USER, EMAIL_PASS, and EMAIL_TO must be set in .env file")
+    # Use configured sender or fallback to support email
+    email_from = os.getenv("EMAIL_FROM", os.getenv("SUPPORT_EMAIL", "info@ricohunt.com"))
+    email_from_name = os.getenv("EMAIL_FROM_NAME", "Rico Hunt")
+
+    if not all([smtp_user, smtp_password, email_to]):
+        print("Error: SMTP credentials and EMAIL_TO must be set in .env file")
         return False
 
     try:
         msg = EmailMessage()
         msg.set_content(content)
         msg["Subject"] = subject
-        msg["From"] = email_user
+        msg["From"] = f"{email_from_name} <{email_from}>"
         msg["To"] = email_to
 
         context = ssl.create_default_context()
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
-            server.login(email_user, email_pass)
-            server.send_message(msg)
+        # Use SSL for port 465, STARTTLS for port 587
+        if smtp_port == 465:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port, context=context) as server:
+                server.login(smtp_user, smtp_password)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(smtp_host, smtp_port) as server:
+                server.starttls(context=context)
+                server.login(smtp_user, smtp_password)
+                server.send_message(msg)
 
         print("Email sent successfully")
         return True
     except smtplib.SMTPAuthenticationError:
-        print("Error: Email authentication failed. Check EMAIL_USER and EMAIL_PASS")
+        print("Error: Email authentication failed. Check SMTP credentials")
         return False
     except Exception as e:
         print(f"Error sending email: {e}")
