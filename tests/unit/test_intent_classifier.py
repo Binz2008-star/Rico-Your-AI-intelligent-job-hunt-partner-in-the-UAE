@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from src.agent.intelligence.intent_classifier import classify_intent
 
 
@@ -102,7 +100,7 @@ class TestIntentClassifierRefactorParity:
         """Test profile summary phrases are classified correctly."""
         test_cases = [
             "show my profile", "my profile", "profile summary",
-            "ما هو اسمي", "ما اسمي",
+            "ما هو اسمي", "ما اسمي", "ما هو ملفي",
         ]
         for message in test_cases:
             result = classify_intent(message)
@@ -159,48 +157,59 @@ class TestIntentClassifierRefactorParity:
             assert result.confidence == 0.0
             assert result.source == "fallback"
 
+    def test_explicit_job_search_extracts_role_after_job_noun(self) -> None:
+        """Explicit 'jobs for <role>' requests keep extracted_role unchanged."""
+        result = classify_intent("find jobs for Environmental Compliance Manager")
 
-# Profile review tests are skipped because profile_review intent is not in main baseline
-# These tests will be re-enabled after #471 (profile review feature) is merged
-class TestProfileReviewIntent:
-    """Test profile review intent classification with broad Arabic/English patterns."""
+        assert result.intent == "job_search_explicit"
+        assert result.confidence == 0.85
+        assert result.source == "regex"
+        assert result.extracted_role == "Environmental Compliance Manager"
 
-    @pytest.mark.skip(reason="profile_review intent not in main baseline - added in #471")
-    def test_arabic_profile_review_phrases(self) -> None:
-        """Test Arabic profile review phrases are classified correctly."""
-        pass
+    def test_explicit_job_search_extracts_role_before_job_noun(self) -> None:
+        """Natural '<role> jobs' requests keep extracted_role unchanged."""
+        result = classify_intent("find operations manager jobs in ajman")
 
-    @pytest.mark.skip(reason="profile_review intent not in main baseline - added in #471")
-    def test_english_profile_review_phrases(self) -> None:
-        """Test English profile review phrases are classified correctly."""
-        pass
+        assert result.intent == "job_search_explicit"
+        assert result.confidence == 0.85
+        assert result.source == "regex"
+        assert result.extracted_role == "operations manager"
 
-    @pytest.mark.skip(reason="profile_review intent not in main baseline - added in #471")
-    def test_false_positive_job_search(self) -> None:
-        """Test job search phrases are NOT classified as profile review."""
-        pass
+    def test_save_target_role_extracts_role_before_save_job(self) -> None:
+        """Save-target-role extraction still wins over generic save-job intent."""
+        result = classify_intent("save Environmental Manager as my target role")
 
-    @pytest.mark.skip(reason="profile_review intent not in main baseline - added in #471")
-    def test_false_positive_job_actions(self) -> None:
-        """Test job action phrases are NOT classified as profile review."""
-        pass
+        assert result.intent == "save_target_role"
+        assert result.confidence == 0.95
+        assert result.source == "regex"
+        assert result.extracted_role == "Environmental Manager"
 
-    @pytest.mark.skip(reason="profile_review intent not in main baseline - added in #471")
-    def test_false_positive_profile_updates(self) -> None:
-        """Test explicit profile update phrases are NOT classified as profile review."""
-        pass
+    def test_job_card_action_extracts_title_and_company(self) -> None:
+        """Structured job-card actions keep title/company extraction unchanged."""
+        result = classify_intent("Prepare application — HSE Manager at Acme Safety")
 
-    @pytest.mark.skip(reason="profile_review intent not in main baseline - added in #471")
-    def test_combined_update_then_review(self) -> None:
-        """Test messages with both update and review - update takes precedence."""
-        pass
+        assert result.intent == "prepare_application"
+        assert result.confidence == 0.95
+        assert result.source == "regex"
+        assert result.extracted_title == "HSE Manager"
+        assert result.extracted_company == "Acme Safety"
 
-    @pytest.mark.skip(reason="profile_review intent not in main baseline - added in #471")
-    def test_complex_arabic_review_request(self) -> None:
-        """Test complex Arabic review request - may not match exact phrases."""
-        pass
+    def test_open_apply_link_extracts_title_and_company(self) -> None:
+        """Free-text open-apply-link keeps optional title/company extraction unchanged."""
+        result = classify_intent("open apply link for ESG Manager at GreenCo")
 
-    @pytest.mark.skip(reason="profile_review intent not in main baseline - added in #471")
-    def test_profile_summary_vs_review(self) -> None:
-        """Test profile summary phrases are distinct from profile review."""
-        pass
+        assert result.intent == "open_apply_link"
+        assert result.confidence == 0.95
+        assert result.source == "regex"
+        assert result.extracted_title == "ESG Manager"
+        assert result.extracted_company == "GreenCo"
+
+    def test_explicit_role_request_does_not_depend_on_saved_profile_roles(self) -> None:
+        """Explicit role wording remains extracted even when caller has a CV profile."""
+        result = classify_intent(
+            "find jobs for Sustainability Operations Manager",
+            has_cv_profile=True,
+        )
+
+        assert result.intent == "job_search_explicit"
+        assert result.extracted_role == "Sustainability Operations Manager"
