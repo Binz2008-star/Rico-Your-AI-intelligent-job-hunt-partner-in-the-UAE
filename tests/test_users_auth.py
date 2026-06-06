@@ -218,7 +218,7 @@ class TestCookieSessionSettings:
         assert "access_token=" in set_cookie
         assert "httponly" in set_cookie_lower
         assert "secure" in set_cookie_lower
-        assert "samesite=none" in set_cookie_lower
+        assert "samesite=lax" in set_cookie_lower
         assert "domain=.ricohunt.com" in set_cookie_lower
 
     def test_cookie_secure_false_rejected_in_production(self):
@@ -291,6 +291,29 @@ class TestRegisterEndpoint:
         assert data["email"] == "newuser@rico.ai"
         assert data["role"] == "user"
         assert data["created"] is True
+
+    def test_register_clears_stale_access_token_cookie(self, user_client):
+        _reset_limiter()
+        created = User(
+            id=16, email="fresh@rico.ai", password_hash="$2b$12$fakehash",
+            role="user", is_active=True,
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            last_login_at=None,
+        )
+        with patch("src.repositories.users_repo.get_user_by_email", return_value=None), \
+             patch("src.api.auth._hash_password", return_value="$2b$12$fakehash"), \
+             patch("src.repositories.users_repo.create_user", return_value=created):
+            r = user_client.post(
+                "/api/v1/auth/register",
+                json={"email": "fresh@rico.ai", "password": "SecurePass1"},
+            )
+
+        assert r.status_code == 201
+        set_cookies = r.headers.get_list("set-cookie")
+        assert any(
+            header.startswith("access_token=") and "Max-Age=0" in header
+            for header in set_cookies
+        )
 
     def test_register_attempts_admin_signup_notification(self, user_client):
         _reset_limiter()

@@ -397,7 +397,7 @@ class RicoChatAPI:
                 raw = {k: getattr(profile, k) for k in dir(profile) if not k.startswith("_")}
 
             essential_fields = {
-                "email", "phone", "skills", "years_experience",
+                "phone", "skills", "years_experience",
                 "preferred_cities", "target_roles", "industries",
                 "salary_expectation_aed", "deal_breakers",
                 "telegram_username", "telegram_chat_id",
