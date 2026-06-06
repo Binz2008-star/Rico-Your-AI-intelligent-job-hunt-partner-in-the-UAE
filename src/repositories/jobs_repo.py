@@ -8,6 +8,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
+from psycopg2 import sql
+
 from src.db import get_db_connection
 
 logger = logging.getLogger(__name__)
@@ -40,17 +42,23 @@ def list_from_db(
             filters.append("source = %s")
             params.append(source)
 
-        where = " AND ".join(filters)
+        where_clause = sql.SQL(" AND ").join(sql.SQL(f) for f in filters)
 
         with conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM jobs WHERE " + where, params)
+            cur.execute(
+                sql.SQL("SELECT COUNT(*) FROM jobs WHERE ") + where_clause,
+                params,
+            )
             total = cur.fetchone()[0]
 
             query = (
-                "SELECT id, title, company, location, link, score,"
-                " match_reason, source, date_found, seen, link_status, link_verified_at"
-                " FROM jobs WHERE " + where +
-                " ORDER BY score DESC, date_found DESC LIMIT %s OFFSET %s"
+                sql.SQL(
+                    "SELECT id, title, company, location, link, score,"
+                    " match_reason, source, date_found, seen, link_status, link_verified_at"
+                    " FROM jobs WHERE "
+                )
+                + where_clause
+                + sql.SQL(" ORDER BY score DESC, date_found DESC LIMIT %s OFFSET %s")
             )
             cur.execute(query, params + [limit, offset])
             rows = cur.fetchall()
