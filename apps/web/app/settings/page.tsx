@@ -308,23 +308,35 @@ export default function SettingsPage() {
             </div>
 
             {settings && (
-              <label className="flex flex-col gap-1.5 border-t border-overlay/10 pt-5">
-                <span className="text-[12px] font-semibold text-text-secondary">
-                  {t("telegramChatId")}
-                </span>
-                <input
-                  type="text"
-                  value={settings.telegram_chat_id}
-                  onChange={(e) =>
-                    setSettings({ ...settings, telegram_chat_id: e.target.value })
-                  }
-                  placeholder={t("telegramPlaceholder")}
-                  className={inputClass}
-                />
-                <span className="text-[11px] text-text-tertiary">
-                  {t("telegramChatIdHint")}
-                </span>
-              </label>
+              <div className="flex flex-col gap-3 border-t border-overlay/10 pt-5">
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[12px] font-semibold text-text-secondary">
+                    {t("telegramChatId")}
+                  </span>
+                  <input
+                    type="text"
+                    value={settings.telegram_chat_id}
+                    onChange={(e) =>
+                      setSettings({ ...settings, telegram_chat_id: e.target.value })
+                    }
+                    placeholder={t("telegramPlaceholder")}
+                    className={inputClass}
+                  />
+                  <span className="text-[11px] text-text-tertiary">
+                    {t("telegramChatIdHint")}
+                  </span>
+                </label>
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="inline-flex items-center gap-2 self-start rounded-lg bg-rico-accent px-4 py-2.5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rico-accent/50 disabled:opacity-40"
+                >
+                  {saving && (
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent motion-reduce:hidden" />
+                  )}
+                  {saving ? t("saving") : t("saveSettings")}
+                </button>
+              </div>
             )}
           </div>
         </StatusCard>

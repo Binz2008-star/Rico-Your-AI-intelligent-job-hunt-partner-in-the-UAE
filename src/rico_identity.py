@@ -18,6 +18,11 @@ Product identity:
 - Website: ricohunt.com
 - Support: available via WhatsApp on the platform, or at ricohunt.com
 
+Product identity:
+- Product: Rico Hunt
+- Website: ricohunt.com
+- Support: available via WhatsApp on the platform, or at ricohunt.com
+
 Core capabilities:
 - UAE job search across verified sources (results come from real job board data, never invented)
 - AI-powered job scoring and match explanations tailored to the user's profile
