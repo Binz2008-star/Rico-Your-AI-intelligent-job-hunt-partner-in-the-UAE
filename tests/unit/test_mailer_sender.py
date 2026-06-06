@@ -7,8 +7,8 @@ from src.services.mailer import send_email
 
 
 @patch.dict(os.environ, {
-    "EMAIL_USER": "test@gmail.com",
-    "EMAIL_PASS": "test_password",
+    "SMTP_USER": "test@gmail.com",
+    "SMTP_PASSWORD": "test_password",
 })
 def test_mailer_uses_configured_sender():
     """Test that mailer uses EMAIL_FROM for sender address."""
@@ -42,8 +42,8 @@ def test_mailer_uses_configured_sender():
 
 
 @patch.dict(os.environ, {
-    "EMAIL_USER": "test@gmail.com",
-    "EMAIL_PASS": "test_password",
+    "SMTP_USER": "test@gmail.com",
+    "SMTP_PASSWORD": "test_password",
 })
 def test_mailer_fallback_to_support_email():
     """Test that mailer falls back to SUPPORT_EMAIL when EMAIL_FROM not set."""
@@ -73,8 +73,8 @@ def test_mailer_fallback_to_support_email():
 
 
 @patch.dict(os.environ, {
-    "EMAIL_USER": "test@gmail.com",
-    "EMAIL_PASS": "test_password",
+    "SMTP_USER": "test@gmail.com",
+    "SMTP_PASSWORD": "test_password",
 })
 def test_mailer_fallback_to_default():
     """Test that mailer falls back to default info@ricohunt.com when neither set."""
@@ -99,3 +99,34 @@ def test_mailer_fallback_to_default():
 
         # Verify sender falls back to default
         assert "info@ricohunt.com" in msg["From"]
+
+
+@patch.dict(os.environ, {
+    "SMTP_USER": "test@gmail.com",
+    "SMTP_PASSWORD": "test_password",
+})
+def test_mailer_uses_production_smtp_config():
+    """Test that mailer uses SMTP_HOST/SMTP_PORT/SMTP_USER when configured."""
+    with patch.dict(os.environ, {
+        "SMTP_HOST": "smtp.zoho.com",
+        "SMTP_PORT": "587",
+        "SMTP_USER": "info@ricohunt.com",
+        "SMTP_PASSWORD": "zoho_password",
+        "EMAIL_FROM": "info@ricohunt.com",
+        "EMAIL_FROM_NAME": "Rico Hunt",
+    }):
+        with patch("src.services.mailer.smtplib.SMTP") as mock_smtp:
+            mock_server = Mock()
+            mock_smtp.return_value.__enter__ = Mock(return_value=mock_server)
+            mock_smtp.return_value.__exit__ = Mock(return_value=False)
+
+            result = send_email(
+                to_email="user@example.com",
+                subject="Test Subject",
+                body="Test Body"
+            )
+
+            assert result is True
+            # Verify STARTTLS was called for port 587
+            mock_server.starttls.assert_called_once()
+            mock_server.login.assert_called_with("info@ricohunt.com", "zoho_password")
