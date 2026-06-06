@@ -87,7 +87,7 @@ services:
 
       # ── Billing mode ─────────────────────────────────────────────────────────
       - key: BILLING_MODE
-        value: "stripe"
+        value: "manual"
       - key: RICO_PRO_PRICE_AED
         value: "29"
       - key: RICO_PREMIUM_PRICE_AED
