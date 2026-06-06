@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Rico">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#16120A"/>
+      <stop offset="0.52" stop-color="#070706"/>
+      <stop offset="1" stop-color="#1C1407"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFF2B8"/>
+      <stop offset="0.26" stop-color="#E7B84B"/>
+      <stop offset="0.62" stop-color="#B87A16"/>
+      <stop offset="1" stop-color="#FFD66D"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="42%" r="55%">
+      <stop offset="0" stop-color="#FFD66D" stop-opacity="0.32"/>
+      <stop offset="0.56" stop-color="#C99022" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="20" stdDeviation="28" flood-color="#000000" flood-opacity="0.55"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="16" flood-color="#D9A23A" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" rx="224" fill="url(#bg)"/>
+  <rect x="34" y="34" width="956" height="956" rx="196" fill="none" stroke="#7A520F" stroke-opacity="0.55" stroke-width="6"/>
+  <circle cx="512" cy="430" r="430" fill="url(#glow)"/>
+
+  <!-- Subtle career/AI orbit -->
+  <path d="M238 710 C 356 792, 640 800, 785 598" fill="none" stroke="#E0A536" stroke-width="12" stroke-linecap="round" stroke-opacity="0.45"/>
+  <circle cx="246" cy="711" r="18" fill="#E4AC3A" opacity="0.72"/>
+  <circle cx="785" cy="598" r="18" fill="#E4AC3A" opacity="0.72"/>
+  <path d="M744 598 L793 584 L777 632" fill="none" stroke="#E4AC3A" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" opacity="0.72"/>
+
+  <!-- Geometric Rico R mark -->
+  <g filter="url(#softShadow)">
+    <path fill="url(#gold)" d="M320 250 H555 C683 250 762 320 762 431 C762 520 712 583 626 610 L764 774 H618 L500 626 H452 V774 H320 Z
+      M452 366 V520 H546 C594 520 627 492 627 444 C627 396 594 366 546 366 Z"/>
+    <path d="M452 366 V520 H546 C594 520 627 492 627 444 C627 396 594 366 546 366 Z" fill="#0D0B08" opacity="0.92"/>
+    <path d="M452 250 H555 C683 250 762 320 762 431 C762 520 712 583 626 610" fill="none" stroke="#FFF0B0" stroke-opacity="0.36" stroke-width="14" stroke-linecap="round"/>
+  </g>
+
+  <!-- Small AI node accents, understated -->
+  <g opacity="0.65" fill="#F0BD4B">
+    <circle cx="712" cy="289" r="10"/>
+    <circle cx="776" cy="348" r="7"/>
+    <circle cx="246" cy="333" r="7"/>
+  </g>
+  <g opacity="0.35" stroke="#F0BD4B" stroke-width="5" stroke-linecap="round">
+    <path d="M712 289 L776 348"/>
+    <path d="M246 333 L300 382"/>
+  </g>
+</svg>

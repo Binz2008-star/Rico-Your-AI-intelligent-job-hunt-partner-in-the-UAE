@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.2" baseProfile="tiny-ps"
+     viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>Rico</title>
+  <rect width="1024" height="1024" fill="#0C0A07"/>
+  <path fill="#E8A830" d="M320 250 H555 C683 250 762 320 762 431
+    C762 520 712 583 626 610 L764 774 H618 L500 626 H452 V774 H320 Z
+    M452 366 V520 H546 C594 520 627 492 627 444
+    C627 396 594 366 546 366 Z"/>
+  <path fill="#0C0A07" d="M452 366 V520 H546 C594 520 627 492 627 444
+    C627 396 594 366 546 366 Z"/>
+</svg>
