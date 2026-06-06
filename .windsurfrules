@@ -1,0 +1,49 @@
+Rico Hunt / Rico AI development rules
+
+Follow CLAUDE.md and AGENTS.md.
+
+Core rules:
+- Treat this as production code.
+- One task = one clean session = one branch = one PR.
+- Keep PRs small and scoped.
+- Do not touch unrelated files.
+- Do not merge without explicit approval.
+- Do not deploy without explicit approval.
+- Do not mutate production DB/Neon without explicit approval.
+- Never expose secrets, cookies, tokens, passwords, or private env values.
+
+Use Plan Mode before:
+- multi-file changes
+- backend changes
+- frontend routing/layout changes
+- auth/session/JWT/cookie changes
+- database/migration/Neon work
+- Stripe/billing work
+- Render/Vercel/deploy work
+- AI routing/intent/scoring/refactor work
+- Telegram/JotForm webhook changes
+- production smoke testing
+- file deletion or broad cleanup
+
+Before risky coding:
+1. Explain the bug/goal.
+2. Identify exact files/functions.
+3. Propose the smallest safe fix.
+4. List tests/smoke checks.
+5. Wait for approval if risk is non-trivial.
+
+Do not:
+- add pseudo-code
+- add placeholder implementations
+- rewrite unrelated systems
+- reintroduce old parallel implementations
+- call live external APIs in unit tests
+- write to live Neon in tests
+- bypass user approval for high-impact actions
+- bypass Rico safety checks
+
+If a task fails twice:
+- stop
+- clear context
+- rewrite the prompt
+- restart clean
