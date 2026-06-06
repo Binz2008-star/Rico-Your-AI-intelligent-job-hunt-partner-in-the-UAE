@@ -14,6 +14,10 @@ def send_email(subject: str, content: str) -> bool:
     email_pass = os.getenv("EMAIL_PASS", "").replace(" ", "").strip()
     email_to = os.getenv("EMAIL_TO")
 
+    # Use configured sender or fallback to support email
+    email_from = os.getenv("EMAIL_FROM", os.getenv("SUPPORT_EMAIL", "info@ricohunt.com"))
+    email_from_name = os.getenv("EMAIL_FROM_NAME", "Rico Hunt")
+
     if not all([email_user, email_pass, email_to]):
         print("Error: EMAIL_USER, EMAIL_PASS, and EMAIL_TO must be set in .env file")
         return False
@@ -22,7 +26,7 @@ def send_email(subject: str, content: str) -> bool:
         msg = EmailMessage()
         msg.set_content(content)
         msg["Subject"] = subject
-        msg["From"] = email_user
+        msg["From"] = f"{email_from_name} <{email_from}>"
         msg["To"] = email_to
 
         context = ssl.create_default_context()
