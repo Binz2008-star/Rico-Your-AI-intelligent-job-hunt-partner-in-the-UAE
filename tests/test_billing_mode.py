@@ -120,6 +120,16 @@ class TestManualModeBlocksCheckout:
         assert r.json()["provider"] == "stripe"
         assert len(calls) == 1
 
+    def test_premium_checkout_returns_403_in_manual_mode(self, user_client, monkeypatch):
+        monkeypatch.setenv("BILLING_MODE", "manual")
+        monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_safe")
+        monkeypatch.setenv("STRIPE_PREMIUM_PRICE_ID", "price_test_premium")
+
+        r = user_client.post("/api/v1/subscription/checkout", json={"plan": "premium"})
+
+        assert r.status_code == 403
+        assert "online checkout is not enabled" in r.json()["detail"].lower()
+
     def test_checkout_requires_auth(self, client, monkeypatch):
         monkeypatch.setenv("BILLING_MODE", "manual")
 
