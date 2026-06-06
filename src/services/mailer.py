@@ -24,10 +24,14 @@ def send_email(*, to_email: str, subject: str, body: str) -> bool:
         logger.warning("email_delivery_not_configured recipient=%s", to_email)
         return False
 
+    # Use configured sender or fallback to support email
+    email_from = os.getenv("EMAIL_FROM", os.getenv("SUPPORT_EMAIL", "info@ricohunt.com"))
+    email_from_name = os.getenv("EMAIL_FROM_NAME", "Rico Hunt")
+
     msg = EmailMessage()
     msg.set_content(body)
     msg["Subject"] = subject
-    msg["From"] = email_user
+    msg["From"] = f"{email_from_name} <{email_from}>"
     msg["To"] = to_email
 
     try:
