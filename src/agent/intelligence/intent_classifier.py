@@ -126,7 +126,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Optional, Union
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +169,21 @@ def _map_intent_to_legacy(intent: str) -> str:
 
 
 @dataclass(frozen=True)
+class Rule:
+    """A single classification rule with priority and matcher."""
+    name: str
+    priority: int  # Higher priority = checked first
+    pattern: Union[re.Pattern, frozenset, Callable[[str], bool]]
+    is_regex: bool = False
+    is_callable: bool = False
+    intent: str = None  # Intent to return if matched
+    confidence: float = 1.0
+    source: str = "exact"
+    # Optional extraction function for complex patterns
+    extractor: Optional[Callable[[str], dict]] = None
+
+
+@dataclass(frozen=True)
 class IntentResult:
     """Result of intent classification (v2 with entities and context)."""
     intent: str  # Canonical intent name (e.g., "job_search.explicit_role")
@@ -195,6 +210,43 @@ class IntentResult:
 
 
 # ── Exact-phrase sets ────────────────────────────────────────────────────────
+
+# Priority-ordered rule table for intent classification
+# Higher priority = checked first. Rules are evaluated in order until a match is found.
+# Patterns are populated after phrase sets are defined below.
+_EXACT_PHRASE_RULES_TEMPLATE = [
+    # Priority 100: Acknowledgements (must match before greetings to avoid mid-conversation triggers)
+    ("acknowledgement", 100, "acknowledgement", 1.0),
+    # Priority 95: Smalltalk
+    ("smalltalk", 95, "smalltalk", 1.0),
+    # Priority 90: Profile match
+    ("profile_match", 90, "job_search_profile_match", 1.0),
+    # Priority 85: Recent context
+    ("recent_context", 85, "recent_context", 1.0),
+    # Priority 80: Lifecycle queries (more specific than application_tracking)
+    ("lifecycle_saved", 80, "lifecycle_show_saved", 1.0),
+    ("lifecycle_applied", 80, "lifecycle_show_applied", 1.0),
+    ("lifecycle_opened_not_applied", 80, "lifecycle_show_opened_not_applied", 1.0),
+    # Priority 75: Application tracking
+    ("application_tracking", 75, "application_tracking", 1.0),
+    # Priority 70: Help
+    ("help", 70, "help", 1.0),
+    # Priority 65: Profile summary
+    ("profile_summary", 65, "profile_summary", 1.0),
+    # Priority 60: Profile role suggestions
+    ("profile_role_suggestions", 60, "profile_role_suggestions", 1.0),
+    # Priority 55: Skip/onboarding
+    ("skip", 55, "onboarding_answer", 0.9),
+    # Priority 50: Profile update
+    ("profile_update", 50, "profile_update", 0.9),
+    # Priority 45: Follow-up confirmation
+    ("follow_up_confirmation", 45, "follow_up_confirmation", 1.0),
+    # Priority 40: Subscription
+    ("subscription", 40, "subscription.show_plans", 1.0),
+]
+
+# Rule table will be populated with actual patterns after phrase sets are defined
+_RULE_TABLE: list[Rule] = []
 
 _PROFILE_MATCH_PHRASES = frozenset([
     "find me one that matches",
@@ -395,6 +447,48 @@ _FOLLOW_UP_CONFIRMATION_PHRASES = frozenset([
     # Arabic confirmations / follow-up affirmatives (normalised forms)
     "تمام", "اوكي", "نعم", "اي", "موافق", "كمل", "استمر", "حسنا", "طيب",
 ])
+
+# ── Initialize rule table with actual patterns ────────────────────────────────
+
+def _initialize_rule_table() -> list[Rule]:
+    """Initialize the rule table with actual phrase patterns."""
+    phrase_map = {
+        "acknowledgement": _ACKNOWLEDGEMENT_PHRASES,
+        "smalltalk": _SMALLTALK_PHRASES,
+        "profile_match": _PROFILE_MATCH_PHRASES,
+        "recent_context": _RECENT_CONTEXT_PHRASES,
+        "lifecycle_saved": _LIFECYCLE_SAVED_PHRASES,
+        "lifecycle_applied": _LIFECYCLE_APPLIED_PHRASES,
+        "lifecycle_opened_not_applied": _LIFECYCLE_OPENED_NOT_APPLIED_PHRASES,
+        "application_tracking": _APPLICATION_TRACKING_PHRASES,
+        "help": _HELP_PHRASES,
+        "profile_summary": _PROFILE_SUMMARY_PHRASES,
+        "profile_role_suggestions": _PROFILE_ROLE_SUGGESTIONS_PHRASES,
+        "skip": _SKIP_PHRASES,
+        "profile_update": _PROFILE_UPDATE_PHRASES,
+        "follow_up_confirmation": _FOLLOW_UP_CONFIRMATION_PHRASES,
+        "subscription": _SUBSCRIPTION_PHRASES,
+    }
+
+    rules = []
+    for name, priority, intent, confidence in _EXACT_PHRASE_RULES_TEMPLATE:
+        pattern = phrase_map.get(name, frozenset())
+        rules.append(Rule(
+            name=name,
+            priority=priority,
+            pattern=pattern,
+            is_regex=False,
+            intent=intent,
+            confidence=confidence,
+            source="exact",
+        ))
+
+    # Sort by priority (highest first)
+    rules.sort(key=lambda r: r.priority, reverse=True)
+    return rules
+
+# Initialize rule table
+_RULE_TABLE = _initialize_rule_table()
 
 # ── Regex patterns ───────────────────────────────────────────────────────────
 
@@ -774,61 +868,19 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     if not text or len(text) < _MIN_MEANINGFUL_LENGTH:
         return IntentResult("unknown", 0.0, "fallback")
 
-    # ── 1. Exact-phrase fast paths (before any regex) ────────────────────
-    # Acknowledgements (thanks/ok/great/etc.) are matched before greetings so
-    # they never trigger the cold-start greeting mid-conversation.
-    if lower in _ACKNOWLEDGEMENT_PHRASES:
-        return IntentResult("acknowledgement", 1.0, "exact")
+    # ── 1. Exact-phrase rule-based matching (priority-ordered) ───────────
+    # Iterate through rules in priority order until a match is found
+    for rule in _RULE_TABLE:
+        if lower in rule.pattern:
+            return IntentResult(rule.intent, rule.confidence, rule.source)
 
-    if lower in _SMALLTALK_PHRASES:
-        return IntentResult("smalltalk", 1.0, "exact")
-
-    # ── 1b. Nonsense gate (after smalltalk check) ───────────────────────
+    # ── 1b. Nonsense gate (after exact-phrase check) ───────────────────
     # Arabic text contains no Latin letters — skip the gate so Arabic is not
     # incorrectly flagged as nonsense.
     if not has_arabic and _NONSENSE_RE.match(text):
         return IntentResult("nonsense", 0.95, "regex")
 
-    # ── 2. Exact-phrase fast paths (continued) ───────────────────────────
-    if lower in _PROFILE_MATCH_PHRASES:
-        return IntentResult("job_search_profile_match", 1.0, "exact")
-
-    if lower in _RECENT_CONTEXT_PHRASES:
-        return IntentResult("recent_context", 1.0, "exact")
-
-    # Lifecycle funnel queries — exact (more specific than application_tracking)
-    if lower in _LIFECYCLE_SAVED_PHRASES:
-        return IntentResult("lifecycle_show_saved", 1.0, "exact")
-    if lower in _LIFECYCLE_APPLIED_PHRASES:
-        return IntentResult("lifecycle_show_applied", 1.0, "exact")
-    if lower in _LIFECYCLE_OPENED_NOT_APPLIED_PHRASES:
-        return IntentResult("lifecycle_show_opened_not_applied", 1.0, "exact")
-
-    if lower in _APPLICATION_TRACKING_PHRASES:
-        return IntentResult("application_tracking", 1.0, "exact")
-
-    if lower in _HELP_PHRASES:
-        return IntentResult("help", 1.0, "exact")
-
-    if lower in _PROFILE_SUMMARY_PHRASES:
-        return IntentResult("profile_summary", 1.0, "exact")
-
-    if lower in _PROFILE_ROLE_SUGGESTIONS_PHRASES:
-        return IntentResult("profile_role_suggestions", 1.0, "exact")
-
-    if lower in _SKIP_PHRASES:
-        return IntentResult("onboarding_answer", 0.9, "exact")
-
-    if lower in _PROFILE_UPDATE_PHRASES:
-        return IntentResult("profile_update", 0.9, "exact")
-
-    if lower in _FOLLOW_UP_CONFIRMATION_PHRASES:
-        return IntentResult("follow_up_confirmation", 1.0, "exact")
-
-    if lower in _SUBSCRIPTION_PHRASES:
-        return IntentResult("subscription.show_plans", 1.0, "exact")
-
-    # ── 3. Regex patterns (ordered by specificity) ───────────────────────
+    # ── 2. Regex patterns (ordered by specificity) ───────────────────────
 
     if _CV_UPLOAD_RE.search(text):
         return IntentResult("cv_upload_or_parse", 0.95, "regex")
