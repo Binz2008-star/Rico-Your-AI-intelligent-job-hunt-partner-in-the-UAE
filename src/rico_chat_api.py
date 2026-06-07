@@ -2770,6 +2770,28 @@ class RicoChatAPI:
                     profile=profile,
                 )
 
+        # Arabic "I already applied" reports are lifecycle updates, not send/draft
+        # requests and not job searches. Catch before the channel follow-up guard,
+        # whose broad Arabic "قدم" send verb can otherwise intercept them.
+        if self._is_arabic_text(message) and any(
+            term in message for term in ("قدم", "تقديم", "التقديم", "ارسل", "أرسل")
+        ):
+            status_intent = classify_intent(message, has_cv_profile=has_cv)
+            if _map_intent_to_legacy(status_intent.intent) == "application_status_update":
+                logger.info(
+                    "rico_intent user=%s intent=%s legacy_intent=%s confidence=%.2f source=%s",
+                    user_id,
+                    status_intent.intent,
+                    status_intent.legacy_intent,
+                    status_intent.confidence,
+                    status_intent.source,
+                )
+                return self._finalize(
+                    self._handle_application_status_update(user_id, message, profile),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
+
         # ── Application draft/send channel clarification ─────────────────────
         # Follow-ups like "go ahead", "send it", or Arabic "صيغ رسالة ... وارسلها"
         # must preserve the current job context without claiming unsupported
@@ -3195,11 +3217,22 @@ class RicoChatAPI:
                     _ctx.pop("_pending_confirm_apply", None)
                     self._store_recent_context(user_id, _ctx)
                     try:
-                        _create_manual_app(title=_title, company=_company, status="applied", user_id=user_id)
+                        _saved = _create_manual_app(
+                            title=_title,
+                            company=_company,
+                            status="applied",
+                            user_id=user_id,
+                        )
+                        if not _saved:
+                            raise RuntimeError("application create_manual returned false")
                         _msg = (
                             f"Got it — **{_title}** at **{_company}** is marked as applied. "
-                            "I'll track it as your latest application. Good luck!"
+                            "I'll track it as your latest application. "
+                            "You can follow it from Applications (/applications)."
                         )
+                        _response_type = "mark_applied"
+                        _job_status = "applied"
+                        _next_action = "follow_up_after_7_days"
                         self._store_recent_context(
                             user_id,
                             self._build_recent_application_context(
@@ -3211,14 +3244,24 @@ class RicoChatAPI:
                         )
                     except Exception:
                         _msg = (
-                            f"Noted — I'll treat **{_title}** at **{_company}** as applied, "
-                            "but I couldn't write to the database right now. "
-                            "Try again from the Pipeline page if it doesn't appear."
+                            f"I understand you submitted **{_title}** at **{_company}**, "
+                            "but I couldn't save it right now. Please try again shortly."
                         )
+                        _response_type = "application_status_update_failed"
+                        _job_status = None
+                        _next_action = "retry_application_status_update"
                     self._append_chat(user_id, "assistant", _msg)
                     return self._finalize(
-                        {"type": "mark_applied", "intent": "mark_applied", "message": _msg,
-                         "job_title": _title, "job_company": _company},
+                        {
+                            "type": _response_type,
+                            "intent": "mark_applied",
+                            "message": _msg,
+                            "job_title": _title,
+                            "job_company": _company,
+                            "job_status": _job_status,
+                            "target_route": "/applications",
+                            "next_action": _next_action,
+                        },
                         self.SOURCE_KEYWORD,
                         profile=profile,
                     )
@@ -3251,6 +3294,13 @@ class RicoChatAPI:
         if legacy_intent == "application_tracking":
             return self._finalize(
                 self._handle_application_tracking(user_id, intent=intent),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        if legacy_intent == "application_status_update":
+            return self._finalize(
+                self._handle_application_status_update(user_id, message, profile),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -3578,11 +3628,17 @@ class RicoChatAPI:
                 pass
 
             try:
-                _create_manual_app(title=title, company=company, status="applied", user_id=user_id)
+                saved = _create_manual_app(title=title, company=company, status="applied", user_id=user_id)
+                if not saved:
+                    raise RuntimeError("application create_manual returned false")
                 msg = (
                     f"Tracked — **{title}** at **{company}** marked as applied. "
-                    "I will treat this as your latest application context for follow-ups."
+                    "I will treat this as your latest application context for follow-ups. "
+                    "You can follow it from Applications (/applications)."
                 )
+                response_type = "mark_applied"
+                job_status = "applied"
+                next_action = "follow_up_after_7_days"
                 self._store_recent_context(
                     user_id,
                     self._build_recent_application_context(
@@ -3594,17 +3650,21 @@ class RicoChatAPI:
                 )
             except Exception:
                 msg = (
-                    f"Noted — **{title}** at **{company}** marked as applied. "
-                    "(Could not write to Application Flow right now — please retry.)"
+                    f"I understand you submitted **{title}** at **{company}**, "
+                    "but I couldn't save it right now. Please try again shortly."
                 )
+                response_type = "application_status_update_failed"
+                job_status = None
+                next_action = "retry_application_status_update"
             response = {
-                "type": "mark_applied",
+                "type": response_type,
                 "intent": "mark_applied",
                 "message": msg,
                 "job_title": title,
                 "job_company": company,
-                "job_status": "applied",
-                "next_action": "follow_up_after_7_days",
+                "job_status": job_status,
+                "target_route": "/applications",
+                "next_action": next_action,
             }
             self._append_chat(user_id, "assistant", msg)
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
@@ -4370,6 +4430,228 @@ class RicoChatAPI:
                 "rico_chat: failed to stamp user_job_context lifecycle user=%s title=%s",
                 user_id, title,
             )
+
+    def _resolve_application_status_job(
+        self,
+        user_id: str,
+        message: str,
+    ) -> dict[str, Any] | None:
+        """Resolve an "I applied to that job" report to recent Rico job context."""
+        try:
+            ctx = self._get_recent_context(user_id)
+        except Exception:
+            ctx = {}
+        candidates: list[dict[str, Any]] = []
+
+        if isinstance(ctx, dict):
+            pending = ctx.get("_pending_application_send")
+            if isinstance(pending, dict) and isinstance(pending.get("job"), dict):
+                candidates.append(dict(pending["job"]))
+
+            recent_app = ctx.get("recent_application")
+            if isinstance(recent_app, dict):
+                candidates.append(dict(recent_app))
+
+            matches = ctx.get("recent_search_matches") or []
+            if isinstance(matches, list):
+                candidates.extend(dict(m) for m in matches if isinstance(m, dict))
+
+        message_lower = (message or "").lower()
+        for candidate in candidates:
+            title = self._job_context_value(candidate, "title")
+            company = self._job_context_value(candidate, "company")
+            if (
+                (title and title.lower() in message_lower)
+                or (company and company.lower() in message_lower)
+            ):
+                return candidate
+
+        if candidates:
+            return candidates[0]
+
+        try:
+            from src.repositories.user_job_context_repo import (
+                get_recently_discussed,
+                get_recently_interacted,
+            )
+
+            for lookup in (get_recently_interacted, get_recently_discussed):
+                rows = lookup(user_id) or []
+                for row in rows:
+                    if isinstance(row, dict) and (row.get("title") or row.get("company")):
+                        return dict(row)
+        except Exception:
+            logger.debug(
+                "rico_chat: failed to resolve applied-status job context user=%s",
+                user_id,
+                exc_info=True,
+            )
+        return None
+
+    def _persist_confirmed_application_status(
+        self,
+        *,
+        user_id: str,
+        job: dict[str, Any],
+    ) -> tuple[bool, str]:
+        """Strictly persist an applied-status report before Rico confirms it."""
+        title = self._job_context_value(job, "title")
+        company = self._job_context_value(job, "company")
+        location = self._job_context_value(job, "location")
+        url = self._job_context_value(job, "apply_url", "link", "source_url")
+        if not title or not company:
+            return False, ""
+
+        job_key = self._derive_lifecycle_job_key(title, company, url)
+        try:
+            existing_status = self._get_existing_application_status(user_id, job_key)
+            if existing_status is None or self._should_update_status(existing_status, "applied"):
+                from src.repositories.applications_repo import create as _create_app
+
+                created = _create_app(
+                    job_id=job_key,
+                    title=title,
+                    company=company,
+                    location=location,
+                    url=url,
+                    status="applied",
+                    source="chat",
+                    user_id=user_id,
+                )
+                if not created:
+                    return False, job_key
+
+            from src.repositories.user_job_context_repo import set_lifecycle_status
+
+            lifecycle_ok = set_lifecycle_status(
+                user_id=user_id,
+                title=title,
+                company=company,
+                status="applied",
+                apply_url=url,
+                note="User reported application submitted in chat.",
+            )
+            if not lifecycle_ok:
+                return False, job_key
+
+            return True, job_key
+        except Exception:
+            logger.exception(
+                "rico_chat: failed strict applied-status persistence user=%s title=%s company=%s",
+                user_id,
+                title,
+                company,
+            )
+            return False, job_key
+
+    def _store_application_status_context(
+        self,
+        user_id: str,
+        *,
+        job: dict[str, Any],
+        job_id: str,
+    ) -> None:
+        title = self._job_context_value(job, "title")
+        company = self._job_context_value(job, "company")
+        link = self._job_context_value(job, "apply_url", "link", "source_url")
+        context = self._build_recent_application_context(
+            title=title,
+            company=company,
+            status="applied",
+            action="application_status_update",
+            route="/applications",
+            job_id=job_id,
+            link=link,
+        )
+        try:
+            existing = self._get_recent_context(user_id)
+            if isinstance(existing, dict):
+                existing.update(context)
+                context = existing
+        except Exception:
+            pass
+        self._store_recent_context(user_id, context)
+
+    def _handle_application_status_update(
+        self,
+        user_id: str,
+        message: str,
+        profile: Any,
+    ) -> dict[str, Any]:
+        """Handle user reports that an application has already been submitted."""
+        arabic = self._is_arabic_text(message)
+        if str(user_id or "").startswith("public:"):
+            msg = (
+                "سجّل الدخول أولاً لكي أحفظ طلباتك في Applications."
+                if arabic else
+                "Sign in first so I can save this in Applications."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "clarification",
+                "intent": "application_status_update",
+                "message": msg,
+                "next_action": "sign_in_required",
+            }
+
+        job = self._resolve_application_status_job(user_id, message)
+        title = self._job_context_value(job or {}, "title")
+        company = self._job_context_value(job or {}, "company")
+        if not job or not title or not company:
+            msg = (
+                "أي وظيفة تقصد؟ أرسل اسم الوظيفة أو الشركة لكي أسجلها كطلب تم تقديمه."
+                if arabic else
+                "Which job do you mean? Send the job title or company so I can mark it as applied."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "clarification",
+                "intent": "application_status_update",
+                "message": msg,
+                "next_action": "choose_job_to_mark_applied",
+            }
+
+        persisted, job_id = self._persist_confirmed_application_status(user_id=user_id, job=job)
+        if persisted:
+            self._store_application_status_context(user_id, job=job, job_id=job_id)
+            if arabic:
+                msg = (
+                    "تم تسجيل التقديم بنجاح. يمكنك متابعته من صفحة Applications (/applications).\n\n"
+                    f"{title} - {company}"
+                )
+            else:
+                msg = (
+                    "Application marked as submitted. You can track it from Applications (/applications).\n\n"
+                    f"{title} at {company}"
+                )
+            response_type = "application_status_update"
+            next_action = "view_applications"
+        else:
+            if arabic:
+                msg = (
+                    "فهمت أنك قدمت على هذه الوظيفة، لكن لم أستطع حفظها الآن. "
+                    "حاول مرة أخرى بعد قليل."
+                )
+            else:
+                msg = (
+                    "I understand you submitted this application, but I could not save it right now. "
+                    "Please try again shortly."
+                )
+            response_type = "application_status_update_failed"
+            next_action = "retry_application_status_update"
+
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": response_type,
+            "intent": "application_status_update",
+            "message": msg,
+            "job_id": job_id,
+            "job_title": title,
+            "job_company": company,
+            "job_status": "applied" if persisted else None,
+            "target_route": "/applications",
+            "next_action": next_action,
+        }
 
     def _store_recent_context(self, user_id: str, context: dict[str, Any]) -> None:
         try:
