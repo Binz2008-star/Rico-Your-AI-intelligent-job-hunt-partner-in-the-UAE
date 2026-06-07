@@ -136,6 +136,9 @@ _NON_ROLE_STARTERS: frozenset[str] = frozenset({
     "the", "a", "an", "this", "that", "these", "those",
     "some", "any", "every", "all", "none", "each", "many", "few",
     "and", "but", "or", "so", "if", "because", "though", "while", "as",
+    # Imperative command / toggle verbs — start a settings command, never a job title
+    "enable", "disable", "turn", "activate", "deactivate",
+    "mute", "unmute", "configure", "connect",
 })
 _QUESTION_CHARS: frozenset[str] = frozenset("?？!！;:")
 _MAX_ROLE_WORDS: int = 6
@@ -167,6 +170,17 @@ _PLACEHOLDER_ROLE_VALUES: frozenset[str] = frozenset({
     "open to all", "any position", "any job", "any jobs",
     "not specified", "tbd", "n/a",
 })
+
+# Settings / notification commands ("enable telegram notifications", "turn off
+# email alerts", "disable reminders"). These are not job roles and not job
+# searches — route them to Settings guidance instead of role classification.
+_SETTINGS_COMMAND_RE = re.compile(
+    r"\b(enable|disable|turn\s+(?:on|off)|activate|deactivate|mute|unmute|"
+    r"switch\s+(?:on|off)|stop|start)\b"
+    r".{0,40}"
+    r"\b(notification|notifications|alert|alerts|telegram|whatsapp|reminder|reminders)\b",
+    re.IGNORECASE,
+)
 
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
@@ -566,6 +580,11 @@ class RicoChatAPI:
         """Accept only short noun-phrase job titles, not questions or commands."""
         text = (message or "").strip()
         if not text:
+            return False
+        # An email address is never a job role — it's typically an answer to a
+        # prompt (e.g. "what's the company email?"). Don't misread it as a role
+        # and emit "I do not recognize '...' as a job role."
+        if EMAIL_RE.search(text):
             return False
         # Pure Arabic / non-ASCII input can't match the English role taxonomy
         if not any(ch.isascii() and ch.isalpha() for ch in text):
@@ -4719,6 +4738,22 @@ class RicoChatAPI:
                     "Sure — which role should I search for? "
                     "Tell me a specific role like 'HSE Manager' or "
                     "'Environmental Engineer', or upload your CV and I'll suggest roles from your background."
+                ),
+            }
+            self._append_chat(user_id, "assistant", response["message"])
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+
+        # Settings / notification commands ("enable telegram notifications",
+        # "turn off email alerts") are neither job roles nor job searches.
+        # Guide the user to Settings instead of emitting a role error.
+        if _SETTINGS_COMMAND_RE.search(message):
+            response = {
+                "type": "settings_guidance",
+                "intent": "settings_update",
+                "message": (
+                    "You can manage notifications — Telegram, WhatsApp and job "
+                    "alerts — from your Settings page. Open Settings → Notifications "
+                    "to turn them on or off."
                 ),
             }
             self._append_chat(user_id, "assistant", response["message"])
