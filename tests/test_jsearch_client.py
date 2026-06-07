@@ -76,6 +76,67 @@ class TestNormalize:
         assert job["location"] == "UAE"
 
 
+# ── UAE geo filter ────────────────────────────────────────────────────────────
+
+def _payload_with(*jobs: dict) -> dict:
+    return {"data": {"jobs": list(jobs)}}
+
+
+def _job(**kw) -> dict:
+    base = {
+        "job_id": "id-" + str(kw.get("employer_name", "x")),
+        "job_title": "Engineer",
+        "employer_name": "Acme",
+        "job_apply_link": "https://acme.com/apply",
+    }
+    base.update(kw)
+    return base
+
+
+class TestUaeGeoFilter:
+    def test_is_uae_job_accepts_ae_code(self):
+        assert jsearch_client._is_uae_job({"job_country": "AE"}) is True
+
+    def test_is_uae_job_accepts_full_name(self):
+        assert jsearch_client._is_uae_job({"job_country": "United Arab Emirates"}) is True
+
+    def test_is_uae_job_rejects_us(self):
+        assert jsearch_client._is_uae_job({"job_country": "US"}) is False
+
+    def test_is_uae_job_rejects_saudi(self):
+        assert jsearch_client._is_uae_job({"job_country": "SA"}) is False
+
+    def test_is_uae_job_keeps_unknown_country(self):
+        # Missing country is kept — the query already targeted country=ae.
+        assert jsearch_client._is_uae_job({"job_title": "X"}) is True
+        assert jsearch_client._is_uae_job({"job_country": ""}) is True
+
+    def test_non_uae_job_filtered_out_of_search(self):
+        payload = _payload_with(
+            _job(employer_name="Raytheon", job_city="El Paso",
+                 job_state="Texas", job_country="US")
+        )
+        with patch.object(jsearch_client.urllib.request, "urlopen", return_value=_resp(payload)):
+            r = jsearch_client.search("engineer UAE")
+        assert r.items == []
+
+    def test_mixed_results_keep_only_uae(self):
+        payload = _payload_with(
+            _job(employer_name="Raytheon", job_country="US"),
+            _job(employer_name="AESG", job_city="Dubai", job_country="AE"),
+        )
+        with patch.object(jsearch_client.urllib.request, "urlopen", return_value=_resp(payload)):
+            r = jsearch_client.search("engineer UAE")
+        assert len(r.items) == 1
+        assert r.items[0]["company"] == "AESG"
+
+    def test_uae_job_passes_through(self):
+        payload = _payload_with(_job(employer_name="AESG", job_country="AE"))
+        with patch.object(jsearch_client.urllib.request, "urlopen", return_value=_resp(payload)):
+            r = jsearch_client.search("engineer UAE")
+        assert len(r.items) == 1
+
+
 # ── caching ───────────────────────────────────────────────────────────────────
 
 class TestCaching:

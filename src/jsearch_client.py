@@ -122,6 +122,26 @@ _UAE_CITY_NAMES = frozenset([
     "ras al khaimah", "fujairah", "al ain", "umm al quwain",
 ])
 
+# Accepted values of JSearch's `job_country` field for a UAE job. JSearch usually
+# returns the ISO alpha-2 code "AE", but full names show up too.
+_UAE_COUNTRY_VALUES = frozenset([
+    "ae", "are", "uae", "u.a.e.", "united arab emirates", "emirates",
+])
+
+
+def _is_uae_job(item: Dict[str, Any]) -> bool:
+    """True unless the raw JSearch item is explicitly tagged with a non-UAE country.
+
+    JSearch occasionally returns out-of-country jobs even when `country=ae` is
+    requested (e.g. a Texas role surfacing in a UAE search). We reject an item
+    only when its `job_country` is present AND clearly not the UAE; a missing or
+    unknown country is kept because the query already targeted `country=ae`.
+    """
+    country = str(item.get("job_country") or "").strip().lower()
+    if not country:
+        return True
+    return country in _UAE_COUNTRY_VALUES
+
 
 def build_queries_for_profile(
     target_roles: List[str],
@@ -200,7 +220,9 @@ def search(query: str, *, use_cache: bool = True, country: str = "ae") -> FetchR
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as resp:
                 data = json.loads(resp.read().decode())
-            raw_items = [normalize_item(it) for it in _raw_items(data)]
+            raw_items = [
+                normalize_item(it) for it in _raw_items(data) if _is_uae_job(it)
+            ]
             seen_ids: set = set()
             items = []
             for it in raw_items:
