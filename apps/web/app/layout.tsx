@@ -39,7 +39,7 @@ export const metadata: Metadata = {
     metadataBase: new URL(
         process.env.NEXT_PUBLIC_APP_URL ||
         process.env.NEXT_PUBLIC_SITE_URL ||
-        "http://localhost:3000"
+        "https://ricohunt.com"
     ),
     title: "Rico Hunt — Your AI Job-Hunt Partner in the UAE",
     description: "Your AI job-hunt partner in the UAE. Upload your CV and Rico finds matching jobs, tracks your applications, and guides your next move — in English and Arabic.",

@@ -11,10 +11,10 @@ export const dynamic = "force-dynamic";
 const RICO_API =
   process.env.BACKEND_API_BASE_URL ??
   process.env.NEXT_PUBLIC_API_BASE_URL ??
-  process.env.NEXT_PUBLIC_RICO_API ??
-  "http://localhost:8000";
+  process.env.NEXT_PUBLIC_RICO_API;
 
 async function checkProfileExists(): Promise<boolean | null> {
+  if (!RICO_API) return null;
   try {
     const cookieStore = await cookies();
     const cookieHeader = cookieStore.getAll().map((c) => `${c.name}=${c.value}`).join("; ");
