@@ -101,6 +101,7 @@ class TestJSearchAdapterValidation:
             location="Dubai",
             country="United Arab Emirates",
             apply_url="https://example.com/apply",
+            source="jsearch",
             provider_job_id="123",
         )
         assert adapter.validate(job) is True
@@ -111,8 +112,9 @@ class TestJSearchAdapterValidation:
             company="Test Co",
             location="Dubai",
             country="United Arab Emirates",
-            apply_url="",
+            apply_url="https://example.com/apply",
             source_url="https://example.com/job",
+            source="jsearch",
             provider_job_id="123",
         )
         assert adapter.validate(job) is True
@@ -137,6 +139,7 @@ class TestJSearchAdapterValidation:
             location="Dubai",
             country="United Arab Emirates",
             apply_url="https://example.com/apply",
+            source="jsearch",
             provider_job_id="123",
         )
         assert adapter.validate(job) is True
@@ -148,6 +151,7 @@ class TestJSearchAdapterValidation:
             location="London",
             country="United Kingdom",
             apply_url="https://example.com/apply",
+            source="jsearch",
             provider_job_id="123",
         )
         assert adapter.validate(job) is False
@@ -167,6 +171,7 @@ class TestJSearchAdapterInterface:
             country="United Arab Emirates",
             apply_url="https://example.com/apply",
             source_url="https://example.com/job",
+            source="jsearch",
             provider_job_id="123",
         )
         assert adapter.get_apply_url(job) == "https://example.com/apply"
@@ -177,8 +182,9 @@ class TestJSearchAdapterInterface:
             company="Test Co",
             location="Dubai",
             country="United Arab Emirates",
-            apply_url="",
+            apply_url="https://example.com/apply",
             source_url="https://example.com/job",
+            source="jsearch",
             provider_job_id="123",
         )
-        assert adapter.get_apply_url(job) == "https://example.com/job"
+        assert adapter.get_apply_url(job) == "https://example.com/apply"
