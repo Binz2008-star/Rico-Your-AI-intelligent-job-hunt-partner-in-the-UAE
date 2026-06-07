@@ -13,11 +13,13 @@ export function isManualBillingMode(): boolean {
  * Build the WhatsApp deep-link for the upgrade flow.
  * Opens a pre-filled conversation with the Rico support number.
  */
-export function buildWhatsAppUpgradeUrl(plan?: string): string {
+export function buildWhatsAppUpgradeUrl(plan?: string, email?: string | null, priceMonthly?: number | null): string {
     const raw = process.env.NEXT_PUBLIC_RICO_WHATSAPP_NUMBER ?? "971585989080";
     const number = raw.replace(/\D/g, "");
     const planLabel = plan ? plan.charAt(0).toUpperCase() + plan.slice(1) : "Pro";
-    const text = `I want to upgrade to Rico ${planLabel}. My account email is:`;
+    const priceStr = priceMonthly ? ` (AED ${priceMonthly}/month)` : "";
+    const emailStr = email ? ` ${email}` : "";
+    const text = `I want to upgrade to Rico ${planLabel}${priceStr}. My account email is:${emailStr}`;
     return `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
 }
 

@@ -115,6 +115,7 @@ function PlanCard({
     onIntent,
     maintenanceMode,
     manualBilling,
+    userEmail,
     t,
 }: {
     plan: SubscriptionPlan;
@@ -129,6 +130,7 @@ function PlanCard({
     onIntent: (plan: "pro" | "premium") => void;
     maintenanceMode: boolean;
     manualBilling: boolean;
+    userEmail: string | null;
     t: (key: string) => string;
 }) {
     const isCurrent = currentPlan === plan.plan && (isActive || manualBilling);
@@ -229,7 +231,7 @@ function PlanCard({
                 ) : isLoggedIn ? (
                     manualBilling ? (
                         <a
-                            href={buildWhatsAppUpgradeUrl(plan.plan)}
+                            href={buildWhatsAppUpgradeUrl(plan.plan, userEmail, plan.price_monthly)}
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={() => onIntent(plan.plan)}
@@ -467,7 +469,8 @@ export default function SubscriptionPage() {
             // Safety guard: if env var is missing/wrong and manual mode is active,
             // open WhatsApp directly — never call the Stripe checkout API.
             if (MANUAL_BILLING) {
-                window.open(buildWhatsAppUpgradeUrl(plan), "_blank", "noopener,noreferrer");
+                const price = plans.find((p) => p.plan === plan)?.price_monthly ?? null;
+                window.open(buildWhatsAppUpgradeUrl(plan, userEmail, price), "_blank", "noopener,noreferrer");
                 return;
             }
             setCheckingOut(plan);
@@ -671,6 +674,7 @@ export default function SubscriptionPage() {
                                 onIntent={handleIntent}
                                 maintenanceMode={maintenanceMode}
                                 manualBilling={MANUAL_BILLING}
+                                userEmail={userEmail}
                                 t={t}
                             />
                         ))}
