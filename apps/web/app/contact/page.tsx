@@ -49,6 +49,14 @@ export default function ContactPage() {
               Whether you have a question about your account, feedback on the product, a business
               enquiry, or something else entirely — reach out and we&apos;ll respond as soon as possible.
             </p>
+            <div className="mt-5 rounded-xl border border-white/10 bg-white/5 px-5 py-4">
+              <p className="text-sm font-semibold text-white">
+                Eco Technology Environment Protection Services L.L.C
+              </p>
+              <p className="mt-0.5 text-xs text-text-tertiary">
+                UAE-registered company · TRN available upon request
+              </p>
+            </div>
           </div>
 
           <div className="grid gap-5 sm:grid-cols-2">
@@ -94,9 +102,12 @@ export default function ContactPage() {
               </div>
               <div>
                 <p className="mb-1 text-sm font-semibold text-white">Location</p>
-                <p className="text-sm text-text-secondary">Dubai, United Arab Emirates</p>
+                <p className="text-sm text-text-secondary">Ajman, United Arab Emirates</p>
+                <p className="mt-1 text-xs text-text-secondary">
+                  Eco Technology Environment Protection Services L.L.C
+                </p>
                 <p className="mt-2 text-xs text-text-tertiary">
-                  Rico Hunt is a UAE-based platform serving professionals across all Emirates
+                  Rico Hunt is a UAE-registered platform serving professionals across all Emirates
                   and the wider GCC region.
                 </p>
               </div>
@@ -142,6 +153,11 @@ export default function ContactPage() {
       </main>
 
       <footer className="relative z-10 border-t border-white/10 bg-black/30 px-5 py-8 text-center">
+        <p className="mb-1 text-sm font-semibold text-white">Rico Hunt</p>
+        <p className="mb-1 text-xs text-text-tertiary">
+          Powered by Eco Technology Environment Protection Services L.L.C
+        </p>
+        <p className="mb-3 text-xs text-text-tertiary">Ajman, United Arab Emirates</p>
         <div className="mb-3 flex flex-wrap items-center justify-center gap-5">
           <Link href="/about" className="text-xs text-text-tertiary transition-colors hover:text-white">About</Link>
           <span className="text-xs font-medium text-white">Contact</span>
@@ -149,11 +165,10 @@ export default function ContactPage() {
           <Link href="/privacy" className="text-xs text-text-tertiary transition-colors hover:text-white">Privacy</Link>
           <Link href="/refund-policy" className="text-xs text-text-tertiary transition-colors hover:text-white">Refunds</Link>
         </div>
-        <p className="mb-2 text-xs text-text-tertiary">
-          For inquiries, support, and business communication:{" "}
-          <a href="mailto:info@ricohunt.com" className="text-[#f5a623] transition-colors hover:opacity-80">
-            info@ricohunt.com
-          </a>
+        <p className="mb-1 text-xs text-text-tertiary">
+          <a href="mailto:info@ricohunt.com" className="text-[#f5a623] transition-colors hover:opacity-80">info@ricohunt.com</a>
+          {" · "}
+          <a href="https://wa.me/971585989080" className="text-[#f5a623] transition-colors hover:opacity-80">+971 58 598 9080</a>
         </p>
         <p className="text-xs text-text-tertiary">© 2026 Rico Hunt. All rights reserved.</p>
       </footer>

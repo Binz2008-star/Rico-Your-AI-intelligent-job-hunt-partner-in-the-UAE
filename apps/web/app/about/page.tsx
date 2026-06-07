@@ -46,9 +46,13 @@ export default function AboutPage() {
               Built for the UAE job market.<br />Built around your CV.
             </h1>
             <p className="text-base leading-7 text-text-secondary">
-              Rico Hunt was created by a team based in Dubai who lived through the frustration of UAE job
-              searching firsthand — spending hours filtering irrelevant listings, copy-pasting the same
-              information into endless forms, and never knowing whether an application was even seen.
+              Rico Hunt is an AI-powered career platform focused on helping professionals in the UAE and
+              GCC discover relevant opportunities, improve their job search strategy, and manage
+              applications more effectively. Rico Hunt is operated by{" "}
+              <span className="text-white font-medium">
+                Eco Technology Environment Protection Services L.L.C
+              </span>
+              , a UAE-registered company based in Ajman.
             </p>
           </div>
 
@@ -118,9 +122,13 @@ export default function AboutPage() {
             <section>
               <h2 className="mb-3 text-lg font-semibold text-white">Where We Are</h2>
               <p>
-                Rico Hunt is headquartered in Dubai, United Arab Emirates. The platform serves professionals
-                across all Emirates — whether you're seeking roles in Abu Dhabi, Dubai, Sharjah, or across
-                the wider GCC.
+                Rico Hunt is operated by{" "}
+                <span className="text-white font-medium">
+                  Eco Technology Environment Protection Services L.L.C
+                </span>
+                , registered in the United Arab Emirates and headquartered in Ajman. The platform
+                serves professionals across all Emirates — whether you&apos;re seeking roles in Abu Dhabi,
+                Dubai, Sharjah, or across the wider GCC.
               </p>
               <p className="mt-3">
                 The platform is currently in active development. We ship updates regularly based on user
@@ -163,6 +171,11 @@ export default function AboutPage() {
       </main>
 
       <footer className="relative z-10 border-t border-white/10 bg-black/30 px-5 py-8 text-center">
+        <p className="mb-1 text-sm font-semibold text-white">Rico Hunt</p>
+        <p className="mb-1 text-xs text-text-tertiary">
+          Powered by Eco Technology Environment Protection Services L.L.C
+        </p>
+        <p className="mb-3 text-xs text-text-tertiary">Ajman, United Arab Emirates</p>
         <div className="mb-3 flex flex-wrap items-center justify-center gap-5">
           <span className="text-xs font-medium text-white">About</span>
           <Link href="/contact" className="text-xs text-text-tertiary transition-colors hover:text-white">Contact</Link>
@@ -170,11 +183,10 @@ export default function AboutPage() {
           <Link href="/privacy" className="text-xs text-text-tertiary transition-colors hover:text-white">Privacy</Link>
           <Link href="/refund-policy" className="text-xs text-text-tertiary transition-colors hover:text-white">Refunds</Link>
         </div>
-        <p className="mb-2 text-xs text-text-tertiary">
-          For inquiries, support, and business communication:{" "}
-          <a href="mailto:info@ricohunt.com" className="text-[#f5a623] transition-colors hover:opacity-80">
-            info@ricohunt.com
-          </a>
+        <p className="mb-1 text-xs text-text-tertiary">
+          <a href="mailto:info@ricohunt.com" className="text-[#f5a623] transition-colors hover:opacity-80">info@ricohunt.com</a>
+          {" · "}
+          <a href="https://wa.me/971585989080" className="text-[#f5a623] transition-colors hover:opacity-80">+971 58 598 9080</a>
         </p>
         <p className="text-xs text-text-tertiary">© 2026 Rico Hunt. All rights reserved.</p>
       </footer>

@@ -44,9 +44,25 @@ export default function PrivacyPage() {
           <h1 className="mb-2 text-3xl font-semibold text-white md:text-4xl">
             Privacy Policy
           </h1>
-          <p className="mb-8 text-sm text-text-secondary">
-            Last updated: May 2026 · We are committed to protecting your personal data.
+          <p className="mb-6 text-sm text-text-secondary">
+            Last updated: June 2026 · We are committed to protecting your personal data.
           </p>
+
+          <div className="mb-8 rounded-xl border border-white/10 bg-white/5 p-5">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-[#f5a623]">
+              Data Controller
+            </p>
+            <p className="text-sm font-medium text-white">
+              Eco Technology Environment Protection Services L.L.C
+            </p>
+            <p className="mt-0.5 text-sm text-text-secondary">Ajman, United Arab Emirates</p>
+            <p className="mt-2 text-xs text-text-tertiary">
+              For privacy requests or data deletion:{" "}
+              <a href="mailto:info@ricohunt.com" className="text-[#f5a623] hover:opacity-80">
+                info@ricohunt.com
+              </a>
+            </p>
+          </div>
 
           <div className="space-y-8 text-sm leading-7 text-text-secondary">
             <section>
@@ -159,17 +175,32 @@ export default function PrivacyPage() {
               <h2 className="mb-3 text-lg font-semibold text-white">10. Contact Us</h2>
               <p>
                 For privacy-related questions or to exercise your rights, contact:
-                <br />
-                Email: info@ricohunt.com
-                <br />
-                Address: Dubai, United Arab Emirates
               </p>
+              <ul className="ml-4 mt-2 list-none space-y-1">
+                <li><strong className="text-white">Company:</strong> Eco Technology Environment Protection Services L.L.C</li>
+                <li><strong className="text-white">Address:</strong> Ajman, United Arab Emirates</li>
+                <li><strong className="text-white">Email:</strong>{" "}
+                  <a href="mailto:info@ricohunt.com" className="text-[#f5a623] hover:opacity-80">
+                    info@ricohunt.com
+                  </a>
+                </li>
+                <li><strong className="text-white">Phone / WhatsApp:</strong>{" "}
+                  <a href="https://wa.me/971585989080" className="text-[#f5a623] hover:opacity-80">
+                    +971 58 598 9080
+                  </a>
+                </li>
+              </ul>
             </section>
           </div>
         </GlassPanel>
       </main>
 
       <footer className="relative z-10 border-t border-white/10 bg-black/30 px-5 py-8 text-center">
+        <p className="mb-1 text-sm font-semibold text-white">Rico Hunt</p>
+        <p className="mb-1 text-xs text-text-tertiary">
+          Powered by Eco Technology Environment Protection Services L.L.C
+        </p>
+        <p className="mb-3 text-xs text-text-tertiary">Ajman, United Arab Emirates</p>
         <div className="mb-3 flex flex-wrap items-center justify-center gap-5">
           <Link href="/about" className="text-xs text-text-tertiary transition-colors hover:text-white">About</Link>
           <Link href="/contact" className="text-xs text-text-tertiary transition-colors hover:text-white">Contact</Link>
@@ -177,7 +208,11 @@ export default function PrivacyPage() {
           <span className="text-xs font-medium text-white">Privacy</span>
           <Link href="/refund-policy" className="text-xs text-text-tertiary transition-colors hover:text-white">Refunds</Link>
         </div>
-        <p className="mb-2 text-xs text-text-tertiary">For inquiries, support, and business communication: <a href="mailto:info@ricohunt.com" className="text-gold transition-colors hover:text-gold-hover">info@ricohunt.com</a></p>
+        <p className="mb-1 text-xs text-text-tertiary">
+          <a href="mailto:info@ricohunt.com" className="text-[#f5a623] transition-colors hover:opacity-80">info@ricohunt.com</a>
+          {" · "}
+          <a href="https://wa.me/971585989080" className="text-[#f5a623] transition-colors hover:opacity-80">+971 58 598 9080</a>
+        </p>
         <p className="text-xs text-text-tertiary">© 2026 Rico Hunt. All rights reserved.</p>
       </footer>
     </div>
