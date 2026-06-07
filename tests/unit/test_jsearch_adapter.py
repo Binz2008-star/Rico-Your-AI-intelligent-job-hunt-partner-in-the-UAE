@@ -112,7 +112,7 @@ class TestJSearchAdapterValidation:
             company="Test Co",
             location="Dubai",
             country="United Arab Emirates",
-            apply_url="https://example.com/apply",
+            apply_url="",
             source_url="https://example.com/job",
             source="jsearch",
             provider_job_id="123",
@@ -129,6 +129,7 @@ class TestJSearchAdapterValidation:
                 country="United Arab Emirates",
                 apply_url="",
                 source_url="",
+                source="jsearch",
                 provider_job_id="123",
             )
 
@@ -182,9 +183,9 @@ class TestJSearchAdapterInterface:
             company="Test Co",
             location="Dubai",
             country="United Arab Emirates",
-            apply_url="https://example.com/apply",
+            apply_url="",
             source_url="https://example.com/job",
             source="jsearch",
             provider_job_id="123",
         )
-        assert adapter.get_apply_url(job) == "https://example.com/apply"
+        assert adapter.get_apply_url(job) == "https://example.com/job"
