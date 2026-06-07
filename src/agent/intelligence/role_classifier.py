@@ -102,7 +102,7 @@ def _extract_profile_terms(profile: Any) -> Set[str]:
         terms.add(str(skill).lower())
 
     # Industries
-    for ind in (_get("industries") or _get("preferred_industries") or []):
+    for ind in (_get("industries") or []):
         terms.add(str(ind).lower())
 
     # Current/previous titles (if available)

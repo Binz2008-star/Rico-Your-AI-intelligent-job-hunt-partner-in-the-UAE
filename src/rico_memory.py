@@ -102,8 +102,18 @@ class RicoMemoryStore:
         data = json.loads(path.read_text(encoding="utf-8"))
         settings_data = data.pop("settings", {}) or {}
         data.pop("updated_at", None)
+
+        # Migration: rename preferred_industries to industries
+        if "preferred_industries" in data:
+            data["industries"] = data.pop("preferred_industries")
+
+        # Filter to only valid RicoProfile fields to handle schema drift
+        from dataclasses import fields
+        valid_fields = {f.name for f in fields(RicoProfile)}
+        filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+
         settings = RicoAgentSettings(**settings_data)
-        return RicoProfile(**data, settings=settings)
+        return RicoProfile(**filtered_data, settings=settings)
 
     def upsert_profile_from_dict(self, user_id: str, updates: Dict[str, Any]) -> RicoProfile:
         profile = self.load_profile(user_id)

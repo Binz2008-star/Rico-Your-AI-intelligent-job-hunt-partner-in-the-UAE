@@ -65,7 +65,7 @@ _FIELD_WEIGHTS = {
     "notice_period": 0.04,
     "linkedin_url": 0.02,
     "portfolio_url": 0.02,
-    "preferred_industries": 0.08,
+    "industries": 0.08,
     "english_level": 0.03,
     "arabic_level": 0.02,
 }
@@ -86,7 +86,7 @@ _OPTIONAL_FIELDS: set[str] = {
     "notice_period",
     "linkedin_url",
     "portfolio_url",
-    "preferred_industries",
+    "industries",
     "english_level",
     "arabic_level",
 }
@@ -499,8 +499,8 @@ class ProfileContextResolver:
             if new_roles:
                 profile.target_roles.extend(list(new_roles)[:3])
 
-        if extracted_industries and not getattr(profile, "preferred_industries", None):
-            profile.preferred_industries = list(extracted_industries)[:5]
+        if extracted_industries and not getattr(profile, "industries", None):
+            profile.industries = list(extracted_industries)[:5]
 
         return profile
 

@@ -4792,7 +4792,7 @@ class RicoChatAPI:
         target_roles = self._as_list(self._profile_value(profile, "target_roles"))
         certifications = self._as_list(self._profile_value(profile, "certifications"))
         preferred_cities = self._as_list(self._profile_value(profile, "preferred_cities"))
-        industries = self._as_list(self._profile_value(profile, "preferred_industries"))
+        industries = self._as_list(self._profile_value(profile, "industries"))
         current_role = self._profile_value(profile, "current_role") or (target_roles[0] if target_roles else "")
 
         # Pull extended parsed-CV fields to check what sections are actually stored
