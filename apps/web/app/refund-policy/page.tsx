@@ -24,6 +24,12 @@ export default function RefundPolicyPage() {
           </span>
         </Link>
         <nav className="flex items-center gap-3">
+          <Link href="/about" className="text-sm text-text-secondary transition-colors hover:text-white">
+            About
+          </Link>
+          <Link href="/contact" className="text-sm text-text-secondary transition-colors hover:text-white">
+            Contact
+          </Link>
           <Link href="/terms" className="text-sm text-text-secondary transition-colors hover:text-white">
             Terms
           </Link>
@@ -155,12 +161,23 @@ export default function RefundPolicyPage() {
       </main>
 
       <footer className="relative z-10 border-t border-white/10 bg-black/30 px-5 py-8 text-center">
-        <div className="mb-3 flex items-center justify-center gap-6">
+        <p className="mb-1 text-sm font-semibold text-white">Rico Hunt</p>
+        <p className="mb-1 text-xs text-text-tertiary">
+          Powered by Eco Technology Environment Protection Services L.L.C
+        </p>
+        <p className="mb-3 text-xs text-text-tertiary">United Arab Emirates</p>
+        <div className="mb-3 flex flex-wrap items-center justify-center gap-5">
+          <Link href="/about" className="text-xs text-text-tertiary transition-colors hover:text-white">About</Link>
+          <Link href="/contact" className="text-xs text-text-tertiary transition-colors hover:text-white">Contact</Link>
           <Link href="/terms" className="text-xs text-text-tertiary transition-colors hover:text-white">Terms</Link>
           <Link href="/privacy" className="text-xs text-text-tertiary transition-colors hover:text-white">Privacy</Link>
           <span className="text-xs font-medium text-white">Refunds</span>
         </div>
-        <p className="mb-2 text-xs text-text-tertiary">For inquiries, support, and business communication: <a href="mailto:info@ricohunt.com" className="text-gold transition-colors hover:text-gold-hover">info@ricohunt.com</a></p>
+        <p className="mb-1 text-xs text-text-tertiary">
+          <a href="mailto:info@ricohunt.com" className="text-[#f5a623] transition-colors hover:opacity-80">info@ricohunt.com</a>
+          {" · "}
+          <a href="https://wa.me/971585989080" className="text-[#f5a623] transition-colors hover:opacity-80">+971 58 598 9080</a>
+        </p>
         <p className="text-xs text-text-tertiary">© 2026 Rico Hunt. All rights reserved.</p>
       </footer>
     </div>
