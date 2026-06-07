@@ -175,14 +175,44 @@ function parseHistoryContent(content: string, id: number): Partial<Message> {
     return { id, role: "rico", text: content };
 }
 
+// Splits inline text into markdown links, bold, italic, and bare URLs so each
+// can be rendered. Bare URLs and [label](url) links become clickable <a> tags
+// (the plain-text chat path previously rendered URLs as inert text).
+const INLINE_TOKEN_RE = /(\[[^\]]+\]\(https?:\/\/[^\s)]+\)|\*\*[^*]+\*\*|\*[^*]+\*|https?:\/\/[^\s<>()]+)/g;
+const MD_LINK_RE = /^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/;
+const LINK_CLASS = "text-gold underline underline-offset-2 hover:text-gold-hover break-words";
+
 function renderInline(text: string): React.ReactNode {
-    const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+    const parts = text.split(INLINE_TOKEN_RE);
     return parts.map((part, i) => {
+        if (!part) return null;
+        const md = part.match(MD_LINK_RE);
+        if (md) {
+            return (
+                <a key={i} href={md[2]} target="_blank" rel="noopener noreferrer" className={LINK_CLASS}>
+                    {md[1]}
+                </a>
+            );
+        }
         if (part.startsWith("**") && part.endsWith("**")) {
             return <strong key={i} className="font-semibold text-rico-text">{part.slice(2, -2)}</strong>;
         }
         if (part.startsWith("*") && part.endsWith("*")) {
             return <em key={i} className="italic">{part.slice(1, -1)}</em>;
+        }
+        if (/^https?:\/\//.test(part)) {
+            // Keep trailing sentence punctuation out of the link target.
+            const trail = part.match(/[.,;:!?]+$/);
+            const trailing = trail ? trail[0] : "";
+            const href = trailing ? part.slice(0, part.length - trailing.length) : part;
+            return (
+                <span key={i}>
+                    <a href={href} target="_blank" rel="noopener noreferrer" className={LINK_CLASS}>
+                        {href}
+                    </a>
+                    {trailing}
+                </span>
+            );
         }
         return part;
     });
