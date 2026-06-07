@@ -894,7 +894,7 @@ export default function LandingPage() {
                     <p className="mb-1 text-xs text-text-tertiary">
                         Powered by Eco Technology Environment Protection Services L.L.C
                     </p>
-                    <p className="mb-3 text-xs text-text-tertiary">Ajman, United Arab Emirates</p>
+                    <p className="mb-3 text-xs text-text-tertiary">United Arab Emirates</p>
                     <p className="mb-1 text-xs text-text-tertiary">
                         <a href="mailto:info@ricohunt.com" className="text-[#f5a623] transition-colors hover:opacity-80">
                             info@ricohunt.com

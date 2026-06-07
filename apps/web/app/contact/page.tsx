@@ -5,7 +5,7 @@ import { AuraGlow } from "@/components/ui/AuraGlow";
 
 export const metadata: Metadata = {
   title: "Contact | Rico Hunt",
-  description: "Get in touch with the Rico Hunt team. We're based in Dubai and read every message.",
+  description: "Get in touch with the Rico Hunt team. We read every message — email, WhatsApp, or through the app.",
 };
 
 export default function ContactPage() {
@@ -102,12 +102,12 @@ export default function ContactPage() {
               </div>
               <div>
                 <p className="mb-1 text-sm font-semibold text-white">Location</p>
-                <p className="text-sm text-text-secondary">Ajman, United Arab Emirates</p>
+                <p className="text-sm text-text-secondary">United Arab Emirates</p>
                 <p className="mt-1 text-xs text-text-secondary">
                   Eco Technology Environment Protection Services L.L.C
                 </p>
                 <p className="mt-2 text-xs text-text-tertiary">
-                  Rico Hunt is a UAE-registered platform serving professionals across all Emirates
+                  Rico Hunt is a UAE-registered platform serving professionals across the UAE
                   and the wider GCC region.
                 </p>
               </div>
@@ -157,7 +157,7 @@ export default function ContactPage() {
         <p className="mb-1 text-xs text-text-tertiary">
           Powered by Eco Technology Environment Protection Services L.L.C
         </p>
-        <p className="mb-3 text-xs text-text-tertiary">Ajman, United Arab Emirates</p>
+        <p className="mb-3 text-xs text-text-tertiary">United Arab Emirates</p>
         <div className="mb-3 flex flex-wrap items-center justify-center gap-5">
           <Link href="/about" className="text-xs text-text-tertiary transition-colors hover:text-white">About</Link>
           <span className="text-xs font-medium text-white">Contact</span>

@@ -165,7 +165,7 @@ export default function RefundPolicyPage() {
         <p className="mb-1 text-xs text-text-tertiary">
           Powered by Eco Technology Environment Protection Services L.L.C
         </p>
-        <p className="mb-3 text-xs text-text-tertiary">Ajman, United Arab Emirates</p>
+        <p className="mb-3 text-xs text-text-tertiary">United Arab Emirates</p>
         <div className="mb-3 flex flex-wrap items-center justify-center gap-5">
           <Link href="/about" className="text-xs text-text-tertiary transition-colors hover:text-white">About</Link>
           <Link href="/contact" className="text-xs text-text-tertiary transition-colors hover:text-white">Contact</Link>

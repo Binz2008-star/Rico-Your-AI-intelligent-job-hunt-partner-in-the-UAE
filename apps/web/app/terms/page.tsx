@@ -118,7 +118,7 @@ export default function TermsPage() {
               <h2 className="mb-3 text-lg font-semibold text-white">8. Governing Law</h2>
               <p>
                 These terms are governed by the laws of the United Arab Emirates. Any disputes
-                shall be resolved in the courts of Ajman, UAE. If you are a consumer in the EU,
+                shall be resolved in the courts of the United Arab Emirates. If you are a consumer in the EU,
                 mandatory consumer protection laws of your country of residence may apply.
               </p>
             </section>
@@ -136,7 +136,7 @@ export default function TermsPage() {
               <p>For questions about these terms, contact us:</p>
               <ul className="ml-4 mt-2 list-none space-y-1">
                 <li><strong className="text-white">Company:</strong> Eco Technology Environment Protection Services L.L.C</li>
-                <li><strong className="text-white">Address:</strong> Ajman, United Arab Emirates</li>
+                <li><strong className="text-white">Location:</strong> United Arab Emirates</li>
                 <li><strong className="text-white">Email:</strong>{" "}
                   <a href="mailto:info@ricohunt.com" className="text-[#f5a623] hover:opacity-80">
                     info@ricohunt.com
@@ -158,7 +158,7 @@ export default function TermsPage() {
         <p className="mb-1 text-xs text-text-tertiary">
           Powered by Eco Technology Environment Protection Services L.L.C
         </p>
-        <p className="mb-3 text-xs text-text-tertiary">Ajman, United Arab Emirates</p>
+        <p className="mb-3 text-xs text-text-tertiary">United Arab Emirates</p>
         <div className="mb-3 flex flex-wrap items-center justify-center gap-5">
           <Link href="/about" className="text-xs text-text-tertiary transition-colors hover:text-white">About</Link>
           <Link href="/contact" className="text-xs text-text-tertiary transition-colors hover:text-white">Contact</Link>

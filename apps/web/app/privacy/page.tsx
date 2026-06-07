@@ -55,136 +55,189 @@ export default function PrivacyPage() {
             <p className="text-sm font-medium text-white">
               Eco Technology Environment Protection Services L.L.C
             </p>
-            <p className="mt-0.5 text-sm text-text-secondary">Ajman, United Arab Emirates</p>
+            <p className="mt-0.5 text-sm text-text-secondary">United Arab Emirates</p>
             <p className="mt-2 text-xs text-text-tertiary">
               For privacy requests or data deletion:{" "}
               <a href="mailto:info@ricohunt.com" className="text-[#f5a623] hover:opacity-80">
                 info@ricohunt.com
               </a>
+              {" · "}
+              <a href="https://wa.me/971585989080" className="text-[#f5a623] hover:opacity-80">
+                +971 58 598 9080
+              </a>
             </p>
           </div>
 
           <div className="space-y-8 text-sm leading-7 text-text-secondary">
+
             <section>
               <h2 className="mb-3 text-lg font-semibold text-white">1. Data We Collect</h2>
+              <p className="mb-3">We collect the following information when you use Rico Hunt:</p>
               <ul className="ml-4 list-disc space-y-2">
-                <li>
-                  <strong>Account Information:</strong> Email address, name, and authentication credentials.
-                </li>
-                <li>
-                  <strong>CV/Resume Data:</strong> Employment history, skills, education, contact information
-                  extracted from uploaded documents.
-                </li>
-                <li>
-                  <strong>Usage Data:</strong> Messages sent to Rico, searches performed, jobs viewed,
-                  applications tracked, and feature usage.
-                </li>
-                <li>
-                  <strong>Technical Data:</strong> IP address, browser type, device information, and cookies.
-                </li>
+                <li><strong className="text-white">Account data:</strong> Name, email address, and authentication credentials.</li>
+                <li><strong className="text-white">Contact data:</strong> Phone number or WhatsApp number, if provided.</li>
+                <li><strong className="text-white">CV and resume files:</strong> Uploaded documents in any format.</li>
+                <li><strong className="text-white">Extracted CV content:</strong> Text, skills, work experience, education, and other information parsed from your CV.</li>
+                <li><strong className="text-white">Career preferences:</strong> Target roles, preferred sectors, salary expectations, and location preferences.</li>
+                <li><strong className="text-white">Chat messages:</strong> Messages you send to Rico and the responses you receive.</li>
+                <li><strong className="text-white">Job activity:</strong> Jobs you save, view, apply for, or mark in any way.</li>
+                <li><strong className="text-white">Application data:</strong> Status and notes for job applications you track through the platform.</li>
+                <li><strong className="text-white">Technical data:</strong> IP address, browser type, device information, and session cookies.</li>
               </ul>
             </section>
 
             <section>
               <h2 className="mb-3 text-lg font-semibold text-white">2. How We Use Your Data</h2>
               <ul className="ml-4 list-disc space-y-2">
-                <li>To provide and improve the career execution service</li>
-                <li>To infer career tracks and generate personalized job searches</li>
-                <li>To score and rank job opportunities based on your profile</li>
-                <li>To send notifications (email, Telegram) about relevant opportunities</li>
+                <li>To create and maintain your account and career profile</li>
+                <li>To analyze your CV and suggest relevant job roles</li>
+                <li>To search, filter, and score job listings based on your profile</li>
+                <li>To provide AI-powered career guidance and job-match insights</li>
+                <li>To track and manage your job applications</li>
+                <li>To send notifications about relevant opportunities</li>
                 <li>To process payments and manage subscriptions</li>
-                <li>To comply with legal obligations and prevent fraud</li>
+                <li>To improve platform quality and fix issues</li>
+                <li>To comply with legal obligations and prevent misuse</li>
               </ul>
             </section>
 
             <section>
-              <h2 className="mb-3 text-lg font-semibold text-white">3. Data Processing & AI</h2>
+              <h2 className="mb-3 text-lg font-semibold text-white">3. CV Storage and AI Analysis</h2>
+              <p className="mb-3">
+                Rico may store your uploaded CV file and/or the text extracted from it. This data is used
+                to build your career profile and power job matching.
+              </p>
               <p>
-                Your CV and profile data are processed by AI systems (OpenAI, DeepSeek, Hugging Face)
-                to generate career insights and job matches. We do not use your data to train public AI
-                models. Processing occurs on secure infrastructure with appropriate safeguards.
+                Rico uses AI tools to analyze CVs, extract skills and experience, suggest target roles,
+                and provide job-match insights. Your CV and profile data may be sent to AI service
+                providers to generate these results. We do not use your personal data to train public
+                AI models.
               </p>
             </section>
 
             <section>
-              <h2 className="mb-3 text-lg font-semibold text-white">4. Data Sharing</h2>
-              <p>
-                We do not sell your personal data. We share data only with:
+              <h2 className="mb-3 text-lg font-semibold text-white">4. Third-Party Providers</h2>
+              <p className="mb-3">
+                To deliver the service, Rico shares limited data with trusted third-party providers,
+                including:
               </p>
-              <ul className="ml-4 mt-2 list-disc space-y-2">
-                <li>Payment processors (Stripe) for subscription management</li>
-                <li>Cloud hosting providers (Render) for service operation</li>
-                <li>AI providers for CV analysis and job matching</li>
-                <li>Analytics providers to improve user experience</li>
-                <li>Legal authorities when required by law</li>
-              </ul>
-            </section>
-
-            <section>
-              <h2 className="mb-3 text-lg font-semibold text-white">5. Data Retention</h2>
-              <p>
-                We retain your data while your account is active. You may delete your account at any time,
-                which will remove your CV, profile, and personal data within 30 days. Some data may be
-                retained longer if required by law or for legitimate business purposes (e.g., financial records).
-              </p>
-            </section>
-
-            <section>
-              <h2 className="mb-3 text-lg font-semibold text-white">6. Your Rights</h2>
-              <p>Depending on your jurisdiction, you may have the right to:</p>
-              <ul className="ml-4 mt-2 list-disc space-y-2">
-                <li>Access and receive a copy of your personal data</li>
-                <li>Correct inaccurate or incomplete data</li>
-                <li>Delete your account and associated data</li>
-                <li>Object to or restrict certain processing activities</li>
-                <li>Export your data in a portable format</li>
-                <li>Withdraw consent where processing is consent-based</li>
+              <ul className="ml-4 list-disc space-y-2">
+                <li><strong className="text-white">Cloud hosting and infrastructure</strong> — for running the platform</li>
+                <li><strong className="text-white">Database providers</strong> — for storing your account and profile data</li>
+                <li><strong className="text-white">Authentication providers</strong> — for secure login</li>
+                <li><strong className="text-white">AI service providers</strong> — for CV analysis, job matching, and chat</li>
+                <li><strong className="text-white">Analytics providers</strong> — for understanding platform usage</li>
+                <li><strong className="text-white">Email and messaging providers</strong> — for notifications and support</li>
+                <li><strong className="text-white">Payment processors</strong> — for subscription billing</li>
+                <li><strong className="text-white">Job data providers</strong> — for sourcing live job listings</li>
               </ul>
               <p className="mt-3">
-                To exercise these rights, contact us at info@ricohunt.com
+                We share only the minimum data necessary for each provider to perform their function.
+                We do not sell your personal information to any third party.
               </p>
             </section>
 
             <section>
-              <h2 className="mb-3 text-lg font-semibold text-white">7. Security</h2>
+              <h2 className="mb-3 text-lg font-semibold text-white">5. Job Source Disclaimer</h2>
               <p>
-                We implement industry-standard security measures including encryption in transit (TLS),
-                secure authentication, and access controls. However, no system is 100% secure. You are
-                responsible for maintaining the confidentiality of your account credentials.
+                Jobs shown on Rico Hunt may come from external job data providers and public job sources.
+                We do our best to surface relevant and accurate listings, but we cannot guarantee the
+                accuracy, availability, or legitimacy of any individual job posting. You should verify
+                all job details — including the employer, role, and terms — before applying.
               </p>
             </section>
 
             <section>
-              <h2 className="mb-3 text-lg font-semibold text-white">8. Cookies & Tracking</h2>
+              <h2 className="mb-3 text-lg font-semibold text-white">6. We Do Not Sell Your Data</h2>
               <p>
-                We use cookies and similar technologies for authentication, preferences, and analytics.
-                You may disable cookies in your browser, though this may affect service functionality.
+                Rico does not sell, rent, or trade your personal information to advertisers, recruiters,
+                employers, or any other third parties for commercial purposes.
               </p>
             </section>
 
             <section>
-              <h2 className="mb-3 text-lg font-semibold text-white">9. International Transfers</h2>
+              <h2 className="mb-3 text-lg font-semibold text-white">7. Data Deletion</h2>
               <p>
-                Your data may be transferred to and processed in countries outside your jurisdiction,
-                including the United States and European Union. We ensure appropriate safeguards are in
-                place for such transfers.
+                You can request deletion of your account and personal data at any time by emailing{" "}
+                <a href="mailto:info@ricohunt.com" className="text-[#f5a623] hover:opacity-80">
+                  info@ricohunt.com
+                </a>{" "}
+                from your registered account email address. We will process your request and confirm
+                deletion within a reasonable timeframe.
               </p>
             </section>
 
             <section>
-              <h2 className="mb-3 text-lg font-semibold text-white">10. Contact Us</h2>
+              <h2 className="mb-3 text-lg font-semibold text-white">8. Data Retention</h2>
               <p>
-                For privacy-related questions or to exercise your rights, contact:
+                We retain your data while your account is active and as needed to provide the service.
+                Data may also be retained for legal compliance, security, abuse prevention, and
+                legitimate operational reasons, even after an account is deleted. Financial records
+                are retained as required by applicable law.
               </p>
-              <ul className="ml-4 mt-2 list-none space-y-1">
+            </section>
+
+            <section>
+              <h2 className="mb-3 text-lg font-semibold text-white">9. Security</h2>
+              <p>
+                We implement reasonable technical and organisational measures to protect your data,
+                including encryption in transit (TLS) and access controls. However, no online service
+                can guarantee complete security. You are responsible for keeping your account
+                credentials confidential.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="mb-3 text-lg font-semibold text-white">10. Cookies</h2>
+              <p>
+                We use cookies and similar technologies for authentication, session management, and
+                basic analytics. You may disable cookies in your browser settings, though this may
+                affect the functionality of the platform.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="mb-3 text-lg font-semibold text-white">11. Your Rights</h2>
+              <p className="mb-3">Depending on your jurisdiction, you may have the right to:</p>
+              <ul className="ml-4 list-disc space-y-2">
+                <li>Access a copy of your personal data</li>
+                <li>Correct inaccurate or incomplete data</li>
+                <li>Request deletion of your account and data</li>
+                <li>Object to or restrict certain processing</li>
+                <li>Export your data in a portable format</li>
+              </ul>
+              <p className="mt-3">
+                To exercise any of these rights, contact us at{" "}
+                <a href="mailto:info@ricohunt.com" className="text-[#f5a623] hover:opacity-80">
+                  info@ricohunt.com
+                </a>
+                .
+              </p>
+            </section>
+
+            <section>
+              <h2 className="mb-3 text-lg font-semibold text-white">12. Changes to This Policy</h2>
+              <p>
+                We may update this Privacy Policy from time to time. Material changes will be
+                communicated via email or a notice within the platform. Continued use of Rico Hunt
+                after changes constitutes acceptance of the updated policy.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="mb-3 text-lg font-semibold text-white">13. Contact</h2>
+              <p className="mb-3">For privacy-related questions or to exercise your rights:</p>
+              <ul className="ml-4 list-none space-y-1">
                 <li><strong className="text-white">Company:</strong> Eco Technology Environment Protection Services L.L.C</li>
-                <li><strong className="text-white">Address:</strong> Ajman, United Arab Emirates</li>
-                <li><strong className="text-white">Email:</strong>{" "}
+                <li><strong className="text-white">Location:</strong> United Arab Emirates</li>
+                <li>
+                  <strong className="text-white">Email:</strong>{" "}
                   <a href="mailto:info@ricohunt.com" className="text-[#f5a623] hover:opacity-80">
                     info@ricohunt.com
                   </a>
                 </li>
-                <li><strong className="text-white">Phone / WhatsApp:</strong>{" "}
+                <li>
+                  <strong className="text-white">Phone / WhatsApp:</strong>{" "}
                   <a href="https://wa.me/971585989080" className="text-[#f5a623] hover:opacity-80">
                     +971 58 598 9080
                   </a>
@@ -200,7 +253,7 @@ export default function PrivacyPage() {
         <p className="mb-1 text-xs text-text-tertiary">
           Powered by Eco Technology Environment Protection Services L.L.C
         </p>
-        <p className="mb-3 text-xs text-text-tertiary">Ajman, United Arab Emirates</p>
+        <p className="mb-3 text-xs text-text-tertiary">United Arab Emirates</p>
         <div className="mb-3 flex flex-wrap items-center justify-center gap-5">
           <Link href="/about" className="text-xs text-text-tertiary transition-colors hover:text-white">About</Link>
           <Link href="/contact" className="text-xs text-text-tertiary transition-colors hover:text-white">Contact</Link>

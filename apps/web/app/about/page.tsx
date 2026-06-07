@@ -52,7 +52,7 @@ export default function AboutPage() {
               <span className="text-white font-medium">
                 Eco Technology Environment Protection Services L.L.C
               </span>
-              , a UAE-registered company based in Ajman.
+              , a UAE-registered company.
             </p>
           </div>
 
@@ -126,9 +126,8 @@ export default function AboutPage() {
                 <span className="text-white font-medium">
                   Eco Technology Environment Protection Services L.L.C
                 </span>
-                , registered in the United Arab Emirates and headquartered in Ajman. The platform
-                serves professionals across all Emirates — whether you&apos;re seeking roles in Abu Dhabi,
-                Dubai, Sharjah, or across the wider GCC.
+                , a UAE-registered company. The platform serves professionals
+                across the UAE and the wider GCC region.
               </p>
               <p className="mt-3">
                 The platform is currently in active development. We ship updates regularly based on user
@@ -175,7 +174,7 @@ export default function AboutPage() {
         <p className="mb-1 text-xs text-text-tertiary">
           Powered by Eco Technology Environment Protection Services L.L.C
         </p>
-        <p className="mb-3 text-xs text-text-tertiary">Ajman, United Arab Emirates</p>
+        <p className="mb-3 text-xs text-text-tertiary">United Arab Emirates</p>
         <div className="mb-3 flex flex-wrap items-center justify-center gap-5">
           <span className="text-xs font-medium text-white">About</span>
           <Link href="/contact" className="text-xs text-text-tertiary transition-colors hover:text-white">Contact</Link>
