@@ -158,6 +158,15 @@ _LOCATION_TERMS: frozenset[str] = frozenset({
 })
 _MIN_TOKEN_ALPHA: int = 2
 
+# Role values that users leave as default placeholders and that cannot drive a
+# useful JSearch query.  Treat them as "no target role set" so the classifier
+# falls through to role-suggestion prompts instead of returning irrelevant jobs.
+_PLACEHOLDER_ROLE_VALUES: frozenset[str] = frozenset({
+    "any", "all", "any role", "all roles", "open", "open to any",
+    "open to all", "any position", "any job", "any jobs",
+    "not specified", "tbd", "n/a",
+})
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -518,6 +527,14 @@ class RicoChatAPI:
             or RicoChatAPI._profile_value(profile, "skills")
             or RicoChatAPI._profile_value(profile, "years_experience")
         )
+
+    @staticmethod
+    def _effective_target_roles(roles: list[Any]) -> list[Any]:
+        """Return roles with generic placeholders ('Any', 'All', etc.) stripped out."""
+        return [
+            r for r in roles
+            if isinstance(r, str) and r.strip().lower() not in _PLACEHOLDER_ROLE_VALUES
+        ]
 
     @staticmethod
     def _looks_like_bare_target_role(message: str) -> bool:
@@ -3071,7 +3088,9 @@ class RicoChatAPI:
 
         # Generic job request with CV and no established target roles → suggest CV-based roles
         # When target roles are already set, skip to intent classification so run_for_profile fires
-        _profile_target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        _profile_target_roles = self._effective_target_roles(
+            self._as_list(self._profile_value(profile, "target_roles"))
+        )
         if (
             has_cv
             and not _profile_target_roles
@@ -3214,7 +3233,9 @@ class RicoChatAPI:
                     ))
                 )
                 if _is_job_request:
-                    _target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+                    _target_roles = self._effective_target_roles(
+                        self._as_list(self._profile_value(profile, "target_roles"))
+                    )
                     if _target_roles:
                         return self._finalize(
                             self._target_role_search_response(
@@ -3419,7 +3440,9 @@ class RicoChatAPI:
                 self._append_chat(user_id, "assistant", response["message"])
                 return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
             # Use profile target roles for search
-            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            target_roles = self._effective_target_roles(
+                self._as_list(self._profile_value(profile, "target_roles"))
+            )
             logger.info(
                 "rico_profile_match_search user=%s target_roles=%s has_cv=%s",
                 user_id, target_roles, has_cv,
@@ -3472,7 +3495,9 @@ class RicoChatAPI:
             routed = _route(message, user_id=user_id, context=context)
 
             # Check if profile has target role before running job search
-            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            target_roles = self._effective_target_roles(
+                self._as_list(self._profile_value(profile, "target_roles"))
+            )
             if not target_roles:
                 if has_cv:
                     # CV present but no confirmed target role → suggest roles from skills
