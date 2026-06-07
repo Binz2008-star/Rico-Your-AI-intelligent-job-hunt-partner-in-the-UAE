@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <div className="relative min-h-screen overflow-x-hidden">
+    <div className="relative min-h-screen overflow-x-hidden bg-[#0a0a1a]">
       <AuraGlow aria-hidden="true" variant="magenta" position="top-left" />
       <AuraGlow aria-hidden="true" variant="cyan" position="bottom-right" />
 
