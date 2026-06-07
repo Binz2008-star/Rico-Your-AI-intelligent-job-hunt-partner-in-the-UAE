@@ -360,8 +360,8 @@ class ProfileContextResolver:
             updates["years_experience"] = cv_data["years_experience_hint"]
 
         # Extract industries from CV
-        if cv_data.get("industries") and not getattr(profile, "preferred_industries", None):
-            updates["preferred_industries"] = cv_data["industries"][:5]
+        if cv_data.get("industries") and not profile.industries:
+            updates["industries"] = cv_data["industries"][:5]
 
         # Infer target roles from experience section
         if not profile.target_roles and cv_data.get("experience"):
@@ -392,7 +392,7 @@ class ProfileContextResolver:
             "notice_period": lambda x: self._parse_notice_period(x),
             "years_experience": self._parse_years,
             "salary_expectation_aed": self._parse_salary,
-            "preferred_industries": self._as_list,
+            "industries": self._as_list,
             "english_level": lambda x: self._validate_language_level(x),
             "arabic_level": lambda x: self._validate_language_level(x),
         }
@@ -427,7 +427,7 @@ class ProfileContextResolver:
         extracted_locations = set(profile.preferred_cities or [])
         extracted_skills = set(profile.skills or [])
         extracted_roles = set(profile.target_roles or [])
-        extracted_industries = set(getattr(profile, "preferred_industries", []) or [])
+        extracted_industries = set(profile.industries or [])
 
         # Process recent user messages (last 15)
         user_messages = [

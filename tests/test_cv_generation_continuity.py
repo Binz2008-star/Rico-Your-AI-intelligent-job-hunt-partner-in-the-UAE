@@ -40,7 +40,7 @@ def _profile(**kw):
         target_roles=["HSE Manager", "EHS Lead"],
         certifications=["NEBOSH"],
         preferred_cities=[],
-        preferred_industries=["Oil & Gas"],
+        industries=["Oil & Gas"],
         current_role="Senior HSE Officer",
         has_cv=True,
         work_experience=[],
