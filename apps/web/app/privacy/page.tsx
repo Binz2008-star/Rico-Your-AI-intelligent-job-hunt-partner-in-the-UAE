@@ -24,6 +24,12 @@ export default function PrivacyPage() {
           </span>
         </Link>
         <nav className="flex items-center gap-3">
+          <Link href="/about" className="text-sm text-text-secondary transition-colors hover:text-white">
+            About
+          </Link>
+          <Link href="/contact" className="text-sm text-text-secondary transition-colors hover:text-white">
+            Contact
+          </Link>
           <Link href="/terms" className="text-sm text-text-secondary transition-colors hover:text-white">
             Terms
           </Link>
@@ -164,7 +170,9 @@ export default function PrivacyPage() {
       </main>
 
       <footer className="relative z-10 border-t border-white/10 bg-black/30 px-5 py-8 text-center">
-        <div className="mb-3 flex items-center justify-center gap-6">
+        <div className="mb-3 flex flex-wrap items-center justify-center gap-5">
+          <Link href="/about" className="text-xs text-text-tertiary transition-colors hover:text-white">About</Link>
+          <Link href="/contact" className="text-xs text-text-tertiary transition-colors hover:text-white">Contact</Link>
           <Link href="/terms" className="text-xs text-text-tertiary transition-colors hover:text-white">Terms</Link>
           <span className="text-xs font-medium text-white">Privacy</span>
           <Link href="/refund-policy" className="text-xs text-text-tertiary transition-colors hover:text-white">Refunds</Link>

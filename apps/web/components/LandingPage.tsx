@@ -152,6 +152,8 @@ export default function LandingPage() {
             ? "ارفع سيرتك الذاتية وريكو يعمل على الفور. يقرأ خبرتك ويبحث عن وظائف مناسبة في الإمارات ويخبرك بما عليك فعله — بالعربية والإنجليزية."
             : "Upload your CV and Rico goes to work. It reads your experience, finds matching UAE jobs, and tells you what to do next — in English and Arabic.",
         // Footer
+        footerAbout: isAr ? "من نحن" : "About",
+        footerContact: isAr ? "تواصل معنا" : "Contact",
         footerTerms: isAr ? "الشروط" : "Terms",
         footerPrivacy: isAr ? "الخصوصية" : "Privacy",
         footerRefunds: isAr ? "الاسترداد" : "Refunds",
@@ -856,7 +858,19 @@ export default function LandingPage() {
                 </main>
 
                 <footer className="relative z-10 border-t border-white/10 bg-black/30 px-5 py-8 text-center">
-                    <div className="mb-3 flex items-center justify-center gap-6">
+                    <div className="mb-3 flex flex-wrap items-center justify-center gap-5">
+                        <Link
+                            href="/about"
+                            className="text-xs text-text-tertiary transition-colors hover:text-white"
+                        >
+                            {t.footerAbout}
+                        </Link>
+                        <Link
+                            href="/contact"
+                            className="text-xs text-text-tertiary transition-colors hover:text-white"
+                        >
+                            {t.footerContact}
+                        </Link>
                         <Link
                             href="/terms"
                             className="text-xs text-text-tertiary transition-colors hover:text-white"
@@ -876,6 +890,12 @@ export default function LandingPage() {
                             {t.footerRefunds}
                         </Link>
                     </div>
+                    <p className="mb-2 text-xs text-text-tertiary">
+                        <a href="mailto:info@ricohunt.com" className="text-[#f5a623] transition-colors hover:opacity-80">
+                            info@ricohunt.com
+                        </a>
+                        {" · "}Dubai, UAE
+                    </p>
                     <p className="text-xs text-text-tertiary">
                         {t.footerRights}
                     </p>
