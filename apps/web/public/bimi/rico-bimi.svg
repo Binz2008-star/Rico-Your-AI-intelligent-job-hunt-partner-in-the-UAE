@@ -1,11 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" version="1.2" baseProfile="tiny-ps"
-     viewBox="0 0 1024 1024" width="1024" height="1024">
-  <title>Rico</title>
-  <rect width="1024" height="1024" fill="#0C0A07"/>
-  <path fill="#E8A830" d="M320 250 H555 C683 250 762 320 762 431
-    C762 520 712 583 626 610 L764 774 H618 L500 626 H452 V774 H320 Z
-    M452 366 V520 H546 C594 520 627 492 627 444
-    C627 396 594 366 546 366 Z"/>
-  <path fill="#0C0A07" d="M452 366 V520 H546 C594 520 627 492 627 444
-    C627 396 594 366 546 366 Z"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.2" baseProfile="tiny-ps" xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Rico Hunt Brand Mark</title>
+  <rect x="24" y="24" width="976" height="976" rx="180" ry="180" fill="#0F0D08"/>
+  <rect x="52" y="52" width="920" height="920" rx="150" ry="150" fill="none" stroke="#B68119" stroke-width="24"/>
+  <circle cx="512" cy="512" r="330" fill="none" stroke="#6E4B12" stroke-width="20"/>
+  <path d="M260 710 C405 815 675 775 785 610" fill="none" stroke="#B68119" stroke-width="24" stroke-linecap="round"/>
+  <path d="M745 585 L825 560 L804 640" fill="none" stroke="#D99A24" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M240 350 L300 405" fill="none" stroke="#B68119" stroke-width="18" stroke-linecap="round"/>
+  <path d="M700 290 L780 355" fill="none" stroke="#B68119" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="238" cy="350" r="18" fill="#D99A24"/>
+  <circle cx="704" cy="290" r="18" fill="#D99A24"/>
+  <circle cx="780" cy="355" r="14" fill="#D99A24"/>
+  <circle cx="240" cy="710" r="34" fill="#D99A24"/>
+  <path d="M330 250 L570 250 C720 250 810 335 810 470 C810 565 760 635 670 665 L800 820 L620 820 L500 680 L455 680 L455 820 L330 820 Z" fill="#D99A24"/>
+  <path d="M455 365 L560 365 C635 365 680 405 680 470 C680 535 635 570 560 570 L455 570 Z" fill="#0F0D08"/>
+  <path d="M330 250 L455 250 L455 820 L330 820 Z" fill="#F2C85B"/>
 </svg>
