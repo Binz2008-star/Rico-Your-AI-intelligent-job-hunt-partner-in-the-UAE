@@ -140,7 +140,7 @@ export default function AboutPage() {
               <p>
                 We&apos;re a small team and we read every message.
               </p>
-              <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <a
                   href="mailto:info@ricohunt.com"
                   className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white transition-colors hover:bg-white/10"
@@ -156,6 +156,15 @@ export default function AboutPage() {
                 >
                   <span className="material-symbols-outlined text-base text-[#f5a623]">chat</span>
                   WhatsApp
+                </a>
+                <a
+                  href="https://www.linkedin.com/company/eco-technology-environment-protection-services-l-l-c/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white transition-colors hover:bg-white/10"
+                >
+                  <span className="material-symbols-outlined text-base text-[#f5a623]">business</span>
+                  Company LinkedIn
                 </a>
                 <Link
                   href="/contact"

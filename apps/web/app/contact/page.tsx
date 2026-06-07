@@ -126,6 +126,26 @@ export default function ContactPage() {
                 </p>
               </div>
             </div>
+
+            <a
+              href="https://www.linkedin.com/company/eco-technology-environment-protection-services-l-l-c/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 p-6 transition-colors hover:bg-white/10 sm:col-span-2"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#f5a623]/10 text-[#f5a623]">
+                <span className="material-symbols-outlined">business</span>
+              </div>
+              <div>
+                <p className="mb-1 text-sm font-semibold text-white">Company LinkedIn</p>
+                <p className="text-sm text-text-secondary">
+                  Eco Technology Environment Protection Services L.L.C
+                </p>
+                <p className="mt-2 text-xs text-text-tertiary">
+                  View the company profile on LinkedIn to verify registration and learn more.
+                </p>
+              </div>
+            </a>
           </div>
 
           <div className="mt-10 rounded-xl border border-[#f5a623]/20 bg-[#f5a623]/5 p-6">
