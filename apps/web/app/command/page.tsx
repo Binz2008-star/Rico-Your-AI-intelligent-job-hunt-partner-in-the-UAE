@@ -653,13 +653,14 @@ export default function CommandPage() {
         let cancelled = false;
         const controller = new AbortController();
         // Safety fallback: if fetchMe hangs (e.g. proxy/backend unreachable),
-        // force guest mode after 5 s so the UI never stays in "checking" forever.
+        // force guest mode after 8 s so the UI never stays in "checking" forever.
+        // Must be long enough for Render cold-start + Vercel proxy round-trip (~3–5 s).
         const fallbackId = setTimeout(() => {
             if (!cancelled) {
                 controller.abort();
                 setChatAudience("public");
             }
-        }, 2000);
+        }, 8000);
 
         fetchMe(controller.signal)
             .then((me) => {

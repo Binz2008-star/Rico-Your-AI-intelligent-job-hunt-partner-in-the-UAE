@@ -5,6 +5,7 @@ import { renderWithProviders as render } from "./test-utils";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
+  usePathname: () => "/command",
 }));
 vi.mock("next/link", () => ({
   default: ({ children, href, ...props }: any) => (
@@ -67,6 +68,26 @@ describe("/command auth-state containment (issue #281)", () => {
     // drawer), so assert presence rather than a single match.
     expect(screen.getAllByText("Sign in").length).toBeGreaterThan(0);
     expect(screen.queryByText("Sign out")).not.toBeInTheDocument();
+  });
+
+  it("/me resolving as authenticated always yields authenticated audience, never public", async () => {
+    fetchMock.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/api/v1/me")) {
+        return jsonResponse({ authenticated: true, role: "user", email: "u@u.com" });
+      }
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    render(<CommandPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Sign out")).toBeInTheDocument();
+    });
+    // Authenticated user must never see public links — guards against fallback timeout
+    // silently downgrading an authenticated session to guest (regression for 2 s timeout).
+    expect(screen.queryByText("Sign up free")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sign in")).not.toBeInTheDocument();
   });
 
   it("while the session is still being checked, no public links flash", () => {
