@@ -1440,9 +1440,9 @@ export interface SubscriptionMeResponse {
 
 export interface CheckoutResponse {
   checkout_url: string;
-  provider: "stripe" | "mock";
+  provider: "stripe" | "mock" | "manual";
   plan: "free" | "pro" | "premium";
-  status: "ready" | "mock";
+  status: "ready" | "mock" | "manual";
 }
 
 export async function getSubscriptionPlans(): Promise<PlansResponse> {

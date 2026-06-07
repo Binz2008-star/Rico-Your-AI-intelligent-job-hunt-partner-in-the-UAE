@@ -193,15 +193,26 @@ def _stripe_price_id(plan: SubscriptionTier) -> str:
     return ""
 
 
+def _whatsapp_checkout_url(plan_label: str) -> str:
+    number = os.getenv("RICO_WHATSAPP_NUMBER", "971585989080").replace(" ", "").replace("+", "")
+    text = f"I want to upgrade to Rico {plan_label}. My account email is:"
+    from urllib.parse import quote
+    return f"https://wa.me/{number}?text={quote(text)}"
+
+
 def build_checkout_response(
     user_id: str,
     request: SubscriptionCreateRequest,
 ) -> CheckoutResponse:
     from src.billing_mode import is_manual_billing_mode
     if is_manual_billing_mode():
-        raise HTTPException(
-            status_code=403,
-            detail="Online checkout is not enabled. Please use manual payment activation.",
+        plan = get_paid_plan(request.plan)
+        label = plan.plan.value.capitalize()
+        return CheckoutResponse(
+            checkout_url=_whatsapp_checkout_url(label),
+            provider="manual",
+            plan=plan.plan,
+            status="manual",
         )
     plan = get_paid_plan(request.plan)
     stripe_key = os.getenv("STRIPE_SECRET_KEY", "").strip()
