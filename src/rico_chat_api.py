@@ -3227,7 +3227,8 @@ class RicoChatAPI:
                             raise RuntimeError("application create_manual returned false")
                         _msg = (
                             f"Got it — **{_title}** at **{_company}** is marked as applied. "
-                            "I'll track it as your latest application. Good luck!"
+                            "I'll track it as your latest application. "
+                            "You can follow it from Applications (/applications)."
                         )
                         _response_type = "mark_applied"
                         _job_status = "applied"
@@ -3632,7 +3633,8 @@ class RicoChatAPI:
                     raise RuntimeError("application create_manual returned false")
                 msg = (
                     f"Tracked — **{title}** at **{company}** marked as applied. "
-                    "I will treat this as your latest application context for follow-ups."
+                    "I will treat this as your latest application context for follow-ups. "
+                    "You can follow it from Applications (/applications)."
                 )
                 response_type = "mark_applied"
                 job_status = "applied"
