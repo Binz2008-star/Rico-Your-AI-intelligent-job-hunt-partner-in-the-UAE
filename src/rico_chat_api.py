@@ -1531,6 +1531,54 @@ class RicoChatAPI:
         )
 
     @staticmethod
+    def _is_creative_writing_request(message: str) -> bool:
+        """Detect creative/general writing requests that should bypass application context.
+
+        Only matches clearly unrelated creative content (poems, jokes, stories).
+        Does NOT match job/application-related requests like:
+        - translate this cover letter
+        - explain this job description
+        - rewrite my application message
+        """
+        if not message or not message.strip():
+            return False
+        lower = (message or "").lower()
+
+        # Job/application-specific phrases that should NOT trigger creative bypass
+        # These are explicit requests about job/application documents, not general mentions
+        job_application_phrases = [
+            "cover letter", "application message", "job description",
+            "رسالة التقديم", "رسالة تقديم", "وصف الوظيفة"
+        ]
+
+        # If message contains job/application phrases, it's not a creative request
+        if any(phrase in lower for phrase in job_application_phrases):
+            return False
+
+        # English creative requests - only pure creative content
+        english_creative_patterns = [
+            r"\b(poem|joke|story|haiku|limerick|sonnet)\b",
+            r"\b(write|create|generate|compose)\b.{0,30}\b(poem|joke|story|haiku)\b",
+        ]
+
+        for pattern in english_creative_patterns:
+            if re.search(pattern, lower):
+                return True
+
+        # Arabic creative requests - only pure creative content
+        normalized = re.sub(r"[\u064B-\u065F\u0670\u0640]", "", message or "")
+        normalized = re.sub(r"[آأإٱ]", "ا", normalized)
+
+        # Only match creative words, not translation/explanation of job content
+        arabic_creative_patterns = [
+            "قصيده", "قصيدة", "نكتة", "نكته", "قصة", "حكاية",
+        ]
+
+        if any(pattern in normalized for pattern in arabic_creative_patterns):
+            return True
+
+        return False
+
     def _requests_application_draft(message: str) -> bool:
         lower = (message or "").lower()
         if re.search(r"\b(draft|write|compose|prepare|generate|create)\b.{0,50}\b(message|email|letter|cover|inmail|linkedin)\b", lower):
@@ -1558,6 +1606,9 @@ class RicoChatAPI:
     @staticmethod
     def _looks_like_application_channel_followup(message: str) -> bool:
         if not message or not message.strip():
+            return False
+        # Creative writing requests bypass application context
+        if RicoChatAPI._is_creative_writing_request(message):
             return False
         return (
             RicoChatAPI._requests_application_draft(message)
@@ -1647,8 +1698,21 @@ class RicoChatAPI:
         return " - ".join(parts)
 
     def _draft_application_message(self, job: dict[str, Any], profile: Any, *, arabic: bool) -> str:
-        title = self._job_context_value(job, "title") or ("الدور" if arabic else "the role")
-        company = self._job_context_value(job, "company") or ("الشركة" if arabic else "the company")
+        title = self._job_context_value(job, "title")
+        company = self._job_context_value(job, "company")
+
+        # Guard against placeholder values - ask for missing details instead
+        placeholder_values = ["any", "unknown", "n/a", "الشركة", "الدور", "غير معروف"]
+        if not title or any(p.lower() == title.lower() for p in placeholder_values):
+            if arabic:
+                return "يرجى تزويدي باسم الدور الوظيفي لأتمكن من صياغة رسالة التقديم."
+            return "Please provide the job title so I can draft the application message."
+
+        if not company or any(p.lower() == company.lower() for p in placeholder_values):
+            if arabic:
+                return "يرجى تزويدي باسم الشركة لأتمكن من صياغة رسالة التقديم."
+            return "Please provide the company name so I can draft the application message."
+
         skills = self._as_list(self._profile_value(profile, "skills"))
         certs = self._as_list(self._profile_value(profile, "certifications"))
         strengths = ", ".join(str(s) for s in (skills + certs)[:4]) or ("خبرتي ذات الصلة" if arabic else "my relevant experience")
