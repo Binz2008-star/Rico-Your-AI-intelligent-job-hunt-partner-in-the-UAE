@@ -558,6 +558,32 @@ _ARABIC_APPLIED_STATUS_RE = re.compile(
     re.UNICODE,
 )
 
+_ENGLISH_APPLIED_STATUS_QUERY_PREFIX_RE = re.compile(
+    r"^\s*(?:what|which|show|list|view|see|where|how\s+many|tell\s+me)\b",
+    re.IGNORECASE,
+)
+
+_ENGLISH_MANUAL_APPLIED_STATUS_RE = re.compile(
+    r"\b(?:ya|yeah|yes|yep|ok|okay)?\s*i\s+"
+    r"(?:(?:have|ve)\s+|already\s+)?"
+    r"(?:applied|submitted)\b"
+    r"(?:.{0,50}\b(?:manually|manual|my\s*self|myself|outside\s+rico|by\s+myself|application))?"
+    r"|\bi\s+(?:sent|submitted)\s+(?:the\s+)?application\b"
+    r"|\b(?:mark|log|record)\s+(?:it|this|this\s+job|the\s+job|that\s+job)?\s*(?:as\s+)?applied\b"
+    r"|\b(?:can|could|will|would)\s+(?:you|u|rico)\s+(?:log|record|add|track)\s+"
+    r"(?:it|this|this\s+job|the\s+job|that\s+job)\b"
+    r"|\bhow\s+can\s+(?:you|u|rico)\s+(?:log|record|add|track)\s+"
+    r"(?:it|this|this\s+job|the\s+job|that\s+job)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_english_manual_applied_status(text: str) -> bool:
+    """True for manual-applied reports, not for list/history queries."""
+    if _ENGLISH_APPLIED_STATUS_QUERY_PREFIX_RE.search(text):
+        return False
+    return bool(_ENGLISH_MANUAL_APPLIED_STATUS_RE.search(text))
+
 _EXPLAIN_MATCH_RE = re.compile(
     r"\b(why|explain|how come|reason)\b.{0,50}\b(recommend|match|suggest|pick|this job)\b",
     re.IGNORECASE,
@@ -886,6 +912,17 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
             "open_apply_link", 0.95, "regex",
             extracted_title=extracted_title,
             extracted_company=extracted_company,
+        )
+
+    if not has_arabic and _is_english_manual_applied_status(text):
+        return IntentResult(
+            "application_status_update",
+            0.93,
+            "regex",
+            context_required=True,
+            context_type="recent_job",
+            action="mark_applied",
+            target_route="/applications",
         )
 
     if _APPLY_JOB_RE.search(text):

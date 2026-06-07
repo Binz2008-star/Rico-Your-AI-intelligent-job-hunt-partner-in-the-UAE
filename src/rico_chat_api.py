@@ -710,6 +710,14 @@ class RicoChatAPI:
         re.IGNORECASE,
     )
 
+    _MANUAL_APPLICATION_LOG_QUESTION_RE = re.compile(
+        r"\bhow\s+can\s+(?:you|u|rico)\s+(?:log|record|add|track)\s+"
+        r"(?:it|this|this\s+job|the\s+job|that\s+job)\b"
+        r"|\b(?:can|could|will|would)\s+(?:you|u|rico)\s+(?:log|record|add|track)\s+"
+        r"(?:it|this|this\s+job|the\s+job|that\s+job)\b",
+        re.IGNORECASE,
+    )
+
     @staticmethod
     def _is_live_job_search_request(message: str) -> bool:
         """True when user explicitly asks for live/current/UAE/openings jobs."""
@@ -4686,11 +4694,38 @@ class RicoChatAPI:
         job = self._resolve_application_status_job(user_id, message)
         title = self._job_context_value(job or {}, "title")
         company = self._job_context_value(job or {}, "company")
+        if not arabic and self._MANUAL_APPLICATION_LOG_QUESTION_RE.search(message or ""):
+            if job and title and company:
+                msg = (
+                    "I can log that manually in Applications (/applications). "
+                    f"If you already submitted **{title}** at **{company}**, reply "
+                    "'mark it as applied' and I will save it after the database update succeeds."
+                )
+                next_action = "confirm_mark_applied"
+            else:
+                msg = (
+                    "I can add a manually submitted application to Applications (/applications). "
+                    "Send me the job title, company name, and source/link if available, "
+                    "then I can mark it as applied."
+                )
+                next_action = "provide_manual_application_details"
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "manual_application_logging_guidance",
+                "intent": "application_status_update",
+                "message": msg,
+                "job_title": title,
+                "job_company": company,
+                "target_route": "/applications",
+                "next_action": next_action,
+            }
+
         if not job or not title or not company:
             msg = (
                 "أي وظيفة تقصد؟ أرسل اسم الوظيفة أو الشركة لكي أسجلها كطلب تم تقديمه."
                 if arabic else
-                "Which job do you mean? Send the job title or company so I can mark it as applied."
+                "I can add it to Applications (/applications) as applied. "
+                "Send me the job title, company name, and source/link if available."
             )
             self._append_chat(user_id, "assistant", msg)
             return {
