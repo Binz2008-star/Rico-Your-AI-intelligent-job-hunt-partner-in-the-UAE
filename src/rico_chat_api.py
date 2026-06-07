@@ -1314,9 +1314,8 @@ class RicoChatAPI:
         response = {
             "type": "cv_first_profile",
             "message": (
-                f"I received {filename}. I will use the CV-first profile flow: extract every available detail "
-                "from the CV, pre-fill the career profile, and only ask for anything missing or unclear. "
-                "I will not run the long manual question-by-question form."
+                f"I found your {filename} and I'll use it to search for matching UAE jobs. "
+                "I'm checking roles that fit your background now."
             ),
             "next_action": "parse_cv_and_prefill_profile",
             "manual_questions_disabled": True,
@@ -3093,6 +3092,31 @@ class RicoChatAPI:
                 return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
             cv_status = self._profile_value(profile, "cv_status")
             if cv_status == "parsed" or self._profile_value(profile, "manual_profile_wizard_disabled"):
+                # If the user is actually asking to find jobs, search using their profile
+                # rather than telling them their CV is already set up.
+                _is_job_request = (
+                    self._is_live_job_search_request(message)
+                    or self._looks_like_generic_job_request(message)
+                    or any(kw in message.lower() for kw in (
+                        "find", "search", "jobs", "roles", "match my cv",
+                        "based on my cv", "using my cv", "suit me",
+                    ))
+                )
+                if _is_job_request:
+                    _target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+                    if _target_roles:
+                        return self._finalize(
+                            self._target_role_search_response(
+                                user_id, _target_roles[0], profile, from_saved_profile=True
+                            ),
+                            self.SOURCE_KEYWORD,
+                            profile=profile,
+                        )
+                    return self._finalize(
+                        self._handle_profile_role_suggestions(profile),
+                        self.SOURCE_KEYWORD,
+                        profile=profile,
+                    )
                 response = {
                     "type": "profile_summary",
                     "message": (

@@ -9,11 +9,15 @@ Covers:
 - _looks_like_bare_target_role is case-insensitive
 - _get_blocked_questions blocks experience/location/industry when known
 - _remove_blocked_questions strips blocked lines from AI responses
+- "Find UAE jobs that match my CV" with a parsed CV must search, not return
+  internal/technical flow text
 """
 import pytest
+from unittest.mock import MagicMock
 
 from src.rico_agent import RicoProfile
 from src.rico_chat_api import RicoChatAPI
+from src.jsearch_client import FetchResult
 
 
 class TestRicoProfileCVFields:
@@ -250,3 +254,106 @@ class TestRemoveBlockedQuestions:
         assert "Preferred location" not in result
         assert "What type of sales" in result
         assert "Here are matching jobs." in result
+
+
+# ── Regression: "Find UAE jobs that match my CV" with parsed CV ───────────────
+
+_INTERNAL_PHRASES = [
+    "CV-first profile flow",
+    "extract every available detail",
+    "pre-fill the career profile",
+    "long manual question-by-question form",
+    "profile flow",
+]
+
+_FIND_JOBS_MESSAGES = [
+    "Find UAE jobs that match my CV",
+    "find uae jobs based on my cv",
+    "search jobs using my cv",
+    "find jobs that suit me",
+]
+
+
+class TestFindJobsWithParsedCV:
+    """When a user has a parsed CV and asks to find UAE jobs, Rico must:
+    - NOT return internal/technical flow text
+    - Either start a job search or ask one clear question (role suggestions)
+    - Never expose 'CV-first profile flow', 'extract every', etc.
+    """
+
+    def _make_api_with_parsed_cv(self, monkeypatch, target_roles=None):
+        profile = MagicMock()
+        profile.user_id = "test@example.com"
+        profile.has_cv = True
+        profile.cv_filename = "robin_cv.pdf"
+        profile.cv_status = "parsed"
+        profile.target_roles = target_roles if target_roles is not None else ["Environmental Manager"]
+        profile.skills = ["ISO 14001", "HSE", "compliance"]
+        profile.years_experience = 10
+        profile.preferred_cities = ["Dubai"]
+        profile.industries = ["energy"]
+        profile.manual_profile_wizard_disabled = False
+        profile.deal_breakers = []
+        profile.nationality = ""
+        profile.citizenship = ""
+        api = RicoChatAPI(persist=False)
+        api.memory = MagicMock()
+        api.system = MagicMock()
+        api.system.run_for_profile.return_value = {"matches": []}
+        api.openai_agent = MagicMock()
+
+        monkeypatch.setattr(api, "_resolve_profile", lambda _uid: profile)
+        monkeypatch.setattr(api, "_resolve_pending_field", lambda *a, **kw: None)
+        monkeypatch.setattr(api, "_search_jsearch_meta", lambda _role: FetchResult(items=[]))
+        monkeypatch.setattr(api, "_enrich_with_role_intelligence", lambda *a, **kw: None)
+        monkeypatch.setattr(
+            api, "_begin_job_search_operation",
+            lambda _uid, _role: {"operation_id": "op-test"},
+        )
+        monkeypatch.setattr("src.rico_chat_api.mark_completed", lambda *a, **kw: None)
+        return api, profile
+
+    @pytest.mark.parametrize("message", _FIND_JOBS_MESSAGES)
+    def test_no_internal_phrases_in_response(self, monkeypatch, message):
+        api, _ = self._make_api_with_parsed_cv(monkeypatch)
+        response = api._handle_active_user("test@example.com", message)
+        msg = response.get("message", "")
+        for phrase in _INTERNAL_PHRASES:
+            assert phrase not in msg, (
+                f"Internal phrase {phrase!r} found in response to {message!r}: {msg!r}"
+            )
+
+    def test_find_uae_jobs_with_cv_triggers_job_search(self, monkeypatch):
+        api, _ = self._make_api_with_parsed_cv(
+            monkeypatch, target_roles=["Environmental Manager"]
+        )
+        response = api._handle_active_user(
+            "test@example.com", "Find UAE jobs that match my CV"
+        )
+        assert response["type"] == "job_matches", (
+            f"Expected job_matches, got {response['type']!r}. Message: {response.get('message')!r}"
+        )
+
+    def test_find_uae_jobs_search_query_is_clean_role(self, monkeypatch):
+        api, _ = self._make_api_with_parsed_cv(
+            monkeypatch, target_roles=["Environmental Manager"]
+        )
+        response = api._handle_active_user(
+            "test@example.com", "Find UAE jobs that match my CV"
+        )
+        sq = response.get("search_query", "")
+        assert "Environmental Manager" in sq or len(sq.split()) <= 5, (
+            f"search_query looks like a blob: {sq!r}"
+        )
+
+    def test_find_jobs_no_target_roles_returns_suggestions(self, monkeypatch):
+        """When CV is parsed but no target_roles yet, return role suggestions, not internal text."""
+        api, _ = self._make_api_with_parsed_cv(monkeypatch, target_roles=[])
+        response = api._handle_active_user(
+            "test@example.com", "Find UAE jobs that match my CV"
+        )
+        msg = response.get("message", "")
+        for phrase in _INTERNAL_PHRASES:
+            assert phrase not in msg, (
+                f"Internal phrase {phrase!r} found when no target_roles: {msg!r}"
+            )
