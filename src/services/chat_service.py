@@ -139,9 +139,20 @@ def send_message(
     )
 
     if decision.should_use_ai:
-        return _conversational_ai_reply(ctx=ctx, message=message, profile=profile, language=language)
+        result = _conversational_ai_reply(ctx=ctx, message=message, profile=profile, language=language)
+    else:
+        result = _legacy_send_message(ctx=ctx, message=message, operation_id=operation_id, language=language)
 
-    return _legacy_send_message(ctx=ctx, message=message, operation_id=operation_id, language=language)
+    # Warn authenticated users who are approaching their monthly AI-message limit.
+    # Threshold: ≤10 remaining (roughly the last 20% of the free-tier 50-msg cap).
+    # Injected into every allowed response so the frontend can surface a persistent
+    # banner without a separate API call.
+    if gate and gate.allowed and gate.remaining is not None and gate.remaining <= 10:
+        result["messages_remaining"] = gate.remaining
+        if gate.limit is not None:
+            result["messages_limit"] = gate.limit
+
+    return result
 
 
 def _unsupported_tool_response(policy: Any) -> Dict[str, Any]:

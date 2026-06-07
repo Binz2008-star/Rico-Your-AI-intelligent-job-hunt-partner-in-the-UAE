@@ -680,6 +680,10 @@ export const translations = {
     cmdIncompletePrefix: "Incomplete — ",
     cmdShowOld: "Show",
     cmdStaleNote: "(broad search — may be outdated)",
+    cmdMsgLimitReached: "You've used all your messages this month.",
+    cmdMsgLimitOne: "1 message left this month.",
+    cmdMsgLimitFew: "{n} messages left this month.",
+    cmdUpgrade: "Upgrade",
 
     // Application Flow page (/flow)
     flowTitle: "Application Flow",
@@ -1426,6 +1430,10 @@ export const translations = {
     cmdIncompletePrefix: "غير مكتمل — ",
     cmdShowOld: "عرض",
     cmdStaleNote: "(بحث موسَّع — قد تكون منتهية)",
+    cmdMsgLimitReached: "لقد استخدمت جميع رسائلك هذا الشهر.",
+    cmdMsgLimitOne: "تبقّت رسالة واحدة هذا الشهر.",
+    cmdMsgLimitFew: "تبقّت {n} رسائل هذا الشهر.",
+    cmdUpgrade: "ترقية الخطة",
 
     // Application Flow page (/flow)
     flowTitle: "مسار الطلبات",

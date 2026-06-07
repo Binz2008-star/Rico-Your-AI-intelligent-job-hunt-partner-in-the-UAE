@@ -859,6 +859,8 @@ export interface ChatApiResponse {
   result_count?: number | null;
   rate_limited?: boolean;
   rate_limit_notice?: string;
+  messages_remaining?: number;
+  messages_limit?: number;
 }
 
 export interface ParsedCV {
