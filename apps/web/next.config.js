@@ -1,12 +1,11 @@
 // Must match the resolution order in lib/api.ts and lib/api/client.ts.
-// NEXT_PUBLIC_RICO_API is the documented production backend var (see CLAUDE.md);
-// omitting it here made the /proxy rewrite fall back to localhost in production,
-// which silently broke every client-side API call (chat, /me, jobs, …).
+// NEXT_PUBLIC_RICO_API is the documented production backend var (see CLAUDE.md).
+// No localhost fallback: if unset, rewrites return [] (handled below), which is
+// safer than silently proxying to a local process that does not exist in production.
 const backendUrl =
     process.env.BACKEND_API_BASE_URL ||
     process.env.NEXT_PUBLIC_API_BASE_URL ||
-    process.env.NEXT_PUBLIC_RICO_API ||
-    "http://localhost:8000";
+    process.env.NEXT_PUBLIC_RICO_API;
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -20,6 +19,21 @@ const nextConfig = {
             {
                 source: "/proxy/:path*",
                 destination: `${backendUrl}/:path*`,
+            },
+        ];
+    },
+
+    // Baseline security headers — no CSP (inline scripts in layout require nonces; deferred to a separate PR).
+    async headers() {
+        return [
+            {
+                source: "/(.*)",
+                headers: [
+                    { key: "X-Frame-Options", value: "DENY" },
+                    { key: "X-Content-Type-Options", value: "nosniff" },
+                    { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+                    { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
+                ],
             },
         ];
     },

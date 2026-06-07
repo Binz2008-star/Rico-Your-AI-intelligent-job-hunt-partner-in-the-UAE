@@ -29,11 +29,12 @@ import type {
 import type { ZodType } from "zod";
 
 // Absolute backend URL — used only for server-side (SSR) fetches such as fetchHealth().
+// No localhost fallback: if unset, SSR fetches will fail loudly rather than silently
+// routing to a local process that does not exist in production.
 const RICO_API =
   process.env.BACKEND_API_BASE_URL ??
   process.env.NEXT_PUBLIC_API_BASE_URL ??
-  process.env.NEXT_PUBLIC_RICO_API ??
-  "http://localhost:8000";
+  process.env.NEXT_PUBLIC_RICO_API;
 
 // All client-side fetches route through /proxy so the session cookie is set and
 // sent as a first-party (same-origin) cookie, bypassing Chrome's cross-site

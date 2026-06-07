@@ -103,7 +103,7 @@ class RicoPublicChatRequest(BaseModel):
     """Public chat request with session tracking or email-based user identification."""
     message: str = Field(..., max_length=2048)
     session_id: str | None = Field(None, min_length=8, max_length=64)
-    email: str | None = Field(None)
+    email: str | None = Field(None, max_length=254)
     operation_id: str | None = Field(None, min_length=8, max_length=80)
     language: str | None = Field(None, pattern="^(en|ar)$")
 
