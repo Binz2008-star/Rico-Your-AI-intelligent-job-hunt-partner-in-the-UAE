@@ -300,3 +300,163 @@ def should_normalize_profile(
     )
 
     return has_broad_roles and has_cv_evidence
+
+
+# Diverse UAE role suggestions for UI autocomplete
+_UAE_ROLE_SUGGESTIONS = [
+    "Environmental Manager",
+    "HSE Manager",
+    "QHSE Manager",
+    "Sustainability Manager",
+    "ESG Specialist",
+    "Operations Manager",
+    "Project Manager",
+    "QA/QC Manager",
+    "Safety Officer",
+    "Compliance Manager",
+    "Accountant",
+    "Sales Executive",
+    "HR Officer",
+    "Admin Assistant",
+    "Customer Service Representative",
+    "Procurement Officer",
+    "Logistics Coordinator",
+    "Civil Engineer",
+    "Mechanical Engineer",
+    "Electrical Engineer",
+]
+
+
+def get_uae_role_suggestions() -> list[str]:
+    """Get diverse UAE role suggestions for UI autocomplete."""
+    return _UAE_ROLE_SUGGESTIONS.copy()
+
+
+def validate_and_normalize_target_roles(
+    target_roles: list[str] | None,
+) -> list[str]:
+    """Validate and normalize target roles for display and save.
+
+    This function:
+    - Trims whitespace
+    - Removes empty strings
+    - Removes duplicates case-insensitively
+    - Splits comma-separated role blobs into individual roles
+    - Filters out gibberish (very short or random-looking strings)
+    - Validates minimum length (2 chars)
+
+    Args:
+        target_roles: Raw target roles from user input or profile
+
+    Returns:
+        Clean, normalized list of target roles
+    """
+    if not target_roles:
+        return []
+
+    cleaned: list[str] = []
+    seen: set[str] = set()
+
+    for role in target_roles:
+        # Split comma-separated blobs
+        parts = role.split(",") if "," in role else [role]
+
+        for part in parts:
+            trimmed = part.strip()
+            if not trimmed:
+                continue
+
+            # Minimum length check (2 chars)
+            if len(trimmed) < 2:
+                continue
+
+            # Gibberish check: reject if very short (<4 chars) and not a common role pattern
+            # Or if it's a repeated character pattern like "ghhh", "aaaa"
+            if len(trimmed) < 4:
+                # Very short strings must look like real roles (e.g., "HR", "QA")
+                # Reject single-letter or repeated patterns
+                if len(set(trimmed.lower())) <= 1:
+                    continue
+
+            # Check for repeated character patterns (e.g., "ghhh", "aaaa")
+            if len(trimmed) >= 4:
+                # If one character appears 75% or more of the time, reject
+                char_counts = {c: trimmed.lower().count(c) for c in set(trimmed.lower())}
+                max_count = max(char_counts.values())
+                if max_count >= len(trimmed) * 0.75:
+                    continue
+
+            # Case-insensitive deduplication
+            lower = trimmed.lower()
+            if lower in seen:
+                continue
+
+            seen.add(lower)
+            cleaned.append(trimmed)
+
+    return cleaned
+
+
+def validate_and_normalize_skills(
+    skills: list[str] | None,
+) -> list[str]:
+    """Validate and normalize skills for display and save.
+
+    This function:
+    - Trims whitespace
+    - Removes empty strings
+    - Removes duplicates case-insensitively
+    - Splits comma-separated skill blobs into individual skills
+    - Filters out gibberish (very short or random-looking strings)
+    - Validates minimum length (2 chars)
+
+    Args:
+        skills: Raw skills from user input or profile
+
+    Returns:
+        Clean, normalized list of skills
+    """
+    if not skills:
+        return []
+
+    cleaned: list[str] = []
+    seen: set[str] = set()
+
+    for skill in skills:
+        # Split comma-separated blobs
+        parts = skill.split(",") if "," in skill else [skill]
+
+        for part in parts:
+            trimmed = part.strip()
+            if not trimmed:
+                continue
+
+            # Minimum length check (2 chars)
+            if len(trimmed) < 2:
+                continue
+
+            # Gibberish check: reject if very short (<4 chars) and not a common skill pattern
+            # Or if it's a repeated character pattern like "ghhh", "aaaa"
+            if len(trimmed) < 4:
+                # Very short strings must look like real skills (e.g., "HR", "QA", "AI")
+                # Reject single-letter or repeated patterns
+                if len(set(trimmed.lower())) <= 1:
+                    continue
+
+            # Check for repeated character patterns (e.g., "ghhh", "aaaa")
+            if len(trimmed) >= 4:
+                # If one character appears 75% or more of the time, reject
+                char_counts = {c: trimmed.lower().count(c) for c in set(trimmed.lower())}
+                max_count = max(char_counts.values())
+                if max_count >= len(trimmed) * 0.75:
+                    continue
+
+            # Case-insensitive deduplication
+            lower = trimmed.lower()
+            if lower in seen:
+                continue
+
+            seen.add(lower)
+            cleaned.append(trimmed)
+
+    return cleaned

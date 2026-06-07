@@ -36,7 +36,8 @@ def onboarding_submit(request: Request, body: OnboardingSubmitRequest) -> Dict[s
 
     updates: Dict[str, Any] = {}
     if body.target_roles is not None:
-        updates["target_roles"] = [r.strip() for r in body.target_roles if r.strip()]
+        from src.role_normalization import validate_and_normalize_target_roles
+        updates["target_roles"] = validate_and_normalize_target_roles(body.target_roles)
     if body.preferred_cities is not None:
         updates["preferred_cities"] = [c.strip() for c in body.preferred_cities if c.strip()]
     if body.salary_expectation_aed is not None:
@@ -46,7 +47,8 @@ def onboarding_submit(request: Request, body: OnboardingSubmitRequest) -> Dict[s
     if body.current_role is not None:
         updates["current_role"] = body.current_role.strip()
     if body.skills is not None:
-        updates["skills"] = [s.strip() for s in body.skills if s.strip()]
+        from src.role_normalization import validate_and_normalize_skills
+        updates["skills"] = validate_and_normalize_skills(body.skills)
 
     if updates:
         from src.repositories.profile_repo import upsert_profile
