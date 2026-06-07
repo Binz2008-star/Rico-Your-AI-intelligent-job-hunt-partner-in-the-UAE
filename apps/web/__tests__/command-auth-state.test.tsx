@@ -5,6 +5,7 @@ import { renderWithProviders as render } from "./test-utils";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
+  usePathname: () => "/command",
 }));
 vi.mock("next/link", () => ({
   default: ({ children, href, ...props }: any) => (
@@ -85,5 +86,29 @@ describe("/command auth-state containment (issue #281)", () => {
     expect(screen.queryByText("Sign up free")).not.toBeInTheDocument();
     expect(screen.queryByText("Sign in")).not.toBeInTheDocument();
     expect(screen.queryByText("Sign out")).not.toBeInTheDocument();
+  });
+
+  it("/me resolving successfully always yields authenticated audience, not public", async () => {
+    // Regression guard: the fallback timeout was 2000 ms. On Render free-tier cold
+    // starts (2–5 s round-trip), the fallback would abort the in-flight /me and
+    // silently downgrade an authenticated user to public chat.
+    // The fix: timeout raised to 8000 ms. This test confirms that when /me returns
+    // authenticated=true (regardless of timing), the component uses authenticated
+    // chat endpoints (Sign out visible, no Sign up / Sign in links).
+    fetchMock.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/api/v1/me")) {
+        return jsonResponse({ authenticated: true, role: "user", email: "u@u.com" });
+      }
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
+
+    render(<CommandPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Sign out")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Sign up free")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sign in")).not.toBeInTheDocument();
   });
 });
