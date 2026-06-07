@@ -566,6 +566,19 @@ class RicoChatAPI:
             return False
         return True
 
+    # Role suffix words used to detect space-concatenated Title Case role blobs.
+    _ROLE_SUFFIX_RE = re.compile(
+        r"\b(?:Manager|Director|Officer|Lead|Specialist|Consultant|Advisor|"
+        r"Coordinator|Executive|Head|Analyst|Engineer|Associate|President|VP)\b"
+    )
+    # Captures a role-suffix word + the space before the next capitalised word.
+    # Used to insert a split sentinel (\x00) without variable-width lookbehind.
+    _ROLE_SUFFIX_BOUNDARY_RE = re.compile(
+        r"(Manager|Director|Officer|Lead|Specialist|Consultant|Advisor|"
+        r"Coordinator|Executive|Head|Analyst|Engineer|Associate|President|VP) "
+        r"(?=[A-Z])"
+    )
+
     @staticmethod
     def _as_list(value: Any) -> list[Any]:
         """Convert profile values to a flat list.
@@ -573,6 +586,11 @@ class RicoChatAPI:
         Profile data can arrive from older forms as comma/newline-separated
         strings. Flatten those before role search so one stored text blob never
         becomes one giant job title.
+
+        Also handles space-concatenated Title Case role blobs produced by older
+        Jotform/onboarding paths (e.g. "Environmental Manager HSE Manager"):
+        these are split at Title Case word boundaries when the string is long
+        and contains multiple known role-suffix words.
         """
         if value is None:
             return []
@@ -584,7 +602,25 @@ class RicoChatAPI:
             if isinstance(item, str):
                 for part in PROFILE_LIST_SPLIT_RE.split(item):
                     cleaned = part.strip().strip("-*\u2022").strip()
-                    if cleaned:
+                    if not cleaned:
+                        continue
+                    # Secondary split: detect space-joined Title Case role blobs.
+                    # Apply only when string is suspiciously long and contains
+                    # at least two known role-suffix words \u2014 avoids false splits
+                    # on legitimate multi-word titles like "General Manager Retail".
+                    if (
+                        len(cleaned) > 50
+                        and len(RicoChatAPI._ROLE_SUFFIX_RE.findall(cleaned)) >= 2
+                    ):
+                        sentinel = RicoChatAPI._ROLE_SUFFIX_BOUNDARY_RE.sub(
+                            lambda m: m.group(1) + "\x00", cleaned
+                        )
+                        sub_parts = sentinel.split("\x00")
+                        for sp in sub_parts:
+                            sp = sp.strip()
+                            if sp:
+                                result.append(sp)
+                    else:
                         result.append(cleaned)
                 continue
             result.append(item)
@@ -1278,9 +1314,8 @@ class RicoChatAPI:
         response = {
             "type": "cv_first_profile",
             "message": (
-                f"I received {filename}. I will use the CV-first profile flow: extract every available detail "
-                "from the CV, pre-fill the career profile, and only ask for anything missing or unclear. "
-                "I will not run the long manual question-by-question form."
+                f"I found your {filename} and I'll use it to search for matching UAE jobs. "
+                "I'm checking roles that fit your background now."
             ),
             "next_action": "parse_cv_and_prefill_profile",
             "manual_questions_disabled": True,
@@ -3057,6 +3092,31 @@ class RicoChatAPI:
                 return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
             cv_status = self._profile_value(profile, "cv_status")
             if cv_status == "parsed" or self._profile_value(profile, "manual_profile_wizard_disabled"):
+                # If the user is actually asking to find jobs, search using their profile
+                # rather than telling them their CV is already set up.
+                _is_job_request = (
+                    self._is_live_job_search_request(message)
+                    or self._looks_like_generic_job_request(message)
+                    or any(kw in message.lower() for kw in (
+                        "find", "search", "jobs", "roles", "match my cv",
+                        "based on my cv", "using my cv", "suit me",
+                    ))
+                )
+                if _is_job_request:
+                    _target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+                    if _target_roles:
+                        return self._finalize(
+                            self._target_role_search_response(
+                                user_id, _target_roles[0], profile, from_saved_profile=True
+                            ),
+                            self.SOURCE_KEYWORD,
+                            profile=profile,
+                        )
+                    return self._finalize(
+                        self._handle_profile_role_suggestions(profile),
+                        self.SOURCE_KEYWORD,
+                        profile=profile,
+                    )
                 response = {
                     "type": "profile_summary",
                     "message": (
