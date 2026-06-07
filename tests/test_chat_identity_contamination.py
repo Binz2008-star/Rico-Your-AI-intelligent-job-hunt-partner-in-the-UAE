@@ -266,8 +266,10 @@ class TestGetUserBundleOrdering:
         order_by_start = sql.find("order by")
         assert order_by_start != -1, "SQL must contain ORDER BY"
         order_section = sql[order_by_start:]
-        email_pos = order_section.find("u.email =")
-        ext_pos = order_section.find("u.external_user_id =")
+        # SQL uses LOWER(u.email) = LOWER(%s) for case-insensitive matching,
+        # so search for "u.email" without the literal "=" that the old form used.
+        email_pos = order_section.find("u.email")
+        ext_pos = order_section.find("u.external_user_id")
         assert email_pos != -1, "ORDER BY must reference u.email"
         assert ext_pos != -1, "ORDER BY must reference u.external_user_id"
         assert email_pos < ext_pos, (

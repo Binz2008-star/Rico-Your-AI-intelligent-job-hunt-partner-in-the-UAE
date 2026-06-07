@@ -341,11 +341,11 @@ class TestRegisterEndpoint:
         send_email.assert_called_once()
         kwargs = send_email.call_args.kwargs
         assert kwargs["to_email"] == "info@ricohunt.com"
-        assert kwargs["subject"] == "New RicoHunt signup"
+        assert kwargs["subject"] == "New RicoHunt signup — notify@rico.ai"
         assert "Email: notify@rico.ai" in kwargs["body"]
         assert "User ID: 12" in kwargs["body"]
         assert "Plan: free" in kwargs["body"]
-        assert "Source: website" in kwargs["body"]
+        assert "Signup source: website" in kwargs["body"]
 
     def test_register_succeeds_when_signup_notification_fails(self, user_client):
         _reset_limiter()
