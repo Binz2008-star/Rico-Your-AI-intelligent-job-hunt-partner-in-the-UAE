@@ -108,7 +108,7 @@ export default function PrivacyPage() {
                 to build your career profile and power job matching.
               </p>
               <p>
-                Rico uses AI tools to analyze CVs, extract skills and experience, suggest target roles,
+                Rico may use AI tools to analyze CVs, extract skills and experience, suggest target roles,
                 and provide job-match insights. Your CV and profile data may be sent to AI service
                 providers to generate these results. We do not use your personal data to train public
                 AI models.
@@ -118,8 +118,7 @@ export default function PrivacyPage() {
             <section>
               <h2 className="mb-3 text-lg font-semibold text-white">4. Third-Party Providers</h2>
               <p className="mb-3">
-                To deliver the service, Rico shares limited data with trusted third-party providers,
-                including:
+                Rico may use trusted third-party providers to deliver the service, including:
               </p>
               <ul className="ml-4 list-disc space-y-2">
                 <li><strong className="text-white">Cloud hosting and infrastructure</strong> — for running the platform</li>
@@ -240,6 +239,17 @@ export default function PrivacyPage() {
                   <strong className="text-white">Phone / WhatsApp:</strong>{" "}
                   <a href="https://wa.me/971585989080" className="text-[#f5a623] hover:opacity-80">
                     +971 58 598 9080
+                  </a>
+                </li>
+                <li>
+                  <strong className="text-white">LinkedIn:</strong>{" "}
+                  <a
+                    href="https://www.linkedin.com/company/eco-technology-environment-protection-services-l-l-c/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#f5a623] hover:opacity-80"
+                  >
+                    Company LinkedIn
                   </a>
                 </li>
               </ul>

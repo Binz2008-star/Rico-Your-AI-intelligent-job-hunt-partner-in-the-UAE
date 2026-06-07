@@ -5,7 +5,7 @@ import { AuraGlow } from "@/components/ui/AuraGlow";
 
 export const metadata: Metadata = {
   title: "Terms of Service | Rico Hunt",
-  description: "Terms of Service for Rico Hunt — the UAE-focused AI career execution platform.",
+  description: "Terms of Service for Rico Hunt — the UAE-focused AI career platform.",
 };
 
 export default function TermsPage() {
@@ -45,40 +45,84 @@ export default function TermsPage() {
             Terms of Service
           </h1>
           <p className="mb-8 text-sm text-text-secondary">
-            Last updated: May 2026 · These terms apply to all users of Rico Hunt.
+            Last updated: June 2026 · These terms apply to all users of Rico Hunt.
           </p>
 
           <div className="space-y-8 text-sm leading-7 text-text-secondary">
+
             <section>
               <h2 className="mb-3 text-lg font-semibold text-white">1. Acceptance of Terms</h2>
               <p>
                 By accessing or using Rico Hunt, you agree to be bound by these Terms of Service.
                 If you do not agree, you may not use the service. These terms constitute a legally
-                binding agreement between you and Rico Hunt.
+                binding agreement between you and Rico Hunt, operated by Eco Technology Environment
+                Protection Services L.L.C.
               </p>
             </section>
 
             <section>
               <h2 className="mb-3 text-lg font-semibold text-white">2. Description of Service</h2>
               <p>
-                Rico Hunt provides an autonomous career execution platform that converts CVs into
-                structured profiles, infers career tracks, searches UAE job markets, scores
-                opportunities, and manages application pipelines. The service includes AI-powered
-                messaging, role-graph optimization, and application tracking.
+                Rico Hunt is an AI-powered career platform that helps professionals in the UAE and
+                GCC discover job opportunities, manage applications, and improve their job search
+                strategy. The service includes CV analysis, job matching, application tracking,
+                and AI-powered career guidance.
               </p>
             </section>
 
             <section>
-              <h2 className="mb-3 text-lg font-semibold text-white">3. User Accounts</h2>
+              <h2 className="mb-3 text-lg font-semibold text-white">3. Service Limitations and Disclaimers</h2>
+              <p className="mb-3">
+                Before using Rico Hunt, please read the following important limitations:
+              </p>
+              <ul className="ml-4 list-disc space-y-3">
+                <li>
+                  <strong className="text-white">No employment guarantee.</strong> Rico Hunt does not
+                  guarantee employment, job interviews, or application success. Using the platform does
+                  not ensure you will receive a job offer.
+                </li>
+                <li>
+                  <strong className="text-white">Not an employer or recruitment agency.</strong> Rico Hunt
+                  is a software platform, not an employer, staffing agency, or recruitment agency. We do
+                  not represent employers, negotiate on your behalf, or place candidates in roles.
+                </li>
+                <li>
+                  <strong className="text-white">Jobs from external sources.</strong> Job listings shown
+                  on Rico Hunt may come from external job data providers and public job sources. We do not
+                  independently verify all listings. Job availability, accuracy, and legitimacy are the
+                  responsibility of the posting employer.
+                </li>
+                <li>
+                  <strong className="text-white">Verify before applying.</strong> You must independently
+                  verify all job details — including the employer, role, salary, location, and application
+                  requirements — before applying. Rico Hunt is not liable for inaccurate or outdated
+                  job listings.
+                </li>
+                <li>
+                  <strong className="text-white">AI outputs may be inaccurate.</strong> Rico uses
+                  AI-generated content for CV analysis, job matching, and career guidance. AI outputs
+                  can contain errors, omissions, or outdated information. Do not rely solely on
+                  AI-generated content for career decisions.
+                </li>
+                <li>
+                  <strong className="text-white">Your approval is required before applications.</strong> Rico
+                  Hunt will not submit a job application on your behalf without your explicit confirmation.
+                  You remain in full control of all application actions.
+                </li>
+              </ul>
+            </section>
+
+            <section>
+              <h2 className="mb-3 text-lg font-semibold text-white">4. User Accounts</h2>
               <p>
                 You must provide accurate information when creating an account. You are responsible
                 for maintaining the security of your account credentials. Notify us immediately of
-                any unauthorized access. We reserve the right to suspend accounts that violate these terms.
+                any unauthorised access. We reserve the right to suspend accounts that violate these terms.
               </p>
             </section>
 
             <section>
-              <h2 className="mb-3 text-lg font-semibold text-white">4. Subscription and Payments</h2>
+              <h2 className="mb-3 text-lg font-semibold text-white">5. Subscription and Payments</h2>
               <p>
                 Some features require a paid subscription. Payments are processed through Stripe.
                 Subscriptions auto-renew unless cancelled. You may cancel at any time through the
@@ -87,44 +131,55 @@ export default function TermsPage() {
             </section>
 
             <section>
-              <h2 className="mb-3 text-lg font-semibold text-white">5. User Content</h2>
+              <h2 className="mb-3 text-lg font-semibold text-white">6. User Content</h2>
               <p>
                 You retain ownership of your CV and profile data. By uploading content, you grant
-                Rico Hunt a license to process it for the purpose of providing the service. We do
-                not sell your data to third parties. You may delete your account and data at any time.
+                Rico Hunt a licence to process it for the purpose of providing the service. We do
+                not sell your data to third parties. You may request deletion of your account and
+                data at any time by contacting info@ricohunt.com.
               </p>
             </section>
 
             <section>
-              <h2 className="mb-3 text-lg font-semibold text-white">6. Prohibited Activities</h2>
+              <h2 className="mb-3 text-lg font-semibold text-white">7. Prohibited Activities</h2>
               <p>
                 You may not: (a) use the service for illegal purposes; (b) attempt to access
-                systems or data without authorization; (c) interfere with other users&apos; access;
-                (d) upload malicious code; (e) resell or redistribute the service without permission.
+                systems or data without authorisation; (c) interfere with other users&apos; access;
+                (d) upload malicious code; (e) resell or redistribute the service without permission;
+                (f) misrepresent your identity or qualifications.
               </p>
             </section>
 
             <section>
-              <h2 className="mb-3 text-lg font-semibold text-white">7. Limitation of Liability</h2>
-              <p>
-                Rico Hunt provides the service &quot;as is&quot; without warranties of any kind. We are not
-                liable for: (a) job application outcomes; (b) accuracy of third-party job listings;
-                (c) AI-generated content errors; (d) service interruptions. Our total liability is
-                limited to amounts paid in the 12 months preceding the claim.
+              <h2 className="mb-3 text-lg font-semibold text-white">8. Limitation of Liability</h2>
+              <p className="mb-3">
+                Rico Hunt provides the service &quot;as is&quot; without warranties of any kind. To the
+                fullest extent permitted by law, we are not liable for:
+              </p>
+              <ul className="ml-4 list-disc space-y-2">
+                <li>Job application outcomes or employment decisions made by employers</li>
+                <li>Accuracy, completeness, or availability of third-party job listings</li>
+                <li>Errors, omissions, or inaccuracies in AI-generated content</li>
+                <li>Service interruptions, data loss, or technical failures</li>
+                <li>Any reliance placed on job listings without independent verification</li>
+              </ul>
+              <p className="mt-3">
+                Our total liability to you is limited to amounts you have paid to Rico Hunt in the
+                12 months preceding the claim.
               </p>
             </section>
 
             <section>
-              <h2 className="mb-3 text-lg font-semibold text-white">8. Governing Law</h2>
+              <h2 className="mb-3 text-lg font-semibold text-white">9. Governing Law</h2>
               <p>
                 These terms are governed by the laws of the United Arab Emirates. Any disputes
-                shall be resolved in the courts of the United Arab Emirates. If you are a consumer in the EU,
-                mandatory consumer protection laws of your country of residence may apply.
+                shall be resolved in the courts of the United Arab Emirates. If you are a consumer
+                in the EU, mandatory consumer protection laws of your country of residence may apply.
               </p>
             </section>
 
             <section>
-              <h2 className="mb-3 text-lg font-semibold text-white">9. Changes to Terms</h2>
+              <h2 className="mb-3 text-lg font-semibold text-white">10. Changes to Terms</h2>
               <p>
                 We may update these terms from time to time. Material changes will be notified via
                 email or through the service. Continued use after changes constitutes acceptance.
@@ -132,19 +187,32 @@ export default function TermsPage() {
             </section>
 
             <section>
-              <h2 className="mb-3 text-lg font-semibold text-white">10. Contact</h2>
-              <p>For questions about these terms, contact us:</p>
-              <ul className="ml-4 mt-2 list-none space-y-1">
+              <h2 className="mb-3 text-lg font-semibold text-white">11. Contact</h2>
+              <p className="mb-3">For questions about these terms, contact us:</p>
+              <ul className="ml-4 list-none space-y-1">
                 <li><strong className="text-white">Company:</strong> Eco Technology Environment Protection Services L.L.C</li>
                 <li><strong className="text-white">Location:</strong> United Arab Emirates</li>
-                <li><strong className="text-white">Email:</strong>{" "}
+                <li>
+                  <strong className="text-white">Email:</strong>{" "}
                   <a href="mailto:info@ricohunt.com" className="text-[#f5a623] hover:opacity-80">
                     info@ricohunt.com
                   </a>
                 </li>
-                <li><strong className="text-white">Phone / WhatsApp:</strong>{" "}
+                <li>
+                  <strong className="text-white">Phone / WhatsApp:</strong>{" "}
                   <a href="https://wa.me/971585989080" className="text-[#f5a623] hover:opacity-80">
                     +971 58 598 9080
+                  </a>
+                </li>
+                <li>
+                  <strong className="text-white">LinkedIn:</strong>{" "}
+                  <a
+                    href="https://www.linkedin.com/company/eco-technology-environment-protection-services-l-l-c/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#f5a623] hover:opacity-80"
+                  >
+                    Company LinkedIn
                   </a>
                 </li>
               </ul>
