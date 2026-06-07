@@ -100,7 +100,9 @@ export default function RefundPolicyPage() {
             <section>
               <h2 className="mb-3 text-lg font-semibold text-white">4. How to Request a Refund</h2>
               <p>
-                To request a refund, email info@ricohunt.com with:
+                To request a refund, email{" "}
+                <a href="mailto:info@ricohunt.com" className="text-[#f5a623] hover:opacity-80">info@ricohunt.com</a>{" "}
+                with:
               </p>
               <ul className="ml-4 mt-2 list-disc space-y-2">
                 <li>Your registered email address</li>
@@ -149,11 +151,9 @@ export default function RefundPolicyPage() {
             <section>
               <h2 className="mb-3 text-lg font-semibold text-white">8. Contact</h2>
               <p>
-                For refund-related questions, contact:
-                <br />
-                Email: info@ricohunt.com
-                <br />
-                Response time: Within 48 hours
+                For refund-related questions, email{" "}
+                <a href="mailto:info@ricohunt.com" className="text-[#f5a623] hover:opacity-80">info@ricohunt.com</a>
+                . We aim to respond within 48 hours.
               </p>
             </section>
           </div>

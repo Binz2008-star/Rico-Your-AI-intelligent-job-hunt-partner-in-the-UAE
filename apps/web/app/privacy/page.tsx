@@ -179,10 +179,10 @@ export default function PrivacyPage() {
             <section>
               <h2 className="mb-3 text-lg font-semibold text-white">9. Security</h2>
               <p>
-                We implement reasonable technical and organisational measures to protect your data,
+                We implement reasonable technical and organizational measures to protect your data,
                 including encryption in transit (TLS) and access controls. However, no online service
                 can guarantee complete security. You are responsible for keeping your account
-                credentials confidential.
+                credentials safe.
               </p>
             </section>
 

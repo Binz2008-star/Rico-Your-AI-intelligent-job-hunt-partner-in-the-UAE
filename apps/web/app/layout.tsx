@@ -72,6 +72,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <head>
                 <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
                 <script dangerouslySetInnerHTML={{ __html: langInitScript }} />
+                <link
+                    rel="stylesheet"
+                    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
+                />
             </head>
             <body className={`${ibmPlexSans.variable} ${sora.variable} ${spaceMono.variable} antialiased bg-background text-text-primary font-body overflow-x-hidden`}>
                 <ThemeProvider><LanguageProvider>{children}</LanguageProvider></ThemeProvider>

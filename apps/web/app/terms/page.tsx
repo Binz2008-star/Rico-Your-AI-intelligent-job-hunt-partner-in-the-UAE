@@ -117,7 +117,7 @@ export default function TermsPage() {
               <p>
                 You must provide accurate information when creating an account. You are responsible
                 for maintaining the security of your account credentials. Notify us immediately of
-                any unauthorised access. We reserve the right to suspend accounts that violate these terms.
+                any unauthorized access. We reserve the right to suspend accounts that violate these terms.
               </p>
             </section>
 
@@ -134,7 +134,7 @@ export default function TermsPage() {
               <h2 className="mb-3 text-lg font-semibold text-white">6. User Content</h2>
               <p>
                 You retain ownership of your CV and profile data. By uploading content, you grant
-                Rico Hunt a licence to process it for the purpose of providing the service. We do
+                Rico Hunt a license to process it for the purpose of providing the service. We do
                 not sell your data to third parties. You may request deletion of your account and
                 data at any time by contacting info@ricohunt.com.
               </p>
@@ -144,7 +144,7 @@ export default function TermsPage() {
               <h2 className="mb-3 text-lg font-semibold text-white">7. Prohibited Activities</h2>
               <p>
                 You may not: (a) use the service for illegal purposes; (b) attempt to access
-                systems or data without authorisation; (c) interfere with other users&apos; access;
+                systems or data without authorization; (c) interfere with other users&apos; access;
                 (d) upload malicious code; (e) resell or redistribute the service without permission;
                 (f) misrepresent your identity or qualifications.
               </p>
