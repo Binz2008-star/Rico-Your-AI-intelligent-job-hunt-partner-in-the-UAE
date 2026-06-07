@@ -523,7 +523,36 @@ def register(
 
     try:
         from src.services.signup_notifications import send_admin_signup_notification
-        background_tasks.add_task(send_admin_signup_notification, user=user, name=display_name, plan="free")
+        # Query profile data if available (best-effort, never blocks registration)
+        profile_data = None
+        try:
+            from src.db import get_db_connection
+            conn = get_db_connection()
+            if conn:
+                try:
+                    with conn.cursor() as cur:
+                        # Query rico_users for existing profile context
+                        cur.execute(
+                            """
+                            SELECT p.profile
+                            FROM rico_users u
+                            LEFT JOIN rico_profiles p ON p.user_id = u.id
+                            WHERE u.external_user_id = %s OR u.email = %s
+                            LIMIT 1
+                            """,
+                            (user.email, user.email),
+                        )
+                        row = cur.fetchone()
+                        if row and row.get("profile"):
+                            profile_data = row["profile"]
+                except Exception:
+                    logger.exception("register_profile_query_failed email=%s", email)
+                finally:
+                    conn.close()
+        except Exception:
+            logger.exception("register_profile_db_unavailable email=%s", email)
+
+        background_tasks.add_task(send_admin_signup_notification, user=user, name=display_name, plan="free", profile=profile_data)
     except Exception:
         logger.exception(
             "signup_notification_schedule_failed user_id=%s",
