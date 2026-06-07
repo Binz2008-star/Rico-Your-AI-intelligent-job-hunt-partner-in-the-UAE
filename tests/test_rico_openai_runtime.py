@@ -210,6 +210,25 @@ def test_helper_smoke_truncates_input_and_caps_tokens(monkeypatch):
     assert user_msg == "Say OK"
 
 
+def test_real_chat_turn_uses_full_output_cap(monkeypatch):
+    """A non-smoke turn must allow enough tokens for long-form replies (cover
+    letters, CV drafts) so responses don't truncate mid-sentence."""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-fake-test")
+    client = _FakeOpenAIClient(output_text="A full cover letter.")
+    _patch_openai(monkeypatch, client)
+
+    from src import rico_openai_runtime
+    from src.rico_openai_runtime import call_openai_minimal
+
+    result = call_openai_minimal("write me a cover letter", profile_context="role: HSE Manager")
+
+    assert result["success"] is True
+    sent = client.calls[0]
+    assert sent["max_output_tokens"] == rico_openai_runtime._DEFAULT_MAX_OUTPUT_TOKENS
+    # Regression guard: the old 500-token cap truncated cover letters.
+    assert sent["max_output_tokens"] >= 1500
+
+
 def test_helper_truncates_profile_context_to_1200_chars(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-fake-test")
     client = _FakeOpenAIClient(output_text="ok")

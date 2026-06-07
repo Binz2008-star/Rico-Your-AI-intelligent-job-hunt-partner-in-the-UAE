@@ -50,7 +50,11 @@ _RATE_LIMITED_TEXT = (
 )
 _PROFILE_CONTEXT_MAX_CHARS = 1200
 _SMOKE_MAX_OUTPUT_TOKENS = 80
-_DEFAULT_MAX_OUTPUT_TOKENS = 500
+# Output cap for real chat turns. This is an upper bound billed on actual output,
+# so short answers stay cheap; it only needs to be high enough that long-form
+# replies (cover letters, CV drafts, multi-paragraph guidance) finish instead of
+# cutting off mid-sentence. 500 was too low and truncated cover letters.
+_DEFAULT_MAX_OUTPUT_TOKENS = 1500
 _ERROR_MESSAGE_MAX_CHARS = 500
 
 # Defensive: redact anything that looks like an OpenAI/DeepSeek key from echoed
