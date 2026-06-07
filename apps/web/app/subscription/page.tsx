@@ -464,13 +464,20 @@ export default function SubscriptionPage() {
                 toast(backendMaintenanceSubMessage, "error");
                 return;
             }
-            // In manual mode the CTA is a direct WhatsApp link — this handler is only
-            // reached in Stripe mode.
+            // Safety guard: if env var is missing/wrong and manual mode is active,
+            // open WhatsApp directly — never call the Stripe checkout API.
+            if (MANUAL_BILLING) {
+                window.open(buildWhatsAppUpgradeUrl(plan), "_blank", "noopener,noreferrer");
+                return;
+            }
             setCheckingOut(plan);
             try {
                 const result = await createCheckoutSession(plan);
                 if (result.provider === "mock") {
                     toast(subscriptionPaymentConfiguringMessage, "error");
+                } else if (result.provider === "manual") {
+                    // Backend in manual mode — open WhatsApp URL returned by the server.
+                    window.open(result.checkout_url, "_blank", "noopener,noreferrer");
                 } else {
                     window.location.href = result.checkout_url;
                 }

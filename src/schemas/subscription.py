@@ -74,9 +74,9 @@ class PlansResponse(BaseModel):
 
 class CheckoutResponse(BaseModel):
     checkout_url: str
-    provider: Literal["stripe", "mock"]
+    provider: Literal["stripe", "mock", "manual"]
     plan: SubscriptionTier
-    status: Literal["ready", "mock"]
+    status: Literal["ready", "mock", "manual"]
 
 
 class SubscriptionWebhookResponse(BaseModel):
