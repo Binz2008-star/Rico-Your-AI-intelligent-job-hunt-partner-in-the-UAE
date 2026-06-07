@@ -658,15 +658,11 @@ The following sequence converts this spec into working code in safe, reviewable 
 - No runtime changes
 - Review confirms spec is accurate and complete
 
-### PR B — English Manual Applied Logging *(tracked in PR #495)*
+### PR #495 — English Manual Applied Logging *(separate PR, in progress)*
 **Addresses:** G1 (Critical)  
-**Changes:**
-- Add `_ENGLISH_MANUAL_APPLIED_RE` to `intent_classifier.py` matching phrases like "I applied manually", "I applied myself", "how can you log it", "mark it as applied"
-- Map to new `application.manual_add` intent
-- Add handler in `rico_chat_api.py` for `manual_application_logging` flow
-- Add unit tests mirroring `test_arabic_application_status_update.py`
+**Scope:** Not part of this spec PR. Being implemented in PR #495. Adds English manual applied phrase classification and handler.
 
-### PR C — CV Builder Follow-Up Routing + Flow State
+### PR B — CV Builder Flow State + CV Improvement Follow-Up Routing
 **Addresses:** G2, G3 (Critical)  
 **Changes:**
 - Add `last_flow_state` field to `recent_context` dict (persisted in memory store and DB)
@@ -675,27 +671,27 @@ The following sequence converts this spec into working code in safe, reviewable 
 - Add `_CV_IMPROVEMENT_FOLLOWUP_RE` for phrases like "please improve it", "make it shorter", "add a summary"
 - Update `_resolve_pending_intent()` to call deterministic handler, not AI fallback, for CV improvement affirmations
 
-### PR D — CV Draft Work Experience and Education Rendering
+### PR C — CV Draft Work Experience and Education Rendering
 **Addresses:** G5  
 **Changes:**
 - Update `_handle_cv_generate_from_profile()` to render `work_experience` and `education` sections when populated
 - Ensure no placeholder text is ever emitted in rendered sections
 
-### PR E — Cover Letter Pasted Job Description Parsing
+### PR D — Cover Letter Pasted Job Description Parsing
 **Addresses:** G4  
 **Changes:**
 - Add job description extraction from long messages in `draft_message` handler
 - If message contains more than ~100 chars and matches a job posting structure, extract title/company automatically
 
-### PR F — Prompt Pack Centralization
+### PR E — Prompt Pack Centralization
 **Addresses:** G8, G10, G7 (structural)  
 **Changes:**
 - Create `src/rico/prompts/` directory with prompt files as defined in Section 17
 - Refactor `get_rico_system_prompt()` to load from files
 - Add post-filter on AI fallback responses to reject outputs containing `[Start Date]`, `TBD`, `assumed — please confirm`, `[Company Name]`, `[Add responsibilities]`
 
-### PR G — Limited Auto-Apply Preparation Queue
-**Prerequisite:** All of PR A through PR F complete and golden tests passing  
+### PR F — Limited Auto-Apply Preparation Queue
+**Prerequisite:** PR #495 merged + PR A through PR E complete, CI green, golden tests passing  
 **Scope:** Backend queue for prepared applications awaiting user review, not autonomous submission  
 **Gate:** See Section 22
 
@@ -707,16 +703,16 @@ Limited auto-apply **cannot begin** until all of the following are verified:
 
 | Gate | Status | Required PR |
 |---|---|---|
-| CV builder stable — no placeholders, no invented data | Partial — current code correct but follow-up routing is broken | PR B, PR C |
-| Cover letter stable — deterministic template, missing-data handling | Partial — pasted job description gap remains | PR E |
+| CV builder stable — no placeholders, no invented data | Partial — current code correct but follow-up routing is broken | PR B |
+| Cover letter stable — deterministic template, missing-data handling | Partial — pasted job description gap remains | PR D |
 | Application tracking stable — writes only on DB success | **Done** — current code correct | — |
-| Apply links persist in user context after opening | Partially implemented | PR C |
-| User approval queue exists before any action | Not implemented | PR G |
+| Apply links persist in user context after opening | Partially implemented | PR B |
+| User approval queue exists before any action | Not implemented | PR F |
 | No action claims without persistence success | **Done** — current code has try/except pattern | — |
 | Privacy smoke passes — no cross-user profile in AI context | **Done** since PR #488 | — |
-| Golden tests pass (A through H in Section 20) | Not complete | PR A (skeleton), PRs B–F |
-| English manual applied logging working | **In progress** — PR #495 | PR B (see #495) |
-| Flow state tracked across turns | **Not done** | PR C |
+| Golden tests pass (A through H in Section 20) | Not complete | PR A (skeleton), PRs B–E |
+| English manual applied logging working | **In progress** — PR #495 | PR #495 |
+| Flow state tracked across turns | **Not done** | PR B |
 
 **Limited auto-apply must mean:**
 1. Rico prepares the CV and cover letter for review
@@ -733,7 +729,7 @@ No fully autonomous applying. No "I'll apply while you sleep." No submission wit
 - [x] `docs/product/rico_behavior_spec.md` exists
 - [x] No runtime code changed
 - [x] Audit covers current code paths (18 routing entries, 10 identified gaps)
-- [x] Next PR sequence is clear and ordered (PR A → G)
+- [x] Next PR sequence is clear and ordered (PR A → F, plus PR #495 for G1)
 - [x] No backend/DB/deploy/env changes
 - [x] No parked PRs touched (#481, #479, #476, #452, #450)
 - [ ] Build/tests — not applicable for docs-only PR; repo test suite unchanged
