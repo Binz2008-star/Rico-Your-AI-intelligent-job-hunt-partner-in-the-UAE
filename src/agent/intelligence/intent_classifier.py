@@ -550,6 +550,14 @@ _APPLY_JOB_RE = re.compile(
     re.IGNORECASE,
 )
 
+_ARABIC_APPLIED_STATUS_RE = re.compile(
+    r"(?:قمت\s+ب)?تقديم\s+الطلب"
+    r"|قدمت\s+(?:الطلب|علي\s+الوظيفه|عليه|عليها|له|لها)"
+    r"|تم\s+التقديم\s+بنجاح"
+    r"|ارسلت\s+الطلب",
+    re.UNICODE,
+)
+
 _EXPLAIN_MATCH_RE = re.compile(
     r"\b(why|explain|how come|reason)\b.{0,50}\b(recommend|match|suggest|pick|this job)\b",
     re.IGNORECASE,
@@ -806,6 +814,17 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
 
     if lower in _APPLICATION_TRACKING_PHRASES:
         return IntentResult("application_tracking", 1.0, "exact")
+
+    if has_arabic and _ARABIC_APPLIED_STATUS_RE.search(lower):
+        return IntentResult(
+            "application_status_update",
+            0.95,
+            "regex",
+            context_required=True,
+            context_type="recent_job",
+            action="mark_applied",
+            target_route="/applications",
+        )
 
     if lower in _HELP_PHRASES:
         return IntentResult("help", 1.0, "exact")

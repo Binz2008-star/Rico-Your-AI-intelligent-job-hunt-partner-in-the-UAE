@@ -42,6 +42,73 @@ def _db() -> Any:
     return db if db.available else None
 
 
+def _row_id(row: Any) -> Optional[str]:
+    if not row:
+        return None
+    if isinstance(row, dict):
+        value = row.get("id")
+    else:
+        try:
+            value = row["id"]
+        except Exception:
+            try:
+                value = row[0]
+            except Exception:
+                value = None
+    return str(value) if value else None
+
+
+def _resolve_authenticated_email_db_user_id(db: Any, user_id: str) -> Optional[str]:
+    """Resolve email-auth users without selecting public:web rows.
+
+    This is intentionally scoped to application tracking. Profile lookup keeps
+    its own resolver until that cleanup is handled separately.
+    """
+    if not user_id or "@" not in user_id or str(user_id).startswith("public:"):
+        return None
+
+    # Unit tests often pass MagicMock DBs with an auto-created .connect attr.
+    # Only run the SQL resolver for RicoDB or explicit fakes that opt in.
+    if db.__class__.__name__ != "RicoDB" and not getattr(db, "_exact_auth_lookup_enabled", False):
+        return None
+
+    conn = db.connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id
+                FROM rico_users
+                WHERE LOWER(external_user_id) = LOWER(%s)
+                  AND COALESCE(external_user_id, '') NOT LIKE 'public:%%'
+                ORDER BY updated_at DESC, id ASC
+                LIMIT 1
+                """,
+                (user_id,),
+            )
+            exact = _row_id(cur.fetchone())
+            if exact:
+                return exact
+
+            cur.execute(
+                """
+                SELECT id
+                FROM rico_users
+                WHERE LOWER(email) = LOWER(%s)
+                  AND COALESCE(external_user_id, '') NOT LIKE 'public:%%'
+                ORDER BY
+                    CASE WHEN external_user_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN 0 ELSE 1 END,
+                    updated_at DESC,
+                    id ASC
+                LIMIT 1
+                """,
+                (user_id,),
+            )
+            return _row_id(cur.fetchone())
+    finally:
+        conn.close()
+
+
 def _resolve_db_user_id(db: Any, user_id: str) -> Optional[str]:
     """
     Map external user_id (email) to Rico DB internal UUID.
@@ -49,6 +116,14 @@ def _resolve_db_user_id(db: Any, user_id: str) -> Optional[str]:
     Returns None only when the user genuinely has no rico_users row.
     Raises on DB/connection errors so callers can surface HTTP 503.
     """
+    exact_auth_id = _resolve_authenticated_email_db_user_id(db, user_id)
+    if exact_auth_id:
+        return exact_auth_id
+    if "@" in user_id and not str(user_id).startswith("public:") and (
+        db.__class__.__name__ == "RicoDB" or getattr(db, "_exact_auth_lookup_enabled", False)
+    ):
+        return None
+
     bundle = db.get_user_bundle(user_id)
     if bundle:
         return str(bundle["id"])
