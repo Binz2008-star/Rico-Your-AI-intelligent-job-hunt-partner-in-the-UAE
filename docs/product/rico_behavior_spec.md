@@ -488,7 +488,8 @@ The table below documents the actual code path for each message type, including 
 The following gaps were identified through code audit of the current `main` branch.
 
 ### G1 — English Manual Applied Phrases Not Classified (Critical)
-**File:** `src/agent/intelligence/intent_classifier.py`
+**File:** `src/agent/intelligence/intent_classifier.py`  
+**Status: Being addressed in PR #495 — do not re-implement here.**
 
 There is no regex or phrase set for English manual application logging:
 - "I applied manually"
@@ -499,7 +500,7 @@ There is no regex or phrase set for English manual application logging:
 
 These fall through to `_APPLICATION_TRACKING_RE` (weak) or `unknown` → AI fallback.
 
-The Arabic path (`_ARABIC_APPLIED_STATUS_RE`) works correctly. The English equivalent is missing.
+The Arabic path (`_ARABIC_APPLIED_STATUS_RE`) works correctly. The English equivalent is missing and is being resolved in PR #495.
 
 ### G2 — "please improve it" Falls to AI Fallback Without Flow State (Critical)
 **File:** `src/rico_chat_api.py`, `src/agent/intelligence/intent_classifier.py`
@@ -657,7 +658,7 @@ The following sequence converts this spec into working code in safe, reviewable 
 - No runtime changes
 - Review confirms spec is accurate and complete
 
-### PR B — English Manual Applied Logging
+### PR B — English Manual Applied Logging *(tracked in PR #495)*
 **Addresses:** G1 (Critical)  
 **Changes:**
 - Add `_ENGLISH_MANUAL_APPLIED_RE` to `intent_classifier.py` matching phrases like "I applied manually", "I applied myself", "how can you log it", "mark it as applied"
@@ -714,7 +715,7 @@ Limited auto-apply **cannot begin** until all of the following are verified:
 | No action claims without persistence success | **Done** — current code has try/except pattern | — |
 | Privacy smoke passes — no cross-user profile in AI context | **Done** since PR #488 | — |
 | Golden tests pass (A through H in Section 20) | Not complete | PR A (skeleton), PRs B–F |
-| English manual applied logging working | **Not done** | PR B |
+| English manual applied logging working | **In progress** — PR #495 | PR B (see #495) |
 | Flow state tracked across turns | **Not done** | PR C |
 
 **Limited auto-apply must mean:**
