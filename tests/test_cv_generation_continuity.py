@@ -215,3 +215,223 @@ class TestCVDraftNoPlaeholders:
         profile = _profile(preferred_cities=["Dubai"])
         result = self.api._handle_cv_generate_from_profile("user-1", profile)
         assert result["type"] == "cv_draft"
+
+
+class TestCVBuilderFlowState:
+    """Tests for flow-state tracking and CV improvement follow-up routing."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self):
+        from src.rico_chat_api import RicoChatAPI
+        self.api = RicoChatAPI.__new__(RicoChatAPI)
+        self.api._append_chat = MagicMock()
+        self._stored_ctx: dict = {}
+        self.api._get_recent_context = MagicMock(side_effect=lambda uid: dict(self._stored_ctx))
+        self.api._store_recent_context = MagicMock(
+            side_effect=lambda uid, ctx: self._stored_ctx.update(ctx)
+        )
+        self.api._has_cv_profile = MagicMock(return_value=True)
+        self.api._profile_value = lambda p, k: getattr(p, k, None)
+        self.api._as_list = lambda v: list(v) if isinstance(v, list) else ([v] if v else [])
+
+    def test_cv_generate_sets_cv_builder_flow_state(self):
+        profile = _profile(preferred_cities=["Dubai"])
+        self.api._handle_cv_generate_from_profile("user-1", profile)
+        assert self._stored_ctx.get("last_flow_state") == "cv_builder"
+
+    def test_cv_creation_sets_cv_builder_flow_state(self):
+        profile = _profile(preferred_cities=["Dubai"])
+        self.api._handle_cv_creation("user-1", profile)
+        assert self._stored_ctx.get("last_flow_state") == "cv_builder"
+
+    def test_improve_followup_regex_matches_english(self):
+        from src.rico_chat_api import _CV_IMPROVE_FOLLOWUP_RE
+        assert _CV_IMPROVE_FOLLOWUP_RE.search("please improve it")
+        assert _CV_IMPROVE_FOLLOWUP_RE.search("improve it")
+        assert _CV_IMPROVE_FOLLOWUP_RE.search("enhance it")
+        assert _CV_IMPROVE_FOLLOWUP_RE.search("make it more professional")
+        assert _CV_IMPROVE_FOLLOWUP_RE.search("make it better")
+
+    def test_improve_followup_regex_matches_arabic(self):
+        from src.rico_chat_api import _CV_IMPROVE_FOLLOWUP_RE
+        assert _CV_IMPROVE_FOLLOWUP_RE.search("نعم حسنها بشكل محترف")
+        assert _CV_IMPROVE_FOLLOWUP_RE.search("حسنها")
+        assert _CV_IMPROVE_FOLLOWUP_RE.search("طورها")
+        assert _CV_IMPROVE_FOLLOWUP_RE.search("حسن السيرة")
+        assert _CV_IMPROVE_FOLLOWUP_RE.search("طور السيرة الذاتية")
+
+    def test_improve_followup_regex_does_not_match_unrelated(self):
+        from src.rico_chat_api import _CV_IMPROVE_FOLLOWUP_RE
+        assert not _CV_IMPROVE_FOLLOWUP_RE.search("find me a job")
+        assert not _CV_IMPROVE_FOLLOWUP_RE.search("show my applications")
+        assert not _CV_IMPROVE_FOLLOWUP_RE.search("hello")
+        assert not _CV_IMPROVE_FOLLOWUP_RE.search("I applied manually")
+
+    def test_flow_state_routes_improve_to_cv_builder(self):
+        """When last_flow_state == cv_builder, 'please improve it' must call
+        _handle_cv_generate_from_profile — not AI fallback."""
+        self._stored_ctx["last_flow_state"] = "cv_builder"
+        profile = _profile(preferred_cities=["Dubai"])
+
+        generated = MagicMock(return_value={"type": "cv_draft", "message": "draft"})
+        self.api._handle_cv_generate_from_profile = generated
+
+        # Minimal stubs needed by _handle_active_user_inner
+        self.api._resolve_profile = MagicMock(return_value=profile)
+        self.api._looks_like_pasted_cv_text = MagicMock(return_value=False)
+        self.api._resolve_pending_field = MagicMock(return_value=None)
+        self.api._finalize = MagicMock(side_effect=lambda r, *a, **kw: r)
+
+        self.api._handle_active_user_inner("user-1", "please improve it")
+
+        generated.assert_called_once_with("user-1", profile)
+
+    def test_no_flow_state_does_not_intercept_improve(self):
+        """Without cv_builder flow state, 'improve it' must NOT intercept to CV builder."""
+        self._stored_ctx["last_flow_state"] = "job_search"
+        profile = _profile(preferred_cities=["Dubai"])
+
+        generated = MagicMock(return_value={"type": "cv_draft", "message": "draft"})
+        self.api._handle_cv_generate_from_profile = generated
+
+        self.api._resolve_profile = MagicMock(return_value=profile)
+        self.api._looks_like_pasted_cv_text = MagicMock(return_value=False)
+        self.api._resolve_pending_field = MagicMock(return_value=None)
+
+        # Stub out everything downstream so the test doesn't crash
+        self.api._handle_application_channel_followup = MagicMock(return_value=None)
+        self.api._looks_like_cv_intent_no_file = MagicMock(return_value=False)
+        self.api._is_arabic_text = MagicMock(return_value=False)
+        self.api._is_list_followup = MagicMock(return_value=False)
+        self.api._is_verify_followup = MagicMock(return_value=False)
+        self.api._is_affirmative = MagicMock(return_value=False)
+        self.api._is_continuation_intent = MagicMock(return_value=False)
+        self.api._is_negative = MagicMock(return_value=False)
+        self.api._normalize_followup_phrase = MagicMock(return_value="improve it")
+        self.api._finalize = MagicMock(side_effect=lambda r, *a, **kw: r)
+        # Stub deepest fallback to avoid further import cascade
+        self.api._answer_with_ai_fallback = MagicMock(return_value={"type": "ai_response", "message": "ok"})
+        self.api._looks_like_next_step_followup = MagicMock(return_value=False)
+        self.api._is_arabic_what_now = MagicMock(return_value=False)
+        self.api._looks_like_selected_role = MagicMock(return_value=False)
+        self.api._looks_like_generic_job_request = MagicMock(return_value=False)
+        self.api._looks_like_bare_target_role = MagicMock(return_value=False)
+        self.api._is_live_job_search_request = MagicMock(return_value=False)
+        from src.rico_chat_api import RicoChatAPI
+        from unittest.mock import patch, PropertyMock
+        _noop_re = MagicMock()
+        _noop_re.match.return_value = None
+        _noop_re.search.return_value = None
+        with patch.object(RicoChatAPI, "_SHOW_MY_APPLICATIONS_RE", _noop_re):
+            with patch.object(RicoChatAPI, "_SET_REMINDER_RE", _noop_re):
+                try:
+                    self.api._handle_active_user_inner("user-1", "improve it")
+                except Exception:
+                    pass
+
+        # CV generate must NOT have been called via the flow-state shortcut
+        generated.assert_not_called()
+
+
+class TestCVPlaceholderProhibition:
+    """Deterministic CV builder must never emit placeholders or invented facts."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self):
+        from src.rico_chat_api import RicoChatAPI
+        self.api = RicoChatAPI.__new__(RicoChatAPI)
+        self.api._append_chat = MagicMock()
+        self.api._get_recent_context = MagicMock(return_value={})
+        self.api._store_recent_context = MagicMock()
+        self.api._has_cv_profile = MagicMock(return_value=True)
+        self.api._profile_value = lambda p, k: getattr(p, k, None)
+        self.api._as_list = lambda v: list(v) if isinstance(v, list) else ([v] if v else [])
+
+    # All patterns from the spec that must never appear in CV body text.
+    _FORBIDDEN = [
+        "[Start Date]", "[End Date]", "[Company Name]", "[Job Title]",
+        "Add responsibilities here", "TBD", "assumed", "please confirm",
+        "30%",   # fabricated achievement
+        "efficiency increased",  # fabricated metric
+        "raised efficiency",     # fabricated metric
+    ]
+
+    def _assert_no_forbidden(self, message: str) -> None:
+        for phrase in self._FORBIDDEN:
+            assert phrase.lower() not in message.lower(), f"Forbidden phrase in CV: {phrase!r}"
+
+    def test_sparse_profile_no_forbidden_phrases(self):
+        """Minimal profile (name + years exp only) must not produce fake content."""
+        profile = _profile(
+            preferred_cities=["Dubai"],
+            skills=[],
+            certifications=[],
+            work_experience=[],
+            education=[],
+            industries=[],
+            target_roles=[],
+            current_role="",
+        )
+        result = self.api._handle_cv_generate_from_profile("user-1", profile)
+        self._assert_no_forbidden(result["message"])
+
+    def test_sparse_profile_has_missing_section(self):
+        """Sparse profile must include 'To complete the CV' or 'not yet available'."""
+        profile = _profile(
+            preferred_cities=["Dubai"],
+            skills=[],
+            work_experience=[],
+            education=[],
+            target_roles=[],
+            current_role="",
+        )
+        result = self.api._handle_cv_generate_from_profile("user-1", profile)
+        msg = result["message"]
+        assert "To complete the CV" in msg or "not yet available" in msg or "not available" in msg
+
+    def test_full_profile_no_missing_section(self):
+        """A complete profile must not show the 'To complete the CV' section."""
+        profile = _profile(
+            preferred_cities=["Dubai"],
+            skills=["Python", "SQL"],
+            work_experience=["Software Engineer at TechCorp (2020-2024)"],
+            education=["BSc Computer Science, UAE University"],
+            certifications=["AWS Certified"],
+            target_roles=["Software Engineer"],
+            current_role="Software Engineer",
+            years_experience=4,
+        )
+        result = self.api._handle_cv_generate_from_profile("user-1", profile)
+        self._assert_no_forbidden(result["message"])
+
+    def test_arabic_improve_followup_uses_deterministic_handler(self):
+        """'نعم حسنها بشكل محترف' after CV draft must match improvement regex and not hit AI."""
+        from src.rico_chat_api import _CV_IMPROVE_FOLLOWUP_RE
+        msg = "نعم حسنها بشكل محترف"
+        assert _CV_IMPROVE_FOLLOWUP_RE.search(msg), "Arabic improve phrase must match regex"
+
+    def test_resolve_pending_intent_cv_improve_uses_deterministic_handler(self):
+        """`_resolve_pending_intent` must call cv handler, not AI fallback, on cv_improve_signals."""
+        from src.rico_chat_api import RicoChatAPI
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        api._append_chat = MagicMock()
+        api._get_recent_context = MagicMock(return_value={})
+        api._store_recent_context = MagicMock()
+        api._has_cv_profile = MagicMock(return_value=True)
+        api._profile_value = lambda p, k: getattr(p, k, None)
+        api._as_list = lambda v: list(v) if isinstance(v, list) else ([v] if v else [])
+
+        # Last assistant message contains a cv improve signal
+        api._get_last_assistant_message = MagicMock(return_value="improve your cv and I'll update it")
+        api._is_affirmative = MagicMock(return_value=True)
+
+        generated = MagicMock(return_value={"type": "cv_draft", "message": "deterministic draft"})
+        api._handle_cv_generate_from_profile = generated
+        ai_fallback = MagicMock(return_value={"type": "ai_response", "message": "ai invented"})
+        api._answer_with_ai_fallback = ai_fallback
+
+        profile = _profile(preferred_cities=["Dubai"])
+        api._resolve_pending_intent("user-1", "yes", profile)
+
+        generated.assert_called_once()
+        ai_fallback.assert_not_called()
