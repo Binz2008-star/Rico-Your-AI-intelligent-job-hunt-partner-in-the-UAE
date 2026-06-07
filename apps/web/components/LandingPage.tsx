@@ -157,6 +157,7 @@ export default function LandingPage() {
         footerTerms: isAr ? "الشروط" : "Terms",
         footerPrivacy: isAr ? "الخصوصية" : "Privacy",
         footerRefunds: isAr ? "الاسترداد" : "Refunds",
+        footerFaq: isAr ? "الأسئلة الشائعة" : "FAQ",
         footerRights: isAr ? "© 2026 ريكو هانت. جميع الحقوق محفوظة." : "© 2026 Rico Hunt. All rights reserved.",
     };
 
@@ -888,6 +889,12 @@ export default function LandingPage() {
                             className="text-xs text-text-tertiary transition-colors hover:text-white"
                         >
                             {t.footerRefunds}
+                        </Link>
+                        <Link
+                            href="/faq"
+                            className="text-xs text-text-tertiary transition-colors hover:text-white"
+                        >
+                            {t.footerFaq}
                         </Link>
                     </div>
                     <p className="mb-1 text-sm font-semibold text-white">Rico Hunt</p>
