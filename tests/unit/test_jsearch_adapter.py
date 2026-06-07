@@ -1,5 +1,5 @@
 """
-Tests for src/job_sources/jsearch_adapter.py - JSearch adapter wrapper.
+Tests for src/job_source_adapters/jsearch_adapter.py - JSearch adapter wrapper.
 
 Phase 1: Tests verify that the adapter preserves existing JSearch behavior.
 No runtime behavior change - wrapper mode only.
@@ -8,8 +8,8 @@ Version: 2.1.0 (Phase 1)
 """
 
 import pytest
-from src.job_sources.jsearch_adapter import JSearchAdapter
-from src.job_sources.normalized import NormalizedJob
+from src.job_source_adapters.jsearch_adapter import JSearchAdapter
+from src.job_source_adapters.normalized import NormalizedJob
 
 
 @pytest.fixture
