@@ -3217,11 +3217,21 @@ class RicoChatAPI:
                     _ctx.pop("_pending_confirm_apply", None)
                     self._store_recent_context(user_id, _ctx)
                     try:
-                        _create_manual_app(title=_title, company=_company, status="applied", user_id=user_id)
+                        _saved = _create_manual_app(
+                            title=_title,
+                            company=_company,
+                            status="applied",
+                            user_id=user_id,
+                        )
+                        if not _saved:
+                            raise RuntimeError("application create_manual returned false")
                         _msg = (
                             f"Got it — **{_title}** at **{_company}** is marked as applied. "
                             "I'll track it as your latest application. Good luck!"
                         )
+                        _response_type = "mark_applied"
+                        _job_status = "applied"
+                        _next_action = "follow_up_after_7_days"
                         self._store_recent_context(
                             user_id,
                             self._build_recent_application_context(
@@ -3233,14 +3243,24 @@ class RicoChatAPI:
                         )
                     except Exception:
                         _msg = (
-                            f"Noted — I'll treat **{_title}** at **{_company}** as applied, "
-                            "but I couldn't write to the database right now. "
-                            "Try again from the Pipeline page if it doesn't appear."
+                            f"I understand you submitted **{_title}** at **{_company}**, "
+                            "but I couldn't save it right now. Please try again shortly."
                         )
+                        _response_type = "application_status_update_failed"
+                        _job_status = None
+                        _next_action = "retry_application_status_update"
                     self._append_chat(user_id, "assistant", _msg)
                     return self._finalize(
-                        {"type": "mark_applied", "intent": "mark_applied", "message": _msg,
-                         "job_title": _title, "job_company": _company},
+                        {
+                            "type": _response_type,
+                            "intent": "mark_applied",
+                            "message": _msg,
+                            "job_title": _title,
+                            "job_company": _company,
+                            "job_status": _job_status,
+                            "target_route": "/applications",
+                            "next_action": _next_action,
+                        },
                         self.SOURCE_KEYWORD,
                         profile=profile,
                     )
@@ -3607,11 +3627,16 @@ class RicoChatAPI:
                 pass
 
             try:
-                _create_manual_app(title=title, company=company, status="applied", user_id=user_id)
+                saved = _create_manual_app(title=title, company=company, status="applied", user_id=user_id)
+                if not saved:
+                    raise RuntimeError("application create_manual returned false")
                 msg = (
                     f"Tracked — **{title}** at **{company}** marked as applied. "
                     "I will treat this as your latest application context for follow-ups."
                 )
+                response_type = "mark_applied"
+                job_status = "applied"
+                next_action = "follow_up_after_7_days"
                 self._store_recent_context(
                     user_id,
                     self._build_recent_application_context(
@@ -3623,17 +3648,21 @@ class RicoChatAPI:
                 )
             except Exception:
                 msg = (
-                    f"Noted — **{title}** at **{company}** marked as applied. "
-                    "(Could not write to Application Flow right now — please retry.)"
+                    f"I understand you submitted **{title}** at **{company}**, "
+                    "but I couldn't save it right now. Please try again shortly."
                 )
+                response_type = "application_status_update_failed"
+                job_status = None
+                next_action = "retry_application_status_update"
             response = {
-                "type": "mark_applied",
+                "type": response_type,
                 "intent": "mark_applied",
                 "message": msg,
                 "job_title": title,
                 "job_company": company,
-                "job_status": "applied",
-                "next_action": "follow_up_after_7_days",
+                "job_status": job_status,
+                "target_route": "/applications",
+                "next_action": next_action,
             }
             self._append_chat(user_id, "assistant", msg)
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)

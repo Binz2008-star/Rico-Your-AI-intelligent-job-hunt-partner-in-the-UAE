@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.agent.intelligence.intent_classifier import classify_intent
+from src.agent.intelligence.intent_classifier import IntentResult, classify_intent
 from src.rico_chat_api import RicoChatAPI
 
 
@@ -159,6 +159,80 @@ def test_arabic_applied_status_without_recent_context_asks_which_job() -> None:
     assert result["intent"] == "application_status_update"
     assert "أي وظيفة تقصد" in result["message"]
     assert "تم تسجيل" not in result["message"]
+
+
+def test_mark_applied_card_write_failure_does_not_claim_applied() -> None:
+    api = _make_api()
+    intent = IntentResult(
+        intent="job_action.mark_applied",
+        confidence=1.0,
+        source="exact",
+        extracted_title="Environmental Manager - Railway Construction Project",
+        extracted_company="Confidential Jobs",
+    )
+
+    with (
+        patch("src.rico_chat_api.is_onboarding_complete", return_value=True),
+        patch.object(api, "_resolve_profile", return_value=_make_profile()),
+        patch.object(api, "_append_chat"),
+        patch.object(api, "_get_openai_agent", return_value=_agent()),
+        patch.object(
+            api,
+            "_get_recent_context",
+            return_value={
+                "recent_application": {
+                    "title": "Environmental Manager - Railway Construction Project",
+                    "company": "Confidential Jobs",
+                    "link": "https://example.com/apply",
+                }
+            },
+        ),
+        patch("src.rico_chat_api.classify_intent", return_value=intent),
+        patch("src.repositories.applications_repo.create_manual", return_value=False),
+    ):
+        result = api.process_message(
+            USER,
+            "Mark as applied — Environmental Manager - Railway Construction Project at Confidential Jobs",
+        )
+
+    assert result["type"] == "application_status_update_failed"
+    assert result["job_status"] is None
+    assert "couldn't save it right now" in result["message"]
+    assert "marked as applied" not in result["message"]
+    assert result["target_route"] == "/applications"
+
+
+def test_pending_mark_applied_confirmation_write_failure_does_not_claim_applied() -> None:
+    api = _make_api()
+    intent = IntentResult(intent="follow_up_confirmation", confidence=1.0, source="exact")
+
+    with (
+        patch("src.rico_chat_api.is_onboarding_complete", return_value=True),
+        patch.object(api, "_resolve_profile", return_value=_make_profile()),
+        patch.object(api, "_append_chat"),
+        patch.object(api, "_get_openai_agent", return_value=_agent()),
+        patch.object(
+            api,
+            "_get_recent_context",
+            return_value={
+                "_pending_confirm_apply": {
+                    "title": "Environmental Manager - Railway Construction Project",
+                    "company": "Confidential Jobs",
+                }
+            },
+        ),
+        patch.object(api, "_store_recent_context"),
+        patch("src.rico_chat_api.classify_intent", return_value=intent),
+        patch("src.repositories.applications_repo.create_manual", return_value=False),
+    ):
+        result = api.process_message(USER, "yes")
+
+    assert result["type"] == "application_status_update_failed"
+    assert result["job_status"] is None
+    assert "couldn't save it right now" in result["message"]
+    assert "marked as applied" not in result["message"]
+    assert "treat" not in result["message"].lower()
+    assert result["target_route"] == "/applications"
 
 
 def test_saved_applied_record_is_returned_by_applications_api(monkeypatch) -> None:
