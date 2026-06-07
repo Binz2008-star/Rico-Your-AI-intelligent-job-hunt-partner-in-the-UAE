@@ -1061,7 +1061,8 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
         if telegram:
             updates["telegram_username"] = telegram
     if body.target_roles is not None:
-        updates["target_roles"] = [r.strip() for r in body.target_roles if r.strip()]
+        from src.role_normalization import validate_and_normalize_target_roles
+        updates["target_roles"] = validate_and_normalize_target_roles(body.target_roles)
     if body.preferred_cities is not None:
         updates["preferred_cities"] = [c.strip() for c in body.preferred_cities if c.strip()]
     if body.salary_expectation_aed is not None:
@@ -1081,7 +1082,8 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
     if body.notice_period is not None:
         updates["notice_period"] = body.notice_period.strip()
     if body.skills is not None:
-        updates["skills"] = [s.strip() for s in body.skills if s.strip()]
+        from src.role_normalization import validate_and_normalize_skills
+        updates["skills"] = validate_and_normalize_skills(body.skills)
     if body.industries is not None:
         updates["industries"] = [i.strip() for i in body.industries if i.strip()]
 
