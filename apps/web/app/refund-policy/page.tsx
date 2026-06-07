@@ -172,6 +172,7 @@ export default function RefundPolicyPage() {
           <Link href="/terms" className="text-xs text-text-tertiary transition-colors hover:text-white">Terms</Link>
           <Link href="/privacy" className="text-xs text-text-tertiary transition-colors hover:text-white">Privacy</Link>
           <span className="text-xs font-medium text-white">Refunds</span>
+          <Link href="/faq" className="text-xs text-text-tertiary transition-colors hover:text-white">FAQ</Link>
         </div>
         <p className="mb-1 text-xs text-text-tertiary">
           <a href="mailto:info@ricohunt.com" className="text-[#f5a623] transition-colors hover:opacity-80">info@ricohunt.com</a>

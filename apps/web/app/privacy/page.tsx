@@ -270,6 +270,7 @@ export default function PrivacyPage() {
           <Link href="/terms" className="text-xs text-text-tertiary transition-colors hover:text-white">Terms</Link>
           <span className="text-xs font-medium text-white">Privacy</span>
           <Link href="/refund-policy" className="text-xs text-text-tertiary transition-colors hover:text-white">Refunds</Link>
+          <Link href="/faq" className="text-xs text-text-tertiary transition-colors hover:text-white">FAQ</Link>
         </div>
         <p className="mb-1 text-xs text-text-tertiary">
           <a href="mailto:info@ricohunt.com" className="text-[#f5a623] transition-colors hover:opacity-80">info@ricohunt.com</a>
