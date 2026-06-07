@@ -34,6 +34,10 @@ def _legacy_response() -> dict[str, Any]:
     return {"type": "text_reply", "message": "Here are your jobs.", "response_source": "keyword"}
 
 
+def _ai_response() -> dict[str, Any]:
+    return {"type": "ai_reply", "message": "AI response.", "response_source": "ai_router"}
+
+
 # Deferred imports in send_message are patched at their canonical module path.
 _PATCHES_BASE = [
     ("src.services.operation_state.is_status_followup", False),
@@ -118,6 +122,58 @@ class TestMessagesRemainingInjection:
             result = chat_service.send_message(ctx, "find jobs")
 
         assert "messages_remaining" not in result
+
+    def test_injects_into_ai_dict_response(self) -> None:
+        """AI-routed dict responses must receive the same warning metadata."""
+        ctx = _make_ctx()
+        gate = _make_gate(remaining=4)
+
+        with (
+            patch("src.services.operation_state.is_status_followup", return_value=False),
+            patch("src.services.operation_state.build_status_response", return_value=None),
+            patch("src.rico.policy.classify_request") as mock_policy,
+            patch("src.services.subscription_gating.check_ai_message_allowed", return_value=gate),
+            patch("src.repositories.profile_repo.get_profile", return_value=None),
+            patch("src.services.chat_service._intent_router") as mock_router,
+            patch("src.services.chat_service._legacy_send_message") as mock_legacy,
+            patch("src.services.chat_service._conversational_ai_reply", return_value=_ai_response()) as mock_ai,
+        ):
+            mock_policy.return_value = MagicMock(route="chat")
+            mock_router.route.return_value = MagicMock(should_use_ai=True)
+
+            from src.services import chat_service
+            result = chat_service.send_message(ctx, "help me plan my career")
+
+        mock_ai.assert_called_once()
+        mock_legacy.assert_not_called()
+        assert result["messages_remaining"] == 4
+        assert result["messages_limit"] == 50
+
+    def test_ai_non_dict_response_is_returned_without_injection_crash(self) -> None:
+        """Streaming/non-dict AI responses must not be mutated with dict keys."""
+        ctx = _make_ctx()
+        gate = _make_gate(remaining=4)
+        streaming_response = object()
+
+        with (
+            patch("src.services.operation_state.is_status_followup", return_value=False),
+            patch("src.services.operation_state.build_status_response", return_value=None),
+            patch("src.rico.policy.classify_request") as mock_policy,
+            patch("src.services.subscription_gating.check_ai_message_allowed", return_value=gate),
+            patch("src.repositories.profile_repo.get_profile", return_value=None),
+            patch("src.services.chat_service._intent_router") as mock_router,
+            patch("src.services.chat_service._legacy_send_message") as mock_legacy,
+            patch("src.services.chat_service._conversational_ai_reply", return_value=streaming_response) as mock_ai,
+        ):
+            mock_policy.return_value = MagicMock(route="chat")
+            mock_router.route.return_value = MagicMock(should_use_ai=True)
+
+            from src.services import chat_service
+            result = chat_service.send_message(ctx, "help me plan my career")
+
+        mock_ai.assert_called_once()
+        mock_legacy.assert_not_called()
+        assert result is streaming_response
 
     def test_blocked_gate_returns_limit_response_not_chat(self) -> None:
         """When gate.allowed=False the limit error is returned directly."""

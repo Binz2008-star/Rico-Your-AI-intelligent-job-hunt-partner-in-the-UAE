@@ -147,7 +147,13 @@ def send_message(
     # Threshold: ≤10 remaining (roughly the last 20% of the free-tier 50-msg cap).
     # Injected into every allowed response so the frontend can surface a persistent
     # banner without a separate API call.
-    if gate and gate.allowed and gate.remaining is not None and gate.remaining <= 10:
+    if (
+        isinstance(result, dict)
+        and gate
+        and gate.allowed
+        and gate.remaining is not None
+        and gate.remaining <= 10
+    ):
         result["messages_remaining"] = gate.remaining
         if gate.limit is not None:
             result["messages_limit"] = gate.limit
