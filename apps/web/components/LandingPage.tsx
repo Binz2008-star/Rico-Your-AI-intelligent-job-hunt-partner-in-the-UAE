@@ -71,89 +71,89 @@ export default function LandingPage() {
         heroBadge: isAr ? "بحث ذكي عن وظيفة" : "AI Job Hunt",
         heroH1Line1: isAr ? "ارفع سيرتك الذاتية." : "Upload your CV.",
         heroH1Line2: isAr
-            ? "ريكو يجد وظائف أفضل في الإمارات، يشرح لماذا تناسبك، ويساعدك على التصرف."
+            ? "ريكو يجد لك الوظيفة المناسبة في الإمارات."
             : "Rico finds better UAE job matches, explains why they fit, and helps you act.",
         heroBody: isAr
-            ? "يقرأ ريكو سيرتك الذاتية، ويبحث عن الوظائف المناسبة في الإمارات، ويتابع طلباتك، ويرشدك في خطوتك المهنية التالية."
+            ? "ريكو يقرأ سيرتك، يبحث عن الوظائف المناسبة، ويتابع طلباتك — بالعربي والإنجليزي."
             : "Rico reads your CV, finds matching UAE jobs, tracks your applications, and guides your next career move — in English and Arabic.",
         heroTagline: isAr
-            ? "لن يتقدم ريكو بصمت. أنت توافق على كل إجراء مهم."
+            ? "لا تقديم بدون إذنك."
             : "Rico never applies silently. You approve every important action.",
         ctaUploadCV: isAr ? "ارفع سيرتك الذاتية" : "Upload your CV",
         ctaStartFree: isAr ? "ابدأ مجانًا" : "Start free",
         // Intelligence card (hero right column)
-        cardLabel: isAr ? "مركز الأوامر" : "Command Center",
+        cardLabel: isAr ? "ريكو يعمل الآن" : "Command Center",
         cardTitle: isAr ? "يعمل ريكو الآن" : "Rico is working now",
         online: isAr ? "متصل" : "Online",
         ready: isAr ? "جاهز" : "ready",
         watching: isAr ? "يراقب" : "watching",
         // How Rico works section
         howWorksEyebrow: isAr ? "كيف يعمل ريكو" : "How Rico works",
-        howWorksTitle: isAr ? "من السيرة الذاتية إلى فرص عمل أفضل" : "From CV to better job opportunities",
+        howWorksTitle: isAr ? "من سيرتك الذاتية إلى فرصتك" : "From CV to better job opportunities",
         howWorksBody: isAr
-            ? "ارفع سيرتك الذاتية مرة واحدة. يقرأ ريكو خبرتك ويبدأ في إيجاد وظائف مناسبة في الإمارات فورًا."
+            ? "ارفع مرة واحدة. ريكو يقرأ خبرتك ويبدأ بالبحث فوراً."
             : "Upload your CV once. Rico reads your experience and starts finding matching UAE jobs right away.",
         // Memory section
-        memoryEyebrow: isAr ? "ريكو يتذكر أهدافك المهنية" : "Rico remembers your career goals",
-        memoryTitle: isAr ? "كل بحث يصبح أذكى" : "Every search gets smarter",
+        memoryEyebrow: isAr ? "ريكو يتذكر" : "Rico remembers your career goals",
+        memoryTitle: isAr ? "كل جلسة أذكى من السابقة" : "Every search gets smarter",
         memoryBody: isAr
-            ? "كل بحث يصبح أذكى لأن ريكو يتذكر سيرتك الذاتية والأدوار المستهدفة والمواقع المفضلة وسجل التقديم."
+            ? "ريكو يحفظ أهدافك وأدوارك المفضلة ومرتبك المستهدف وسجل طلباتك — لا تبدأ من الصفر في كل مرة."
             : "Every search gets smarter because Rico remembers your CV, target roles, preferred locations, and application history.",
         // Job matching section
-        matchingEyebrow: isAr ? "القطاعات التي يبحث فيها ريكو" : "Sectors Rico searches",
-        matchingTitle: isAr ? "يغطي جميع القطاعات الرئيسية في الإمارات" : "Covers all major UAE industries",
+        matchingEyebrow: isAr ? "قطاعات البحث" : "Sectors Rico searches",
+        matchingTitle: isAr ? "يبحث في كل القطاعات الكبرى بالإمارات" : "Covers all major UAE industries",
         uaeJobsBadge: isAr ? "وظائف الإمارات" : "UAE jobs",
         fitLabel: isAr ? "ملاءمة" : "fit",
         // Alert section
-        alertEyebrow: isAr ? "تنبيهات عند تغيّر شيء مهم" : "Job alerts when something important changes",
-        alertTitle: isAr ? "ريكو يخبرك متى تتصرف" : "Rico tells you when to act",
+        alertEyebrow: isAr ? "تنبيهات في الوقت المناسب" : "Job alerts when something important changes",
+        alertTitle: isAr ? "ريكو يخبرك متى تتحرك" : "Rico tells you when to act",
         alertBody: isAr
-            ? "يراقب ريكو وظائفك المحفوظة والمطابقات الجديدة وحالة الطلبات — وينبهك عندما يستحق الأمر انتباهك."
+            ? "ريكو يراقب لك — ويُنبّهك حين تظهر فرصة تستحق."
             : "Rico watches your saved jobs, new matches, and application status — and alerts you when something is worth your attention.",
         latestAlert: isAr ? "آخر تنبيه" : "Latest alert",
         alertMessage: isAr
-            ? "توجد وظيفة جديدة تناسب سيرتك الذاتية وراتبك المستهدف. ريكو مستعد لعرضها لك."
+            ? "وظيفة جديدة تناسب سيرتك ومرتبك المستهدف. ريكو جاهز لعرضها."
             : "A new job matches your CV and target salary. Rico is ready to show it to you.",
         // Control section
-        controlEyebrow: isAr ? "أنت تتحكم" : "You stay in control",
-        controlTitle: isAr ? "ريكو يعمل لك، لا بدلاً عنك" : "Rico works for you, not instead of you",
+        controlEyebrow: isAr ? "أنت من يقرر" : "You stay in control",
+        controlTitle: isAr ? "ريكو يعمل، وأنت تقرر" : "Rico works for you, not instead of you",
         controlBody: isAr
-            ? "ريكو يبحث عن الوظائف ويرتبها ويتتبع تقدمك. أنت تقرر متى تتقدم، ومتى توقف، وأين تتجه في مسيرتك."
+            ? "ريكو يبحث ويرتّب ويتابع. وأنت تقرر متى تتقدم، ومتى توقف، وأين تتجه."
             : "Rico finds jobs, ranks them, and tracks your progress. You decide when to apply, when to pause, and which direction to take your career.",
         // Pricing section
-        pricingEyebrow: isAr ? "التسعير" : "Pricing",
-        pricingTitle: isAr ? "خطط بسيطة للحركات المهنية الجادة" : "Simple plans for serious career moves",
+        pricingEyebrow: isAr ? "الباقات" : "Pricing",
+        pricingTitle: isAr ? "باقات مصممة لتوجيهك نحو وظيفتك" : "Simple plans for serious career moves",
         pricingBody: isAr
-            ? "ابدأ مجانًا مع 50 رسالة ذكاء اصطناعي و10 وظائف محفوظة. ترقَّ عندما تحتاج المزيد."
+            ? "ابدأ مجاناً. ارتقِ حين تحتاج المزيد."
             : "Start free with 50 AI messages and 10 saved jobs. Upgrade when you need more.",
-        pricingPopular: isAr ? "الأكثر شعبية" : "Popular",
-        pricingPro: isAr ? "احترافي" : "Pro",
-        pricingPremium: isAr ? "مميز" : "Premium",
+        pricingPopular: isAr ? "الأكثر طلباً" : "Popular",
+        pricingPro: isAr ? "الاحترافية" : "Pro",
+        pricingPremium: isAr ? "المميزة" : "Premium",
         pricingPerMonth: isAr ? "/شهر" : "/month",
         pricingProFeatures: isAr
-            ? ["300 رسالة ذكاء اصطناعي شهريًا", "100 وظيفة محفوظة", "20 تحسين ملف شخصي شهريًا", "توصيات أدوار ذكية", "نظام مطابقة متقدم"]
+            ? ["٣٠٠ رسالة ذكاء اصطناعي شهرياً", "١٠٠ وظيفة محفوظة", "٢٠ تحسين ملف شهرياً", "توصيات ذكية للأدوار", "نظام مطابقة متقدم"]
             : ["300 AI messages per month", "100 saved jobs", "20 profile optimisations per month", "Smart AI role recommendations", "Advanced match scoring"],
         pricingPremiumFeatures: isAr
-            ? ["1500 رسالة ذكاء اصطناعي شهريًا", "وظائف محفوظة غير محدودة", "100 تحسين ملف شخصي شهريًا", "كل ما في الاحترافي", "نظام التقديم التلقائي", "توصيات مميزة"]
+            ? ["١٥٠٠ رسالة ذكاء اصطناعي شهرياً", "وظائف محفوظة بلا حدود", "١٠٠ تحسين ملف شهرياً", "كل ما في الاحترافية", "تقديم تلقائي بموافقتك", "توصيات مميزة"]
             : ["1500 AI messages per month", "Unlimited saved jobs", "100 profile optimisations per month", "Everything in Pro", "Auto-apply system", "Premium recommendations"],
-        upgradePro: isAr ? "ترقية إلى احترافي" : "Upgrade to Pro",
-        upgradePremium: isAr ? "ترقية إلى مميز" : "Upgrade to Premium",
-        freePlan: isAr ? "مجاني" : "Free",
+        upgradePro: isAr ? "اختر الاحترافية" : "Upgrade to Pro",
+        upgradePremium: isAr ? "اختر المميزة" : "Upgrade to Premium",
+        freePlan: isAr ? "مجانية" : "Free",
         freePlanDesc: isAr
-            ? "50 رسالة ذكاء اصطناعي · 10 وظائف محفوظة · 1 تحسين ملف شخصي/شهر"
+            ? "٥٠ رسالة · ١٠ وظائف محفوظة · تحسين ملف واحد/شهر"
             : "50 AI messages · 10 saved jobs · 1 profile optimisation/mo",
         signUpFreeArrow: isAr ? "سجّل مجانًا ←" : "Sign up free →",
         // CTA section (bottom)
-        ctaSectionEyebrow: isAr ? "ابدأ مجانًا" : "Start free",
+        ctaSectionEyebrow: isAr ? "ابدأ الآن" : "Start free",
         ctaSectionTitle: isAr
-            ? "ارفع سيرتك الذاتية. دع ريكو يجد وظيفتك التالية."
+            ? "وظيفتك في الإمارات تبدأ من هنا."
             : "Upload your CV. Let Rico find your next job.",
         ctaSectionBody: isAr
-            ? "ارفع سيرتك الذاتية وريكو يعمل على الفور. يقرأ خبرتك ويبحث عن وظائف مناسبة في الإمارات ويخبرك بما عليك فعله — بالعربية والإنجليزية."
+            ? "ارفع سيرتك مرة واحدة — ريكو يقرأ خبرتك، يبحث لك، ويرشدك لخطوتك التالية."
             : "Upload your CV and Rico goes to work. It reads your experience, finds matching UAE jobs, and tells you what to do next — in English and Arabic.",
         // Footer
-        footerAbout: isAr ? "من نحن" : "About",
-        footerContact: isAr ? "تواصل معنا" : "Contact",
+        footerAbout: isAr ? "عن ريكو" : "About",
+        footerContact: isAr ? "تواصل" : "Contact",
         footerTerms: isAr ? "الشروط" : "Terms",
         footerPrivacy: isAr ? "الخصوصية" : "Privacy",
         footerRefunds: isAr ? "الاسترداد" : "Refunds",
@@ -165,8 +165,8 @@ export default function LandingPage() {
     const intelligenceLoop = isAr
         ? [
             "قراءة سيرتك الذاتية",
-            "فهم خبرتك",
-            "البحث عن وظائف مناسبة في الإمارات",
+            "فهم خبرتك وأهدافك",
+            "البحث عن وظائف في الإمارات",
             "تتبع طلباتك",
             "إرسال تنبيهات الوظائف",
         ]
@@ -194,7 +194,7 @@ export default function LandingPage() {
             {
                 step: "02",
                 title: "بناء ملفك المهني",
-                body: "يحول ريكو سيرتك الذاتية إلى ملف حي يستخدمه لمطابقتك مع وظائف أفضل.",
+                body: "يحوّل ريكو سيرتك إلى ملف حي يعرف خبرتك ويبحث لك.",
                 icon: (
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <circle cx="12" cy="8" r="4" />
@@ -204,8 +204,8 @@ export default function LandingPage() {
             },
             {
                 step: "03",
-                title: "البحث عن وظائف مناسبة في الإمارات",
-                body: "يبحث ريكو عن أدوار تناسب خبرتك وهدفك ومرتبك وموقعك.",
+                title: "البحث لك في الإمارات",
+                body: "ريكو يبحث عن أدوار تناسب خبرتك وهدفك ومرتبك.",
                 icon: (
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <circle cx="11" cy="11" r="7" />
@@ -216,7 +216,7 @@ export default function LandingPage() {
             {
                 step: "04",
                 title: "تتبع طلباتك",
-                body: "احتفظ بوظائفك المحفوظة والروابط المفتوحة والطلبات والمتابعات في مكان واحد.",
+                body: "وظائفك المحفوظة وطلباتك ومتابعاتك في مكان واحد.",
                 icon: (
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <path d="M9 11l3 3L22 4" />
@@ -226,8 +226,8 @@ export default function LandingPage() {
             },
             {
                 step: "05",
-                title: "الحصول على إرشادات وتنبيهات",
-                body: "يخبرك ريكو بما يهم الآن — مطابقة جديدة، مهارة ناقصة، أو تذكير بالمتابعة.",
+                title: "إرشاد وتنبيهات",
+                body: "ريكو يخبرك بما يهم — فرصة جديدة، مهارة ناقصة، أو تذكير بالمتابعة.",
                 icon: (
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <path d="M3 12h4l2 6 4-12 2 6h6" />
@@ -295,8 +295,8 @@ export default function LandingPage() {
     const memoryItems = isAr
         ? [
             "سيرتك الذاتية وخبرتك",
-            "الأدوار المستهدفة والمواقع المفضلة",
-            "توقعات الراتب",
+            "أدوارك المستهدفة والمدن",
+            "المرتب المستهدف",
             "سجل الطلبات",
             "تذكيرات المتابعة",
         ]
@@ -357,16 +357,16 @@ export default function LandingPage() {
     const audienceCards = isAr
         ? [
             {
-                heading: "مصمم للمهنيين في الإمارات",
-                body: "المبيعات، المالية، العمليات، التسويق، الهندسة، وأدوار أخرى.",
+                heading: "لكل باحث عن عمل في الإمارات",
+                body: "مبيعات، مالية، عمليات، تسويق، هندسة — ريكو يعمل لأي قطاع.",
             },
             {
-                heading: "مبني حول سيرتك الذاتية",
-                body: "ارفع مرة واحدة. يقرأ ريكو خبرتك ويحولها إلى إجراءات بحث وظيفي.",
+                heading: "ريكو يبدأ منك",
+                body: "ارفع سيرتك مرة واحدة. ريكو يحوّل خبرتك إلى بحث وظيفي فعّال من اليوم الأول.",
             },
             {
-                heading: "الخصوصية في صميم التصميم",
-                body: "بياناتك لن تُباع أبداً لأصحاب العمل أو المجندين أو أي أطراف ثالثة. تُشغَّل المنصة بواسطة شركة إيكو تكنولوجي لحماية البيئة ذ.م.م، شركة مسجلة في الإمارات.",
+                heading: "ريكو يرتقي مع كل استخدام",
+                body: "كلما تفاعلت مع ريكو، فهمك أكثر وقدّم لك فرصاً أدق.",
                 ctas: [
                     { label: "سياسة الخصوصية", href: "/privacy" },
                     { label: "عن ريكو", href: "/about" },
@@ -375,16 +375,16 @@ export default function LandingPage() {
         ]
         : [
             {
-                heading: "Built for UAE professionals",
-                body: "Sales, finance, operations, marketing, engineering, and more.",
+                heading: "Built for UAE job seekers",
+                body: "Sales, finance, operations, marketing, engineering — Rico works for any sector.",
             },
             {
-                heading: "Designed around your CV",
-                body: "Upload once. Rico reads your experience and turns it into job-search actions.",
+                heading: "Rico starts from you",
+                body: "Upload once. Rico turns your experience into effective job-search actions from day one.",
             },
             {
-                heading: "Privacy by design",
-                body: "Your data is never sold to employers, recruiters, or third parties. Operated by Eco Technology Environment Protection Services L.L.C, a UAE-registered company.",
+                heading: "Rico gets smarter with use",
+                body: "The more you interact with Rico, the better it understands you and the sharper the opportunities it surfaces.",
                 ctas: [
                     { label: "Privacy policy", href: "/privacy" },
                     { label: "About Rico", href: "/about" },
@@ -393,7 +393,7 @@ export default function LandingPage() {
         ];
 
     const noItems = isAr
-        ? ["لا معالج إعداد", "لا نماذج مؤسسية", "لا تقديم صامت"]
+        ? ["بدون معالج إعداد", "بدون ورق أو نماذج", "لا تقديم بدون إذنك"]
         : ["No setup wizard", "No enterprise forms", "No silent applying"];
 
     return (
