@@ -645,6 +645,31 @@ _INTERVIEW_PREP_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Prepare application — catches free-text "prepare" intent before _DRAFT_RE so Arabic
+# "اكتبلي cover letter" routes to draft creation, not generic cover letter guidance.
+_PREPARE_APP_RE = re.compile(
+    # English: prepare application / prepare this/my job/cv/resume
+    r"\bprepare\b.{0,40}\b(application|apply|for\s+(?:this\s+)?(?:job|role|position))\b"
+    r"|\bprepare\s+(?:my\s+)?(?:application|cv|resume)\b"
+    # Arabic: جهز التقديم / جهز لهذه الوظيفة / جهزلي السيرة/السي في
+    r"|جهز.{0,25}(?:التقديم|وظيف|السيرة|السيره|سيرتي|سي\s*في)"
+    r"|اكتبلي\s+(?:cover\s+letter|سيرة|تقديم)"
+    r"|جهزلي\s+(?:السيرة|السيره|السي\s*في|تقديم|وظيف)",
+    re.IGNORECASE | re.UNICODE,
+)
+
+# Show draft — read existing pending application draft
+_SHOW_DRAFT_RE = re.compile(
+    r"\bshow\b.{0,30}\b(my\s+draft|draft|prepared\s+application|application\s+draft)\b"
+    r"|\bmy\s+draft\b"
+    r"|\bview\s+(?:my\s+)?draft\b"
+    # Arabic
+    r"|اعرض.{0,20}(?:المسودة|مسودة|التقديم\s+المجهز)"
+    r"|ورجيني.{0,20}(?:المسودة|التقديم)"
+    r"|(?:المسودة|مسودتي)",
+    re.IGNORECASE | re.UNICODE,
+)
+
 _DRAFT_RE = re.compile(
     # English: draft/write/generate/create/make/prepare/build + cover letter / message / email
     r"\b(draft|write|generate|create|make|prepare|build)\b.{0,40}\b(cover\s+letter|message|email|letter)\b"
@@ -1047,6 +1072,14 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
 
     if _EXPLAIN_MATCH_RE.search(text):
         return IntentResult("explain_match", 0.9, "regex")
+
+    # prepare_application must be checked BEFORE _DRAFT_RE so "اكتبلي cover letter"
+    # routes to draft creation rather than generic cover-letter guidance.
+    if _PREPARE_APP_RE.search(text):
+        return IntentResult("prepare_application", 0.92, "regex")
+
+    if _SHOW_DRAFT_RE.search(text):
+        return IntentResult("show_draft", 0.9, "regex")
 
     if _DRAFT_RE.search(text):
         return IntentResult("draft_message", 0.9, "regex")

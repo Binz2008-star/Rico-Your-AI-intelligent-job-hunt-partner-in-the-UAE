@@ -422,8 +422,11 @@ class LearningRepository:
         # Extract role from title
         role = self._extract_role_from_title(title)
         if role:
-            if action_type in ("apply", "save", "opened_external"):
-                weight = 0.8 if action_type == "apply" else (0.5 if action_type == "save" else 0.3)
+            if action_type in ("apply", "save", "opened_external", "prepared"):
+                if action_type == "apply":       weight = 0.8
+                elif action_type == "prepared":  weight = 0.6
+                elif action_type == "save":      weight = 0.5
+                else:                            weight = 0.3  # opened_external
                 self.record_signal(
                     canonical_user_id,
                     "role_preference",
@@ -453,8 +456,11 @@ class LearningRepository:
 
         # Extract location
         if location:
-            if action_type in ("apply", "save", "opened_external"):
-                weight = 0.7 if action_type == "apply" else (0.4 if action_type == "save" else 0.2)
+            if action_type in ("apply", "save", "opened_external", "prepared"):
+                if action_type == "apply":       weight = 0.7
+                elif action_type == "prepared":  weight = 0.5
+                elif action_type == "save":      weight = 0.4
+                else:                            weight = 0.2  # opened_external
                 self.record_signal(
                     canonical_user_id,
                     "location_preference",
@@ -499,6 +505,15 @@ class LearningRepository:
                     "company_sentiment",
                     company,
                     signal_weight=0.2,
+                    source="job_action",
+                    metadata={"action": action_type},
+                )
+            elif action_type == "prepared":
+                self.record_signal(
+                    canonical_user_id,
+                    "company_sentiment",
+                    company,
+                    signal_weight=0.4,
                     source="job_action",
                     metadata={"action": action_type},
                 )

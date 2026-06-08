@@ -3771,82 +3771,213 @@ class RicoChatAPI:
 
         # Prepare application — from job card "Prepare application — {title} at {company}"
         if legacy_intent == "prepare_application":
-            title = getattr(intent_result, "extracted_title", None) or "the role"
-            company = getattr(intent_result, "extracted_company", None) or "the company"
-            profile_skills = self._as_list(self._profile_value(profile, "skills"))
-            profile_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            # 1. Resolve job from intent extraction or recent context.
+            raw_title = (getattr(intent_result, "extracted_title", None) or "").strip()
+            raw_company = (getattr(intent_result, "extracted_company", None) or "").strip()
+            # Strip the old fallback sentinel values the handler used before.
+            if raw_title in ("the role",):
+                raw_title = ""
+            if raw_company in ("the company",):
+                raw_company = ""
 
-            # Persist to Application Flow so prepared state survives session/restart
-            self._persist_application_lifecycle_event(
-                user_id=user_id,
-                title=title,
-                company=company,
-                status="prepared",
-            )
+            title, company, _ctx_row = raw_title, raw_company, None
+            if not title or not company:
+                try:
+                    from src.repositories.user_job_context_repo import (
+                        get_recently_discussed as _grd_pa,
+                        get_recently_interacted as _gri_pa,
+                    )
+                    _recent_pa = _grd_pa(user_id, limit=1) or _gri_pa(user_id, limit=1)
+                    if _recent_pa:
+                        _ctx_row = _recent_pa[0]
+                        title = title or (_ctx_row.get("title") or "")
+                        company = company or (_ctx_row.get("company") or "")
+                except Exception:
+                    pass
 
+            if not title or not company:
+                msg = (
+                    "Which job would you like me to prepare the application for? "
+                    "Tell me the job title and company, or search for jobs first."
+                )
+                self._append_chat(user_id, "assistant", msg)
+                return self._finalize(
+                    {"type": "prepare_application", "intent": "prepare_application", "message": msg},
+                    self.SOURCE_KEYWORD, profile=profile,
+                )
+
+            # 2. Get user CV — required for tailoring.
+            _cv_text = ""
+            _db_pa = None
+            try:
+                from src.rico_db import RicoDB
+                _db_pa = RicoDB()
+                _bundle = _db_pa.get_user_bundle(user_id)
+                if _bundle:
+                    _cv_text = (_bundle.get("cv_text") or "").strip()
+            except Exception:
+                pass
+
+            if not _cv_text:
+                msg = (
+                    f"To prepare your application for **{title}** at **{company}**, "
+                    "I need your CV first. Upload it from your profile or paste it in chat."
+                )
+                self._append_chat(user_id, "assistant", msg)
+                return self._finalize(
+                    {"type": "prepare_application", "intent": "prepare_application",
+                     "message": msg, "next_action": "upload_cv"},
+                    self.SOURCE_KEYWORD, profile=profile,
+                )
+
+            # 3. Build job context fields.
+            _apply_url = (_ctx_row or {}).get("apply_url") or ""
+            _source_url = (_ctx_row or {}).get("source_url") or ""
+            _location = (_ctx_row or {}).get("location") or "UAE"
+            _job_key = self._derive_lifecycle_job_key(title, company)
+
+            # 4. Duplicate protection — reuse existing pending draft for same job.
+            _existing_draft = None
+            try:
+                if _db_pa is None:
+                    from src.rico_db import RicoDB
+                    _db_pa = RicoDB()
+                _pending = _db_pa.get_application_drafts(user_id, status="pending")
+                _existing_draft = next(
+                    (d for d in _pending if d.get("job_key") == _job_key), None
+                )
+            except Exception:
+                pass
+
+            if _existing_draft:
+                _draft = _existing_draft
+                _reused = True
+            else:
+                # 5. Generate tailored CV + cover letter.
+                _reused = False
+                try:
+                    from src.rico_apply_ai import tailor_application as _tailor
+                    _tail = _tailor(
+                        cv_text=_cv_text,
+                        profile=profile if isinstance(profile, dict) else {},
+                        job={
+                            "title": title,
+                            "company": company,
+                            "description": "",
+                            "apply_url": _apply_url or _source_url,
+                            "location": _location,
+                        },
+                    )
+                    _tailored_cv = (_tail.get("tailored_cv") or "").strip()
+                    _cover_letter = (_tail.get("cover_letter") or "").strip()
+                except Exception as _exc:
+                    logger.warning("prepare_application tailor failed user=%s: %s", user_id, _exc)
+                    msg = (
+                        f"I had trouble generating the draft for **{title}** at **{company}** right now. "
+                        "Please try again in a moment."
+                    )
+                    self._append_chat(user_id, "assistant", msg)
+                    return self._finalize(
+                        {"type": "prepare_application", "intent": "prepare_application", "message": msg},
+                        self.SOURCE_KEYWORD, profile=profile,
+                    )
+
+                if not _tailored_cv or not _cover_letter:
+                    msg = (
+                        f"The draft for **{title}** at **{company}** came back incomplete. "
+                        "Please try again or provide the job description for better results."
+                    )
+                    self._append_chat(user_id, "assistant", msg)
+                    return self._finalize(
+                        {"type": "prepare_application", "intent": "prepare_application", "message": msg},
+                        self.SOURCE_KEYWORD, profile=profile,
+                    )
+
+                # 6. Insert into application_drafts.
+                try:
+                    if _db_pa is None:
+                        from src.rico_db import RicoDB
+                        _db_pa = RicoDB()
+                    _draft = _db_pa.create_application_draft(
+                        user_id=user_id,
+                        job_key=_job_key,
+                        job_title=title,
+                        company=company,
+                        job_description="",
+                        apply_url=_apply_url or _source_url,
+                        tailored_cv=_tailored_cv,
+                        cover_letter=_cover_letter,
+                    )
+                except Exception as _exc:
+                    logger.warning("create_application_draft failed user=%s: %s", user_id, _exc)
+                    msg = (
+                        f"I prepared your draft for **{title}** at **{company}** but couldn't save it. "
+                        "Please try again shortly."
+                    )
+                    self._append_chat(user_id, "assistant", msg)
+                    return self._finalize(
+                        {"type": "prepare_application", "intent": "prepare_application", "message": msg},
+                        self.SOURCE_KEYWORD, profile=profile,
+                    )
+
+            # 7. Update user_job_context lifecycle → prepared.
+            try:
+                from src.repositories.user_job_context_repo import set_lifecycle_status as _slc_pa
+                _slc_pa(
+                    user_id=user_id, title=title, company=company, status="prepared",
+                    apply_url=_apply_url, source_url=_source_url,
+                )
+            except Exception:
+                pass
+
+            # 8. Learning signal for draft preparation.
+            try:
+                from src.repositories.learning_repo import get_learning_repository
+                get_learning_repository().infer_signals_from_job_action(
+                    user_id, "prepared",
+                    {"title": title, "company": company, "apply_url": _apply_url or _source_url},
+                )
+            except Exception:
+                pass
+
+            # 9. Store recent context.
             self._store_recent_context(
                 user_id,
                 self._build_recent_application_context(
-                    title=title,
-                    company=company,
-                    status="prepared",
-                    action="prepare_application",
+                    title=title, company=company, status="prepared", action="prepare_application",
                 ),
             )
 
-            context_parts: list[str] = []
-            if profile_skills:
-                context_parts.append(f"Skills: {', '.join(str(s) for s in profile_skills[:8])}")
-            if profile_roles:
-                context_parts.append(f"Target roles: {', '.join(str(r) for r in profile_roles[:3])}")
-            context_str = ". ".join(context_parts) + ("." if context_parts else "")
-
-            system_prompt = (
-                "You are Rico, a UAE career intelligence system. "
-                "The user wants to prepare an application for a specific job. "
-                "Give a concise application angle: what from their background aligns, "
-                "what to lead with in their CV and cover note, and any key gap to address. "
-                "Keep it under 200 words."
+            _draft_id = str(_draft.get("id") or "")
+            _cl = _draft.get("cover_letter") or ""
+            _cl_preview = _cl[:350]
+            _reuse_note = (
+                "_(Existing pending draft found — showing that one.)_\n\n" if _reused else ""
             )
-            ai_input = f"Prepare application for {title} at {company}. {context_str}"
-            ai_text = None
-            if hf_ok():
-                ai_text = generate_text(ai_input, system=system_prompt, max_new_tokens=400)
-
-            if ai_text:
-                msg = ai_text
-                src = self.SOURCE_HF
-            else:
-                skills_str = (
-                    ", ".join(str(s) for s in profile_skills[:4])
-                    if profile_skills else "your documented skills"
-                )
-                msg = (
-                    f"**{title} at {company}**\n\n"
-                    f"Lead with: {skills_str}\n\n"
-                    f"Angle: position your experience directly against this role. "
-                    f"Research {company} and reference specific work in your cover note.\n\n"
-                    f"Upload your CV for a full gap analysis against this role."
-                )
-                src = self.SOURCE_FALLBACK
-
+            msg = (
+                f"{_reuse_note}**Draft ready — {title} at {company}**\n\n"
+                f"**Cover letter preview:**\n{_cl_preview}"
+                f"{'…' if len(_cl) > 350 else ''}\n\n"
+                "Your tailored CV has been prepared. "
+                "Review the full draft from Applications (/applications)."
+            )
             response = {
                 "type": "prepare_application",
                 "intent": "prepare_application",
                 "message": msg,
+                "draft_id": _draft_id,
+                "job_title": title,
+                "job_company": company,
+                "reused_draft": _reused,
                 "options": [
                     {"action": "open_apply_link", "label": "Open apply link",
                      "message": f"open apply link for {title} at {company}"},
-                    {"action": "track_job", "label": "Track this job",
-                     "message": f"Track this job — {title} at {company}"},
                     {"action": "mark_applied", "label": "Mark as applied",
                      "message": f"Mark as applied — {title} at {company}"},
-                    {"action": "save_job", "label": "Save job",
-                     "message": f"Save job — {title} at {company}"},
                 ],
             }
             self._append_chat(user_id, "assistant", msg)
-            return self._finalize(response, src, profile=profile)
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # Mark as applied — from job card "Mark as applied — {title} at {company}"
         if legacy_intent == "mark_applied":
@@ -4489,6 +4620,37 @@ class RicoChatAPI:
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
+
+        # Show latest pending application draft
+        if legacy_intent == "show_draft":
+            _drafts_sd = []
+            try:
+                from src.rico_db import RicoDB
+                _drafts_sd = RicoDB().get_application_drafts(user_id, status="pending")
+            except Exception:
+                pass
+
+            if not _drafts_sd:
+                msg = (
+                    "You don't have any pending application drafts yet. "
+                    "Say **'prepare application'** for a saved job and I'll generate one."
+                )
+            else:
+                _d = _drafts_sd[0]
+                _d_title = _d.get("job_title") or "Unknown"
+                _d_company = _d.get("company") or "Unknown"
+                _d_cl = _d.get("cover_letter") or ""
+                _d_preview = _d_cl[:400]
+                msg = (
+                    f"**Latest draft — {_d_title} at {_d_company}**\n\n"
+                    f"**Cover letter:**\n{_d_preview}"
+                    f"{'…' if len(_d_cl) > 400 else ''}\n\n"
+                    "Your tailored CV is also ready. "
+                    "Visit Applications (/applications) to review and approve."
+                )
+            response = {"type": "show_draft", "intent": "show_draft", "message": msg}
+            self._append_chat(user_id, "assistant", msg)
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # Interview prep
         if legacy_intent == "interview_prep":
