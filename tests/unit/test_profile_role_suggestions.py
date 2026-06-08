@@ -432,12 +432,14 @@ class TestGenericJobSearchFastPath:
         assert result["matches"][0]["title"] == "HSE Manager"
 
     def test_no_cv_profile_falls_through_to_pipeline(self, monkeypatch):
-        """Generic job search WITHOUT CV should not return CV role suggestions."""
+        """Generic job search WITHOUT CV and without prior context should return profile_incomplete."""
         import src.rico_chat_api as chat_module
 
         api = RicoChatAPI()
         empty_profile = MockProfile()
         monkeypatch.setattr(chat_module, "get_profile", lambda uid: empty_profile)
+        # Ensure no prior-search context bleeds in from other tests
+        monkeypatch.setattr(api, "_get_recent_context", lambda uid: {})
 
         result = api._handle_active_user("test-user", "am looking for job")
 
