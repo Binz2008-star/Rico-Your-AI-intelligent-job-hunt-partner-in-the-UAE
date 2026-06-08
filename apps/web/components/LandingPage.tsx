@@ -310,14 +310,14 @@ export default function LandingPage() {
 
     const liveMatches = isAr
         ? [
-            { role: "مدير السلامة والصحة المهنية", score: "94", signal: "تطابق قوي مع خبرتك في السلامة والامتثال" },
-            { role: "مدير العمليات", score: "89", signal: "تطابق جيد مع خبرتك في الإمارات" },
-            { role: "مسؤول الامتثال البيئي", score: "86", signal: "يتطابق مع خلفيتك التنظيمية والتفتيشية" },
+            { role: "مدير مبيعات", score: "94", signal: "تطابق قوي مع خبرتك وأهدافك المهنية" },
+            { role: "مدير مشروع", score: "89", signal: "يتناسب مع خلفيتك وخبرتك في الإمارات" },
+            { role: "محلل مالي", score: "86", signal: "يتطابق مع مهاراتك والقطاع المستهدف" },
         ]
         : [
-            { role: "HSE Manager", score: "94", signal: "Strong match with your safety and compliance experience" },
-            { role: "Operations Manager", score: "89", signal: "Good match with your UAE experience" },
-            { role: "Environmental Compliance Officer", score: "86", signal: "Matches your regulatory and inspection background" },
+            { role: "Sales Manager", score: "94", signal: "Strong match with your experience and career goals" },
+            { role: "Project Manager", score: "89", signal: "Fits your background and UAE work history" },
+            { role: "Finance Analyst", score: "86", signal: "Matches your skills and target sector" },
         ];
 
     const pillars = isAr
@@ -340,7 +340,7 @@ export default function LandingPage() {
         ? [
             {
                 heading: "مصمم للمهنيين في الإمارات",
-                body: "السلامة والبيئة، الامتثال، الهندسة، المالية، وأدوار أخرى.",
+                body: "المبيعات، المالية، العمليات، التسويق، الهندسة، وأدوار أخرى.",
             },
             {
                 heading: "مبني حول سيرتك الذاتية",
@@ -358,7 +358,7 @@ export default function LandingPage() {
         : [
             {
                 heading: "Built for UAE professionals",
-                body: "HSE, ESG, operations, compliance, engineering, and finance roles.",
+                body: "Sales, finance, operations, marketing, engineering, and more.",
             },
             {
                 heading: "Designed around your CV",
