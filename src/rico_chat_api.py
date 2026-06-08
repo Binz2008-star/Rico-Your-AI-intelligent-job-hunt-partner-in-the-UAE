@@ -3430,6 +3430,22 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        # Preference correction — user wants to forget / veto a learned preference
+        if legacy_intent == "preference_correction":
+            return self._finalize(
+                self._handle_preference_correction(user_id, message, profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # Application insights — success rates, response patterns, follow-up intel
+        if legacy_intent == "application_insights":
+            return self._finalize(
+                self._handle_application_insights(user_id),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
         # Profile summary
         if legacy_intent == "profile_summary":
             from src.agent.context.resolver import resolve_profile_context
@@ -5262,6 +5278,160 @@ class RicoChatAPI:
 
         self._append_chat(user_id, "assistant", msg)
         return {"type": "learning_profile_summary", "message": msg}
+
+    def _handle_preference_correction(
+        self, user_id: str, message: str, profile: Any
+    ) -> dict[str, Any]:
+        """Remove a learned preference at the user's explicit request.
+
+        Parses the message to extract what type of preference to clear and the
+        value, then calls LearningRepository.clear_preference() which writes a
+        durable veto signal and removes the key from the in-memory cache.
+        """
+        import re as _re
+
+        _LOCATIONS = {
+            "dubai", "abu dhabi", "sharjah", "ajman", "ras al khaimah",
+            "fujairah", "umm al quwain", "riyadh", "jeddah", "dammam",
+            "doha", "kuwait", "muscat", "manama", "abu dhabi",
+            "uae", "saudi arabia", "qatar", "bahrain", "oman",
+        }
+
+        msg_lower = message.lower()
+
+        # Determine preference type
+        pref_type = "role"
+        if "skill" in msg_lower:
+            pref_type = "skill"
+        elif "company" in msg_lower or "employer" in msg_lower:
+            pref_type = "company"
+        else:
+            for loc in _LOCATIONS:
+                if loc in msg_lower:
+                    pref_type = "location"
+                    break
+
+        # Extract the value: strip command words then take remaining text
+        _STRIP = _re.compile(
+            r"\b(forget|remove|clear|delete|drop|don.?t\s+want|not\s+interested\s+in"
+            r"|my\s+preference\s+for|preference\s+for|preference|from\s+my\s+preferences"
+            r"|انسَ|احذف|تفضيلي\s*ل?|لا\s+أريد\s+وظائف\s+في)\b",
+            _re.IGNORECASE,
+        )
+        cleaned = _STRIP.sub("", message).strip(" .,،!؟?")
+        # Remove leading filler words
+        cleaned = _re.sub(
+            r"^(for|about|in|at|ل|عن|في|that|this|the)\s+",
+            "", cleaned, flags=_re.IGNORECASE,
+        ).strip()
+        # Collapse whitespace
+        cleaned = _re.sub(r"\s+", " ", cleaned).strip()
+
+        if not cleaned or len(cleaned) < 2:
+            reply = (
+                "Please tell me what specific preference to remove — for example:\n"
+                "- \"Forget my preference for Dubai\"\n"
+                "- \"Remove Python from my skills\"\n"
+                "- \"I don't want jobs in Abu Dhabi\""
+            )
+            self._append_chat(user_id, "assistant", reply)
+            return {"type": "preference_correction", "message": reply}
+
+        try:
+            from src.repositories.learning_repo import get_learning_repository
+            get_learning_repository().clear_preference(user_id, pref_type, cleaned)
+            _labels = {
+                "role": "role preference",
+                "location": "location preference",
+                "skill": "skill",
+                "company": "company",
+            }
+            label = _labels.get(pref_type, "preference")
+            reply = (
+                f"Done — I've removed **{cleaned}** from your {label} list. "
+                "It won't influence your results anymore.\n\n"
+                "If you change your mind, just save or apply to relevant jobs and I'll pick it up again."
+            )
+        except Exception:
+            reply = (
+                "I couldn't remove that preference right now. "
+                "Please try again in a moment — your other data is safe."
+            )
+
+        self._append_chat(user_id, "assistant", reply)
+        return {"type": "preference_correction", "message": reply}
+
+    def _handle_application_insights(self, user_id: str) -> dict[str, Any]:
+        """Analyze the user's tracked applications and surface success patterns.
+
+        Calls ResponseIntelligenceEngine.analyze_response_patterns() on the user's
+        application history and formats a plain-language insight summary.
+        """
+        try:
+            from src.repositories.applications_repo import get_all
+            apps = get_all(user_id=user_id) or []
+
+            if len(apps) < 3:
+                count = len(apps)
+                noun = "application" if count == 1 else "applications"
+                msg = (
+                    f"You have {count} tracked {noun} so far. "
+                    "Once you have a few more I'll be able to show you patterns — "
+                    "success rate, how long employers typically respond, and where to focus."
+                )
+            else:
+                from src.decision_engine import JobDecisionEngine
+                from src.response_intelligence import (
+                    JsonFileStateStore,
+                    ResponseIntelligenceEngine,
+                )
+                from pathlib import Path
+
+                _engine = ResponseIntelligenceEngine(
+                    decision_engine=JobDecisionEngine(profile={}, target_roles=[]),
+                    state_store=JsonFileStateStore(Path("data/scoring_adjustments.json")),
+                )
+                result = _engine.analyze_response_patterns(apps)
+
+                if "error" in result:
+                    msg = "I couldn't analyze your applications right now. Try again in a moment."
+                else:
+                    total = result["total_applications"]
+                    success_pct = result["success_rate_pct"]
+                    avg_days = result.get("avg_response_time_days", 0.0)
+                    dist = result.get("response_distribution", {})
+                    insights = result.get("insights", [])
+
+                    lines = [f"**Application Analysis — {total} tracked applications**\n"]
+
+                    status_parts = []
+                    for status, count in sorted(dist.items(), key=lambda x: -x[1]):
+                        if count > 0 and status != "no_response":
+                            label = status.replace("_", " ").title()
+                            status_parts.append(f"{label}: {count}")
+                    if status_parts:
+                        lines.append("**Outcomes:** " + " · ".join(status_parts))
+
+                    lines.append(f"**Success rate:** {success_pct}%")
+                    if avg_days > 0:
+                        lines.append(f"**Avg employer response:** {avg_days:.0f} days")
+
+                    if insights:
+                        lines.append("")
+                        for ins in insights[:3]:
+                            lines.append(f"**Insight — {ins['insight_type'].replace('_', ' ').title()}**")
+                            if ins.get("recommendation"):
+                                lines.append(ins["recommendation"])
+
+                    msg = "\n".join(lines)
+        except Exception:
+            msg = (
+                "I couldn't load your application data right now. "
+                "Try again in a moment."
+            )
+
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "application_insights", "message": msg}
 
     def _handle_job_feedback_positive(self, user_id: str, message: str, profile: Any) -> dict[str, Any]:
         """Record a positive learning signal when the user says a job is a great match.

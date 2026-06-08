@@ -367,6 +367,55 @@ _LEARNING_SUMMARY_RE = re.compile(
     re.IGNORECASE,
 )
 
+# ── Preference correction phrases ─────────────────────────────────────────
+# User wants to remove / veto a learned preference.
+
+_PREF_CORRECTION_PHRASES = frozenset([
+    # English
+    "forget my preference", "remove my preference", "clear my preference",
+    "forget that preference", "remove that preference",
+    "don't show me jobs in", "don't want jobs in", "not interested in jobs in",
+    "remove from my preferences", "clear from my preferences",
+    "i changed my mind about", "i don't like that role", "i don't want that role",
+    "remove this preference", "delete this preference",
+    # Arabic
+    "انسَ تفضيلي", "احذف تفضيلي", "لا أريد وظائف في",
+    "غيّرت رأيي", "لا أريد هذا التفضيل", "احذف هذا",
+])
+
+_PREF_CORRECTION_RE = re.compile(
+    r"\b(forget|remove|clear|delete|drop).{0,10}(my\s+)?(preference|skill|role|location)\b"
+    r"|\bdon.t\s+(want|show\s+me).{0,10}(jobs|roles).{0,10}\b(in|for|at)\b"
+    r"|\b(i\s+)?(changed\s+my\s+mind|no\s+longer\s+want).{0,30}\b",
+    re.IGNORECASE,
+)
+
+# ── Application insights phrases ─────────────────────────────────────────
+# User wants to see their application success stats / patterns.
+
+_APP_INSIGHTS_PHRASES = frozenset([
+    # English
+    "analyze my applications", "analyse my applications",
+    "application insights", "my application stats", "application statistics",
+    "how are my applications doing", "application success rate",
+    "my success rate", "how many interviews did i get",
+    "employer response patterns", "response patterns",
+    "how long do employers take", "follow up on my applications",
+    "application analysis", "how well am i doing",
+    "show my application performance", "application performance",
+    # Arabic
+    "حلل طلباتي", "إحصائيات طلباتي", "كيف أداؤي في التقديمات",
+    "معدل نجاحي", "كم مقابلة حصلت عليها", "تحليل طلباتي",
+])
+
+_APP_INSIGHTS_RE = re.compile(
+    r"\b(analyz|analys|review).{0,15}(my\s+)?applications?\b"
+    r"|\bapplication\s+(stats|statistics|insights|analysis|performance|success)\b"
+    r"|\b(success|response|interview)\s+rate\b"
+    r"|\bhow\s+(well|good|many).{0,20}(applications?|interviews?|responses?)\b",
+    re.IGNORECASE,
+)
+
 _PROFILE_ROLE_SUGGESTIONS_PHRASES = frozenset([
     "show roles from my cv",
     "what roles fit my cv",
@@ -919,6 +968,12 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     if lower in _LEARNING_SUMMARY_PHRASES:
         return IntentResult("learning_profile_summary", 1.0, "exact")
 
+    if lower in _PREF_CORRECTION_PHRASES:
+        return IntentResult("preference_correction", 1.0, "exact")
+
+    if lower in _APP_INSIGHTS_PHRASES:
+        return IntentResult("application_insights", 1.0, "exact")
+
     if lower in _PROFILE_ROLE_SUGGESTIONS_PHRASES:
         return IntentResult("profile_role_suggestions", 1.0, "exact")
 
@@ -1004,6 +1059,12 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
 
     if _LEARNING_SUMMARY_RE.search(text):
         return IntentResult("learning_profile_summary", 0.9, "regex")
+
+    if _PREF_CORRECTION_RE.search(text):
+        return IntentResult("preference_correction", 0.9, "regex")
+
+    if _APP_INSIGHTS_RE.search(text):
+        return IntentResult("application_insights", 0.9, "regex")
 
     # Subscription / pricing regex (check before job search)
     if _SUBSCRIPTION_RE.search(text):
