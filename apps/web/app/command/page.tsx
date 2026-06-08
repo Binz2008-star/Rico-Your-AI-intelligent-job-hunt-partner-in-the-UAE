@@ -651,6 +651,7 @@ export default function CommandPage() {
     const [userName, setUserName] = useState<string | null>(null);
     // "pending" = history not yet checked; "has_history" = history loaded; "empty" = no history
     const [historyState, setHistoryState] = useState<"pending" | "has_history" | "empty">("pending");
+    const [messagesRemaining, setMessagesRemaining] = useState<number | null>(null);
 
     useEffect(() => {
         if (typeof window !== "undefined") {
@@ -895,6 +896,9 @@ export default function CommandPage() {
                             streaming: false,
                         }];
                     });
+                }
+                if (typeof res.messages_remaining === "number") {
+                    setMessagesRemaining(res.messages_remaining);
                 }
             }
 
@@ -1654,6 +1658,23 @@ export default function CommandPage() {
                     )}
                     {uploadError && (
                         <p className="text-[11px] text-rico-red mb-2 text-center" role="alert">{uploadError}</p>
+                    )}
+                    {messagesRemaining !== null && messagesRemaining <= 10 && chatAudience === "authenticated" && (
+                        <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-amber-500/25 bg-amber-500/8 px-3 py-2" role="status" aria-live="polite">
+                            <p className="text-[11px] text-amber-400">
+                                {messagesRemaining === 0
+                                    ? t("cmdMsgLimitReached")
+                                    : messagesRemaining === 1
+                                        ? t("cmdMsgLimitOne")
+                                        : t("cmdMsgLimitFew").replace("{n}", String(messagesRemaining))}
+                            </p>
+                            <Link
+                                href="/subscription"
+                                className="shrink-0 text-[11px] font-medium text-amber-400 underline underline-offset-2 hover:text-amber-300 transition-colors"
+                            >
+                                {t("cmdUpgrade")}
+                            </Link>
+                        </div>
                     )}
                     <div className="flex items-end gap-2 rounded-2xl border border-border-soft bg-surface-elevated/95 p-1.5 shadow-xl shadow-black/10 backdrop-blur-md transition-[border-color,box-shadow] focus-within:border-gold/30 focus-within:shadow-[0_0_0_3px_rgba(245,166,35,0.07),0_8px_32px_rgba(0,0,0,0.12)]">
                         {/* CV upload button */}
