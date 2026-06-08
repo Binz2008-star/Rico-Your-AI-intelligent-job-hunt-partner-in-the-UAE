@@ -140,12 +140,13 @@ class TestSQLInjection:
         from src.repositories import jobs_repo
         import inspect
         source = inspect.getsource(jobs_repo.list_from_db)
-        # The where variable is built from hardcoded strings + %s placeholders, not user input.
-        # Accept both f-string and + concatenation forms — both are safe here.
+        # Accept f-string, + concatenation, or psycopg2.sql.SQL composition — all safe.
         assert ('f"SELECT COUNT(*) FROM jobs WHERE {where}"' in source or
                 "f'SELECT COUNT(*) FROM jobs WHERE {where}'" in source or
                 '"SELECT COUNT(*) FROM jobs WHERE " + where' in source or
-                "'SELECT COUNT(*) FROM jobs WHERE ' + where" in source)
+                "'SELECT COUNT(*) FROM jobs WHERE ' + where" in source or
+                'sql.SQL("SELECT COUNT(*) FROM jobs WHERE ")' in source or
+                "sql.SQL('SELECT COUNT(*) FROM jobs WHERE ')" in source)
         # Verify params list is used (parameterized)
         assert "params" in source
 
