@@ -12,5 +12,8 @@ class StatsResponse(BaseModel):
     rejections: int
     pending: int
     success_rate: float
+    jobs_total: int = 0
+    avg_score: int = 0
+    new_today: int = 0
 
     model_config = {"extra": "allow"}

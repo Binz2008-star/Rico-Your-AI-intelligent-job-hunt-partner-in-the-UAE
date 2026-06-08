@@ -8,7 +8,7 @@ import {
     getJobs,
     getSettings,
 } from "@/lib/api";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface Stats {
     jobsTotal: number;
@@ -124,6 +124,7 @@ export function DashboardStats() {
     const [stats, setStats] = useState<Stats | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<"auth" | null>(null);
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
     const loadData = useCallback(async () => {
         try {
@@ -157,6 +158,7 @@ export function DashboardStats() {
             const settingsError = settingsResult.status === "rejected" ? getLoadError("Settings", settingsResult.reason) : null;
 
             setError(null);
+            setLastUpdated(new Date());
             setStats({
                 jobsTotal: jobsRes?.total ?? 0,
                 appsTotal: appsRes?.total ?? 0,
@@ -182,6 +184,11 @@ export function DashboardStats() {
         }
     }, []);
 
+    const handleRefresh = useCallback(() => {
+        setLoading(true);
+        void loadData();
+    }, [loadData]);
+
     useEffect(() => {
         const timeoutId = window.setTimeout(() => {
             void loadData();
@@ -196,6 +203,27 @@ export function DashboardStats() {
     if (!stats) return <ErrorMessage message="Could not load dashboard stats." icon="⚠️" />;
 
     return (
+        <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-3">
+            {lastUpdated && (
+                <span className="text-[11px] text-text-tertiary">
+                    Updated {lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </span>
+            )}
+            <button
+                type="button"
+                onClick={handleRefresh}
+                className="ms-auto flex items-center gap-1.5 rounded-full border border-border-soft bg-surface-elevated/60 px-3 py-1 text-[11px] font-semibold text-text-secondary transition-all hover:border-gold/30 hover:text-gold"
+                aria-label="Refresh dashboard stats"
+            >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polyline points="23 4 23 10 17 10" />
+                    <polyline points="1 20 1 14 7 14" />
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                </svg>
+                Refresh
+            </button>
+        </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <StatusCard
                 title="Scored opportunities"
@@ -243,6 +271,7 @@ export function DashboardStats() {
                 <p className="text-sm text-on-surface-variant">{getDailyLimitCopy(stats)}</p>
                 <span className="mt-3 inline-flex text-[12px] font-semibold text-gold">Review settings</span>
             </StatusCard>
+        </div>
         </div>
     );
 }

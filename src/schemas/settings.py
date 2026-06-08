@@ -13,6 +13,7 @@ class SettingsResponse(BaseModel):
     telegram_chat_id: str
     score_threshold_apply: int
     score_threshold_watch: int
+    blocked_companies: List[str] = []
 
     model_config = {"extra": "allow"}
 
@@ -25,3 +26,4 @@ class SettingsUpdateRequest(BaseModel):
     telegram_chat_id: Optional[str] = None
     score_threshold_apply: Optional[int] = None
     score_threshold_watch: Optional[int] = None
+    blocked_companies: Optional[List[str]] = None

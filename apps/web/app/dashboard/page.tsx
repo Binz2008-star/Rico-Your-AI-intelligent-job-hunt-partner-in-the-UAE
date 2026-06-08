@@ -85,7 +85,7 @@ export default async function DashboardPage({
                 Open Command Center
               </span>
             </StatusCard>
-            <StatusCard title="Review matches" badge="placeholder" href="/jobs">
+            <StatusCard title="Review matches" badge="live" href="/jobs">
               <p className="text-sm text-text-tertiary">
                 Check scored opportunities and decide which leads should move into your flow.
               </p>
@@ -93,7 +93,7 @@ export default async function DashboardPage({
                 View Matches
               </span>
             </StatusCard>
-            <StatusCard title="Tune preferences" badge="placeholder" href="/settings">
+            <StatusCard title="Tune preferences" badge="live" href="/settings">
               <p className="text-sm text-text-tertiary">
                 Adjust match thresholds, apply pacing, and alert preferences.
               </p>
@@ -136,7 +136,7 @@ export default async function DashboardPage({
                 Open Flow
               </span>
             </StatusCard>
-            <StatusCard title="Apply pacing" badge="placeholder" href="/settings">
+            <StatusCard title="Apply pacing" badge="live" href="/settings">
               <p className="text-sm text-text-tertiary">
                 Use your daily apply limit to keep automation controlled and reviewable.
               </p>

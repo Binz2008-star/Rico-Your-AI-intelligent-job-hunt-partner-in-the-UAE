@@ -92,6 +92,42 @@ def get_by_db_id(db_id: int) -> Optional[Dict[str, Any]]:
         conn.close()
 
 
+def get_pipeline_stats() -> Dict[str, Any]:
+    """
+    Aggregate stats for the jobs feed: total available, avg score, new today.
+    Returns zeros on any DB error.
+    """
+    conn = get_db_connection()
+    if not conn:
+        return {"jobs_total": 0, "avg_score": 0, "new_today": 0}
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    COUNT(*) AS jobs_total,
+                    ROUND(AVG(score))::int AS avg_score,
+                    COUNT(*) FILTER (WHERE date_found >= NOW() - INTERVAL '24 hours') AS new_today
+                FROM jobs
+                WHERE score >= 0
+                  AND date_found >= NOW() - INTERVAL '14 days'
+                """
+            )
+            row = cur.fetchone()
+        if not row:
+            return {"jobs_total": 0, "avg_score": 0, "new_today": 0}
+        return {
+            "jobs_total": int(row[0] or 0),
+            "avg_score": int(row[1] or 0),
+            "new_today": int(row[2] or 0),
+        }
+    except Exception:
+        logger.exception("jobs_repo_pipeline_stats_failed")
+        return {"jobs_total": 0, "avg_score": 0, "new_today": 0}
+    finally:
+        conn.close()
+
+
 def _row_to_job(row: tuple) -> Dict[str, Any]:
     return {
         "id": str(row[0]),

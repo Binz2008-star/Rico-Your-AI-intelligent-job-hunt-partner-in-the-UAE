@@ -19,11 +19,19 @@ const SUCCESS_STATUSES = ["applied", "success", "submitted", "saved"];
 const TRACKED_STATUSES = ["saved", "skipped", "already_tracked"];
 
 type Filter = "all" | "high" | "mid";
+type SortKey = "score_desc" | "score_asc" | "company_asc" | "date_desc";
 
 const FILTER_LABELS: Record<Filter, string> = {
     all: "All",
     high: "85%+ match",
     mid: "65–84%",
+};
+
+const SORT_LABELS: Record<SortKey, string> = {
+    score_desc: "Score: High → Low",
+    score_asc: "Score: Low → High",
+    company_asc: "Company A–Z",
+    date_desc: "Newest first",
 };
 
 function getJobLink(job: Job): string {
@@ -48,6 +56,8 @@ export default function JobsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<"auth" | "other" | null>(null);
     const [filter, setFilter] = useState<Filter>("all");
+    const [sort, setSort] = useState<SortKey>("score_desc");
+    const [search, setSearch] = useState("");
     const [submittingId, setSubmittingId] = useState<string | null>(null);
 
     const fetchJobs = useCallback(async () => {
@@ -79,17 +89,35 @@ export default function JobsPage() {
         void fetchJobs();
     }, [fetchJobs]);
 
-    const filtered = useMemo(
-        () =>
-            jobs.filter((j) =>
-                filter === "high"
-                    ? j.score >= SCORE_THRESHOLDS.HIGH
-                    : filter === "mid"
-                        ? j.score >= SCORE_THRESHOLDS.MID && j.score < SCORE_THRESHOLDS.HIGH
-                        : true
-            ),
-        [jobs, filter]
-    );
+    const filtered = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        let list = jobs.filter((j) =>
+            filter === "high"
+                ? j.score >= SCORE_THRESHOLDS.HIGH
+                : filter === "mid"
+                    ? j.score >= SCORE_THRESHOLDS.MID && j.score < SCORE_THRESHOLDS.HIGH
+                    : true
+        );
+        if (q) {
+            list = list.filter(
+                (j) =>
+                    j.title?.toLowerCase().includes(q) ||
+                    j.company?.toLowerCase().includes(q) ||
+                    j.location?.toLowerCase().includes(q)
+            );
+        }
+        list = [...list].sort((a, b) => {
+            if (sort === "score_asc") return a.score - b.score;
+            if (sort === "company_asc") return (a.company ?? "").localeCompare(b.company ?? "");
+            if (sort === "date_desc") {
+                const ad = a.posted_at ?? "";
+                const bd = b.posted_at ?? "";
+                return bd.localeCompare(ad);
+            }
+            return b.score - a.score;
+        });
+        return list;
+    }, [jobs, filter, sort, search]);
 
     const handleAction = async (jobId: string, action: string) => {
         if (!user || submittingId) return;
@@ -183,28 +211,48 @@ export default function JobsPage() {
     };
 
     const filterBar = (
-        <nav className="flex gap-2" aria-label="Job filters">
-            {(Object.keys(FILTER_LABELS) as Filter[]).map((f) => (
-                <button
-                    key={f}
-                    onClick={() => setFilter(f)}
-                    className={cn(
-                        "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
-                        filter === f
-                            ? "bg-gold/10 text-gold border border-gold/30"
-                            : "text-rico-text-dim hover:text-rico-text hover:bg-white/[0.04]"
-                    )}
-                >
-                    {FILTER_LABELS[f]}
-                </button>
-            ))}
-        </nav>
+        <div className="flex flex-wrap items-center gap-2">
+            <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search title, company…"
+                className="h-8 rounded-lg border border-border-soft bg-surface-elevated/60 px-3 text-xs text-text-primary placeholder:text-text-tertiary focus:border-gold/40 focus:outline-none focus:ring-1 focus:ring-gold/20 transition-all w-44"
+                aria-label="Search jobs"
+            />
+            <nav className="flex gap-1.5" aria-label="Job filters">
+                {(Object.keys(FILTER_LABELS) as Filter[]).map((f) => (
+                    <button
+                        key={f}
+                        onClick={() => setFilter(f)}
+                        className={cn(
+                            "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
+                            filter === f
+                                ? "bg-gold/10 text-gold border border-gold/30"
+                                : "text-rico-text-dim hover:text-rico-text hover:bg-white/[0.04]"
+                        )}
+                    >
+                        {FILTER_LABELS[f]}
+                    </button>
+                ))}
+            </nav>
+            <select
+                value={sort}
+                onChange={(e) => setSort(e.target.value as SortKey)}
+                className="h-8 rounded-lg border border-border-soft bg-surface-elevated/60 px-2 text-xs text-text-secondary focus:border-gold/40 focus:outline-none focus:ring-1 focus:ring-gold/20 transition-all cursor-pointer"
+                aria-label="Sort jobs"
+            >
+                {(Object.keys(SORT_LABELS) as SortKey[]).map((s) => (
+                    <option key={s} value={s}>{SORT_LABELS[s]}</option>
+                ))}
+            </select>
+        </div>
     );
 
     return (
         <AppShell
             title="Job Matches"
-            subtitle={loading ? "Loading…" : `${jobs.length} roles matched your profile`}
+            subtitle={loading ? "Loading…" : filtered.length !== jobs.length ? `${filtered.length} of ${jobs.length} roles` : `${jobs.length} roles matched your profile`}
             sidebarProps={{
                 user: user ? { name: user.name, email: user.email } : undefined,
                 onLogout: handleLogout,
