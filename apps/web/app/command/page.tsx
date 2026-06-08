@@ -1163,9 +1163,20 @@ export default function CommandPage() {
         try {
             const userId = `public:${getSessionId(sessionIdRef)}`;
             await confirmCVProfile({ preview, filename }, userId);
+            // Detect the user's chat language from recent messages so that Arabic-speaking
+            // users receive an Arabic confirmation even when the UI toggle is still on "EN".
+            const recentUserText = messages
+                .filter(m => m.role === "user")
+                .slice(-4)
+                .map(m => m.text || "")
+                .join("");
+            const arabicCount = (recentUserText.match(/[؀-ۿ]/g) || []).length;
+            const effectiveLang: "en" | "ar" = arabicCount > 3 ? "ar" : language;
+            const tEff = (key: TranslationKey) =>
+                (translations[effectiveLang][key] ?? translations.en[key]) as string;
             const confirmText = chatAudience === "public"
-                ? t("cmdCvProfileSavedPublic")
-                : t("cmdCvProfileConfirmed");
+                ? tEff("cmdCvProfileSavedPublic")
+                : tEff("cmdCvProfileConfirmed");
             setMessages((prev) => prev.map(m => m.id === messageId ? { ...m, type: "profile_confirmed", text: confirmText } : m));
         } catch (err) {
             const text = err instanceof Error ? `${t("cmdCvProfileError")}: ${err.message}` : t("cmdCvProfileError");

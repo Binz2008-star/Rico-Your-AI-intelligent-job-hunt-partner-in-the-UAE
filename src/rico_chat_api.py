@@ -3361,12 +3361,24 @@ class RicoChatAPI:
             recent = self._get_recent_messages(user_id, limit=4)
             has_active_conversation = len(recent) >= 2
             if _is_ar:
-                followup = (
-                    "أهلاً! كيف أقدر أساعدك اليوم؟"
-                    if has_active_conversation else
-                    "أهلاً! أنا ريكو، مساعدك في البحث عن وظائف في الإمارات. "
-                    "أخبرني بالمسمى الوظيفي المستهدف أو ارفع سيرتك الذاتية للبدء."
-                )
+                # Islamic greeting "السلام عليكم" requires the proper reply "وعليكم السلام".
+                # Using a generic "أهلاً" leaves the greeting unanswered in chat history,
+                # which causes the AI to retroactively respond to it in a later turn.
+                _is_salam = bool(re.search(r'السلام', message))
+                if _is_salam:
+                    followup = (
+                        "وعليكم السلام! كيف أقدر أساعدك اليوم؟"
+                        if has_active_conversation else
+                        "وعليكم السلام! أنا ريكو، مساعدك في البحث عن وظائف في الإمارات. "
+                        "أخبرني بالمسمى الوظيفي المستهدف أو ارفع سيرتك الذاتية للبدء."
+                    )
+                else:
+                    followup = (
+                        "أهلاً! كيف أقدر أساعدك اليوم؟"
+                        if has_active_conversation else
+                        "أهلاً! أنا ريكو، مساعدك في البحث عن وظائف في الإمارات. "
+                        "أخبرني بالمسمى الوظيفي المستهدف أو ارفع سيرتك الذاتية للبدء."
+                    )
             else:
                 followup = (
                     "What would you like to do next? I can search jobs, review applications, or answer questions about your profile."
