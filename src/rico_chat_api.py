@@ -459,6 +459,30 @@ class RicoChatAPI:
             except Exception:
                 pass
 
+            # Inject learned behavioral preferences from rico_learning_signals so the
+            # AI knows which roles/locations the user gravitates toward and which
+            # companies to avoid — derived from apply/save/skip/block actions.
+            try:
+                from src.repositories.learning_repo import get_learning_repository
+                _lr = get_learning_repository()
+                _learned: dict[str, Any] = {}
+                _roles = [r for r, _ in _lr.get_top_preferences(user_id, "role", limit=5)]
+                if _roles:
+                    _learned["preferred_roles"] = _roles
+                _locs = [loc for loc, _ in _lr.get_top_preferences(user_id, "location", limit=3)]
+                if _locs:
+                    _learned["preferred_locations"] = _locs
+                _skills = [s for s, _ in _lr.get_top_preferences(user_id, "skill", limit=8)]
+                if _skills:
+                    _learned["preferred_skills"] = _skills
+                _cos = [(c, w) for c, w in _lr.get_top_preferences(user_id, "company", limit=10) if w < 0]
+                if _cos:
+                    _learned["avoided_companies"] = [c for c, _ in _cos]
+                if _learned:
+                    ctx["learned_preferences"] = _learned
+            except Exception:
+                pass
+
         return ctx
 
     def _recent_jobs_summary(self, user_id: str, limit: int = 3) -> str:
@@ -809,7 +833,9 @@ class RicoChatAPI:
             except Exception as exc:
                 logger.debug("career_execution_search_failed query=%r error=%s", query, exc)
 
-        top_matches = all_matches[:5]
+        top_matches = self._sort_by_company_quality(
+            self._rerank_by_learned_preferences(all_matches, user_id)
+        )[:5]
         formatted = [self._format_match(m, profile) for m in top_matches]
         execution_state = "MATCHES_SCORED" if formatted else "SEARCH_RUNNING"
         role_text = ", ".join(roles[:3])
@@ -1146,7 +1172,7 @@ class RicoChatAPI:
         # the frontend can offer them as a fallback, but don't present them as
         # the primary "Apply" action.
         try:
-            from src.services.source_quality import classify_url, is_google_intermediary
+            from src.services.source_quality import classify_url, is_google_intermediary, classify_company
             if apply_url and is_google_intermediary(apply_url):
                 if not alt_link:
                     alt_link = apply_url
@@ -1154,8 +1180,10 @@ class RicoChatAPI:
                 verification_status = "google_intermediary"
             else:
                 verification_status = classify_url(apply_url or source_url)
+            company_quality = classify_company(str(m.get("company") or ""))
         except Exception:
             verification_status = "needs_source_verification" if apply_url else "lead_needs_verification"
+            company_quality = "ok"
 
         result = {
             "title": str(m.get("title") or "Untitled role"),
@@ -1165,6 +1193,7 @@ class RicoChatAPI:
             "source_url": source_url,
             "alt_link": alt_link,
             "verification_status": verification_status,
+            "company_quality": company_quality,
             "actions": ["Prepare application", "Save", "Ask why", "Skip"],
             **explanation,
         }
@@ -1178,6 +1207,65 @@ class RicoChatAPI:
             result["why"] = str(why)
 
         return result
+
+    @staticmethod
+    def _sort_by_company_quality(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Stable sort: named/verified companies first, anonymous/low-quality last.
+
+        Does not remove any jobs — low-quality entries appear at the tail so they
+        are only shown when there are not enough better alternatives.
+        """
+        try:
+            from src.services.source_quality import is_low_quality_company as _lqc
+            return sorted(matches, key=lambda m: 1 if _lqc(str(m.get("company") or "")) else 0)
+        except Exception:
+            return matches
+
+    @staticmethod
+    def _rerank_by_learned_preferences(
+        matches: list[dict[str, Any]],
+        user_id: str,
+    ) -> list[dict[str, Any]]:
+        """Boost jobs matching the user's learned role/location preferences to the top.
+
+        Scoring (lower = better, stable secondary sort preserves original order):
+          -3  title contains a preferred role
+          -2  location contains a preferred location
+          +5  company in avoided list
+
+        Falls back to original order when no preferences are recorded or on error.
+        """
+        if not matches or not user_id:
+            return matches
+        try:
+            from src.repositories.learning_repo import get_learning_repository
+            _lr = get_learning_repository()
+            pref_roles = [r.lower() for r, _ in _lr.get_top_preferences(user_id, "role", limit=5)]
+            pref_locs = [loc.lower() for loc, _ in _lr.get_top_preferences(user_id, "location", limit=3)]
+            avoided = {
+                c.lower()
+                for c, w in _lr.get_top_preferences(user_id, "company", limit=10)
+                if w < 0
+            }
+            if not pref_roles and not pref_locs and not avoided:
+                return matches
+
+            def _pref_key(m: dict[str, Any]) -> int:
+                title = (m.get("title") or "").lower()
+                location = (m.get("location") or m.get("city") or "").lower()
+                company = (m.get("company") or "").lower()
+                score = 0
+                if any(r in title for r in pref_roles):
+                    score -= 3
+                if any(loc in location for loc in pref_locs):
+                    score -= 2
+                if company in avoided:
+                    score += 5
+                return score
+
+            return sorted(matches, key=_pref_key)
+        except Exception:
+            return matches
 
     def _get_openai_agent(self) -> RicoOpenAIAgent:
         """Get or create OpenAI agent instance."""
@@ -2378,7 +2466,24 @@ class RicoChatAPI:
             "aggregator_untrusted": 5,
         }
         try:
-            from src.services.source_quality import classify_url as _cq, is_google_intermediary as _igi
+            from src.services.source_quality import (
+                classify_url as _cq, is_google_intermediary as _igi,
+                is_low_quality_company as _lqc,
+            )
+            # Pre-compute learned preference sets once (avoid repeated DB calls per job)
+            _pref_roles: list[str] = []
+            _pref_locs: list[str] = []
+            _avoided_cos: set[str] = set()
+            try:
+                from src.repositories.learning_repo import get_learning_repository as _glr
+                _lr = _glr()
+                _pref_roles = [r.lower() for r, _ in _lr.get_top_preferences(user_id, "role", limit=5)]
+                _pref_locs = [loc.lower() for loc, _ in _lr.get_top_preferences(user_id, "location", limit=3)]
+                _avoided_cos = {
+                    c.lower() for c, w in _lr.get_top_preferences(user_id, "company", limit=10) if w < 0
+                }
+            except Exception:
+                pass
 
             def _quality_key(m: dict[str, Any]) -> int:
                 url = str(
@@ -2388,7 +2493,20 @@ class RicoChatAPI:
                 # Secondary sort: quality within profile-fit bands
                 fit = m.get("profile_fit_score", 0)
                 fit_band = max(0, 5 - fit // 20)  # 5 bands (0=best fit, 4=worst)
-                return fit_band * 10 + _QUALITY_RANK.get(status, 1)
+                # Company quality penalty: anonymous/low_quality jobs sort after legitimate ones
+                company_penalty = 20 if _lqc(str(m.get("company") or "")) else 0
+                # Preference bonus: jobs matching learned role/location float up
+                title = (m.get("title") or "").lower()
+                location = (m.get("location") or m.get("city") or "").lower()
+                company_lower = (m.get("company") or "").lower()
+                pref_bonus = 0
+                if _pref_roles and any(r in title for r in _pref_roles):
+                    pref_bonus -= 3
+                if _pref_locs and any(loc in location for loc in _pref_locs):
+                    pref_bonus -= 2
+                if company_lower in _avoided_cos:
+                    pref_bonus += 5
+                return fit_band * 10 + _QUALITY_RANK.get(status, 1) + company_penalty + pref_bonus
 
             all_matches.sort(key=_quality_key)
         except Exception:
@@ -3136,6 +3254,22 @@ class RicoChatAPI:
             self._append_chat(user_id, "assistant", ack_text)
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
+        # Positive job feedback — record learning signal and acknowledge
+        if legacy_intent == "job_feedback_positive":
+            return self._finalize(
+                self._handle_job_feedback_positive(user_id, message, profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # Negative job feedback — record learning signal and acknowledge
+        if legacy_intent == "job_feedback_negative":
+            return self._finalize(
+                self._handle_job_feedback_negative(user_id, message, profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
         # Smalltalk (greetings: hi/hello/hey/bye)
         # If the user is mid-conversation, return a brief continuation instead of
         # the cold-start greeting — avoids the "Hi! I am Rico…" restart after a
@@ -3284,6 +3418,30 @@ class RicoChatAPI:
                 )
             return self._finalize(
                 self._handle_cv_creation(user_id, profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # Learning profile summary — what Rico has inferred from user behavior
+        if legacy_intent == "learning_profile_summary":
+            return self._finalize(
+                self._handle_learning_profile_summary(user_id, profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # Preference correction — user wants to forget / veto a learned preference
+        if legacy_intent == "preference_correction":
+            return self._finalize(
+                self._handle_preference_correction(user_id, message, profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # Application insights — success rates, response patterns, follow-up intel
+        if legacy_intent == "application_insights":
+            return self._finalize(
+                self._handle_application_insights(user_id),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -3556,7 +3714,9 @@ class RicoChatAPI:
                     all_explicit = [m for m in all_explicit if not app_map.get(get_job_id(m), False)]
             except Exception:
                 pass
-            top_matches = all_explicit[:5]
+            top_matches = self._sort_by_company_quality(
+                self._rerank_by_learned_preferences(all_explicit, user_id)
+            )[:5]
             formatted = [self._format_match(m, profile) for m in top_matches]
             if top_matches:
                 job_msg = "I found {} strong UAE job matches for you.".format(len(top_matches))
@@ -5073,6 +5233,282 @@ class RicoChatAPI:
                 {"action": "subscription_how_to", "label": "How do I subscribe?", "message": "How do I subscribe to Rico Pro or Premium?"},
             ],
         }
+
+    def _handle_learning_profile_summary(self, user_id: str, profile: Any) -> dict[str, Any]:
+        """Show the user what Rico has learned from their behavioral signals.
+
+        Reads top preferences from LearningRepository and formats a plain-language
+        summary so users can verify what Rico has inferred and correct mistakes.
+        """
+        try:
+            from src.repositories.learning_repo import get_learning_repository
+            _lr = get_learning_repository()
+            roles = [r for r, _ in _lr.get_top_preferences(user_id, "role", limit=5)]
+            locs = [loc for loc, _ in _lr.get_top_preferences(user_id, "location", limit=3)]
+            skills = [s for s, _ in _lr.get_top_preferences(user_id, "skill", limit=6)]
+            avoided = [
+                c for c, w in _lr.get_top_preferences(user_id, "company", limit=5) if w < 0
+            ]
+
+            if not any([roles, locs, skills, avoided]):
+                msg = (
+                    "I haven't learned anything specific yet — I build your preference profile "
+                    "from your actions. Save, apply, or skip jobs and I'll start personalising results."
+                )
+            else:
+                lines = ["Here is what I've learned from your actions so far:\n"]
+                if roles:
+                    lines.append(f"**Preferred roles:** {', '.join(roles)}")
+                if locs:
+                    lines.append(f"**Preferred locations:** {', '.join(locs)}")
+                if skills:
+                    lines.append(f"**Relevant skills:** {', '.join(skills)}")
+                if avoided:
+                    lines.append(f"**Companies to avoid:** {', '.join(avoided)}")
+                lines.append(
+                    "\nThis shapes which jobs float to the top of your results. "
+                    "Tell me if anything looks wrong and I'll correct it."
+                )
+                msg = "\n".join(lines)
+        except Exception:
+            msg = (
+                "I couldn't retrieve your preference profile right now. "
+                "Try again in a moment — your data is safe."
+            )
+
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "learning_profile_summary", "message": msg}
+
+    def _handle_preference_correction(
+        self, user_id: str, message: str, profile: Any
+    ) -> dict[str, Any]:
+        """Remove a learned preference at the user's explicit request.
+
+        Parses the message to extract what type of preference to clear and the
+        value, then calls LearningRepository.clear_preference() which writes a
+        durable veto signal and removes the key from the in-memory cache.
+        """
+        import re as _re
+
+        _LOCATIONS = {
+            "dubai", "abu dhabi", "sharjah", "ajman", "ras al khaimah",
+            "fujairah", "umm al quwain", "riyadh", "jeddah", "dammam",
+            "doha", "kuwait", "muscat", "manama", "abu dhabi",
+            "uae", "saudi arabia", "qatar", "bahrain", "oman",
+        }
+
+        msg_lower = message.lower()
+
+        # Determine preference type
+        pref_type = "role"
+        if "skill" in msg_lower:
+            pref_type = "skill"
+        elif "company" in msg_lower or "employer" in msg_lower:
+            pref_type = "company"
+        else:
+            for loc in _LOCATIONS:
+                if loc in msg_lower:
+                    pref_type = "location"
+                    break
+
+        # Extract the value: strip command words then take remaining text
+        _STRIP = _re.compile(
+            r"\b(forget|remove|clear|delete|drop|don.?t\s+want|not\s+interested\s+in"
+            r"|my\s+preference\s+for|preference\s+for|preference|from\s+my\s+preferences"
+            r"|انسَ|احذف|تفضيلي\s*ل?|لا\s+أريد\s+وظائف\s+في)\b",
+            _re.IGNORECASE,
+        )
+        cleaned = _STRIP.sub("", message).strip(" .,،!؟?")
+        # Remove leading filler words
+        cleaned = _re.sub(
+            r"^(for|about|in|at|ل|عن|في|that|this|the)\s+",
+            "", cleaned, flags=_re.IGNORECASE,
+        ).strip()
+        # Collapse whitespace
+        cleaned = _re.sub(r"\s+", " ", cleaned).strip()
+
+        if not cleaned or len(cleaned) < 2:
+            reply = (
+                "Please tell me what specific preference to remove — for example:\n"
+                "- \"Forget my preference for Dubai\"\n"
+                "- \"Remove Python from my skills\"\n"
+                "- \"I don't want jobs in Abu Dhabi\""
+            )
+            self._append_chat(user_id, "assistant", reply)
+            return {"type": "preference_correction", "message": reply}
+
+        try:
+            from src.repositories.learning_repo import get_learning_repository
+            get_learning_repository().clear_preference(user_id, pref_type, cleaned)
+            _labels = {
+                "role": "role preference",
+                "location": "location preference",
+                "skill": "skill",
+                "company": "company",
+            }
+            label = _labels.get(pref_type, "preference")
+            reply = (
+                f"Done — I've removed **{cleaned}** from your {label} list. "
+                "It won't influence your results anymore.\n\n"
+                "If you change your mind, just save or apply to relevant jobs and I'll pick it up again."
+            )
+        except Exception:
+            reply = (
+                "I couldn't remove that preference right now. "
+                "Please try again in a moment — your other data is safe."
+            )
+
+        self._append_chat(user_id, "assistant", reply)
+        return {"type": "preference_correction", "message": reply}
+
+    def _handle_application_insights(self, user_id: str) -> dict[str, Any]:
+        """Analyze the user's tracked applications and surface success patterns.
+
+        Calls ResponseIntelligenceEngine.analyze_response_patterns() on the user's
+        application history and formats a plain-language insight summary.
+        """
+        try:
+            from src.repositories.applications_repo import get_all
+            apps = get_all(user_id=user_id) or []
+
+            if len(apps) < 3:
+                count = len(apps)
+                noun = "application" if count == 1 else "applications"
+                msg = (
+                    f"You have {count} tracked {noun} so far. "
+                    "Once you have a few more I'll be able to show you patterns — "
+                    "success rate, how long employers typically respond, and where to focus."
+                )
+            else:
+                from src.decision_engine import JobDecisionEngine
+                from src.response_intelligence import (
+                    JsonFileStateStore,
+                    ResponseIntelligenceEngine,
+                )
+                from pathlib import Path
+
+                _engine = ResponseIntelligenceEngine(
+                    decision_engine=JobDecisionEngine(profile={}, target_roles=[]),
+                    state_store=JsonFileStateStore(Path("data/scoring_adjustments.json")),
+                )
+                result = _engine.analyze_response_patterns(apps)
+
+                if "error" in result:
+                    msg = "I couldn't analyze your applications right now. Try again in a moment."
+                else:
+                    total = result["total_applications"]
+                    success_pct = result["success_rate_pct"]
+                    avg_days = result.get("avg_response_time_days", 0.0)
+                    dist = result.get("response_distribution", {})
+                    insights = result.get("insights", [])
+
+                    lines = [f"**Application Analysis — {total} tracked applications**\n"]
+
+                    status_parts = []
+                    for status, count in sorted(dist.items(), key=lambda x: -x[1]):
+                        if count > 0 and status != "no_response":
+                            label = status.replace("_", " ").title()
+                            status_parts.append(f"{label}: {count}")
+                    if status_parts:
+                        lines.append("**Outcomes:** " + " · ".join(status_parts))
+
+                    lines.append(f"**Success rate:** {success_pct}%")
+                    if avg_days > 0:
+                        lines.append(f"**Avg employer response:** {avg_days:.0f} days")
+
+                    if insights:
+                        lines.append("")
+                        for ins in insights[:3]:
+                            lines.append(f"**Insight — {ins['insight_type'].replace('_', ' ').title()}**")
+                            if ins.get("recommendation"):
+                                lines.append(ins["recommendation"])
+
+                    msg = "\n".join(lines)
+        except Exception:
+            msg = (
+                "I couldn't load your application data right now. "
+                "Try again in a moment."
+            )
+
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "application_insights", "message": msg}
+
+    def _handle_job_feedback_positive(self, user_id: str, message: str, profile: Any) -> dict[str, Any]:
+        """Record a positive learning signal when the user says a job is a great match.
+
+        Calls infer_signals_from_job_action(..., "save", job) on the most recently
+        shown job so role/location/company weights are boosted. Falls back to a
+        generic positive signal when no recent job context is available.
+        """
+        try:
+            from src.repositories.learning_repo import get_learning_repository
+            _lr = get_learning_repository()
+            ctx = self._get_recent_context(user_id)
+            matches = ctx.get("recent_search_matches") or []
+            if matches:
+                top = matches[0]
+                _lr.infer_signals_from_job_action(user_id, "save", top)
+                title = top.get("title") or "that role"
+                company = top.get("company") or ""
+                label = f"**{title}**" + (f" at {company}" if company else "")
+                msg = (
+                    f"Great — {label} is marked as a strong match. "
+                    "I'll prioritise similar roles in future searches."
+                )
+            else:
+                _lr.record_signal(
+                    user_id,
+                    "feedback",
+                    "positive_match",
+                    signal_weight=0.6,
+                    source="chat_feedback",
+                    metadata={"message": message[:200]},
+                )
+                msg = "Glad to hear it! Tell me if you want to save it or prepare an application."
+        except Exception:
+            msg = "Great — I'll keep that in mind when searching for more roles."
+
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "job_feedback", "message": msg}
+
+    def _handle_job_feedback_negative(self, user_id: str, message: str, profile: Any) -> dict[str, Any]:
+        """Record a negative learning signal when the user says a job isn't suitable.
+
+        Looks up the most recently shown job from context and calls
+        infer_signals_from_job_action(..., "not_relevant", job) so role/location/company
+        signals are updated with negative weights. Falls back to a generic signal when no
+        recent job is in context. Never raises — a bare acknowledgement is returned on error.
+        """
+        try:
+            from src.repositories.learning_repo import get_learning_repository
+            _lr = get_learning_repository()
+            ctx = self._get_recent_context(user_id)
+            matches = ctx.get("recent_search_matches") or []
+            if matches:
+                top = matches[0]
+                _lr.infer_signals_from_job_action(user_id, "not_relevant", top)
+                title = top.get("title") or "that role"
+                company = top.get("company") or ""
+                label = f"**{title}**" + (f" at {company}" if company else "")
+                msg = (
+                    f"Noted — {label} isn't the right fit. "
+                    "I'll use that to refine future recommendations."
+                )
+            else:
+                _lr.record_signal(
+                    user_id,
+                    "feedback",
+                    "negative_match",
+                    signal_weight=-0.3,
+                    source="chat_feedback",
+                    metadata={"message": message[:200]},
+                )
+                msg = "Understood. Tell me what kind of role you're looking for and I'll find better matches."
+        except Exception:
+            msg = "Got it — I'll keep that in mind when searching for roles."
+
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "job_feedback", "message": msg}
 
     def _handle_delegated_decision(self, user_id: str, profile: Any) -> dict[str, Any]:
         """Handle 'you decide' / 'choose for me' by picking the strongest CV-aligned role."""

@@ -115,8 +115,13 @@ class LearningSignal:
     timestamp: datetime
     metadata: dict[str, Any] = field(default_factory=dict)
 
-    def decayed_weight(self, half_life_days: int = 30) -> float:
-        """Apply exponential decay based on age."""
+    def decayed_weight(self, half_life_days: int = 60) -> float:
+        """Apply exponential decay based on age.
+
+        60-day half-life: a signal loses ~50% weight after 2 months and
+        ~87% after 6 months — appropriate for career preferences that
+        evolve over quarters, not weeks.
+        """
         days_old = (datetime.now(_UTC) - self.timestamp).days
         decay_factor = 2 ** (-days_old / half_life_days)
         return self.signal_weight * decay_factor
@@ -347,20 +352,46 @@ class LearningRepository:
         return profile
 
     def _apply_decay_to_profile(self, profile: LearningProfile) -> LearningProfile:
-        """Create a copy of profile with decayed weights."""
+        """Create a copy of profile with decayed weights, respecting user vetoes.
+
+        A "preference_veto" signal zeroes out all earlier signals for that
+        (type, value) pair.  Signals recorded AFTER the veto timestamp are
+        still applied, allowing preferences to be rebuilt from scratch.
+        """
         decayed = LearningProfile(canonical_user_id=profile.canonical_user_id)
 
-        # Recalculate all weights from signal history
+        # First pass: collect vetoes → {(signal_type, value_lower): veto_timestamp}
+        vetoes: dict[tuple[str, str], datetime] = {}
         for signal in profile.signal_history:
-            decayed_weight = signal.decayed_weight()
+            if signal.signal_type == "preference_veto":
+                veto_type = signal.metadata.get("veto_type", "")
+                key = (veto_type, signal.signal_value.lower())
+                if key not in vetoes or signal.timestamp > vetoes[key]:
+                    vetoes[key] = signal.timestamp
+
+        # Second pass: accumulate non-vetoed signals with decay
+        _VETO_KEY_MAP = {
+            "role_preference": "role_preference",
+            "location_preference": "location_preference",
+            "skill_relevance": "skill_relevance",
+            "company_sentiment": "company_sentiment",
+        }
+        for signal in profile.signal_history:
+            if signal.signal_type == "preference_veto":
+                continue
+            veto_key = (_VETO_KEY_MAP.get(signal.signal_type, ""), signal.signal_value.lower())
+            if veto_key[0] and veto_key in vetoes and signal.timestamp < vetoes[veto_key]:
+                continue  # predates the user's veto — skip
+
+            dw = signal.decayed_weight()
             if signal.signal_type == "role_preference":
-                self._update_weighted_ema(decayed.role_preferences, signal.signal_value, decayed_weight, alpha=0.5)
+                self._update_weighted_ema(decayed.role_preferences, signal.signal_value, dw, alpha=0.5)
             elif signal.signal_type == "location_preference":
-                self._update_weighted_ema(decayed.location_preferences, signal.signal_value, decayed_weight, alpha=0.5)
+                self._update_weighted_ema(decayed.location_preferences, signal.signal_value, dw, alpha=0.5)
             elif signal.signal_type == "skill_relevance":
-                self._update_weighted_ema(decayed.skill_relevance, signal.signal_value, decayed_weight, alpha=0.5)
+                self._update_weighted_ema(decayed.skill_relevance, signal.signal_value, dw, alpha=0.5)
             elif signal.signal_type == "company_sentiment":
-                self._update_company_sentiment(decayed.company_sentiment, signal.signal_value, decayed_weight)
+                self._update_company_sentiment(decayed.company_sentiment, signal.signal_value, dw)
 
         decayed.feedback_events = profile.feedback_events.copy()
         decayed.salary_preference = profile.salary_preference
@@ -580,6 +611,57 @@ class LearningRepository:
 
         sorted_prefs = sorted(filtered, key=lambda x: x[1], reverse=True)
         return sorted_prefs[:limit]
+
+    def clear_preference(
+        self,
+        canonical_user_id: str,
+        pref_type: str,
+        value: str,
+    ) -> None:
+        """Permanently veto a learned preference so it stops influencing results.
+
+        Records a "preference_veto" signal to DB (so it survives cache resets),
+        then removes the key from the in-memory cache for immediate effect.
+
+        Args:
+            pref_type: "role" | "location" | "skill" | "company"
+            value:     The exact preference value to clear (case-insensitive match)
+        """
+        _TYPE_MAP = {
+            "role":     "role_preference",
+            "location": "location_preference",
+            "skill":    "skill_relevance",
+            "company":  "company_sentiment",
+        }
+        signal_type = _TYPE_MAP.get(pref_type, pref_type)
+
+        self.record_signal(
+            canonical_user_id,
+            "preference_veto",
+            value.strip(),
+            signal_weight=0.0,
+            source="user_command",
+            metadata={"veto_type": signal_type},
+        )
+
+        # Immediate removal from cached profile dicts
+        if canonical_user_id in self._cache:
+            profile = self._cache[canonical_user_id]
+            field_map: dict[str, dict[str, float]] = {
+                "role_preference":     profile.role_preferences,
+                "location_preference": profile.location_preferences,
+                "skill_relevance":     profile.skill_relevance,
+                "company_sentiment":   profile.company_sentiment,
+            }
+            field = field_map.get(signal_type)
+            if field is not None:
+                for k in [k for k in field if k.lower() == value.strip().lower()]:
+                    del field[k]
+
+        logger.info(
+            "preference_cleared user=%s type=%s value=%r",
+            canonical_user_id, pref_type, value,
+        )
 
     def invalidate_cache(self, canonical_user_id: str) -> None:
         """Invalidate cache for a specific user."""

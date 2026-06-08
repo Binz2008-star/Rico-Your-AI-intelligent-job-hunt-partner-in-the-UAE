@@ -340,6 +340,82 @@ _PROFILE_SUMMARY_PHRASES = frozenset([
     "ما هو اسمي", "ما اسمي", "اسمي", "من انا", "ما هو ملفي",
 ])
 
+# ── Learning profile summary phrases ─────────────────────────────────────────
+# User wants to see what Rico has learned from their behavior.
+
+_LEARNING_SUMMARY_PHRASES = frozenset([
+    # English
+    "what have you learned about me", "what did you learn about me",
+    "what do you know about my preferences", "my preferences",
+    "what have i taught you", "what did i teach you",
+    "what do you know about what i like", "show my preferences",
+    "what have you learned", "show what you learned",
+    "what are my preferences", "my learned preferences",
+    "what roles do i prefer", "what locations do i prefer",
+    "show my learning profile", "my behavior profile",
+    "what have you figured out about me",
+    # Arabic (normalised)
+    "ماذا تعلمت عني", "ما الذي تعلمته عني", "ما تعلمته عني",
+    "ما تفضيلاتي", "تفضيلاتي", "ماذا تعرف عن تفضيلاتي",
+    "ماذا تعلمت", "ارني ما تعلمته",
+])
+
+_LEARNING_SUMMARY_RE = re.compile(
+    r"\b(what.{0,10}(learned|know|figured).{0,20}(about me|my preferences|what i like))\b"
+    r"|\b(show|display|list).{0,15}(my\s+)?(learned|behavioral|behaviour)\s+(preferences|profile)\b"
+    r"|\b(my\s+)?(learned\s+preferences|preference\s+profile|learning\s+profile)\b",
+    re.IGNORECASE,
+)
+
+# ── Preference correction phrases ─────────────────────────────────────────
+# User wants to remove / veto a learned preference.
+
+_PREF_CORRECTION_PHRASES = frozenset([
+    # English
+    "forget my preference", "remove my preference", "clear my preference",
+    "forget that preference", "remove that preference",
+    "don't show me jobs in", "don't want jobs in", "not interested in jobs in",
+    "remove from my preferences", "clear from my preferences",
+    "i changed my mind about", "i don't like that role", "i don't want that role",
+    "remove this preference", "delete this preference",
+    # Arabic
+    "انسَ تفضيلي", "احذف تفضيلي", "لا أريد وظائف في",
+    "غيّرت رأيي", "لا أريد هذا التفضيل", "احذف هذا",
+])
+
+_PREF_CORRECTION_RE = re.compile(
+    r"\b(forget|remove|clear|delete|drop).{0,10}(my\s+)?(preference|skill|role|location)\b"
+    r"|\bdon.t\s+(want|show\s+me).{0,10}(jobs|roles).{0,10}\b(in|for|at)\b"
+    r"|\b(i\s+)?(changed\s+my\s+mind|no\s+longer\s+want).{0,30}\b",
+    re.IGNORECASE,
+)
+
+# ── Application insights phrases ─────────────────────────────────────────
+# User wants to see their application success stats / patterns.
+
+_APP_INSIGHTS_PHRASES = frozenset([
+    # English
+    "analyze my applications", "analyse my applications",
+    "application insights", "my application stats", "application statistics",
+    "how are my applications doing", "application success rate",
+    "my success rate", "how many interviews did i get",
+    "employer response patterns", "response patterns",
+    "how long do employers take", "follow up on my applications",
+    "application analysis", "how well am i doing",
+    "show my application performance", "application performance",
+    # Arabic
+    "حلل طلباتي", "إحصائيات طلباتي", "كيف أداؤي في التقديمات",
+    "معدل نجاحي", "كم مقابلة حصلت عليها", "تحليل طلباتي",
+])
+
+_APP_INSIGHTS_RE = re.compile(
+    r"\b(analyz|analys|review).{0,15}(my\s+)?applications?\b"
+    r"|\bapplication\s+(stats|statistics|insights|analysis|performance|success)\b"
+    r"|\b(success|response|interview)\s+rate\b"
+    r"|\bhow\s+(well|good|many).{0,20}(applications?|interviews?|responses?)\b",
+    re.IGNORECASE,
+)
+
 _PROFILE_ROLE_SUGGESTIONS_PHRASES = frozenset([
     "show roles from my cv",
     "what roles fit my cv",
@@ -581,6 +657,63 @@ _DRAFT_RE = re.compile(
     r"|اعمل\s+(?:لي\s+)?(?:خطاب|رسالة)"
     r"|(?:cover\s+letter|خطاب|رسالة)\s+(?:لي|لوظيفة|للوظيفة)",
     re.IGNORECASE | re.UNICODE,
+)
+
+# ── Negative job feedback phrases ────────────────────────────────────────────
+# User signals that a shown job is not suitable → record negative learning signal.
+
+_JOB_FEEDBACK_NEGATIVE_PHRASES = frozenset([
+    # English exact phrases
+    "not suitable", "not relevant", "not for me", "not a good fit", "bad fit",
+    "not interested", "this doesn't match", "not what i want", "not my type",
+    "this job is not suitable", "this job is not relevant", "this role is not suitable",
+    "this doesn't fit", "doesn't match my profile", "not relevant to me",
+    "not a match", "poor match", "wrong type", "not the right fit",
+    "this isn't suitable", "this isn't relevant", "this isn't for me",
+    "not suitable for me", "not relevant for me", "doesn't fit my profile",
+    # Arabic (normalised forms — ta marbuta, alef variants normalised before lookup)
+    "مو مناسب", "مو مناسبه", "مش مناسب", "مش مناسبه",
+    "هذا مو مناسب", "هذه مو مناسبه", "غير مناسب", "غير مناسبه",
+    "ليس مناسبا", "ليست مناسبه", "مو ملائم", "مش ملائم",
+    "مو مناسب لي", "مش مناسبه لي", "هذي مو مناسبه",
+])
+
+_JOB_FEEDBACK_NEGATIVE_RE = re.compile(
+    r"\b(not|isn'?t|doesn'?t|don'?t|no)\b.{0,25}"
+    r"\b(suitable|relevant|fit|match|interest|good|right|what\s+i\s+(want|need|look))\b"
+    r"|\b(bad|poor|wrong|irrelevant|unrelated)\b.{0,15}\b(fit|match|job|role)\b"
+    r"|\b(this|the)\s+(job|role).{0,20}\b(not|isn'?t|wrong|bad|poor|irrelevant)\b"
+    r"|\b(mismatch|unsuitable|inappropriate)\b",
+    re.IGNORECASE,
+)
+
+# ── Positive job feedback phrases ─────────────────────────────────────────────
+# User signals that a shown job is a great match → record positive learning signal.
+
+_JOB_FEEDBACK_POSITIVE_PHRASES = frozenset([
+    # English exact phrases
+    "perfect match", "great match", "exactly what i want", "exactly what i need",
+    "this is perfect", "this is great", "this is ideal", "this is exactly it",
+    "love this job", "love this role", "this looks great", "this looks perfect",
+    "great fit", "good fit", "excellent match", "this suits me",
+    "this is what i'm looking for", "this is what i was looking for",
+    "this is for me", "this matches my profile", "this fits perfectly",
+    "yes this", "yes this one", "exactly right", "spot on",
+    # Arabic (normalised forms)
+    "ممتاز", "مثالي", "هذا مناسب", "هذا مناسب لي", "هذا مثالي",
+    "هذا ما ابي", "هذا ما اريد", "هذا ما احتاج", "هذا يناسبني",
+    "يناسبني", "مناسب جدا", "مناسب جداً", "هذا يناسب خبرتي",
+    "هذا مناسبه", "هذا مناسبه لي", "اعجبني هذا", "اعجبتني الوظيفه",
+])
+
+_JOB_FEEDBACK_POSITIVE_RE = re.compile(
+    r"\b(perfect|great|ideal|excellent|exactly|love|awesome)\b.{0,20}"
+    r"\b(match|fit|job|role|one|this)\b"
+    r"|\b(this|the)\s+(job|role).{0,20}\b(perfect|great|ideal|excellent|suits?|fits?)\b"
+    r"|\b(this\s+is\s+(perfect|great|ideal|exactly|what\s+i\s+(want|need|was\s+looking\s+for)))\b"
+    r"|\b(looks?\s+(great|perfect|ideal|good|excellent))\b"
+    r"|\b(spot\s+on|right\s+on|nailed\s+it)\b",
+    re.IGNORECASE,
 )
 
 # ── Nonsense / safety heuristics ─────────────────────────────────────────────
@@ -832,6 +965,15 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     if lower in _PROFILE_SUMMARY_PHRASES:
         return IntentResult("profile_summary", 1.0, "exact")
 
+    if lower in _LEARNING_SUMMARY_PHRASES:
+        return IntentResult("learning_profile_summary", 1.0, "exact")
+
+    if lower in _PREF_CORRECTION_PHRASES:
+        return IntentResult("preference_correction", 1.0, "exact")
+
+    if lower in _APP_INSIGHTS_PHRASES:
+        return IntentResult("application_insights", 1.0, "exact")
+
     if lower in _PROFILE_ROLE_SUGGESTIONS_PHRASES:
         return IntentResult("profile_role_suggestions", 1.0, "exact")
 
@@ -915,6 +1057,15 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     if _PROFILE_UPDATE_RE.search(text):
         return IntentResult("profile_update", 0.85, "regex")
 
+    if _LEARNING_SUMMARY_RE.search(text):
+        return IntentResult("learning_profile_summary", 0.9, "regex")
+
+    if _PREF_CORRECTION_RE.search(text):
+        return IntentResult("preference_correction", 0.9, "regex")
+
+    if _APP_INSIGHTS_RE.search(text):
+        return IntentResult("application_insights", 0.9, "regex")
+
     # Subscription / pricing regex (check before job search)
     if _SUBSCRIPTION_RE.search(text):
         return IntentResult("subscription.show_plans", 0.9, "regex")
@@ -964,6 +1115,14 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     _GENERIC_MATCH_WORDS = {"match", "matches", "matching", "suitable", "fit", "recommend"}
     if has_cv_profile and any(w in lower.split() for w in _GENERIC_MATCH_WORDS):
         return IntentResult("job_search_profile_match", 0.8, "regex")
+
+    # ── 5b. Job feedback (positive / negative) before unknown fallback ───
+    # Positive first — "this is perfect" must not be caught by negative regex.
+    if lower in _JOB_FEEDBACK_POSITIVE_PHRASES or _JOB_FEEDBACK_POSITIVE_RE.search(text):
+        return IntentResult("job_feedback_positive", 0.9, "regex")
+
+    if lower in _JOB_FEEDBACK_NEGATIVE_PHRASES or _JOB_FEEDBACK_NEGATIVE_RE.search(text):
+        return IntentResult("job_feedback_negative", 0.9, "regex")
 
     # ── 6. Unknown — DO NOT default to job search ────────────────────────
     return IntentResult("unknown", 0.0, "fallback")

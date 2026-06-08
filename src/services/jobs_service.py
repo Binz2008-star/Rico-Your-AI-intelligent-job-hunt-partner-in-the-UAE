@@ -99,14 +99,26 @@ def _score_and_paginate_jobs(
         job for job in scored_jobs
         if isinstance(job, dict) and int(job.get("score", 0) or 0) >= min_score
     ]
-    filtered.sort(
-        key=lambda job: (
-            int(job.get("score", 0) or 0),
-            str(job.get("title", "")).lower(),
-            str(get_job_id(job) or ""),
-        ),
-        reverse=True,
-    )
+    # Sort: high score first; anonymous/low-quality companies pushed to tail within
+    # the same score band so they only surface when no better alternatives exist.
+    try:
+        from src.services.source_quality import is_low_quality_company as _lqc
+        filtered.sort(
+            key=lambda job: (
+                1 if _lqc(str(job.get("company") or "")) else 0,
+                -int(job.get("score", 0) or 0),
+                str(job.get("title", "")).lower(),
+            ),
+        )
+    except Exception:
+        filtered.sort(
+            key=lambda job: (
+                int(job.get("score", 0) or 0),
+                str(job.get("title", "")).lower(),
+                str(get_job_id(job) or ""),
+            ),
+            reverse=True,
+        )
 
     total = len(filtered)
     page_jobs = filtered[offset : offset + limit]
