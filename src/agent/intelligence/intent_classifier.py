@@ -583,6 +583,34 @@ _DRAFT_RE = re.compile(
     re.IGNORECASE | re.UNICODE,
 )
 
+# ── Negative job feedback phrases ────────────────────────────────────────────
+# User signals that a shown job is not suitable → record negative learning signal.
+
+_JOB_FEEDBACK_NEGATIVE_PHRASES = frozenset([
+    # English exact phrases
+    "not suitable", "not relevant", "not for me", "not a good fit", "bad fit",
+    "not interested", "this doesn't match", "not what i want", "not my type",
+    "this job is not suitable", "this job is not relevant", "this role is not suitable",
+    "this doesn't fit", "doesn't match my profile", "not relevant to me",
+    "not a match", "poor match", "wrong type", "not the right fit",
+    "this isn't suitable", "this isn't relevant", "this isn't for me",
+    "not suitable for me", "not relevant for me", "doesn't fit my profile",
+    # Arabic (normalised forms — ta marbuta, alef variants normalised before lookup)
+    "مو مناسب", "مو مناسبه", "مش مناسب", "مش مناسبه",
+    "هذا مو مناسب", "هذه مو مناسبه", "غير مناسب", "غير مناسبه",
+    "ليس مناسبا", "ليست مناسبه", "مو ملائم", "مش ملائم",
+    "مو مناسب لي", "مش مناسبه لي", "هذي مو مناسبه",
+])
+
+_JOB_FEEDBACK_NEGATIVE_RE = re.compile(
+    r"\b(not|isn'?t|doesn'?t|don'?t|no)\b.{0,25}"
+    r"\b(suitable|relevant|fit|match|interest|good|right|what\s+i\s+(want|need|look))\b"
+    r"|\b(bad|poor|wrong|irrelevant|unrelated)\b.{0,15}\b(fit|match|job|role)\b"
+    r"|\b(this|the)\s+(job|role).{0,20}\b(not|isn'?t|wrong|bad|poor|irrelevant)\b"
+    r"|\b(mismatch|unsuitable|inappropriate)\b",
+    re.IGNORECASE,
+)
+
 # ── Nonsense / safety heuristics ─────────────────────────────────────────────
 
 _NONSENSE_RE = re.compile(
@@ -964,6 +992,11 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     _GENERIC_MATCH_WORDS = {"match", "matches", "matching", "suitable", "fit", "recommend"}
     if has_cv_profile and any(w in lower.split() for w in _GENERIC_MATCH_WORDS):
         return IntentResult("job_search_profile_match", 0.8, "regex")
+
+    # ── 5b. Negative job feedback (before unknown fallback) ──────────────
+    # "this job is not suitable / not relevant / not for me" → record learning signal
+    if lower in _JOB_FEEDBACK_NEGATIVE_PHRASES or _JOB_FEEDBACK_NEGATIVE_RE.search(text):
+        return IntentResult("job_feedback_negative", 0.9, "regex")
 
     # ── 6. Unknown — DO NOT default to job search ────────────────────────
     return IntentResult("unknown", 0.0, "fallback")

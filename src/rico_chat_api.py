@@ -459,6 +459,27 @@ class RicoChatAPI:
             except Exception:
                 pass
 
+            # Inject learned behavioral preferences from rico_learning_signals so the
+            # AI knows which roles/locations the user gravitates toward and which
+            # companies to avoid — derived from apply/save/skip/block actions.
+            try:
+                from src.repositories.learning_repo import get_learning_repository
+                _lr = get_learning_repository()
+                _learned: dict[str, Any] = {}
+                _roles = [r for r, _ in _lr.get_top_preferences(user_id, "role", limit=5)]
+                if _roles:
+                    _learned["preferred_roles"] = _roles
+                _locs = [loc for loc, _ in _lr.get_top_preferences(user_id, "location", limit=3)]
+                if _locs:
+                    _learned["preferred_locations"] = _locs
+                _cos = [(c, w) for c, w in _lr.get_top_preferences(user_id, "company", limit=10) if w < 0]
+                if _cos:
+                    _learned["avoided_companies"] = [c for c, _ in _cos]
+                if _learned:
+                    ctx["learned_preferences"] = _learned
+            except Exception:
+                pass
+
         return ctx
 
     def _recent_jobs_summary(self, user_id: str, limit: int = 3) -> str:
@@ -3136,6 +3157,14 @@ class RicoChatAPI:
             self._append_chat(user_id, "assistant", ack_text)
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
+        # Negative job feedback — record learning signal and acknowledge
+        if legacy_intent == "job_feedback_negative":
+            return self._finalize(
+                self._handle_job_feedback_negative(user_id, message, profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
         # Smalltalk (greetings: hi/hello/hey/bye)
         # If the user is mid-conversation, return a brief continuation instead of
         # the cold-start greeting — avoids the "Hi! I am Rico…" restart after a
@@ -5073,6 +5102,45 @@ class RicoChatAPI:
                 {"action": "subscription_how_to", "label": "How do I subscribe?", "message": "How do I subscribe to Rico Pro or Premium?"},
             ],
         }
+
+    def _handle_job_feedback_negative(self, user_id: str, message: str, profile: Any) -> dict[str, Any]:
+        """Record a negative learning signal when the user says a job isn't suitable.
+
+        Looks up the most recently shown job from context and calls
+        infer_signals_from_job_action(..., "not_relevant", job) so role/location/company
+        signals are updated with negative weights. Falls back to a generic signal when no
+        recent job is in context. Never raises — a bare acknowledgement is returned on error.
+        """
+        try:
+            from src.repositories.learning_repo import get_learning_repository
+            _lr = get_learning_repository()
+            ctx = self._get_recent_context(user_id)
+            matches = ctx.get("recent_search_matches") or []
+            if matches:
+                top = matches[0]
+                _lr.infer_signals_from_job_action(user_id, "not_relevant", top)
+                title = top.get("title") or "that role"
+                company = top.get("company") or ""
+                label = f"**{title}**" + (f" at {company}" if company else "")
+                msg = (
+                    f"Noted — {label} isn't the right fit. "
+                    "I'll use that to refine future recommendations."
+                )
+            else:
+                _lr.record_signal(
+                    user_id,
+                    "feedback",
+                    "negative_match",
+                    signal_weight=-0.3,
+                    source="chat_feedback",
+                    metadata={"message": message[:200]},
+                )
+                msg = "Understood. Tell me what kind of role you're looking for and I'll find better matches."
+        except Exception:
+            msg = "Got it — I'll keep that in mind when searching for roles."
+
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "job_feedback", "message": msg}
 
     def _handle_delegated_decision(self, user_id: str, profile: Any) -> dict[str, Any]:
         """Handle 'you decide' / 'choose for me' by picking the strongest CV-aligned role."""
