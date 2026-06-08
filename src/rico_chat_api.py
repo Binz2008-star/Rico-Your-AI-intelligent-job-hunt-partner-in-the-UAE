@@ -3507,6 +3507,26 @@ class RicoChatAPI:
                     profile=profile,
                 )
 
+            # No explicit role in this message — check recent conversation context
+            # before falling back to profile target_roles.  This preserves continuity
+            # when users switch languages mid-conversation (e.g. searched "software jobs"
+            # in English then sent "ابحث لي وظائف في أبوظبي" in Arabic).
+            try:
+                _ctx = self._get_recent_context(user_id)
+                _prior_role = (
+                    _ctx.get("recent_search_role")
+                    or _ctx.get("recent_role")
+                    or _ctx.get("recent_job")
+                )
+                if _prior_role:
+                    return self._finalize(
+                        self._classified_role_search(user_id, _prior_role, profile),
+                        self.SOURCE_KEYWORD,
+                        profile=profile,
+                    )
+            except Exception:
+                pass
+
             # Fall through to legacy router for entity extraction
             context = self._build_router_context(user_id, profile)
             routed = _route(message, user_id=user_id, context=context)
@@ -3523,16 +3543,24 @@ class RicoChatAPI:
                         self.SOURCE_KEYWORD,
                         profile=profile,
                     )
+                _is_ar = self._is_arabic_text(message)
+                _incomplete_msg = (
+                    "لإجراء البحث أحتاج إلى معرفة المسمى الوظيفي المستهدف أولاً.\n"
+                    "أخبرني:\n"
+                    "• المسمى الوظيفي (مثل: مهندس برمجيات، محاسب)\n"
+                    "• المدينة المفضلة (مثل: دبي، أبوظبي)\n"
+                    "• توقعات الراتب (اختياري)"
+                    if _is_ar else
+                    "I can search jobs using your profile. Please confirm:\n"
+                    "• Target role (e.g., HSE Manager, ESG Specialist)\n"
+                    "• Preferred city (e.g., Dubai, Abu Dhabi)\n"
+                    "• Expected salary (optional)\n\n"
+                    "I cannot search for jobs until at least your target role is known."
+                )
                 response = {
                     "type": "profile_incomplete",
                     "intent": "search_jobs",
-                    "message": (
-                        "I can search jobs using your profile. Please confirm:\n"
-                        "• Target role (e.g., HSE Manager, ESG Specialist)\n"
-                        "• Preferred city (e.g., Dubai, Abu Dhabi)\n"
-                        "• Expected salary (optional)\n\n"
-                        "I cannot search for jobs until at least your target role is known."
-                    ),
+                    "message": _incomplete_msg,
                     "entities": routed.entities,
                 }
                 self._append_chat(user_id, "assistant", response["message"])
