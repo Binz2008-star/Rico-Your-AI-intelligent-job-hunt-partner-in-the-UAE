@@ -17,6 +17,7 @@ Required env vars for auth tests:
 import os
 import random
 import threading
+import uuid
 from collections import defaultdict
 from datetime import datetime
 
@@ -42,6 +43,11 @@ def _record_time(elapsed_seconds: float) -> None:
 def _record_error(endpoint: str, status_code: int) -> None:
     with _lock:
         _error_counts[f"{endpoint}:{status_code}"] += 1
+
+
+def _op_id() -> str:
+    """Generate a valid operation_id (min_length=8, max_length=80)."""
+    return uuid.uuid4().hex[:16]
 
 
 class RicoPublicUser(HttpUser):
@@ -125,7 +131,7 @@ class RicoPublicUser(HttpUser):
         payload = {
             "message": random.choice(messages),
             "session_id": self.session_id,
-            "operation_id": f"op_{random.randint(1000, 9999)}",
+            "operation_id": _op_id(),
             "language": random.choice(["en", "ar", None]),
         }
         with self.client.post(
@@ -165,9 +171,17 @@ class RicoAuthenticatedUser(HttpUser):
         ) as r:
             if r.status_code == 200:
                 r.success()
-                self._authenticated = True
+                # The backend sets the cookie with domain=.ricohunt.com, but we're
+                # hitting onrender.com directly, so requests.Session won't send it
+                # automatically. Extract the token and inject it for this host.
+                token = r.cookies.get("access_token")
+                if token:
+                    self.client.cookies.set("access_token", token)
+                    self._authenticated = True
+                else:
+                    r.failure("Login OK but no access_token cookie in response")
             else:
-                r.failure(f"Login failed: {r.status_code}")
+                r.failure(f"Login failed: {r.status_code} — {r.text[:120]}")
 
     # --- guard helper ---
 
@@ -217,7 +231,7 @@ class RicoAuthenticatedUser(HttpUser):
         ]
         payload = {
             "message": random.choice(messages),
-            "operation_id": f"op_{random.randint(1000, 9999)}",
+            "operation_id": _op_id(),
             "language": random.choice(["en", "ar"]),
         }
         with self.client.post(
