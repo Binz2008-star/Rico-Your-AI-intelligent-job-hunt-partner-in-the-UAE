@@ -145,6 +145,7 @@ _LEGACY_INTENT_MAP = {
     "job_action.mark_applied": "mark_applied",
     "job_action.save_job": "save_job",
     "job_action.apply_job": "apply_job",
+    "job_action.bulk_apply_unsafe": "bulk_apply_unsafe",
     "job_action.explain_fit": "explain_match",
     "job_action.bulk_apply_unsafe": "bulk_apply_unsafe",
     # Application tracking
@@ -613,6 +614,14 @@ _JOB_CARD_ACTION_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
+# Bulk apply detection — safety-critical: must fire before generic apply_job check
+_BULK_APPLY_RE = re.compile(
+    r"\b(apply|submit).{0,20}(everything|all jobs|every job|all|each one|all of them)\b"
+    r"|\b(find|get).{0,30}(all|every).{0,20}(job|position).{0,20}(and apply|then apply|and submit)"
+    r"|\b(apply to|submit for).{0,10}(all|everything|every)\b",
+    re.IGNORECASE,
+)
+
 # Free-text "open apply link for <title> at <company>"
 _OPEN_APPLY_LINK_RE = re.compile(
     r"\bopen\s+apply\s+link\b"
@@ -1052,6 +1061,18 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         }
         matched_intent = intent_map.get(action_raw, "job_action")
         return IntentResult(matched_intent, 0.95, "regex", extracted_title=title, extracted_company=company)
+
+    # Bulk/unsafe apply must be caught before generic apply_job — safety-critical.
+    if _BULK_APPLY_RE.search(text):
+        return IntentResult(
+            "job_action.bulk_apply_unsafe",
+            0.95,
+            "regex",
+            context_required=True,
+            context_type="recent_job",
+            action="require_explicit_consent",
+            target_route="/jobs",
+        )
 
     # Free-text open-apply-link must be caught before generic apply_job.
     m = _OPEN_APPLY_LINK_RE.search(text)
