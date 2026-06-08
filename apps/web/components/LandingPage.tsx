@@ -326,12 +326,14 @@ export default function LandingPage() {
             { label: "مطابقة تعتمد على السيرة الذاتية", icon: "CV" },
             { label: "بحث وظيفي بالدردشة", icon: "AI" },
             { label: "دعم عبر واتساب والبريد الإلكتروني", icon: "✉" },
+            { label: "بياناتك لن تُباع أبداً", icon: "🛡" },
         ]
         : [
             { label: "UAE-focused job search", icon: "AE" },
             { label: "CV-first matching", icon: "CV" },
             { label: "Chat-based job search", icon: "AI" },
             { label: "WhatsApp & email support", icon: "✉" },
+            { label: "Your data is never sold", icon: "🛡" },
         ];
 
     const audienceCards = isAr
@@ -345,11 +347,11 @@ export default function LandingPage() {
                 body: "ارفع مرة واحدة. يقرأ ريكو خبرتك ويحولها إلى إجراءات بحث وظيفي.",
             },
             {
-                heading: "ملاحظاتك تساعدنا",
-                body: "نجمع التقييمات من أول مستخدمينا. إذا جربت ريكو، يسعدنا سماع رأيك.",
+                heading: "الخصوصية في صميم التصميم",
+                body: "بياناتك لن تُباع أبداً لأصحاب العمل أو المجندين أو أي أطراف ثالثة. تُشغَّل المنصة بواسطة شركة إيكو تكنولوجي لحماية البيئة ذ.م.م، شركة مسجلة في الإمارات.",
                 ctas: [
-                    { label: "راسلنا", href: "mailto:info@ricohunt.ae?subject=Rico%20feedback" },
-                    { label: "واتساب", href: "https://wa.me/971585989080?text=Hi%2C%20I%27d%20like%20to%20share%20feedback%20about%20Rico" },
+                    { label: "سياسة الخصوصية", href: "/privacy" },
+                    { label: "عن ريكو", href: "/about" },
                 ],
             },
         ]
@@ -363,11 +365,11 @@ export default function LandingPage() {
                 body: "Upload once. Rico reads your experience and turns it into job-search actions.",
             },
             {
-                heading: "Your feedback helps us",
-                body: "We're collecting feedback from our first users. If you try Rico, we'd love to hear what worked.",
+                heading: "Privacy by design",
+                body: "Your data is never sold to employers, recruiters, or third parties. Operated by Eco Technology Environment Protection Services L.L.C, a UAE-registered company.",
                 ctas: [
-                    { label: "Email us", href: "mailto:info@ricohunt.ae?subject=Rico%20feedback" },
-                    { label: "WhatsApp", href: "https://wa.me/971585989080?text=Hi%2C%20I%27d%20like%20to%20share%20feedback%20about%20Rico" },
+                    { label: "Privacy policy", href: "/privacy" },
+                    { label: "About Rico", href: "/about" },
                 ],
             },
         ];
@@ -474,6 +476,12 @@ export default function LandingPage() {
                                     </Link>
                                 </motion.div>
                             </div>
+                            <p className="mt-4 text-xs text-text-muted">
+                                {isAr
+                                    ? <>تشغّل المنصة{" "}<Link href="/about" className="text-[#f5a623] hover:opacity-80">شركة إيكو تكنولوجي ذ.م.م</Link> · الإمارات ·{" "}<Link href="/privacy" className="text-[#f5a623] hover:opacity-80">سياسة الخصوصية</Link></>
+                                    : <>Operated by{" "}<Link href="/about" className="text-[#f5a623] hover:opacity-80">Eco Technology L.L.C</Link> · UAE ·{" "}<Link href="/privacy" className="text-[#f5a623] hover:opacity-80">Privacy policy</Link></>
+                                }
+                            </p>
                         </motion.div>
 
                         <RicoCardPanel
