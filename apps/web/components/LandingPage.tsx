@@ -68,7 +68,7 @@ export default function LandingPage() {
         langToggle: isAr ? "EN" : "عربي",
         langToggleLabel: isAr ? "Switch to English" : "Switch to Arabic",
         // Hero
-        heroBadge: isAr ? "شريكك الذكي في البحث عن عمل بالإمارات" : "Your AI job-hunt partner in the UAE",
+        heroBadge: isAr ? "بحث ذكي عن وظيفة" : "AI Job Hunt",
         heroH1Line1: isAr ? "ارفع سيرتك الذاتية." : "Upload your CV.",
         heroH1Line2: isAr
             ? "ريكو يجد وظائف أفضل في الإمارات، يشرح لماذا تناسبك، ويساعدك على التصرف."
