@@ -68,6 +68,7 @@ _LEGACY_INTENT_MAP = {
     "job_action.mark_applied": "mark_applied",
     "job_action.save_job": "save_job",
     "job_action.apply_job": "apply_job",
+    "job_action.bulk_apply_unsafe": "bulk_apply_unsafe",
     "job_action.explain_fit": "explain_match",
     # Application tracking
     "application.show_flow": "application_tracking",
@@ -4382,6 +4383,22 @@ class RicoChatAPI:
                     )
             response = {"type": "recent_context", "intent": "recent_context", "message": msg}
             self._append_chat(user_id, "assistant", msg)
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+
+        # Bulk / unsafe apply — safety block: never auto-apply to all jobs
+        if legacy_intent == "bulk_apply_unsafe":
+            _bulk_msg = (
+                "I can't apply to all jobs automatically. "
+                "Please choose specific jobs to apply for, or narrow your search first.\n\n"
+                "ما بقدر أقدّم على كل الوظائف تلقائيًا. "
+                "اختار وظائف محددة أو ضيّق البحث أولاً."
+            )
+            response = {
+                "type": "safety_block",
+                "intent": "bulk_apply_unsafe",
+                "message": _bulk_msg,
+            }
+            self._append_chat(user_id, "assistant", _bulk_msg)
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # Apply job — confirmation gate
