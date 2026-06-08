@@ -833,7 +833,7 @@ class RicoChatAPI:
             except Exception as exc:
                 logger.debug("career_execution_search_failed query=%r error=%s", query, exc)
 
-        top_matches = all_matches[:5]
+        top_matches = self._sort_by_company_quality(all_matches)[:5]
         formatted = [self._format_match(m, profile) for m in top_matches]
         execution_state = "MATCHES_SCORED" if formatted else "SEARCH_RUNNING"
         role_text = ", ".join(roles[:3])
@@ -1170,7 +1170,7 @@ class RicoChatAPI:
         # the frontend can offer them as a fallback, but don't present them as
         # the primary "Apply" action.
         try:
-            from src.services.source_quality import classify_url, is_google_intermediary
+            from src.services.source_quality import classify_url, is_google_intermediary, classify_company
             if apply_url and is_google_intermediary(apply_url):
                 if not alt_link:
                     alt_link = apply_url
@@ -1178,8 +1178,10 @@ class RicoChatAPI:
                 verification_status = "google_intermediary"
             else:
                 verification_status = classify_url(apply_url or source_url)
+            company_quality = classify_company(str(m.get("company") or ""))
         except Exception:
             verification_status = "needs_source_verification" if apply_url else "lead_needs_verification"
+            company_quality = "ok"
 
         result = {
             "title": str(m.get("title") or "Untitled role"),
@@ -1189,6 +1191,7 @@ class RicoChatAPI:
             "source_url": source_url,
             "alt_link": alt_link,
             "verification_status": verification_status,
+            "company_quality": company_quality,
             "actions": ["Prepare application", "Save", "Ask why", "Skip"],
             **explanation,
         }
@@ -1202,6 +1205,19 @@ class RicoChatAPI:
             result["why"] = str(why)
 
         return result
+
+    @staticmethod
+    def _sort_by_company_quality(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Stable sort: named/verified companies first, anonymous/low-quality last.
+
+        Does not remove any jobs — low-quality entries appear at the tail so they
+        are only shown when there are not enough better alternatives.
+        """
+        try:
+            from src.services.source_quality import is_low_quality_company as _lqc
+            return sorted(matches, key=lambda m: 1 if _lqc(str(m.get("company") or "")) else 0)
+        except Exception:
+            return matches
 
     def _get_openai_agent(self) -> RicoOpenAIAgent:
         """Get or create OpenAI agent instance."""
@@ -2402,7 +2418,10 @@ class RicoChatAPI:
             "aggregator_untrusted": 5,
         }
         try:
-            from src.services.source_quality import classify_url as _cq, is_google_intermediary as _igi
+            from src.services.source_quality import (
+                classify_url as _cq, is_google_intermediary as _igi,
+                is_low_quality_company as _lqc,
+            )
 
             def _quality_key(m: dict[str, Any]) -> int:
                 url = str(
@@ -2412,7 +2431,9 @@ class RicoChatAPI:
                 # Secondary sort: quality within profile-fit bands
                 fit = m.get("profile_fit_score", 0)
                 fit_band = max(0, 5 - fit // 20)  # 5 bands (0=best fit, 4=worst)
-                return fit_band * 10 + _QUALITY_RANK.get(status, 1)
+                # Company quality penalty: anonymous/low_quality jobs sort after legitimate ones
+                company_penalty = 20 if _lqc(str(m.get("company") or "")) else 0
+                return fit_band * 10 + _QUALITY_RANK.get(status, 1) + company_penalty
 
             all_matches.sort(key=_quality_key)
         except Exception:
@@ -3588,7 +3609,7 @@ class RicoChatAPI:
                     all_explicit = [m for m in all_explicit if not app_map.get(get_job_id(m), False)]
             except Exception:
                 pass
-            top_matches = all_explicit[:5]
+            top_matches = self._sort_by_company_quality(all_explicit)[:5]
             formatted = [self._format_match(m, profile) for m in top_matches]
             if top_matches:
                 job_msg = "I found {} strong UAE job matches for you.".format(len(top_matches))

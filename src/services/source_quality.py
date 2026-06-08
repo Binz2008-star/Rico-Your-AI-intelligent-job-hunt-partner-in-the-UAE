@@ -177,3 +177,72 @@ def _matches_domain(hostname: str, domain_set: frozenset[str]) -> bool:
         if hostname == domain or hostname.endswith("." + domain):
             return True
     return False
+
+
+# ---------------------------------------------------------------------------
+# Company name quality classification
+# ---------------------------------------------------------------------------
+
+# Anonymous / placeholder company names that indicate the real employer is hidden
+_ANONYMOUS_COMPANY_NAMES: frozenset[str] = frozenset({
+    "confidential",
+    "unknown",
+    "n/a",
+    "na",
+    "not disclosed",
+    "not specified",
+    "undisclosed",
+    "anonymous",
+    "employer confidential",
+    "client confidential",
+    "withheld",
+    "unnamed",
+    "unknown company",
+    "unknown employer",
+})
+
+# Low-quality aggregator / spam company names
+_LOW_QUALITY_COMPANY_NAMES: frozenset[str] = frozenset({
+    "jobs for humanity",
+    "jobs for humanity uae",
+    "theuaejobs",
+    "talentmate",
+    "private company",
+    "leading company",
+    "reputable company",
+    "well known company",
+    "multinational company",
+    "leading organization",
+    "leading organisation",
+    "a leading company",
+    "a reputable company",
+    "a leading organization",
+    "a well known company",
+})
+
+
+@lru_cache(maxsize=512)
+def classify_company(company: str) -> str:
+    """Return a quality label for a company name string.
+
+    Returns one of:
+        "ok"          — looks like a real named employer
+        "anonymous"   — placeholder (Confidential, Unknown, N/A, …)
+        "low_quality" — known spam aggregator or vague filler phrase
+    """
+    if not company or not company.strip():
+        return "anonymous"
+    normalized = company.strip().lower()
+    if normalized in _ANONYMOUS_COMPANY_NAMES:
+        return "anonymous"
+    if normalized in _LOW_QUALITY_COMPANY_NAMES:
+        return "low_quality"
+    # Substring heuristics: "confidential" or "unknown employer" anywhere in name
+    if "confidential" in normalized or "unknown employer" in normalized:
+        return "anonymous"
+    return "ok"
+
+
+def is_low_quality_company(company: str) -> bool:
+    """True when the company name signals an anonymous or low-quality posting."""
+    return classify_company(company) in ("anonymous", "low_quality")
