@@ -6,7 +6,20 @@ All data access goes through src.repositories.applications_repo.
 from __future__ import annotations
 
 import hashlib
+import logging
+import threading
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+# Map outcome statuses to the action type that best represents them for
+# learning-signal inference.  "interview" and "offer" are positive signals;
+# "rejected" is a mild negative.  Other statuses carry no learning signal.
+_OUTCOME_ACTION_MAP: Dict[str, str] = {
+    "interview": "save",       # mutual positive interest → weight +0.5
+    "offer":     "apply",      # strongest positive signal  → weight +0.8
+    "rejected":  "not_relevant",  # mild negative           → weight −0.2
+}
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -22,6 +35,28 @@ from src.schemas.applications import (
 )
 
 router = APIRouter(prefix="/api/v1/applications", tags=["applications"])
+
+
+def _fire_outcome_signal(user_id: str, status: str, application: Dict[str, Any]) -> None:
+    """Dispatch a background thread that records a learning signal for an outcome."""
+    mapped_action = _OUTCOME_ACTION_MAP.get(status)
+    if not mapped_action:
+        return
+
+    def _run() -> None:
+        try:
+            from src.repositories.learning_repo import get_learning_repository
+            get_learning_repository().infer_signals_from_job_action(
+                user_id, mapped_action, application
+            )
+            logger.debug(
+                "outcome_learning_signal status=%s action=%s user=%s title=%r",
+                status, mapped_action, user_id, application.get("title", ""),
+            )
+        except Exception:
+            logger.debug("outcome_learning_signal_failed status=%s user=%s", status, user_id, exc_info=True)
+
+    threading.Thread(target=_run, daemon=True).start()
 
 
 @router.post("", response_model=StatusUpdateResponse)
@@ -135,6 +170,11 @@ def update_application(
     ok = update_status(target, req.status, user_id, req.notes or "")
     if not ok:
         raise HTTPException(status_code=500, detail="Failed to update application status")
+
+    # Fire-and-forget learning signal for outcome status transitions.
+    # Runs in a daemon thread so it never delays the HTTP response.
+    if req.status in _OUTCOME_ACTION_MAP:
+        _fire_outcome_signal(user_id, req.status, target)
 
     return StatusUpdateResponse(status=req.status, job_id=job_id, message="Status updated")
 
