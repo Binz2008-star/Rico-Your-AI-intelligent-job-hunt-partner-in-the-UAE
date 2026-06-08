@@ -121,7 +121,9 @@ export default function LandingPage() {
         footerPrivacy: isAr ? "الخصوصية" : "Privacy",
         footerTerms: isAr ? "الشروط" : "Terms",
         footerContact: isAr ? "تواصل" : "Contact",
-        footerRights: isAr ? "© 2026 ريكو هانت." : "© 2026 Rico Hunt.",
+        footerRefunds: isAr ? "الاسترداد" : "Refunds",
+        footerFaq: isAr ? "الأسئلة الشائعة" : "FAQ",
+        footerRights: isAr ? "© 2026 ريكو هانت. جميع الحقوق محفوظة." : "© 2026 Rico Hunt. All rights reserved.",
     };
 
     return (
@@ -491,9 +493,11 @@ export default function LandingPage() {
                     </p>
                     <div className="mb-3 flex flex-wrap items-center justify-center gap-4">
                         <Link href="/about" className="text-xs text-white/25 transition-colors hover:text-white">{t.footerAbout}</Link>
-                        <Link href="/privacy" className="text-xs text-white/25 transition-colors hover:text-white">{t.footerPrivacy}</Link>
-                        <Link href="/terms" className="text-xs text-white/25 transition-colors hover:text-white">{t.footerTerms}</Link>
                         <Link href="/contact" className="text-xs text-white/25 transition-colors hover:text-white">{t.footerContact}</Link>
+                        <Link href="/terms" className="text-xs text-white/25 transition-colors hover:text-white">{t.footerTerms}</Link>
+                        <Link href="/privacy" className="text-xs text-white/25 transition-colors hover:text-white">{t.footerPrivacy}</Link>
+                        <Link href="/refund-policy" className="text-xs text-white/25 transition-colors hover:text-white">{t.footerRefunds}</Link>
+                        <Link href="/faq" className="text-xs text-white/25 transition-colors hover:text-white">{t.footerFaq}</Link>
                         <a
                             href="https://wa.me/971585989080"
                             target="_blank"
