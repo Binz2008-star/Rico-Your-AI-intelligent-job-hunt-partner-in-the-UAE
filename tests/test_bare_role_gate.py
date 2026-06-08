@@ -1,6 +1,6 @@
 import pytest
 
-from src.rico_chat_api import RicoChatAPI
+from src.rico_chat_api import RicoChatAPI, _SETTINGS_COMMAND_RE
 
 
 @pytest.mark.parametrize("msg", [
@@ -62,6 +62,61 @@ def test_rejects_location_only_messages(msg: str) -> None:
         f"Expected _looks_like_bare_target_role({msg!r}) to be False — "
         "location names are not job roles"
     )
+
+
+# Email addresses are never job roles — they are usually answers to a prompt
+# (e.g. "what's the company email?"). They must not trigger a role-search error.
+@pytest.mark.parametrize("msg", [
+    "info@liongold.com",
+    "ahmed@example.com",
+    "careers@company.co.uk",
+    "My email is info@liongold.com",
+])
+def test_rejects_email_addresses(msg: str) -> None:
+    assert RicoChatAPI._looks_like_bare_target_role(msg) is False, (
+        f"Expected _looks_like_bare_target_role({msg!r}) to be False — "
+        "an email address is not a job role"
+    )
+
+
+# Imperative settings / notification commands are not job roles.
+@pytest.mark.parametrize("msg", [
+    "enable telegram notifications",
+    "disable notifications",
+    "turn off email alerts",
+    "activate reminders",
+    "mute alerts",
+])
+def test_rejects_settings_commands(msg: str) -> None:
+    assert RicoChatAPI._looks_like_bare_target_role(msg) is False, (
+        f"Expected _looks_like_bare_target_role({msg!r}) to be False — "
+        "a settings command is not a job role"
+    )
+
+
+class TestSettingsCommandRegex:
+    @pytest.mark.parametrize("msg", [
+        "enable telegram notifications",
+        "Enable Telegram Notifications",
+        "turn on notifications",
+        "turn off email alerts",
+        "disable reminders",
+        "deactivate whatsapp alerts",
+        "mute notifications",
+        "stop sending me alerts",
+    ])
+    def test_matches_settings_commands(self, msg: str) -> None:
+        assert _SETTINGS_COMMAND_RE.search(msg) is not None
+
+    @pytest.mark.parametrize("msg", [
+        "HSE Manager",
+        "find me jobs in Dubai",
+        "enable me to grow",          # no notification noun
+        "telegram",                    # no command verb
+        "what are my notifications",   # a question, not a command
+    ])
+    def test_does_not_match_non_commands(self, msg: str) -> None:
+        assert _SETTINGS_COMMAND_RE.search(msg) is None
 
 
 # Mixed role+location messages with a real role still pass (role extraction is separate).
