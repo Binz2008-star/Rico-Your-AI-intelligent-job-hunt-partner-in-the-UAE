@@ -611,6 +611,35 @@ _JOB_FEEDBACK_NEGATIVE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# ── Positive job feedback phrases ─────────────────────────────────────────────
+# User signals that a shown job is a great match → record positive learning signal.
+
+_JOB_FEEDBACK_POSITIVE_PHRASES = frozenset([
+    # English exact phrases
+    "perfect match", "great match", "exactly what i want", "exactly what i need",
+    "this is perfect", "this is great", "this is ideal", "this is exactly it",
+    "love this job", "love this role", "this looks great", "this looks perfect",
+    "great fit", "good fit", "excellent match", "this suits me",
+    "this is what i'm looking for", "this is what i was looking for",
+    "this is for me", "this matches my profile", "this fits perfectly",
+    "yes this", "yes this one", "exactly right", "spot on",
+    # Arabic (normalised forms)
+    "ممتاز", "مثالي", "هذا مناسب", "هذا مناسب لي", "هذا مثالي",
+    "هذا ما ابي", "هذا ما اريد", "هذا ما احتاج", "هذا يناسبني",
+    "يناسبني", "مناسب جدا", "مناسب جداً", "هذا يناسب خبرتي",
+    "هذا مناسبه", "هذا مناسبه لي", "اعجبني هذا", "اعجبتني الوظيفه",
+])
+
+_JOB_FEEDBACK_POSITIVE_RE = re.compile(
+    r"\b(perfect|great|ideal|excellent|exactly|love|awesome)\b.{0,20}"
+    r"\b(match|fit|job|role|one|this)\b"
+    r"|\b(this|the)\s+(job|role).{0,20}\b(perfect|great|ideal|excellent|suits?|fits?)\b"
+    r"|\b(this\s+is\s+(perfect|great|ideal|exactly|what\s+i\s+(want|need|was\s+looking\s+for)))\b"
+    r"|\b(looks?\s+(great|perfect|ideal|good|excellent))\b"
+    r"|\b(spot\s+on|right\s+on|nailed\s+it)\b",
+    re.IGNORECASE,
+)
+
 # ── Nonsense / safety heuristics ─────────────────────────────────────────────
 
 _NONSENSE_RE = re.compile(
@@ -993,8 +1022,11 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     if has_cv_profile and any(w in lower.split() for w in _GENERIC_MATCH_WORDS):
         return IntentResult("job_search_profile_match", 0.8, "regex")
 
-    # ── 5b. Negative job feedback (before unknown fallback) ──────────────
-    # "this job is not suitable / not relevant / not for me" → record learning signal
+    # ── 5b. Job feedback (positive / negative) before unknown fallback ───
+    # Positive first — "this is perfect" must not be caught by negative regex.
+    if lower in _JOB_FEEDBACK_POSITIVE_PHRASES or _JOB_FEEDBACK_POSITIVE_RE.search(text):
+        return IntentResult("job_feedback_positive", 0.9, "regex")
+
     if lower in _JOB_FEEDBACK_NEGATIVE_PHRASES or _JOB_FEEDBACK_NEGATIVE_RE.search(text):
         return IntentResult("job_feedback_negative", 0.9, "regex")
 
