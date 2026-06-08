@@ -231,6 +231,23 @@ class AgentRuntime:
             except Exception:
                 logger.debug("runtime: failed to record job context interaction", exc_info=True)
 
+        # 10. Update behavioral learning signals so DeepSeek context stays fresh.
+        #     apply/save boost role+location+company weights; skip/not_relevant/block
+        #     apply negative weights. Fire-and-forget — never blocks the response.
+        _LEARNING_ACTIONS = frozenset({"apply", "save", "skip", "not_relevant", "block"})
+        if tool_ok and action in _LEARNING_ACTIONS and resolved_job:
+            try:
+                from src.repositories.learning_repo import get_learning_repository
+                get_learning_repository().infer_signals_from_job_action(
+                    user_id, action, resolved_job
+                )
+                logger.debug(
+                    "runtime_learning_signal action=%s user=%s job=%r",
+                    action, user_id, resolved_job.get("title", ""),
+                )
+            except Exception:
+                logger.debug("runtime: learning signal failed action=%s", action, exc_info=True)
+
         return RuntimeResult(
             ok=tool_ok,
             message=message,

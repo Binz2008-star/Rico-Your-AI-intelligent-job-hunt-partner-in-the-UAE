@@ -472,6 +472,9 @@ class RicoChatAPI:
                 _locs = [loc for loc, _ in _lr.get_top_preferences(user_id, "location", limit=3)]
                 if _locs:
                     _learned["preferred_locations"] = _locs
+                _skills = [s for s, _ in _lr.get_top_preferences(user_id, "skill", limit=8)]
+                if _skills:
+                    _learned["preferred_skills"] = _skills
                 _cos = [(c, w) for c, w in _lr.get_top_preferences(user_id, "company", limit=10) if w < 0]
                 if _cos:
                     _learned["avoided_companies"] = [c for c, _ in _cos]
