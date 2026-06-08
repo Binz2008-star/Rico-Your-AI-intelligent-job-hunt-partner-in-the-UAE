@@ -3618,6 +3618,23 @@ class RicoChatAPI:
             except Exception:
                 pass  # fall through to generic confirmation handling
 
+            # Priority 2: resume a pending role search confirmation
+            # (user replied YES after known_but_off_profile clarification)
+            try:
+                _ctx2 = self._get_recent_context(user_id)
+                _pending_role = _ctx2.get("_pending_role_confirmation")
+                if _pending_role and _pending_role.get("role"):
+                    _role = _pending_role["role"]
+                    _ctx2.pop("_pending_role_confirmation", None)
+                    self._store_recent_context(user_id, _ctx2)
+                    return self._finalize(
+                        self._target_role_search_response(user_id, _role, profile),
+                        self.SOURCE_KEYWORD,
+                        profile=profile,
+                    )
+            except Exception:
+                pass
+
             if text == "all":
                 return self._finalize(
                     self._handle_keep_all_target_roles(user_id, profile),
@@ -6469,6 +6486,12 @@ class RicoChatAPI:
                 ],
             }
             self._append_chat(user_id, "assistant", response["message"])
+            try:
+                _ctx = self._get_recent_context(user_id)
+                _ctx["_pending_role_confirmation"] = {"role": canonical_role}
+                self._store_recent_context(user_id, _ctx)
+            except Exception:
+                pass
             return response
 
         # unknown role
