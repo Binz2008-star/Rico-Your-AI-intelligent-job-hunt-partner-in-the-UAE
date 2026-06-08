@@ -100,8 +100,8 @@ export default function LandingPage() {
             ? "كل بحث يصبح أذكى لأن ريكو يتذكر سيرتك الذاتية والأدوار المستهدفة والمواقع المفضلة وسجل التقديم."
             : "Every search gets smarter because Rico remembers your CV, target roles, preferred locations, and application history.",
         // Job matching section
-        matchingEyebrow: isAr ? "جودة الوظائف" : "Job quality",
-        matchingTitle: isAr ? "وظائف حقيقية تناسب سيرتك الذاتية" : "Real jobs that fit your CV",
+        matchingEyebrow: isAr ? "القطاعات التي يبحث فيها ريكو" : "Sectors Rico searches",
+        matchingTitle: isAr ? "يغطي جميع القطاعات الرئيسية في الإمارات" : "Covers all major UAE industries",
         uaeJobsBadge: isAr ? "وظائف الإمارات" : "UAE jobs",
         fitLabel: isAr ? "ملاءمة" : "fit",
         // Alert section
@@ -308,16 +308,34 @@ export default function LandingPage() {
             "Follow-up reminders",
         ];
 
-    const liveMatches = isAr
+    const sectors = isAr
         ? [
-            { role: "مدير مبيعات", score: "94", signal: "تطابق قوي مع خبرتك وأهدافك المهنية" },
-            { role: "مدير مشروع", score: "89", signal: "يتناسب مع خلفيتك وخبرتك في الإمارات" },
-            { role: "محلل مالي", score: "86", signal: "يتطابق مع مهاراتك والقطاع المستهدف" },
+            "المالية والمصرفية",
+            "التكنولوجيا وتقنية المعلومات",
+            "الإنشاء والعقارات",
+            "الرعاية الصحية",
+            "التجزئة والسلع الاستهلاكية",
+            "الهندسة",
+            "الموارد البشرية والإدارة",
+            "التسويق والإعلام",
+            "الطاقة والمرافق",
+            "التعليم",
+            "الضيافة والسياحة",
+            "اللوجستيات والنقل",
         ]
         : [
-            { role: "Sales Manager", score: "94", signal: "Strong match with your experience and career goals" },
-            { role: "Project Manager", score: "89", signal: "Fits your background and UAE work history" },
-            { role: "Finance Analyst", score: "86", signal: "Matches your skills and target sector" },
+            "Finance & Banking",
+            "Technology & IT",
+            "Construction & Real Estate",
+            "Healthcare",
+            "Retail & FMCG",
+            "Engineering",
+            "HR & Admin",
+            "Marketing & Media",
+            "Energy & Utilities",
+            "Education",
+            "Hospitality & Tourism",
+            "Logistics & Transport",
         ];
 
     const pillars = isAr
@@ -649,31 +667,14 @@ export default function LandingPage() {
                                         {t.uaeJobsBadge}
                                     </span>
                                 </div>
-                                <div className="space-y-3">
-                                    {liveMatches.map((match) => (
-                                        <div
-                                            key={match.role}
-                                            className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-4"
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                    {sectors.map((sector) => (
+                                        <span
+                                            key={sector}
+                                            className="rounded-full border border-white/[0.10] bg-white/[0.04] px-3 py-1.5 text-sm text-text-secondary"
                                         >
-                                            <div className="flex items-start justify-between gap-4">
-                                                <div>
-                                                    <h3 className="text-base font-semibold text-white">
-                                                        {match.role}
-                                                    </h3>
-                                                    <p className="mt-1 text-sm text-text-tertiary">
-                                                        {match.signal}
-                                                    </p>
-                                                </div>
-                                                <div className={isAr ? "text-left" : "text-right"}>
-                                                    <p className="font-mono text-2xl text-gold">
-                                                        {match.score}
-                                                    </p>
-                                                    <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-muted">
-                                                        {t.fitLabel}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
+                                            {sector}
+                                        </span>
                                     ))}
                                 </div>
                             </RicoCardPanel>
