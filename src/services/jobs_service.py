@@ -240,8 +240,31 @@ def block_company(job: Dict[str, Any], user_id: Optional[str] = None) -> str:
     if not is_applied(job, user_id=user_id):
         mark_applied(job, status="decision_made", notes="Company blocked via API", user_id=user_id)
 
-    # TODO: Store user-specific blocked companies in database table
-    # For now, just mark the job as blocked for this user
+    _persist_blocked_company(user_id, company)
     logger.info("block_company: user=%s blocked company=%r", user_id, company)
 
     return company
+
+
+def _persist_blocked_company(user_id: str, company: str) -> None:
+    """Append company to the user's blocked_companies list in settings DB."""
+    if not is_db_available():
+        return
+    from src.repositories import settings_repo
+
+    current = settings_repo.read(user_id=user_id) or {}
+    existing: list = list(current.get("blocked_companies") or [])
+    normalized = company.strip().lower()
+    if normalized not in [c.lower() for c in existing]:
+        existing.append(company.strip())
+        settings_repo.upsert({"blocked_companies": existing}, user_id=user_id)
+
+
+def get_blocked_companies(user_id: str) -> list:
+    """Return the user's persisted list of blocked company names."""
+    if not is_db_available():
+        return []
+    from src.repositories import settings_repo
+
+    row = settings_repo.read(user_id=user_id) or {}
+    return list(row.get("blocked_companies") or [])

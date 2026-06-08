@@ -26,7 +26,8 @@ def read(user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
             cur.execute(
                 """SELECT include_keywords, exclude_keywords, min_score,
                           max_daily_applies, telegram_chat_id,
-                          score_threshold_apply, score_threshold_watch
+                          score_threshold_apply, score_threshold_watch,
+                          COALESCE(blocked_companies, '{}') AS blocked_companies
                    FROM settings WHERE user_id = %s""",
                 (user_id or "default",),
             )
@@ -41,6 +42,7 @@ def read(user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
             "telegram_chat_id": row[4] or "",
             "score_threshold_apply": row[5] if row[5] is not None else 75,
             "score_threshold_watch": row[6] if row[6] is not None else 50,
+            "blocked_companies": list(row[7] or []),
         }
     except Exception:
         logger.exception("settings_repo_read_failed")
@@ -61,9 +63,10 @@ def upsert(data: Dict[str, Any], user_id: Optional[str] = None) -> None:
                 INSERT INTO settings (
                     user_id, include_keywords, exclude_keywords,
                     min_score, max_daily_applies, telegram_chat_id,
-                    score_threshold_apply, score_threshold_watch, updated_at
+                    score_threshold_apply, score_threshold_watch,
+                    blocked_companies, updated_at
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                 ON CONFLICT (user_id) DO UPDATE SET
                     include_keywords       = COALESCE(EXCLUDED.include_keywords,       settings.include_keywords),
                     exclude_keywords       = COALESCE(EXCLUDED.exclude_keywords,       settings.exclude_keywords),
@@ -72,6 +75,7 @@ def upsert(data: Dict[str, Any], user_id: Optional[str] = None) -> None:
                     telegram_chat_id       = COALESCE(EXCLUDED.telegram_chat_id,       settings.telegram_chat_id),
                     score_threshold_apply  = COALESCE(EXCLUDED.score_threshold_apply,  settings.score_threshold_apply),
                     score_threshold_watch  = COALESCE(EXCLUDED.score_threshold_watch,  settings.score_threshold_watch),
+                    blocked_companies      = COALESCE(EXCLUDED.blocked_companies,      settings.blocked_companies),
                     updated_at             = NOW()
                 """,
                 (
@@ -83,6 +87,7 @@ def upsert(data: Dict[str, Any], user_id: Optional[str] = None) -> None:
                     data.get("telegram_chat_id"),
                     data.get("score_threshold_apply"),
                     data.get("score_threshold_watch"),
+                    data.get("blocked_companies"),
                 ),
             )
         conn.commit()

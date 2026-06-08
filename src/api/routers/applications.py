@@ -141,4 +141,7 @@ def update_application(
 
 @router.get("/stats")
 def application_stats(user_id: str = Depends(get_current_user_id)) -> Dict[str, Any]:
-    return get_stats(user_id=user_id)
+    from src.repositories.jobs_repo import get_pipeline_stats
+    app_stats = get_stats(user_id=user_id)
+    pipeline = get_pipeline_stats()
+    return {**app_stats, **pipeline}

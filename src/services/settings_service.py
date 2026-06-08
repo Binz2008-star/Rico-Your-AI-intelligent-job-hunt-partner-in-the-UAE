@@ -19,6 +19,7 @@ _DEFAULTS: Dict[str, Any] = {
     "telegram_chat_id": "",
     "score_threshold_apply": 75,
     "score_threshold_watch": 50,
+    "blocked_companies": [],
 }
 
 _ALLOWED_KEYS = frozenset(_DEFAULTS)
