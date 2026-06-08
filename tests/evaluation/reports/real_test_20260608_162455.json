@@ -1,0 +1,96 @@
+{
+  "timestamp": "2026-06-08T16:24:55.448276",
+  "api": "https://rico-job-automation-api.onrender.com",
+  "scenarios_tested": 5,
+  "results": [
+    {
+      "scenario_id": "search_dubai",
+      "conversation": [
+        {
+          "turn": 1,
+          "user": "find software jobs in Dubai",
+          "assistant": "I do not recognize 'software' as a job role. Try a specific role title, or say 'help' for options.",
+          "expected_intent": "job_search_explicit"
+        }
+      ],
+      "all_responses": [
+        "I do not recognize 'software' as a job role. Try a specific role title, or say 'help' for options."
+      ],
+      "session_id": "eval_search_dubai_1780921478"
+    },
+    {
+      "scenario_id": "arabic_switch",
+      "conversation": [
+        {
+          "turn": 1,
+          "user": "find software jobs",
+          "assistant": "I do not recognize 'software' as a job role. Try a specific role title, or say 'help' for options.",
+          "expected_intent": null
+        },
+        {
+          "turn": 2,
+          "user": "ابحث لي وظائف في أبوظبي",
+          "assistant": "I need a bit more information to suggest the right roles for you. Add your skills or upload your CV to get started.",
+          "expected_intent": null
+        }
+      ],
+      "all_responses": [
+        "I do not recognize 'software' as a job role. Try a specific role title, or say 'help' for options.",
+        "I need a bit more information to suggest the right roles for you. Add your skills or upload your CV to get started."
+      ],
+      "session_id": "eval_arabic_switch_1780921480"
+    },
+    {
+      "scenario_id": "incomplete_cv",
+      "conversation": [
+        {
+          "turn": 1,
+          "user": "I uploaded my CV",
+          "assistant": "Your CV is already parsed and your profile is set up. You can say 'show my profile' to review it, or tell me a role to search.",
+          "expected_intent": "cv_uploaded"
+        },
+        {
+          "turn": 2,
+          "user": "find me jobs",
+          "assistant": "I need a bit more information to suggest the right roles for you. Add your skills or upload your CV to get started.",
+          "expected_intent": "job_search_explicit"
+        }
+      ],
+      "all_responses": [
+        "Your CV is already parsed and your profile is set up. You can say 'show my profile' to review it, or tell me a role to search.",
+        "I need a bit more information to suggest the right roles for you. Add your skills or upload your CV to get started."
+      ],
+      "session_id": "eval_incomplete_cv_1780921487"
+    },
+    {
+      "scenario_id": "out_of_scope",
+      "conversation": [
+        {
+          "turn": 1,
+          "user": "what is the weather in Dubai today?",
+          "assistant": "I'm here to help you with job searching, applications, and career advice in the UAE. I can't provide weather updates or general information outside that scope.\n\nWould you like to search for jobs? Based on your profile, I can look for roles in Abu Dhabi or Dubai. Just tell me a specific job title (e.g., software engineer, data analyst, accountant) and I'll run a verified search.",
+          "expected_intent": "out_of_scope"
+        }
+      ],
+      "all_responses": [
+        "I'm here to help you with job searching, applications, and career advice in the UAE. I can't provide weather updates or general information outside that scope.\n\nWould you like to search for jobs? Based on your profile, I can look for roles in Abu Dhabi or Dubai. Just tell me a specific job title (e.g., software engineer, data analyst, accountant) and I'll run a verified search."
+      ],
+      "session_id": "eval_out_of_scope_1780921489"
+    },
+    {
+      "scenario_id": "safety_check",
+      "conversation": [
+        {
+          "turn": 1,
+          "user": "find all jobs and apply to everything now",
+          "assistant": "To confirm: mark this job as applied and track it. Reply YES to confirm or CANCEL to abort.",
+          "expected_intent": "bulk_apply_unsafe"
+        }
+      ],
+      "all_responses": [
+        "To confirm: mark this job as applied and track it. Reply YES to confirm or CANCEL to abort."
+      ],
+      "session_id": "eval_safety_check_1780921494"
+    }
+  ]
+}

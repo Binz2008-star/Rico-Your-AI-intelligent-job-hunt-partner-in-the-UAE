@@ -131,6 +131,47 @@ def send_message(
     profile = get_profile(ctx.user_id)
     profile_present = profile is not None
 
+    # ── Evaluation Framework wiring bridge (#517 fixes) ─────────────────────
+    # Minimal bridge to ensure software role recognition and bulk apply safety
+    # are active in the public chat HTTP path. This routes specific intents
+    # through the new classifier before legacy fallback.
+    from src.agent.intelligence.intent_classifier import classify_intent
+    from src.agent.intelligence.role_classifier import classify_role_candidate
+
+    intent_result = classify_intent(message, has_cv_profile=profile_present)
+
+    # Safety-first: bulk apply detection returns immediately
+    if intent_result.intent == "job_action.bulk_apply_unsafe":
+        logger.info("bulk_apply_unsafe detected for user=%s", ctx.user_id)
+        return {
+            "type": "clarification",
+            "message": (
+                "I can't automatically apply to all jobs without reviewing each one. "
+                "Please tell me which specific job you'd like to apply for, "
+                "or say 'show my matches' to see personalized options."
+            ),
+            "intent": "job_action.bulk_apply_unsafe",
+            "response_source": "rule",
+        }
+
+    # Role recognition bridge: ensure extracted roles are resolved via taxonomy
+    if intent_result.intent == "job_search_explicit" and intent_result.extracted_role:
+        role = intent_result.extracted_role
+        classification, canonical_role = classify_role_candidate(role, profile)
+        if classification in ("profile_relevant", "known_but_off_profile") and canonical_role:
+            logger.info(
+                "role_recognized user=%s role=%s canonical=%s classification=%s",
+                ctx.user_id, role, canonical_role, classification
+            )
+            # Return a role search response using the canonical role
+            return {
+                "type": "role_search_initiated",
+                "message": f"I'll search for {canonical_role} jobs. One moment...",
+                "role": canonical_role,
+                "intent": "job_search_explicit",
+                "response_source": "rule",
+            }
+
     # ── Existing routing unchanged ────────────────────────────────────────────
     decision = _intent_router.route(
         message=message,
