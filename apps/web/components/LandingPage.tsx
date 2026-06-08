@@ -122,27 +122,27 @@ export default function LandingPage() {
             : "Rico finds jobs, ranks them, and tracks your progress. You decide when to apply, when to pause, and which direction to take your career.",
         // Pricing section
         pricingEyebrow: isAr ? "الباقات" : "Pricing",
-        pricingTitle: isAr ? "باقات مصممة لتوجيهك نحو وظيفتك" : "Simple plans for serious career moves",
+        pricingTitle: isAr ? "باقات مصممة لتوجيهك نحو وظيفتك" : "Plans built around your job search",
         pricingBody: isAr
             ? "ابدأ مجاناً. ارتقِ حين تحتاج المزيد."
-            : "Start free with 50 AI messages and 10 saved jobs. Upgrade when you need more.",
-        pricingPopular: isAr ? "الأكثر طلباً" : "Popular",
+            : "Start free. Scale when you're ready.",
+        pricingPopular: isAr ? "الأكثر طلباً" : "Most popular",
         pricingPro: isAr ? "الاحترافية" : "Pro",
         pricingPremium: isAr ? "المميزة" : "Premium",
-        pricingPerMonth: isAr ? "/شهر" : "/month",
+        pricingPerMonth: isAr ? "/شهر" : "/mo",
         pricingProFeatures: isAr
             ? ["٣٠٠ رسالة ذكاء اصطناعي شهرياً", "١٠٠ وظيفة محفوظة", "٢٠ تحسين ملف شهرياً", "توصيات ذكية للأدوار", "نظام مطابقة متقدم"]
-            : ["300 AI messages per month", "100 saved jobs", "20 profile optimisations per month", "Smart AI role recommendations", "Advanced match scoring"],
+            : ["300 AI messages / month", "100 saved jobs", "20 profile optimisations / month", "Smart role recommendations", "Advanced match scoring"],
         pricingPremiumFeatures: isAr
             ? ["١٥٠٠ رسالة ذكاء اصطناعي شهرياً", "وظائف محفوظة بلا حدود", "١٠٠ تحسين ملف شهرياً", "كل ما في الاحترافية", "تقديم تلقائي بموافقتك", "توصيات مميزة"]
-            : ["1500 AI messages per month", "Unlimited saved jobs", "100 profile optimisations per month", "Everything in Pro", "Auto-apply system", "Premium recommendations"],
-        upgradePro: isAr ? "اختر الاحترافية" : "Upgrade to Pro",
-        upgradePremium: isAr ? "اختر المميزة" : "Upgrade to Premium",
+            : ["1500 AI messages / month", "Unlimited saved jobs", "100 profile optimisations / month", "Everything in Pro", "Auto-apply with your approval", "Priority recommendations"],
+        upgradePro: isAr ? "اختر الاحترافية" : "Get Pro",
+        upgradePremium: isAr ? "اختر المميزة" : "Get Premium",
         freePlan: isAr ? "مجانية" : "Free",
         freePlanDesc: isAr
             ? "٥٠ رسالة · ١٠ وظائف محفوظة · تحسين ملف واحد/شهر"
-            : "50 AI messages · 10 saved jobs · 1 profile optimisation/mo",
-        signUpFreeArrow: isAr ? "سجّل مجانًا ←" : "Sign up free →",
+            : "50 messages · 10 saved jobs · 1 profile optimisation/mo",
+        signUpFreeArrow: isAr ? "سجّل مجانًا ←" : "Start free →",
         // CTA section (bottom)
         ctaSectionEyebrow: isAr ? "ابدأ الآن" : "Start free",
         ctaSectionTitle: isAr
