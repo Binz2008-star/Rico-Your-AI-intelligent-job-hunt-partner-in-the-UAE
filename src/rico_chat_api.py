@@ -110,6 +110,43 @@ TELEGRAM_MENTION_RE = re.compile(
     re.IGNORECASE,
 )
 
+# CV improvement follow-up phrases — used ONLY when last_flow_state == "cv_builder".
+# Never apply this pattern without flow-state context or it will misfire on
+# "improve my cover letter", "enhance it" for other content, etc.
+_CV_IMPROVE_FOLLOWUP_RE = re.compile(
+    # English: standalone improvement requests (no "cv"/"resume" word needed)
+    r"\bplease\s+improve\s+it\b"
+    r"|\bimprove\s+it\b"
+    r"|\benhance\s+it\b"
+    r"|\bmake\s+it\s+(better|shorter|longer|more\s+professional|professional)\b"
+    r"|\brefine\s+it\b"
+    r"|\btailor\s+it\b"
+    # Arabic: "improve it [professionally]"
+    r"|(?:نعم\s+)?حسنها(?:\s+بشكل\s+احتراف(?:ي|ياً?))?"
+    r"|(?:نعم\s+)?طورها"
+    r"|احسنها"
+    r"|حسّنها"
+    # Arabic: "improve/develop the CV"
+    r"|(?:نعم\s+)?حسن\s+(?:ال)?سير[هة](?:\s+(?:ال)?ذاتي[هة])?"
+    r"|(?:نعم\s+)?طور\s+(?:ال)?سير[هة](?:\s+(?:ال)?ذاتي[هة])?",
+    re.IGNORECASE | re.UNICODE,
+)
+
+# Strings that must never appear inside a deterministic CV draft body.
+# Used as a post-generation guard in _handle_cv_generate_from_profile.
+_CV_PLACEHOLDER_PATTERNS = re.compile(
+    r"\[Start\s+Date\]"
+    r"|\[End\s+Date\]"
+    r"|\[Company\s+Name\]"
+    r"|\[Job\s+Title\]"
+    r"|\[Add\s+\w"
+    r"|Add\s+\d+.{0,20}responsibilities\s+here"
+    r"|\bTBD\b"
+    r"|\bassumed\b"
+    r"|please\s+confirm(?:\s+inside)?",
+    re.IGNORECASE,
+)
+
 # Domain-agnostic. A bare role is a short noun phrase. Anything starting with
 # one of these tokens is a question, command, greeting, or sentence - never
 # a role title.
@@ -2128,6 +2165,15 @@ class RicoChatAPI:
             pass
         return ""
 
+    def _set_flow_state(self, user_id: str, state: str) -> None:
+        """Persist the current conversational flow state for follow-up routing."""
+        try:
+            ctx = self._get_recent_context(user_id)
+            ctx["last_flow_state"] = state
+            self._store_recent_context(user_id, ctx)
+        except Exception:
+            pass
+
     def _resolve_pending_intent(self, user_id: str, message: str, profile: Any) -> dict[str, Any] | None:
         """If last Rico message offered a yes/no action and user affirms, execute it.
 
@@ -2159,12 +2205,7 @@ class RicoChatAPI:
         )
 
         if cv_improve_signals:
-            return self._answer_with_ai_fallback(
-                user_id=user_id,
-                message="Give me specific CV improvement suggestions based on my profile and target roles.",
-                profile=profile,
-                save_user_message=False,
-            )
+            return self._handle_cv_generate_from_profile(user_id, profile)
         if job_search_signals:
             target_roles = self._as_list(self._profile_value(profile, "target_roles"))
             role = target_roles[0] if target_roles else "my target role"
@@ -2953,6 +2994,19 @@ class RicoChatAPI:
         pending_field_result = self._resolve_pending_field(user_id, message, profile)
         if pending_field_result is not None:
             return self._finalize(pending_field_result, self.SOURCE_KEYWORD, profile=profile)
+
+        # ── CV builder flow-state follow-up ──────────────────────────────────
+        # When Rico has just returned a CV draft (last_flow_state == "cv_builder"),
+        # route improvement follow-ups like "please improve it" or Arabic
+        # "نعم حسنها بشكل محترف" directly to the deterministic CV handler instead
+        # of AI fallback, which may invent achievements, percentages, or placeholders.
+        _flow_ctx = self._get_recent_context(user_id)
+        if _flow_ctx.get("last_flow_state") == "cv_builder" and _CV_IMPROVE_FOLLOWUP_RE.search(message):
+            return self._finalize(
+                self._handle_cv_generate_from_profile(user_id, profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
 
         # ── Proactive Telegram declaration: "my telegram is @handle" ─────────
         # When the user volunteers their Telegram handle with the keyword "telegram"
@@ -5917,6 +5971,7 @@ class RicoChatAPI:
             greeting = f"Hi {name},"
         else:
             greeting = "Hi there,"
+        self._set_flow_state(user_id, "cv_builder")
         return {
             "type": "cv_creation",
             "message": (
@@ -6047,6 +6102,7 @@ class RicoChatAPI:
 
         message = f"{greeting}\n\n---\n\n{cv_draft}\n\n---{missing_note}"
         self._append_chat(user_id, "assistant", message)
+        self._set_flow_state(user_id, "cv_builder")
         return {
             "type": "cv_draft",
             "message": message,
