@@ -266,7 +266,7 @@ class TestUserSettingsIsolation:
 
         conn = MagicMock()
         cur = MagicMock()
-        cur.fetchone.return_value = (["hse"], [], 60, 5, "", 75, 50)
+        cur.fetchone.return_value = (["hse"], [], 60, 5, "", 75, 50, ["Meta"])
         conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
         conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
 
