@@ -52,12 +52,13 @@ http_status() {
 
 jq_field() {
     # Lightweight JSON field extraction — no jq dependency required.
-    python3 -c "
-import json, sys
+    # Key is passed via env var to avoid shell interpolation into Python code.
+    local field="$2"
+    JQFIELD="$field" python3 -c "
+import json, os, sys
 try:
     d = json.load(sys.stdin)
-    keys = '${2}'.split('.')
-    for k in keys:
+    for k in os.environ['JQFIELD'].split('.'):
         d = d[k] if isinstance(d, dict) else None
     print(d if d is not None else '')
 except Exception:
@@ -71,7 +72,7 @@ REPO_ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel 2>/dev/null || e
 EXPECTED_COMMIT=""
 if [[ -n "$REPO_ROOT" ]]; then
     # Fetch quietly so we see the real remote state, not stale local refs.
-    git -C "$REPO_ROOT" fetch origin main --quiet 2>/dev/null || true
+    git -C "$REPO_ROOT" fetch origin main --depth=1 --quiet 2>/dev/null || true
     EXPECTED_COMMIT="$(git -C "$REPO_ROOT" rev-parse origin/main 2>/dev/null | cut -c1-7 || true)"
 fi
 
@@ -100,10 +101,14 @@ else
 fi
 
 # ── 3. Render /health ─────────────────────────────────────────────────────────
+# Single curl: capture both body and HTTP status to avoid a second round-trip.
 
-HEALTH_JSON="$(fetch_json "$RENDER_API/health" 15)"
+HEALTH_RESPONSE="$(curl -sS --max-time 15 -w "\n%{http_code}" \
+    -H "Accept: application/json" -H "User-Agent: rico-deploy-check/1.0" \
+    "$RENDER_API/health" 2>/dev/null || echo -e "\n000")"
+HEALTH_CODE="$(echo "$HEALTH_RESPONSE" | tail -1)"
+HEALTH_JSON="$(echo "$HEALTH_RESPONSE" | head -n -1)"
 HEALTH_STATUS="$(echo "$HEALTH_JSON" | jq_field - status)"
-HEALTH_CODE="$(http_status "$RENDER_API/health")"
 
 if [[ "$HEALTH_CODE" == "200" && "$HEALTH_STATUS" == "ok" ]]; then
     _log "[$PASS] GET /health   →  HTTP $HEALTH_CODE  status=$HEALTH_STATUS"
@@ -118,8 +123,11 @@ fi
 _log ""
 _log "── Vercel frontend ($FRONTEND) ──"
 
-PROXY_CODE="$(http_status "$FRONTEND/proxy/health")"
-PROXY_JSON="$(fetch_json "$FRONTEND/proxy/health" 15)"
+PROXY_RESPONSE="$(curl -sS --max-time 15 -w "\n%{http_code}" \
+    -H "Accept: application/json" -H "User-Agent: rico-deploy-check/1.0" \
+    "$FRONTEND/proxy/health" 2>/dev/null || echo -e "\n000")"
+PROXY_CODE="$(echo "$PROXY_RESPONSE" | tail -1)"
+PROXY_JSON="$(echo "$PROXY_RESPONSE" | head -n -1)"
 PROXY_STATUS="$(echo "$PROXY_JSON" | jq_field - status)"
 
 if [[ "$PROXY_CODE" == "200" && "$PROXY_STATUS" == "ok" ]]; then
@@ -192,24 +200,36 @@ fi
 _log ""
 
 # ── JSON output (--json flag) ─────────────────────────────────────────────────
+# All values are passed via environment variables — never interpolated directly
+# into Python source to prevent injection from untrusted HTTP response fields.
 
 if [[ $JSON_MODE -eq 1 ]]; then
-    python3 - <<PYEOF
-import json
+    OUT_EXPECTED="${EXPECTED_COMMIT:-unknown}" \
+    OUT_DEPLOYED="${DEPLOYED_COMMIT:-unknown}" \
+    OUT_STALE="$STALE" \
+    OUT_HEALTH="${HEALTH_STATUS:-error}" \
+    OUT_HEALTH_CODE="${HEALTH_CODE}" \
+    OUT_PROXY_CODE="${PROXY_CODE}" \
+    OUT_PROXY_STATUS="${PROXY_STATUS:-error}" \
+    OUT_FRONTEND_CODE="${FRONTEND_CODE}" \
+    OUT_ENV="${DEPLOYED_ENV:-unknown}" \
+    OUT_DEPLOYED_AT="${DEPLOYED_AT:-}" \
+    python3 -c "
+import json, os
 data = {
-    "expected_commit":  "${EXPECTED_COMMIT:-unknown}",
-    "deployed_commit":  "${DEPLOYED_COMMIT:-unknown}",
-    "stale":            ${STALE},
-    "render_health":    "${HEALTH_STATUS:-error}",
-    "render_health_code": "${HEALTH_CODE}",
-    "proxy_health_code":  "${PROXY_CODE}",
-    "proxy_health":       "${PROXY_STATUS:-error}",
-    "frontend_code":      "${FRONTEND_CODE}",
-    "deployed_env":       "${DEPLOYED_ENV:-unknown}",
-    "deployed_at":        "${DEPLOYED_AT:-}",
+    'expected_commit':    os.environ.get('OUT_EXPECTED',      'unknown'),
+    'deployed_commit':    os.environ.get('OUT_DEPLOYED',      'unknown'),
+    'stale':              int(os.environ.get('OUT_STALE',     '0')),
+    'render_health':      os.environ.get('OUT_HEALTH',        'error'),
+    'render_health_code': os.environ.get('OUT_HEALTH_CODE',   '000'),
+    'proxy_health_code':  os.environ.get('OUT_PROXY_CODE',    '000'),
+    'proxy_health':       os.environ.get('OUT_PROXY_STATUS',  'error'),
+    'frontend_code':      os.environ.get('OUT_FRONTEND_CODE', '000'),
+    'deployed_env':       os.environ.get('OUT_ENV',           'unknown'),
+    'deployed_at':        os.environ.get('OUT_DEPLOYED_AT',   ''),
 }
 print(json.dumps(data, indent=2))
-PYEOF
+"
 fi
 
 # Exit non-zero when stale or health check failed
