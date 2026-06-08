@@ -3422,6 +3422,14 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        # Learning profile summary — what Rico has inferred from user behavior
+        if legacy_intent == "learning_profile_summary":
+            return self._finalize(
+                self._handle_learning_profile_summary(user_id, profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
         # Profile summary
         if legacy_intent == "profile_summary":
             from src.agent.context.resolver import resolve_profile_context
@@ -5209,6 +5217,51 @@ class RicoChatAPI:
                 {"action": "subscription_how_to", "label": "How do I subscribe?", "message": "How do I subscribe to Rico Pro or Premium?"},
             ],
         }
+
+    def _handle_learning_profile_summary(self, user_id: str, profile: Any) -> dict[str, Any]:
+        """Show the user what Rico has learned from their behavioral signals.
+
+        Reads top preferences from LearningRepository and formats a plain-language
+        summary so users can verify what Rico has inferred and correct mistakes.
+        """
+        try:
+            from src.repositories.learning_repo import get_learning_repository
+            _lr = get_learning_repository()
+            roles = [r for r, _ in _lr.get_top_preferences(user_id, "role", limit=5)]
+            locs = [loc for loc, _ in _lr.get_top_preferences(user_id, "location", limit=3)]
+            skills = [s for s, _ in _lr.get_top_preferences(user_id, "skill", limit=6)]
+            avoided = [
+                c for c, w in _lr.get_top_preferences(user_id, "company", limit=5) if w < 0
+            ]
+
+            if not any([roles, locs, skills, avoided]):
+                msg = (
+                    "I haven't learned anything specific yet — I build your preference profile "
+                    "from your actions. Save, apply, or skip jobs and I'll start personalising results."
+                )
+            else:
+                lines = ["Here is what I've learned from your actions so far:\n"]
+                if roles:
+                    lines.append(f"**Preferred roles:** {', '.join(roles)}")
+                if locs:
+                    lines.append(f"**Preferred locations:** {', '.join(locs)}")
+                if skills:
+                    lines.append(f"**Relevant skills:** {', '.join(skills)}")
+                if avoided:
+                    lines.append(f"**Companies to avoid:** {', '.join(avoided)}")
+                lines.append(
+                    "\nThis shapes which jobs float to the top of your results. "
+                    "Tell me if anything looks wrong and I'll correct it."
+                )
+                msg = "\n".join(lines)
+        except Exception:
+            msg = (
+                "I couldn't retrieve your preference profile right now. "
+                "Try again in a moment — your data is safe."
+            )
+
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "learning_profile_summary", "message": msg}
 
     def _handle_job_feedback_positive(self, user_id: str, message: str, profile: Any) -> dict[str, Any]:
         """Record a positive learning signal when the user says a job is a great match.

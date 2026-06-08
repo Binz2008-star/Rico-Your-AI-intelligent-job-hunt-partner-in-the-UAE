@@ -340,6 +340,33 @@ _PROFILE_SUMMARY_PHRASES = frozenset([
     "ما هو اسمي", "ما اسمي", "اسمي", "من انا", "ما هو ملفي",
 ])
 
+# ── Learning profile summary phrases ─────────────────────────────────────────
+# User wants to see what Rico has learned from their behavior.
+
+_LEARNING_SUMMARY_PHRASES = frozenset([
+    # English
+    "what have you learned about me", "what did you learn about me",
+    "what do you know about my preferences", "my preferences",
+    "what have i taught you", "what did i teach you",
+    "what do you know about what i like", "show my preferences",
+    "what have you learned", "show what you learned",
+    "what are my preferences", "my learned preferences",
+    "what roles do i prefer", "what locations do i prefer",
+    "show my learning profile", "my behavior profile",
+    "what have you figured out about me",
+    # Arabic (normalised)
+    "ماذا تعلمت عني", "ما الذي تعلمته عني", "ما تعلمته عني",
+    "ما تفضيلاتي", "تفضيلاتي", "ماذا تعرف عن تفضيلاتي",
+    "ماذا تعلمت", "ارني ما تعلمته",
+])
+
+_LEARNING_SUMMARY_RE = re.compile(
+    r"\b(what.{0,10}(learned|know|figured).{0,20}(about me|my preferences|what i like))\b"
+    r"|\b(show|display|list).{0,15}(my\s+)?(learned|behavioral|behaviour)\s+(preferences|profile)\b"
+    r"|\b(my\s+)?(learned\s+preferences|preference\s+profile|learning\s+profile)\b",
+    re.IGNORECASE,
+)
+
 _PROFILE_ROLE_SUGGESTIONS_PHRASES = frozenset([
     "show roles from my cv",
     "what roles fit my cv",
@@ -889,6 +916,9 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     if lower in _PROFILE_SUMMARY_PHRASES:
         return IntentResult("profile_summary", 1.0, "exact")
 
+    if lower in _LEARNING_SUMMARY_PHRASES:
+        return IntentResult("learning_profile_summary", 1.0, "exact")
+
     if lower in _PROFILE_ROLE_SUGGESTIONS_PHRASES:
         return IntentResult("profile_role_suggestions", 1.0, "exact")
 
@@ -971,6 +1001,9 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
 
     if _PROFILE_UPDATE_RE.search(text):
         return IntentResult("profile_update", 0.85, "regex")
+
+    if _LEARNING_SUMMARY_RE.search(text):
+        return IntentResult("learning_profile_summary", 0.9, "regex")
 
     # Subscription / pricing regex (check before job search)
     if _SUBSCRIPTION_RE.search(text):
