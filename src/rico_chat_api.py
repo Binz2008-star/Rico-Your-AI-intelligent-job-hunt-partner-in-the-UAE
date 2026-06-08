@@ -4120,11 +4120,11 @@ class RicoChatAPI:
                         link=apply_url,
                     ),
                 )
-                # Opening an apply link is strong positive interest — fire a learning signal.
+                # Opening an apply link is distinct browsing interest — lighter than save.
                 try:
                     from src.repositories.learning_repo import get_learning_repository
                     get_learning_repository().infer_signals_from_job_action(
-                        user_id, "save", {"title": title, "company": company, "apply_url": apply_url}
+                        user_id, "opened_external", {"title": title, "company": company, "apply_url": apply_url}
                     )
                 except Exception:
                     pass
@@ -4190,7 +4190,7 @@ class RicoChatAPI:
                         try:
                             from src.repositories.learning_repo import get_learning_repository
                             get_learning_repository().infer_signals_from_job_action(
-                                user_id, "save", {"title": title, "company": company, "apply_url": apply_url}
+                                user_id, "opened_external", {"title": title, "company": company, "apply_url": apply_url}
                             )
                         except Exception:
                             pass

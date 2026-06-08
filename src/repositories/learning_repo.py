@@ -422,8 +422,8 @@ class LearningRepository:
         # Extract role from title
         role = self._extract_role_from_title(title)
         if role:
-            if action_type in ("apply", "save"):
-                weight = 0.8 if action_type == "apply" else 0.5
+            if action_type in ("apply", "save", "opened_external"):
+                weight = 0.8 if action_type == "apply" else (0.5 if action_type == "save" else 0.3)
                 self.record_signal(
                     canonical_user_id,
                     "role_preference",
@@ -453,8 +453,8 @@ class LearningRepository:
 
         # Extract location
         if location:
-            if action_type in ("apply", "save"):
-                weight = 0.7 if action_type == "apply" else 0.4
+            if action_type in ("apply", "save", "opened_external"):
+                weight = 0.7 if action_type == "apply" else (0.4 if action_type == "save" else 0.2)
                 self.record_signal(
                     canonical_user_id,
                     "location_preference",
@@ -490,6 +490,15 @@ class LearningRepository:
                     "company_sentiment",
                     company,
                     signal_weight=0.3,
+                    source="job_action",
+                    metadata={"action": action_type},
+                )
+            elif action_type == "opened_external":
+                self.record_signal(
+                    canonical_user_id,
+                    "company_sentiment",
+                    company,
+                    signal_weight=0.2,
                     source="job_action",
                     metadata={"action": action_type},
                 )
