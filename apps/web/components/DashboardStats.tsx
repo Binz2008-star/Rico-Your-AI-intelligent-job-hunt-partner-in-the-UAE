@@ -8,7 +8,7 @@ import {
     getJobs,
     getSettings,
 } from "@/lib/api";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 interface Stats {
     jobsTotal: number;
