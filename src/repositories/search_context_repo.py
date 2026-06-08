@@ -2,6 +2,10 @@
 
 Active search context persistence for Rico Agent OS.
 
+NOTE: This module is DORMANT. SearchContextRepository is not imported or called
+by any active code path (chat, agent runtime, or API routers). The search_context
+table has 0 live rows. Do not wire into new features without a deliberate decision.
+
 Maintains user's active search state across sessions:
 - Current search query
 - Applied filters (location, role, salary, etc.)

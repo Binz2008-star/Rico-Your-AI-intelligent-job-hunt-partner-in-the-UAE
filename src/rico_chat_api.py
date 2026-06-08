@@ -3922,6 +3922,14 @@ class RicoChatAPI:
                         action="mark_applied",
                     ),
                 )
+                # Fire learning signal for confirmed application.
+                try:
+                    from src.repositories.learning_repo import get_learning_repository
+                    get_learning_repository().infer_signals_from_job_action(
+                        user_id, "apply", {"title": title, "company": company}
+                    )
+                except Exception:
+                    pass
             except Exception:
                 msg = (
                     f"I understand you submitted **{title}** at **{company}**, "
@@ -4112,6 +4120,14 @@ class RicoChatAPI:
                         link=apply_url,
                     ),
                 )
+                # Opening an apply link is strong positive interest — fire a learning signal.
+                try:
+                    from src.repositories.learning_repo import get_learning_repository
+                    get_learning_repository().infer_signals_from_job_action(
+                        user_id, "save", {"title": title, "company": company, "apply_url": apply_url}
+                    )
+                except Exception:
+                    pass
             elif db_source_url:
                 msg = (
                     f"I don't have a direct apply link saved for **{title}** at **{company}**, "
@@ -4132,7 +4148,65 @@ class RicoChatAPI:
                         "I'll keep this role marked as needs source verification and continue with verified matches."
                     )
             else:
-                msg = "Please specify the job title and company so I can look up the apply link."
+                # No title/company provided — try to resolve from recently discussed jobs
+                resolved_recent = None
+                try:
+                    from src.repositories.user_job_context_repo import (
+                        get_recently_discussed as _get_recently_discussed,
+                        get_recently_interacted as _get_recently_interacted,
+                    )
+                    recent = _get_recently_discussed(user_id, limit=1)
+                    if not recent:
+                        recent = _get_recently_interacted(user_id, limit=1)
+                    if recent:
+                        resolved_recent = recent[0]
+                except Exception:
+                    pass
+
+                if resolved_recent:
+                    title = resolved_recent.get("title") or ""
+                    company = resolved_recent.get("company") or ""
+                    apply_url = resolved_recent.get("apply_url") or ""
+                    source_url_fallback = resolved_recent.get("source_url") or ""
+                    if apply_url:
+                        msg = f"Apply link for **{title}** at **{company}**: {apply_url}"
+                        self._persist_application_lifecycle_event(
+                            user_id=user_id,
+                            title=title,
+                            company=company,
+                            status="opened_external",
+                            url=apply_url,
+                        )
+                        self._store_recent_context(
+                            user_id,
+                            self._build_recent_application_context(
+                                title=title,
+                                company=company,
+                                status="opened_external",
+                                action="open_apply_link",
+                                link=apply_url,
+                            ),
+                        )
+                        try:
+                            from src.repositories.learning_repo import get_learning_repository
+                            get_learning_repository().infer_signals_from_job_action(
+                                user_id, "save", {"title": title, "company": company, "apply_url": apply_url}
+                            )
+                        except Exception:
+                            pass
+                    elif source_url_fallback:
+                        msg = (
+                            f"I don't have a direct apply link for **{title}** at **{company}**, "
+                            f"but here's the source listing: {source_url_fallback}"
+                        )
+                    else:
+                        msg = (
+                            f"I found your recent job **{title}** at **{company}**, "
+                            "but I don't have an apply link saved for it yet. "
+                            "Run a search to refresh the listing."
+                        )
+                else:
+                    msg = "Please specify the job title and company so I can look up the apply link."
             response = {"type": "open_apply_link", "intent": "open_apply_link",
                         "message": msg, "apply_url": apply_url}
             self._append_chat(user_id, "assistant", msg)
@@ -4273,7 +4347,53 @@ class RicoChatAPI:
                 self._append_chat(user_id, "assistant", success_msg)
                 return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
-            # Could not identify a job from the card — fall back to the tool router.
+            # No title/company from card — try recently discussed/interacted job before router.
+            _recent_resolved = None
+            try:
+                from src.repositories.user_job_context_repo import (
+                    get_recently_discussed as _get_recently_discussed_sj,
+                    get_recently_interacted as _get_recently_interacted_sj,
+                )
+                _recent_list = _get_recently_discussed_sj(user_id, limit=1)
+                if not _recent_list:
+                    _recent_list = _get_recently_interacted_sj(user_id, limit=1)
+                if _recent_list:
+                    _recent_resolved = _recent_list[0]
+            except Exception:
+                pass
+
+            if _recent_resolved:
+                title = (_recent_resolved.get("title") or "").strip()
+                company = (_recent_resolved.get("company") or "").strip()
+                if title and company:
+                    apply_url = (_recent_resolved.get("apply_url") or "").strip()
+                    source_url = (_recent_resolved.get("source_url") or "").strip()
+                    job_dict = {
+                        "title": title,
+                        "company": company,
+                        "apply_url": apply_url,
+                        "source_url": source_url,
+                        "verification_status": "lead_needs_verification",
+                    }
+                    job_key = self._derive_lifecycle_job_key(title, company)
+                    result = agent_runtime.handle_action(
+                        user_id=user_id, action="save", job=job_dict, job_key=job_key, source="chat",
+                    )
+                    success_msg = (
+                        f"Saved — {title} at {company}. I'll keep it in your tracked jobs."
+                        if result.ok else
+                        f"Noted — {title} at {company} is in your tracker."
+                    )
+                    response = {
+                        "type": "save_job",
+                        "intent": "save_job",
+                        "message": success_msg,
+                        "entities": {"title": title, "company": company},
+                    }
+                    self._append_chat(user_id, "assistant", success_msg)
+                    return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+
+            # Could not identify a job from the card or recent context — fall back to the tool router.
             context = self._build_router_context(user_id, profile)
             routed = _route(message, user_id=user_id, context=context)
             if routed.tool_name:

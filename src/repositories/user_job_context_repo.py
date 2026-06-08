@@ -355,9 +355,9 @@ def set_lifecycle_status(
     try:
         # Build the optional timestamp assignment with the validated column name.
         insert_cols = ["user_id", "title", "company", "status",
-                       "last_action", "last_action_at", "user_note",
-                       "interaction_count", "searched_at"]
-        insert_vals = ["%s", "%s", "%s", "%s", "%s", "NOW()", "%s", "1", "NOW()"]
+                       "last_action", "last_action_at", "last_discussed_at",
+                       "user_note", "interaction_count", "searched_at"]
+        insert_vals = ["%s", "%s", "%s", "%s", "%s", "NOW()", "NOW()", "%s", "1", "NOW()"]
         params: list = [user_id, t, c, norm, norm, (note or None)]
         if au:
             insert_cols.append("apply_url"); insert_vals.append("%s"); params.append(au)
@@ -370,6 +370,7 @@ def set_lifecycle_status(
             "status            = EXCLUDED.status",
             "last_action       = EXCLUDED.status",
             "last_action_at    = NOW()",
+            "last_discussed_at = NOW()",
             "user_note         = COALESCE(EXCLUDED.user_note, user_job_context.user_note)",
             "interaction_count = user_job_context.interaction_count + 1",
         ]
