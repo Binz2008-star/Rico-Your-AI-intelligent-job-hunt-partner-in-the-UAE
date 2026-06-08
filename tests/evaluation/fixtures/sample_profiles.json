@@ -1,0 +1,38 @@
+{
+  "software_engineer": {
+    "name": "Ahmed Hassan",
+    "email": "ahmed@example.com",
+    "skills": ["Python", "React", "PostgreSQL", "AWS"],
+    "years_experience": 4,
+    "target_roles": ["Software Engineer", "Full Stack Developer"],
+    "preferred_cities": ["Dubai", "Abu Dhabi"],
+    "salary_expectation_aed": 18000
+  },
+  "hse_manager": {
+    "name": "Sarah Johnson",
+    "email": "sarah@example.com",
+    "skills": ["HSE Management", "Risk Assessment", "ISO 45001", "Safety Audits"],
+    "years_experience": 8,
+    "target_roles": ["HSE Manager", "Safety Officer"],
+    "preferred_cities": ["Dubai", "Sharjah"],
+    "salary_expectation_aed": 25000
+  },
+  "new_graduate": {
+    "name": "Mohammed Ali",
+    "email": "mohammed@example.com",
+    "skills": ["Java", "Spring Boot", "MySQL"],
+    "years_experience": 0,
+    "target_roles": ["Junior Developer", "Software Engineer"],
+    "preferred_cities": ["Dubai"],
+    "salary_expectation_aed": 8000
+  },
+  "career_changer": {
+    "name": "Lisa Chen",
+    "email": "lisa@example.com",
+    "skills": ["Project Management", "Agile", "Data Analysis"],
+    "years_experience": 5,
+    "target_roles": ["Product Manager", "Data Analyst"],
+    "preferred_cities": ["Abu Dhabi", "Dubai"],
+    "salary_expectation_aed": 22000
+  }
+}
