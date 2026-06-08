@@ -3352,20 +3352,29 @@ class RicoChatAPI:
                 profile=profile,
             )
 
-        # Smalltalk (greetings: hi/hello/hey/bye)
-        # If the user is mid-conversation, return a brief continuation instead of
-        # the cold-start greeting — avoids the "Hi! I am Rico…" restart after a
-        # profile/details response.
+        # Smalltalk (greetings: hi/hello/hey/السلام عليكم/مرحبا/…)
+        # Return a short deterministic reply — never call the AI for a greeting.
+        # Arabic greetings were previously routed to the AI streaming path which
+        # generated long verbose responses that got truncated mid-sentence.
         if legacy_intent == "smalltalk":
+            _is_ar = self._is_arabic_text(message)
             recent = self._get_recent_messages(user_id, limit=4)
             has_active_conversation = len(recent) >= 2
-            if has_active_conversation:
-                followup = "What would you like to do next? I can search jobs, review applications, or answer questions about your profile."
-                response = {"type": "clarification", "message": followup}
+            if _is_ar:
+                followup = (
+                    "أهلاً! كيف أقدر أساعدك اليوم؟"
+                    if has_active_conversation else
+                    "أهلاً! أنا ريكو، مساعدك في البحث عن وظائف في الإمارات. "
+                    "أخبرني بالمسمى الوظيفي المستهدف أو ارفع سيرتك الذاتية للبدء."
+                )
             else:
-                followup = "Hi! I am Rico, your job search assistant. Tell me a role to search, upload your CV, or say 'help' for options."
-                response = {"type": "clarification", "message": followup}
-            self._append_chat(user_id, "assistant", response["message"])
+                followup = (
+                    "What would you like to do next? I can search jobs, review applications, or answer questions about your profile."
+                    if has_active_conversation else
+                    "Hi! I am Rico, your job search assistant. Tell me a role to search, upload your CV, or say 'help' for options."
+                )
+            response = {"type": "smalltalk", "message": followup}
+            self._append_chat(user_id, "assistant", followup)
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # Subscription / pricing

@@ -108,9 +108,11 @@ def is_open_ended_question(message: str) -> tuple[bool, str]:
     if _is_imperative_job_request(lowered):
         return False, "ok"
 
-    # Arabic greeting → always conversational
+    # Arabic greetings are short conversational openers handled by the
+    # smalltalk legacy classifier — NOT open-ended questions that need AI.
+    # Routing them to AI produces long verbose responses that get truncated.
     if _ARABIC_GREETING_RE.search(text):
-        return True, "arabic_greeting"
+        return False, "ok"
 
     # Arabic job search imperatives stay on legacy (DB needed)
     if _is_arabic_job_request(text):
