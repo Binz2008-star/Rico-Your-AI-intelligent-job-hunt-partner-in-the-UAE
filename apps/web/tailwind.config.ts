@@ -196,6 +196,8 @@ const config: Config = {
                 breathe: "breathe 5.5s cubic-bezier(0.22, 0.61, 0.36, 1) infinite",
                 "pulse-ring": "pulse-ring 5.5s cubic-bezier(0.22, 0.61, 0.36, 1) infinite",
                 "glow-pulse": "glow-pulse 6s ease-in-out infinite",
+                drift: "drift 9s ease-in-out infinite",
+                "ring-reveal": "ring-reveal 1.1s cubic-bezier(0.22, 0.61, 0.36, 1) 0.15s backwards",
             },
             keyframes: {
                 float: {
@@ -231,6 +233,16 @@ const config: Config = {
                 "glow-pulse": {
                     "0%, 100%": { opacity: "0.35" },
                     "50%": { opacity: "0.7" },
+                },
+                // Hero card float — 3px max so text stays readable
+                drift: {
+                    "0%, 100%": { transform: "translateY(0)" },
+                    "50%": { transform: "translateY(-3px)" },
+                },
+                // FitRing one-shot draw-in; --ring-c = per-instance circumference,
+                // animates to the element's own stroke-dashoffset (no `to` frame)
+                "ring-reveal": {
+                    from: { strokeDashoffset: "var(--ring-c)" },
                 },
                 "pulse-ring": {
                     "0%, 100%": { transform: "scale(0.96)", opacity: "0.7" },

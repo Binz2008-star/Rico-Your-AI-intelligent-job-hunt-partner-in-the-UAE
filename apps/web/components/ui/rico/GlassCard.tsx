@@ -44,13 +44,16 @@ export function GlassCard<T extends ElementType = "div">({
         "rounded-rico-lg",
         // Shadow + inset highlight — theme-aware via --shadow-color (soft on light)
         "[box-shadow:inset_0_1px_0_rgb(var(--overlay)_/_0.05),0_30px_80px_rgb(var(--shadow-color)_/_0.5)]",
+        // Hover polish (all cards, hover-only): border brightens, shadow deepens
+        "transition-[border-color,box-shadow,transform] duration-300",
+        "hover:border-overlay/12",
+        !elevated &&
+          "hover:[box-shadow:inset_0_1px_0_rgb(var(--overlay)_/_0.06),0_34px_90px_rgb(var(--shadow-color)_/_0.55)]",
         // Backdrop blur
         "backdrop-blur-xl",
         // Interactive states
         interactive && [
           "cursor-pointer",
-          "transition-all duration-200",
-          "hover:border-overlay/12",
           "hover:-translate-y-0.5",
           "focus-visible:ring-2 focus-visible:ring-ember focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
         ],

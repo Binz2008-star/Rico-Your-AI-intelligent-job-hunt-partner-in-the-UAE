@@ -35,7 +35,7 @@ export function RicoButton({
     const variantStyles: Record<RicoButtonVariant, string> = {
         // Nocturne primary: ember bg, dark text, hover brightens
         primary:
-            "bg-ember text-void hover:bg-ember-bright hover:shadow-[0_8px_30px_rgba(240,169,74,0.35)] hover:-translate-y-px",
+            "bg-ember text-void hover:bg-ember-bright hover:shadow-[0_8px_30px_rgb(var(--gold)/0.35)] hover:-translate-y-px",
         // Ember: glass bg with ember accent on hover (alias: magenta for back-compat)
         ember:
             "bg-surface/50 text-text-primary border-overlay/12 hover:border-ember hover:bg-ember/5",

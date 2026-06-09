@@ -225,7 +225,7 @@ export default function LandingPageNocturne() {
                             </div>
                         </div>
                         <div className="relative mt-8 lg:mt-0">
-                            <GlassCard className="p-5 relative overflow-visible">
+                            <GlassCard className="p-5 relative overflow-visible animate-drift motion-reduce:animate-none">
                                 <div className="flex items-center gap-2.5 pb-4 mb-4 border-b border-overlay/7">
                                     <div className="w-[30px] h-[30px] rounded-full bg-[radial-gradient(circle_at_38%_34%,#fff,rgb(var(--gold-hover))_38%,rgb(var(--gold))_70%)] shadow-[0_0_18px_rgb(var(--gold)/0.65)] motion-safe:animate-breathe" />
                                     <div>

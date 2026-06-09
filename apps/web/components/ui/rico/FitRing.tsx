@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import type { CSSProperties } from "react";
 
 interface FitRingProps {
   value: number; // 0-100
@@ -65,7 +66,7 @@ export function FitRing({
           strokeWidth={strokeWidth}
         />
 
-        {/* Value arc */}
+        {/* Value arc — one-shot draw-in from empty (--ring-c) to the score */}
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -76,6 +77,8 @@ export function FitRing({
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={offset}
+          className="animate-ring-reveal motion-reduce:animate-none"
+          style={{ "--ring-c": `${circumference}` } as CSSProperties}
         />
       </svg>
 
