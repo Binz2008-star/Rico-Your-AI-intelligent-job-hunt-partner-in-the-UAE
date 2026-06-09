@@ -225,7 +225,7 @@ export default function LandingPageNocturne() {
                         </div>
                         <div className="relative mt-8 lg:mt-0">
                             <GlassCard className="p-5 relative overflow-visible">
-                                <div className="absolute -top-12 right-4"><Aura size="sm" variant="ember" animate={false} /></div>
+                                <div className="absolute -top-12 end-4"><Aura size="sm" variant="ember" animate={false} /></div>
                                 <div className="flex items-center gap-2.5 pb-4 mb-4 border-b border-overlay/7">
                                     <div className="w-[30px] h-[30px] rounded-full bg-gradient-to-br from-white via-ember-bright to-ember shadow-[0_0_12px_rgba(240,169,74,0.4)] motion-safe:animate-breathe" />
                                     <div>
@@ -342,7 +342,7 @@ export default function LandingPageNocturne() {
                                 <div className="p-6 flex flex-col">
                                     <div className="flex-1 space-y-4 max-w-[560px]">
                                         {/* User Message */}
-                                        <div className="self-end bg-surface-elevated border border-overlay/7 rounded-[14px] rounded-br-[5px] px-4 py-3 text-sm max-w-[90%] md:max-w-[78%] ml-auto">
+                                        <div className="self-end bg-surface-elevated border border-overlay/7 rounded-[14px] rounded-br-[5px] px-4 py-3 text-sm max-w-[90%] md:max-w-[78%] ms-auto">
                                             {t.chatMsg1}
                                         </div>
                                         {/* Rico Response */}
@@ -354,7 +354,7 @@ export default function LandingPageNocturne() {
                                             {t.chatMsg2}
                                         </div>
                                         {/* User Follow-up */}
-                                        <div className="self-end bg-surface-elevated border border-overlay/7 rounded-[14px] rounded-br-[5px] px-4 py-3 text-sm max-w-[90%] md:max-w-[78%] ml-auto">
+                                        <div className="self-end bg-surface-elevated border border-overlay/7 rounded-[14px] rounded-br-[5px] px-4 py-3 text-sm max-w-[90%] md:max-w-[78%] ms-auto">
                                             {t.chatMsg3}
                                         </div>
                                     </div>
@@ -558,7 +558,7 @@ export default function LandingPageNocturne() {
                             ].map((faq, i) => (
                                 <GlassCard key={i} className="p-0 overflow-hidden">
                                     <button
-                                        className="w-full flex items-center justify-between p-5 text-left"
+                                        className="w-full flex items-center justify-between p-5 text-start"
                                         onClick={() => setOpenFaq(openFaq === i ? null : i)}
                                         aria-expanded={openFaq === i}
                                         aria-controls={`faq-answer-${i}`}
@@ -594,7 +594,7 @@ export default function LandingPageNocturne() {
                     <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                         <Link href="/" className="flex items-center gap-2 font-display font-bold text-lg">
                             <span className="flex h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-gradient-to-br from-ember-bright to-ember text-void font-bold text-sm">R</span>
-                            <span>Rico<span className="text-ember font-bold">Hunt</span></span>
+                            <span>Rico<span className="text-ember font-bold"> Hunt</span></span>
                         </Link>
                         <nav className="flex flex-wrap justify-center gap-x-6 gap-y-2">
                             <Link href="/about" className="text-sm text-text-secondary hover:text-text-primary transition-colors">{t.footerAbout}</Link>

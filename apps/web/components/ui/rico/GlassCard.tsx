@@ -40,11 +40,10 @@ export function GlassCard<T extends ElementType = "div">({
         "bg-gradient-to-b from-surface-elevated/85 to-surface/70",
         // Hairline border
         "border border-overlay/7",
-        // Radius
-        "rounded-xl",
-        // Shadow + inset highlight
-        "shadow-[0_30px_80px_rgba(0,0,0,0.5)]",
-        "[box-shadow:inset_0_1px_0_rgba(255,255,255,0.05),0_30px_80px_rgba(0,0,0,0.5)]",
+        // Radius — Nocturne reference .glass-card (22px)
+        "rounded-rico-lg",
+        // Shadow + inset highlight — theme-aware via --shadow-color (soft on light)
+        "[box-shadow:inset_0_1px_0_rgb(var(--overlay)_/_0.05),0_30px_80px_rgb(var(--shadow-color)_/_0.5)]",
         // Backdrop blur
         "backdrop-blur-xl",
         // Interactive states
@@ -55,8 +54,8 @@ export function GlassCard<T extends ElementType = "div">({
           "hover:-translate-y-0.5",
           "focus-visible:ring-2 focus-visible:ring-ember focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
         ],
-        // Elevated variant
-        elevated && "shadow-[0_40px_120px_rgba(0,0,0,0.6)]",
+        // Elevated variant (modal/floating — stronger, still theme-aware)
+        elevated && "[box-shadow:inset_0_1px_0_rgb(var(--overlay)_/_0.05),0_40px_120px_rgb(var(--shadow-color)_/_0.6)]",
         className
       )}
       {...props}

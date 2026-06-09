@@ -21,6 +21,10 @@ const config: Config = {
 
                 // Global Canvas
                 background: "rgb(var(--bg) / <alpha-value>)",
+                // Nocturne aliases — `void` is the canvas, `overlay` the translucent
+                // white/dark channel used for hairline borders + glass fills.
+                void: "rgb(var(--bg) / <alpha-value>)",
+                overlay: "rgb(var(--overlay) / <alpha-value>)",
                 surface: {
                     DEFAULT: "rgb(var(--surface) / <alpha-value>)",
                     elevated: "rgb(var(--surface-elevated) / <alpha-value>)",
@@ -133,6 +137,15 @@ const config: Config = {
                     amber: "rgb(var(--gold) / <alpha-value>)",
                     gold: "rgb(var(--gold) / <alpha-value>)",
                 },
+            },
+            // Nocturne hairline alpha stops — Tailwind's `/N` color-alpha modifier only
+            // resolves values present in the opacity scale, and the reference uses
+            // off-scale stops (e.g. overlay/7 hairlines, ember/13 bubble fill).
+            opacity: {
+                7: "0.07",
+                12: "0.12",
+                13: "0.13",
+                16: "0.16",
             },
             borderRadius: {
                 DEFAULT: "0.25rem",

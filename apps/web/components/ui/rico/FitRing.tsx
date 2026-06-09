@@ -33,9 +33,14 @@ export function FitRing({
   const circumference = 2 * Math.PI * radius;
   const offset = circumference * (1 - clampedValue / 100);
 
-  // Color by threshold: ember for low (< 60), aura for good (≥ 60)
+  // Color by threshold: ember for low (< 60), aura for good (≥ 60).
+  // Token-driven so the ring follows the theme (AA-darkened in light mode).
   const isGoodFit = clampedValue >= threshold;
-  const strokeColor = isGoodFit ? "#6fe9d0" /* aura */ : "#f0a94a" /* ember */;
+  const strokeColor = isGoodFit ? "rgb(var(--aura))" : "rgb(var(--gold))";
+
+  // Scale the center type with the ring so small rings (e.g. size={44}) don't overflow.
+  const valueFontSize = Math.round(size * 0.27);
+  const labelFontSize = Math.max(8, Math.round(size * 0.094));
 
   return (
     <div
@@ -56,7 +61,7 @@ export function FitRing({
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="rgba(255,255,255,0.08)"
+          stroke="rgb(var(--overlay) / 0.08)"
           strokeWidth={strokeWidth}
         />
 
@@ -78,14 +83,18 @@ export function FitRing({
       <div className="absolute inset-0 grid place-content-center text-center">
         <span
           className={cn(
-            "font-display text-[26px] font-semibold leading-none",
+            "font-display font-semibold leading-none",
             isGoodFit ? "text-aura" : "text-ember"
           )}
+          style={{ fontSize: valueFontSize }}
         >
           {clampedValue}
         </span>
         {label && (
-          <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-text-tertiary -mt-0.5">
+          <span
+            className="font-mono uppercase tracking-[0.18em] text-text-tertiary -mt-0.5"
+            style={{ fontSize: labelFontSize }}
+          >
             {label}
           </span>
         )}
