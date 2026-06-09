@@ -38,8 +38,9 @@ export function GlassCard<T extends ElementType = "div">({
       className={cn(
         // Glass gradient: surface-elevated → ink
         "bg-gradient-to-b from-surface-elevated/85 to-surface/70",
-        // Hairline border
+        // Hairline border + inner ring (double-border glass depth)
         "border border-overlay/7",
+        "relative before:pointer-events-none before:absolute before:inset-px before:rounded-[inherit] before:border before:border-overlay/5 before:content-['']",
         // Radius — Nocturne reference .glass-card (22px)
         "rounded-rico-lg",
         // Shadow + inset highlight — theme-aware via --shadow-color (soft on light)

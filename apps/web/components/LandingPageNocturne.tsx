@@ -180,15 +180,27 @@ export default function LandingPageNocturne() {
 
     return (
         <div dir={isAr ? "rtl" : "ltr"} className="relative min-h-screen overflow-x-hidden bg-void text-text-primary">
-            {/* Background glows - reduced intensity for easier viewing */}
+            {/* Atmosphere — layered command-center depth (all fixed, non-interactive) */}
             <div className="fixed inset-0 pointer-events-none z-0 motion-reduce:opacity-50" aria-hidden="true">
-                <div className="absolute -left-40 -top-40 h-[620px] w-[620px] rounded-full bg-ember/[0.07] blur-[140px]" />
-                <div className="absolute -right-40 top-[40%] h-[520px] w-[520px] rounded-full bg-aura/[0.04] blur-[140px]" />
+                {/* Stage light: faint ember radial from top center */}
+                <div className="absolute inset-x-0 -top-[30%] h-[80%] bg-[radial-gradient(ellipse_55%_60%_at_50%_0%,rgb(var(--gold)/0.08),transparent_70%)]" />
+                {/* Drifting glows (slow float = parallax against the 3px card drift) */}
+                <div className="absolute -left-40 -top-40 h-[620px] w-[620px] rounded-full bg-ember/[0.07] blur-[140px] animate-float" />
+                <div className="absolute -right-40 top-[40%] h-[520px] w-[520px] rounded-full bg-aura/[0.04] blur-[140px] animate-float-delayed" />
                 <div className="absolute bottom-[-160px] left-[30%] h-[520px] w-[520px] rounded-full bg-ember/[0.04] blur-[140px]" />
+                {/* Beam: vertical light shaft behind the hero card column */}
+                <div className="absolute top-0 start-[58%] h-[70vh] w-[44%] bg-[linear-gradient(180deg,rgb(var(--gold)/0.05),transparent_75%)] [mask-image:radial-gradient(ellipse_60%_90%_at_50%_0%,#000,transparent)] blur-2xl" />
+                {/* Grid: faint plotting lines, fading out radially */}
+                <div className="absolute inset-0 opacity-[0.35] bg-[linear-gradient(rgb(var(--overlay)/0.045)_1px,transparent_1px),linear-gradient(90deg,rgb(var(--overlay)/0.045)_1px,transparent_1px)] bg-[size:72px_72px] [mask-image:radial-gradient(ellipse_75%_60%_at_50%_22%,#000_30%,transparent_78%)]" />
+                {/* Vignette: pulls focus to center, grounds the edges */}
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_115%_95%_at_50%_40%,transparent_55%,rgb(var(--bg)/0.55)_100%)]" />
             </div>
 
             {/* Header */}
-            <header className="sticky top-0 z-50 backdrop-blur-xl bg-void/55 border-b border-overlay/7">
+            <header className="sticky top-0 z-50 backdrop-blur-xl bg-void/55">
+                {/* Gradient hairline + ember accent — ties the bar into the stage light */}
+                <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-overlay/20 to-transparent" aria-hidden="true" />
+                <div className="absolute inset-x-[30%] bottom-0 h-px bg-gradient-to-r from-transparent via-ember/30 to-transparent" aria-hidden="true" />
                 <div className="max-w-[1140px] mx-auto px-6 h-16 flex items-center justify-between">
                     <Link href="/" className="flex items-center gap-2.5 font-display font-bold text-lg tracking-tight">
                         <RicoLogoMark />
@@ -207,26 +219,36 @@ export default function LandingPageNocturne() {
                 <section className="py-16 md:py-[78px] pb-12 md:pb-[70px]">
                     <div className="max-w-[1140px] mx-auto px-4 sm:px-6 grid lg:grid-cols-[1.05fr_0.95fr] gap-8 md:gap-14 items-center">
                         <div>
-                            <Eyebrow className="mb-5">{t.eyebrow}</Eyebrow>
-                            <h1 className="font-display font-semibold text-[clamp(2.2rem,5.4vw,4rem)] leading-[1.04] tracking-[-0.025em]">
-                                {t.headline1}<br /><span className="text-ember">{t.headline2}</span>
+                            <Eyebrow className="mb-6">{t.eyebrow}</Eyebrow>
+                            <h1 className="font-display font-semibold text-[clamp(2.3rem,5.6vw,4.2rem)] leading-[1.03] tracking-[-0.028em]">
+                                <span className="bg-gradient-to-b from-text-primary to-text-secondary bg-clip-text text-transparent">{t.headline1}</span>
+                                <br />
+                                <span className="bg-gradient-to-b from-ember-bright to-ember bg-clip-text text-transparent">{t.headline2}</span>
                             </h1>
-                            <p className="mt-5 max-w-[42ch] text-lg text-text-secondary">{t.subtitle}</p>
-                            <div className="mt-8 flex flex-wrap gap-3">
+                            <p className="mt-6 max-w-[42ch] text-lg leading-relaxed text-text-secondary">{t.subtitle}</p>
+                            <div className="mt-9 flex flex-wrap gap-3">
                                 <Link href="/upload"><RicoButton variant="primary" size="md">{t.ctaUpload}</RicoButton></Link>
                                 <Link href="#how"><RicoButton variant="ghost" size="md">{t.ctaHow}</RicoButton></Link>
                             </div>
-                            <div className="mt-7 flex flex-wrap gap-2">
+                            <div className="mt-8 flex flex-wrap gap-2">
                                 {[t.trust1, t.trust2, t.trust3].map((item) => (
-                                    <span key={item} className="inline-flex items-center gap-1.5 font-mono text-[11.5px] text-text-secondary border border-overlay/7 rounded-full px-3 py-1.5">
-                                        <span className="h-1 w-1 rounded-full bg-aura shadow-[0_0_6px_rgba(111,233,208,0.5)]" />{item}
+                                    <span key={item} className="inline-flex items-center gap-1.5 font-mono text-[11px] text-text-tertiary border border-overlay/7 rounded-full px-3 py-1.5 bg-surface/30">
+                                        <span className="h-1 w-1 rounded-full bg-aura shadow-[0_0_6px_rgb(var(--aura)/0.5)]" />{item}
                                     </span>
                                 ))}
                             </div>
                         </div>
-                        <div className="relative mt-8 lg:mt-0">
+                        <div className="relative mt-8 lg:mt-0 [perspective:1300px]">
+                            {/* Halo grounding the card in the stage light (breathes with the orb) */}
+                            <div aria-hidden="true" className="absolute -inset-10 bg-[radial-gradient(ellipse_at_50%_38%,rgb(var(--gold)/0.10),transparent_65%)] blur-2xl animate-glow-pulse motion-reduce:animate-none" />
+                            {/* Floor shadow — sells the float */}
+                            <div aria-hidden="true" className="absolute -bottom-10 inset-x-12 h-10 bg-[radial-gradient(ellipse_at_center,rgb(var(--shadow-color)/0.6),transparent_70%)] blur-md" />
+                            {/* Tilt layer — subtle 3D facing the headline; mirrored for RTL */}
+                            <div className="relative [transform-style:preserve-3d] lg:[transform:rotateX(1.5deg)_rotateY(-2.5deg)] lg:rtl:[transform:rotateX(1.5deg)_rotateY(2.5deg)]">
                             <GlassCard className="p-5 relative overflow-visible animate-drift motion-reduce:animate-none">
-                                <div className="flex items-center gap-2.5 pb-4 mb-4 border-b border-overlay/7">
+                                {/* Top edge-light */}
+                                <div aria-hidden="true" className="absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-ember/40 to-transparent" />
+                                <div className="flex items-center gap-2.5 pb-4 mb-4 border-b border-overlay/7 -mx-5 -mt-5 px-5 pt-5 rounded-t-rico-lg bg-gradient-to-b from-overlay/[0.04] to-transparent">
                                     <div className="w-[30px] h-[30px] rounded-full bg-[radial-gradient(circle_at_38%_34%,#fff,rgb(var(--gold-hover))_38%,rgb(var(--gold))_70%)] shadow-[0_0_18px_rgb(var(--gold)/0.65)] motion-safe:animate-breathe" />
                                     <div>
                                         <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-secondary">{t.matchLabel}</p>
@@ -245,19 +267,23 @@ export default function LandingPageNocturne() {
                                             ))}
                                         </div>
                                     </div>
-                                    <FitRing value={86} size={96} label={isAr ? "ملاءمة" : "Fit"} />
+                                    <div className="relative">
+                                        <div aria-hidden="true" className="absolute -inset-3 rounded-full bg-aura/10 blur-xl" />
+                                        <FitRing className="relative" value={86} size={96} label={isAr ? "ملاءمة" : "Fit"} />
+                                    </div>
                                 </div>
                                 <div className="mt-4 pt-3 border-t border-overlay/7 flex items-center justify-between">
                                     <p className="text-xs text-text-tertiary">{isAr ? "التالي: " : "Next: "}<span className="text-text-primary font-medium">{isAr ? "فتح رابط التقديم" : "open apply link"}</span></p>
                                     <RicoButton variant="ghost" size="sm">{t.matchReview}</RicoButton>
                                 </div>
                             </GlassCard>
+                            </div>
                         </div>
                     </div>
                 </section>
 
                 {/* Trust Bar */}
-                <div className="border-y border-overlay/7 py-4 md:py-6">
+                <div className="border-y border-overlay/7 py-4 md:py-6 bg-surface/30 backdrop-blur-sm">
                     <div className="max-w-[1140px] mx-auto px-4 sm:px-6 flex flex-wrap justify-center md:justify-between gap-4 md:gap-6">
                         {[t.trustBar1, t.trustBar2, t.trustBar3, t.trustBar4].map((item, i) => (
                             <div key={i} className="flex items-center gap-2.5 text-sm text-text-secondary">
