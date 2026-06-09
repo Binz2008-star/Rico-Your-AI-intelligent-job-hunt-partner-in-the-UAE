@@ -1,210 +1,173 @@
+# Exported from Render on 2026-06-09T13:12:42Z
+version: "1"
 services:
-  - type: web
-    name: rico-api
-    runtime: python
-    plan: starter
-    buildCommand: pip install -r requirements.txt
-    # --proxy-headers + --forwarded-allow-ips lets uvicorn trust Render's load balancer
-    # and populate request.client.host from X-Forwarded-For (real client IP), so per-client
-    # rate limiting and request logging don't collapse onto the proxy's single IP.
-    startCommand: python -m uvicorn src.api.app:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips='*'
-    healthCheckPath: /health
-    envVars:
-
-      # ── Auth / admin (secrets — set in Render dashboard) ─────────────────────
-      - key: ADMIN_EMAIL
-        sync: false
-      - key: ADMIN_PASSWORD
-        sync: false
-      - key: ADMIN_PASSWORD_HASH
-        sync: false
-      - key: JWT_SECRET
-        sync: false
-      - key: ALLOW_ENV_AUTH_FALLBACK
-        value: "false"
-
-      # ── Database ──────────────────────────────────────────────────────────────
-      - key: DATABASE_URL
-        sync: false
-
-      # ── Email / SMTP (secrets) ────────────────────────────────────────────────
-      - key: EMAIL_USER
-        sync: false
-      - key: EMAIL_PASS
-        sync: false
-      - key: EMAIL_TO
-        sync: false
-      - key: ENABLE_SIGNUP_EMAIL_NOTIFICATIONS
-        value: "true"
-      - key: ADMIN_SIGNUP_NOTIFICATION_EMAIL
-        value: "info@ricohunt.com"
-
-      # ── Public contact addresses ──────────────────────────────────────────────
-      - key: APP_PUBLIC_EMAIL
-        value: "info@ricohunt.com"
-      - key: SUPPORT_EMAIL
-        value: "info@ricohunt.com"
-
-      # ── Telegram (secrets) ────────────────────────────────────────────────────
-      - key: TELEGRAM_BOT_TOKEN
-        sync: false
-      - key: TELEGRAM_CHAT_ID
-        sync: false
-      - key: TELEGRAM_WEBHOOK_SECRET
-        sync: false
-
-      # ── AI providers (secrets) ────────────────────────────────────────────────
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: DEEPSEEK_API_KEY
-        sync: false
-      - key: HF_TOKEN
-        sync: false
-      - key: HF_API_TOKEN
-        sync: false
-
-      # ── AI provider routing (config) ──────────────────────────────────────────
-      - key: RICO_AI_PROVIDER
-        value: "deepseek"
-      - key: RICO_OPENAI_MODEL
-        value: "gpt-4.1-mini"
-      - key: DEEPSEEK_MODEL
-        value: "deepseek-v4-flash"
-
-      # ── Jotform (secrets) ─────────────────────────────────────────────────────
-      - key: JOTFORM_FORM_ID
-        sync: false
-      - key: JOTFORM_RICO_FORM_ID
-        sync: false
-      - key: JOTFORM_API_KEY
-        sync: false
-      - key: JOTFORM_WEBHOOK_SECRET
-        sync: false
-
-      # ── GitHub webhook (secret) ───────────────────────────────────────────────
-      - key: GITHUB_WEBHOOK_SECRET
-        sync: false
-
-      # ── Billing mode ─────────────────────────────────────────────────────────
-      - key: BILLING_MODE
-        value: "manual"
-      - key: RICO_PRO_PRICE_AED
-        value: "29"
-      - key: RICO_PREMIUM_PRICE_AED
-        value: "49"
-
-      # ── Stripe ────────────────────────────────────────────────────────────────
-      - key: STRIPE_SECRET_KEY
-        sync: false
-      - key: STRIPE_WEBHOOK_SECRET
-        sync: false
-      - key: STRIPE_PRO_PRICE_ID
-        value: "price_1Tf9N0DjGoun5RObhfGUBgeh"
-      - key: STRIPE_PREMIUM_PRICE_ID
-        value: "price_1Tf9LJDjGoun5RObhGBUOPFo"
-
-      # ── Job search API (secret) ───────────────────────────────────────────────
-      - key: RAPIDAPI_KEY
-        sync: false
-
-      # ── Environment / URLs ────────────────────────────────────────────────────
-      - key: RICO_ENV
-        value: "production"
-      - key: APP_ENV
-        value: "production"
-      - key: FRONTEND_URL
-        value: "https://ricohunt.com"
-      - key: APP_URL
-        value: "https://ricohunt.com"
-      - key: RESET_BASE_URL
-        value: "https://ricohunt.com"
-      - key: DEPLOYED_AT
-        value: "2026-05-23T15:21:00Z"
-
-      # ── Cookies / CORS ────────────────────────────────────────────────────────
-      - key: COOKIE_SECURE
-        value: "true"
-      - key: COOKIE_DOMAIN
-        value: ".ricohunt.com"
-      - key: CORS_ORIGINS
-        value: "https://ricohunt.com,https://www.ricohunt.com,https://web-rose-phi-35.vercel.app,http://localhost:3000"
-      - key: JWT_TTL_HOURS
-        value: "24"
-
-      # ── Safety / automation gates ─────────────────────────────────────────────
-      - key: RICO_ENABLE_AUTO_APPLY
-        value: "false"
-      - key: RICO_INTERACTIVE_APPLY
-        value: "false"
-      - key: RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS
-        value: "true"
-      - key: RICO_TELEGRAM_PUBLIC_ALERTS
-        value: "true"
-      - key: ALLOW_CI_APPLY
-        value: "false"
-
-      # ── Auto-apply config ─────────────────────────────────────────────────────
-      - key: AUTO_APPLY_ENABLED
-        value: "false"
-      - key: AUTO_APPLY_DRY_RUN
-        value: "true"
-      - key: AUTO_APPLY_MAX_PER_RUN
-        value: "3"
-      - key: AUTO_APPLY_DAILY_LIMIT
-        value: "30"
-      - key: AUTO_APPLY_COOLDOWN_SECONDS
-        value: "90"
-      - key: AUTO_APPLY_SCORE_THRESHOLD
-        value: "75"
-      - key: AUTO_APPLY_SCORE
-        value: "85"
-      - key: MANUAL_APPROVAL_SCORE
-        value: "65"
-      - key: AUTO_APPLY_EXCLUDE_KEYWORDS
-        value: "uae national,uae nationals only,uae national only,emirati only,graduate uae national only,quantity surveyor,surveyor,civil engineer,estimator,site engineer,co-founder,owner,founding partner,intern,internship"
-
-      # ── NaukriGulf config ─────────────────────────────────────────────────────
-      - key: NG_ENABLED
-        value: "true"
-      - key: NG_DRY_RUN
-        value: "true"
-      - key: NG_MAX_PER_RUN
-        value: "2"
-      - key: NG_DAILY_LIMIT
-        value: "5"
-      - key: NG_COOLDOWN_SECONDS
-        value: "180"
-      - key: NG_SCORE_THRESHOLD
-        value: "45"
-      - key: NG_MAX_SESSION_FAILURES
-        value: "3"
-      - key: NAUKRIGULF_EXCLUDE_KEYWORDS
-        value: "consultancy,pay fee,visa fee,commission only,whatsapp only,recruitment agency,placement agency,manpower supply,walk in interview,uae national,emirati only,quantity surveyor,civil engineer,site engineer,driver,technician"
-
-      # ── Indeed config ─────────────────────────────────────────────────────────
-      - key: INDEED_ENABLED
-        value: "false"
-      - key: INDEED_DRY_RUN
-        value: "false"
-      - key: INDEED_MAX_PER_RUN
-        value: "3"
-      - key: INDEED_DAILY_LIMIT
-        value: "15"
-      - key: INDEED_COOLDOWN_SECONDS
-        value: "120"
-      - key: INDEED_SCORE_THRESHOLD
-        value: "50"
-      - key: INDEED_STREET_ADDRESS
-        value: "Ajman, UAE"
-      - key: INDEED_RELEVANT_JOB_TITLE
-        value: "Sustainability & Environmental Operations Leader"
-      - key: INDEED_RELEVANT_COMPANY
-        value: "ECO Environmental Services"
-
-      # ── Job filtering ─────────────────────────────────────────────────────────
-      - key: EXCLUDE_KEYWORDS
-        value: "surveyor,purchasing,procurement,interior,joinery,project engineer,hr officer,catering,accommodation,cad supervisor,technician,driver,consultant,recruitment agency,admin officer,secretary,personal assistant,uae national,emirati only,general manager,executive assistant,store manager,sales manager,marketing manager,business development manager"
-      - key: CV_PATH
-        value: "data/cv.pdf"
-      - key: PYTHON_VERSION
-        value: "3.11.9"
+- type: web
+  name: rico-job-automation-api
+  runtime: python
+  repo: https://github.com/Binz2008-star/Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE
+  plan: standard
+  envVars:
+  - key: NEXT_PUBLIC_BILLING_MODE
+    sync: false
+  - key: EMAIL_FROM_NAME
+    sync: false
+  - key: EMAIL_FROM
+    sync: false
+  - key: SMTP_USER
+    sync: false
+  - key: SMTP_PORT
+    sync: false
+  - key: SMTP_HOST
+    sync: false
+  - key: SMTP_PASSWORD
+    sync: false
+  - key: TELEGRAM_WEBHOOK_SECRET
+    sync: false
+  - key: TELEGRAM_CHAT_ID
+    sync: false
+  - key: TELEGRAM_BOT_TOKEN
+    sync: false
+  - key: JWT_SECRET
+    sync: false
+  - key: JOTFORM_WEBHOOK_SECRET
+    sync: false
+  - key: JOTFORM_RICO_FORM_ID
+    sync: false
+  - key: STRIPE_SECRET_KEY
+    sync: false
+  - key: STRIPE_PREMIUM_PRICE_ID
+    sync: false
+  - key: STRIPE_PRO_PRICE_ID
+    sync: false
+  - key: BILLING_MODE
+    sync: false
+  - key: RESET_BASE_URL
+    sync: false
+  - key: FRONTEND_URL
+    sync: false
+  - key: EMAIL_PASS
+    sync: false
+  - key: ENABLE_SIGNUP_EMAIL_NOTIFICATIONS
+    sync: false
+  - key: ADMIN_SIGNUP_NOTIFICATION_EMAIL
+    sync: false
+  - key: NEXT_PUBLIC_RICO_WHATSAPP_NUMBER
+    sync: false
+  - key: ADMIN_EMAIL
+    sync: false
+  - key: SUPPORT_EMAIL
+    sync: false
+  - key: APP_PUBLIC_EMAIL
+    sync: false
+  - key: CODEX_ACCESS_TOKEN
+    sync: false
+  - key: STRIPE_WEBHOOK_SECRET
+    sync: false
+  - key: DEPLOYED_AT
+    sync: false
+  - key: RICO_AI_PROVIDER
+    sync: false
+  - key: ready_for_hf
+    sync: false
+  - key: HF_TOKEN
+    sync: false
+  - key: JOTFORM_API_KEY
+    sync: false
+  - key: RICO_ENV
+    sync: false
+  - key: response_source
+    sync: false
+  - key: DEEPSEEK_API_KEY
+    sync: false
+  - key: DATABASE_URL
+    sync: false
+  - key: RAPIDAPI_KEY
+    sync: false
+  - key: CORS_ORIGINS
+    sync: false
+  - key: RENDER_API_KEY
+    sync: false
+  - key: PYTHON_VERSION
+    sync: false
+  - key: NG_DAILY_LIMIT
+    sync: false
+  - key: NG_COOLDOWN_SECONDS
+    sync: false
+  - key: NAUKRIGULF_PASSWORD
+    sync: false
+  - key: LINKEDIN_EMAIL
+    sync: false
+  - key: INDEED_ENABLED
+    sync: false
+  - key: INDEED_DRY_RUN
+    sync: false
+  - key: INDEED_DAILY_LIMIT
+    sync: false
+  - key: INDEED_COOLDOWN_SECONDS
+    sync: false
+  - key: EXCLUDE_KEYWORDS
+    sync: false
+  - key: EMAIL_USER
+    sync: false
+  - key: EMAIL_TO
+    sync: false
+  - key: CV_PATH
+    sync: false
+  - key: AUTO_APPLY_SCORE
+    sync: false
+  - key: AUTO_APPLY_MAX_PER_RUN
+    sync: false
+  - key: AUTO_APPLY_DAILY_LIMIT
+    sync: false
+  - key: ADMIN_PASSWORD
+    sync: false
+  - key: OPENAI_API_KEY
+    sync: false
+  - key: ALLOW_ENV_AUTH_FALLBACK
+    sync: false
+  - key: NAUKRIGULF_EXCLUDE_KEYWORDS
+    sync: false
+  - key: NAUKRIGULF_EMAIL
+    sync: false
+  - key: NG_MAX_SESSION_FAILURES
+    sync: false
+  - key: MANUAL_APPROVAL_SCORE
+    sync: false
+  - key: NG_SCORE_THRESHOLD
+    sync: false
+  - key: NG_MAX_PER_RUN
+    sync: false
+  - key: NG_DRY_RUN
+    sync: false
+  - key: NG_ENABLED
+    sync: false
+  - key: INDEED_RELEVANT_COMPANY
+    sync: false
+  - key: INDEED_RELEVANT_JOB_TITLE
+    sync: false
+  - key: INDEED_STREET_ADDRESS
+    sync: false
+  - key: INDEED_SCORE_THRESHOLD
+    sync: false
+  - key: INDEED_MAX_PER_RUN
+    sync: false
+  - key: AUTO_APPLY_EXCLUDE_KEYWORDS
+    sync: false
+  - key: ALLOW_CI_APPLY
+    sync: false
+  - key: AUTO_APPLY_COOLDOWN_SECONDS
+    sync: false
+  - key: AUTO_APPLY_SCORE_THRESHOLD
+    sync: false
+  - key: AUTO_APPLY_DRY_RUN
+    sync: false
+  - key: AUTO_APPLY_ENABLED
+    sync: false
+  - key: LINKEDIN_PASSWORD
+    sync: false
+  region: virginia
+  buildCommand: pip install -r requirements.txt
+  startCommand: python -m uvicorn src.api.app:app --host 0.0.0.0 --port $PORT
+  autoDeployTrigger: "off"
+  previews:
+    generation: manual
