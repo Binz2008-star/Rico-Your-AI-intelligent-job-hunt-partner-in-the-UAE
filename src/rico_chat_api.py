@@ -124,6 +124,19 @@ _SETTINGS_SHOW_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Job card "Mark as applied" action commands — must route to legacy mark_applied handler,
+# NOT the manual application status update flow. Pattern: "Mark as applied — Title at Company"
+_MARK_APPLIED_CARD_ACTION_RE = re.compile(
+    r"^\s*mark\s+as\s+applied\s*[-—–]\s*"  # "Mark as applied —" or "Mark as applied -"
+    r".+\s+at\s+.+"  # Must have "Title at Company" structure
+    r"|\s*mark\s+as\s+applied\s+[-—–]\s*.+\s+at\s+.+"  # Variant with leading space
+    r"|\s*mark\s+as\s+applied\s*:\s*.+\s+at\s+.+"  # Variant with colon
+    r"|\s*mark\s+(?:it|this|the\s+job)\s+as\s+applied\s+[-—–:]\s*.+\s+at\s+.+"  # "mark it as applied —"
+    r"|\s*mark\s+(?:it|this)\s+as\s+applied\s+(?:for|to)\s+.+\s+at\s+.+"  # "mark it as applied for X at Y"
+    ,
+    re.IGNORECASE,
+)
+
 # CV improvement follow-up phrases — used ONLY when last_flow_state == "cv_builder".
 # Never apply this pattern without flow-state context or it will misfire on
 # "improve my cover letter", "enhance it" for other content, etc.
@@ -3115,7 +3128,8 @@ class RicoChatAPI:
         # ── Manual Application Status: English (before Arabic block for priority) ─
         # Handle English "I applied" / "submitted" / "mark as applied" BEFORE
         # job search classification to prevent "I applied manually" being treated as a job role.
-        if not self._is_arabic_text(message):
+        # Guard: Skip if message looks like an explicit job-card action command (e.g., "Mark as applied — HSE Officer at Acme")
+        if not self._is_arabic_text(message) and not _MARK_APPLIED_CARD_ACTION_RE.search(message):
             from src.agent.intelligence.intent_classifier import _is_english_manual_applied_status
             if _is_english_manual_applied_status(message):
                 logger.info("rico_manual_applied user=%s msg=%r", user_id, message)
