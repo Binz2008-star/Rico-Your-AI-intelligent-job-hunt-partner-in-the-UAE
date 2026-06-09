@@ -16,27 +16,42 @@
 
 ### Color Palette
 
-| Role | Hex | CSS Variable |
-|------|-----|--------------|
-| Primary | `#1C1917` | `--color-primary` |
-| Secondary | `#44403C` | `--color-secondary` |
-| CTA/Accent | `#CA8A04` | `--color-cta` |
-| Background | `#FAFAF9` | `--color-background` |
-| Text | `#0C0A09` | `--color-text` |
+> **Source of truth:** `apps/web/app/globals.css` (`:root` = dark default, `.light`
+> = WCAG-AA light theme). Semantic colors are RGB-channel CSS variables consumed
+> through Tailwind tokens (`bg-background`, `text-text-secondary`, `text-gold`,
+> `border-border-subtle`, …). Do **not** hardcode hex for semantic roles in
+> components — use the token utilities so the `.light` theme keeps working.
 
-**Color Notes:** Premium dark + gold accent
+| Role | Hex (dark) | Token / Tailwind |
+|------|-----------|------------------|
+| Canvas background | `#000000` (page surface `#0a0a1a`) | `--bg` / `bg-background` |
+| Surface | `#0a0a0f` | `--surface` / `bg-surface` |
+| Primary accent · CTA — **Gold/Amber** | `#f5a623` | `--gold` / `text-gold` `bg-gold` |
+| Secondary — **Magenta** (energy/action) | `#ff2d8e` | `--magenta` / `text-magenta` |
+| Tertiary — **Cyan** (data/intelligence) | `#00e5ff` | `--cyan` / `text-cyan` |
+| Text primary | `#ffffff` | `--text-primary` / `text-text-primary` |
+| Text secondary | `#b8b8b8` | `--text-secondary` / `text-text-secondary` |
+| Text tertiary | `#7a7a7a` | `--text-tertiary` / `text-text-tertiary` |
+
+**Color Notes:** Cinematic **dark** canvas with a gold/amber primary; magenta and
+cyan are energy/data tertiaries. A WCAG-AA light theme ships via the `.light`
+class (accents darkened for contrast). Contrast is gated by
+`apps/web/scripts/check-contrast.mjs` — run `npm run check:contrast`.
 
 ### Typography
 
-- **Heading Font:** Satoshi
-- **Body Font:** General Sans
-- **Mood:** premium, modern, clean, sophisticated, versatile, balanced
-- **Google Fonts:** [Satoshi + General Sans](https://fonts.google.com/share?selection.family=DM+Sans:wght@400;500;700)
+- **Heading / Display Font:** IBM Plex Sans (with Sora as the display fallback)
+- **Body / UI Font:** IBM Plex Sans
+- **Mono / labels:** Space Mono
+- **Mood:** premium, modern, clean, sophisticated
+- **Loaded in:** `apps/web/app/layout.tsx` via `next/font/google` (`IBM_Plex_Sans`,
+  `Sora`, `Space_Mono`) — no CSS `@import` is used.
 
-**CSS Import:**
-```css
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap');
-```
+Tailwind families (see `tailwind.config.ts`):
+
+- `font-display` / `font-headline` → `var(--font-ibm-plex-sans)`, `var(--font-sora)`
+- `font-body` → `var(--font-ibm-plex-sans)`
+- `font-mono` → `var(--font-space-mono)`
 
 ### Spacing Variables
 
@@ -66,50 +81,55 @@
 ### Buttons
 
 ```css
-/* Primary Button */
+/* Primary Button — gold CTA, dark label, gold glow */
 .btn-primary {
-  background: #CA8A04;
-  color: white;
+  background: #f5a623;
+  color: #0a0a1a;
   padding: 12px 24px;
-  border-radius: 8px;
+  border-radius: 9999px;
   font-weight: 600;
-  transition: all 200ms ease;
+  box-shadow: 0 0 32px rgba(245, 166, 35, 0.28);
+  transition: opacity 200ms ease;
   cursor: pointer;
 }
 
 .btn-primary:hover {
   opacity: 0.9;
-  transform: translateY(-1px);
 }
 
-/* Secondary Button */
+/* Secondary Button — quiet glass on the dark canvas */
 .btn-secondary {
-  background: transparent;
-  color: #1C1917;
-  border: 2px solid #1C1917;
+  background: rgba(255, 255, 255, 0.04);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   padding: 12px 24px;
-  border-radius: 8px;
+  border-radius: 9999px;
   font-weight: 600;
-  transition: all 200ms ease;
+  transition: background 200ms ease;
   cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 ```
 
 ### Cards
 
 ```css
+/* Glass card on the dark canvas (see .glass-panel in globals.css for the
+   elevated variant with backdrop-blur). */
 .card {
-  background: #FAFAF9;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 12px;
   padding: 24px;
-  box-shadow: var(--shadow-md);
   transition: all 200ms ease;
-  cursor: pointer;
 }
 
 .card:hover {
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 ```
 
@@ -117,17 +137,19 @@
 
 ```css
 .input {
+  background: rgba(255, 255, 255, 0.03);
+  color: #ffffff;
   padding: 12px 16px;
-  border: 1px solid #E2E8F0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   font-size: 16px;
   transition: border-color 200ms ease;
 }
 
 .input:focus {
-  border-color: #1C1917;
+  border-color: #f5a623;
   outline: none;
-  box-shadow: 0 0 0 3px #1C191720;
+  box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.20);
 }
 ```
 
@@ -140,10 +162,12 @@
 }
 
 .modal {
-  background: white;
+  background: linear-gradient(180deg, rgba(19, 19, 42, 0.92) 0%, rgba(10, 10, 24, 0.88) 100%);
+  backdrop-filter: blur(36px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   padding: 32px;
-  box-shadow: var(--shadow-xl);
+  box-shadow: 0 20px 60px rgba(5, 5, 16, 0.5);
   max-width: 500px;
   width: 90%;
 }
@@ -153,13 +177,13 @@
 
 ## Style Guidelines
 
-**Style:** Flat Design
+**Style:** Cinematic dark — glassmorphism + premium gold accent
 
-**Keywords:** 2D, minimalist, bold colors, no shadows, clean lines, simple shapes, typography-focused, modern, icon-heavy
+**Keywords:** dark canvas, glassmorphism, ambient radial glows, gold/magenta/cyan accents, framer-motion, bilingual + RTL-aware, premium, high-contrast
 
-**Best For:** Web apps, mobile apps, cross-platform, startup MVPs, user-friendly, SaaS, dashboards, corporate
+**Best For:** AI products, SaaS, premium landing pages, dashboards
 
-**Key Effects:** No gradients/shadows, simple hover (color/opacity shift), fast loading, clean transitions (150-200ms ease), minimal icons
+**Key Effects:** Glass panels (`.glass-panel` / `.glass-island`, backdrop-blur), ambient radial glows, gold glow shadows on primary CTAs, framer-motion entrance animations wrapped in `MotionConfig reducedMotion="user"` (respects `prefers-reduced-motion`), subtle noise-grain overlay, transitions 150–300ms ease.
 
 ### Page Pattern
 
