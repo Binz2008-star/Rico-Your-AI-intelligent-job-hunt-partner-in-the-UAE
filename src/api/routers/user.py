@@ -1,10 +1,12 @@
-"""GET /api/v1/me — current session identity."""
+"""GET /api/v1/me — current session identity.
+GET /api/v1/user/files — list user's uploaded files (CV etc.).
+"""
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, List
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 
 router = APIRouter(prefix="/api/v1", tags=["user"])
 logger = logging.getLogger(__name__)
@@ -50,3 +52,58 @@ def me(request: Request) -> Dict[str, Any]:
         "authenticated": True,
         "name":          _fetch_display_name(email),
     }
+
+
+@router.get("/user/files")
+def list_user_files(request: Request) -> List[Dict[str, Any]]:
+    """Return the user's uploaded files (CV only for now).
+
+    Reads cv_filename and updated_at from rico_users / rico_profiles so the
+    My Files page has something to display without a dedicated file-storage
+    table.  Returns an empty list for unauthenticated requests.
+    """
+    user = getattr(request.state, "current_user", None)
+    if not isinstance(user, dict) or not user.get("email"):
+        return []
+
+    email = user["email"]
+    try:
+        from src.db import get_db_connection
+        conn = get_db_connection()
+        if not conn:
+            return []
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT u.id, u.updated_at,
+                           p.data->>'cv_filename' AS cv_filename
+                    FROM   rico_users u
+                    LEFT JOIN rico_profiles p ON p.user_id = u.id
+                    WHERE  u.email = %s
+                    LIMIT  1
+                    """,
+                    (email,),
+                )
+                row = cur.fetchone()
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("user_files_lookup_error email=%s", email)
+        raise HTTPException(status_code=500, detail="Could not load files")
+
+    if not row:
+        return []
+
+    cv_filename = row[2] if row[2] else None
+    if not cv_filename:
+        return []
+
+    return [
+        {
+            "id":         f"cv-{row[0]}",
+            "name":       cv_filename,
+            "type":       "cv",
+            "uploaded_at": row[1].isoformat() if row[1] else None,
+        }
+    ]
