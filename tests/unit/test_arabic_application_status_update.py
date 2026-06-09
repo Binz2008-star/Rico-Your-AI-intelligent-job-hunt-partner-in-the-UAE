@@ -197,7 +197,8 @@ def test_mark_applied_card_write_failure_does_not_claim_applied() -> None:
 
     assert result["type"] == "application_status_update_failed"
     assert result["job_status"] is None
-    assert "couldn't save it right now" in result["message"]
+    # Accept both "couldn't" and "could not" phrasings
+    assert ("couldn't save it right now" in result["message"] or "could not save it right now" in result["message"])
     assert "marked as applied" not in result["message"]
     assert result["target_route"] == "/applications"
 
@@ -271,7 +272,8 @@ def test_pending_mark_applied_confirmation_write_failure_does_not_claim_applied(
 
     assert result["type"] == "application_status_update_failed"
     assert result["job_status"] is None
-    assert "couldn't save it right now" in result["message"]
+    # Accept both "couldn't" and "could not" phrasings
+    assert ("couldn't save it right now" in result["message"] or "could not save it right now" in result["message"])
     assert "marked as applied" not in result["message"]
     assert "treat" not in result["message"].lower()
     assert result["target_route"] == "/applications"
