@@ -29,7 +29,7 @@ router = APIRouter(prefix="/api/v1/user/files", tags=["files"])
 
 _db = RicoDB()
 
-_UNSAFE_CHARS_RE = re.compile(r"[<>\"';\\x00-\x1f\x7f]")
+_UNSAFE_CHARS_RE = re.compile(r"[<>\"';\x00-\x1f\x7f]")
 _PDF_MAGIC = b"%PDF"
 _MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 _ALLOWED_DOC_TYPES = {"cv", "cover_letter", "other"}
