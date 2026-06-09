@@ -42,6 +42,7 @@ from src.api.routers.admin_subscriptions import router as admin_subscriptions_ro
 from src.api.routers.job_lifecycle import router as job_lifecycle_router
 from src.api.routers.apply_queue import router as apply_queue_router
 from src.api.routers.user import router as user_router
+from src.api.routers.files import router as files_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -228,6 +229,7 @@ async def hydrate_request_auth_context(request: Request, call_next):
 
 app.include_router(auth_router)
 app.include_router(user_router)
+app.include_router(files_router)
 app.include_router(actions_router)
 app.include_router(agent_router)
 app.include_router(rico_chat_router)

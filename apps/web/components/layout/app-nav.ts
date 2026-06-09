@@ -28,7 +28,7 @@ export const mainNavSections: NavSection[] = [
         title: "Career",
         items: [
             { label: "Profile", href: "/profile", icon: "person"      },
-            { label: "My CV",   href: "/upload",  icon: "upload_file" },
+            { label: "My Files", href: "/upload",  icon: "folder_open" },
         ],
     },
     {
