@@ -2,6 +2,8 @@
 
 import { fetchMe, submitOnboarding, uploadCV, type OnboardingPayload, type ParsedCV } from "@/lib/api";
 import { buildAuthHref } from "@/lib/redirect";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTranslation } from "@/lib/translations";
 import { AuraGlow } from "@/components/ui/AuraGlow";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { PageTransition } from "@/components/ui/PageTransition";
@@ -9,24 +11,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-// ── Missing-fields form config ────────────────────────────────────────────────
-
-const MISSING_FIELDS: { key: keyof OnboardingPayload; label: string; placeholder: string; isNumber?: boolean; isList?: boolean }[] = [
-  { key: "target_roles", label: "Target roles", placeholder: "e.g. HSE Manager, Operations Director", isList: true },
-  { key: "preferred_cities", label: "Preferred cities", placeholder: "e.g. Dubai, Abu Dhabi, Remote", isList: true },
-  { key: "salary_expectation_aed", label: "Salary expectation (AED/month)", placeholder: "e.g. 25000", isNumber: true },
-  { key: "years_experience", label: "Years of experience", placeholder: "e.g. 8", isNumber: true },
-  { key: "skills", label: "Additional skills (if any missed)", placeholder: "Comma-separated", isList: true },
-];
+type TFunc = (key: string) => string;
 
 // ── Step indicator ────────────────────────────────────────────────────────────
 
-const STEPS = ["Upload CV", "Complete Profile", "Ready"] as const;
-
-function StepIndicator({ current }: { current: 0 | 1 | 2 }) {
+function StepIndicator({ current, t }: { current: 0 | 1 | 2; t: TFunc }) {
+  const steps = [t("onboardingStepUpload"), t("onboardingStepComplete"), t("onboardingStepReady")] as const;
   return (
     <div className="mb-8 flex items-center gap-0" aria-label="Onboarding progress">
-      {STEPS.map((label, idx) => {
+      {steps.map((label, idx) => {
         const done = idx < current;
         const active = idx === current;
         return (
@@ -58,7 +51,7 @@ function StepIndicator({ current }: { current: 0 | 1 | 2 }) {
                 {label}
               </span>
             </div>
-            {idx < STEPS.length - 1 && (
+            {idx < steps.length - 1 && (
               <div
                 className={[
                   "mx-2 mb-4 h-px w-12 transition-all duration-500",
@@ -102,7 +95,7 @@ function SpinnerCard({ label }: { label: string }) {
 
 // ── Completion screen ─────────────────────────────────────────────────────────
 
-function CompletionCard({ onGo }: { onGo: () => void }) {
+function CompletionCard({ onGo, t }: { onGo: () => void; t: TFunc }) {
   return (
     <div className="w-full max-w-lg text-center">
       <div className="mb-6 mx-auto w-14 h-14 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center">
@@ -111,16 +104,16 @@ function CompletionCard({ onGo }: { onGo: () => void }) {
         </svg>
       </div>
       <h2 className="mb-2 font-display font-bold text-2xl text-text-primary tracking-tight">
-        Profile saved
+        {t("onboardingDoneTitle")}
       </h2>
       <p className="mb-8 text-sm text-text-secondary leading-relaxed max-w-sm mx-auto">
-        Rico now has enough context to start hunting. Your first batch of scored jobs will appear on the dashboard shortly.
+        {t("onboardingDoneDesc")}
       </p>
       <button
         onClick={onGo}
         className="inline-flex items-center gap-2 rounded-lg bg-gold text-[#0a0a1a] px-6 py-3 text-sm font-semibold uppercase tracking-widest hover:bg-gold-hover transition-all shadow-[0_4px_16px_rgba(245,166,35,0.28)]"
       >
-        Go to dashboard →
+        {t("onboardingGoToDashboard")}
       </button>
     </div>
   );
@@ -128,7 +121,7 @@ function CompletionCard({ onGo }: { onGo: () => void }) {
 
 // ── Error screen ──────────────────────────────────────────────────────────────
 
-function ErrorCard({ message, onRetry }: { message: string; onRetry: () => void }) {
+function ErrorCard({ message, onRetry, t }: { message: string; onRetry: () => void; t: TFunc }) {
   return (
     <GlassPanel className="w-full max-w-lg p-6 text-center border-error/30 bg-error/5">
       <p className="mb-4 text-sm text-error">{message}</p>
@@ -136,7 +129,7 @@ function ErrorCard({ message, onRetry }: { message: string; onRetry: () => void 
         onClick={onRetry}
         className="rounded-lg bg-gold text-[#0a0a1a] px-5 py-2.5 text-sm font-semibold uppercase tracking-widest hover:bg-gold-hover transition-all"
       >
-        Try again
+        {t("onboardingTryAgain")}
       </button>
     </GlassPanel>
   );
@@ -154,6 +147,8 @@ function isAuthFailure(error: unknown): boolean {
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { language } = useLanguage();
+  const t = useTranslation(language);
   const [authState, setAuthState] = useState<AuthState>("checking");
   const [pageState, setPageState] = useState<PageState>("upload");
   const [parsed, setParsed] = useState<ParsedCV | null>(null);
@@ -163,6 +158,14 @@ export default function OnboardingPage() {
   const loginHref = buildAuthHref("/login", "/onboarding");
   const yearsExperience =
     parsed?.years_experience_hint ?? parsed?.years_experience ?? null;
+
+  const missingFields: { key: keyof OnboardingPayload; label: string; placeholder: string; isNumber?: boolean; isList?: boolean }[] = [
+    { key: "target_roles", label: t("onboardingFieldTargetRoles"), placeholder: t("onboardingFieldTargetRolesPlaceholder"), isList: true },
+    { key: "preferred_cities", label: t("onboardingFieldCities"), placeholder: t("onboardingFieldCitiesPlaceholder"), isList: true },
+    { key: "salary_expectation_aed", label: t("onboardingFieldSalary"), placeholder: t("onboardingFieldSalaryPlaceholder"), isNumber: true },
+    { key: "years_experience", label: t("onboardingFieldExperience"), placeholder: t("onboardingFieldExperiencePlaceholder"), isNumber: true },
+    { key: "skills", label: t("onboardingFieldSkills"), placeholder: t("onboardingFieldSkillsPlaceholder"), isList: true },
+  ];
 
   useEffect(() => {
     let cancelled = false;
@@ -182,18 +185,18 @@ export default function OnboardingPage() {
           router.replace(signUpHref);
           return;
         }
-        setErrorMsg("Could not verify your session. Please refresh or sign in again.");
+        setErrorMsg(t("onboardingErrSession"));
         setAuthState("ready");
       });
 
     return () => {
       cancelled = true;
     };
-  }, [router, signUpHref]);
+  }, [router, signUpHref, t]);
 
   const handleFile = useCallback(async (file: File) => {
     if (file.type !== "application/pdf") {
-      setErrorMsg("Only PDF files are accepted.");
+      setErrorMsg(t("onboardingErrPdfOnly"));
       return;
     }
     setPageState("parsing");
@@ -214,10 +217,10 @@ export default function OnboardingPage() {
         router.replace(loginHref);
         return;
       }
-      setErrorMsg(err instanceof Error ? err.message : "Upload failed. Please try again.");
+      setErrorMsg(err instanceof Error ? err.message : t("onboardingErrUpload"));
       setPageState("upload");
     }
-  }, [loginHref, router]);
+  }, [loginHref, router, t]);
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -235,7 +238,7 @@ export default function OnboardingPage() {
     setErrorMsg("");
 
     const payload: OnboardingPayload = {};
-    for (const field of MISSING_FIELDS) {
+    for (const field of missingFields) {
       const raw = (fieldValues[field.key] ?? "").trim();
       if (!raw) continue;
       if (field.isNumber) {
@@ -255,16 +258,17 @@ export default function OnboardingPage() {
         router.replace(loginHref);
         return;
       }
-      setErrorMsg(err instanceof Error ? err.message : "Could not save your profile. Please try again.");
+      setErrorMsg(err instanceof Error ? err.message : t("onboardingErrSave"));
       setPageState("form");
     }
-  }, [fieldValues, loginHref, router]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fieldValues, loginHref, router, t]);
 
   const pageContent = (
     <>
       {/* ── Auth check spinner ── */}
       {authState === "checking" && (
-        <SpinnerCard label="Checking your session…" />
+        <SpinnerCard label={t("onboardingCheckSession")} />
       )}
 
       {authState === "ready" && (
@@ -277,6 +281,7 @@ export default function OnboardingPage() {
                 : pageState === "form" || pageState === "submitting" ? 1
                 : 2
               }
+              t={t}
             />
           )}
 
@@ -285,10 +290,10 @@ export default function OnboardingPage() {
             <GlassPanel className="w-full max-w-md p-8">
               <div className="mb-8 text-center">
                 <h1 className="font-display font-bold text-2xl text-text-primary tracking-tight mb-2">
-                  Start with your CV
+                  {t("onboardingUploadTitle")}
                 </h1>
                 <p className="text-sm text-text-secondary">
-                  Upload your CV (PDF) — Rico extracts everything and only asks for missing details.
+                  {t("onboardingUploadDesc")}
                 </p>
               </div>
 
@@ -306,8 +311,8 @@ export default function OnboardingPage() {
                       <line x1="12" y1="3" x2="12" y2="15" />
                     </svg>
                   </div>
-                  <span className="text-sm text-text-primary font-medium">Click to upload or drag &amp; drop</span>
-                  <span className="text-xs text-text-secondary">PDF only · max 10 MB</span>
+                  <span className="text-sm text-text-primary font-medium">{t("onboardingClickUpload")}</span>
+                  <span className="text-xs text-text-secondary">{t("onboardingPdfOnly")}</span>
                 </label>
               </div>
 
@@ -318,55 +323,55 @@ export default function OnboardingPage() {
               )}
 
               <p className="mt-6 text-xs text-text-secondary text-center">
-                Already have a profile?{" "}
+                {t("onboardingHaveProfile")}{" "}
                 <Link href="/dashboard?skip=1" className="text-primary hover:text-primary/80 transition-colors">
-                  Go to dashboard →
+                  {t("onboardingGoToDashboard")}
                 </Link>
               </p>
             </GlassPanel>
           )}
 
           {/* ── Parsing spinner ── */}
-          {pageState === "parsing" && <SpinnerCard label="Parsing your CV…" />}
+          {pageState === "parsing" && <SpinnerCard label={t("onboardingParsing")} />}
 
           {/* ── Missing fields form ── */}
           {pageState === "form" && (
             <GlassPanel className="w-full max-w-2xl p-8">
               <h1 className="mb-1 font-display font-bold text-2xl text-text-primary tracking-tight">
-                Profile extracted
+                {t("onboardingExtractedTitle")}
               </h1>
               <p className="mb-6 text-sm text-text-secondary">
-                Rico read your CV. Fill in any missing details to complete your profile.
+                {t("onboardingExtractedDesc")}
               </p>
 
               {parsed && (
                 <div className="mb-6 rounded-xl bg-surface p-4 border border-border-subtle space-y-1">
-                  <p className="text-[11px] uppercase tracking-wider text-text-tertiary mb-2">Extracted from CV</p>
+                  <p className="text-[11px] uppercase tracking-wider text-text-tertiary mb-2">{t("onboardingExtractedFrom")}</p>
                   {yearsExperience != null && (
                     <p className="text-sm text-text-secondary">
-                      <span className="text-text-tertiary">Experience: </span>{yearsExperience} yrs
+                      <span className="text-text-tertiary">{t("onboardingExperience")} </span>{yearsExperience} {t("onboardingYrs")}
                     </p>
                   )}
                   {(parsed.skills?.length ?? 0) > 0 && (
                     <p className="text-sm text-text-secondary">
-                      <span className="text-text-tertiary">Skills: </span>{(parsed.skills ?? []).slice(0, 8).join(", ")}
+                      <span className="text-text-tertiary">{t("onboardingSkillsLabel")} </span>{(parsed.skills ?? []).slice(0, 8).join(", ")}
                     </p>
                   )}
                   {(parsed.certifications?.length ?? 0) > 0 && (
                     <p className="text-sm text-text-secondary">
-                      <span className="text-text-tertiary">Certs: </span>{(parsed.certifications ?? []).join(", ")}
+                      <span className="text-text-tertiary">{t("onboardingCerts")} </span>{(parsed.certifications ?? []).join(", ")}
                     </p>
                   )}
                   {(parsed.languages?.length ?? 0) > 0 && (
                     <p className="text-sm text-text-secondary">
-                      <span className="text-text-tertiary">Languages: </span>{(parsed.languages ?? []).join(", ")}
+                      <span className="text-text-tertiary">{t("onboardingLanguagesLabel")} </span>{(parsed.languages ?? []).join(", ")}
                     </p>
                   )}
                 </div>
               )}
 
               <div className="space-y-4">
-                {MISSING_FIELDS.map((field) => (
+                {missingFields.map((field) => (
                   <div key={field.key}>
                     <label className="block text-[10px] uppercase tracking-widest text-text-secondary mb-1.5">
                       {field.label}
@@ -393,24 +398,24 @@ export default function OnboardingPage() {
                   onClick={() => router.push("/dashboard?skip=1")}
                   className="text-sm text-text-secondary hover:text-text-primary transition-colors"
                 >
-                  Skip for now
+                  {t("onboardingSkipForNow")}
                 </button>
                 <button
                   onClick={handleSubmit}
                   className="inline-flex items-center gap-2 rounded-lg bg-gold text-[#0a0a1a] px-6 py-3 text-sm font-semibold uppercase tracking-widest hover:bg-gold-hover transition-all shadow-[0_4px_16px_rgba(245,166,35,0.28)]"
                 >
-                  Complete profile →
+                  {t("onboardingCompleteProfile")}
                 </button>
               </div>
             </GlassPanel>
           )}
 
           {/* ── Saving spinner ── */}
-          {pageState === "submitting" && <SpinnerCard label="Saving your profile…" />}
+          {pageState === "submitting" && <SpinnerCard label={t("onboardingSaving")} />}
 
           {/* ── Done ── */}
           {pageState === "done" && (
-            <CompletionCard onGo={() => router.push("/dashboard?skip=1")} />
+            <CompletionCard onGo={() => router.push("/dashboard?skip=1")} t={t} />
           )}
 
           {/* ── Error (fatal) ── */}
@@ -418,6 +423,7 @@ export default function OnboardingPage() {
             <ErrorCard
               message={errorMsg}
               onRetry={() => { setPageState("upload"); setErrorMsg(""); }}
+              t={t}
             />
           )}
         </>
@@ -426,7 +432,10 @@ export default function OnboardingPage() {
   );
 
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-background px-4">
+    <main
+      className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-background px-4"
+      dir={language === "ar" ? "rtl" : "ltr"}
+    >
       <AuraGlow variant="magenta" position="top-right" className="animate-pulse-magenta" />
       <AuraGlow variant="cyan" position="bottom-left" className="animate-pulse-magenta" style={{ animationDelay: "-2s" }} />
 

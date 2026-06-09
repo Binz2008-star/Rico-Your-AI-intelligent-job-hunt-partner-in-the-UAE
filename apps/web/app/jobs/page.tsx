@@ -7,6 +7,8 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { SkeletonCard } from "@/components/shared/LoadingState";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useAuth } from "@/hooks/useAuth";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTranslation } from "@/lib/translations";
 import { useToast } from "@/hooks/useToast";
 import { ApiError, createApplication, getJobs, logout as apiLogout, saveJob, skipJob, updateApplication } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -20,19 +22,6 @@ const TRACKED_STATUSES = ["saved", "skipped", "already_tracked"];
 
 type Filter = "all" | "high" | "mid";
 type SortKey = "score_desc" | "score_asc" | "company_asc" | "date_desc";
-
-const FILTER_LABELS: Record<Filter, string> = {
-    all: "All",
-    high: "85%+ match",
-    mid: "65–84%",
-};
-
-const SORT_LABELS: Record<SortKey, string> = {
-    score_desc: "Score: High → Low",
-    score_asc: "Score: Low → High",
-    company_asc: "Company A–Z",
-    date_desc: "Newest first",
-};
 
 function getJobLink(job: Job): string {
     const applyUrl = job.apply_url?.trim();
@@ -48,6 +37,8 @@ export default function JobsPage() {
     const { user } = useAuth();
     const { toasts, toast } = useToast();
     const router = useRouter();
+    const { language } = useLanguage();
+    const t = useTranslation(language);
 
     const handleLogout = useCallback(async () => {
         try { await apiLogout(); } finally { router.push("/login"); }
@@ -138,7 +129,6 @@ export default function JobsPage() {
 
         try {
             if (action === "apply") {
-                // Create application record with status "opened" (mapped from opened_external)
                 await createApplication({
                     job_id: job.job_id,
                     title: job.title,
@@ -149,7 +139,6 @@ export default function JobsPage() {
                     source: "manual",
                 });
 
-                // Open external URL
                 if (jobLink) {
                     window.open(jobLink, "_blank");
                     toast("Application opened. Click 'Mark as applied' after submitting.", "success");
@@ -160,7 +149,6 @@ export default function JobsPage() {
             }
 
             if (action === "mark_applied") {
-                // Update application status to "applied"
                 try {
                     await updateApplication(jobId, { status: "applied" });
                     toast("Application marked as applied", "success");
@@ -210,18 +198,31 @@ export default function JobsPage() {
         }
     };
 
+    const filterLabels: Record<Filter, string> = {
+        all: t("jobsFilterAll"),
+        high: t("jobsFilterHigh"),
+        mid: t("jobsFilterMid"),
+    };
+
+    const sortLabels: Record<SortKey, string> = {
+        score_desc: t("jobsSortScoreDesc"),
+        score_asc: t("jobsSortScoreAsc"),
+        company_asc: t("jobsSortCompanyAsc"),
+        date_desc: t("jobsSortNewest"),
+    };
+
     const filterBar = (
         <div className="flex flex-wrap items-center gap-2">
             <input
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search title, company…"
+                placeholder={t("jobsSearchPlaceholder")}
                 className="h-8 rounded-lg border border-border-soft bg-surface-elevated/60 px-3 text-xs text-text-primary placeholder:text-text-tertiary focus:border-gold/40 focus:outline-none focus:ring-1 focus:ring-gold/20 transition-all w-44"
                 aria-label="Search jobs"
             />
             <nav className="flex gap-1.5" aria-label="Job filters">
-                {(Object.keys(FILTER_LABELS) as Filter[]).map((f) => (
+                {(Object.keys(filterLabels) as Filter[]).map((f) => (
                     <button
                         key={f}
                         onClick={() => setFilter(f)}
@@ -232,7 +233,7 @@ export default function JobsPage() {
                                 : "text-rico-text-dim hover:text-rico-text hover:bg-white/[0.04]"
                         )}
                     >
-                        {FILTER_LABELS[f]}
+                        {filterLabels[f]}
                     </button>
                 ))}
             </nav>
@@ -242,17 +243,23 @@ export default function JobsPage() {
                 className="h-8 rounded-lg border border-border-soft bg-surface-elevated/60 px-2 text-xs text-text-secondary focus:border-gold/40 focus:outline-none focus:ring-1 focus:ring-gold/20 transition-all cursor-pointer"
                 aria-label="Sort jobs"
             >
-                {(Object.keys(SORT_LABELS) as SortKey[]).map((s) => (
-                    <option key={s} value={s}>{SORT_LABELS[s]}</option>
+                {(Object.keys(sortLabels) as SortKey[]).map((s) => (
+                    <option key={s} value={s}>{sortLabels[s]}</option>
                 ))}
             </select>
         </div>
     );
 
+    const subtitle = loading
+        ? t("jobsLoading")
+        : filtered.length !== jobs.length
+            ? `${filtered.length} ${t("jobsOf")} ${jobs.length} ${t("jobsRoles")}`
+            : `${jobs.length} ${t("jobsRoles")}`;
+
     return (
         <AppShell
             title="Job Matches"
-            subtitle={loading ? "Loading…" : filtered.length !== jobs.length ? `${filtered.length} of ${jobs.length} roles` : `${jobs.length} roles matched your profile`}
+            subtitle={subtitle}
             sidebarProps={{
                 user: user ? { name: user.name, email: user.email } : undefined,
                 onLogout: handleLogout,
@@ -278,9 +285,9 @@ export default function JobsPage() {
                 </div>
             ) : (
                 <EmptyState
-                    title="No matches in this range"
-                    description="Try the 'All' filter, or Rico will surface more matches in the next scan."
-                    actionLabel={filter !== "all" ? "Show all jobs" : undefined}
+                    title={t("jobsEmptyTitle")}
+                    description={t("jobsEmptyDesc")}
+                    actionLabel={filter !== "all" ? t("jobsShowAll") : undefined}
                     onAction={filter !== "all" ? () => setFilter("all") : undefined}
                 />
             )}
