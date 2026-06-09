@@ -1,12 +1,14 @@
 "use client";
 
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTranslation, type TranslationKey } from "@/lib/translations";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 interface DockTab {
     href: string;
-    label: string;
+    labelKey: TranslationKey;
     icon: React.ReactNode;
     activeIcon: React.ReactNode;
 }
@@ -14,7 +16,7 @@ interface DockTab {
 const TABS: DockTab[] = [
     {
         href: "/command",
-        label: "Ask Rico",
+        labelKey: "navAskRico",
         icon: (
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M12 2a10 10 0 1 0 10 10" />
@@ -32,7 +34,7 @@ const TABS: DockTab[] = [
     },
     {
         href: "/flow",
-        label: "Pipeline",
+        labelKey: "navPipeline",
         icon: (
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
@@ -48,7 +50,7 @@ const TABS: DockTab[] = [
     },
     {
         href: "/profile",
-        label: "Profile",
+        labelKey: "profileTitle",
         icon: (
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <circle cx="12" cy="8" r="4" />
@@ -65,7 +67,7 @@ const TABS: DockTab[] = [
     },
     {
         href: "/settings",
-        label: "Settings",
+        labelKey: "settings",
         icon: (
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="3" />
@@ -84,6 +86,8 @@ const TABS: DockTab[] = [
 
 export function MobileBottomNav() {
     const pathname = usePathname();
+    const { language } = useLanguage();
+    const t = useTranslation(language);
 
     return (
         <nav
@@ -103,7 +107,6 @@ export function MobileBottomNav() {
                             isActive ? "text-gold" : "text-text-tertiary hover:text-text-secondary"
                         )}
                     >
-                        {/* Active indicator bar */}
                         {isActive && (
                             <span
                                 className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[2px] rounded-full bg-gold"
@@ -111,17 +114,15 @@ export function MobileBottomNav() {
                             />
                         )}
 
-                        {/* Icon */}
                         <span className="flex items-center justify-center">
                             {isActive ? tab.activeIcon : tab.icon}
                         </span>
 
-                        {/* Label */}
                         <span className={cn(
                             "text-[10px] font-semibold tracking-wide",
                             isActive ? "text-gold" : "text-text-tertiary"
                         )}>
-                            {tab.label}
+                            {t(tab.labelKey)}
                         </span>
                     </Link>
                 );

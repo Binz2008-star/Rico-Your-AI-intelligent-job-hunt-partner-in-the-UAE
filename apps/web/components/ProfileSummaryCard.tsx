@@ -1,12 +1,16 @@
 "use client";
 
 import { StatusCard } from "@/components/StatusCard";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTranslation } from "@/lib/translations";
 import { fetchProfile, type ProfileResponse } from "@/lib/api";
 import { useCallback, useEffect, useState } from "react";
 
 export function ProfileSummaryCard() {
     const [profile, setProfile] = useState<ProfileResponse | null>(null);
     const [status, setStatus] = useState<"loading" | "error" | "ready">("loading");
+    const { language } = useLanguage();
+    const t = useTranslation(language);
 
     const loadProfile = useCallback(async () => {
         try {
@@ -37,7 +41,7 @@ export function ProfileSummaryCard() {
 
     if (status === "loading") {
         return (
-            <StatusCard title="Profile Summary" badge="pending">
+            <StatusCard title={t("profileSummaryTitle")} badge="pending">
                 <div className="animate-pulse space-y-2">
                     <div className="h-4 w-24 bg-white/5 rounded transition-all duration-300" />
                     <div className="h-3 w-32 bg-white/5 rounded transition-all duration-300" />
@@ -48,13 +52,13 @@ export function ProfileSummaryCard() {
 
     if (status === "error") {
         return (
-            <StatusCard title="Profile Summary" badge="error">
-                <p className="mb-2 text-sm text-on-surface-variant">Could not load profile.</p>
+            <StatusCard title={t("profileSummaryTitle")} badge="error">
+                <p className="mb-2 text-sm text-on-surface-variant">{t("profileSummaryErrLoad")}</p>
                 <button
                     onClick={handleRetry}
                     className="text-xs text-primary underline transition-colors hover:text-on-surface"
                 >
-                    Try again
+                    {t("profileSummaryRetry")}
                 </button>
             </StatusCard>
         );
@@ -62,16 +66,16 @@ export function ProfileSummaryCard() {
 
     if (!profile?.profile_exists) {
         return (
-            <StatusCard title="Profile Summary" badge="pending">
+            <StatusCard title={t("profileSummaryTitle")} badge="pending">
                 <p className="text-[13px] leading-relaxed text-on-surface-variant">
-                    No profile yet. Use the Rico chat to complete onboarding.
+                    {t("profileSummaryEmpty")}
                 </p>
             </StatusCard>
         );
     }
 
     return (
-        <StatusCard title="Profile Summary" badge="live">
+        <StatusCard title={t("profileSummaryTitle")} badge="live">
             <div className="space-y-1.5">
                 <p className="text-[16px] font-semibold tracking-tight text-on-surface">
                     {profile.name ?? profile.email ?? "—"}
@@ -79,20 +83,20 @@ export function ProfileSummaryCard() {
 
                 {displayRoles && (
                     <p className="text-[13px] text-on-surface-variant">
-                        Targeting: <span className="text-on-surface">{displayRoles}</span>
+                        {t("profileSummaryTargeting")} <span className="text-on-surface">{displayRoles}</span>
                     </p>
                 )}
 
                 <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
                     {profile.years_experience != null && (
                         <p className="text-[12px] text-on-surface-variant">
-                            Experience: <span className="font-medium text-on-surface">{profile.years_experience} yrs</span>
+                            {t("profileSummaryExperience")} <span className="font-medium text-on-surface">{profile.years_experience} {t("profileSummaryYrs")}</span>
                         </p>
                     )}
 
                     {profile.visa_status && (
                         <p className="text-[12px] text-on-surface-variant">
-                            Visa: <span className="font-medium text-on-surface">{profile.visa_status}</span>
+                            {t("profileSummaryVisa")} <span className="font-medium text-on-surface">{profile.visa_status}</span>
                         </p>
                     )}
                 </div>

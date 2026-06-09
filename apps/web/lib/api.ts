@@ -261,6 +261,71 @@ export async function fetchProfile(): Promise<ProfileResponse> {
   );
 }
 
+// ── User files / documents ────────────────────────────────────────────────────
+
+export interface UserDocument {
+  id: string;
+  user_id: string;
+  filename: string;
+  original_filename: string;
+  doc_type: "cv" | "cover_letter" | "other";
+  file_size: number;
+  label?: string | null;
+  is_primary: boolean;
+  is_legacy?: boolean;
+  skills_count?: number | null;
+  years_experience?: number | null;
+  current_role?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface UserFilesResponse {
+  files: UserDocument[];
+  total: number;
+}
+
+export async function listUserFiles(): Promise<UserFilesResponse> {
+  return requestJson<UserFilesResponse>("/api/v1/user/files", { method: "GET" });
+}
+
+export async function deleteUserFile(fileId: string): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>(`/api/v1/user/files/${fileId}`, { method: "DELETE" });
+}
+
+export async function updateUserFile(
+  fileId: string,
+  updates: { label?: string; doc_type?: string },
+): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>(`/api/v1/user/files/${fileId}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function setPrimaryFile(fileId: string): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>(`/api/v1/user/files/${fileId}/set-primary`, { method: "POST" });
+}
+
+export async function uploadUserFile(
+  file: File,
+  docType: "cover_letter" | "other" = "cover_letter",
+): Promise<{ ok: boolean; id: string; filename: string; doc_type: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("doc_type", docType);
+  const res = await fetch(`${PROXY}/api/v1/user/files?doc_type=${docType}`, {
+    method: "POST",
+    body: form,
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new ApiError(err.detail ?? "Upload failed", res.status, err);
+  }
+  return res.json() as Promise<{ ok: boolean; id: string; filename: string; doc_type: string }>;
+}
+
 // ── Saved searches ────────────────────────────────────────────────────────────
 
 export interface SavedSearch {

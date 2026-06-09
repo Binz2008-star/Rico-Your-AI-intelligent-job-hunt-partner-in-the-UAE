@@ -66,7 +66,7 @@ export function AppTopbar({
 
                 {showNav && displayTitle && (
                     <>
-                        <MaterialIcon icon="chevron_right" size={16} className="hidden text-text-tertiary sm:block" />
+                        <MaterialIcon icon={language === "ar" ? "chevron_left" : "chevron_right"} size={16} className="hidden text-text-tertiary sm:block" />
                         <div className="flex min-w-0 items-center gap-2">
                             <MaterialIcon icon={breadcrumb?.icon ?? "chevron_right"} size={18} className="text-text-secondary" />
                             <h1 className="truncate text-sm font-semibold text-text-primary">{displayTitle}</h1>

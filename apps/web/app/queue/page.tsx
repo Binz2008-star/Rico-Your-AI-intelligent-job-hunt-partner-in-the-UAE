@@ -11,12 +11,16 @@ import {
     type ApplicationDraft,
 } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTranslation } from "@/lib/translations";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 export default function QueuePage() {
     const { user, ready, logout: doLogout } = useAuth();
     const router = useRouter();
+    const { language } = useLanguage();
+    const t = useTranslation(language);
     const [drafts, setDrafts] = useState<ApplicationDraft[]>([]);
     const [followUps, setFollowUps] = useState<ApplicationDraft[]>([]);
     const [loading, setLoading] = useState(true);
@@ -40,11 +44,11 @@ export default function QueuePage() {
                 setError(null);
             })
             .catch((err) => {
-                if (err.name !== "AbortError") setError("Could not load your queue. Try refreshing.");
+                if (err.name !== "AbortError") setError(t("queueErrLoad"));
             })
             .finally(() => setLoading(false));
         return () => ctrl.abort();
-    }, [ready, user, router]);
+    }, [ready, user, router, t]);
 
     const handleApprove = useCallback(async (id: string) => {
         await approveApplication(id);
@@ -62,8 +66,8 @@ export default function QueuePage() {
 
     return (
         <AppShell
-            title="Tailored Application Queue"
-            subtitle="Your CV rewritten, your cover letter written — review and approve before Rico sends"
+            title={t("queueTitle")}
+            subtitle={t("queueSubtitle")}
             sidebarProps={{ user: user ?? undefined, onLogout: handleLogout }}
         >
             {loading ? (
@@ -83,7 +87,7 @@ export default function QueuePage() {
                         onClick={() => window.location.reload()}
                         className="mt-2 rounded-lg border border-overlay/10 px-4 py-2 text-sm text-text-secondary hover:bg-surface-subtle"
                     >
-                        Retry
+                        {t("queueRetry")}
                     </button>
                 </div>
             ) : drafts.length === 0 ? (
@@ -92,12 +96,12 @@ export default function QueuePage() {
                         <MaterialIcon icon="rocket_launch" size={32} className="text-gold" />
                     </div>
                     <div>
-                        <h2 className="text-lg font-semibold text-text-primary">No applications in queue</h2>
+                        <h2 className="text-lg font-semibold text-text-primary">{t("queueEmptyTitle")}</h2>
                         <p className="mt-2 max-w-md text-sm leading-relaxed text-text-secondary">
-                            Generic applications get no replies. Tell Rico which job to prepare — Rico reads the job description, rewrites your CV around its keywords, writes a tailored cover letter, and queues the package here for your review.
+                            {t("queueEmptyDesc")}
                         </p>
                         <p className="mt-1.5 max-w-md text-sm text-text-tertiary">
-                            You approve. Then Rico sends.
+                            {t("queueEmptyHint")}
                         </p>
                     </div>
                     <a
@@ -105,31 +109,29 @@ export default function QueuePage() {
                         className="mt-2 flex items-center gap-2 rounded-lg bg-gold px-5 py-2.5 text-sm font-semibold text-[#0a0a1a] transition-opacity hover:opacity-90"
                     >
                         <MaterialIcon icon="auto_awesome" size={16} />
-                        Ask Rico to prepare an application
+                        {t("queueAskRico")}
                     </a>
                 </div>
             ) : (
                 <div className="space-y-6">
-                    {/* Prominent "You approve. Rico sends." callout */}
                     <div className="flex items-center gap-3 rounded-xl border border-gold/20 bg-gold/5 px-5 py-4">
                         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gold/15">
                             <MaterialIcon icon="task_alt" size={18} className="text-gold" />
                         </div>
                         <div>
-                            <p className="text-sm font-semibold text-gold">You approve. Rico sends.</p>
+                            <p className="text-sm font-semibold text-gold">{t("queueApproveBanner")}</p>
                             <p className="mt-0.5 text-xs leading-relaxed text-text-tertiary">
-                                Every application below has a CV rewritten for this job and a tailored cover letter. Nothing goes out until you tap Approve.
+                                {t("queueApproveBannerDesc")}
                             </p>
                         </div>
                     </div>
 
-                    {/* Follow-up reminders */}
                     {followUps.length > 0 && (
                         <div className="rounded-xl border border-overlay/10 bg-surface-subtle/40 px-5 py-4">
                             <div className="mb-3 flex items-center gap-2">
                                 <MaterialIcon icon="history" size={16} className="text-text-tertiary" />
                                 <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-                                    Follow-up due
+                                    {t("queueFollowUpDue")}
                                 </p>
                             </div>
                             <div className="space-y-2">
@@ -137,7 +139,7 @@ export default function QueuePage() {
                                     <div key={fu.id} className="flex items-center justify-between gap-3">
                                         <div className="min-w-0">
                                             <span className="truncate text-sm font-medium text-text-primary">{fu.job_title}</span>
-                                            <span className="ml-2 text-xs text-text-tertiary">{fu.company}</span>
+                                            <span className="ms-2 text-xs text-text-tertiary">{fu.company}</span>
                                         </div>
                                         {fu.apply_url && (
                                             <a
@@ -146,7 +148,7 @@ export default function QueuePage() {
                                                 rel="noopener noreferrer"
                                                 className="shrink-0 text-xs text-gold underline-offset-2 hover:underline"
                                             >
-                                                Send follow-up ↗
+                                                {t("queueSendFollowUp")} ↗
                                             </a>
                                         )}
                                     </div>
@@ -157,8 +159,8 @@ export default function QueuePage() {
 
                     <p className="text-sm text-text-secondary">
                         <span className="font-semibold text-text-primary">{drafts.length}</span>{" "}
-                        tailored application{drafts.length === 1 ? "" : "s"} ready for your review —{" "}
-                        <span className="text-text-tertiary">approve to send, decline to remove</span>
+                        {drafts.length === 1 ? t("queueReadyCount") : t("queueReadyCountPlural")} —{" "}
+                        <span className="text-text-tertiary">{t("queueApproveToSend")}</span>
                     </p>
                     {drafts.map((draft) => (
                         <ApplicationDraftCard

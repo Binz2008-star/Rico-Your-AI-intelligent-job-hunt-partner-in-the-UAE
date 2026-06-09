@@ -158,6 +158,26 @@ CREATE INDEX IF NOT EXISTS idx_rico_webhook_events_submission ON rico_webhook_ev
 CREATE INDEX IF NOT EXISTS idx_rico_webhook_events_user ON rico_webhook_events(user_id);
 """
 
+_USER_DOCUMENTS_DDL = """
+CREATE TABLE IF NOT EXISTS user_documents (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    original_filename TEXT NOT NULL,
+    doc_type TEXT NOT NULL DEFAULT 'cv',
+    file_size INTEGER DEFAULT 0,
+    label TEXT,
+    is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+    skills_count INTEGER DEFAULT 0,
+    years_experience NUMERIC(4,1),
+    current_role TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_user_documents_user_created
+    ON user_documents(user_id, created_at DESC);
+"""
+
 _APPLY_DRAFTS_DDL = """
 CREATE TABLE IF NOT EXISTS application_drafts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -205,6 +225,7 @@ class RicoDB:
             with conn.cursor() as cur:
                 cur.execute(_RICO_SCHEMA_DDL)
                 cur.execute(_APPLY_DRAFTS_DDL)
+                cur.execute(_USER_DOCUMENTS_DDL)
             conn.commit()
             self._schema_ready_urls.add(self.database_url)
 
@@ -243,8 +264,138 @@ class RicoDB:
             with conn.cursor() as cur:
                 cur.execute(_RICO_SCHEMA_DDL)
                 cur.execute(_APPLY_DRAFTS_DDL)
+                cur.execute(_USER_DOCUMENTS_DDL)
         if self.database_url:
             self._schema_ready_urls.add(self.database_url)
+
+    # ── User Documents ─────────────────────────────────────────────────────────
+
+    def save_user_document(
+        self,
+        *,
+        user_id: str,
+        filename: str,
+        original_filename: str,
+        doc_type: str = "cv",
+        file_size: int = 0,
+        label: Optional[str] = None,
+        skills_count: int = 0,
+        years_experience: Optional[float] = None,
+        current_role: Optional[str] = None,
+        is_primary: bool = False,
+    ) -> Optional[str]:
+        """Insert a new document record. Returns the new UUID id."""
+        if is_primary:
+            self._clear_primary_flag(user_id=user_id, doc_type=doc_type)
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO user_documents
+                        (user_id, filename, original_filename, doc_type, file_size,
+                         label, is_primary, skills_count, years_experience, current_role)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (user_id, filename, original_filename, doc_type, file_size,
+                     label, is_primary, skills_count, years_experience, current_role),
+                )
+                row = cur.fetchone()
+        return str(row["id"]) if row else None
+
+    def list_user_documents(self, user_id: str) -> List[Dict[str, Any]]:
+        """Return all documents for a user, newest first."""
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, user_id, filename, original_filename, doc_type,
+                           file_size, label, is_primary,
+                           skills_count, years_experience, current_role,
+                           created_at, updated_at
+                    FROM user_documents
+                    WHERE user_id = %s
+                    ORDER BY is_primary DESC, created_at DESC
+                    """,
+                    (user_id,),
+                )
+                rows = cur.fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["id"] = str(d["id"])
+            if d.get("created_at"):
+                d["created_at"] = d["created_at"].isoformat()
+            if d.get("updated_at"):
+                d["updated_at"] = d["updated_at"].isoformat()
+            result.append(d)
+        return result
+
+    def delete_user_document(self, user_id: str, doc_id: str) -> bool:
+        """Delete a document. Returns True if a row was deleted."""
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM user_documents WHERE id = %s AND user_id = %s RETURNING id",
+                    (doc_id, user_id),
+                )
+                row = cur.fetchone()
+        return row is not None
+
+    def update_user_document(
+        self,
+        user_id: str,
+        doc_id: str,
+        *,
+        label: Optional[str] = None,
+        doc_type: Optional[str] = None,
+    ) -> bool:
+        """Update label and/or doc_type. Returns True if updated."""
+        updates: list[str] = ["updated_at = now()"]
+        params: list[Any] = []
+        if label is not None:
+            updates.append("label = %s")
+            params.append(label if label.strip() else None)
+        if doc_type is not None:
+            updates.append("doc_type = %s")
+            params.append(doc_type)
+        if len(updates) == 1:
+            return False
+        params.extend([doc_id, user_id])
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"UPDATE user_documents SET {', '.join(updates)} "
+                    "WHERE id = %s AND user_id = %s RETURNING id",
+                    params,
+                )
+                row = cur.fetchone()
+        return row is not None
+
+    def set_primary_document(self, user_id: str, doc_id: str) -> bool:
+        """Set one CV document as primary, clearing is_primary on all others."""
+        self._clear_primary_flag(user_id=user_id, doc_type="cv")
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE user_documents
+                    SET is_primary = TRUE, updated_at = now()
+                    WHERE id = %s AND user_id = %s AND doc_type = 'cv'
+                    RETURNING id
+                    """,
+                    (doc_id, user_id),
+                )
+                row = cur.fetchone()
+        return row is not None
+
+    def _clear_primary_flag(self, *, user_id: str, doc_type: str) -> None:
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE user_documents SET is_primary = FALSE WHERE user_id = %s AND doc_type = %s",
+                    (user_id, doc_type),
+                )
 
     def register_webhook_event(
         self,

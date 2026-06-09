@@ -1393,6 +1393,27 @@ async def confirm_cv_profile(
         if not is_valid_public_user_id(resolved_user_id):
             mark_onboarding_complete(resolved_user_id)
 
+        # Save document record for the file manager (authenticated users only)
+        if not is_valid_public_user_id(resolved_user_id):
+            try:
+                from src.rico_db import RicoDB as _RicoDB
+                _doc_db = _RicoDB()
+                if _doc_db.available:
+                    skills = profile_updates.get("skills") or []
+                    _doc_db.save_user_document(
+                        user_id=resolved_user_id,
+                        filename=payload.filename,
+                        original_filename=payload.filename,
+                        doc_type="cv",
+                        file_size=0,
+                        skills_count=len(skills),
+                        years_experience=profile_updates.get("years_experience"),
+                        current_role=profile_updates.get("current_role"),
+                        is_primary=True,
+                    )
+            except Exception as _doc_exc:
+                logger.warning("cv_confirm_doc_save_failed user=%s error=%s", resolved_user_id, str(_doc_exc))
+
         _metrics.record_request((time.time() - start_time) * 1000)
         logger.info(
             "cv_profile_confirmed user=%s fields=%d request_ref=%s",

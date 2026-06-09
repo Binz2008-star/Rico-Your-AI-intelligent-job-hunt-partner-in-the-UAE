@@ -2,6 +2,8 @@
 
 import { cn } from "@/lib/utils";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTranslation } from "@/lib/translations";
 import type { ApplicationDraft } from "@/lib/api";
 import { useState } from "react";
 
@@ -22,6 +24,8 @@ export function ApplicationDraftCard({
     const [approving, setApproving] = useState(false);
     const [rejecting, setRejecting] = useState(false);
     const [done, setDone] = useState<"approved" | "rejected" | null>(null);
+    const { language } = useLanguage();
+    const t = useTranslation(language);
 
     async function handleApprove() {
         setApproving(true);
@@ -65,29 +69,29 @@ export function ApplicationDraftCard({
                 {done === "approved" ? (
                     <span className="flex shrink-0 items-center gap-1 rounded-full bg-green-500/15 px-2.5 py-1 text-xs font-semibold text-green-400">
                         <MaterialIcon icon="task_alt" size={14} />
-                        Approved
+                        {t("draftApproved")}
                     </span>
                 ) : (
                     <span className="shrink-0 rounded-full bg-gold/10 px-2.5 py-1 text-xs font-semibold text-gold">
-                        Awaiting review
+                        {t("draftAwaitingReview")}
                     </span>
                 )}
             </div>
 
             {/* Tab switcher */}
             <div className="flex border-b border-overlay/10 px-5">
-                {(["cover_letter", "cv"] as Tab[]).map((t) => (
+                {(["cover_letter", "cv"] as Tab[]).map((tabKey) => (
                     <button
-                        key={t}
-                        onClick={() => setTab(t)}
+                        key={tabKey}
+                        onClick={() => setTab(tabKey)}
                         className={cn(
-                            "mr-4 border-b-2 pb-2 text-sm font-medium transition-colors",
-                            tab === t
+                            "me-4 border-b-2 pb-2 text-sm font-medium transition-colors",
+                            tab === tabKey
                                 ? "border-gold text-gold"
                                 : "border-transparent text-text-tertiary hover:text-text-secondary",
                         )}
                     >
-                        {t === "cover_letter" ? "Cover Letter" : "Tailored CV"}
+                        {tabKey === "cover_letter" ? t("draftCoverLetter") : t("draftTailoredCv")}
                     </button>
                 ))}
             </div>
@@ -109,27 +113,27 @@ export function ApplicationDraftCard({
                             rel="noopener noreferrer"
                             className="text-xs text-text-tertiary underline-offset-2 hover:text-text-secondary hover:underline"
                         >
-                            View job posting ↗
+                            {t("draftViewPosting")}
                         </a>
                     )}
-                    <div className="ml-auto flex gap-2">
+                    <div className="ms-auto flex gap-2">
                         <button
                             onClick={handleReject}
                             disabled={rejecting || approving}
-                            aria-label="Decline this application"
+                            aria-label={t("draftDecline")}
                             className="flex items-center gap-1.5 rounded-lg border border-overlay/10 px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:border-red-500/30 hover:bg-red-500/5 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 disabled:opacity-40"
                         >
                             <MaterialIcon icon="close" size={15} />
-                            Decline
+                            {t("draftDecline")}
                         </button>
                         <button
                             onClick={handleApprove}
                             disabled={approving || rejecting}
-                            aria-label="Approve this application"
+                            aria-label={t("draftApprove")}
                             className="flex items-center gap-1.5 rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-[#0a0a1a] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 disabled:opacity-40"
                         >
                             <MaterialIcon icon="task_alt" size={15} />
-                            {approving ? "Approving…" : "Approve"}
+                            {approving ? t("draftApproving") : t("draftApprove")}
                         </button>
                     </div>
                 </div>

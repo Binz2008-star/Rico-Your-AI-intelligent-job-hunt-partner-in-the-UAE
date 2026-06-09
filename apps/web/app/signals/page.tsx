@@ -5,24 +5,34 @@ import { TopNav } from "@/components/layout/TopNav";
 import { AuraGlow } from "@/components/ui/AuraGlow";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTranslation, type TranslationKey } from "@/lib/translations";
 import { useLinkVerification } from "@/hooks/useLinkVerification";
 import { useOrchestration } from "@/hooks/useOrchestration";
 import type { OpportunitySignal } from "@/lib/api/orchestration";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-function MomentumLabel({ momentum }: { momentum: "high" | "medium" | "low" }) {
+type TFunc = (key: TranslationKey) => string;
+
+function MomentumLabel({ momentum, t }: { momentum: "high" | "medium" | "low"; t: TFunc }) {
   const palette = {
     high: "text-gold border-gold/30",
     medium: "text-rico-amber border-rico-amber/30",
     low: "text-text-tertiary border-text-tertiary/30",
   } as const;
 
+  const labels: Record<"high" | "medium" | "low", string> = {
+    high: t("signalsMomentumHigh"),
+    medium: t("signalsMomentumMedium"),
+    low: t("signalsMomentumLow"),
+  };
+
   return (
     <span
       className={`text-label-caps text-[10px] px-2 py-1 border rounded ${palette[momentum]}`}
     >
-      {momentum.toUpperCase()} MOMENTUM
+      {labels[momentum]}
     </span>
   );
 }
@@ -47,8 +57,10 @@ function MatchScoreBadge({ score }: { score: number }) {
 
 function LinkStatusBadge({
   status,
+  t,
 }: {
   status: OpportunitySignal["linkStatus"];
+  t: TFunc;
 }) {
   if (!status) return null;
 
@@ -62,15 +74,15 @@ function LinkStatusBadge({
     checking: "text-text-tertiary border-text-tertiary/30",
   } as const;
 
-  const labels = {
-    live: "Verified live",
-    expired: "Link unavailable",
-    blocked: "Blocked",
-    redirect: "Redirects",
-    source_only: "Source only",
-    needs_review: "Needs review",
-    checking: "Checking link...",
-  } as const;
+  const labels: Record<NonNullable<OpportunitySignal["linkStatus"]>, string> = {
+    live: t("signalsLinkLive"),
+    expired: t("signalsLinkExpired"),
+    blocked: t("signalsLinkBlocked"),
+    redirect: t("signalsLinkRedirect"),
+    source_only: t("signalsLinkSourceOnly"),
+    needs_review: t("signalsLinkNeedsReview"),
+    checking: t("signalsLinkChecking"),
+  };
 
   return (
     <span
@@ -82,14 +94,14 @@ function LinkStatusBadge({
   );
 }
 
-function signalDate(signal: OpportunitySignal) {
+function signalDate(signal: OpportunitySignal, language: string, fallback: string) {
   return signal.timestamp
-    ? new Date(signal.timestamp).toLocaleDateString("en-GB", {
+    ? new Date(signal.timestamp).toLocaleDateString(language === "ar" ? "ar-AE" : "en-GB", {
         day: "numeric",
         month: "short",
         year: "numeric",
       })
-    : "Date unavailable";
+    : fallback;
 }
 
 function commandHref(message: string) {
@@ -99,9 +111,11 @@ function commandHref(message: string) {
 function PrimaryAction({
   signal,
   linkStatus,
+  t,
 }: {
   signal: OpportunitySignal;
   linkStatus?: OpportunitySignal["linkStatus"];
+  t: TFunc;
 }) {
   const titleCompany = `${signal.role} at ${signal.company}`;
 
@@ -118,7 +132,7 @@ function PrimaryAction({
         className="inline-flex items-center gap-1.5 rounded-full border border-gold/25 bg-gold/10 px-4 py-2 text-[13px] font-semibold text-gold hover:bg-gold/15"
       >
         <MaterialIcon icon="rocket_launch" size={14} />
-        Find similar live jobs
+        {t("signalsFindSimilar")}
       </Link>
     );
   }
@@ -127,7 +141,7 @@ function PrimaryAction({
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full border border-red/25 bg-red/10 px-4 py-2 text-[13px] font-semibold text-red">
         <MaterialIcon icon="lock" size={14} />
-        Needs review
+        {t("signalsNeedsReview")}
       </span>
     );
   }
@@ -142,7 +156,7 @@ function PrimaryAction({
         className="inline-flex items-center gap-1.5 rounded-full border border-gold/25 bg-gold/10 px-4 py-2 text-[13px] font-semibold text-gold hover:bg-gold/15"
       >
         <MaterialIcon icon="arrow_forward" size={14} />
-        View job
+        {t("signalsViewJob")}
       </a>
     );
   }
@@ -154,10 +168,12 @@ function SignalActions({
   signal,
   onDismiss,
   linkStatus,
+  t,
 }: {
   signal: OpportunitySignal;
   onDismiss: () => void;
   linkStatus?: OpportunitySignal["linkStatus"];
+  t: TFunc;
 }) {
   const titleCompany = `${signal.role} at ${signal.company}`;
   const showCaution =
@@ -169,10 +185,10 @@ function SignalActions({
   return (
     <div className="mt-4 flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <PrimaryAction signal={signal} linkStatus={linkStatus} />
+        <PrimaryAction signal={signal} linkStatus={linkStatus} t={t} />
         {showCaution && (
           <span className="text-[11px] text-on-surface-variant/60">
-            Caution: link status uncertain
+            {t("signalsCaution")}
           </span>
         )}
       </div>
@@ -181,38 +197,38 @@ function SignalActions({
           href={commandHref(`Explain fit — ${titleCompany}`)}
           className={secondaryClass}
         >
-          Explain fit
+          {t("signalsExplainFit")}
         </Link>
         <Link
           href={commandHref(`Track this job — ${titleCompany}`)}
           className={secondaryClass}
         >
-          Track
+          {t("signalsTrack")}
         </Link>
         <Link
           href={commandHref(`Prepare application — ${titleCompany}`)}
           className={secondaryClass}
         >
-          Prepare application
+          {t("signalsPrepareApp")}
         </Link>
         <Link
           href={commandHref(`Mark as applied — ${titleCompany}`)}
           className={secondaryClass}
         >
-          Mark as applied
+          {t("signalsMarkApplied")}
         </Link>
         <Link
           href={commandHref(`Save job — ${titleCompany}`)}
           className={secondaryClass}
         >
-          Save
+          {t("signalsSave")}
         </Link>
         <button
           type="button"
           onClick={onDismiss}
           className="rounded-full border border-white/10 bg-white/[0.02] px-2.5 py-1 text-[11px] font-medium text-on-surface-variant hover:text-white hover:bg-white/[0.04]"
         >
-          Dismiss
+          {t("signalsDismiss")}
         </button>
       </div>
     </div>
@@ -225,12 +241,16 @@ function SignalCard({
   onSelect,
   onDismiss,
   viewMode,
+  t,
+  language,
 }: {
   signal: OpportunitySignal;
   linkStatus?: OpportunitySignal["linkStatus"];
   onSelect: (s: OpportunitySignal) => void;
   onDismiss: () => void;
   viewMode: "card" | "list";
+  t: TFunc;
+  language: string;
 }) {
   const isList = viewMode === "list";
 
@@ -242,7 +262,7 @@ function SignalCard({
       <button
         type="button"
         onClick={() => onSelect(signal)}
-        className="block w-full text-left"
+        className="block w-full text-start"
       >
         {/* Header row */}
         <div
@@ -261,24 +281,24 @@ function SignalCard({
           </div>
           <div className="flex flex-col items-end gap-1.5 shrink-0">
             <MatchScoreBadge score={signal.matchScore} />
-            <LinkStatusBadge status={linkStatus} />
+            <LinkStatusBadge status={linkStatus} t={t} />
           </div>
         </div>
 
         {/* Meta row */}
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-on-surface-variant/60 mb-3">
-          <span>{signal.location || "Location unavailable"}</span>
+          <span>{signal.location || t("signalsLocationUnavailable")}</span>
           <span>·</span>
-          <span>{signal.source || "Rico job search"}</span>
+          <span>{signal.source || t("signalsSource")}</span>
           <span>·</span>
-          <span>{signalDate(signal)}</span>
+          <span>{signalDate(signal, language, t("signalsDateUnavailable"))}</span>
           <span>·</span>
-          <MomentumLabel momentum={signal.momentum} />
+          <MomentumLabel momentum={signal.momentum} t={t} />
         </div>
 
         {/* Body */}
         <p className="text-sm text-on-surface-variant/80 line-clamp-2 mb-3">
-          {signal.whyItFits || "Rico matched this role against your profile."}
+          {signal.whyItFits || t("signalsDefaultFit")}
         </p>
 
         {/* Footer hint */}
@@ -288,7 +308,7 @@ function SignalCard({
               className={`w-1.5 h-1.5 rounded-full ${signal.momentum === "high" ? "bg-secondary" : signal.momentum === "medium" ? "bg-[#facc15]" : "bg-primary"}`}
             />
             <span className="text-label-caps text-[10px] text-on-surface-variant">
-              Open details
+              {t("signalsOpenDetails")}
             </span>
           </div>
           <MaterialIcon
@@ -303,6 +323,7 @@ function SignalCard({
         signal={signal}
         linkStatus={linkStatus}
         onDismiss={onDismiss}
+        t={t}
       />
     </GlassPanel>
   );
@@ -311,6 +332,8 @@ function SignalCard({
 export default function SignalsPage() {
   const { signals, isLoading, error, refetchSignals } = useOrchestration();
   const { getLinkStatus } = useLinkVerification(signals);
+  const { language } = useLanguage();
+  const t = useTranslation(language);
   const [selectedSignal, setSelectedSignal] =
     useState<OpportunitySignal | null>(null);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
@@ -321,7 +344,6 @@ export default function SignalsPage() {
     [dismissedIds, signals],
   );
 
-  // Sort by match score descending
   const sortedSignals = useMemo(
     () => [...visibleSignals].sort((a, b) => b.matchScore - a.matchScore),
     [visibleSignals],
@@ -350,6 +372,8 @@ export default function SignalsPage() {
           onSelect={setSelectedSignal}
           onDismiss={() => dismissSignal(signal.id)}
           viewMode={viewMode}
+          t={t}
+          language={language}
         />
       ))}
     </div>
@@ -359,6 +383,7 @@ export default function SignalsPage() {
     <div
       data-testid="opportunity-radar-page"
       className="relative min-h-screen overflow-x-hidden"
+      dir={language === "ar" ? "rtl" : "ltr"}
     >
       <AuraGlow aria-hidden="true" variant="magenta" position="top-left" />
       <AuraGlow aria-hidden="true" variant="cyan" position="bottom-right" />
@@ -371,11 +396,10 @@ export default function SignalsPage() {
               data-testid="opportunity-radar-title"
               className="font-headline-xl text-headline-xl text-on-surface mb-3"
             >
-              Opportunity Radar
+              {t("signalsTitle")}
             </h1>
             <p className="font-body-lg text-body-lg text-on-surface-variant max-w-xl">
-              Live market signals scored against your profile. Links are
-              verified before you apply.
+              {t("signalsDesc")}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -387,7 +411,7 @@ export default function SignalsPage() {
               aria-label="Card view"
               title="Card view"
             >
-              Cards
+              {t("signalsCards")}
             </button>
             <button
               data-testid="view-mode-toggle-list"
@@ -397,7 +421,7 @@ export default function SignalsPage() {
               aria-label="List view"
               title="List view"
             >
-              Focus list
+              {t("signalsFocusList")}
             </button>
           </div>
         </div>
@@ -417,25 +441,23 @@ export default function SignalsPage() {
           </div>
         ) : error ? (
           <GlassPanel className="p-6 rounded-xl border border-white/10">
-            <p className="text-on-surface mb-2">Could not load live signals.</p>
+            <p className="text-on-surface mb-2">{t("signalsErrLoad")}</p>
             <p className="text-body-md text-on-surface-variant">
-              The backend is reachable for command execution, but the signals
-              surface could not read the current jobs feed.
+              {t("signalsErrDesc")}
             </p>
             <button
               type="button"
               onClick={() => void refetchSignals()}
               className="mt-4 rounded-full border border-gold/25 bg-gold/10 px-4 py-2 text-sm font-semibold text-gold hover:bg-gold/15"
             >
-              Retry signals
+              {t("signalsRetry")}
             </button>
           </GlassPanel>
         ) : visibleSignals.length === 0 ? (
           <GlassPanel className="p-6 rounded-xl border border-white/10">
-            <p className="text-on-surface mb-2">No live signals yet.</p>
+            <p className="text-on-surface mb-2">{t("signalsEmpty")}</p>
             <p className="text-body-md text-on-surface-variant">
-              Rico will populate this view when matched opportunities are
-              available from the live jobs endpoint.
+              {t("signalsEmptyDesc")}
             </p>
           </GlassPanel>
         ) : (
@@ -447,7 +469,7 @@ export default function SignalsPage() {
                 <div className="flex items-center gap-3 pt-2">
                   <div className="h-px flex-1 bg-white/10" />
                   <span className="text-[11px] font-medium text-on-surface-variant/50 uppercase tracking-wider">
-                    Below 50% match — review with caution
+                    {t("signalsBelowMatch")}
                   </span>
                   <div className="h-px flex-1 bg-white/10" />
                 </div>
@@ -467,15 +489,15 @@ export default function SignalsPage() {
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-label-caps text-[10px] text-gold">
-                  {selectedSignal.source || "Rico job search"} ·{" "}
-                  {signalDate(selectedSignal)}
+                  {selectedSignal.source || t("signalsSource")} ·{" "}
+                  {signalDate(selectedSignal, language, t("signalsDateUnavailable"))}
                 </p>
                 <h2 className="mt-3 text-2xl font-semibold text-on-surface break-normal">
                   {selectedSignal.role}
                 </h2>
                 <p className="mt-2 text-body-md text-on-surface-variant">
                   {selectedSignal.company} ·{" "}
-                  {selectedSignal.location || "Location unavailable"}
+                  {selectedSignal.location || t("signalsLocationUnavailable")}
                 </p>
               </div>
               <button
@@ -484,20 +506,20 @@ export default function SignalsPage() {
                 onClick={() => setSelectedSignal(null)}
                 className="shrink-0 rounded-full border border-white/10 px-3 py-1 text-sm text-on-surface-variant hover:text-white"
               >
-                Close
+                {t("signalsClose")}
               </button>
             </div>
 
             <div className="mt-5 flex flex-wrap items-center gap-2">
               <MatchScoreBadge score={selectedSignal.matchScore} />
-              <MomentumLabel momentum={selectedSignal.momentum} />
-              <LinkStatusBadge status={getLinkStatus(selectedSignal.id)} />
+              <MomentumLabel momentum={selectedSignal.momentum} t={t} />
+              <LinkStatusBadge status={getLinkStatus(selectedSignal.id)} t={t} />
             </div>
 
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                 <p className="text-label-caps text-[10px] text-on-surface-variant">
-                  Match score
+                  {t("signalsMatchScore")}
                 </p>
                 <p className="mt-2 text-3xl font-semibold text-on-surface">
                   {selectedSignal.matchScore}%
@@ -505,37 +527,35 @@ export default function SignalsPage() {
               </div>
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                 <p className="text-label-caps text-[10px] text-on-surface-variant">
-                  Momentum
+                  {t("signalsMomentum")}
                 </p>
                 <div className="mt-3">
-                  <MomentumLabel momentum={selectedSignal.momentum} />
+                  <MomentumLabel momentum={selectedSignal.momentum} t={t} />
                 </div>
               </div>
             </div>
             <div className="mt-6 space-y-4">
               <section>
                 <h3 className="text-sm font-semibold text-on-surface">
-                  Why it fits
+                  {t("signalsWhyItFits")}
                 </h3>
                 <p className="mt-2 text-sm leading-6 text-on-surface-variant">
-                  {selectedSignal.whyItFits ||
-                    "Rico matched this role against your profile and saved preferences."}
+                  {selectedSignal.whyItFits || t("signalsDefaultFitLong")}
                 </p>
               </section>
               <section>
                 <h3 className="text-sm font-semibold text-on-surface">
-                  Missing facts to verify
+                  {t("signalsMissingFacts")}
                 </h3>
                 {selectedSignal.missingFacts?.length ? (
-                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-on-surface-variant">
+                  <ul className="mt-2 list-disc space-y-1 ps-5 text-sm leading-6 text-on-surface-variant">
                     {selectedSignal.missingFacts.map((fact) => (
                       <li key={fact}>{fact}</li>
                     ))}
                   </ul>
                 ) : (
                   <p className="mt-2 text-sm leading-6 text-on-surface-variant">
-                    Check the job post for salary, visa requirements, reporting
-                    line, and exact application deadline.
+                    {t("signalsCheckPost")}
                   </p>
                 )}
               </section>
@@ -544,6 +564,7 @@ export default function SignalsPage() {
               signal={selectedSignal}
               linkStatus={getLinkStatus(selectedSignal.id)}
               onDismiss={() => dismissSignal(selectedSignal.id)}
+              t={t}
             />
           </GlassPanel>
         </div>

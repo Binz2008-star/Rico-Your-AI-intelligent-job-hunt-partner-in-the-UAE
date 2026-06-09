@@ -7,6 +7,8 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { useAuth } from '@/hooks/useAuth';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { useTranslation } from '@/lib/translations';
 import { fetchChatHistory, logout as apiLogout, type ChatHistoryMessage } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -61,6 +63,8 @@ export default function ArchivePage() {
   const [error, setError] = useState(false);
   const { user } = useAuth();
   const router = useRouter();
+  const { language } = useLanguage();
+  const t = useTranslation(language);
 
   const handleLogout = useCallback(async () => {
     try { await apiLogout(); } finally { router.push('/login'); }
@@ -87,26 +91,26 @@ export default function ArchivePage() {
 
   return (
     <AppShell
-      title="Memory Archive"
-      subtitle="Live strategic memory from Rico's recent conversation history."
+      title={t("archiveTitle")}
+      subtitle={t("archiveSubtitle")}
       sidebarProps={{
         user: user ? { name: user.name, email: user.email } : undefined,
         onLogout: handleLogout,
       }}
     >
       {loading ? (
-        <LoadingState variant="card" message="Loading memory history..." />
+        <LoadingState variant="card" message={t("archiveLoading")} />
       ) : error ? (
         <ErrorState
           variant="network"
-          message="Could not load memory history."
+          message={t("archiveErrLoad")}
           onRetry={loadArchive}
         />
       ) : messages.length === 0 ? (
         <EmptyState
-          title="No archived memory yet"
-          description="Start a conversation in Command and Rico will begin building the live memory timeline shown here."
-          actionLabel="Open Command"
+          title={t("archiveEmptyTitle")}
+          description={t("archiveEmptyDesc")}
+          actionLabel={t("archiveOpenCommand")}
           actionHref="/command"
         />
       ) : (
@@ -122,7 +126,7 @@ export default function ArchivePage() {
                   </div>
                   <div className="mb-4">
                     <p className="text-body-md text-on-surface-variant mb-2">
-                      {message.role === 'user' ? 'User instruction' : 'Rico response'}
+                      {message.role === 'user' ? t("archiveUserInstruction") : t("archiveRicoResponse")}
                     </p>
                     {structured ? (
                       <div className="space-y-2">
@@ -136,7 +140,7 @@ export default function ArchivePage() {
                         </p>
                         {structured.matches && structured.matches.length > 0 && (
                           <p className="text-[10px] text-secondary">
-                            {structured.matches.length} match{structured.matches.length !== 1 ? 'es' : ''} found
+                            {structured.matches.length} {structured.matches.length !== 1 ? t("archiveMatchesFound") : t("archiveMatchFound")}
                           </p>
                         )}
                       </div>
@@ -146,7 +150,7 @@ export default function ArchivePage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <div className={`w-1.5 h-1.5 rounded-full ${message.role === 'user' ? 'bg-secondary' : 'bg-primary'}`} />
-                    <span className="text-label-caps text-[10px] text-primary">MEMORY INTEGRATED</span>
+                    <span className="text-label-caps text-[10px] text-primary">{t("archiveMemoryIntegrated")}</span>
                   </div>
                 </GlassPanel>
               );

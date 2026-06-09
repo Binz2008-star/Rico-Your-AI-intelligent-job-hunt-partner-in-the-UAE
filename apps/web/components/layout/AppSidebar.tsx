@@ -266,7 +266,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gold text-xs font-bold text-[#0a0a1a]">
                             {initials}
                         </div>
-                        <div className="flex-1 min-w-0 text-left">
+                        <div className="flex-1 min-w-0 text-start">
                             <p className="text-sm font-medium text-text-primary truncate">
                                 {user?.name ?? "User"}
                             </p>
