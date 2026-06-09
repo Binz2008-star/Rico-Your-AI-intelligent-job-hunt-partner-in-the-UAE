@@ -1,6 +1,7 @@
 "use client";
 
 import { AuraGlow } from "@/components/ui/AuraGlow";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
 import { AppSidebar } from "./AppSidebar";
 import { AppTopbar } from "./AppTopbar";
@@ -27,8 +28,9 @@ export function AppShell({
     showSidebar = true,
     showTopbar = true,
 }: AppShellProps) {
+    const { language } = useLanguage();
     return (
-        <div className={cn("relative flex h-[100dvh] min-h-screen w-full bg-background", className)}>
+        <div dir={language === "ar" ? "rtl" : "ltr"} className={cn("relative flex h-[100dvh] min-h-screen w-full bg-background", className)}>
             {/* Cinematic ambient glows — Pulse-style, same as DashboardShell */}
             <AuraGlow aria-hidden="true" variant="magenta" position="top-left" className="animate-pulse-magenta" />
             <AuraGlow aria-hidden="true" variant="cyan" position="bottom-right" className="animate-pulse-magenta" style={{ animationDelay: "-2s" }} />

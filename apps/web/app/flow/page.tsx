@@ -21,6 +21,15 @@ import { useTranslation } from '@/lib/translations';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+type ViewMode = 'list' | 'board';
+
+const KANBAN_COLS: Array<{ labelKey: string; statuses: ApplicationStatus[]; accent: string }> = [
+    { labelKey: 'flowColLeads',     statuses: ['saved', 'opened'],                     accent: 'border-text-tertiary/30' },
+    { labelKey: 'flowColApplied',   statuses: ['applied'],                             accent: 'border-sky-500/30' },
+    { labelKey: 'flowColInterview', statuses: ['interview'],                            accent: 'border-gold/40' },
+    { labelKey: 'flowColOutcome',   statuses: ['offer', 'rejected', 'decision_made'],  accent: 'border-magenta/30' },
+];
+
 // Maps each canonical backend status to its display-label translation key.
 // Backend values are never changed — only the rendered label is localized.
 const STATUS_LABEL_KEYS: Record<ApplicationStatus, string> = {
@@ -90,6 +99,7 @@ export default function FlowPage() {
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<'auth' | 'network' | false>(false);
+    const [viewMode, setViewMode] = useState<ViewMode>('list');
     const [showModal, setShowModal] = useState(false);
     const [saving, setSaving] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
@@ -200,13 +210,34 @@ export default function FlowPage() {
                                 </Badge>
                             )}
                         </div>
-                        <button
-                            onClick={() => setShowModal(true)}
-                            className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-gold/25 bg-gold/[0.06] px-4 py-2 text-xs font-semibold text-gold transition-colors hover:bg-gold/15 sm:w-auto"
-                        >
-                            <MaterialIcon icon="add" className="text-sm" />
-                            {t('flowTrackApplication')}
-                        </button>
+                        <div className="flex items-center gap-2">
+                            {/* List / Board toggle */}
+                            <div className="flex items-center rounded-lg border border-overlay/10 bg-surface-elevated/60 p-0.5">
+                                <button
+                                    onClick={() => setViewMode('list')}
+                                    aria-pressed={viewMode === 'list'}
+                                    className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${viewMode === 'list' ? 'bg-gold/10 text-gold' : 'text-text-tertiary hover:text-text-secondary'}`}
+                                >
+                                    <MaterialIcon icon="format_list_bulleted" size={14} />
+                                    <span className="hidden sm:inline">{t('flowViewList')}</span>
+                                </button>
+                                <button
+                                    onClick={() => setViewMode('board')}
+                                    aria-pressed={viewMode === 'board'}
+                                    className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${viewMode === 'board' ? 'bg-gold/10 text-gold' : 'text-text-tertiary hover:text-text-secondary'}`}
+                                >
+                                    <MaterialIcon icon="view_kanban" size={14} />
+                                    <span className="hidden sm:inline">{t('flowViewBoard')}</span>
+                                </button>
+                            </div>
+                            <button
+                                onClick={() => setShowModal(true)}
+                                className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-gold/25 bg-gold/[0.06] px-4 py-2 text-xs font-semibold text-gold transition-colors hover:bg-gold/15 sm:w-auto"
+                            >
+                                <MaterialIcon icon="add" className="text-sm" />
+                                {t('flowTrackApplication')}
+                            </button>
+                        </div>
                     </div>
                 )}
 
@@ -243,7 +274,77 @@ export default function FlowPage() {
                                 title={t('flowEmptyTitle')}
                                 description={t('flowEmptyDesc')}
                             />
+                        ) : viewMode === 'board' ? (
+                            /* ── Kanban Board ── */
+                            <div className="-mx-1 flex gap-3 overflow-x-auto pb-4 sm:mx-0">
+                                {KANBAN_COLS.map((col) => {
+                                    const colApps = applications.filter((a) => col.statuses.includes(a.status));
+                                    return (
+                                        <div
+                                            key={col.labelKey}
+                                            className={`flex min-w-[220px] flex-1 flex-col rounded-xl border ${col.accent} bg-surface-elevated/40 p-3 sm:min-w-[200px]`}
+                                        >
+                                            <div className="mb-3 flex items-center justify-between">
+                                                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+                                                    {t(col.labelKey)}
+                                                </h3>
+                                                <span className="rounded-full bg-overlay/10 px-1.5 py-0.5 text-[10px] font-bold text-text-tertiary">
+                                                    {colApps.length}
+                                                </span>
+                                            </div>
+                                            <div className="flex flex-col gap-2">
+                                                {colApps.length === 0 && (
+                                                    <p className="py-4 text-center text-[11px] text-text-tertiary">—</p>
+                                                )}
+                                                {colApps.map((item) => (
+                                                    <div
+                                                        key={item.application_id}
+                                                        className="rounded-lg border border-overlay/10 bg-surface/70 p-3 transition-colors hover:border-gold/20"
+                                                    >
+                                                        <p className="text-xs font-semibold leading-5 text-text-primary [overflow-wrap:anywhere]">
+                                                            {item.title}
+                                                        </p>
+                                                        <p className="mt-0.5 text-[11px] text-text-secondary [overflow-wrap:anywhere]">
+                                                            {item.company}
+                                                        </p>
+                                                        {item.apply_url && item.apply_url !== '#' && (
+                                                            <a
+                                                                href={item.apply_url}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-gold hover:underline"
+                                                            >
+                                                                {t('flowViewListing')} ↗
+                                                            </a>
+                                                        )}
+                                                        <div className="mt-2 flex items-center justify-between gap-2">
+                                                            <span className="text-[10px] text-text-tertiary">
+                                                                {fmtDate(item.applied_at, language) ?? ''}
+                                                            </span>
+                                                            <label className="sr-only" htmlFor={`board-status-${item.application_id}`}>
+                                                                {`Change status for ${item.title}`}
+                                                            </label>
+                                                            <select
+                                                                id={`board-status-${item.application_id}`}
+                                                                value={item.status}
+                                                                onChange={(e) => changeStatus(item, e.target.value as ApplicationStatus)}
+                                                                disabled={!!updating}
+                                                                className="rounded-md border border-border-soft bg-surface px-2 py-1 text-[10px] text-text-primary outline-none transition-colors focus:border-gold/40 disabled:opacity-40"
+                                                            >
+                                                                {STATUS_OPTIONS.map((s) => (
+                                                                    <option key={s} value={s}>{t(STATUS_LABEL_KEYS[s])}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         ) : (
+                            /* ── List View ── */
                             <div className="space-y-3">
                                 {applications.map((item) => (
                                     <Card

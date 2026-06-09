@@ -779,6 +779,19 @@ export const translations = {
     navBreadcrumbFlow: "Flow",
     navBreadcrumbSignals: "Signals",
     navBreadcrumbArchive: "Archive",
+
+    // Profile Completeness
+    profileCompleteness: "Profile completeness",
+    profileCompletenessTip: "A complete profile improves job matching",
+    profileQuickWins: "Quick wins",
+
+    // Application Flow — Board view
+    flowViewList: "List",
+    flowViewBoard: "Board",
+    flowColLeads: "Leads",
+    flowColApplied: "Applied",
+    flowColInterview: "Interview",
+    flowColOutcome: "Outcome",
   },
   ar: {
     // Common
@@ -1552,6 +1565,19 @@ export const translations = {
     navBreadcrumbFlow: "المسار",
     navBreadcrumbSignals: "الإشارات",
     navBreadcrumbArchive: "الأرشيف",
+
+    // Profile Completeness
+    profileCompleteness: "اكتمال الملف الشخصي",
+    profileCompletenessTip: "ملف مكتمل يحسّن مطابقة الوظائف",
+    profileQuickWins: "إضافات سريعة",
+
+    // Application Flow — Board view
+    flowViewList: "قائمة",
+    flowViewBoard: "لوحة",
+    flowColLeads: "المحفوظات",
+    flowColApplied: "المقدَّم عليها",
+    flowColInterview: "المقابلات",
+    flowColOutcome: "النتائج",
   },
 } as const;
 

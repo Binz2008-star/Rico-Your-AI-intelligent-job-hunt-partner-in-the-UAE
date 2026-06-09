@@ -244,6 +244,82 @@ function EditableTextField({
     );
 }
 
+type ProfileField = {
+    key: string;
+    labelKey: string;
+    filled: boolean;
+};
+
+function buildFields(profile: ProfileResponse): ProfileField[] {
+    return [
+        { key: "name",                 labelKey: "name",               filled: !!profile.name?.trim() },
+        { key: "phone",                labelKey: "profilePhone",        filled: !!profile.phone?.trim() },
+        { key: "current_role",         labelKey: "profileCurrentRole",  filled: !!profile.current_role?.trim() },
+        { key: "current_company",      labelKey: "profileCurrentCompany", filled: !!profile.current_company?.trim() },
+        { key: "linkedin_url",         labelKey: "profileLinkedin",     filled: !!profile.linkedin_url?.trim() },
+        { key: "visa_status",          labelKey: "profileVisa",         filled: !!profile.visa_status?.trim() },
+        { key: "notice_period",        labelKey: "profileNotice",       filled: !!profile.notice_period?.trim() },
+        { key: "telegram_username",    labelKey: "telegram",            filled: !!profile.telegram_username?.trim() },
+        { key: "target_roles",         labelKey: "profileTargetRoles",  filled: (profile.target_roles?.length ?? 0) > 0 },
+        { key: "preferred_cities",     labelKey: "profileCities",       filled: (profile.preferred_cities?.length ?? 0) > 0 },
+        { key: "salary_expectation_aed", labelKey: "profileSalaryTarget", filled: profile.salary_expectation_aed != null },
+        { key: "years_experience",     labelKey: "profileExperience",   filled: profile.years_experience != null },
+        { key: "skills",               labelKey: "profileSkills",       filled: (profile.skills?.length ?? 0) >= 3 },
+    ];
+}
+
+function ProfileCompleteness({ profile }: { profile: ProfileResponse }) {
+    const { language } = useLanguage();
+    const t = useTranslation(language);
+
+    const fields = buildFields(profile);
+    const filledCount = fields.filter((f) => f.filled).length;
+    const pct = Math.round((filledCount / fields.length) * 100);
+    const missing = fields.filter((f) => !f.filled).slice(0, 3);
+
+    const barColor =
+        pct >= 80 ? "bg-green-500" : pct >= 50 ? "bg-gold" : "bg-red-500";
+
+    return (
+        <div className="rounded-xl border border-overlay/8 bg-surface-elevated/50 p-4 backdrop-blur-sm">
+            <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-semibold uppercase tracking-[0.1em] text-text-secondary">
+                    {t("profileCompleteness")}
+                </span>
+                <span className={`text-sm font-bold ${pct >= 80 ? "text-green-400" : pct >= 50 ? "text-gold" : "text-red-400"}`}>
+                    {pct}%
+                </span>
+            </div>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-overlay/10">
+                <div
+                    className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                    style={{ width: `${pct}%` }}
+                />
+            </div>
+            {missing.length > 0 && (
+                <div className="mt-3">
+                    <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-text-tertiary">
+                        {t("profileQuickWins")}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                        {missing.map((f) => (
+                            <span
+                                key={f.key}
+                                className="rounded-md border border-overlay/10 bg-surface-glass px-2 py-0.5 text-[11px] text-text-secondary"
+                            >
+                                + {t(f.labelKey)}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            )}
+            {pct === 100 && (
+                <p className="mt-2 text-[11px] text-green-400">{t("profileCompletenessTip")}</p>
+            )}
+        </div>
+    );
+}
+
 function ProfileDetail({
     profile,
     onSaveName,
@@ -289,6 +365,9 @@ function ProfileDetail({
 
     return (
         <div className="flex w-full flex-col gap-5">
+            {/* Completeness score */}
+            <ProfileCompleteness profile={profile} />
+
             {/* Identity */}
             <StatusCard title={t("profileIdentity")} badge="live" badgeLabel={t("profileBadgeSynced")}>
                 <dl className="grid min-w-0 grid-cols-1 gap-3 text-sm lg:grid-cols-2">
