@@ -110,6 +110,20 @@ TELEGRAM_MENTION_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Settings/Notification commands: enable/disable notifications and alerts
+_SETTINGS_NOTIFICATION_ENABLE_RE = re.compile(
+    r"\b(?:enable|turn\s+on|activate|start)\s+(?:telegram\s+)?(?:notifications?|alerts?|reminders?)\b",
+    re.IGNORECASE,
+)
+_SETTINGS_NOTIFICATION_DISABLE_RE = re.compile(
+    r"\b(?:disable|turn\s+off|deactivate|stop)\s+(?:telegram\s+)?(?:notifications?|alerts?|reminders?)\b",
+    re.IGNORECASE,
+)
+_SETTINGS_SHOW_RE = re.compile(
+    r"\b(?:open\s+)?(?:notification\s+)?settings\b|\b(?:manage|change)\s+(?:notifications?|alerts?)\b",
+    re.IGNORECASE,
+)
+
 # CV improvement follow-up phrases — used ONLY when last_flow_state == "cv_builder".
 # Never apply this pattern without flow-state context or it will misfire on
 # "improve my cover letter", "enhance it" for other content, etc.
@@ -2380,6 +2394,65 @@ class RicoChatAPI:
 
         return None
 
+    def _resolve_settings_command(
+        self, user_id: str, message: str
+    ) -> "dict[str, Any] | None":
+        """Intercept settings and notification commands.
+
+        Commands like "enable telegram notifications" must route to settings,
+        not job search (prevent searching for "Telegram Notifications" jobs).
+
+        Returns a response dict if a settings command was resolved, else None.
+        """
+        msg = message.strip()
+        if not msg:
+            return None
+
+        # ── Enable notifications ────────────────────────────────────────────
+        if _SETTINGS_NOTIFICATION_ENABLE_RE.search(msg):
+            # Save preference and return confirmation
+            upsert_profile(user_id=user_id, updates={"notifications_enabled": True})
+            reply = (
+                "I've enabled notifications for you. You'll now receive job alerts "
+                "and application updates via Telegram and email."
+            )
+            self._append_chat(user_id, "assistant", reply)
+            return {
+                "type": "settings_updated",
+                "message": reply,
+                "updated": {"notifications_enabled": True},
+                "target_route": "/settings",
+            }
+
+        # ── Disable notifications ───────────────────────────────────────────
+        if _SETTINGS_NOTIFICATION_DISABLE_RE.search(msg):
+            upsert_profile(user_id=user_id, updates={"notifications_enabled": False})
+            reply = (
+                "I've disabled notifications. You won't receive job alerts or "
+                "application updates until you re-enable them."
+            )
+            self._append_chat(user_id, "assistant", reply)
+            return {
+                "type": "settings_updated",
+                "message": reply,
+                "updated": {"notifications_enabled": False},
+                "target_route": "/settings",
+            }
+
+        # ── Show settings ───────────────────────────────────────────────────
+        if _SETTINGS_SHOW_RE.search(msg):
+            reply = (
+                "Opening your notification settings. You can manage which "
+                "channels you want to receive alerts through."
+            )
+            return {
+                "type": "navigate",
+                "message": reply,
+                "target_route": "/settings",
+            }
+
+        return None
+
     _JOB_SEARCH_OPTIONS = {
         "type": "options",
         "message": "Here is what I can help you with:",
@@ -3039,6 +3112,19 @@ class RicoChatAPI:
                     profile=profile,
                 )
 
+        # ── Manual Application Status: English (before Arabic block for priority) ─
+        # Handle English "I applied" / "submitted" / "mark as applied" BEFORE
+        # job search classification to prevent "I applied manually" being treated as a job role.
+        if not self._is_arabic_text(message):
+            from src.agent.intelligence.intent_classifier import _is_english_manual_applied_status
+            if _is_english_manual_applied_status(message):
+                logger.info("rico_manual_applied user=%s msg=%r", user_id, message)
+                return self._finalize(
+                    self._handle_application_status_update(user_id, message, profile),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
+
         # Arabic "I already applied" reports are lifecycle updates, not send/draft
         # requests and not job searches. Catch before the channel follow-up guard,
         # whose broad Arabic "قدم" send verb can otherwise intercept them.
@@ -3060,6 +3146,13 @@ class RicoChatAPI:
                     self.SOURCE_KEYWORD,
                     profile=profile,
                 )
+
+        # ── Settings/Notification Commands ────────────────────────────────────
+        # Commands like "enable telegram notifications" must route to settings,
+        # not job search (prevent searching for "Telegram Notifications" jobs).
+        settings_result = self._resolve_settings_command(user_id, message)
+        if settings_result is not None:
+            return self._finalize(settings_result, self.SOURCE_KEYWORD, profile=profile)
 
         # ── Application draft/send channel clarification ─────────────────────
         # Follow-ups like "go ahead", "send it", or Arabic "صيغ رسالة ... وارسلها"
