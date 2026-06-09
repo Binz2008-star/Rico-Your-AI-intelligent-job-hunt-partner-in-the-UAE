@@ -2,7 +2,7 @@ import { LanguageProvider } from "@/contexts/LanguageContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Sans, Sora, Space_Mono } from "next/font/google";
+import { IBM_Plex_Mono, Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
 // No-flash theme script: runs before paint to apply the stored theme class so a
@@ -14,24 +14,25 @@ const themeInitScript = `(function(){try{var t=localStorage.getItem("rico-theme"
 // React hydrates so Arabic users never see an LTR flash on page load or refresh.
 const langInitScript = `(function(){try{var l=localStorage.getItem("rico-language");if(l==="ar"){var e=document.documentElement;e.lang="ar";e.dir="rtl";}}catch(_){}})();`;
 
-// DESIGN.md spec: IBM Plex Sans Variable + Sora
-const ibmPlexSans = IBM_Plex_Sans({
+// Nocturne type system: Space Grotesk (display) + Inter (body) + IBM Plex Mono (labels/data)
+const spaceGrotesk = Space_Grotesk({
     subsets: ["latin"],
-    weight: ["300", "400", "500", "600", "700"],
-    variable: "--font-ibm-plex-sans",
+    weight: ["400", "500", "600", "700"],
+    variable: "--font-display",
     display: "swap",
 });
 
-const sora = Sora({
+const inter = Inter({
     subsets: ["latin"],
-    variable: "--font-sora",
+    weight: ["400", "500", "600"],
+    variable: "--font-body",
     display: "swap",
 });
 
-const spaceMono = Space_Mono({
+const ibmPlexMono = IBM_Plex_Mono({
     subsets: ["latin"],
-    weight: ["400", "700"],
-    variable: "--font-space-mono",
+    weight: ["400", "500", "600"],
+    variable: "--font-mono",
     display: "swap",
 });
 
@@ -49,11 +50,13 @@ export const metadata: Metadata = {
         description: "Upload your CV. Rico finds matching UAE jobs, tracks your applications, and guides your next move — in English and Arabic.",
         type: "website",
         siteName: "Rico Hunt",
+        images: [{ url: "/icons/icon-512.png", width: 512, height: 512, alt: "Rico Hunt" }],
     },
     twitter: {
-        card: "summary",
+        card: "summary_large_image",
         title: "Rico Hunt — Your AI Job-Hunt Partner in the UAE",
         description: "Upload your CV. Rico finds matching UAE jobs, tracks your applications, and guides your next move — in English and Arabic.",
+        images: ["/icons/icon-512.png"],
     },
 };
 
@@ -63,7 +66,7 @@ export const viewport: Viewport = {
     width: "device-width",
     initialScale: 1,
     viewportFit: "cover",
-    themeColor: "#0a0a1a",
+    themeColor: "#06060c",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -77,7 +80,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
                 />
             </head>
-            <body className={`${ibmPlexSans.variable} ${sora.variable} ${spaceMono.variable} antialiased bg-background text-text-primary font-body overflow-x-hidden`}>
+            <body className={`${spaceGrotesk.variable} ${inter.variable} ${ibmPlexMono.variable} antialiased bg-background text-text-primary font-body overflow-x-hidden`}>
                 <ThemeProvider><LanguageProvider>{children}</LanguageProvider></ThemeProvider>
                 <Analytics />
             </body>

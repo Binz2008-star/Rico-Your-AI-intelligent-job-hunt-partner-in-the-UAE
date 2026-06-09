@@ -3,75 +3,90 @@
 import { cn } from "@/lib/utils";
 import { ButtonHTMLAttributes, ReactNode } from "react";
 
-type RicoButtonVariant = "primary" | "magenta" | "ghost" | "outline";
+type RicoButtonVariant = "primary" | "ember" | "magenta" | "ghost" | "outline";
 type RicoButtonSize = "sm" | "md" | "lg";
 
 interface RicoButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  children: ReactNode;
-  variant?: RicoButtonVariant;
-  size?: RicoButtonSize;
-  disabled?: boolean;
+    children: ReactNode;
+    variant?: RicoButtonVariant;
+    size?: RicoButtonSize;
+    disabled?: boolean;
 }
 
 /**
- * RicoButton — Design system button
+ * RicoButton — Nocturne design system button
  *
- * Uses the new --rico-* design tokens for consistent button styling.
- * Variants: primary (white-on-black), magenta (brand), ghost (transparent), outline
- * Sizes: sm, md, lg
+ * Variants:
+ * - primary: ember bg + dark text (CTA, main actions)
+ * - ember/magenta: glass bg + ember hover (alias for back-compat)
+ * - ghost: transparent + ember border hover (secondary)
+ * - outline: minimal border (tertiary)
+ *
+ * Note: "magenta" is retained as alias for "ember" (Nocturne rebrand).
  */
 export function RicoButton({
-  children,
-  variant = "primary",
-  size = "md",
-  disabled = false,
-  className,
-  ...props
+    children,
+    variant = "primary",
+    size = "md",
+    disabled = false,
+    className,
+    ...props
 }: RicoButtonProps) {
-  const variantStyles: Record<RicoButtonVariant, string> = {
-    primary: "bg-[var(--rico-fg-1)] text-black hover:bg-[var(--rico-primary)] hover:text-[var(--rico-bg)]",
-    magenta: "bg-[var(--rico-primary-container)] text-white hover:bg-[var(--rico-primary)] hover:text-[var(--rico-on-primary)]",
-    ghost: "bg-transparent text-[var(--rico-fg-2)] border-[var(--rico-border-soft)] hover:bg-[rgba(255,255,255,0.05)] hover:text-[var(--rico-fg-1)] hover:border-[var(--rico-border-medium)]",
-    outline: "bg-transparent text-[var(--rico-fg-1)] border-[var(--rico-border-soft)]",
-  };
+    const variantStyles: Record<RicoButtonVariant, string> = {
+        // Nocturne primary: ember bg, dark text, hover brightens
+        primary:
+            "bg-ember text-void hover:bg-ember-bright hover:shadow-[0_8px_30px_rgb(var(--gold)/0.35)] hover:-translate-y-px",
+        // Ember: glass bg with ember accent on hover (alias: magenta for back-compat)
+        ember:
+            "bg-surface/50 text-text-primary border-overlay/12 hover:border-ember hover:bg-ember/5",
+        // Back-compat: magenta now maps to ember
+        magenta:
+            "bg-surface/50 text-text-primary border-overlay/12 hover:border-ember hover:bg-ember/5",
+        // Ghost: minimal, hover reveals
+        ghost:
+            "bg-transparent text-text-secondary border-overlay/12 hover:bg-overlay/5 hover:text-text-primary hover:border-overlay/16",
+        // Outline: static border
+        outline:
+            "bg-transparent text-text-primary border-overlay/12",
+    };
 
-  const sizeStyles: Record<RicoButtonSize, string> = {
-    sm: "px-4 py-2 text-[10px]",
-    md: "px-6 py-3 text-[12px]",
-    lg: "px-8 py-3.5 text-[13px]",
-  };
+    const sizeStyles: Record<RicoButtonSize, string> = {
+        sm: "px-4 py-2 text-[10px]",
+        md: "px-6 py-3 text-[12px]",
+        lg: "px-8 py-3.5 text-[13px]",
+    };
 
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      className={cn(
-        // Base button styles
-        "inline-flex items-center justify-center gap-2",
-        // Typography from design system
-        "font-semibold",
-        "tracking-[0.10em] uppercase leading-none",
-        // Border radius (full pill)
-        "rounded-[var(--r-full)]",
-        // Border
-        "border border-transparent",
-        // Cursor and user select
-        "cursor-pointer select-none",
-        "whitespace-nowrap",
-        // Focus ring using Rico token
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--rico-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--rico-bg)]",
-        // Transition from design system
-        "transition-all duration-[var(--dur-hover)] ease-[var(--ease-out)]",
-        // Disabled state
-        disabled && "opacity-40 cursor-not-allowed",
-        // Variant and size
-        variantStyles[variant],
-        sizeStyles[size],
-        className
-      )}
-      {...props}
-    >
-      {children}
-    </button>
-  );
+    return (
+        <button
+            type="button"
+            disabled={disabled}
+            className={cn(
+                // Base button styles
+                "inline-flex items-center justify-center gap-2",
+                // Typography from design system
+                "font-semibold font-body",
+                "tracking-[0.10em] uppercase leading-none",
+                // Border radius (Nocturne: rounded-lg, not full pill)
+                "rounded-lg",
+                // Border
+                "border",
+                // Cursor and user select
+                "cursor-pointer select-none",
+                "whitespace-nowrap",
+                // Focus ring: ember (Nocturne)
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
+                // Transition
+                "transition-all duration-200 ease-out",
+                // Disabled state
+                disabled && "opacity-40 cursor-not-allowed",
+                // Variant and size
+                variantStyles[variant],
+                sizeStyles[size],
+                className
+            )}
+            {...props}
+        >
+            {children}
+        </button>
+    );
 }

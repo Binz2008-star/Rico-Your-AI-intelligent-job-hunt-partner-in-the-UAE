@@ -25,35 +25,42 @@
 :root {
     color-scheme: dark;
 
-    /* Canvas + surfaces */
-    --bg: 0 0 0;
-    --surface: 10 10 15;
-    --surface-elevated: 17 17 22;
+    /* Canvas + surfaces — Nocturne */
+    --bg: 6 6 12;
+    /* void */
+    --surface: 17 19 32;
+    --surface-elevated: 22 26 43;
     /* Overlay channel for translucent fills/borders (white on dark canvas) */
     --overlay: 255 255 255;
 
-    /* Accents */
-    --gold: 245 166 35;
-    --gold-hover: 251 191 36;
+    /* Accents — Nocturne. Ember = Rico's voice; Aura (teal) = intelligence/data only. */
+    --gold: 240 169 74;
+    /* ember */
+    --gold-hover: 255 200 115;
+    /* ember-bright */
+    --aura: 111 233 208;
+    /* teal — intelligence / data */
+    --aura-dim: 63 185 166;
+    /* Legacy magenta/cyan retained (still referenced by some primitives/glows) — use sparingly. */
     --magenta: 255 45 142;
     --magenta-hover: 255 74 158;
     --cyan: 0 229 255;
     --cyan-hover: 51 235 255;
 
-    /* Text — solid equivalents of the prior translucent-white scale on black */
-    --text-primary: 255 255 255;
-    --text-secondary: 184 184 184;
-    --text-tertiary: 122 122 122;
+    /* Text — Nocturne scale */
+    --text-primary: 238 240 246;
+    --text-secondary: 154 163 184;
+    --text-tertiary: 100 109 131;
     --text-muted: 71 71 71;
     --text-disabled: 41 41 41;
 
-    /* Ambient canvas glow (gold TL, magenta BR) — premium warmth */
-    --canvas-glow-1: 245 166 35;
-    --canvas-glow-2: 255 45 142;
+    /* Ambient canvas glow (ember TL, aura BR) — Nocturne atmosphere */
+    --canvas-glow-1: 240 169 74;
+    --canvas-glow-2: 111 233 208;
 
-    /* Glass panel base (navy translucent) */
-    --glass-top: 19 19 42;
-    --glass-bottom: 10 10 24;
+    /* Glass panel base (Nocturne — elevated surface → ink) */
+    --glass-top: 22 26 43;
+    --glass-bottom: 10 11 19;
 
     /* Ambient drop-shadow color (near-black on the dark canvas) */
     --shadow-color: 5 5 16;
@@ -110,7 +117,11 @@
 
     /* Darkened accents for AA on light surfaces */
     --gold: 161 87 0;
+    /* ember (AA on light) */
     --gold-hover: 133 68 0;
+    --aura: 15 118 110;
+    /* teal (AA on light) */
+    --aura-dim: 13 95 85;
     --magenta: 197 24 96;
     --magenta-hover: 168 18 80;
     --cyan: 13 110 135;
@@ -122,8 +133,8 @@
     --text-muted: 150 150 165;
     --text-disabled: 190 190 200;
 
-    --canvas-glow-1: 245 166 35;
-    --canvas-glow-2: 255 45 142;
+    --canvas-glow-1: 240 169 74;
+    --canvas-glow-2: 111 233 208;
 
     /* Light glass = near-white translucent */
     --glass-top: 255 255 255;
@@ -147,26 +158,28 @@
 .command-dark-lock {
     color-scheme: dark;
 
-    --bg: 0 0 0;
-    --surface: 10 10 15;
-    --surface-elevated: 17 17 22;
+    --bg: 6 6 12;
+    --surface: 17 19 32;
+    --surface-elevated: 22 26 43;
     --overlay: 255 255 255;
 
-    --gold: 245 166 35;
-    --gold-hover: 251 191 36;
+    --gold: 240 169 74;
+    --gold-hover: 255 200 115;
+    --aura: 111 233 208;
+    --aura-dim: 63 185 166;
     --magenta: 255 45 142;
     --magenta-hover: 255 74 158;
     --cyan: 0 229 255;
     --cyan-hover: 51 235 255;
 
-    --text-primary: 255 255 255;
-    --text-secondary: 184 184 184;
-    --text-tertiary: 122 122 122;
+    --text-primary: 238 240 246;
+    --text-secondary: 154 163 184;
+    --text-tertiary: 100 109 131;
     --text-muted: 71 71 71;
     --text-disabled: 41 41 41;
 
-    --glass-top: 19 19 42;
-    --glass-bottom: 10 10 24;
+    --glass-top: 22 26 43;
+    --glass-bottom: 10 11 19;
 
     --shadow-color: 5 5 16;
 
@@ -185,7 +198,7 @@ body {
         radial-gradient(circle at bottom right, rgb(var(--canvas-glow-2) / 0.06) 0%, transparent 32%),
         rgb(var(--bg));
     color: rgb(var(--text-primary));
-    font-family: var(--font-ibm-plex-sans), system-ui, sans-serif;
+    font-family: var(--font-body), system-ui, sans-serif;
     height: 100%;
     overflow-x: hidden;
 }
@@ -247,17 +260,20 @@ body>div:first-child {
 
 /* Skeleton shimmer animation */
 @keyframes shimmer {
-    0% { background-position: -200% 0; }
-    100% { background-position: 200% 0; }
+    0% {
+        background-position: -200% 0;
+    }
+
+    100% {
+        background-position: 200% 0;
+    }
 }
 
 .skeleton-shimmer {
-    background: linear-gradient(
-        90deg,
-        rgb(var(--overlay) / 0.05) 0%,
-        rgb(var(--overlay) / 0.10) 50%,
-        rgb(var(--overlay) / 0.05) 100%
-    );
+    background: linear-gradient(90deg,
+            rgb(var(--overlay) / 0.05) 0%,
+            rgb(var(--overlay) / 0.10) 50%,
+            rgb(var(--overlay) / 0.05) 100%);
     background-size: 200% 100%;
     animation: shimmer 1.8s ease-in-out infinite;
 }
@@ -297,15 +313,15 @@ body>div:first-child {
     outline-offset: var(--focus-ring-offset);
 }
 
-/* Noise grain overlay */
+/* Ambient grain overlay — Nocturne (subtle fixed fractal noise ~0.035, behind nothing interactive) */
 body::after {
     content: '';
     position: fixed;
     inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.025'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     pointer-events: none;
     z-index: 9999;
-    opacity: 0.04;
+    opacity: 0.035;
 }
 
 /* Cinematic entrance keyframes */
@@ -314,6 +330,7 @@ body::after {
         opacity: 0;
         transform: translateY(8px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -321,9 +338,12 @@ body::after {
 }
 
 @keyframes glowPulse {
-    0%, 100% {
+
+    0%,
+    100% {
         box-shadow: 0 0 20px rgba(245, 166, 35, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.05);
     }
+
     50% {
         box-shadow: 0 0 32px rgba(245, 166, 35, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.08);
     }
@@ -343,6 +363,7 @@ body::after {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
     *,
     *::before,
     *::after {
@@ -360,6 +381,7 @@ body::after {
     gap: 10px;
     margin: 8px 0 10px;
 }
+
 .rico-orb {
     width: 28px;
     height: 28px;
@@ -379,10 +401,12 @@ body::after {
     animation: ricoOrbPulse 2s ease-in-out infinite;
     flex-shrink: 0;
 }
+
 .rico-orb span {
     display: inline-block;
     letter-spacing: -0.02em;
 }
+
 .rico-thinking-label {
     display: flex;
     align-items: center;
@@ -391,11 +415,13 @@ body::after {
     font-size: 13px;
     letter-spacing: -0.01em;
 }
+
 .rico-dots {
     display: inline-flex;
     gap: 3px;
     align-items: center;
 }
+
 .rico-dots i {
     display: block;
     width: 4px;
@@ -406,24 +432,85 @@ body::after {
     font-style: normal;
     animation: ricoDot 1.4s ease-in-out infinite;
 }
-.rico-dots i:nth-child(2) { animation-delay: 0.18s; }
-.rico-dots i:nth-child(3) { animation-delay: 0.36s; }
+
+.rico-dots i:nth-child(2) {
+    animation-delay: 0.18s;
+}
+
+.rico-dots i:nth-child(3) {
+    animation-delay: 0.36s;
+}
 
 @keyframes ricoRSpin {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
+
 @keyframes ricoOrbPulse {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: scale(1);
         box-shadow: 0 0 8px rgba(245, 166, 35, 0.25);
     }
+
     50% {
         transform: scale(1.05);
         box-shadow: 0 0 16px rgba(245, 166, 35, 0.45);
     }
 }
+
 @keyframes ricoDot {
-    0%, 100% { opacity: 0.30; transform: translateY(0); }
-    50%       { opacity: 1;    transform: translateY(-2px); }
+
+    0%,
+    100% {
+        opacity: 0.30;
+        transform: translateY(0);
+    }
+
+    50% {
+        opacity: 1;
+        transform: translateY(-2px);
+    }
+}
+
+/* ========================================
+   Reduced Motion Support
+   ======================================== */
+
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    .animate-breathe,
+    .animate-pulse-ring,
+    .animate-float,
+    .animate-pulse-gold,
+    .animate-pulse-magenta,
+    .skeleton-shimmer {
+        animation: none !important;
+    }
+
+    .motion-reduce\:opacity-50 {
+        opacity: 0.3 !important;
+    }
+}
+
+/* Utility for motion-safe animations */
+@media (prefers-reduced-motion: no-preference) {
+    .motion-safe\:animate-breathe {
+        animation: breathe 5.5s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+    }
 }

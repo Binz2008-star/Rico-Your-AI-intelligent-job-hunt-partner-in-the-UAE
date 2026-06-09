@@ -21,6 +21,10 @@ const config: Config = {
 
                 // Global Canvas
                 background: "rgb(var(--bg) / <alpha-value>)",
+                // Nocturne aliases — `void` is the canvas, `overlay` the translucent
+                // white/dark channel used for hairline borders + glass fills.
+                void: "rgb(var(--bg) / <alpha-value>)",
+                overlay: "rgb(var(--overlay) / <alpha-value>)",
                 surface: {
                     DEFAULT: "rgb(var(--surface) / <alpha-value>)",
                     elevated: "rgb(var(--surface-elevated) / <alpha-value>)",
@@ -55,6 +59,24 @@ const config: Config = {
                     soft: "rgb(var(--cyan) / 0.1)",
                     dim: "rgb(var(--cyan) / 0.05)",
                     hover: "rgb(var(--cyan-hover) / <alpha-value>)",
+                },
+
+                // Nocturne — Ember (Rico's voice). Aliases the --gold token for semantic reads.
+                ember: {
+                    DEFAULT: "rgb(var(--gold) / <alpha-value>)",
+                    bright: "rgb(var(--gold-hover) / <alpha-value>)",
+                    glow: "rgb(var(--gold) / 0.25)",
+                    soft: "rgb(var(--gold) / 0.10)",
+                    border: "rgb(var(--gold) / 0.35)",
+                },
+
+                // Nocturne — Aura (intelligence / data only). Teal on dark, AA-darkened on light.
+                aura: {
+                    DEFAULT: "rgb(var(--aura) / <alpha-value>)",
+                    dim: "rgb(var(--aura-dim) / <alpha-value>)",
+                    glow: "rgb(var(--aura) / 0.25)",
+                    soft: "rgb(var(--aura) / 0.10)",
+                    border: "rgb(var(--aura) / 0.40)",
                 },
 
                 // Gradient System
@@ -116,11 +138,23 @@ const config: Config = {
                     gold: "rgb(var(--gold) / <alpha-value>)",
                 },
             },
+            // Nocturne hairline alpha stops — Tailwind's `/N` color-alpha modifier only
+            // resolves values present in the opacity scale, and the reference uses
+            // off-scale stops (e.g. overlay/7 hairlines, ember/13 bubble fill).
+            opacity: {
+                7: "0.07",
+                12: "0.12",
+                13: "0.13",
+                16: "0.16",
+            },
             borderRadius: {
                 DEFAULT: "0.25rem",
                 lg: "0.5rem",
                 xl: "0.75rem",
                 full: "9999px",
+                // Nocturne radii
+                rico: "14px",
+                "rico-lg": "22px",
             },
             spacing: {
                 unit: "8px",
@@ -132,11 +166,12 @@ const config: Config = {
                 "container-padding-desktop": "120px",
             },
             fontFamily: {
-                // DESIGN.md spec: IBM Plex Sans Variable + Sora
-                display: ["var(--font-ibm-plex-sans)", "var(--font-sora)", "sans-serif"],
-                headline: ["var(--font-ibm-plex-sans)", "var(--font-sora)", "sans-serif"],
-                body: ["var(--font-ibm-plex-sans)", "system-ui", "sans-serif"],
-                mono: ["var(--font-space-mono)", "monospace"],
+                // Nocturne: Space Grotesk (display/headline) + Inter (body/sans) + IBM Plex Mono
+                display: ["var(--font-display)", "var(--font-body)", "sans-serif"],
+                headline: ["var(--font-display)", "var(--font-body)", "sans-serif"],
+                sans: ["var(--font-body)", "system-ui", "sans-serif"],
+                body: ["var(--font-body)", "system-ui", "sans-serif"],
+                mono: ["var(--font-mono)", "ui-monospace", "monospace"],
             },
             fontSize: {
                 "display-lg": ["80px", { lineHeight: "1.1", letterSpacing: "-0.04em", fontWeight: "700" }],
@@ -157,6 +192,12 @@ const config: Config = {
                 thinking: "thinking 3s ease-in-out infinite",
                 shimmer: "shimmer 1.8s ease-in-out infinite",
                 "fade-up": "fadeUp 0.4s ease-out forwards",
+                // Nocturne Aura animations
+                breathe: "breathe 5.5s cubic-bezier(0.22, 0.61, 0.36, 1) infinite",
+                "pulse-ring": "pulse-ring 5.5s cubic-bezier(0.22, 0.61, 0.36, 1) infinite",
+                "glow-pulse": "glow-pulse 6s ease-in-out infinite",
+                drift: "drift 9s ease-in-out infinite",
+                "ring-reveal": "ring-reveal 1.1s cubic-bezier(0.22, 0.61, 0.36, 1) 0.15s backwards",
             },
             keyframes: {
                 float: {
@@ -182,6 +223,30 @@ const config: Config = {
                 fadeUp: {
                     "0%": { opacity: "0", transform: "translateY(6px)" },
                     "100%": { opacity: "1", transform: "translateY(0)" },
+                },
+                // Nocturne Aura keyframes
+                breathe: {
+                    "0%, 100%": { transform: "scale(1)", opacity: "0.92" },
+                    "50%": { transform: "scale(1.08)", opacity: "1" },
+                },
+                // Logo halo — opacity only so the badge never moves
+                "glow-pulse": {
+                    "0%, 100%": { opacity: "0.35" },
+                    "50%": { opacity: "0.7" },
+                },
+                // Hero card float — 3px max so text stays readable
+                drift: {
+                    "0%, 100%": { transform: "translateY(0)" },
+                    "50%": { transform: "translateY(-3px)" },
+                },
+                // FitRing one-shot draw-in; --ring-c = per-instance circumference,
+                // animates to the element's own stroke-dashoffset (no `to` frame)
+                "ring-reveal": {
+                    from: { strokeDashoffset: "var(--ring-c)" },
+                },
+                "pulse-ring": {
+                    "0%, 100%": { transform: "scale(0.96)", opacity: "0.7" },
+                    "50%": { transform: "scale(1.06)", opacity: "0.25" },
                 },
             },
             backdropBlur: {
