@@ -3,7 +3,7 @@
 import { fetchMe, submitOnboarding, uploadCV, type OnboardingPayload, type ParsedCV } from "@/lib/api";
 import { buildAuthHref } from "@/lib/redirect";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useTranslation } from "@/lib/translations";
+import { useTranslation, type TranslationKey } from "@/lib/translations";
 import { AuraGlow } from "@/components/ui/AuraGlow";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { PageTransition } from "@/components/ui/PageTransition";
@@ -11,7 +11,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-type TFunc = (key: string) => string;
+type TFunc = (key: TranslationKey) => string;
 
 // ── Step indicator ────────────────────────────────────────────────────────────
 

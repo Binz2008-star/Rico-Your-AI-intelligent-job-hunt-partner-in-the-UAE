@@ -957,6 +957,41 @@ export const translations = {
     dashboardSavedLeadsDesc: "Saved searches and leads help Rico keep future scans aligned with your priorities.",
     dashboardSavedLeadsCta: "View Saved Leads",
     dashboardSubtitle: "Your career execution progress and next actions",
+
+    // ProfileSummaryCard
+    profileSummaryTitle: "Profile Summary",
+    profileSummaryErrLoad: "Could not load profile.",
+    profileSummaryRetry: "Try again",
+    profileSummaryEmpty: "No profile yet. Use the Rico chat to complete onboarding.",
+    profileSummaryTargeting: "Targeting:",
+    profileSummaryExperience: "Experience:",
+    profileSummaryYrs: "yrs",
+    profileSummaryVisa: "Visa:",
+
+    // JobCard
+    jobCardStrongFit: "Strong fit",
+    jobCardWorthChecking: "Worth checking",
+    jobCardLowAlignment: "Low alignment",
+    jobCardMatchAnalysis: "Match analysis",
+    jobCardWhyLikes: "Why Rico likes this",
+    jobCardRecommendedStep: "Recommended next step",
+    jobCardLiveBadge: "Live / apply link available",
+    jobCardLeadBadge: "Lead / verify before applying",
+    jobCardMarkApplied: "Mark as applied",
+    jobCardApplyNow: "Apply now",
+    jobCardSave: "Save",
+    jobCardIgnore: "Ignore",
+    jobCardDone: "Action completed",
+
+    // ApplicationDraftCard
+    draftCoverLetter: "Cover Letter",
+    draftTailoredCv: "Tailored CV",
+    draftViewPosting: "View job posting ↗",
+    draftDecline: "Decline",
+    draftApproving: "Approving…",
+    draftApprove: "Approve",
+    draftApproved: "Approved",
+    draftAwaitingReview: "Awaiting review",
   },
   ar: {
     // Common
@@ -1908,6 +1943,41 @@ export const translations = {
     dashboardSavedLeadsDesc: "تساعد عمليات البحث والعملاء المحفوظون ريكو على مواءمة عمليات الفحص المستقبلية مع أولوياتك.",
     dashboardSavedLeadsCta: "عرض العملاء المحفوظين",
     dashboardSubtitle: "تقدّم تنفيذ مسيرتك المهنية والخطوات التالية",
+
+    // ProfileSummaryCard
+    profileSummaryTitle: "ملخص الملف الشخصي",
+    profileSummaryErrLoad: "تعذّر تحميل الملف الشخصي.",
+    profileSummaryRetry: "حاول مجدداً",
+    profileSummaryEmpty: "لا يوجد ملف شخصي بعد. استخدم محادثة ريكو لإكمال التأهيل.",
+    profileSummaryTargeting: "يستهدف:",
+    profileSummaryExperience: "الخبرة:",
+    profileSummaryYrs: "سنوات",
+    profileSummaryVisa: "التأشيرة:",
+
+    // JobCard
+    jobCardStrongFit: "ملاءمة ممتازة",
+    jobCardWorthChecking: "يستحق المراجعة",
+    jobCardLowAlignment: "تطابق منخفض",
+    jobCardMatchAnalysis: "تحليل التطابق",
+    jobCardWhyLikes: "لماذا يحب ريكو هذا",
+    jobCardRecommendedStep: "الخطوة التالية الموصى بها",
+    jobCardLiveBadge: "مباشر / رابط التقديم متاح",
+    jobCardLeadBadge: "يتطلب تحقق قبل التقديم",
+    jobCardMarkApplied: "تعليم كمُقدَّم",
+    jobCardApplyNow: "تقدّم الآن",
+    jobCardSave: "حفظ",
+    jobCardIgnore: "تجاهل",
+    jobCardDone: "تم تنفيذ الإجراء",
+
+    // ApplicationDraftCard
+    draftCoverLetter: "رسالة التقديم",
+    draftTailoredCv: "سيرة ذاتية مخصصة",
+    draftViewPosting: "عرض إعلان الوظيفة ↗",
+    draftDecline: "رفض",
+    draftApproving: "جاري الموافقة…",
+    draftApprove: "موافقة",
+    draftApproved: "تمت الموافقة",
+    draftAwaitingReview: "في انتظار المراجعة",
   },
 } as const;
 
@@ -1917,8 +1987,8 @@ export function useTranslation(language: "en" | "ar") {
   // any useEffect/useCallback that depends on `t` re-run on every render —
   // causing request loops (e.g. repeated /health and /settings polling).
   return useCallback(
-    (key: string): string => {
-      return translations[language][key as keyof typeof translations.en];
+    (key: TranslationKey): string => {
+      return translations[language][key];
     },
     [language],
   );

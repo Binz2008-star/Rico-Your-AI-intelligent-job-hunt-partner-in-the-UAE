@@ -6,14 +6,14 @@ import { AuraGlow } from "@/components/ui/AuraGlow";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useTranslation } from "@/lib/translations";
+import { useTranslation, type TranslationKey } from "@/lib/translations";
 import { useLinkVerification } from "@/hooks/useLinkVerification";
 import { useOrchestration } from "@/hooks/useOrchestration";
 import type { OpportunitySignal } from "@/lib/api/orchestration";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-type TFunc = (key: string) => string;
+type TFunc = (key: TranslationKey) => string;
 
 function MomentumLabel({ momentum, t }: { momentum: "high" | "medium" | "low"; t: TFunc }) {
   const palette = {

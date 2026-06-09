@@ -2,6 +2,8 @@
 
 import { Button } from "@/components/ui/Button";
 import { ScoreBadge } from "@/components/ui/ScoreBadge";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTranslation, type TranslationKey } from "@/lib/translations";
 import { cn } from "@/lib/utils";
 import type { Job, MatchExplanation } from "@/types";
 import { useMemo, useState } from "react";
@@ -23,10 +25,12 @@ const LOGO_COLORS = [
     "from-amber-500/20 to-orange-400/10 text-amber-100",
 ];
 
-const VERDICT_LABELS: Record<MatchExplanation["verdict"], string> = {
-    strong_fit: "Strong fit",
-    worth_checking: "Worth checking",
-    weak_fit: "Low alignment",
+type VerdictKey = "jobCardStrongFit" | "jobCardWorthChecking" | "jobCardLowAlignment";
+
+const VERDICT_KEYS: Record<MatchExplanation["verdict"], VerdictKey> = {
+    strong_fit: "jobCardStrongFit",
+    worth_checking: "jobCardWorthChecking",
+    weak_fit: "jobCardLowAlignment",
 };
 
 const VERDICT_STYLES: Record<MatchExplanation["verdict"], string> = {
@@ -86,7 +90,7 @@ function BulletList({ items, tone }: { items: string[]; tone: "gold" | "fuchsia"
     );
 }
 
-function MatchExplanationPanel({ explanation }: { explanation: MatchExplanation }) {
+function MatchExplanationPanel({ explanation, t }: { explanation: MatchExplanation; t: (k: TranslationKey) => string }) {
     return (
         <section
             aria-label="Rico match analysis"
@@ -94,14 +98,14 @@ function MatchExplanationPanel({ explanation }: { explanation: MatchExplanation 
         >
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <p className="rico-kicker mb-1">Match analysis</p>
+                    <p className="rico-kicker mb-1">{t("jobCardMatchAnalysis")}</p>
                     <span
                         className={cn(
                             "inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em]",
                             VERDICT_STYLES[explanation.verdict]
                         )}
                     >
-                        {VERDICT_LABELS[explanation.verdict]}
+                        {t(VERDICT_KEYS[explanation.verdict])}
                     </span>
                 </div>
 
@@ -118,18 +122,18 @@ function MatchExplanationPanel({ explanation }: { explanation: MatchExplanation 
 
             <div className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-2xl border border-overlay/6 bg-surface/50 p-4">
-                    <p className="rico-kicker mb-2">Why Rico likes this</p>
+                    <p className="rico-kicker mb-2">{t("jobCardWhyLikes")}</p>
                     <BulletList items={explanation.why_this_fits} tone="gold" />
                 </div>
 
                 <div className="rounded-2xl border border-overlay/6 bg-surface/50 p-4">
-                    <p className="rico-kicker mb-2">Worth checking</p>
+                    <p className="rico-kicker mb-2">{t("jobCardWorthChecking")}</p>
                     <BulletList items={explanation.worth_checking} tone="fuchsia" />
                 </div>
             </div>
 
             <div className="mt-4 rounded-2xl border border-gold/15 bg-gold/[0.05] p-4">
-                <p className="rico-kicker mb-2">Recommended next step</p>
+                <p className="rico-kicker mb-2">{t("jobCardRecommendedStep")}</p>
                 <p className="text-[13px] leading-relaxed text-[rgba(255,255,255,0.8)]">
                     {explanation.recommended_next_step}
                 </p>
@@ -142,6 +146,8 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
     const [localAction, setLocalAction] = useState<JobAction | null>(null);
     const [isDone, setIsDone] = useState(false);
     const [showMarkApplied, setShowMarkApplied] = useState(false);
+    const { language } = useLanguage();
+    const t = useTranslation(language);
 
     const companyIdentity = useMemo(() => getCompanyIdentity(job.company), [job.company]);
     const isBusy = Boolean(localAction || isSubmitting);
@@ -153,11 +159,11 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
                 : hasUsableUrl(job.apply_url) || hasUsableUrl(job.source_url);
     const verificationBadge = isLive
         ? {
-            label: "Live / apply link available",
+            label: t("jobCardLiveBadge"),
             className: "border-emerald-400/20 bg-emerald-500/10 text-emerald-100",
         }
         : {
-            label: "Lead / verify before applying",
+            label: t("jobCardLeadBadge"),
             className: "border-amber-400/25 bg-amber-500/10 text-amber-100",
         };
 
@@ -187,8 +193,8 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
             )}
         >
             <div className="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                <div className="absolute left-0 top-0 h-40 w-40 rounded-full bg-gold/[0.06] blur-3xl animate-pulse" />
-                <div className="absolute bottom-0 right-0 h-40 w-40 rounded-full bg-gold/[0.04] blur-3xl animate-pulse" />
+                <div className="absolute start-0 top-0 h-40 w-40 rounded-full bg-gold/[0.06] blur-3xl animate-pulse" />
+                <div className="absolute bottom-0 end-0 h-40 w-40 rounded-full bg-gold/[0.04] blur-3xl animate-pulse" />
             </div>
 
             <div className="relative z-10 flex gap-4 items-start">
@@ -216,7 +222,7 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
                             <ScoreBadge score={job.score} />
                             <span
                                 className={cn(
-                                    "max-w-[150px] rounded-full border px-2.5 py-1 text-right text-[10px] font-bold uppercase leading-snug tracking-[0.12em]",
+                                    "max-w-[150px] rounded-full border px-2.5 py-1 text-end text-[10px] font-bold uppercase leading-snug tracking-[0.12em]",
                                     verificationBadge.className
                                 )}
                             >
@@ -236,7 +242,7 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
                 </section>
             )}
 
-            {job.match_explanation && <MatchExplanationPanel explanation={job.match_explanation} />}
+            {job.match_explanation && <MatchExplanationPanel explanation={job.match_explanation} t={t} />}
 
             <div className="relative z-10 mt-4 flex flex-wrap items-center gap-2">
                 {(job.salary_range || job.salary) && (
@@ -261,7 +267,7 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
                         onClick={() => handleActionClick("mark_applied")}
                         className="flex-1"
                     >
-                        Mark as applied
+                        {t("jobCardMarkApplied")}
                     </Button>
                 </div>
             ) : !isDone ? (
@@ -273,7 +279,7 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
                         onClick={() => handleActionClick("apply")}
                         className="flex-1"
                     >
-                        Apply now
+                        {t("jobCardApplyNow")}
                     </Button>
                     <Button
                         variant="ghost"
@@ -281,7 +287,7 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
                         loading={localAction === "save"}
                         onClick={() => handleActionClick("save")}
                     >
-                        Save
+                        {t("jobCardSave")}
                     </Button>
                     <Button
                         variant="outline"
@@ -289,14 +295,14 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
                         loading={localAction === "ignore"}
                         onClick={() => handleActionClick("ignore")}
                     >
-                        Ignore
+                        {t("jobCardIgnore")}
                     </Button>
                 </div>
             ) : (
                 <div className="relative z-10 mt-5 flex items-center gap-2 border-t rico-divider pt-4">
                     <span aria-hidden="true" className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_16px_rgba(74,222,128,0.8)]" />
                     <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[rgba(255,255,255,0.48)]">
-                        Action completed
+                        {t("jobCardDone")}
                     </p>
                 </div>
             )}

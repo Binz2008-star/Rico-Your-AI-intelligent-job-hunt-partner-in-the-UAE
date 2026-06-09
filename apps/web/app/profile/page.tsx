@@ -9,7 +9,7 @@ import { ToastContainer } from "@/components/ui/Toast";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/useToast";
 import { ApiError, fetchProfile, logout, updateProfile, type ProfileResponse } from "@/lib/api";
-import { useTranslation } from "@/lib/translations";
+import { useTranslation, type TranslationKey } from "@/lib/translations";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -246,7 +246,7 @@ function EditableTextField({
 
 type ProfileField = {
     key: string;
-    labelKey: string;
+    labelKey: TranslationKey;
     filled: boolean;
 };
 

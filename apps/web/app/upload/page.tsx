@@ -17,7 +17,7 @@ import {
     type UserDocument,
 } from '@/lib/api';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { useTranslation } from '@/lib/translations';
+import { useTranslation, type TranslationKey } from '@/lib/translations';
 import { useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -55,7 +55,7 @@ type DocTypeOption = 'cv' | 'cover_letter' | 'other';
 interface FileCardProps {
     doc: UserDocument;
     isAr: boolean;
-    t: (k: string) => string;
+    t: (k: TranslationKey) => string;
     onSetPrimary: (id: string) => void;
     onDelete: (id: string) => void;
     onRename: (id: string, newLabel: string) => void;
@@ -88,7 +88,7 @@ function FileCard({ doc, isAr, t, onSetPrimary, onDelete, onRename }: FileCardPr
         <div className="group relative rounded-xl border border-border-soft bg-surface-elevated/70 p-4 transition-colors hover:border-gold/20">
             {/* Primary badge */}
             {doc.is_primary && (
-                <span className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[10px] font-semibold text-gold">
+                <span className="absolute top-3 end-3 flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[10px] font-semibold text-gold">
                     <MaterialIcon icon="star" className="text-[11px]" />
                     {t('filesPrimary')}
                 </span>
@@ -209,7 +209,7 @@ interface UploadZoneProps {
     onDocTypeChange: (t: DocTypeOption) => void;
     onFileSelected: (file: File) => void;
     isUploading: boolean;
-    t: (k: string) => string;
+    t: (k: TranslationKey) => string;
 }
 
 function UploadZone({ docType, onDocTypeChange, onFileSelected, isUploading, t }: UploadZoneProps) {
@@ -299,7 +299,7 @@ function UploadZone({ docType, onDocTypeChange, onFileSelected, isUploading, t }
 
 interface FileManagerViewProps {
     isAr: boolean;
-    t: (k: string) => string;
+    t: (k: TranslationKey) => string;
     router: ReturnType<typeof useRouter>;
 }
 
@@ -452,7 +452,7 @@ function FileManagerView({ isAr, t, router }: FileManagerViewProps) {
 
 interface GuestUploadViewProps {
     isAr: boolean;
-    t: (k: string) => string;
+    t: (k: TranslationKey) => string;
     router: ReturnType<typeof useRouter>;
 }
 

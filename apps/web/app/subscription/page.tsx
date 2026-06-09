@@ -3,6 +3,7 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useLanguage } from "@/contexts/LanguageContext";
+import type { TranslationKey } from "@/lib/translations";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
 import {
@@ -77,17 +78,17 @@ const FALLBACK_PLANS: SubscriptionPlan[] = [
 
 const PLAN_TIER: Record<string, number> = { free: 0, pro: 1, premium: 2 };
 
-const PLAN_NAME_KEY: Record<string, string> = {
+const PLAN_NAME_KEY: Record<string, TranslationKey> = {
     Pro: "planProName",
     Premium: "planPremiumName",
 };
 
-const PLAN_DESC_KEY: Record<string, string> = {
+const PLAN_DESC_KEY: Record<string, TranslationKey> = {
     "Smart AI job hunting for active UAE professionals.": "planProDesc",
     "Full automation and premium AI recommendations.": "planPremiumDesc",
 };
 
-const PLAN_FEATURE_KEY: Record<string, string> = {
+const PLAN_FEATURE_KEY: Record<string, TranslationKey> = {
     "Unlimited CV analysis": "planFeatureUnlimitedCV",
     "Smart AI role recommendations": "planFeatureSmartRec",
     "Advanced match scoring": "planFeatureAdvancedScoring",
@@ -131,7 +132,7 @@ function PlanCard({
     maintenanceMode: boolean;
     manualBilling: boolean;
     userEmail: string | null;
-    t: (key: string) => string;
+    t: (key: TranslationKey) => string;
 }) {
     const isCurrent = currentPlan === plan.plan && (isActive || manualBilling);
     const isHigherPlan =

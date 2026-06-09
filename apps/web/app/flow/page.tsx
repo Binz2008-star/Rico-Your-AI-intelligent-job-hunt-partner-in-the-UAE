@@ -17,13 +17,13 @@ import {
 } from '@/lib/api';
 import type { Application, ApplicationStatus } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { useTranslation } from '@/lib/translations';
+import { useTranslation, type TranslationKey } from '@/lib/translations';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 type ViewMode = 'list' | 'board';
 
-const KANBAN_COLS: Array<{ labelKey: string; statuses: ApplicationStatus[]; accent: string }> = [
+const KANBAN_COLS: Array<{ labelKey: TranslationKey; statuses: ApplicationStatus[]; accent: string }> = [
     { labelKey: 'flowColLeads',     statuses: ['saved', 'opened'],                     accent: 'border-text-tertiary/30' },
     { labelKey: 'flowColApplied',   statuses: ['applied'],                             accent: 'border-sky-500/30' },
     { labelKey: 'flowColInterview', statuses: ['interview'],                            accent: 'border-gold/40' },
@@ -32,7 +32,7 @@ const KANBAN_COLS: Array<{ labelKey: string; statuses: ApplicationStatus[]; acce
 
 // Maps each canonical backend status to its display-label translation key.
 // Backend values are never changed — only the rendered label is localized.
-const STATUS_LABEL_KEYS: Record<ApplicationStatus, string> = {
+const STATUS_LABEL_KEYS: Record<ApplicationStatus, TranslationKey> = {
     applied: 'flowStatusApplied',
     interview: 'flowStatusInterview',
     offer: 'flowStatusOffer',
@@ -46,7 +46,7 @@ const STATUS_OPTIONS: ApplicationStatus[] = [
     'saved', 'opened', 'applied', 'interview', 'offer', 'rejected', 'decision_made',
 ];
 
-const NEXT_ACTION_KEYS: Record<ApplicationStatus, string> = {
+const NEXT_ACTION_KEYS: Record<ApplicationStatus, TranslationKey> = {
     saved: 'flowNextSaved',
     opened: 'flowNextOpened',
     applied: 'flowNextApplied',
@@ -216,7 +216,8 @@ export default function FlowPage() {
                                 <button
                                     onClick={() => setViewMode('list')}
                                     aria-pressed={viewMode === 'list'}
-                                    className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${viewMode === 'list' ? 'bg-gold/10 text-gold' : 'text-text-tertiary hover:text-text-secondary'}`}
+                                    aria-label={t('flowViewList')}
+                                    className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 ${viewMode === 'list' ? 'bg-gold/10 text-gold' : 'text-text-tertiary hover:text-text-secondary'}`}
                                 >
                                     <MaterialIcon icon="format_list_bulleted" size={14} />
                                     <span className="hidden sm:inline">{t('flowViewList')}</span>
@@ -224,7 +225,8 @@ export default function FlowPage() {
                                 <button
                                     onClick={() => setViewMode('board')}
                                     aria-pressed={viewMode === 'board'}
-                                    className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${viewMode === 'board' ? 'bg-gold/10 text-gold' : 'text-text-tertiary hover:text-text-secondary'}`}
+                                    aria-label={t('flowViewBoard')}
+                                    className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 ${viewMode === 'board' ? 'bg-gold/10 text-gold' : 'text-text-tertiary hover:text-text-secondary'}`}
                                 >
                                     <MaterialIcon icon="view_kanban" size={14} />
                                     <span className="hidden sm:inline">{t('flowViewBoard')}</span>
@@ -276,6 +278,7 @@ export default function FlowPage() {
                             />
                         ) : viewMode === 'board' ? (
                             /* ── Kanban Board ── */
+                            <div className="overflow-x-hidden">
                             <div className="-mx-1 flex gap-3 overflow-x-auto pb-4 sm:mx-0">
                                 {KANBAN_COLS.map((col) => {
                                     const colApps = applications.filter((a) => col.statuses.includes(a.status));
@@ -342,6 +345,7 @@ export default function FlowPage() {
                                         </div>
                                     );
                                 })}
+                            </div>
                             </div>
                         ) : (
                             /* ── List View ── */
