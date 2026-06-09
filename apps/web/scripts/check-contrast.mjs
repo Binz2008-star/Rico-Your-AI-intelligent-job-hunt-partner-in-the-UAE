@@ -10,7 +10,8 @@
  * Checked pairs (foreground on background):
  *   - text-primary / text-secondary / text-tertiary on the canvas (--bg)
  *   - text-primary / text-secondary on the elevated surface (--surface-elevated)
- *   - magenta + cyan accents on the canvas (used for links/labels/UI accents)
+ *   - ember (gold) + aura accents on the canvas (Nocturne signature accents)
+ *   - magenta + cyan accents on the canvas (legacy accents, retained)
  *
  * Thresholds: 4.5:1 for body text (AA normal), 3:1 for large text / UI accents.
  *
@@ -70,6 +71,8 @@ const pairs = [
     ["text-tertiary", "bg", AA_LARGE, "tertiary text on canvas (large/UI)"],
     ["text-primary", "surface-elevated", AA_NORMAL, "primary text on elevated surface"],
     ["text-secondary", "surface-elevated", AA_NORMAL, "secondary text on elevated surface"],
+    ["gold", "bg", AA_LARGE, "ember accent on canvas (UI/large)"],
+    ["aura", "bg", AA_LARGE, "aura accent on canvas (UI/large)"],
     ["magenta", "bg", AA_LARGE, "magenta accent on canvas (UI/large)"],
     ["cyan", "bg", AA_LARGE, "cyan accent on canvas (UI/large)"],
 ];

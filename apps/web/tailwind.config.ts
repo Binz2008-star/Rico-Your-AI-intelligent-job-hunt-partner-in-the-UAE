@@ -57,6 +57,24 @@ const config: Config = {
                     hover: "rgb(var(--cyan-hover) / <alpha-value>)",
                 },
 
+                // Nocturne — Ember (Rico's voice). Aliases the --gold token for semantic reads.
+                ember: {
+                    DEFAULT: "rgb(var(--gold) / <alpha-value>)",
+                    bright: "rgb(var(--gold-hover) / <alpha-value>)",
+                    glow: "rgb(var(--gold) / 0.25)",
+                    soft: "rgb(var(--gold) / 0.10)",
+                    border: "rgb(var(--gold) / 0.35)",
+                },
+
+                // Nocturne — Aura (intelligence / data only). Teal on dark, AA-darkened on light.
+                aura: {
+                    DEFAULT: "rgb(var(--aura) / <alpha-value>)",
+                    dim: "rgb(var(--aura-dim) / <alpha-value>)",
+                    glow: "rgb(var(--aura) / 0.25)",
+                    soft: "rgb(var(--aura) / 0.10)",
+                    border: "rgb(var(--aura) / 0.40)",
+                },
+
                 // Gradient System
                 gradient: {
                     gold: "linear-gradient(135deg, #f5a623 0%, #fbbf24 100%)",
@@ -132,11 +150,12 @@ const config: Config = {
                 "container-padding-desktop": "120px",
             },
             fontFamily: {
-                // DESIGN.md spec: IBM Plex Sans Variable + Sora
-                display: ["var(--font-ibm-plex-sans)", "var(--font-sora)", "sans-serif"],
-                headline: ["var(--font-ibm-plex-sans)", "var(--font-sora)", "sans-serif"],
-                body: ["var(--font-ibm-plex-sans)", "system-ui", "sans-serif"],
-                mono: ["var(--font-space-mono)", "monospace"],
+                // Nocturne: Space Grotesk (display/headline) + Inter (body/sans) + IBM Plex Mono
+                display: ["var(--font-display)", "var(--font-body)", "sans-serif"],
+                headline: ["var(--font-display)", "var(--font-body)", "sans-serif"],
+                sans: ["var(--font-body)", "system-ui", "sans-serif"],
+                body: ["var(--font-body)", "system-ui", "sans-serif"],
+                mono: ["var(--font-mono)", "ui-monospace", "monospace"],
             },
             fontSize: {
                 "display-lg": ["80px", { lineHeight: "1.1", letterSpacing: "-0.04em", fontWeight: "700" }],
