@@ -139,6 +139,9 @@ const config: Config = {
                 lg: "0.5rem",
                 xl: "0.75rem",
                 full: "9999px",
+                // Nocturne radii
+                rico: "14px",
+                "rico-lg": "22px",
             },
             spacing: {
                 unit: "8px",
@@ -176,6 +179,9 @@ const config: Config = {
                 thinking: "thinking 3s ease-in-out infinite",
                 shimmer: "shimmer 1.8s ease-in-out infinite",
                 "fade-up": "fadeUp 0.4s ease-out forwards",
+                // Nocturne Aura animations
+                breathe: "breathe 5.5s cubic-bezier(0.22, 0.61, 0.36, 1) infinite",
+                "pulse-ring": "pulse-ring 5.5s cubic-bezier(0.22, 0.61, 0.36, 1) infinite",
             },
             keyframes: {
                 float: {
@@ -201,6 +207,15 @@ const config: Config = {
                 fadeUp: {
                     "0%": { opacity: "0", transform: "translateY(6px)" },
                     "100%": { opacity: "1", transform: "translateY(0)" },
+                },
+                // Nocturne Aura keyframes
+                breathe: {
+                    "0%, 100%": { transform: "scale(1)", opacity: "0.92" },
+                    "50%": { transform: "scale(1.08)", opacity: "1" },
+                },
+                "pulse-ring": {
+                    "0%, 100%": { transform: "scale(0.96)", opacity: "0.7" },
+                    "50%": { transform: "scale(1.06)", opacity: "0.25" },
                 },
             },
             backdropBlur: {
