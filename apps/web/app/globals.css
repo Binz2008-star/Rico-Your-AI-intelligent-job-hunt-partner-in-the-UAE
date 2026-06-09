@@ -26,16 +26,20 @@
     color-scheme: dark;
 
     /* Canvas + surfaces — Nocturne */
-    --bg: 6 6 12;                /* void */
+    --bg: 6 6 12;
+    /* void */
     --surface: 17 19 32;
     --surface-elevated: 22 26 43;
     /* Overlay channel for translucent fills/borders (white on dark canvas) */
     --overlay: 255 255 255;
 
     /* Accents — Nocturne. Ember = Rico's voice; Aura (teal) = intelligence/data only. */
-    --gold: 240 169 74;          /* ember */
-    --gold-hover: 255 200 115;   /* ember-bright */
-    --aura: 111 233 208;         /* teal — intelligence / data */
+    --gold: 240 169 74;
+    /* ember */
+    --gold-hover: 255 200 115;
+    /* ember-bright */
+    --aura: 111 233 208;
+    /* teal — intelligence / data */
     --aura-dim: 63 185 166;
     /* Legacy magenta/cyan retained (still referenced by some primitives/glows) — use sparingly. */
     --magenta: 255 45 142;
@@ -112,9 +116,11 @@
     --overlay: 17 17 24;
 
     /* Darkened accents for AA on light surfaces */
-    --gold: 161 87 0;            /* ember (AA on light) */
+    --gold: 161 87 0;
+    /* ember (AA on light) */
     --gold-hover: 133 68 0;
-    --aura: 15 118 110;          /* teal (AA on light) */
+    --aura: 15 118 110;
+    /* teal (AA on light) */
     --aura-dim: 13 95 85;
     --magenta: 197 24 96;
     --magenta-hover: 168 18 80;
@@ -254,17 +260,20 @@ body>div:first-child {
 
 /* Skeleton shimmer animation */
 @keyframes shimmer {
-    0% { background-position: -200% 0; }
-    100% { background-position: 200% 0; }
+    0% {
+        background-position: -200% 0;
+    }
+
+    100% {
+        background-position: 200% 0;
+    }
 }
 
 .skeleton-shimmer {
-    background: linear-gradient(
-        90deg,
-        rgb(var(--overlay) / 0.05) 0%,
-        rgb(var(--overlay) / 0.10) 50%,
-        rgb(var(--overlay) / 0.05) 100%
-    );
+    background: linear-gradient(90deg,
+            rgb(var(--overlay) / 0.05) 0%,
+            rgb(var(--overlay) / 0.10) 50%,
+            rgb(var(--overlay) / 0.05) 100%);
     background-size: 200% 100%;
     animation: shimmer 1.8s ease-in-out infinite;
 }
@@ -321,6 +330,7 @@ body::after {
         opacity: 0;
         transform: translateY(8px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -328,9 +338,12 @@ body::after {
 }
 
 @keyframes glowPulse {
-    0%, 100% {
+
+    0%,
+    100% {
         box-shadow: 0 0 20px rgba(245, 166, 35, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.05);
     }
+
     50% {
         box-shadow: 0 0 32px rgba(245, 166, 35, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.08);
     }
@@ -350,6 +363,7 @@ body::after {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
     *,
     *::before,
     *::after {
@@ -367,6 +381,7 @@ body::after {
     gap: 10px;
     margin: 8px 0 10px;
 }
+
 .rico-orb {
     width: 28px;
     height: 28px;
@@ -386,10 +401,12 @@ body::after {
     animation: ricoOrbPulse 2s ease-in-out infinite;
     flex-shrink: 0;
 }
+
 .rico-orb span {
     display: inline-block;
     letter-spacing: -0.02em;
 }
+
 .rico-thinking-label {
     display: flex;
     align-items: center;
@@ -398,11 +415,13 @@ body::after {
     font-size: 13px;
     letter-spacing: -0.01em;
 }
+
 .rico-dots {
     display: inline-flex;
     gap: 3px;
     align-items: center;
 }
+
 .rico-dots i {
     display: block;
     width: 4px;
@@ -413,24 +432,85 @@ body::after {
     font-style: normal;
     animation: ricoDot 1.4s ease-in-out infinite;
 }
-.rico-dots i:nth-child(2) { animation-delay: 0.18s; }
-.rico-dots i:nth-child(3) { animation-delay: 0.36s; }
+
+.rico-dots i:nth-child(2) {
+    animation-delay: 0.18s;
+}
+
+.rico-dots i:nth-child(3) {
+    animation-delay: 0.36s;
+}
 
 @keyframes ricoRSpin {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
+
 @keyframes ricoOrbPulse {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: scale(1);
         box-shadow: 0 0 8px rgba(245, 166, 35, 0.25);
     }
+
     50% {
         transform: scale(1.05);
         box-shadow: 0 0 16px rgba(245, 166, 35, 0.45);
     }
 }
+
 @keyframes ricoDot {
-    0%, 100% { opacity: 0.30; transform: translateY(0); }
-    50%       { opacity: 1;    transform: translateY(-2px); }
+
+    0%,
+    100% {
+        opacity: 0.30;
+        transform: translateY(0);
+    }
+
+    50% {
+        opacity: 1;
+        transform: translateY(-2px);
+    }
+}
+
+/* ========================================
+   Reduced Motion Support
+   ======================================== */
+
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    .animate-breathe,
+    .animate-pulse-ring,
+    .animate-float,
+    .animate-pulse-gold,
+    .animate-pulse-magenta,
+    .skeleton-shimmer {
+        animation: none !important;
+    }
+
+    .motion-reduce\:opacity-50 {
+        opacity: 0.3 !important;
+    }
+}
+
+/* Utility for motion-safe animations */
+@media (prefers-reduced-motion: no-preference) {
+    .motion-safe\:animate-breathe {
+        animation: breathe 5.5s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+    }
 }

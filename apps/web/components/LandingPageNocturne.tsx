@@ -36,7 +36,7 @@ export default function LandingPageNocturne() {
         langToggle: isAr ? "EN" : "عربي",
         eyebrow: isAr ? "ذكاء وظيفي · الإمارات" : "AI Job Intelligence · UAE",
         headline1: isAr ? "سيرتك الذاتية، مفهومة." : "Your CV, understood.",
-        headline2: isAr ? "دورك القادم، موجود." : "Your next role, found.",
+        headline2: isAr ? "وظيفتك القادمة في انتظارك." : "Your next role, found.",
         subtitle: isAr
             ? "ارفع مرة واحدة. يقرأ ريكو خبرتك، ويعرض وظائف الإمارات التي تناسبك فعلاً، ويشرح السبب — بالعربية والإنجليزية."
             : "Upload once. Rico reads your experience, surfaces UAE roles that fit, and tells you why — in English and Arabic.",
@@ -59,7 +59,7 @@ export default function LandingPageNocturne() {
         trustBar3: isAr ? "مبني لسوق الإمارات" : "Built for the UAE market",
         trustBar4: isAr ? "ثنائي اللغة" : "Bilingual EN / AR",
         stepsEyebrow: isAr ? "كيف يعمل" : "How it works",
-        stepsTitle: isAr ? "ثلاث خطوات. لا تشويش." : "Three steps. No noise.",
+        stepsTitle: isAr ? "ثلاث خطوات. بلا تعقيد." : "Three steps. No noise.",
         stepsSubtitle: isAr
             ? "لوحات الوظائف تدفنك في أدوار لا تناسبك. ريكو يحوّل سيرتك إلى بحث يقوم بالتصفية نيابة عنك."
             : "Job boards bury you in roles that don't fit. Rico turns your CV into a search that does the filtering for you.",
@@ -71,7 +71,7 @@ export default function LandingPageNocturne() {
         step2Num: "02",
         step2Title: isAr ? "شاهد ما يناسبك" : "See what fits",
         step2Body: isAr
-            ? "أدوار مرتّبة حسب الملاءمة الحقيقية، كل منها مع نقاط وأسباب."
+            ? "وظائف مرتبة حسب التوافق الفعلي، كل منها مع درجة تقييم وأسبابها."
             : "Roles ranked by genuine fit, each with a score and the reasons behind it.",
         step3Num: "03",
         step3Title: isAr ? "تابع كل خطوة" : "Track every move",
@@ -80,13 +80,13 @@ export default function LandingPageNocturne() {
             : "Saved, opened, applied — your whole search in one calm command center.",
         // Phase 4 - Product/Command
         cmdEyebrow: isAr ? "مركز القيادة" : "Command center",
-        cmdTitle: isAr ? "تحدث مع ريكو كأنه قارئ سير ذاتية." : "Talk to Rico like a CV reader.",
+        cmdTitle: isAr ? "تحدث مع ريكو كخبير توظيف." : "Talk to Rico like a CV reader.",
         cmdSubtitle: isAr
             ? "اسأل بالعربية أو الإنجليزية. يجيب ريكو من خبرتك وسوق الإمارات — ولا يتحرك بدون موافقتك."
             : "Ask in Arabic or English. Rico answers from your experience and the UAE market — and never acts without your approval.",
         chatMsg1: isAr ? "اعثر على أدوار امتثال في أبوظبي تناسب خلفيتي." : "Find compliance roles in Abu Dhabi matching my background.",
         chatMsg2: isAr
-            ? "وجدت 7 مطابقات. الأعلى: مسؤول امتثال بيئي — 86 نقطة. خبرتك في الامتثال الإماراتي تتطابق. هل تريد رابط التقديم؟"
+            ? "وجدت 7 وظائف متوافقة. الأنسب: مسؤول امتثال بيئي — 86% توافق. خبرتك في الامتثال الإماراتي متناسقة. هل تريد رابط التقديم؟"
             : "Found 7 matches. Top: Environmental Compliance Officer — 86 fit. Your UAE compliance experience aligns. Want the apply link?",
         chatMsg3: isAr ? "أرني الاثنتين التاليتين أولاً." : "Show me the next two first.",
         chatInput: isAr ? "اسأل ريكو أي شيء عن بحثك الوظيفي..." : "Ask Rico anything about your job search...",
@@ -98,7 +98,7 @@ export default function LandingPageNocturne() {
             : "Every saved job, every application, every message — organized by priority, not just date.",
         // Phase 4 - Pricing
         pricingEyebrow: isAr ? "الأسعار" : "Pricing",
-        pricingTitle: isAr ? "ابدأ مجاناً. ادفع فقط عندما يستحق ريكو ذلك." : "Start free. Pay only when Rico earns it.",
+        pricingTitle: isAr ? "ابدأ مجاناً. ادفع فقط عندما يثبت ريكو جدارته." : "Start free. Pay only when Rico earns it.",
         freeName: isAr ? "مجانية" : "Free",
         freePrice: isAr ? "٠ درهم" : "AED 0",
         freeF1: isAr ? "٥٠ رسالة ذكاء اصطناعي/شهر" : "50 AI messages/month",
@@ -106,31 +106,31 @@ export default function LandingPageNocturne() {
         freeF3: isAr ? "تقييم ملاءمة السيرة والأسباب" : "CV fit scoring & reasons",
         proName: isAr ? "الاحترافية" : "Pro",
         proPrice: "AED 29",
-        proF1: isAr ? "٣٠٠ رسالة ذكاء اصطناعي/شهر" : "300 AI messages/month",
+        proF1: isAr ? "٣٠٠ رسالة AI/شهر" : "300 AI messages/month",
         proF2: isAr ? "١٠٠ وظيفة محفوظة" : "100 saved jobs",
         proF3: isAr ? "مطابقة أولوية وتنبيهات" : "Priority matching & alerts",
         proF4: isAr ? "مساعد مسودات التقديم" : "Application draft assistant",
         popular: isAr ? "الأكثر شعبية" : "Most popular",
         premiumName: isAr ? "المميزة" : "Premium",
         premiumPrice: "AED 49",
-        premiumF1: isAr ? "١٥٠٠ رسالة ذكاء اصطناعي/شهر" : "1,500 AI messages/month",
+        premiumF1: isAr ? "١٥٠٠ رسالة AI/شهر" : "1,500 AI messages/month",
         premiumF2: isAr ? "وظائف محفوظة بلا حدود" : "Unlimited saved jobs",
         premiumF3: isAr ? "تحسين السيرة عربي + إنجليزي" : "CV optimization AR+EN",
         premiumF4: isAr ? "تذكيرات متابعة ورؤى" : "Follow-up reminders & insights",
         cancelAnytime: isAr ? "إلغاء في أي وقت. لا تحتاج بطاقة للبدء." : "Cancel anytime. No card required to start.",
         // Phase 5 - Credibility
         credEyebrow: isAr ? "لماذا تثق في ريكو" : "Why trust Rico",
-        credTitle: isAr ? "شركة حقيقية، ليس صندوقاً أسود." : "A real company, not a black box.",
+        credTitle: isAr ? "شركة حقيقية، ليس نظاماً مغلقاً." : "A real company, not a black box.",
         credSubtitle: isAr
-            ? "مبني ويُشغَّل في الإمارات — مع الخصوصية والتحكم مصمَّمين من البداية."
+            ? "مطور ويُدار في الإمارات — مع حماية الخصوصية وتحكمك مصممين من البداية."
             : "Built and operated in the UAE — with privacy and your control designed in from the start.",
         credPoint1Title: isAr ? "أنت تبقى في السيطرة" : "You stay in control",
         credPoint1Body: isAr
-            ? "ريكو لا يتقدم أبداً، ولا يرسل، ولا يشارك أي شيء بدون موافقتك الصريحة."
+            ? "ريكو لا يتقدم ولا يرسل ولا يشارك أي شيء بدون موافقتك الصريحة."
             : "Rico never applies, sends, or shares anything without your explicit approval.",
         credPoint2Title: isAr ? "بياناتك لن تُباع أبداً" : "Your data is never sold",
         credPoint2Body: isAr
-            ? "تُستخدم فقط لتفعيل بحثك الوظيفي — والتوقف هنا."
+            ? "تُستخدم فقط لبحثك الوظيفي — دون أي استخدام آخر."
             : "It's used only to power your job search — full stop.",
         credPoint3Title: isAr ? "ثنائي اللغة حقاً" : "Truly bilingual",
         credPoint3Body: isAr
@@ -141,11 +141,11 @@ export default function LandingPageNocturne() {
             ? "المؤسس، إيكو تكنولوجي ذ.م.م · مسجلة في الإمارات"
             : "Founder, Eco Technology L.L.C · UAE-registered",
         // Phase 5 - FAQ
-        faqEyebrow: isAr ? "الأسئلة" : "Questions",
-        faqTitle: isAr ? "ما يسأله الناس أولاً." : "What people ask first.",
+        faqEyebrow: isAr ? "الأسئلة الشائعة" : "Questions",
+        faqTitle: isAr ? "أبرز الأسئلة." : "What people ask first.",
         faq1Q: isAr ? "هل يتقدم ريكو بالوظائف نيابة عني؟" : "Does Rico apply to jobs for me?",
         faq1A: isAr
-            ? "لا — ليس إلا إذا قلت له. يجد ويرتّب المطابقات ويُعد المسودات، لكنك تُوافق وتُرسل كل طلب بنفسك."
+            ? "لا — إلا إذا طلبت ذلك. يجد ويرتب الوظائف المتوافقة ويُعد المسودات، لكنك توافق وترسل كل طلب بنفسك."
             : "No — not unless you say so. Rico finds and ranks matches and prepares drafts, but you approve and send every application yourself.",
         faq2Q: isAr ? "هل سيرتي الذاتية وبياناتي آمنة؟" : "Is my CV and data safe?",
         faq2A: isAr
@@ -153,18 +153,18 @@ export default function LandingPageNocturne() {
             : "Yes. Your data is used only to power your job search and is never sold. Rico is operated by a UAE-registered company.",
         faq3Q: isAr ? "هل يعمل في مجالي؟" : "Does it work in my field?",
         faq3A: isAr
-            ? "يقرأ خبرتك الفعلية بدلاً من مطابقة الكلمات، لذا يعمل عبر القطاعات — المالية والعمليات والهندسة وغيرها."
+            ? "يقرأ خبرتك الفعلية بدلاً من مطابقة الكلمات المفتاحية، لذا يعمل في جميع القطاعات: المالية والعمليات والهندسة وغيرها."
             : "Rico reads your actual experience rather than matching keywords, so it works across sectors — finance, operations, engineering, and more.",
         faq4Q: isAr ? "هل يمكنني استخدامه بالعربية؟" : "Can I use it in Arabic?",
         faq4A: isAr
             ? "بالكامل. المنتج بالكامل — المطابقات والمحادثة والتتبع — يعمل بالعربية والإنجليزية."
             : "Fully. The entire product — matches, chat, and tracking — works in Arabic and English.",
         // Phase 5 - Final CTA
-        finalTitle: isAr ? "دع ريكو يقرأ سيرتك. شاهد ما يناسبك — الليلة." : "Let Rico read your CV. See what fits — tonight.",
-        finalSubtitle: isAr ? "مجاني للبدء. لا بطاقة. أنت المسيطر طوال الطريق." : "Free to start. No card. You're in control the whole way.",
+        finalTitle: isAr ? "دع ريكو يقرأ سيرتك. اكتشف الوظائف المناسبة — اليوم." : "Let Rico read your CV. See what fits — tonight.",
+        finalSubtitle: isAr ? "مجاني للبدء. لا بطاقة ائتمان. أنت المتحكم طوال الطريق." : "Free to start. No card. You're in control the whole way.",
         finalCta: isAr ? "ارفع سيرتك الذاتية" : "Upload your CV",
         // Phase 5 - Footer
-        footerAbout: isAr ? "عن" : "About",
+        footerAbout: isAr ? "من نحن" : "About",
         footerContact: isAr ? "تواصل" : "Contact",
         footerTerms: isAr ? "الشروط" : "Terms",
         footerPrivacy: isAr ? "الخصوصية" : "Privacy",
@@ -173,17 +173,17 @@ export default function LandingPageNocturne() {
         footerWhatsapp: isAr ? "واتساب" : "WhatsApp",
         footerRights: isAr ? "© 2026 ريكو هانت. جميع الحقوق محفوظة." : "© 2026 Rico Hunt. All rights reserved.",
         footerPowered: isAr
-            ? "تُشغَّل بواسطة إيكو تكنولوجي لحماية البيئة ذ.م.م · الإمارات"
+            ? "تُدار بواسطة Eco Technology L.L.C · الإمارات"
             : "Powered by Eco Technology Environment Protection Services L.L.C · UAE",
     };
 
     return (
         <div dir={isAr ? "rtl" : "ltr"} className="relative min-h-screen overflow-x-hidden bg-void text-text-primary">
-            {/* Background glows */}
-            <div className="fixed inset-0 pointer-events-none z-0" aria-hidden="true">
-                <div className="absolute -left-40 -top-40 h-[620px] w-[620px] rounded-full bg-ember/10 blur-[120px]" />
-                <div className="absolute -right-40 top-[40%] h-[520px] w-[520px] rounded-full bg-aura/6 blur-[120px]" />
-                <div className="absolute bottom-[-160px] left-[30%] h-[520px] w-[520px] rounded-full bg-ember/5 blur-[120px]" />
+            {/* Background glows - reduced intensity for easier viewing */}
+            <div className="fixed inset-0 pointer-events-none z-0 motion-reduce:opacity-50" aria-hidden="true">
+                <div className="absolute -left-40 -top-40 h-[620px] w-[620px] rounded-full bg-ember/[0.07] blur-[140px]" />
+                <div className="absolute -right-40 top-[40%] h-[520px] w-[520px] rounded-full bg-aura/[0.04] blur-[140px]" />
+                <div className="absolute bottom-[-160px] left-[30%] h-[520px] w-[520px] rounded-full bg-ember/[0.04] blur-[140px]" />
             </div>
 
             {/* Header */}
@@ -203,8 +203,8 @@ export default function LandingPageNocturne() {
 
             <main className="relative z-10">
                 {/* Hero */}
-                <section className="py-[78px] pb-[70px]">
-                    <div className="max-w-[1140px] mx-auto px-6 grid lg:grid-cols-[1.05fr_0.95fr] gap-14 items-center">
+                <section className="py-16 md:py-[78px] pb-12 md:pb-[70px]">
+                    <div className="max-w-[1140px] mx-auto px-4 sm:px-6 grid lg:grid-cols-[1.05fr_0.95fr] gap-8 md:gap-14 items-center">
                         <div>
                             <Eyebrow className="mb-5">{t.eyebrow}</Eyebrow>
                             <h1 className="font-display font-semibold text-[clamp(2.2rem,5.4vw,4rem)] leading-[1.04] tracking-[-0.025em]">
@@ -218,16 +218,16 @@ export default function LandingPageNocturne() {
                             <div className="mt-7 flex flex-wrap gap-2">
                                 {[t.trust1, t.trust2, t.trust3].map((item) => (
                                     <span key={item} className="inline-flex items-center gap-1.5 font-mono text-[11.5px] text-text-secondary border border-overlay/7 rounded-full px-3 py-1.5">
-                                        <span className="h-1 w-1 rounded-full bg-aura shadow-[0_0_8px_var(--aura)]" />{item}
+                                        <span className="h-1 w-1 rounded-full bg-aura shadow-[0_0_6px_rgba(111,233,208,0.5)]" />{item}
                                     </span>
                                 ))}
                             </div>
                         </div>
-                        <div className="relative">
+                        <div className="relative mt-8 lg:mt-0">
                             <GlassCard className="p-5 relative overflow-visible">
-                                <div className="absolute -top-12 right-4"><Aura size="sm" variant="ember" /></div>
+                                <div className="absolute -top-12 right-4"><Aura size="sm" variant="ember" animate={false} /></div>
                                 <div className="flex items-center gap-2.5 pb-4 mb-4 border-b border-overlay/7">
-                                    <div className="w-[30px] h-[30px] rounded-full bg-gradient-to-br from-white via-ember-bright to-ember shadow-[0_0_16px_rgba(240,169,74,0.6)] animate-breathe" />
+                                    <div className="w-[30px] h-[30px] rounded-full bg-gradient-to-br from-white via-ember-bright to-ember shadow-[0_0_12px_rgba(240,169,74,0.4)] motion-safe:animate-breathe" />
                                     <div>
                                         <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-secondary">{t.matchLabel}</p>
                                         <p className="text-xs text-text-tertiary">{t.matchBy}</p>
@@ -257,8 +257,8 @@ export default function LandingPageNocturne() {
                 </section>
 
                 {/* Trust Bar */}
-                <div className="border-y border-overlay/7 py-6">
-                    <div className="max-w-[1140px] mx-auto px-6 flex flex-wrap justify-between gap-6">
+                <div className="border-y border-overlay/7 py-4 md:py-6">
+                    <div className="max-w-[1140px] mx-auto px-4 sm:px-6 flex flex-wrap justify-center md:justify-between gap-4 md:gap-6">
                         {[t.trustBar1, t.trustBar2, t.trustBar3, t.trustBar4].map((item, i) => (
                             <div key={i} className="flex items-center gap-2.5 text-sm text-text-secondary">
                                 <span className="w-[34px] h-[34px] rounded-[10px] bg-surface border border-overlay/7 flex items-center justify-center text-ember">
@@ -270,14 +270,14 @@ export default function LandingPageNocturne() {
                 </div>
 
                 {/* Steps */}
-                <section id="how" className="py-24">
-                    <div className="max-w-[1140px] mx-auto px-6">
-                        <div className="max-w-[600px] mb-12">
+                <section id="how" className="py-16 md:py-24">
+                    <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
+                        <div className="max-w-[600px] mb-8 md:mb-12">
                             <Eyebrow className="mb-4">{t.stepsEyebrow}</Eyebrow>
-                            <h2 className="font-display font-semibold text-[clamp(1.7rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.stepsTitle}</h2>
-                            <p className="text-text-secondary">{t.stepsSubtitle}</p>
+                            <h2 className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.stepsTitle}</h2>
+                            <p className="text-text-secondary text-sm md:text-base">{t.stepsSubtitle}</p>
                         </div>
-                        <div className="grid md:grid-cols-3 gap-5">
+                        <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-5">
                             <GlassCard className="p-6" role="article" aria-label={t.step1Title}>
                                 <span className="font-mono text-xs text-ember tracking-[0.2em]">{t.step1Num}</span>
                                 <h3 className="font-display font-semibold text-lg mt-3 mb-2">{t.step1Title}</h3>
@@ -313,12 +313,12 @@ export default function LandingPageNocturne() {
                 </section>
 
                 {/* Phase 4 - Product Window / Command UI */}
-                <section className="py-24 pt-0" aria-labelledby="command-heading">
-                    <div className="max-w-[1140px] mx-auto px-6">
-                        <div className="max-w-[600px] mb-12">
+                <section className="py-16 md:py-24 pt-0" aria-labelledby="command-heading">
+                    <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
+                        <div className="max-w-[600px] mb-8 md:mb-12">
                             <Eyebrow className="mb-4">{t.cmdEyebrow}</Eyebrow>
-                            <h2 id="command-heading" className="font-display font-semibold text-[clamp(1.7rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.cmdTitle}</h2>
-                            <p className="text-text-secondary">{t.cmdSubtitle}</p>
+                            <h2 id="command-heading" className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.cmdTitle}</h2>
+                            <p className="text-text-secondary text-sm md:text-base">{t.cmdSubtitle}</p>
                         </div>
                         {/* Window Frame */}
                         <div className="rounded-rico-lg overflow-hidden border border-overlay/12 shadow-[0_40px_120px_rgba(0,0,0,0.6)]" role="img" aria-label="Rico command center interface preview">
@@ -373,12 +373,12 @@ export default function LandingPageNocturne() {
                 </section>
 
                 {/* Phase 4 - Dashboard Preview */}
-                <section className="py-24 pt-0" aria-labelledby="dashboard-heading">
-                    <div className="max-w-[1140px] mx-auto px-6">
-                        <div className="max-w-[600px] mb-12">
+                <section className="py-16 md:py-24 pt-0" aria-labelledby="dashboard-heading">
+                    <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
+                        <div className="max-w-[600px] mb-8 md:mb-12">
                             <Eyebrow className="mb-4">{t.dashEyebrow}</Eyebrow>
-                            <h2 id="dashboard-heading" className="font-display font-semibold text-[clamp(1.7rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.dashTitle}</h2>
-                            <p className="text-text-secondary">{t.dashSubtitle}</p>
+                            <h2 id="dashboard-heading" className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.dashTitle}</h2>
+                            <p className="text-text-secondary text-sm md:text-base">{t.dashSubtitle}</p>
                         </div>
                         <GlassCard className="p-6 md:p-8 overflow-x-auto">
                             <div className="min-w-[600px]">
@@ -443,13 +443,13 @@ export default function LandingPageNocturne() {
                 </section>
 
                 {/* Phase 4 - Pricing */}
-                <section className="py-24 pt-0" aria-labelledby="pricing-heading">
-                    <div className="max-w-[1140px] mx-auto px-6">
-                        <div className="max-w-[600px] mb-12 md:mx-auto md:text-center">
+                <section className="py-16 md:py-24 pt-0" aria-labelledby="pricing-heading">
+                    <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
+                        <div className="max-w-[600px] mb-8 md:mb-12 md:mx-auto md:text-center">
                             <Eyebrow className="mb-4 md:justify-center">{t.pricingEyebrow}</Eyebrow>
-                            <h2 id="pricing-heading" className="font-display font-semibold text-[clamp(1.7rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.pricingTitle}</h2>
+                            <h2 id="pricing-heading" className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.pricingTitle}</h2>
                         </div>
-                        <div className="grid md:grid-cols-3 gap-5">
+                        <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-5">
                             {/* Free */}
                             <GlassCard className="p-6 flex flex-col">
                                 <div className="mb-6">
@@ -498,9 +498,9 @@ export default function LandingPageNocturne() {
                 </section>
 
                 {/* Phase 5 - Credibility */}
-                <section className="py-24 pt-0" aria-labelledby="credibility-heading">
-                    <div className="max-w-[1140px] mx-auto px-6">
-                        <GlassCard className="p-8 md:p-10">
+                <section className="py-16 md:py-24 pt-0" aria-labelledby="credibility-heading">
+                    <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
+                        <GlassCard className="p-6 md:p-8 lg:p-10">
                             <div className="grid md:grid-cols-2 gap-10 items-center">
                                 <div>
                                     <Eyebrow className="mb-4">{t.credEyebrow}</Eyebrow>
@@ -543,11 +543,11 @@ export default function LandingPageNocturne() {
                 </section>
 
                 {/* Phase 5 - FAQ */}
-                <section className="py-24 pt-0" aria-labelledby="faq-heading">
-                    <div className="max-w-[720px] mx-auto px-6">
-                        <div className="mb-10 text-center">
+                <section className="py-16 md:py-24 pt-0" aria-labelledby="faq-heading">
+                    <div className="max-w-[720px] mx-auto px-4 sm:px-6">
+                        <div className="mb-8 md:mb-10 text-center">
                             <Eyebrow className="mb-4 justify-center">{t.faqEyebrow}</Eyebrow>
-                            <h2 id="faq-heading" className="font-display font-semibold text-[clamp(1.7rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em]">{t.faqTitle}</h2>
+                            <h2 id="faq-heading" className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em]">{t.faqTitle}</h2>
                         </div>
                         <div className="space-y-3">
                             {[
@@ -576,8 +576,8 @@ export default function LandingPageNocturne() {
                 </section>
 
                 {/* Phase 5 - Final CTA */}
-                <section className="py-24" aria-labelledby="final-cta-heading">
-                    <div className="max-w-[600px] mx-auto px-6 text-center">
+                <section className="py-16 md:py-24" aria-labelledby="final-cta-heading">
+                    <div className="max-w-[600px] mx-auto px-4 sm:px-6 text-center">
                         <div className="mb-6 flex justify-center">
                             <Aura size="md" variant="ember" aria-hidden="true" />
                         </div>
@@ -589,8 +589,8 @@ export default function LandingPageNocturne() {
             </main>
 
             {/* Phase 5 - Footer */}
-            <footer className="relative z-10 border-t border-overlay/7 py-12" role="contentinfo">
-                <div className="max-w-[1140px] mx-auto px-6">
+            <footer className="relative z-10 border-t border-overlay/7 py-8 md:py-12" role="contentinfo">
+                <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
                     <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                         <Link href="/" className="flex items-center gap-2 font-display font-bold text-lg">
                             <span className="flex h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-gradient-to-br from-ember-bright to-ember text-void font-bold text-sm">R</span>
