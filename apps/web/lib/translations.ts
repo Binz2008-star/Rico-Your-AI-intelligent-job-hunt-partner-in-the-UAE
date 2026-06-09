@@ -488,6 +488,15 @@ export const translations = {
     chatHistory: "Chat history",
     help: "Help",
     reportIssue: "Report issue",
+    openMenu: "Open menu",
+    mainMenuLabel: "Main menu",
+    moreOptions: "More",
+    uploadCv: "Upload CV",
+    lightMode: "Light mode",
+    darkMode: "Dark mode",
+    switchToLight: "Switch to light mode",
+    switchToDark: "Switch to dark mode",
+    signUp: "Sign up",
 
     // Upload additional
     uploadSecureNote: "End-to-end encrypted. Your CV is never shared.",
@@ -1474,6 +1483,15 @@ export const translations = {
     chatHistory: "تاريخ المحادثات",
     help: "مساعدة",
     reportIssue: "الإبلاغ عن مشكلة",
+    openMenu: "فتح القائمة",
+    mainMenuLabel: "القائمة الرئيسية",
+    moreOptions: "المزيد",
+    uploadCv: "رفع السيرة الذاتية",
+    lightMode: "الوضع الفاتح",
+    darkMode: "الوضع الداكن",
+    switchToLight: "تبديل إلى الوضع الفاتح",
+    switchToDark: "تبديل إلى الوضع الداكن",
+    signUp: "سجّل",
 
     // Upload additional
     uploadSecureNote: "مشفر من طرف إلى طرف. لن تتم مشاركة سيرتك الذاتية أبدًا.",

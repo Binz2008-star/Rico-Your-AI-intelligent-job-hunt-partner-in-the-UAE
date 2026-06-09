@@ -2,6 +2,7 @@
 
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useTranslation } from "@/lib/translations";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -131,6 +132,7 @@ export function MobileCommandHeader({
 }: MobileCommandHeaderProps) {
     const { language, setLanguage } = useLanguage();
     const { resolvedTheme, setTheme } = useTheme();
+    const t = useTranslation(language);
     const isDark = resolvedTheme === "dark";
     const isRTL = language === "ar";
 
@@ -182,15 +184,15 @@ export function MobileCommandHeader({
     const drawerItems =
         chatAudience === "authenticated"
             ? [
-                  { label: language === "ar" ? "الملف الشخصي" : "Profile", href: "/profile", icon: <IconPerson /> },
-                  { label: language === "ar" ? "رفع السيرة الذاتية" : "Upload CV", href: "/upload", icon: <IconDocument /> },
-                  { label: language === "ar" ? "المسار" : "Pipeline", href: "/flow", icon: <IconClipboard /> },
-                  { label: language === "ar" ? "الاشتراك" : "Subscription", href: "/subscription", icon: <IconStar /> },
+                  { label: t("profileTitle"), href: "/profile", icon: <IconPerson /> },
+                  { label: t("uploadCv"), href: "/upload", icon: <IconDocument /> },
+                  { label: t("navPipeline"), href: "/flow", icon: <IconClipboard /> },
+                  { label: t("subscriptionTitle"), href: "/subscription", icon: <IconStar /> },
               ]
             : chatAudience === "public"
             ? [
-                  { label: language === "ar" ? "رفع السيرة الذاتية" : "Upload CV", href: "/upload", icon: <IconDocument /> },
-                  { label: language === "ar" ? "الاشتراك" : "Subscription", href: "/subscription", icon: <IconStar /> },
+                  { label: t("uploadCv"), href: "/upload", icon: <IconDocument /> },
+                  { label: t("subscriptionTitle"), href: "/subscription", icon: <IconStar /> },
               ]
             : [];
 
@@ -211,7 +213,7 @@ export function MobileCommandHeader({
                     ) : (
                         <button
                             type="button"
-                            aria-label={language === "ar" ? "فتح القائمة" : "Open menu"}
+                            aria-label={t("openMenu")}
                             aria-expanded={drawerOpen}
                             onClick={() => setDrawerOpen(true)}
                             className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
@@ -245,9 +247,7 @@ export function MobileCommandHeader({
                     <button
                         type="button"
                         onClick={() => setTheme(isDark ? "light" : "dark")}
-                        aria-label={isDark
-                            ? (language === "ar" ? "تبديل إلى الوضع الفاتح" : "Switch to light mode")
-                            : (language === "ar" ? "تبديل إلى الوضع الداكن" : "Switch to dark mode")}
+                        aria-label={isDark ? t("switchToLight") : t("switchToDark")}
                         className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                     >
                         {isDark ? <IconSun /> : <IconMoon />}
@@ -258,7 +258,7 @@ export function MobileCommandHeader({
                         type="button"
                         onClick={() => setLanguage(language === "en" ? "ar" : "en")}
                         aria-label={language === "ar" ? "EN – Switch to English" : "AR – التبديل إلى العربية"}
-                        className="h-7 cursor-pointer rounded-md border border-border-subtle px-2 text-[11px] font-medium text-text-muted transition-colors hover:border-border-strong hover:text-text-primary"
+                        className="h-7 cursor-pointer rounded-md border border-border-subtle px-2 text-[11px] font-medium text-text-muted transition-colors hover:border-border-strong hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50"
                     >
                         {language === "ar" ? "EN" : "AR"}
                     </button>
@@ -268,7 +268,7 @@ export function MobileCommandHeader({
                             {/* New chat */}
                             <button
                                 type="button"
-                                aria-label={language === "ar" ? "محادثة جديدة" : "New chat"}
+                                aria-label={t("newChat")}
                                 onClick={onNewChat}
                                 className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                             >
@@ -282,7 +282,7 @@ export function MobileCommandHeader({
                             <div className="relative" ref={overflowRef}>
                                 <button
                                     type="button"
-                                    aria-label={language === "ar" ? "المزيد" : "More"}
+                                    aria-label={t("moreOptions")}
                                     aria-expanded={overflowOpen}
                                     onClick={() => setOverflowOpen((o) => !o)}
                                     className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
@@ -296,7 +296,7 @@ export function MobileCommandHeader({
 
                                 {overflowOpen && (
                                     <div
-                                        className={`absolute top-10 ${isRTL ? "left-0" : "right-0"} z-50 w-48 rounded-xl border border-border-subtle bg-surface-elevated/95 backdrop-blur-md shadow-xl py-1`}
+                                        className="absolute top-10 end-0 z-50 w-48 rounded-xl border border-border-subtle bg-surface-elevated/95 backdrop-blur-md shadow-xl py-1"
                                         role="menu"
                                     >
                                         <button
@@ -306,7 +306,7 @@ export function MobileCommandHeader({
                                             className="flex w-full cursor-pointer items-center gap-2.5 px-4 py-2.5 text-[13px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                                         >
                                             <span className="text-text-tertiary"><IconTrash /></span>
-                                            {language === "ar" ? "مسح المحادثة" : "Clear chat"}
+                                            {t("clearChat")}
                                         </button>
                                         <Link
                                             href="/archive"
@@ -315,7 +315,7 @@ export function MobileCommandHeader({
                                             className="flex w-full cursor-pointer items-center gap-2.5 px-4 py-2.5 text-[13px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                                         >
                                             <span className="text-text-tertiary"><IconHistory /></span>
-                                            {language === "ar" ? "تاريخ المحادثات" : "Chat history"}
+                                            {t("chatHistory")}
                                         </Link>
                                     </div>
                                 )}
@@ -330,13 +330,13 @@ export function MobileCommandHeader({
                                 href={loginHref}
                                 className="px-2 text-[12px] text-text-muted transition-colors hover:text-text-primary"
                             >
-                                {language === "ar" ? "دخول" : "Sign in"}
+                                {t("signIn")}
                             </Link>
                             <Link
                                 href={signupHref}
                                 className="text-[11px] px-2.5 py-1.5 rounded-lg bg-gold text-[#0a0a1a] hover:bg-gold-hover transition-colors font-semibold whitespace-nowrap"
                             >
-                                {language === "ar" ? "سجّل" : "Sign up"}
+                                {t("signUp")}
                             </Link>
                         </div>
                     )}
@@ -365,12 +365,10 @@ export function MobileCommandHeader({
             <div
                 ref={drawerRef}
                 role="dialog"
-                aria-label={language === "ar" ? "القائمة الرئيسية" : "Main menu"}
+                aria-label={t("mainMenuLabel")}
                 aria-modal="true"
-                className={`fixed top-0 z-50 h-full w-72 max-w-[85vw] bg-surface border-border-subtle flex flex-col shadow-2xl transition-transform duration-300 ease-out ${
-                    isRTL
-                        ? `right-0 border-s ${drawerOpen ? "translate-x-0" : "translate-x-full"}`
-                        : `left-0 border-r ${drawerOpen ? "translate-x-0" : "-translate-x-full"}`
+                className={`fixed top-0 start-0 rtl:start-auto rtl:end-0 z-50 h-full w-72 max-w-[85vw] bg-surface border-e border-border-subtle rtl:border-e-0 rtl:border-s flex flex-col shadow-2xl transition-transform duration-300 ease-out ${
+                    drawerOpen ? "translate-x-0" : "-translate-x-full rtl:translate-x-full"
                 }`}
                 style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
             >
@@ -388,7 +386,7 @@ export function MobileCommandHeader({
                     </Link>
                     <button
                         type="button"
-                        aria-label={language === "ar" ? "إغلاق" : "Close"}
+                        aria-label={t("close")}
                         onClick={() => setDrawerOpen(false)}
                         className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                     >
@@ -430,10 +428,7 @@ export function MobileCommandHeader({
                         className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
                     >
                         <span className="text-text-tertiary flex-shrink-0">{isDark ? <IconSun /> : <IconMoon />}</span>
-                        {isDark
-                            ? (language === "ar" ? "الوضع الفاتح" : "Light mode")
-                            : (language === "ar" ? "الوضع الداكن" : "Dark mode")
-                        }
+                        {isDark ? t("lightMode") : t("darkMode")}
                     </button>
 
                     <Link
@@ -442,7 +437,7 @@ export function MobileCommandHeader({
                         className="flex items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary cursor-pointer"
                     >
                         <span className="text-text-tertiary flex-shrink-0"><IconSettings /></span>
-                        {language === "ar" ? "الإعدادات" : "Settings"}
+                        {t("settings")}
                     </Link>
                 </nav>
 
@@ -455,7 +450,7 @@ export function MobileCommandHeader({
                             className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-[#ff5e5b] hover:bg-[rgba(255,94,91,0.08)] transition-colors"
                         >
                             <span className="flex-shrink-0"><IconLogout /></span>
-                            {language === "ar" ? "تسجيل الخروج" : "Sign out"}
+                            {t("logout")}
                         </button>
                     ) : chatAudience === "public" ? (
                         <div className="flex flex-col gap-2">
@@ -464,14 +459,14 @@ export function MobileCommandHeader({
                                 onClick={() => setDrawerOpen(false)}
                                 className="flex w-full items-center justify-center rounded-xl px-3 py-2.5 text-[13px] font-semibold bg-gold text-[#0a0a1a] hover:bg-gold-hover transition-colors cursor-pointer"
                             >
-                                {language === "ar" ? "سجّل مجانًا" : "Sign up free"}
+                                {t("signUpFree")}
                             </Link>
                             <Link
                                 href={loginHref}
                                 onClick={() => setDrawerOpen(false)}
                                 className="flex w-full items-center justify-center rounded-xl px-3 py-2.5 text-[13px] text-text-muted transition-colors hover:text-text-primary cursor-pointer"
                             >
-                                {language === "ar" ? "تسجيل الدخول" : "Sign in"}
+                                {t("signIn")}
                             </Link>
                         </div>
                     ) : null}
