@@ -195,6 +195,7 @@ const config: Config = {
                 // Nocturne Aura animations
                 breathe: "breathe 5.5s cubic-bezier(0.22, 0.61, 0.36, 1) infinite",
                 "pulse-ring": "pulse-ring 5.5s cubic-bezier(0.22, 0.61, 0.36, 1) infinite",
+                "glow-pulse": "glow-pulse 6s ease-in-out infinite",
             },
             keyframes: {
                 float: {
@@ -225,6 +226,11 @@ const config: Config = {
                 breathe: {
                     "0%, 100%": { transform: "scale(1)", opacity: "0.92" },
                     "50%": { transform: "scale(1.08)", opacity: "1" },
+                },
+                // Logo halo — opacity only so the badge never moves
+                "glow-pulse": {
+                    "0%, 100%": { opacity: "0.35" },
+                    "50%": { opacity: "0.7" },
                 },
                 "pulse-ring": {
                     "0%, 100%": { transform: "scale(0.96)", opacity: "0.7" },

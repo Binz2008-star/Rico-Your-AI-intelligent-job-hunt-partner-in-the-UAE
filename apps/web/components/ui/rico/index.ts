@@ -3,6 +3,7 @@ export { Aura } from "./Aura";
 export { Eyebrow } from "./Eyebrow";
 export { FitRing } from "./FitRing";
 export { GlassCard } from "./GlassCard";
+export { RicoLogoMark } from "./RicoLogoMark";
 
 // Existing Rico components
 export { RicoButton } from "./RicoButton";

@@ -7,6 +7,7 @@ import { Aura } from "./ui/rico/Aura";
 import { Eyebrow } from "./ui/rico/Eyebrow";
 import { FitRing } from "./ui/rico/FitRing";
 import { GlassCard } from "./ui/rico/GlassCard";
+import { RicoLogoMark } from "./ui/rico/RicoLogoMark";
 import { RicoButton } from "./ui/rico/RicoButton";
 
 // SVG Icons
@@ -190,7 +191,7 @@ export default function LandingPageNocturne() {
             <header className="sticky top-0 z-50 backdrop-blur-xl bg-void/55 border-b border-overlay/7">
                 <div className="max-w-[1140px] mx-auto px-6 h-16 flex items-center justify-between">
                     <Link href="/" className="flex items-center gap-2.5 font-display font-bold text-lg tracking-tight">
-                        <span className="flex h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-gradient-to-br from-ember-bright to-ember text-void font-bold text-sm shadow-[0_0_22px_rgba(240,169,74,0.5)]">R</span>
+                        <RicoLogoMark />
                         <span>Rico<span className="text-ember font-bold"> Hunt</span></span>
                     </Link>
                     <nav className="flex items-center gap-2.5">
@@ -225,9 +226,9 @@ export default function LandingPageNocturne() {
                         </div>
                         <div className="relative mt-8 lg:mt-0">
                             <GlassCard className="p-5 relative overflow-visible">
-                                <div className="absolute -top-12 end-4"><Aura size="sm" variant="ember" animate={false} /></div>
+                                <div className="absolute -top-12 end-4"><Aura size="sm" variant="ember" /></div>
                                 <div className="flex items-center gap-2.5 pb-4 mb-4 border-b border-overlay/7">
-                                    <div className="w-[30px] h-[30px] rounded-full bg-gradient-to-br from-white via-ember-bright to-ember shadow-[0_0_12px_rgba(240,169,74,0.4)] motion-safe:animate-breathe" />
+                                    <div className="w-[30px] h-[30px] rounded-full bg-[radial-gradient(circle_at_38%_34%,#fff,rgb(var(--gold-hover))_38%,rgb(var(--gold))_70%)] shadow-[0_0_18px_rgb(var(--gold)/0.65)] motion-safe:animate-breathe" />
                                     <div>
                                         <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-secondary">{t.matchLabel}</p>
                                         <p className="text-xs text-text-tertiary">{t.matchBy}</p>
@@ -593,7 +594,7 @@ export default function LandingPageNocturne() {
                 <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
                     <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                         <Link href="/" className="flex items-center gap-2 font-display font-bold text-lg">
-                            <span className="flex h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-gradient-to-br from-ember-bright to-ember text-void font-bold text-sm">R</span>
+                            <RicoLogoMark animate={false} />
                             <span>Rico<span className="text-ember font-bold"> Hunt</span></span>
                         </Link>
                         <nav className="flex flex-wrap justify-center gap-x-6 gap-y-2">

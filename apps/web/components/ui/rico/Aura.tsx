@@ -86,10 +86,12 @@ export function Aura({
         className={cn(
           "relative rounded-full",
           coreSizeClasses[size],
+          // Tokens are raw RGB channel triples — they must be wrapped in rgb()
+          // or the whole gradient is invalid and the core loses its glow.
           isEmber
-            ? "bg-[radial-gradient(circle_at_38%_34%,#fff,var(--gold-hover)_38%,var(--gold)_70%)]"
-            : "bg-[radial-gradient(circle_at_38%_34%,#fff,var(--aura)_38%,var(--aura-dim)_70%)]",
-          isEmber ? "shadow-[0_0_30px_rgba(240,169,74,0.7)]" : "shadow-[0_0_30px_rgba(111,233,208,0.5)]",
+            ? "bg-[radial-gradient(circle_at_38%_34%,#fff,rgb(var(--gold-hover))_38%,rgb(var(--gold))_70%)]"
+            : "bg-[radial-gradient(circle_at_38%_34%,#fff,rgb(var(--aura))_38%,rgb(var(--aura-dim))_70%)]",
+          isEmber ? "shadow-[0_0_30px_rgb(var(--gold)/0.7)]" : "shadow-[0_0_30px_rgb(var(--aura)/0.5)]",
           animate && "animate-breathe"
         )}
       />
