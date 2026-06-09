@@ -1177,7 +1177,11 @@ export default function CommandPage() {
             const confirmText = chatAudience === "public"
                 ? tEff("cmdCvProfileSavedPublic")
                 : tEff("cmdCvProfileConfirmed");
-            setMessages((prev) => prev.map(m => m.id === messageId ? { ...m, type: "profile_confirmed", text: confirmText } : m));
+            const confirmOptions: RicoOption[] = chatAudience === "authenticated" ? [
+                { action: "find_jobs_cv", label: tEff("cmdFindJobsCv") ?? "Find jobs from my CV", message: "Find UAE jobs that match my CV and experience." },
+                { action: "view_applications", label: tEff("cmdViewApplications") ?? "Track my applications", message: "show my applications" },
+            ] : [];
+            setMessages((prev) => prev.map(m => m.id === messageId ? { ...m, type: "profile_confirmed", text: confirmText, options: confirmOptions.length > 0 ? confirmOptions : m.options } : m));
         } catch (err) {
             const text = err instanceof Error ? `${t("cmdCvProfileError")}: ${err.message}` : t("cmdCvProfileError");
             setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: text }]);
