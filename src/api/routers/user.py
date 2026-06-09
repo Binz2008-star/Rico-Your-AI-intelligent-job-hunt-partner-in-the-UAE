@@ -76,8 +76,8 @@ def list_user_files(request: Request) -> List[Dict[str, Any]]:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT u.id, u.updated_at,
-                           p.data->>'cv_filename' AS cv_filename
+                    SELECT u.id, p.updated_at,
+                           p.profile->>'cv_filename' AS cv_filename
                     FROM   rico_users u
                     LEFT JOIN rico_profiles p ON p.user_id = u.id
                     WHERE  u.email = %s
