@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rico Hunt — Nocturne Design System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#06060c;
+    --ink:#0a0b13;
+    --surface:#111320;
+    --surface-2:#161a2b;
+    --glass:rgba(255,255,255,0.04);
+    --hair:rgba(255,255,255,0.07);
+    --hair-2:rgba(255,255,255,0.12);
+
+    --ember:#f0a94a;          /* Rico's voice — warm signature */
+    --ember-bright:#ffc873;
+    --aura:#6fe9d0;           /* intelligence / data only */
+    --aura-dim:#3fb9a6;
+
+    --text:#eef0f6;
+    --muted:#9aa3b8;
+    --faint:#646d83;
+
+    --r:14px;
+    --r-lg:22px;
+    --maxw:1140px;
+    --ease:cubic-bezier(.22,.61,.36,1);
+    --display:"Space Grotesk","Segoe UI",system-ui,sans-serif;
+    --body:"Inter","Segoe UI",system-ui,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",monospace;
+  }
+
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:var(--body);
+    background:var(--void);
+    color:var(--text);
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  /* ambient grain */
+  body::after{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.035;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  a{color:inherit;text-decoration:none}
+  .mono{font-family:var(--mono)}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px;position:relative;z-index:2}
+
+  /* ---------- atmosphere ---------- */
+  .glow{position:fixed;border-radius:50%;filter:blur(120px);pointer-events:none;z-index:0}
+  .glow.a{width:620px;height:620px;background:rgba(240,169,74,.10);top:-200px;left:-160px}
+  .glow.b{width:520px;height:520px;background:rgba(111,233,208,.06);top:38%;right:-180px}
+  .glow.c{width:520px;height:520px;background:rgba(240,169,74,.05);bottom:-160px;left:30%}
+
+  /* ---------- header ---------- */
+  header{
+    position:sticky;top:0;z-index:50;
+    backdrop-filter:blur(18px);
+    background:rgba(6,6,12,.55);
+    border-bottom:1px solid var(--hair);
+  }
+  .nav{display:flex;align-items:center;justify-content:space-between;height:64px}
+  .brand{display:flex;align-items:center;gap:11px;font-family:var(--display);font-weight:700;font-size:18px;letter-spacing:-.01em}
+  .mark{
+    position:relative;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;
+    background:radial-gradient(circle at 35% 30%,var(--ember-bright),var(--ember));
+    color:#1a1206;font-weight:700;font-family:var(--display);font-size:15px;
+    box-shadow:0 0 22px rgba(240,169,74,.5);
+  }
+  .brand b{color:var(--ember);font-weight:700}
+  .nav-actions{display:flex;align-items:center;gap:10px}
+  .lang{font-family:var(--mono);font-size:12px;color:var(--muted);border:1px solid var(--hair);padding:6px 11px;border-radius:9px;cursor:pointer;transition:.2s var(--ease);background:none}
+  .lang:hover{color:var(--text);border-color:var(--ember)}
+  .nav-signin{font-size:14px;color:var(--muted);transition:.2s}
+  .nav-signin:hover{color:var(--text)}
+
+  .btn{
+    font-family:var(--body);font-size:14px;font-weight:600;cursor:pointer;
+    padding:10px 20px;border-radius:11px;border:1px solid transparent;
+    transition:.22s var(--ease);display:inline-flex;align-items:center;gap:8px;white-space:nowrap;
+  }
+  .btn-primary{background:var(--ember);color:#1a1206;box-shadow:0 0 0 rgba(240,169,74,0)}
+  .btn-primary:hover{background:var(--ember-bright);box-shadow:0 8px 30px rgba(240,169,74,.35);transform:translateY(-1px)}
+  .btn-ghost{background:var(--glass);color:var(--text);border-color:var(--hair-2)}
+  .btn-ghost:hover{border-color:var(--ember);background:rgba(240,169,74,.08)}
+  .btn-sm{padding:7px 15px;font-size:13px;border-radius:9px}
+
+  /* ---------- the aura (signature) ---------- */
+  .aura-wrap{position:relative;display:grid;place-items:center}
+  .aura{position:relative;width:118px;height:118px;border-radius:50%;display:grid;place-items:center}
+  .aura .core{
+    width:54px;height:54px;border-radius:50%;
+    background:radial-gradient(circle at 38% 34%,#fff,var(--ember-bright) 38%,var(--ember) 70%);
+    box-shadow:0 0 30px rgba(240,169,74,.7),0 0 70px rgba(240,169,74,.35);
+    animation:breathe 5.5s var(--ease) infinite;
+  }
+  .aura .ring{position:absolute;inset:0;border-radius:50%;border:1px solid rgba(240,169,74,.28);animation:pulse 5.5s var(--ease) infinite}
+  .aura .ring.r2{inset:-18px;border-color:rgba(240,169,74,.14);animation-delay:.6s}
+  @keyframes breathe{0%,100%{transform:scale(1);opacity:.92}50%{transform:scale(1.08);opacity:1}}
+  @keyframes pulse{0%,100%{transform:scale(.96);opacity:.7}50%{transform:scale(1.06);opacity:.25}}
+
+  /* ---------- type scale ---------- */
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:var(--ember);display:inline-flex;align-items:center;gap:9px}
+  .eyebrow::before{content:"";width:22px;height:1px;background:var(--ember);opacity:.7}
+  h1{font-family:var(--display);font-weight:600;font-size:clamp(2.2rem,5.4vw,4rem);line-height:1.04;letter-spacing:-.025em}
+  h2{font-family:var(--display);font-weight:600;font-size:clamp(1.7rem,3.6vw,2.6rem);line-height:1.1;letter-spacing:-.02em}
+  h3{font-family:var(--display);font-weight:600;font-size:18px;letter-spacing:-.01em}
+  .lead{font-size:clamp(1rem,1.4vw,1.18rem);color:var(--muted);max-width:42ch}
+  .glow-text{color:var(--ember)}
+
+  /* ---------- sections ---------- */
+  .section{padding:96px 0;position:relative}
+  .section-head{max-width:600px;margin-bottom:48px}
+  .section-head h2{margin:16px 0 14px}
+  .section-head p{color:var(--muted)}
+
+  /* ---------- hero ---------- */
+  .hero{padding:78px 0 70px;position:relative}
+  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:54px;align-items:center}
+  .hero-cta{display:flex;gap:13px;margin-top:32px;flex-wrap:wrap}
+  .hero h1{margin:20px 0 22px}
+  .trust-chips{display:flex;gap:9px;flex-wrap:wrap;margin-top:30px}
+  .chip{font-family:var(--mono);font-size:11.5px;color:var(--muted);border:1px solid var(--hair);border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:7px}
+  .chip .dot{width:5px;height:5px;border-radius:50%;background:var(--aura);box-shadow:0 0 8px var(--aura)}
+
+  /* glass card */
+  .glass-card{
+    background:linear-gradient(160deg,rgba(22,26,43,.85),rgba(10,11,19,.7));
+    border:1px solid var(--hair);border-radius:var(--r-lg);
+    box-shadow:0 30px 80px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.05);
+    backdrop-filter:blur(12px);
+  }
+
+  /* hero match card */
+  .match{padding:22px;position:relative;overflow:hidden}
+  .match-top{display:flex;align-items:center;gap:11px;padding-bottom:16px;border-bottom:1px solid var(--hair);margin-bottom:18px}
+  .mini-aura{width:30px;height:30px;border-radius:50%;background:radial-gradient(circle at 38% 34%,#fff,var(--ember-bright) 40%,var(--ember) 72%);box-shadow:0 0 16px rgba(240,169,74,.6);flex-shrink:0;animation:breathe 5.5s var(--ease) infinite}
+  .match-top .label{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+  .match-top .by{font-size:12px;color:var(--faint);margin-top:1px}
+  .match-body{display:flex;gap:18px;align-items:center}
+  .role-name{font-family:var(--display);font-weight:600;font-size:17px;margin-bottom:3px}
+  .role-meta{font-size:12.5px;color:var(--faint)}
+  .reasons{margin-top:14px;display:flex;flex-direction:column;gap:7px}
+  .reason{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--muted)}
+  .reason svg{flex-shrink:0;color:var(--aura)}
+  .ring-wrap{flex-shrink:0;position:relative;width:96px;height:96px}
+  .ring-wrap .pct{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+  .ring-wrap .pct b{font-family:var(--display);font-size:26px;font-weight:600;color:var(--aura)}
+  .ring-wrap .pct span{display:block;font-family:var(--mono);font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--faint);margin-top:-2px}
+  .match-foot{margin-top:18px;padding-top:15px;border-top:1px solid var(--hair);display:flex;align-items:center;justify-content:space-between}
+  .match-foot .next{font-size:12px;color:var(--faint)}
+  .match-foot .next b{color:var(--text);font-weight:500}
+
+  /* ---------- trust bar ---------- */
+  .trustbar{border-top:1px solid var(--hair);border-bottom:1px solid var(--hair);padding:26px 0}
+  .trustbar .wrap{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap}
+  .trust-item{display:flex;align-items:center;gap:11px;font-size:13.5px;color:var(--muted)}
+  .trust-item .ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--glass);border:1px solid var(--hair);color:var(--ember)}
+
+  /* ---------- steps ---------- */
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  .step{padding:26px 24px;position:relative;overflow:hidden}
+  .step .num{font-family:var(--mono);font-size:12px;color:var(--ember);letter-spacing:.2em}
+  .step h3{margin:14px 0 8px}
+  .step p{font-size:14px;color:var(--muted)}
+  .step .viz{margin-top:20px;height:96px;border-radius:12px;background:var(--ink);border:1px solid var(--hair);position:relative;overflow:hidden;display:grid;place-items:center}
+  .doc-line{height:6px;border-radius:3px;background:var(--hair-2)}
+  .fit-bars{display:flex;gap:7px;align-items:flex-end;height:54px}
+  .fit-bars i{width:13px;border-radius:3px 3px 0 0;background:linear-gradient(180deg,var(--aura),var(--aura-dim));display:block}
+  .track-row{display:flex;gap:8px}
+  .track-pill{font-family:var(--mono);font-size:10px;padding:4px 9px;border-radius:7px;border:1px solid var(--hair)}
+  .track-pill.s{color:var(--faint)}
+  .track-pill.o{color:var(--ember);border-color:rgba(240,169,74,.4)}
+  .track-pill.a{color:var(--aura);border-color:rgba(111,233,208,.4)}
+
+  /* ---------- product window ---------- */
+  .window{border-radius:var(--r-lg);overflow:hidden;border:1px solid var(--hair-2);box-shadow:0 40px 120px rgba(0,0,0,.6)}
+  .win-bar{display:flex;align-items:center;gap:8px;padding:13px 16px;background:var(--surface-2);border-bottom:1px solid var(--hair)}
+  .win-bar .dots{display:flex;gap:6px}
+  .win-bar .dots i{width:10px;height:10px;border-radius:50%;background:var(--hair-2)}
+  .win-bar .addr{font-family:var(--mono);font-size:11.5px;color:var(--faint);margin-left:8px}
+  .app{display:grid;grid-template-columns:64px 1fr;min-height:440px;background:var(--ink)}
+  .app-rail{border-right:1px solid var(--hair);padding:18px 0;display:flex;flex-direction:column;align-items:center;gap:22px;background:var(--void)}
+  .rail-ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:var(--faint);border:1px solid transparent}
+  .rail-ic.on{color:var(--ember);background:rgba(240,169,74,.1);border-color:rgba(240,169,74,.3)}
+  .app-main{padding:26px 28px;position:relative;overflow:hidden}
+  .chat{display:flex;flex-direction:column;gap:16px;max-width:560px}
+  .bubble{padding:13px 16px;border-radius:14px;font-size:14px;max-width:78%;line-height:1.55}
+  .bubble.user{align-self:flex-end;background:var(--surface-2);border:1px solid var(--hair);border-bottom-right-radius:5px}
+  .bubble.rico{align-self:flex-start;background:linear-gradient(160deg,rgba(240,169,74,.13),rgba(240,169,74,.05));border:1px solid rgba(240,169,74,.22);border-bottom-left-radius:5px}
+  .bubble.rico .who{display:flex;align-items:center;gap:8px;margin-bottom:7px;font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ember)}
+  .bubble.rico .who .da{width:18px;height:18px;border-radius:50%;background:radial-gradient(circle at 38% 34%,#fff,var(--ember-bright) 40%,var(--ember) 72%);box-shadow:0 0 10px rgba(240,169,74,.6)}
+  .cmd{margin-top:22px;display:flex;align-items:center;gap:11px;padding:13px 16px;border-radius:13px;background:var(--void);border:1px solid var(--hair-2);max-width:560px}
+  .cmd .ph{font-size:14px;color:var(--faint);flex:1}
+  .cmd .send{width:32px;height:32px;border-radius:9px;background:var(--ember);display:grid;place-items:center;color:#1a1206}
+
+  /* ---------- dashboard ---------- */
+  .dash{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px}
+  .stat{padding:20px}
+  .stat .k{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+  .stat .v{font-family:var(--display);font-size:30px;font-weight:600;margin-top:8px}
+  .stat .v.aura{color:var(--aura)}
+  .stat .v.ember{color:var(--ember)}
+  .job-list{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+  .job{padding:20px;display:flex;gap:16px;align-items:flex-start;transition:.22s var(--ease)}
+  .job:hover{border-color:var(--hair-2);transform:translateY(-2px)}
+  .job .ring-sm{width:54px;height:54px;flex-shrink:0;position:relative}
+  .job .ring-sm .p{position:absolute;inset:0;display:grid;place-content:center;font-family:var(--display);font-size:15px;font-weight:600;color:var(--aura)}
+  .job h3{font-size:15px;margin-bottom:3px}
+  .job .co{font-size:12.5px;color:var(--faint)}
+  .job .tags{display:flex;gap:6px;margin-top:11px;flex-wrap:wrap}
+  .tag{font-family:var(--mono);font-size:10px;color:var(--muted);border:1px solid var(--hair);border-radius:6px;padding:3px 8px}
+
+  /* ---------- pricing ---------- */
+  .tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;align-items:stretch}
+  .tier{padding:30px 26px;display:flex;flex-direction:column;position:relative}
+  .tier.feat{border-color:rgba(240,169,74,.4);box-shadow:0 0 0 1px rgba(240,169,74,.2),0 30px 80px rgba(0,0,0,.5)}
+  .tier .badge{position:absolute;top:-11px;left:26px;font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#1a1206;background:var(--ember);padding:4px 11px;border-radius:999px}
+  .tier .tname{font-family:var(--mono);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+  .tier .price{font-family:var(--display);font-size:38px;font-weight:600;margin:12px 0 2px;display:flex;align-items:baseline;gap:6px}
+  .tier .price span{font-size:14px;color:var(--faint);font-family:var(--body);font-weight:400}
+  .tier ul{list-style:none;margin:22px 0;display:flex;flex-direction:column;gap:11px;flex:1}
+  .tier li{font-size:13.5px;color:var(--muted);display:flex;align-items:flex-start;gap:9px}
+  .tier li svg{flex-shrink:0;margin-top:3px;color:var(--aura)}
+  .tier .btn{width:100%;justify-content:center;margin-top:auto}
+  .reassure{text-align:center;font-size:12.5px;color:var(--faint);margin-top:20px}
+
+  /* ---------- credibility ---------- */
+  .cred{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;padding:46px;border-radius:var(--r-lg)}
+  .cred-points{display:flex;flex-direction:column;gap:18px;margin-top:8px}
+  .cred-point{display:flex;gap:13px;align-items:flex-start}
+  .cred-point .ic{width:36px;height:36px;border-radius:10px;flex-shrink:0;display:grid;place-items:center;background:var(--glass);border:1px solid var(--hair);color:var(--ember)}
+  .cred-point b{display:block;font-weight:600;font-size:14.5px;margin-bottom:2px}
+  .cred-point p{font-size:13px;color:var(--muted)}
+  .founder{display:flex;align-items:center;gap:14px;margin-top:28px;padding-top:24px;border-top:1px solid var(--hair)}
+  .founder .ph{width:48px;height:48px;border-radius:50%;background:var(--surface-2);border:1px solid var(--hair-2);display:grid;place-items:center;color:var(--faint);font-family:var(--mono);font-size:11px}
+  .founder .ft b{font-size:14px}
+  .founder .ft p{font-size:12.5px;color:var(--faint)}
+
+  /* ---------- faq ---------- */
+  .faq{display:flex;flex-direction:column;gap:12px;max-width:760px;margin:0 auto}
+  .qa{padding:20px 24px;cursor:pointer}
+  .qa summary{font-family:var(--display);font-weight:500;font-size:16px;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:16px}
+  .qa summary::-webkit-details-marker{display:none}
+  .qa summary .pl{color:var(--ember);font-size:20px;transition:.2s;flex-shrink:0}
+  .qa[open] summary .pl{transform:rotate(45deg)}
+  .qa p{font-size:14px;color:var(--muted);margin-top:13px}
+
+  /* ---------- final cta ---------- */
+  .final{text-align:center;padding:110px 0;position:relative}
+  .final h2{margin:26px auto 18px;max-width:16ch}
+  .final .lead{margin:0 auto 34px;text-align:center}
+
+  /* ---------- footer ---------- */
+  footer{border-top:1px solid var(--hair);padding:46px 0 38px}
+  .foot{display:flex;justify-content:space-between;gap:30px;flex-wrap:wrap}
+  .foot-links{display:flex;gap:22px;flex-wrap:wrap}
+  .foot-links a{font-size:13px;color:var(--muted);transition:.2s}
+  .foot-links a:hover{color:var(--text)}
+  .foot-meta{font-size:12px;color:var(--faint);margin-top:18px;width:100%}
+
+  /* reveal (progressive — visible without JS) */
+  body.js .reveal{opacity:0;transform:translateY(22px)}
+  body.js .reveal.in{opacity:1;transform:none;transition:opacity .7s var(--ease),transform .7s var(--ease)}
+
+  @media (max-width:860px){
+    .hero-grid,.cred{grid-template-columns:1fr;gap:36px}
+    .steps,.tiers{grid-template-columns:1fr}
+    .dash{grid-template-columns:repeat(2,1fr)}
+    .job-list{grid-template-columns:1fr}
+    .app{grid-template-columns:52px 1fr}
+    .section{padding:70px 0}
+    .nav-signin{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important;scroll-behavior:auto}
+    body.js .reveal{opacity:1;transform:none}
+  }
+</style>
+</head>
+<body>
+<div class="glow a"></div><div class="glow b"></div><div class="glow c"></div>
+
+<!-- ===================== HEADER ===================== -->
+<header>
+  <div class="wrap nav">
+    <a href="#" class="brand"><span class="mark">R</span>Rico<b>&nbsp;Hunt</b></a>
+    <div class="nav-actions">
+      <button class="lang" id="langBtn">عربي</button>
+      <a href="#" class="nav-signin">Sign in</a>
+      <a href="#" class="btn btn-primary btn-sm">Start free</a>
+    </div>
+  </div>
+</header>
+
+<!-- ===================== HERO ===================== -->
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="eyebrow" data-en="AI Job Intelligence · UAE" data-ar="ذكاء وظيفي · الإمارات">AI Job Intelligence · UAE</span>
+      <h1 data-en="Your CV, understood.&lt;br&gt;Your next role, &lt;span class='glow-text'&gt;found.&lt;/span&gt;" data-ar="سيرتك الذاتية، مفهومة.&lt;br&gt;دورك القادم، &lt;span class='glow-text'&gt;موجود.&lt;/span&gt;">Your CV, understood.<br>Your next role, <span class="glow-text">found.</span></h1>
+      <p class="lead" data-en="Upload once. Rico reads your experience, surfaces the UAE roles that actually fit, and tells you why — in English and Arabic. You approve every move." data-ar="ارفع مرة واحدة. يقرأ ريكو خبرتك، ويعرض وظائف الإمارات التي تناسبك فعلاً، ويشرح السبب — بالعربية والإنجليزية. أنت تقرّر كل خطوة.">Upload once. Rico reads your experience, surfaces the UAE roles that actually fit, and tells you why — in English and Arabic. You approve every move.</p>
+      <div class="hero-cta">
+        <a href="#" class="btn btn-primary" data-en="Upload your CV" data-ar="ارفع سيرتك الذاتية">Upload your CV</a>
+        <a href="#" class="btn btn-ghost" data-en="See how it works" data-ar="كيف يعمل">See how it works</a>
+      </div>
+      <div class="trust-chips">
+        <span class="chip"><span class="dot"></span><span data-en="UAE-focused" data-ar="متخصص في الإمارات">UAE-focused</span></span>
+        <span class="chip"><span class="dot"></span><span data-en="English + Arabic" data-ar="عربي + إنجليزي">English + Arabic</span></span>
+        <span class="chip"><span class="dot"></span><span data-en="You approve every application" data-ar="أنت توافق على كل طلب">You approve every application</span></span>
+      </div>
+    </div>
+
+    <div class="aura-wrap reveal">
+      <div class="glass-card match">
+        <div class="aura" style="position:absolute;top:-46px;right:14px;width:90px;height:90px;opacity:.9">
+          <div class="ring"></div><div class="ring r2"></div><div class="core" style="width:40px;height:40px"></div>
+        </div>
+        <div class="match-top">
+          <div class="mini-aura"></div>
+          <div>
+            <div class="label">Rico match preview</div>
+            <div class="by">Read from your CV · 2s ago</div>
+          </div>
+        </div>
+        <div class="match-body">
+          <div style="flex:1">
+            <div class="role-name">Environmental Compliance Officer</div>
+            <div class="role-meta">Abu Dhabi · Full-time · Posted today</div>
+            <div class="reasons">
+              <div class="reason"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>UAE compliance background</div>
+              <div class="reason"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>Environmental operations experience</div>
+              <div class="reason"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>Inspection &amp; reporting skills</div>
+            </div>
+          </div>
+          <div class="ring-wrap">
+            <svg width="96" height="96" viewBox="0 0 96 96">
+              <circle cx="48" cy="48" r="42" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="6"/>
+              <circle cx="48" cy="48" r="42" fill="none" stroke="#6fe9d0" stroke-width="6" stroke-linecap="round" stroke-dasharray="263.8" stroke-dashoffset="36.9" transform="rotate(-90 48 48)"/>
+            </svg>
+            <div class="pct"><b>86</b><span>Fit</span></div>
+          </div>
+        </div>
+        <div class="match-foot">
+          <div class="next" data-en="Next: &lt;b&gt;open apply link&lt;/b&gt;" data-ar="التالي: &lt;b&gt;فتح رابط التقديم&lt;/b&gt;">Next: <b>open apply link</b></div>
+          <a href="#" class="btn btn-ghost btn-sm" data-en="Review" data-ar="مراجعة">Review</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== TRUST BAR ===================== -->
+<div class="trustbar reveal">
+  <div class="wrap">
+    <div class="trust-item"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/></svg></span><span data-en="Your data is never sold" data-ar="بياناتك لن تُباع أبداً">Your data is never sold</span></div>
+    <div class="trust-item"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></span><span data-en="Manual approval — always" data-ar="موافقة يدوية — دائماً">Manual approval — always</span></div>
+    <div class="trust-item"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 010 20M12 2a15 15 0 000 20"/></svg></span><span data-en="Built for the UAE market" data-ar="مبني لسوق الإمارات">Built for the UAE market</span></div>
+    <div class="trust-item"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8"/></svg></span><span data-en="Bilingual EN / AR" data-ar="ثنائي اللغة">Bilingual EN / AR</span></div>
+  </div>
+</div>
+
+<!-- ===================== STEPS ===================== -->
+<section class="section">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">How it works</span>
+      <h2>Three steps. No noise.</h2>
+      <p>Job boards bury you in roles that don't fit. Rico turns your CV into a search that does the filtering for you.</p>
+    </div>
+    <div class="steps">
+      <div class="glass-card step reveal">
+        <div class="num">01</div>
+        <h3>Upload your CV</h3>
+        <p>One file. Rico reads your real experience — not just keywords — in English or Arabic.</p>
+        <div class="viz">
+          <div style="display:flex;flex-direction:column;gap:7px;width:62%">
+            <div class="doc-line" style="width:80%"></div><div class="doc-line" style="width:100%"></div>
+            <div class="doc-line" style="width:55%"></div><div class="doc-line" style="width:90%;background:rgba(240,169,74,.5)"></div>
+          </div>
+        </div>
+      </div>
+      <div class="glass-card step reveal">
+        <div class="num">02</div>
+        <h3>See what fits</h3>
+        <p>Roles ranked by genuine fit, each with a score and the reasons behind it.</p>
+        <div class="viz">
+          <div class="fit-bars">
+            <i style="height:38px"></i><i style="height:46px"></i><i style="height:54px"></i><i style="height:30px"></i><i style="height:42px"></i>
+          </div>
+        </div>
+      </div>
+      <div class="glass-card step reveal">
+        <div class="num">03</div>
+        <h3>Track every move</h3>
+        <p>Saved, opened, applied — your whole search in one calm command center.</p>
+        <div class="viz">
+          <div class="track-row">
+            <span class="track-pill s">Saved</span><span class="track-pill o">Opened</span><span class="track-pill a">Applied</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== PRODUCT WINDOW (chat / command) ===================== -->
+<section class="section" style="padding-top:0">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">The command center</span>
+      <h2>Talk to Rico like a person who reads.</h2>
+      <p>Ask in plain language. Rico answers from your CV and the live UAE market — and never acts without you.</p>
+    </div>
+    <div class="window reveal">
+      <div class="win-bar">
+        <div class="dots"><i></i><i></i><i></i></div>
+        <div class="addr">ricohunt.com / command</div>
+      </div>
+      <div class="app">
+        <div class="app-rail">
+          <div class="rail-ic on"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg></div>
+          <div class="rail-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg></div>
+          <div class="rail-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-4-7 4V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></div>
+          <div class="rail-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0112 0v1"/></svg></div>
+        </div>
+        <div class="app-main">
+          <div class="chat">
+            <div class="bubble user">Find compliance roles in Abu Dhabi that match my background.</div>
+            <div class="bubble rico">
+              <div class="who"><span class="da"></span>Rico</div>
+              I found 7 strong matches. The top one — Environmental Compliance Officer — scores <b style="color:var(--aura)">86</b> because your UAE compliance and inspection experience line up directly. Want me to open the apply link, or keep looking?
+            </div>
+            <div class="bubble user">Show me the next two first.</div>
+          </div>
+          <div class="cmd">
+            <span class="da" style="width:18px;height:18px;border-radius:50%;background:radial-gradient(circle at 38% 34%,#fff,var(--ember-bright) 40%,var(--ember) 72%);box-shadow:0 0 10px rgba(240,169,74,.6)"></span>
+            <span class="ph">Ask Rico anything about your job search…</span>
+            <span class="send"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== DASHBOARD ===================== -->
+<section class="section" style="padding-top:0">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Your dashboard</span>
+      <h2>One screen. The whole hunt.</h2>
+    </div>
+    <div class="reveal">
+      <div class="dash">
+        <div class="glass-card stat"><div class="k">Matches</div><div class="v aura">23</div></div>
+        <div class="glass-card stat"><div class="k">Saved</div><div class="v">11</div></div>
+        <div class="glass-card stat"><div class="k">Applied</div><div class="v ember">6</div></div>
+        <div class="glass-card stat"><div class="k">Top fit</div><div class="v aura">94</div></div>
+      </div>
+      <div class="job-list">
+        <div class="glass-card job">
+          <div class="ring-sm">
+            <svg width="54" height="54" viewBox="0 0 54 54"><circle cx="27" cy="27" r="23" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="4"/><circle cx="27" cy="27" r="23" fill="none" stroke="#6fe9d0" stroke-width="4" stroke-linecap="round" stroke-dasharray="144.5" stroke-dashoffset="8.7" transform="rotate(-90 27 27)"/></svg>
+            <div class="p">94</div>
+          </div>
+          <div>
+            <h3>Operations Manager</h3>
+            <div class="co">Hospitality Group · Dubai</div>
+            <div class="tags"><span class="tag">P&amp;L</span><span class="tag">Multi-site</span><span class="tag">Automation</span></div>
+          </div>
+        </div>
+        <div class="glass-card job">
+          <div class="ring-sm">
+            <svg width="54" height="54" viewBox="0 0 54 54"><circle cx="27" cy="27" r="23" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="4"/><circle cx="27" cy="27" r="23" fill="none" stroke="#6fe9d0" stroke-width="4" stroke-linecap="round" stroke-dasharray="144.5" stroke-dashoffset="20.2" transform="rotate(-90 27 27)"/></svg>
+            <div class="p">86</div>
+          </div>
+          <div>
+            <h3>Relationship Manager</h3>
+            <div class="co">Private Bank · Abu Dhabi</div>
+            <div class="tags"><span class="tag">VIP</span><span class="tag">Portfolio</span><span class="tag">Advisory</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== PRICING ===================== -->
+<section class="section" style="padding-top:0">
+  <div class="wrap">
+    <div class="section-head reveal" style="margin-inline:auto;text-align:center;max-width:560px">
+      <span class="eyebrow" style="justify-content:center">Pricing</span>
+      <h2>Start free. Pay only when Rico earns it.</h2>
+    </div>
+    <div class="tiers">
+      <div class="glass-card tier reveal">
+        <div class="tname">Free</div>
+        <div class="price">AED 0</div>
+        <ul>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>50 AI messages / month</li>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>10 saved jobs</li>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>CV fit scoring &amp; reasons</li>
+        </ul>
+        <a href="#" class="btn btn-ghost">Start free</a>
+      </div>
+      <div class="glass-card tier feat reveal">
+        <span class="badge">Most popular</span>
+        <div class="tname">Pro</div>
+        <div class="price">AED 29 <span>/mo</span></div>
+        <ul>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>300 AI messages / month</li>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>100 saved jobs</li>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>Priority matching &amp; daily alerts</li>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>Application draft assistant</li>
+        </ul>
+        <a href="#" class="btn btn-primary">Get Pro</a>
+      </div>
+      <div class="glass-card tier reveal">
+        <div class="tname">Premium</div>
+        <div class="price">AED 49 <span>/mo</span></div>
+        <ul>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>1,500 AI messages / month</li>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>Unlimited saved jobs</li>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>Arabic + English CV optimization</li>
+          <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>Follow-up reminders &amp; insights</li>
+        </ul>
+        <a href="#" class="btn btn-ghost">Get Premium</a>
+      </div>
+    </div>
+    <p class="reassure">Cancel anytime. No card required to start.</p>
+  </div>
+</section>
+
+<!-- ===================== CREDIBILITY ===================== -->
+<section class="section" style="padding-top:0">
+  <div class="wrap">
+    <div class="glass-card cred reveal">
+      <div>
+        <span class="eyebrow">Why trust Rico</span>
+        <h2 style="margin:16px 0 10px">A real company, not a black box.</h2>
+        <p style="color:var(--muted);font-size:14.5px">Rico is built and operated in the UAE — with privacy and your control designed in from the first screen.</p>
+        <div class="founder">
+          <div class="ph">RE</div>
+          <div class="ft"><b>Built by Roben Edwan</b><p>Founder, Eco Technology Environment Protection Services L.L.C · UAE-registered</p></div>
+        </div>
+      </div>
+      <div class="cred-points">
+        <div class="cred-point"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/></svg></span><div><b>You stay in control</b><p>Rico never applies, sends, or shares anything without your explicit approval.</p></div></div>
+        <div class="cred-point"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></span><div><b>Your data is never sold</b><p>It's used only to power your job search — full stop.</p></div></div>
+        <div class="cred-point"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8"/></svg></span><div><b>Truly bilingual</b><p>Arabic and English, end to end — including right-to-left throughout.</p></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FAQ ===================== -->
+<section class="section" style="padding-top:0">
+  <div class="wrap">
+    <div class="section-head reveal" style="margin-inline:auto;text-align:center;max-width:560px">
+      <span class="eyebrow" style="justify-content:center">Questions</span>
+      <h2>The things people ask first.</h2>
+    </div>
+    <div class="faq reveal">
+      <details class="glass-card qa"><summary>Does Rico apply to jobs for me?<span class="pl">+</span></summary><p>No — not unless you say so. Rico finds and ranks matches and can prepare drafts, but you approve and send every single application yourself.</p></details>
+      <details class="glass-card qa"><summary>Is my CV and data safe?<span class="pl">+</span></summary><p>Yes. Your data is used only to power your job search and is never sold. Rico is operated by a UAE-registered company.</p></details>
+      <details class="glass-card qa"><summary>Does it work in my field?<span class="pl">+</span></summary><p>Rico reads your actual experience rather than matching keywords, so it works across sectors — finance, operations, hospitality, engineering, environmental, and more.</p></details>
+      <details class="glass-card qa"><summary>Can I use it in Arabic?<span class="pl">+</span></summary><p>Fully. The entire product — matches, chat, and tracking — works in Arabic and English, with proper right-to-left layout.</p></details>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FINAL CTA ===================== -->
+<section class="final">
+  <div class="wrap reveal">
+    <div class="aura" style="margin:0 auto 8px"><div class="ring"></div><div class="ring r2"></div><div class="core"></div></div>
+    <h2>Let Rico read your CV. See what fits — tonight.</h2>
+    <p class="lead">Free to start. No card. You're in control the whole way.</p>
+    <a href="#" class="btn btn-primary" style="font-size:15px;padding:14px 30px">Upload your CV</a>
+  </div>
+</section>
+
+<!-- ===================== FOOTER ===================== -->
+<footer>
+  <div class="wrap foot">
+    <a href="#" class="brand"><span class="mark">R</span>Rico<b>&nbsp;Hunt</b></a>
+    <div class="foot-links">
+      <a href="#">About</a><a href="#">Contact</a><a href="#">Terms</a><a href="#">Privacy</a><a href="#">Refunds</a><a href="#">FAQ</a><a href="#">WhatsApp</a>
+    </div>
+    <div class="foot-meta">Powered by Eco Technology Environment Protection Services L.L.C · UAE · info@ricohunt.com · © 2026 Rico Hunt. All rights reserved.</div>
+  </div>
+</footer>
+
+<script>
+  document.body.classList.add('js');
+
+  // scroll reveal
+  const io=new IntersectionObserver((es)=>{es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}})},{threshold:.12});
+  document.querySelectorAll('.reveal').forEach((el,i)=>{el.style.transitionDelay=(i%3*70)+'ms';io.observe(el);});
+
+  // language toggle (EN <-> AR) using the real Arabic copy
+  let ar=false;
+  const btn=document.getElementById('langBtn');
+  btn.addEventListener('click',()=>{
+    ar=!ar;
+    document.documentElement.lang=ar?'ar':'en';
+    document.documentElement.dir=ar?'rtl':'ltr';
+    btn.textContent=ar?'EN':'عربي';
+    document.querySelectorAll('[data-en]').forEach(el=>{
+      el.innerHTML=ar?el.getAttribute('data-ar'):el.getAttribute('data-en');
+    });
+  });
+</script>
+</body>
+</html>
