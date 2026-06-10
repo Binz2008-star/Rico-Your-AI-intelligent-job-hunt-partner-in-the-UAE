@@ -7,6 +7,7 @@ import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { PageTransition } from '@/components/ui/PageTransition';
 import { ProcessingOverlay } from '@/components/ui/ProcessingOverlay';
 import {
+    ApiError,
     deleteUserFile,
     fetchMe,
     listUserFiles,
@@ -316,12 +317,17 @@ function FileManagerView({ isAr, t, router }: FileManagerViewProps) {
         try {
             const res = await listUserFiles();
             setFiles(res.files);
-        } catch {
-            setError('Could not load files');
+        } catch (err) {
+            // 404 means the endpoint isn't deployed yet — treat as empty, not an error
+            if (err instanceof ApiError && (err.statusCode === 404 || err.statusCode === 503)) {
+                setFiles([]);
+            } else {
+                setError(t('uploadErrLoad'));
+            }
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [t]);
 
     useEffect(() => { loadFiles(); }, [loadFiles]);
 
