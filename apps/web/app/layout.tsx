@@ -50,13 +50,11 @@ export const metadata: Metadata = {
         description: "Upload your CV. Rico finds matching UAE jobs, tracks your applications, and guides your next move — in English and Arabic.",
         type: "website",
         siteName: "Rico Hunt",
-        images: [{ url: "/icons/icon-512.png", width: 512, height: 512, alt: "Rico Hunt" }],
     },
     twitter: {
         card: "summary_large_image",
         title: "Rico Hunt — Your AI Job-Hunt Partner in the UAE",
         description: "Upload your CV. Rico finds matching UAE jobs, tracks your applications, and guides your next move — in English and Arabic.",
-        images: ["/icons/icon-512.png"],
     },
 };
 
