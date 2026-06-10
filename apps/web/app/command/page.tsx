@@ -2,6 +2,7 @@
 
 import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
 import { AppSidebar } from "@/components/layout/AppSidebar";
+import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, RicoOption, UploadCVResponse } from "@/lib/api";
 import { clearChatHistory, confirmCVProfile, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, uploadCV } from "@/lib/api";
@@ -1659,7 +1660,7 @@ export default function CommandPage() {
 
                 {/* Input bar — shrink-0 flex child keeps it below the scroll area;
                     safe-area padding covers iOS home indicator. */}
-                <div className="shrink-0 px-2 pt-3 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:px-4">
+                <div className={`shrink-0 px-2 pt-3 sm:px-4 ${chatAudience === "authenticated" ? "pb-[calc(56px+1rem+env(safe-area-inset-bottom))] md:pb-[calc(1rem+env(safe-area-inset-bottom))]" : "pb-[calc(1rem+env(safe-area-inset-bottom))]"}`}>
                     {chatAudience === "public" && messages.filter((m) => m.role === "rico").length >= 2 && (
                         <div className="mb-2 flex items-center justify-between gap-3 px-1">
                             <p className="text-[11px] text-text-muted">{t("cmdSignUpCta")}</p>
@@ -1749,6 +1750,9 @@ export default function CommandPage() {
                 </div>
             </main>
             </div>{/* end main column */}
+
+            {/* Mobile bottom dock — matches AppShell; authenticated only (public gets sign-in links in MobileCommandHeader) */}
+            {chatAudience === "authenticated" && <MobileBottomNav />}
         </div>
     );
 }
