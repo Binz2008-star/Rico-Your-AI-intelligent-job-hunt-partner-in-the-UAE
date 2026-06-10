@@ -429,6 +429,7 @@ export const translations = {
     uploadCompleteMessage:
       "Your career trajectory has been mapped. Redirecting to command center...",
     uploadError: "Upload failed. Please try again.",
+    uploadErrLoad: "Could not load files. Try refreshing.",
 
     // Command page
     commandPlaceholder: "Tell Rico what you need...",
@@ -1426,6 +1427,7 @@ export const translations = {
     uploadCompleteMessage:
       "تم تعيين مسارك المهني. إعادة التوجيه إلى مركز القيادة...",
     uploadError: "فشل الرفع. يرجى المحاولة مرة أخرى.",
+    uploadErrLoad: "تعذّر تحميل الملفات. حاول التحديث.",
 
     // Command page
     commandPlaceholder: "أخبر ريكو بما تحتاج...",

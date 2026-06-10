@@ -3,7 +3,9 @@
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useTranslation } from "@/lib/translations";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 type ChatAudience = "checking" | "authenticated" | "public";
@@ -133,6 +135,7 @@ export function MobileCommandHeader({
     const { language, setLanguage } = useLanguage();
     const { resolvedTheme, setTheme } = useTheme();
     const t = useTranslation(language);
+    const pathname = usePathname();
     const isDark = resolvedTheme === "dark";
     const isRTL = language === "ar";
 
@@ -367,19 +370,28 @@ export function MobileCommandHeader({
                 role="dialog"
                 aria-label={t("mainMenuLabel")}
                 aria-modal="true"
-                className={`fixed top-0 start-0 rtl:start-auto rtl:end-0 z-50 h-full w-72 max-w-[85vw] bg-surface border-e border-border-subtle rtl:border-e-0 rtl:border-s flex flex-col shadow-2xl transition-transform duration-300 ease-out ${
-                    drawerOpen ? "translate-x-0" : "-translate-x-full rtl:translate-x-full"
+                className={`fixed top-0 z-50 h-full w-72 max-w-[85vw] flex flex-col shadow-[4px_0_40px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-out overflow-hidden ${
+                    isRTL ? "end-0" : "start-0"
+                } ${
+                    drawerOpen ? "translate-x-0" : (isRTL ? "translate-x-full" : "-translate-x-full")
                 }`}
-                style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+                style={{
+                    paddingTop: "env(safe-area-inset-top, 0px)",
+                    background: "linear-gradient(180deg, #0e0e1f 0%, #0a0a1a 100%)",
+                    borderInlineEnd: "1px solid rgba(255,255,255,0.07)",
+                }}
             >
+                {/* Gold glow at top */}
+                <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-gold/[0.07] to-transparent" />
+
                 {/* Drawer header */}
-                <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle">
+                <div className="relative flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                     <Link
                         href="/"
                         onClick={() => setDrawerOpen(false)}
-                        className="flex items-center gap-2 text-text-primary font-black text-[15px] tracking-tight"
+                        className="flex items-center gap-2 font-black text-[15px] tracking-tight text-white"
                     >
-                        <div className="w-6 h-6 rounded-[7px] bg-gold flex items-center justify-center text-[11px] font-black text-[#0a0a1a]">
+                        <div className="w-7 h-7 rounded-[8px] bg-gold flex items-center justify-center text-[12px] font-black text-[#0a0a1a] shadow-[0_3px_12px_rgba(245,166,35,0.35)]">
                             R
                         </div>
                         Rico<span className="text-gold"> Hunt</span>
@@ -388,68 +400,117 @@ export function MobileCommandHeader({
                         type="button"
                         aria-label={t("close")}
                         onClick={() => setDrawerOpen(false)}
-                        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
+                        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-white/40 transition-colors hover:bg-white/[0.06] hover:text-white/80"
                     >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
                             <line x1="18" y1="6" x2="6" y2="18" />
                             <line x1="6" y1="6" x2="18" y2="18" />
                         </svg>
                     </button>
                 </div>
 
-                {/* Drawer nav */}
-                <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
-                    {drawerItems.map((item) => (
-                        <Link
-                            key={item.href}
-                            href={item.href}
-                            onClick={() => setDrawerOpen(false)}
-                            className="flex items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary cursor-pointer"
-                        >
-                            <span className="text-text-tertiary flex-shrink-0">{item.icon}</span>
-                            {item.label}
-                        </Link>
-                    ))}
+                {/* User badge — authenticated only */}
+                {chatAudience === "authenticated" && (
+                    <div className="relative mx-4 mt-4 mb-1 flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: "rgba(245,166,35,0.07)", border: "1px solid rgba(245,166,35,0.14)" }}>
+                        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gold/30 to-amber-400/10 text-[13px] font-bold text-gold shadow-[0_0_16px_rgba(245,166,35,0.2)]">
+                            R
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-[12px] font-semibold text-white/90 truncate">Rico Hunt</p>
+                            <p className="text-[10px] text-white/40 uppercase tracking-[0.12em]">{language === "ar" ? "حساب نشط" : "Active account"}</p>
+                        </div>
+                        <span className="ms-auto flex h-2 w-2 flex-shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]" aria-hidden="true" />
+                    </div>
+                )}
 
-                    <div className="my-2 border-t border-border-subtle pt-1" />
+                {/* Drawer nav */}
+                <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5" style={{ scrollbarWidth: "none" }}>
+                    {/* Section: Navigate */}
+                    {drawerItems.length > 0 && (
+                        <>
+                            <p className="px-3 pb-1.5 pt-2 text-[9px] font-bold uppercase tracking-[0.18em] text-white/25">
+                                {language === "ar" ? "التنقل" : "Navigate"}
+                            </p>
+                            {drawerItems.map((item) => {
+                                const isActive = pathname === item.href;
+                                return (
+                                    <Link
+                                        key={item.href}
+                                        href={item.href}
+                                        onClick={() => setDrawerOpen(false)}
+                                        className={cn(
+                                            "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium transition-all duration-150 cursor-pointer",
+                                            isActive
+                                                ? "text-gold bg-gold/10"
+                                                : "text-white/60 hover:text-white/90 hover:bg-white/[0.05]"
+                                        )}
+                                    >
+                                        {isActive && (
+                                            <span aria-hidden="true" className="absolute start-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-gold shadow-[0_0_8px_rgba(245,166,35,0.6)]" />
+                                        )}
+                                        <span className={cn("flex-shrink-0 transition-colors", isActive ? "text-gold" : "text-white/35 group-hover:text-white/60")}>
+                                            {item.icon}
+                                        </span>
+                                        {item.label}
+                                    </Link>
+                                );
+                            })}
+                        </>
+                    )}
+
+                    {/* Divider + Section: Preferences */}
+                    <div className="my-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }} />
+                    <p className="px-3 pb-1.5 text-[9px] font-bold uppercase tracking-[0.18em] text-white/25">
+                        {language === "ar" ? "التفضيلات" : "Preferences"}
+                    </p>
 
                     <button
                         type="button"
                         onClick={() => setLanguage(language === "en" ? "ar" : "en")}
-                        className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
+                        className="group flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium text-white/60 transition-all hover:bg-white/[0.05] hover:text-white/90"
                     >
-                        <span className="text-text-tertiary flex-shrink-0"><IconGlobe /></span>
+                        <span className="flex-shrink-0 text-white/35 group-hover:text-white/60 transition-colors"><IconGlobe /></span>
                         {language === "ar" ? "English" : "العربية"}
                     </button>
 
                     <button
                         type="button"
                         onClick={() => setTheme(isDark ? "light" : "dark")}
-                        className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary"
+                        className="group flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium text-white/60 transition-all hover:bg-white/[0.05] hover:text-white/90"
                     >
-                        <span className="text-text-tertiary flex-shrink-0">{isDark ? <IconSun /> : <IconMoon />}</span>
+                        <span className="flex-shrink-0 text-white/35 group-hover:text-white/60 transition-colors">{isDark ? <IconSun /> : <IconMoon />}</span>
                         {isDark ? t("lightMode") : t("darkMode")}
                     </button>
 
                     <Link
                         href="/settings"
                         onClick={() => setDrawerOpen(false)}
-                        className="flex items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-text-muted transition-colors hover:bg-surface/60 hover:text-text-primary cursor-pointer"
+                        className={cn(
+                            "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium transition-all cursor-pointer",
+                            pathname === "/settings"
+                                ? "text-gold bg-gold/10"
+                                : "text-white/60 hover:text-white/90 hover:bg-white/[0.05]"
+                        )}
                     >
-                        <span className="text-text-tertiary flex-shrink-0"><IconSettings /></span>
+                        {pathname === "/settings" && (
+                            <span aria-hidden="true" className="absolute start-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-gold shadow-[0_0_8px_rgba(245,166,35,0.6)]" />
+                        )}
+                        <span className={cn("flex-shrink-0 transition-colors", pathname === "/settings" ? "text-gold" : "text-white/35 group-hover:text-white/60")}>
+                            <IconSettings />
+                        </span>
                         {t("settings")}
                     </Link>
                 </nav>
 
-                {/* Auth section */}
-                <div className="border-t border-border-subtle px-3 py-4" style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom, 0px))" }}>
+                {/* Auth footer */}
+                <div className="relative px-4 py-4" style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingBottom: "max(1rem, env(safe-area-inset-bottom, 0px))" }}>
                     {chatAudience === "authenticated" ? (
                         <button
                             type="button"
                             onClick={() => { setDrawerOpen(false); onLogout(); }}
-                            className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-[14px] text-[#ff5e5b] hover:bg-[rgba(255,94,91,0.08)] transition-colors"
+                            className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium text-rose-400/80 transition-all hover:bg-rose-500/[0.08] hover:text-rose-400"
                         >
-                            <span className="flex-shrink-0"><IconLogout /></span>
+                            <span className="flex-shrink-0 text-rose-400/60"><IconLogout /></span>
                             {t("logout")}
                         </button>
                     ) : chatAudience === "public" ? (
@@ -457,14 +518,14 @@ export function MobileCommandHeader({
                             <Link
                                 href={signupHref}
                                 onClick={() => setDrawerOpen(false)}
-                                className="flex w-full items-center justify-center rounded-xl px-3 py-2.5 text-[13px] font-semibold bg-gold text-[#0a0a1a] hover:bg-gold-hover transition-colors cursor-pointer"
+                                className="flex w-full items-center justify-center rounded-xl px-3 py-2.5 text-[13px] font-bold bg-gold text-[#0a0a1a] hover:bg-gold-hover transition-colors shadow-[0_4px_16px_rgba(245,166,35,0.25)]"
                             >
                                 {t("signUpFree")}
                             </Link>
                             <Link
                                 href={loginHref}
                                 onClick={() => setDrawerOpen(false)}
-                                className="flex w-full items-center justify-center rounded-xl px-3 py-2.5 text-[13px] text-text-muted transition-colors hover:text-text-primary cursor-pointer"
+                                className="flex w-full items-center justify-center rounded-xl px-3 py-2 text-[13px] text-white/50 transition-colors hover:text-white/80"
                             >
                                 {t("signIn")}
                             </Link>
