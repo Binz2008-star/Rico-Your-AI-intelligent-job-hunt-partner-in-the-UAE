@@ -371,7 +371,7 @@ export function MobileCommandHeader({
                 aria-label={t("mainMenuLabel")}
                 aria-modal="true"
                 className={`fixed top-0 z-50 h-full w-72 max-w-[85vw] flex flex-col shadow-[4px_0_40px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-out overflow-hidden ${
-                    isRTL ? "end-0" : "start-0"
+                    isRTL ? "right-0" : "left-0"
                 } ${
                     drawerOpen ? "translate-x-0" : (isRTL ? "translate-x-full" : "-translate-x-full")
                 }`}

@@ -318,8 +318,8 @@ function FileManagerView({ isAr, t, router }: FileManagerViewProps) {
             const res = await listUserFiles();
             setFiles(res.files);
         } catch (err) {
-            // 404 means the endpoint isn't deployed yet — treat as empty, not an error
-            if (err instanceof ApiError && (err.statusCode === 404 || err.statusCode === 503)) {
+            // 404/500/503 = backend cold-start or endpoint not yet deployed — treat as empty
+            if (err instanceof ApiError && (err.statusCode === 404 || err.statusCode === 500 || err.statusCode === 503)) {
                 setFiles([]);
             } else {
                 setError(t('uploadErrLoad'));
