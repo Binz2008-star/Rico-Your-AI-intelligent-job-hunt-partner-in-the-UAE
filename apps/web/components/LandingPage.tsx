@@ -151,6 +151,10 @@ export default function LandingPage() {
         ctaSectionBody: isAr
             ? "ارفع سيرتك الذاتية وريكو يعمل على الفور. يقرأ خبرتك ويبحث عن وظائف مناسبة في الإمارات ويخبرك بما عليك فعله — بالعربية والإنجليزية."
             : "Upload your CV and Rico goes to work. It reads your experience, finds matching UAE jobs, and tells you what to do next — in English and Arabic.",
+        // Sticky nav links
+        navHowItWorks: isAr ? "كيف يعمل" : "How it works",
+        navPricing: isAr ? "التسعير" : "Pricing",
+        navFaq: isAr ? "الأسئلة الشائعة" : "FAQ",
         // Footer
         footerAbout: isAr ? "من نحن" : "About",
         footerContact: isAr ? "تواصل معنا" : "Contact",
@@ -396,7 +400,7 @@ export default function LandingPage() {
                     <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.04)_0%,rgba(255,255,255,0)_18%,rgba(255,255,255,0.025)_100%)]" />
                 </div>
 
-                <header className="relative z-10 flex items-center justify-between border-b border-border-subtle bg-black/50 px-5 py-4 backdrop-blur-xl md:px-10">
+                <header className="sticky top-0 z-40 flex items-center justify-between border-b border-border-subtle bg-black/50 px-5 py-4 backdrop-blur-xl md:px-10">
                     <Link
                         href="/"
                         className="flex items-center gap-2 text-lg font-black tracking-tight text-white"
@@ -409,6 +413,17 @@ export default function LandingPage() {
                         </span>
                     </Link>
                     <nav className="flex items-center gap-3">
+                        <div className="hidden items-center gap-5 md:flex">
+                            <a href="#how-it-works" className="text-sm text-text-secondary transition-colors hover:text-white">
+                                {t.navHowItWorks}
+                            </a>
+                            <a href="#pricing" className="text-sm text-text-secondary transition-colors hover:text-white">
+                                {t.navPricing}
+                            </a>
+                            <Link href="/faq" className="text-sm text-text-secondary transition-colors hover:text-white">
+                                {t.navFaq}
+                            </Link>
+                        </div>
                         <button
                             type="button"
                             onClick={() => setLanguage(isAr ? "en" : "ar")}
@@ -548,7 +563,7 @@ export default function LandingPage() {
                     </section>
 
                     {/* How Rico works */}
-                    <section className="px-5 py-16 md:px-10 lg:px-16">
+                    <section id="how-it-works" className="scroll-mt-20 px-5 py-16 md:px-10 lg:px-16">
                         <SectionHeading
                             eyebrow={t.howWorksEyebrow}
                             title={t.howWorksTitle}
@@ -754,7 +769,7 @@ export default function LandingPage() {
                     </section>
 
                     {/* Pricing */}
-                    <section className="px-5 py-16 md:px-10 lg:px-16">
+                    <section id="pricing" className="scroll-mt-20 px-5 py-16 md:px-10 lg:px-16">
                         <SectionHeading
                             eyebrow={t.pricingEyebrow}
                             title={t.pricingTitle}
