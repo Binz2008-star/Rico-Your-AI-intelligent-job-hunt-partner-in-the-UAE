@@ -170,7 +170,7 @@ CREATE TABLE IF NOT EXISTS user_documents (
     is_primary BOOLEAN NOT NULL DEFAULT FALSE,
     skills_count INTEGER DEFAULT 0,
     years_experience NUMERIC(4,1),
-    current_role TEXT,
+    "current_role" TEXT,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -293,7 +293,7 @@ class RicoDB:
                     """
                     INSERT INTO user_documents
                         (user_id, filename, original_filename, doc_type, file_size,
-                         label, is_primary, skills_count, years_experience, current_role)
+                         label, is_primary, skills_count, years_experience, "current_role")
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
@@ -311,7 +311,7 @@ class RicoDB:
                     """
                     SELECT id, user_id, filename, original_filename, doc_type,
                            file_size, label, is_primary,
-                           skills_count, years_experience, current_role,
+                           skills_count, years_experience, "current_role",
                            created_at, updated_at
                     FROM user_documents
                     WHERE user_id = %s
