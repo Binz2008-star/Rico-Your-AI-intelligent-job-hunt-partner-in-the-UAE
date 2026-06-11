@@ -181,6 +181,66 @@ class ProfileContext:
 
 
 # ---------------------------------------------------------------------------
+# Minimum career-profile gate
+# ---------------------------------------------------------------------------
+#
+# Single source of truth for "is this profile complete enough to mark
+# onboarding as completed". Signup pre-creates a rico_users row, so a
+# non-None profile object does NOT imply any career data exists — callers
+# must use this gate instead of checking profile existence.
+
+MINIMUM_PROFILE_FIELDS: List[str] = [
+    "target_roles",
+    "preferred_cities",
+    "years_experience",
+    "skills",
+]
+
+
+def _has_cv_evidence(ctx: ProfileContext) -> bool:
+    """True only when a CV was actually uploaded/parsed (not inferred from skills)."""
+    return bool(ctx.cv_filename or ctx.cv_status == "parsed")
+
+
+def evaluate_minimum_profile(ctx: ProfileContext) -> tuple[bool, List[str]]:
+    """Return (is_complete, missing_fields) for the minimum career profile.
+
+    Minimum complete profile:
+    - target_roles has at least 1 value
+    - preferred_cities has at least 1 value
+    - years_experience is present
+    - skills has at least 1 value OR an uploaded/parsed CV exists
+    """
+    missing: List[str] = []
+    if not ctx.target_roles:
+        missing.append("target_roles")
+    if not ctx.preferred_cities:
+        missing.append("preferred_cities")
+    if ctx.years_experience is None:
+        missing.append("years_experience")
+    if not ctx.skills and not _has_cv_evidence(ctx):
+        missing.append("skills")
+    return (not missing, missing)
+
+
+def has_career_profile_data(ctx: ProfileContext) -> bool:
+    """True when any real career data exists beyond a signup shell row.
+
+    Name/email/phone alone do not count — those are written at registration.
+    """
+    return bool(
+        ctx.target_roles
+        or ctx.skills
+        or ctx.preferred_cities
+        or ctx.years_experience is not None
+        or ctx.current_role
+        or ctx.industries
+        or ctx.salary_expectation_aed is not None
+        or _has_cv_evidence(ctx)
+    )
+
+
+# ---------------------------------------------------------------------------
 # Resolver
 # ---------------------------------------------------------------------------
 

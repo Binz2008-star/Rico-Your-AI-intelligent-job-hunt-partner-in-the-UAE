@@ -44,7 +44,10 @@ from src.repositories.onboarding_repo import (
     set_onboarding_status,
 )
 from src.repositories.profile_repo import get_profile, upsert_profile
-from src.services.profile_context_resolver import resolve_profile_context
+from src.services.profile_context_resolver import (
+    evaluate_minimum_profile,
+    resolve_profile_context,
+)
 from src.services.operation_state import (
     mark_completed,
     mark_failed,
@@ -3025,8 +3028,58 @@ class RicoChatAPI:
             self._append_chat(user_id, "assistant", response["message"])
             return self._finalize(response, self.SOURCE_KEYWORD, profile=None)
 
+        # Signup pre-creates a rico_users row, so a non-None profile here may
+        # still be an empty shell with zero career data. Only mark onboarding
+        # completed when the minimum career profile is actually saved;
+        # otherwise stay in_progress and ask for the missing fields.
+        ctx = resolve_profile_context(user_id, profile)
+        min_complete, missing_fields = evaluate_minimum_profile(ctx)
+        if not min_complete:
+            if getattr(self, "_persist", True):
+                set_onboarding_status(user_id, ONBOARDING_IN_PROGRESS)
+            import re as _re
+            _is_ar = language == "ar" or bool(_re.search(r'[؀-ۿ]', message))
+            response = {
+                "type": "onboarding",
+                "message": self._build_missing_fields_prompt(missing_fields, _is_ar),
+                "missing_fields": missing_fields,
+                "next_action": "complete_profile",
+            }
+            self._append_chat(user_id, "assistant", response["message"])
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=None)
+
         mark_onboarding_complete(user_id)
         return self._handle_active_user(user_id, message)
+
+    @staticmethod
+    def _build_missing_fields_prompt(missing_fields: list[str], arabic: bool) -> str:
+        """Ask the user for the career fields still required to finish onboarding."""
+        labels_en = {
+            "target_roles": "your target role(s)",
+            "preferred_cities": "your preferred UAE city or cities",
+            "years_experience": "your years of experience",
+            "skills": "your key skills (or upload your CV)",
+        }
+        labels_ar = {
+            "target_roles": "المسمى الوظيفي الذي تستهدفه",
+            "preferred_cities": "المدينة التي تفضل العمل فيها بالإمارات",
+            "years_experience": "عدد سنوات خبرتك",
+            "skills": "مهاراتك الأساسية (أو ارفع سيرتك الذاتية)",
+        }
+        labels = labels_ar if arabic else labels_en
+        listed = "، ".join(labels[f] for f in missing_fields if f in labels) if arabic \
+            else ", ".join(labels[f] for f in missing_fields if f in labels)
+        if arabic:
+            return (
+                "ملفك المهني غير مكتمل بعد. لأتمكن من البحث عن وظائف تناسبك، "
+                f"أخبرني من فضلك عن: {listed}. "
+                "يمكنك أيضًا رفع سيرتك الذاتية وسأملأ ملفك تلقائيًا."
+            )
+        return (
+            "Your career profile isn't complete yet. To start matching you with UAE jobs, "
+            f"please tell me: {listed}. "
+            "You can also upload your CV and I will pre-fill your profile automatically."
+        )
 
     def _resolve_profile(self, user_id: str):
         """Load and normalise profile into a ProfileContext.

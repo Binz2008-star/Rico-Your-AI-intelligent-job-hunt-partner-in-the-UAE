@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from src.api.deps import get_current_user
@@ -50,11 +50,43 @@ def onboarding_submit(request: Request, body: OnboardingSubmitRequest) -> Dict[s
         from src.role_normalization import validate_and_normalize_skills
         updates["skills"] = validate_and_normalize_skills(body.skills)
 
-    if updates:
-        from src.repositories.profile_repo import upsert_profile
-        upsert_profile(user_id, updates)
-        logger.info("onboarding_submit: profile updated user_id=%s fields=%s", user_id, list(updates.keys()))
-    else:
-        logger.info("onboarding_submit: no fields to update user_id=%s", user_id)
+    if not updates:
+        logger.info("onboarding_submit: empty submission rejected user_id=%s", user_id)
+        raise HTTPException(
+            status_code=422,
+            detail="At least one onboarding field is required.",
+        )
 
-    return {"status": "ok", "updated_fields": list(updates.keys())}
+    from src.repositories.profile_repo import get_profile, upsert_profile
+    upsert_profile(user_id, updates)
+    logger.info("onboarding_submit: profile updated user_id=%s fields=%s", user_id, list(updates.keys()))
+
+    # Re-read the merged profile and gate onboarding status on the shared
+    # minimum-career-profile rule — never on mere profile existence.
+    from src.models.onboarding import ONBOARDING_IN_PROGRESS
+    from src.repositories.onboarding_repo import mark_onboarding_complete, set_onboarding_status
+    from src.services.profile_context_resolver import (
+        evaluate_minimum_profile,
+        has_career_profile_data,
+        resolve_profile_context,
+    )
+
+    ctx = resolve_profile_context(user_id, get_profile(user_id))
+    min_complete, missing_fields = evaluate_minimum_profile(ctx)
+    if min_complete:
+        mark_onboarding_complete(user_id)
+        status = "completed"
+    else:
+        set_onboarding_status(user_id, ONBOARDING_IN_PROGRESS)
+        status = "in_progress"
+    logger.info(
+        "onboarding_submit: user_id=%s status=%s missing_fields=%s", user_id, status, missing_fields
+    )
+
+    return {
+        "status": status,
+        "updated_fields": list(updates.keys()),
+        "missing_fields": missing_fields,
+        "profile_exists": has_career_profile_data(ctx),
+        "profile_completeness": ctx.completion_score,
+    }

@@ -443,6 +443,22 @@ def rico_get_profile(request: Request) -> ProfileResponse:
         _metrics.record_request((time.time() - start_time) * 1000)
         return ProfileResponse(profile_exists=False, email=user_id)
 
+    # Signup pre-creates a rico_users row, so get_profile() returns a non-None
+    # shell even when no career data was ever saved. profile_exists must mean
+    # "real career profile data exists" so the dashboard routes fresh signups
+    # to /onboarding instead of treating them as onboarded.
+    from src.services.profile_context_resolver import (
+        has_career_profile_data,
+        resolve_profile_context as _resolve_svc_context,
+    )
+    if not has_career_profile_data(_resolve_svc_context(user_id, profile)):
+        _metrics.record_request((time.time() - start_time) * 1000)
+        return ProfileResponse(
+            profile_exists=False,
+            email=user_id,
+            name=getattr(profile, "name", None),
+        )
+
     # Calculate completeness (simplified - use resolver for full)
     from src.agent.context.resolver import resolve_profile_context
     context = resolve_profile_context(user_id)

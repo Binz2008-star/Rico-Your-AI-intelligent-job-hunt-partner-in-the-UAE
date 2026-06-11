@@ -179,11 +179,33 @@ class TestFirstTimeOnboarding:
             response = api.process_message("done-user", "hello")
         assert response["type"] != "onboarding"
 
-    def test_second_message_marks_onboarding_complete(self):
-        """After the welcome, any message from user with existing profile → complete."""
+    def test_shell_profile_does_not_mark_onboarding_complete(self):
+        """A signup shell row (empty RicoProfile) must NOT mark onboarding completed."""
         api = _make_api()
         with patch("src.rico_chat_api.is_onboarding_complete", return_value=False), \
              patch("src.rico_chat_api.get_profile", return_value=RicoProfile(user_id="u1")), \
+             patch("src.rico_chat_api.set_onboarding_status") as mock_set, \
+             patch("src.rico_chat_api.mark_onboarding_complete") as mock_complete:
+            response = api.process_message("u1", "find me jobs")
+        mock_complete.assert_not_called()
+        mock_set.assert_called_once_with("u1", ONBOARDING_IN_PROGRESS)
+        assert response["type"] == "onboarding"
+        assert set(response["missing_fields"]) == {
+            "target_roles", "preferred_cities", "years_experience", "skills",
+        }
+
+    def test_minimum_profile_marks_onboarding_complete(self):
+        """A profile with the minimum career fields → onboarding completed."""
+        api = _make_api()
+        profile = RicoProfile(
+            user_id="u1",
+            target_roles=["HSE Officer"],
+            preferred_cities=["Dubai"],
+            years_experience=5,
+            skills=["nebosh"],
+        )
+        with patch("src.rico_chat_api.is_onboarding_complete", return_value=False), \
+             patch("src.rico_chat_api.get_profile", return_value=profile), \
              patch("src.rico_chat_api.mark_onboarding_complete") as mock_complete:
             api.process_message("u1", "find me jobs")
         mock_complete.assert_called_once_with("u1")
@@ -259,10 +281,17 @@ class TestGracefulDegradation:
         assert response["type"] == "onboarding"
 
     def test_db_down_existing_profile_user_gets_active_response(self):
-        """User with existing profile gets active response even if DB is down."""
+        """User with a real (minimum-complete) profile gets active response even if DB is down."""
         api = _make_api()
+        profile = RicoProfile(
+            user_id="existing-user",
+            target_roles=["HSE Officer"],
+            preferred_cities=["Dubai"],
+            years_experience=5,
+            skills=["nebosh"],
+        )
         with patch("src.rico_chat_api.is_onboarding_complete", return_value=False), \
-             patch("src.rico_chat_api.get_profile", return_value=RicoProfile(user_id="existing-user")), \
+             patch("src.rico_chat_api.get_profile", return_value=profile), \
              patch("src.rico_chat_api.set_onboarding_status"), \
              patch("src.rico_chat_api.mark_onboarding_complete"):
             response = api.process_message("existing-user", "find jobs")
