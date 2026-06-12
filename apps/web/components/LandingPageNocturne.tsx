@@ -563,7 +563,7 @@ export default function LandingPageNocturne() {
                                     </div>
                                     <div className="p-4 rounded-xl bg-surface border border-overlay/7">
                                         <p className="text-xs text-text-tertiary mb-1">{isAr ? "مقابلة" : "Interview"}</p>
-                                        <p className="font-display text-2xl font-semibold text-ember"><CountUp to={2} /></p>
+                                        <p className="font-display text-2xl font-semibold text-aura"><CountUp to={2} /></p>
                                     </div>
                                 </div>
                                 {/* Job List Preview */}
@@ -576,7 +576,7 @@ export default function LandingPageNocturne() {
                                                 <p className="text-xs text-text-tertiary">{isAr ? "مصرف · دبي" : "Bank · Dubai"}</p>
                                             </div>
                                         </div>
-                                        <span className="px-2.5 py-1 rounded-md bg-ember/10 border border-ember/30 text-ember text-xs font-mono">{isAr ? "متقدم" : "Applied"}</span>
+                                        <span className="px-2.5 py-1 rounded-md bg-aura/10 border border-aura/30 text-aura text-xs font-mono">{isAr ? "متقدم" : "Applied"}</span>
                                     </div>
                                     <div className="flex items-center justify-between p-3 rounded-lg bg-surface/50 border border-overlay/7">
                                         <div className="flex items-center gap-3">

@@ -26,13 +26,13 @@ const config: Record<
   offer: {
     label: "Offer",
     className:
-      "text-amber-300 bg-amber-400/10 border-amber-400/20",
+      "text-ember bg-ember/10 border-ember/20",
   },
   // Legacy alias
   offer_extended: {
     label: "Offer",
     className:
-      "text-amber-300 bg-amber-400/10 border-amber-400/20",
+      "text-ember bg-ember/10 border-ember/20",
   },
   rejected: {
     label: "Rejected",
@@ -45,7 +45,7 @@ const config: Record<
   },
   opened: {
     label: "Link opened",
-    className: "text-amber-400 bg-amber-400/10 border-amber-400/20",
+    className: "text-ember bg-ember/10 border-ember/20",
   },
   decision_made: {
     label: "Decision",
