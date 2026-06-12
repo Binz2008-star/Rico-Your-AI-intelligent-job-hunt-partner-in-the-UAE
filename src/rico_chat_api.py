@@ -1317,18 +1317,24 @@ class RicoChatAPI:
         """Return a backward-compatible chat match with v1 structured guidance."""
         explanation = build_match_explanation(m, profile)
 
-        raw_score = m.get("rico_score") or m.get("score")
+        # rico_score takes priority; fall back to score. Use explicit None check
+        # so that 0 and 0.0 (valid "scored zero" states) are not confused with
+        # "no scorer ran" (None). The previous `or` chain and `if raw_score:`
+        # falsy-check both treated 0/0.0 the same as None, causing zero scores
+        # to be silently dropped and the frontend badge to be hidden.
+        _rs = m.get("rico_score")
+        raw_score = _rs if _rs is not None else m.get("score")
         # Normalize to [0.0, 1.0] — frontend multiplies by 100 for display.
         # Legacy scoring pipeline (scoring.py) emits 0–100 integers; FitScore
         # (scorer.py) already emits 0.0–1.0 floats. Values > 1 are divided by 100.
         # None is emitted when no scorer ran — the frontend hides the score badge.
-        if raw_score:
+        if raw_score is not None:
             _s = float(raw_score)
-            normalized_score: float | None = round(max(0.0, min(1.0, _s / 100.0 if _s > 1.0 else _s)), 4)
-            if normalized_score == 0.0:
-                normalized_score = None
+            normalized_score: float = round(max(0.0, min(1.0, _s / 100.0 if _s > 1.0 else _s)), 4)
         else:
-            normalized_score = None
+            # No scorer ran — emit 0.0 so the frontend can safely multiply by 100
+            # and show a 0% badge rather than crash on None arithmetic.
+            normalized_score = 0.0
 
         # Preserve URL fields so the frontend can surface apply links and distinguish
         # verified live postings from leads that still need a working apply URL.
