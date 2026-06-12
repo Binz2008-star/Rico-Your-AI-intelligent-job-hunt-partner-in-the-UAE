@@ -376,11 +376,19 @@ class TestProcessMessageWrapper:
     """Verify process_message always returns debug_id and success."""
 
     @patch("src.rico_chat_api.is_onboarding_complete", return_value=True)
-    @patch("src.rico_chat_api.get_profile", return_value=None)
-    def test_process_message_returns_debug_id(self, mock_profile: Any, mock_onboard: Any) -> None:
+    def test_process_message_returns_debug_id(self, mock_onboard: Any) -> None:
         from src.rico_chat_api import RicoChatAPI
+        from src.services.profile_context_resolver import ProfileContext
         api = RicoChatAPI()
-        # Patch internal methods to prevent real calls
+        # Provide a gate-passing profile so the gate passes and _handle_active_user is reached
+        _gate_ctx = ProfileContext(
+            user_id="test_user",
+            target_roles=["Software Engineer"],
+            preferred_cities=["Dubai"],
+            years_experience=3.0,
+            skills=["Python"],
+        )
+        api._resolve_profile = MagicMock(return_value=_gate_ctx)
         api._handle_active_user = MagicMock(return_value={
             "type": "test",
             "message": "test response",
@@ -390,10 +398,19 @@ class TestProcessMessageWrapper:
         assert "success" in result
 
     @patch("src.rico_chat_api.is_onboarding_complete", return_value=True)
-    @patch("src.rico_chat_api.get_profile", return_value=None)
-    def test_process_message_catches_exceptions(self, mock_profile: Any, mock_onboard: Any) -> None:
+    def test_process_message_catches_exceptions(self, mock_onboard: Any) -> None:
         from src.rico_chat_api import RicoChatAPI
+        from src.services.profile_context_resolver import ProfileContext
         api = RicoChatAPI()
+        # Provide a gate-passing profile so the gate passes and _handle_active_user is reached
+        _gate_ctx = ProfileContext(
+            user_id="test_user",
+            target_roles=["Software Engineer"],
+            preferred_cities=["Dubai"],
+            years_experience=3.0,
+            skills=["Python"],
+        )
+        api._resolve_profile = MagicMock(return_value=_gate_ctx)
         api._handle_active_user = MagicMock(side_effect=RuntimeError("boom"))
         # Use _process_message_inner to bypass the outer wrapper for a moment
         # Actually test the outer wrapper:

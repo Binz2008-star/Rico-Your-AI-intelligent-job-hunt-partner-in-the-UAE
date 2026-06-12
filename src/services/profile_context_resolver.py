@@ -181,6 +181,60 @@ class ProfileContext:
 
 
 # ---------------------------------------------------------------------------
+# Minimum profile gate
+# ---------------------------------------------------------------------------
+
+def evaluate_minimum_profile(ctx: ProfileContext) -> tuple[bool, List[str]]:
+    """Check whether *ctx* passes the minimum career profile gate.
+
+    Requirements
+    ------------
+    * ``target_roles``  — at least one non-empty value
+    * ``preferred_cities`` — at least one non-empty value
+    * ``years_experience`` — non-None (0 is valid for fresh graduates)
+    * skills-or-CV — ``skills`` list non-empty **OR** CV evidence present
+      (``cv_filename`` set or ``cv_status == "parsed"``)
+
+    Returns ``(True, [])`` when all pass; ``(False, [missing_field_names])``
+    otherwise.  CV evidence fully substitutes for an empty skills list.
+    """
+    missing: List[str] = []
+
+    if not ctx.target_roles:
+        missing.append("target_roles")
+    if not ctx.preferred_cities:
+        missing.append("preferred_cities")
+    if ctx.years_experience is None:
+        missing.append("years_experience")
+
+    has_skills = bool(ctx.skills)
+    has_cv_evidence = bool(ctx.cv_filename or ctx.cv_status == "parsed")
+    if not has_skills and not has_cv_evidence:
+        missing.append("skills")
+
+    return (len(missing) == 0, missing)
+
+
+def has_career_profile_data(ctx: ProfileContext) -> bool:
+    """True when *ctx* carries any career data beyond a signup shell.
+
+    A signup shell has only name/email from the auth row — all career fields
+    are empty.  This helper distinguishes that from a real (even partial)
+    career profile.
+    """
+    return bool(
+        ctx.target_roles
+        or ctx.preferred_cities
+        or ctx.years_experience is not None
+        or ctx.skills
+        or ctx.current_role
+        or ctx.industries
+        or ctx.cv_filename
+        or ctx.cv_status
+    )
+
+
+# ---------------------------------------------------------------------------
 # Resolver
 # ---------------------------------------------------------------------------
 

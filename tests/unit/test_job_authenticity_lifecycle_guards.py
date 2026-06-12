@@ -37,18 +37,17 @@ def _make_api() -> RicoChatAPI:
 
 
 def _make_profile(has_cv: bool = False) -> MagicMock:
-    """Return a minimal profile mock."""
+    """Return a minimal profile mock that passes the evaluate_minimum_profile gate."""
     p = MagicMock()
     p.has_cv = has_cv
-    # Return empty / falsy values for all field lookups
-    p.target_roles = []
-    p.skills = []
+    p.target_roles = ["HSE Officer"]   # gate: target_roles required
+    p.skills = ["NEBOSH", "Safety"]    # gate: skills-or-CV required
     p.name = "Test User"
     p.email = USER
-    p.years_experience = None
+    p.years_experience = 5.0           # gate: years_experience required
     p.current_location = None
     p.cv_filename = None
-    p.completion_score = 0.0
+    p.completion_score = 0.7
     p.missing_fields = []
     return p
 

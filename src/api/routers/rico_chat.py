@@ -443,6 +443,17 @@ def rico_get_profile(request: Request) -> ProfileResponse:
         _metrics.record_request((time.time() - start_time) * 1000)
         return ProfileResponse(profile_exists=False, email=user_id)
 
+    # A signup-shell user has a row in rico_users but no career data in the
+    # profile JSONB.  They should still be redirected to onboarding.
+    from src.services.profile_context_resolver import (
+        has_career_profile_data,
+        resolve_profile_context as _svc_resolve,
+    )
+    _svc_ctx = _svc_resolve(user_id, profile)
+    if not has_career_profile_data(_svc_ctx):
+        _metrics.record_request((time.time() - start_time) * 1000)
+        return ProfileResponse(profile_exists=False, email=user_id)
+
     # Calculate completeness (simplified - use resolver for full)
     from src.agent.context.resolver import resolve_profile_context
     context = resolve_profile_context(user_id)
