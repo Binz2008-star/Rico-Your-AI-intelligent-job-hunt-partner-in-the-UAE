@@ -199,26 +199,6 @@ CREATE INDEX IF NOT EXISTS idx_application_drafts_user_status
 ALTER TABLE application_drafts ADD COLUMN IF NOT EXISTS follow_up_at TIMESTAMPTZ;
 """
 
-_USER_DOCUMENTS_DDL = """
-CREATE TABLE IF NOT EXISTS user_documents (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id TEXT NOT NULL,
-    filename TEXT NOT NULL,
-    original_filename TEXT NOT NULL,
-    doc_type TEXT NOT NULL DEFAULT 'cv',
-    file_size INTEGER DEFAULT 0,
-    label TEXT,
-    is_primary BOOLEAN NOT NULL DEFAULT FALSE,
-    skills_count INTEGER DEFAULT 0,
-    years_experience NUMERIC(4,1),
-    current_role TEXT,
-    created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS idx_user_documents_user_created
-    ON user_documents(user_id, created_at DESC);
-"""
-
 
 class RicoDB:
     """Thin PostgreSQL wrapper for Rico AI multi-user memory."""
