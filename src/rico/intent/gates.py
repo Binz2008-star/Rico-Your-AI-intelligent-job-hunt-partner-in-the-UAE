@@ -49,6 +49,25 @@ _APPLICATION_STATUS_RE: Final[re.Pattern[str]] = re.compile(
     re.IGNORECASE,
 )
 
+# Carve-out: uploaded-file / My Files questions must route to the legacy
+# classifier (which answers deterministically from user_documents), not to the
+# conversational AI handler — the model cannot be trusted to enumerate files.
+_FILE_LIST_RE: Final[re.Pattern[str]] = re.compile(
+    r"\b(?:my|uploaded)\s+(?:files?|documents?|docs|uploads)\b"
+    r"|\b(?:what|which)\s+(?:files?|documents?)\b"
+    r"|\bwhich\s+(?:cv|resume)\s+is\s+(?:the\s+)?(?:active|primary|current|main)\b"
+    r"|\b(?:active|primary)\s+(?:cv|resume)\b"
+    r"|ملفاتي|مستنداتي|الملفات\s+المرفوعة"
+    r"|(?:الملفات|المستندات)\s+(?:اللي|التي)\s+(?:رافعه?ا|رفعته?ا|رفعها)",
+    re.IGNORECASE | re.UNICODE,
+)
+
+
+def _is_file_list_question(text: str) -> bool:
+    """Return True for My Files queries that need the DB, not the AI."""
+    return bool(_FILE_LIST_RE.search(text))
+
+
 # Arabic conversational starters: greetings, open-ended question words, conversational openers.
 # These are pure conversational messages — always route to AI.
 _ARABIC_GREETING_RE: Final[re.Pattern[str]] = re.compile(
@@ -103,6 +122,8 @@ def is_open_ended_question(message: str) -> tuple[bool, str]:
     if any(ch in text for ch in _QUESTION_CHARS):
         if _is_application_status_question(lowered):
             return False, "ok"
+        if _is_file_list_question(text):
+            return False, "ok"
         return True, "question_mark"
 
     if _is_imperative_job_request(lowered):
@@ -120,6 +141,8 @@ def is_open_ended_question(message: str) -> tuple[bool, str]:
 
     for phrase in _OPENING_PHRASES:
         if lowered == phrase or lowered.startswith(phrase + " "):
+            if _is_file_list_question(text):
+                return False, "ok"
             return True, f"phrase:{phrase.replace(' ', '_')}"
 
     tokens = lowered.split()
@@ -129,6 +152,8 @@ def is_open_ended_question(message: str) -> tuple[bool, str]:
     first = tokens[0].strip(_FIRST_TOKEN_STRIP)
     if first in _OPENING_TOKENS:
         if _is_application_status_question(lowered):
+            return False, "ok"
+        if _is_file_list_question(text):
             return False, "ok"
         return True, f"token:{first}"
 
