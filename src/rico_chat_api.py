@@ -507,6 +507,46 @@ class RicoChatAPI:
 
         # Embed last 8 turns so the AI has conversation context for yes/no and follow-ups
         if user_id:
+            # Inject uploaded documents FIRST: the serialized context is truncated
+            # to _PROFILE_CONTEXT_MAX_CHARS in rico_openai_runtime and dict insertion
+            # order is preserved, so file metadata must precede the long conversation
+            # history or the model never sees it. Lets Rico answer "which CVs do I
+            # have?" and route requests like "use my finance CV" to the right
+            # document. Active (is_primary=True) CV remains the default for matching.
+            try:
+                from src.rico_db import RicoDB as _RicoDB
+                _docs_db = _RicoDB()
+                _docs = _docs_db.list_user_documents(user_id) if _docs_db.available else []
+                if _docs:
+                    ctx["uploaded_documents"] = [
+                        {
+                            "filename": d.get("filename", ""),
+                            "doc_type": d.get("doc_type", ""),
+                            "label": d.get("label") or d.get("filename", ""),
+                            "is_primary": bool(d.get("is_primary")),
+                            "skills_count": d.get("skills_count"),
+                            "years_experience": d.get("years_experience"),
+                        }
+                        for d in _docs
+                    ]
+                elif profile is not None:
+                    # Same legacy fallback as GET /api/v1/user/files: users who
+                    # uploaded a CV before multi-document storage existed only
+                    # have cv_filename on the profile record.
+                    _cv_filename = self._profile_value(profile, "cv_filename")
+                    if _cv_filename:
+                        ctx["uploaded_documents"] = [
+                            {
+                                "filename": _cv_filename,
+                                "doc_type": "cv",
+                                "label": _cv_filename,
+                                "is_primary": True,
+                                "is_legacy": True,
+                            }
+                        ]
+            except Exception:
+                pass
+
             try:
                 recent = self._get_recent_messages(user_id, limit=8)
                 if recent:
@@ -562,29 +602,6 @@ class RicoChatAPI:
                     _learned["avoided_companies"] = [c for c, _ in _cos]
                 if _learned:
                     ctx["learned_preferences"] = _learned
-            except Exception:
-                pass
-
-            # Inject uploaded documents so Rico can answer "which CVs do I have?"
-            # and route requests like "use my finance CV" to the right document.
-            # Active (is_primary=True) CV remains the default for matching.
-            try:
-                from src.rico_db import RicoDB as _RicoDB
-                _docs_db = _RicoDB()
-                if _docs_db.available:
-                    _docs = _docs_db.list_user_documents(user_id)
-                    if _docs:
-                        ctx["uploaded_documents"] = [
-                            {
-                                "filename": d.get("filename", ""),
-                                "doc_type": d.get("doc_type", ""),
-                                "label": d.get("label") or d.get("filename", ""),
-                                "is_primary": bool(d.get("is_primary")),
-                                "skills_count": d.get("skills_count"),
-                                "years_experience": d.get("years_experience"),
-                            }
-                            for d in _docs
-                        ]
             except Exception:
                 pass
 

@@ -229,18 +229,21 @@ def test_real_chat_turn_uses_full_output_cap(monkeypatch):
     assert sent["max_output_tokens"] >= 1500
 
 
-def test_helper_truncates_profile_context_to_1200_chars(monkeypatch):
+def test_helper_truncates_profile_context_to_max_chars(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-fake-test")
     client = _FakeOpenAIClient(output_text="ok")
     _patch_openai(monkeypatch, client)
 
-    from src.rico_openai_runtime import call_openai_minimal
+    from src.rico_openai_runtime import _PROFILE_CONTEXT_MAX_CHARS, call_openai_minimal
 
-    long_profile = "Y" * 5000
+    long_profile = "Y" * (_PROFILE_CONTEXT_MAX_CHARS + 5000)
     call_openai_minimal("question", profile_context=long_profile)
     user_msg = next(m for m in client.calls[0]["input"] if m["role"] == "user")["content"]
-    # Only 1200 Y's should appear, never the full 5000.
-    assert user_msg.count("Y") == 1200
+    # Only _PROFILE_CONTEXT_MAX_CHARS Y's should appear, never the full input.
+    assert user_msg.count("Y") == _PROFILE_CONTEXT_MAX_CHARS
+    # The cap must fit uploaded_documents + 8-turn history (see
+    # tests/test_chat_uploaded_documents_context.py).
+    assert _PROFILE_CONTEXT_MAX_CHARS >= 4000
 
 
 def test_helper_error_detail_truncates_message(monkeypatch):
