@@ -68,6 +68,11 @@ def _verify_password(plain: str, hashed: str) -> bool:
 
 # ── Config helpers ────────────────────────────────────────────────────────────
 
+_WEAK_SECRETS = frozenset({
+    "secret", "changeme", "password", "jwt_secret", "your-secret-here",
+    "supersecret", "mysecret", "development", "dev", "test", "demo",
+})
+
 def _jwt_secret() -> str:
     secret = os.getenv("JWT_SECRET", "").strip()
     if not secret:
@@ -84,6 +89,19 @@ def _jwt_secret() -> str:
                 "Set JWT_SECRET in .env before deploying."
             )
         return _jwt_secret._ephemeral  # type: ignore[attr-defined]
+    if len(secret) < 32:
+        msg = (
+            f"JWT_SECRET is only {len(secret)} characters — minimum 32 required. "
+            "Generate one with: python3 -c \"import secrets; print(secrets.token_hex(32))\""
+        )
+        if _is_production():
+            raise RuntimeError(msg)
+        logger.warning(msg)
+    if secret.lower() in _WEAK_SECRETS:
+        msg = "JWT_SECRET appears to be a placeholder or default value. Replace it with a random secret."
+        if _is_production():
+            raise RuntimeError(msg)
+        logger.warning(msg)
     return secret
 
 

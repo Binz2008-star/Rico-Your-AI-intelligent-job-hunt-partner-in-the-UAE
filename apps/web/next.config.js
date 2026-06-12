@@ -7,12 +7,14 @@ const backendUrl =
     process.env.NEXT_PUBLIC_API_BASE_URL ||
     process.env.NEXT_PUBLIC_RICO_API;
 
-// CSP in report-only mode while the policy is tuned; flip to Content-Security-Policy to enforce.
-// 'unsafe-inline' in script-src covers the theme/lang init scripts in layout.tsx;
-// replace with per-script SHA-256 hashes to remove it before switching to enforcing mode.
+// CSP enforced. Inline scripts in layout.tsx (theme + lang init) are locked to
+// their SHA-256 hashes so 'unsafe-inline' is not needed.
+// To update hashes: python3 -c "import hashlib,base64; print('sha256-' + base64.b64encode(hashlib.sha256('<script content>'.encode()).digest()).decode())"
 const csp = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' https://va.vercel-scripts.com",
+    // theme-init hash: sha256-e3jHsOXxdXVtROmxFsrXZluLXMJZalSnzegpELleX6Y=
+    // lang-init hash:  sha256-y0eJobwms3FTv51+hvoyq6L38bxbY6yjgcfFsbD/Hmk=
+    "script-src 'self' 'sha256-e3jHsOXxdXVtROmxFsrXZluLXMJZalSnzegpELleX6Y=' 'sha256-y0eJobwms3FTv51+hvoyq6L38bxbY6yjgcfFsbD/Hmk=' https://va.vercel-scripts.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob: https:",
@@ -50,7 +52,7 @@ const nextConfig = {
                     // Explicit scoped ACAO overrides any platform-level wildcard; same-origin BFF calls don't need CORS.
                     { key: "Access-Control-Allow-Origin", value: "https://ricohunt.com" },
                     { key: "Vary", value: "Origin" },
-                    { key: "Content-Security-Policy-Report-Only", value: csp },
+                    { key: "Content-Security-Policy", value: csp },
                 ],
             },
         ];
