@@ -257,11 +257,15 @@ class TestOnboardingSubmitEndpoint:
 
         body = OnboardingSubmitRequest(**body_dict)
         mock_request = MagicMock()
+        # upsert_profile and get_profile are lazy-imported inside onboarding_submit
+        # from src.repositories.profile_repo — patch at the source module so the
+        # local import picks up the mock regardless of import order.
+        # set_onboarding_status is lazy-imported from src.repositories.onboarding_repo.
         with patch("src.api.routers.onboarding.get_current_user",
                    return_value={"email": user_id, "role": "user"}), \
-             patch("src.api.routers.onboarding.upsert_profile", return_value=MagicMock()), \
-             patch("src.api.routers.onboarding.get_profile", return_value=profile_return), \
-             patch("src.api.routers.onboarding.set_onboarding_status") as mock_status:
+             patch("src.repositories.profile_repo.upsert_profile", return_value=MagicMock()), \
+             patch("src.repositories.profile_repo.get_profile", return_value=profile_return), \
+             patch("src.repositories.onboarding_repo.set_onboarding_status") as mock_status:
             try:
                 result = onboarding_submit(mock_request, body)
                 return result, mock_status
