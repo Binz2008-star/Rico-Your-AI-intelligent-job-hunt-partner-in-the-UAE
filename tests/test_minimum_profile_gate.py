@@ -320,10 +320,10 @@ def _make_api_if_possible():
 
 
 class TestCompletedRowBypassRegression:
-    def test_completed_db_no_career_data_is_downgraded(self):
+    def test_completed_db_no_career_data_job_search_is_downgraded(self):
         """
-        User has status='completed' in DB but profile is a signup shell.
-        Chat entry flow must:
+        Shell user (status='completed', no career data) asks for a job search.
+        Gate fires because the message requires career matching:
           1. detect the gate failure
           2. call set_onboarding_status(in_progress)
           3. return type='onboarding' with missing_fields
@@ -336,15 +336,37 @@ class TestCompletedRowBypassRegression:
              patch("src.rico_chat_api.get_profile", return_value=shell), \
              patch("src.rico_chat_api.set_onboarding_status") as mock_set, \
              patch.object(api, "_handle_active_user") as mock_active:
-            response = api.process_message("stale-user", "hello")
+            response = api.process_message("stale-user", "find me a job")
 
         assert response["type"] == "onboarding", (
-            "Expected onboarding downgrade prompt, got: " + response.get("type", "<none>")
+            "Expected onboarding downgrade for job search from shell user, got: "
+            + response.get("type", "<none>")
         )
         assert "missing_fields" in response
         assert len(response["missing_fields"]) > 0
         mock_set.assert_called_once_with("stale-user", ONBOARDING_IN_PROGRESS)
         mock_active.assert_not_called()
+
+    def test_completed_db_no_career_data_hello_routes_to_active(self):
+        """
+        Shell user (status='completed', no career data) says 'hello'.
+        Gate must NOT fire — Rico stays conversational for non-job-search messages.
+        """
+        api = _make_api_if_possible()
+        shell = _shell_profile("stale-user-hello")
+
+        with patch("src.rico_chat_api.is_onboarding_complete", return_value=True), \
+             patch("src.rico_chat_api.get_profile", return_value=shell), \
+             patch("src.rico_chat_api.set_onboarding_status") as mock_set, \
+             patch.object(api, "_handle_active_user",
+                          return_value={"type": "clarification", "message": "Hi!"}) as mock_active:
+            response = api.process_message("stale-user-hello", "hello")
+
+        assert response["type"] != "onboarding", (
+            "Gate must not fire for 'hello' — Rico should not be a form bot"
+        )
+        mock_active.assert_called_once()
+        mock_set.assert_not_called()
 
     def test_completed_db_with_full_career_data_routes_to_active(self):
         """
@@ -425,15 +447,83 @@ class TestCompletedRowBypassRegression:
         mock_set.assert_called_once_with("partial-user", ONBOARDING_IN_PROGRESS)
         mock_active.assert_not_called()
 
-    def test_downgrade_is_bilingual_for_arabic_message(self):
-        """Arabic input must produce an Arabic downgrade prompt."""
+    def test_completed_partial_profile_missing_cities_hello_routes_to_active(self):
+        """
+        User with status='completed', has target_roles/skills/years_experience but
+        missing preferred_cities.  Saying 'hello' must NOT fire the gate —
+        Rico answers conversationally, not as a form bot.
+        """
+        api = _make_api_if_possible()
+        partial = RicoProfile(
+            user_id="partial-cities",
+            target_roles=["HSE Manager"],
+            years_experience=5.0,
+            skills=["NEBOSH"],
+            # preferred_cities intentionally absent
+        )
+
+        with patch("src.rico_chat_api.is_onboarding_complete", return_value=True), \
+             patch("src.rico_chat_api.get_profile", return_value=partial), \
+             patch("src.rico_chat_api.set_onboarding_status") as mock_set, \
+             patch.object(api, "_handle_active_user",
+                          return_value={"type": "clarification", "message": "Hi!"}) as mock_active:
+            response = api.process_message("partial-cities", "hello")
+
+        assert response["type"] != "onboarding", (
+            "Gate must not fire for 'hello' even when preferred_cities is missing"
+        )
+        mock_active.assert_called_once()
+        mock_set.assert_not_called()
+
+    def test_completed_partial_profile_missing_cities_job_search_is_downgraded(self):
+        """
+        Same partial profile but user asks to find jobs.
+        Gate fires because the message requires career matching.
+        """
+        api = _make_api_if_possible()
+        partial = RicoProfile(
+            user_id="partial-cities-search",
+            target_roles=["HSE Manager"],
+            years_experience=5.0,
+            skills=["NEBOSH"],
+            # preferred_cities intentionally absent
+        )
+
+        with patch("src.rico_chat_api.is_onboarding_complete", return_value=True), \
+             patch("src.rico_chat_api.get_profile", return_value=partial), \
+             patch("src.rico_chat_api.set_onboarding_status") as mock_set, \
+             patch.object(api, "_handle_active_user") as mock_active:
+            response = api.process_message("partial-cities-search", "find jobs that match my CV")
+
+        assert response["type"] == "onboarding"
+        assert "preferred_cities" in response.get("missing_fields", [])
+        mock_set.assert_called_once_with("partial-cities-search", ONBOARDING_IN_PROGRESS)
+        mock_active.assert_not_called()
+
+    def test_arabic_job_search_with_missing_fields_returns_arabic_prompt(self):
+        """Arabic job-search request with missing profile fields → Arabic missing-fields prompt."""
         api = _make_api_if_possible()
         shell = _shell_profile("ar-user")
 
         with patch("src.rico_chat_api.is_onboarding_complete", return_value=True), \
              patch("src.rico_chat_api.get_profile", return_value=shell), \
              patch("src.rico_chat_api.set_onboarding_status"):
-            response = api.process_message("ar-user", "مرحباً")
+            response = api.process_message("ar-user", "دورلي على وظائف تناسب خبرتي")
+
+        assert response["type"] == "onboarding"
+        assert "missing_fields" in response
+        msg = response.get("message", "")
+        assert any(ord(c) > 0x600 for c in msg), "Expected Arabic characters in downgrade message"
+
+    def test_downgrade_is_bilingual_for_arabic_job_search(self):
+        """Arabic job-search (not greeting) with missing fields → Arabic prompt."""
+        api = _make_api_if_possible()
+        shell = _shell_profile("ar-user-2")
+
+        with patch("src.rico_chat_api.is_onboarding_complete", return_value=True), \
+             patch("src.rico_chat_api.get_profile", return_value=shell), \
+             patch("src.rico_chat_api.set_onboarding_status"):
+            response = api.process_message("ar-user-2", "ابحث عن وظائف")
 
         assert response["type"] == "onboarding"
         assert "missing_fields" in response
