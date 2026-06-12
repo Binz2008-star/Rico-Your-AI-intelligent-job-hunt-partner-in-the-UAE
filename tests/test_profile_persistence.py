@@ -6,7 +6,7 @@ from src.rico_agent import RicoProfile
 from src.api.app import app
 
 
-def test_profile_name_persists_through_db():
+def test_profile_name_persists_through_db(no_db):
     """Test that name field persists after upsert and retrieval."""
     user_id = "test_persistence@example.com"
 
@@ -25,7 +25,7 @@ def test_profile_name_persists_through_db():
     assert retrieved.name == "Test User", f"Expected 'Test User', got {retrieved.name}"
 
 
-def test_profile_current_role_persists_through_db():
+def test_profile_current_role_persists_through_db(no_db):
     """Test that current_role field persists after upsert and retrieval."""
     user_id = "test_role_persistence@example.com"
 
@@ -40,7 +40,7 @@ def test_profile_current_role_persists_through_db():
         f"Expected 'Sustainability & Environmental Operations Lead', got {retrieved.current_role}"
 
 
-def test_profile_current_company_persists_through_db():
+def test_profile_current_company_persists_through_db(no_db):
     """Test that current_company field persists after upsert and retrieval."""
     user_id = "test_company_persistence@example.com"
 
@@ -55,7 +55,7 @@ def test_profile_current_company_persists_through_db():
         f"Expected 'Eco Technology Environmental Protection Services LLC', got {retrieved.current_company}"
 
 
-def test_profile_linkedin_url_persists_through_db():
+def test_profile_linkedin_url_persists_through_db(no_db):
     """Test that linkedin_url field persists after upsert and retrieval."""
     user_id = "test_linkedin_persistence@example.com"
 
@@ -70,7 +70,7 @@ def test_profile_linkedin_url_persists_through_db():
         f"Expected 'https://linkedin.com/in/robin-edwan-environmental', got {retrieved.linkedin_url}"
 
 
-def test_profile_preferred_cities_persist_through_db():
+def test_profile_preferred_cities_persist_through_db(no_db):
     """Test that preferred_cities field persists after upsert and retrieval."""
     user_id = "test_cities_persistence@example.com"
 
@@ -86,7 +86,7 @@ def test_profile_preferred_cities_persist_through_db():
         f"Expected {cities}, got {retrieved.preferred_cities}"
 
 
-def test_profile_salary_fields_persist_through_db():
+def test_profile_salary_fields_persist_through_db(no_db):
     """Test that salary fields persist after upsert and retrieval."""
     user_id = "test_salary_persistence@example.com"
 
@@ -104,7 +104,7 @@ def test_profile_salary_fields_persist_through_db():
         f"Expected 10000, got {retrieved.minimum_salary_aed}"
 
 
-def test_profile_visa_status_persists_through_db():
+def test_profile_visa_status_persists_through_db(no_db):
     """Test that visa_status field persists after upsert and retrieval."""
     user_id = "test_visa_persistence@example.com"
 
@@ -119,7 +119,7 @@ def test_profile_visa_status_persists_through_db():
         f"Expected 'Employment Visa', got {retrieved.visa_status}"
 
 
-def test_profile_notice_period_persists_through_db():
+def test_profile_notice_period_persists_through_db(no_db):
     """Test that notice_period field persists after upsert and retrieval."""
     user_id = "test_notice_persistence@example.com"
 
@@ -134,7 +134,7 @@ def test_profile_notice_period_persists_through_db():
         f"Expected '1 month', got {retrieved.notice_period}"
 
 
-def test_profile_multiple_fields_persist_together():
+def test_profile_multiple_fields_persist_together(no_db):
     """Test that multiple fields persist together in a single upsert."""
     user_id = "test_multi_persistence@example.com"
 
@@ -184,7 +184,7 @@ if __name__ == "__main__":
 # API Route Tests - PATCH /api/v1/rico/profile → GET /api/v1/rico/profile
 # ============================================================================
 
-def test_api_patch_name_persists(monkeypatch):
+def test_api_patch_name_persists(monkeypatch, no_db, profile_gate_open):
     """Test PATCH name field persists through API using real upsert_profile."""
     import src.api.routers.rico_chat as rico_chat_router
 
@@ -214,7 +214,7 @@ def test_api_patch_name_persists(monkeypatch):
     assert data["name"] == "Roben Edwan"
 
 
-def test_api_patch_current_role_persists(monkeypatch):
+def test_api_patch_current_role_persists(monkeypatch, no_db, profile_gate_open):
     """Test PATCH current_role field persists through API using real upsert_profile."""
     import src.api.routers.rico_chat as rico_chat_router
 
@@ -240,7 +240,7 @@ def test_api_patch_current_role_persists(monkeypatch):
     assert data["current_role"] == "Sustainability & Environmental Operations Lead"
 
 
-def test_api_patch_current_company_persists(monkeypatch):
+def test_api_patch_current_company_persists(monkeypatch, no_db, profile_gate_open):
     """Test PATCH current_company field persists through API using real upsert_profile."""
     import src.api.routers.rico_chat as rico_chat_router
 
@@ -266,7 +266,7 @@ def test_api_patch_current_company_persists(monkeypatch):
     assert data["current_company"] == "Eco Technology Environmental Protection Services LLC"
 
 
-def test_api_patch_linkedin_url_persists(monkeypatch):
+def test_api_patch_linkedin_url_persists(monkeypatch, no_db, profile_gate_open):
     """Test PATCH linkedin_url field persists through API using real upsert_profile."""
     import src.api.routers.rico_chat as rico_chat_router
 
@@ -292,7 +292,7 @@ def test_api_patch_linkedin_url_persists(monkeypatch):
     assert data["linkedin_url"] == "https://linkedin.com/in/robin-edwan-environmental"
 
 
-def test_api_patch_preferred_cities_persists(monkeypatch):
+def test_api_patch_preferred_cities_persists(monkeypatch, no_db, profile_gate_open):
     """Test PATCH preferred_cities field persists through API using real upsert_profile."""
     import src.api.routers.rico_chat as rico_chat_router
 
@@ -318,7 +318,7 @@ def test_api_patch_preferred_cities_persists(monkeypatch):
     assert data["preferred_cities"] == ["Ajman", "Dubai", "Sharjah"]
 
 
-def test_api_patch_salary_fields_persist(monkeypatch):
+def test_api_patch_salary_fields_persist(monkeypatch, no_db, profile_gate_open):
     """Test PATCH salary fields persist through API using real upsert_profile."""
     import src.api.routers.rico_chat as rico_chat_router
 
@@ -346,7 +346,7 @@ def test_api_patch_salary_fields_persist(monkeypatch):
     assert data["minimum_salary_aed"] == 10000
 
 
-def test_api_patch_visa_status_persists(monkeypatch):
+def test_api_patch_visa_status_persists(monkeypatch, no_db, profile_gate_open):
     """Test PATCH visa_status field persists through API using real upsert_profile."""
     import src.api.routers.rico_chat as rico_chat_router
 
@@ -372,7 +372,7 @@ def test_api_patch_visa_status_persists(monkeypatch):
     assert data["visa_status"] == "Employment Visa"
 
 
-def test_api_patch_notice_period_persists(monkeypatch):
+def test_api_patch_notice_period_persists(monkeypatch, no_db, profile_gate_open):
     """Test PATCH notice_period field persists through API using real upsert_profile."""
     import src.api.routers.rico_chat as rico_chat_router
 
@@ -398,7 +398,7 @@ def test_api_patch_notice_period_persists(monkeypatch):
     assert data["notice_period"] == "1 month"
 
 
-def test_api_patch_skills_persist(monkeypatch):
+def test_api_patch_skills_persist(monkeypatch, no_db, profile_gate_open):
     """Test PATCH skills field persists through API using real upsert_profile."""
     import src.api.routers.rico_chat as rico_chat_router
 
@@ -424,7 +424,7 @@ def test_api_patch_skills_persist(monkeypatch):
     assert data["skills"] == ["hse", "iso 14001", "environmental management"]
 
 
-def test_api_patch_target_roles_persist(monkeypatch):
+def test_api_patch_target_roles_persist(monkeypatch, no_db, profile_gate_open):
     """Test PATCH target_roles field persists through API using real upsert_profile."""
     import src.api.routers.rico_chat as rico_chat_router
 
@@ -450,7 +450,7 @@ def test_api_patch_target_roles_persist(monkeypatch):
     assert data["target_roles"] == ["HSE Manager", "Environmental Manager"]
 
 
-def test_api_patch_industries_persist(monkeypatch):
+def test_api_patch_industries_persist(monkeypatch, no_db, profile_gate_open):
     """Test PATCH industries field persists through API using real upsert_profile."""
     import src.api.routers.rico_chat as rico_chat_router
 
@@ -476,7 +476,7 @@ def test_api_patch_industries_persist(monkeypatch):
     assert data["industries"] == ["Environmental Services", "Construction"]
 
 
-def test_api_patch_empty_cities_persist(monkeypatch):
+def test_api_patch_empty_cities_persist(monkeypatch, no_db, profile_gate_open):
     """Test PATCH empty preferred_cities array persists through API."""
     import src.api.routers.rico_chat as rico_chat_router
 
@@ -510,7 +510,7 @@ def test_api_patch_empty_cities_persist(monkeypatch):
 # Normalization Version Tests
 # ============================================================================
 
-def test_normalization_version_persists():
+def test_normalization_version_persists(no_db):
     """Test that normalization_version field persists through upsert and retrieval."""
     user_id = "normalization_version_test@example.com"
 
@@ -525,7 +525,7 @@ def test_normalization_version_persists():
         f"Expected normalization_version=2, got {retrieved.normalization_version}"
 
 
-def test_get_profile_handles_none_normalization_version(monkeypatch):
+def test_get_profile_handles_none_normalization_version(monkeypatch, no_db, profile_gate_open):
     """Profiles written before versioning may have null normalization_version."""
     import src.repositories.profile_repo as profile_repo
     from src.role_normalization import NORMALIZATION_VERSION
@@ -552,7 +552,7 @@ def test_get_profile_handles_none_normalization_version(monkeypatch):
     assert retrieved.normalization_version == NORMALIZATION_VERSION
 
 
-def test_profile_renormalization_with_versioning():
+def test_profile_renormalization_with_versioning(no_db):
     """Test that profile re-normalizes when normalization_version changes."""
     from src.role_normalization import NORMALIZATION_VERSION
 
@@ -579,7 +579,8 @@ def test_profile_renormalization_with_versioning():
 # DB Roundtrip Tests - Diagnostic for production issue
 # ============================================================================
 
-def test_db_user_upsert_read_roundtrip():
+@pytest.mark.integration
+def test_db_user_upsert_read_roundtrip(no_db):
     """Test that db.upsert_user and db.get_user_bundle use the same identity key and name persists."""
     from src.rico_db import RicoDB
 
@@ -609,6 +610,7 @@ def test_db_user_upsert_read_roundtrip():
         conn.commit()
 
 
+@pytest.mark.integration
 def test_get_user_bundle_with_duplicate_rows():
     """Test that get_user_bundle returns the latest row when multiple rows match the same email."""
     from src.rico_db import RicoDB
@@ -672,6 +674,7 @@ def test_get_user_bundle_with_duplicate_rows():
             conn.commit()
 
 
+@pytest.mark.integration
 def test_api_patch_to_db_to_get_roundtrip(monkeypatch):
     """Test full path: PATCH endpoint -> DB -> GET endpoint."""
     import src.api.routers.rico_chat as rico_chat_router
@@ -723,6 +726,7 @@ def test_api_patch_to_db_to_get_roundtrip(monkeypatch):
             conn.commit()
 
 
+@pytest.mark.integration
 def test_canonical_row_selection_with_duplicate_emails():
     """Regression test: PATCH and GET must choose same canonical row when duplicate email rows exist.
 
@@ -838,6 +842,7 @@ def test_canonical_row_selection_with_duplicate_emails():
             conn.commit()
 
 
+@pytest.mark.integration
 def test_email_external_user_id_fallback_row_still_roundtrips():
     """Regression test: email users with only external_user_id=email still PATCH/GET correctly."""
     import os
@@ -904,7 +909,8 @@ def test_email_external_user_id_fallback_row_still_roundtrips():
             conn.commit()
 
 
-def test_non_email_identifiers_still_work():
+@pytest.mark.integration
+def test_non_email_identifiers_still_work(no_db):
     """Regression test: non-email identifiers (Telegram/JotForm/external_user_id) path is not broken by canonical email fix.
 
     Verify:
@@ -1004,7 +1010,8 @@ def test_non_email_identifiers_still_work():
             conn.commit()
 
 
-def test_api_patch_get_consistency_with_duplicate_rows(monkeypatch):
+@pytest.mark.integration
+def test_api_patch_get_consistency_with_duplicate_rows(monkeypatch, no_db, profile_gate_open):
     """Regression test: PATCH /api/v1/rico/profile then GET /api/v1/rico/profile must return saved data when duplicate rows exist.
 
     This tests the full API path with the canonical selection fix.
@@ -1101,6 +1108,7 @@ def test_api_patch_get_consistency_with_duplicate_rows(monkeypatch):
             conn.commit()
 
 
+@pytest.mark.integration
 def test_upsert_profile_uses_bundle_resolver_for_email_users(monkeypatch):
     """Unit regression: email PATCH writes to the same bundle row GET resolves."""
     import src.repositories.profile_repo as profile_repo
@@ -1163,6 +1171,7 @@ def test_upsert_profile_uses_bundle_resolver_for_email_users(monkeypatch):
     assert captured["closed"] is True
 
 
+@pytest.mark.integration
 def test_upsert_profile_creates_email_user_with_email_column(monkeypatch):
     """Unit regression: new web email users are readable by GET after fallback creation."""
     import src.repositories.profile_repo as profile_repo
