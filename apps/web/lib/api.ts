@@ -228,8 +228,10 @@ export async function logout(): Promise<void> {
 
 export interface ProfileResponse {
   profile_exists: boolean;
-  email?: string;
-  user_id?: string;
+  /** Null for new users who have not completed profile setup. */
+  email?: string | null;
+  /** Null for new users who have not completed profile setup. */
+  user_id?: string | null;
   name?: string | null;
   phone?: string | null;
   telegram_username?: string | null;
