@@ -64,16 +64,21 @@ const md: Components = {
       {children}
     </pre>
   ),
-  a: ({ href, children }) => (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-[var(--rico-primary)] underline underline-offset-2 hover:opacity-75 transition-opacity"
-    >
-      {children}
-    </a>
-  ),
+  a: ({ href, children }) => {
+    const safe = href && (href.startsWith("http://") || href.startsWith("https://") || href.startsWith("mailto:"))
+      ? href
+      : "#";
+    return (
+      <a
+        href={safe}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-[var(--rico-primary)] underline underline-offset-2 hover:opacity-75 transition-opacity"
+      >
+        {children}
+      </a>
+    );
+  },
   blockquote: ({ children }) => (
     <blockquote className="border-l-2 border-[var(--rico-primary-container)] pl-3 my-2 opacity-75 italic">
       {children}

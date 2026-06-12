@@ -780,29 +780,23 @@ class RicoDB:
         score: Optional[int] = None,
         explanation: Optional[str] = None,
     ) -> bool:
-        """Insert or update a recommendation row. Uses SELECT+INSERT/UPDATE for
-        portability since there is no UNIQUE(user_id, job_key) constraint yet."""
+        """Insert or update a recommendation row atomically via ON CONFLICT."""
         with self._transaction() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT id FROM rico_job_recommendations WHERE user_id = %s AND job_key = %s LIMIT 1",
-                    (user_id, job_key),
+                    """
+                    INSERT INTO rico_job_recommendations
+                        (user_id, job_key, job, rico_score, explanation, status)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (user_id, job_key) WHERE job_key IS NOT NULL
+                    DO UPDATE SET
+                        status      = EXCLUDED.status,
+                        rico_score  = COALESCE(EXCLUDED.rico_score, rico_job_recommendations.rico_score),
+                        explanation = COALESCE(EXCLUDED.explanation, rico_job_recommendations.explanation),
+                        updated_at  = now()
+                    """,
+                    (user_id, job_key, Json(job_data), score, explanation, status),
                 )
-                row = cur.fetchone()
-                if row:
-                    cur.execute(
-                        "UPDATE rico_job_recommendations SET status = %s, updated_at = now() WHERE user_id = %s AND job_key = %s",
-                        (status, user_id, job_key),
-                    )
-                else:
-                    cur.execute(
-                        """
-                        INSERT INTO rico_job_recommendations
-                            (user_id, job_key, job, rico_score, explanation, status)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                        """,
-                        (user_id, job_key, Json(job_data), score, explanation, status),
-                    )
         return True
 
     def update_recommendation_status(
