@@ -7,7 +7,8 @@ services:
     # --proxy-headers + --forwarded-allow-ips lets uvicorn trust Render's load balancer
     # and populate request.client.host from X-Forwarded-For (real client IP), so per-client
     # rate limiting and request logging don't collapse onto the proxy's single IP.
-    startCommand: python -m uvicorn src.api.app:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips='*'
+    # '127.0.0.1' trusts only Render's internal proxy — prevents IP spoofing for rate-limit bypass.
+    startCommand: python -m uvicorn src.api.app:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips='127.0.0.1'
     healthCheckPath: /health
     envVars:
 
@@ -127,7 +128,7 @@ services:
       - key: COOKIE_DOMAIN
         value: ".ricohunt.com"
       - key: CORS_ORIGINS
-        value: "https://ricohunt.com,https://www.ricohunt.com,https://web-rose-phi-35.vercel.app,http://localhost:3000"
+        value: "https://ricohunt.com,https://www.ricohunt.com,http://localhost:3000"
       - key: JWT_TTL_HOURS
         value: "24"
 
