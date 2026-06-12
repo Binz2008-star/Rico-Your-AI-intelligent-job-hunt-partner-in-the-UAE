@@ -48,7 +48,10 @@ _RATE_LIMITED_TEXT = (
     "Rico's AI provider is currently rate-limited. "
     "This is temporary — please try again in a minute."
 )
-_PROFILE_CONTEXT_MAX_CHARS = 1200
+# Sized to fit profile essentials + uploaded_documents metadata + 8-turn
+# conversation history; 1200 predates documents/history and silently cut
+# the tail of the context JSON (uploaded_documents was serialized last).
+_PROFILE_CONTEXT_MAX_CHARS = 4000
 _SMOKE_MAX_OUTPUT_TOKENS = 80
 # Output cap for real chat turns. This is an upper bound billed on actual output,
 # so short answers stay cheap; it only needs to be high enough that long-form
