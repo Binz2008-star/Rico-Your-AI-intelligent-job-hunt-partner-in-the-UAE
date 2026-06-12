@@ -517,33 +517,39 @@ class RicoChatAPI:
                 from src.rico_db import RicoDB as _RicoDB
                 _docs_db = _RicoDB()
                 _docs = _docs_db.list_user_documents(user_id) if _docs_db.available else []
-                if _docs:
-                    ctx["uploaded_documents"] = [
-                        {
-                            "filename": d.get("filename", ""),
-                            "doc_type": d.get("doc_type", ""),
-                            "label": d.get("label") or d.get("filename", ""),
-                            "is_primary": bool(d.get("is_primary")),
-                            "skills_count": d.get("skills_count"),
-                            "years_experience": d.get("years_experience"),
-                        }
-                        for d in _docs
-                    ]
-                elif profile is not None:
-                    # Same legacy fallback as GET /api/v1/user/files: users who
-                    # uploaded a CV before multi-document storage existed only
-                    # have cv_filename on the profile record.
+                _entries = [
+                    {
+                        "filename": d.get("filename", ""),
+                        "doc_type": d.get("doc_type", ""),
+                        "label": d.get("label") or d.get("filename", ""),
+                        "is_primary": bool(d.get("is_primary")),
+                        "skills_count": d.get("skills_count"),
+                        "years_experience": d.get("years_experience"),
+                    }
+                    for d in _docs
+                ]
+                _has_active_cv = any(
+                    d.get("doc_type") == "cv" and d.get("is_primary") for d in _docs
+                )
+                if not _has_active_cv and profile is not None:
+                    # Same legacy fallback as GET /api/v1/user/files: surface
+                    # the parsed profile CV whenever no real document is the
+                    # active CV — not only when the list is empty — so other
+                    # uploads never hide it.
                     _cv_filename = self._profile_value(profile, "cv_filename")
                     if _cv_filename:
-                        ctx["uploaded_documents"] = [
+                        _entries.insert(
+                            0,
                             {
                                 "filename": _cv_filename,
                                 "doc_type": "cv",
                                 "label": _cv_filename,
                                 "is_primary": True,
                                 "is_legacy": True,
-                            }
-                        ]
+                            },
+                        )
+                if _entries:
+                    ctx["uploaded_documents"] = _entries
             except Exception:
                 pass
 

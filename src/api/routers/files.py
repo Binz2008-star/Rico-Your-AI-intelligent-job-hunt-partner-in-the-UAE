@@ -92,6 +92,45 @@ def get_quota(request: Request) -> dict[str, Any]:
 
 # ── List files ─────────────────────────────────────────────────────────────────
 
+def has_active_cv_document(docs: list[dict[str, Any]]) -> bool:
+    """True when the user has a real, primary CV document on record."""
+    return any(d.get("doc_type") == "cv" and d.get("is_primary") for d in docs)
+
+
+def build_profile_cv_record(user_id: str) -> Optional[dict[str, Any]]:
+    """Synthesise a legacy 'profile-cv' record from the profile JSONB.
+
+    Users who uploaded a CV before multi-document storage existed (or whose
+    CV document write failed) only have cv_filename on the profile. Returns
+    None when no parsed profile CV exists or the lookup fails.
+    """
+    try:
+        profile = profile_repo.get_profile(user_id)
+        cv_filename = profile and getattr(profile, "cv_filename", None)
+        if not cv_filename:
+            return None
+        cv_extracted_at = getattr(profile, "cv_extracted_at", None)
+        return {
+            "id": "profile-cv",
+            "user_id": user_id,
+            "filename": cv_filename,
+            "original_filename": cv_filename,
+            "doc_type": "cv",
+            "file_size": 0,
+            "label": None,
+            "is_primary": True,
+            "is_legacy": True,
+            "skills_count": len(getattr(profile, "skills", []) or []),
+            "years_experience": getattr(profile, "years_experience", None),
+            "current_role": getattr(profile, "current_role", None),
+            "created_at": cv_extracted_at,
+            "updated_at": cv_extracted_at,
+        }
+    except Exception:
+        logger.debug("profile_cv_fallback_failed user=%s", user_id)
+        return None
+
+
 @router.get("")
 def list_files(request: Request) -> dict[str, Any]:
     """Return all documents for the authenticated user."""
@@ -100,47 +139,29 @@ def list_files(request: Request) -> dict[str, Any]:
 
     docs = _db.list_user_documents(user_id) if _db.available else []
 
-    # For users who uploaded a CV before this feature existed, synthesise a
-    # record from the profile JSONB so the UI is never empty.
-    if not docs:
-        try:
-            profile = profile_repo.get_profile(user_id)
-            cv_filename = profile and getattr(profile, "cv_filename", None)
-            cv_extracted_at = profile and getattr(profile, "cv_extracted_at", None)
-            if cv_filename:
-                docs = [
-                    {
-                        "id": "profile-cv",
-                        "user_id": user_id,
-                        "filename": cv_filename,
-                        "original_filename": cv_filename,
-                        "doc_type": "cv",
-                        "file_size": 0,
-                        "label": None,
-                        "is_primary": True,
-                        "is_legacy": True,
-                        "skills_count": len(getattr(profile, "skills", []) or []),
-                        "years_experience": getattr(profile, "years_experience", None),
-                        "current_role": getattr(profile, "current_role", None),
-                        "created_at": cv_extracted_at,
-                        "updated_at": cv_extracted_at,
-                    }
-                ]
-        except Exception:
-            logger.debug("list_files profile_fallback_failed user=%s", user_id)
+    # When no real document is the active CV, surface the parsed profile CV
+    # alongside the real documents (not only when the list is empty) so the
+    # active CV is never hidden by unrelated uploads.
+    if not has_active_cv_document(docs):
+        profile_cv = build_profile_cv_record(user_id)
+        if profile_cv:
+            docs = [profile_cv] + docs
 
-    # Attach quota info to the response
+    # Attach quota info to the response. The synthetic legacy record is not a
+    # stored document and must not count against quota — enforcement counts
+    # user_documents rows, and the UI display has to agree with it.
     resolved = resolve_effective_user_plan(user_id)
     entitlements = resolved.subscription.entitlements
+    stored = [d for d in docs if not d.get("is_legacy")]
 
     return {
         "files": docs,
         "total": len(docs),
         "quota": {
             "plan": resolved.subscription.plan.value,
-            "cv_used": sum(1 for d in docs if d.get("doc_type") == "cv"),
+            "cv_used": sum(1 for d in stored if d.get("doc_type") == "cv"),
             "cv_limit": entitlements.cv_storage_limit,
-            "other_used": sum(1 for d in docs if d.get("doc_type") != "cv"),
+            "other_used": sum(1 for d in stored if d.get("doc_type") != "cv"),
             "other_limit": entitlements.other_document_limit,
         },
     }
