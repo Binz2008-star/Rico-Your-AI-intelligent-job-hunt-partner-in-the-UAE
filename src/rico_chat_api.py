@@ -476,6 +476,142 @@ class RicoChatAPI:
             daemon=True,
         ).start()
 
+    # ── Uploaded documents (My Files) ──────────────────────────────────────────
+
+    # Deterministic file-list intent: these questions must be answered from the
+    # database, never left to the AI model's discretion over context JSON.
+    _FILE_LIST_EN_RE = re.compile(
+        r"\b(?:check|show|list|view|see|display)\s+(?:me\s+)?(?:all\s+)?(?:my\s+)?"
+        r"(?:uploaded\s+)?(?:files?|documents?|docs)\b"
+        r"|\b(?:my|uploaded)\s+(?:files?|documents?|docs|uploads)\b"
+        r"|\b(?:what|which)\s+(?:files?|documents?)\b"
+        r"|\bwhich\s+(?:cv|resume)\s+is\s+(?:the\s+)?(?:active|primary|current|main)\b"
+        r"|\b(?:active|primary)\s+(?:cv|resume)\b",
+        re.IGNORECASE,
+    )
+    _FILE_LIST_AR_RE = re.compile(
+        r"ملفاتي|مستنداتي|وثائقي"
+        r"|(?:اعرض|أعرض|اعرضي|شوف|شوفي|وريني|ورني|اظهر|أظهر)\s+(?:لي\s+)?(?:كل\s+)?(?:الملفات|المستندات)"
+        r"|(?:الملفات|المستندات)\s+(?:اللي|التي)\s+(?:رافعه?ا|رفعته?ا|رفعها)"
+        r"|(?:الملفات|المستندات)\s+المرفوعة"
+        r"|(?:أي|اي)\s+سيرة\s+.{0,16}(?:نشطة|فعالة|أساسية|الأساسية|الاساسية)",
+        re.UNICODE,
+    )
+
+    _DOC_TYPE_LABELS = {
+        "en": {"cv": "CV", "cover_letter": "Cover letter", "other": "Other document"},
+        "ar": {"cv": "سيرة ذاتية", "cover_letter": "رسالة تقديم", "other": "مستند آخر"},
+    }
+
+    def _collect_uploaded_documents(self, user_id: str, profile: Any) -> list[dict[str, Any]]:
+        """Merge real user_documents with the legacy profile-CV fallback.
+
+        Mirrors GET /api/v1/user/files: when no real document has
+        doc_type == "cv" AND is_primary == true, the parsed profile CV is
+        prepended as a synthetic active entry so other uploads never hide it.
+        """
+        from src.rico_db import RicoDB as _RicoDB
+
+        _docs_db = _RicoDB()
+        _docs = _docs_db.list_user_documents(user_id) if _docs_db.available else []
+        entries = [
+            {
+                "filename": d.get("filename", ""),
+                "doc_type": d.get("doc_type", ""),
+                "label": d.get("label") or d.get("filename", ""),
+                "is_primary": bool(d.get("is_primary")),
+                "skills_count": d.get("skills_count"),
+                "years_experience": d.get("years_experience"),
+            }
+            for d in _docs
+        ]
+        has_active_cv = any(
+            d.get("doc_type") == "cv" and d.get("is_primary") for d in _docs
+        )
+        if not has_active_cv and profile is not None:
+            cv_filename = self._profile_value(profile, "cv_filename")
+            if cv_filename:
+                entries.insert(
+                    0,
+                    {
+                        "filename": cv_filename,
+                        "doc_type": "cv",
+                        "label": cv_filename,
+                        "is_primary": True,
+                        "is_legacy": True,
+                    },
+                )
+        return entries
+
+    def _is_file_list_query(self, message: str) -> bool:
+        text = (message or "").strip()
+        if not text:
+            return False
+        return bool(
+            self._FILE_LIST_EN_RE.search(text) or self._FILE_LIST_AR_RE.search(text)
+        )
+
+    def _handle_file_list_query(self, user_id: str, message: str) -> Optional[dict[str, Any]]:
+        """Deterministic My Files answer — same data as /upload, no AI involved.
+
+        Returns None when the message is not a file-list question so normal
+        routing continues.
+        """
+        if not self._is_file_list_query(message):
+            return None
+        try:
+            profile = get_profile(user_id)
+        except Exception:
+            profile = None
+        try:
+            docs = self._collect_uploaded_documents(user_id, profile)
+        except Exception:
+            logger.warning("file_list_query_db_failed user=%s", user_id)
+            docs = []
+
+        arabic = self._is_arabic_text(message)
+        lang = "ar" if arabic else "en"
+        type_labels = self._DOC_TYPE_LABELS[lang]
+
+        if not docs:
+            msg = (
+                "لا توجد ملفات مرفوعة في حسابك حتى الآن. استخدم زر **رفع السيرة الذاتية** "
+                "لرفع سيرتك — بعد الرفع سأقرأها تلقائياً وأملأ ملفك المهني."
+                if arabic else
+                "You have no uploaded files on record yet. Use the **Upload CV** button to "
+                "upload your CV — once uploaded, I will read it automatically and pre-fill "
+                "your career profile."
+            )
+        else:
+            lines = []
+            for d in docs:
+                type_label = type_labels.get(d.get("doc_type"), type_labels["other"])
+                badges = []
+                if d.get("is_primary") and d.get("doc_type") == "cv":
+                    badges.append("⭐ " + ("السيرة الذاتية النشطة" if arabic else "active CV"))
+                if d.get("is_legacy"):
+                    badges.append("من الملف الشخصي" if arabic else "from your profile")
+                badge_str = f" ({'، '.join(badges) if arabic else ', '.join(badges)})" if badges else ""
+                lines.append(f"📄 {d.get('filename')} — {type_label}{badge_str}")
+            note = (
+                "أستطيع قراءة محتوى السيرة الذاتية المحلّلة فقط؛ بقية المستندات لديّ بياناتها "
+                "الوصفية فقط (الاسم والنوع) ولا يمكنني فتح محتوى PDF الخام. يمكنك إدارة الملفات من صفحة My Files."
+                if arabic else
+                "I can read the parsed CV's content only; for other documents I have file "
+                "details (name and type) and cannot open raw PDF contents. You can manage "
+                "files from the My Files page."
+            )
+            header = "ملفاتك المرفوعة:" if arabic else "Your uploaded files:"
+            msg = header + "\n" + "\n".join(lines) + "\n\n" + note
+
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "file_list",
+            "message": msg,
+            "files": docs,
+            "next_action": "manage_files",
+        }
+
     def _build_openai_context(self, profile: Any, user_id: str | None = None) -> dict[str, Any]:
         """Build context for OpenAI agent from profile and recent conversation history."""
         if profile is None:
@@ -514,40 +650,7 @@ class RicoChatAPI:
             # have?" and route requests like "use my finance CV" to the right
             # document. Active (is_primary=True) CV remains the default for matching.
             try:
-                from src.rico_db import RicoDB as _RicoDB
-                _docs_db = _RicoDB()
-                _docs = _docs_db.list_user_documents(user_id) if _docs_db.available else []
-                _entries = [
-                    {
-                        "filename": d.get("filename", ""),
-                        "doc_type": d.get("doc_type", ""),
-                        "label": d.get("label") or d.get("filename", ""),
-                        "is_primary": bool(d.get("is_primary")),
-                        "skills_count": d.get("skills_count"),
-                        "years_experience": d.get("years_experience"),
-                    }
-                    for d in _docs
-                ]
-                _has_active_cv = any(
-                    d.get("doc_type") == "cv" and d.get("is_primary") for d in _docs
-                )
-                if not _has_active_cv and profile is not None:
-                    # Same legacy fallback as GET /api/v1/user/files: surface
-                    # the parsed profile CV whenever no real document is the
-                    # active CV — not only when the list is empty — so other
-                    # uploads never hide it.
-                    _cv_filename = self._profile_value(profile, "cv_filename")
-                    if _cv_filename:
-                        _entries.insert(
-                            0,
-                            {
-                                "filename": _cv_filename,
-                                "doc_type": "cv",
-                                "label": _cv_filename,
-                                "is_primary": True,
-                                "is_legacy": True,
-                            },
-                        )
+                _entries = self._collect_uploaded_documents(user_id, profile)
                 if _entries:
                     ctx["uploaded_documents"] = _entries
             except Exception:
@@ -1563,6 +1666,28 @@ class RicoChatAPI:
         date_hits = len(self._PASTED_CV_DATE_RE.findall(message))
         # Require at least 2 section keywords OR 1 section + 1 date range
         return section_hits >= 2 or (section_hits >= 1 and date_hits >= 1)
+
+    _JOB_REQUEST_WITH_CV_RE = re.compile(
+        r"\b(?:find|search|show|get|give|looking\s+for|need|want)\b.{0,80}"
+        r"\b(?:jobs?|roles?|positions?|vacancies|openings?|matches?)\b"
+        r"|\b(?:match|based\s+on|using|from)\s+my\s+(?:cv|resume)\b"
+        r"|(?:ابحث|دور|دوري|جد|جيب|لقيلي)\s.{0,40}(?:وظائف|وظيفة|شغل|فرص)",
+        re.IGNORECASE | re.UNICODE,
+    )
+
+    def _is_job_request_mentioning_cv(self, message: str) -> bool:
+        """True for job-search requests that merely reference the CV.
+
+        "Find UAE jobs that match my CV and experience" contains "my cv" and so
+        matches _looks_like_cv_upload, but treating it as a CV-upload
+        announcement sends it to _cv_first_profile_response — which overwrites
+        cv_filename/cv_status on the profile and replies with a search promise
+        nothing fulfills. No actual filename present + job-request shape means
+        it must stay on the normal routing path.
+        """
+        if CV_FILE_RE.search(message):
+            return False
+        return bool(self._JOB_REQUEST_WITH_CV_RE.search(message))
 
     def _looks_like_cv_intent_no_file(self, message: str) -> bool:
         """True when user announces they have a CV but hasn't attached a file yet."""
@@ -3053,6 +3178,15 @@ class RicoChatAPI:
 
     def _process_message_inner(self, user_id: str, message: str, language: str | None = None) -> dict[str, Any]:
         self._append_chat(user_id, "user", message)
+
+        # ── Deterministic My Files listing ────────────────────────────────────
+        # "check my uploaded files" / "اعرض الملفات اللي رافعها" must answer from
+        # the database in any onboarding state — before the job-search classifier
+        # can misread it as a role title and before any AI call.
+        file_list_result = self._handle_file_list_query(user_id, message)
+        if file_list_result is not None:
+            return self._finalize(file_list_result, self.SOURCE_KEYWORD, profile=None)
+
         completed = is_onboarding_complete(user_id)
 
         if completed:
@@ -3105,7 +3239,7 @@ class RicoChatAPI:
             # Non-job-search message from a completed user — go straight to active flow.
             return self._handle_active_user(user_id, message)
 
-        if self._looks_like_cv_upload(message):
+        if self._looks_like_cv_upload(message) and not self._is_job_request_mentioning_cv(message):
             # If the user has announced they have a CV but hasn't attached a file,
             # direct them to the Upload CV button instead of faking a filename.
             if self._looks_like_cv_intent_no_file(message):
