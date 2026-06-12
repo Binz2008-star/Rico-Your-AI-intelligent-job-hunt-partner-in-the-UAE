@@ -273,3 +273,82 @@ def record_profile_optimization_usage(user_id: str) -> None:
         )
     except Exception:
         logger.debug("subscription_gating: profile optimization usage record failed user=%s", user_id, exc_info=True)
+
+
+# ── Document storage quota ─────────────────────────────────────────────────────
+
+_UPGRADE_HINTS: dict[str, str] = {
+    "cv_storage_limit": "Upgrade to Pro for up to 5 CVs, or Premium for unlimited",
+    "other_document_limit": "Upgrade to Pro for up to 10 documents, or Premium for unlimited",
+}
+
+
+def count_user_documents(user_id: str, doc_type: str) -> int:
+    """Count documents of *doc_type* stored for *user_id* using RicoDB.
+
+    Returns 0 when DB is unavailable so callers can still proceed.
+    """
+    try:
+        from src.rico_db import RicoDB
+
+        db = RicoDB()
+        if not db.available:
+            return 0
+        return db.count_user_documents(user_id, doc_type)
+    except Exception:
+        logger.debug(
+            "subscription_gating: document count failed user=%s doc_type=%s",
+            user_id,
+            doc_type,
+            exc_info=True,
+        )
+        return 0
+
+
+def _feature_for_doc_type(doc_type: str) -> str:
+    """Map a document type to its entitlement attribute name."""
+    return "cv_storage_limit" if doc_type == "cv" else "other_document_limit"
+
+
+def check_document_quota(user_id: str, doc_type: str) -> GateCheck:
+    """Return a GateCheck for uploading a new document of *doc_type*."""
+    feature = _feature_for_doc_type(doc_type)
+    usage = count_user_documents(user_id, doc_type)
+    resolved = resolve_effective_user_plan(user_id)
+    return _build_gate_check(user_id, feature, usage, resolved)
+
+
+def enforce_document_quota(user_id: str, doc_type: str) -> None:
+    """Raise HTTP 422 with a structured detail dict if the document quota is reached.
+
+    Uses 422 (Unprocessable Entity) rather than 402 so the frontend can inspect
+    the detail without triggering a global payment-required redirect.
+    """
+    from fastapi import HTTPException
+
+    check = check_document_quota(user_id, doc_type)
+    if check.allowed:
+        return
+
+    plan = check.plan
+    used = check.usage
+    limit = check.limit
+    feature = _feature_for_doc_type(doc_type)
+    doc_label = "CV" if doc_type == "cv" else "document"
+    hint = _UPGRADE_HINTS.get(feature, "Upgrade your plan for more storage")
+
+    raise HTTPException(
+        status_code=422,
+        detail={
+            "detail": f"{feature}_exceeded",
+            "plan": plan,
+            "used": used,
+            "limit": limit,
+            "upgrade_hint": hint,
+            "doc_type": doc_type,
+            "message": (
+                f"You have reached your {doc_label} storage limit "
+                f"({used}/{limit}) on the {plan.title()} plan. {hint}."
+            ),
+        },
+    )

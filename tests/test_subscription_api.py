@@ -65,6 +65,8 @@ class TestSubscriptionPlans:
             "monthly_ai_message_limit": 300,
             "saved_jobs_limit": 100,
             "profile_optimization_limit": 20,
+            "cv_storage_limit": 5,
+            "other_document_limit": 10,
             "premium_recommendations_enabled": False,
             "application_automation_enabled": False,
         }
@@ -77,6 +79,8 @@ class TestSubscriptionPlans:
             "monthly_ai_message_limit": 1500,
             "saved_jobs_limit": None,
             "profile_optimization_limit": 100,
+            "cv_storage_limit": None,
+            "other_document_limit": None,
             "premium_recommendations_enabled": True,
             "application_automation_enabled": True,
         }

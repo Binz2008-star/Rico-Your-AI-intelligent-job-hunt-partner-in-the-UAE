@@ -565,6 +565,29 @@ class RicoChatAPI:
             except Exception:
                 pass
 
+            # Inject uploaded documents so Rico can answer "which CVs do I have?"
+            # and route requests like "use my finance CV" to the right document.
+            # Active (is_primary=True) CV remains the default for matching.
+            try:
+                from src.rico_db import RicoDB as _RicoDB
+                _docs_db = _RicoDB()
+                if _docs_db.available:
+                    _docs = _docs_db.list_user_documents(user_id)
+                    if _docs:
+                        ctx["uploaded_documents"] = [
+                            {
+                                "filename": d.get("filename", ""),
+                                "doc_type": d.get("doc_type", ""),
+                                "label": d.get("label") or d.get("filename", ""),
+                                "is_primary": bool(d.get("is_primary")),
+                                "skills_count": d.get("skills_count"),
+                                "years_experience": d.get("years_experience"),
+                            }
+                            for d in _docs
+                        ]
+            except Exception:
+                pass
+
         return ctx
 
     def _recent_jobs_summary(self, user_id: str, limit: int = 3) -> str:

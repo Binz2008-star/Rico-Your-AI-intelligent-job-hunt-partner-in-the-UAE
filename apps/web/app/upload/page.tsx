@@ -336,7 +336,9 @@ function FileManagerView({ isAr, t, router }: FileManagerViewProps) {
         setError('');
         try {
             if (docType === 'cv') {
-                await uploadCV(file, getGuestUploadUserId());
+                // CV upload goes through the CV parsing pipeline.
+                // No user_id arg — backend resolves identity from JWT cookie.
+                await uploadCV(file);
                 setIsUploading(false);
                 setIsProcessing(true);
             } else {

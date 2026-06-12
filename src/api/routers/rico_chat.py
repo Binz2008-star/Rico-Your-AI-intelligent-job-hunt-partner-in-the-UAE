@@ -1154,6 +1154,12 @@ async def rico_upload_cv(
     request_ref = generate_error_ref()
     resolved_user_id = _resolve_upload_user_id(request, user_id, form_user_id)
 
+    # Enforce per-plan CV quota for authenticated users.
+    # Guest/public sessions (public:*) are exempt — they have no plan record.
+    if not _is_valid_public_user_id(resolved_user_id):
+        from src.services.subscription_gating import enforce_document_quota
+        enforce_document_quota(resolved_user_id, "cv")
+
     try:
         data = await file.read()
         if len(data) > _MAX_UPLOAD_BYTES:
