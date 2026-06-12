@@ -44,7 +44,10 @@ from src.repositories.onboarding_repo import (
     set_onboarding_status,
 )
 from src.repositories.profile_repo import get_profile, upsert_profile
-from src.services.profile_context_resolver import resolve_profile_context
+from src.services.profile_context_resolver import (
+    evaluate_minimum_profile,
+    resolve_profile_context,
+)
 from src.services.operation_state import (
     mark_completed,
     mark_failed,
@@ -2966,7 +2969,51 @@ class RicoChatAPI:
         completed = is_onboarding_complete(user_id)
 
         if completed:
-            return self._handle_active_user(user_id, message)
+            # Re-verify the minimum career profile gate even when the DB row says
+            # "completed".  Stale rows (e.g. signup-shell users who were incorrectly
+            # marked complete) must not route directly to the active-user flow.
+            _raw = get_profile(user_id)
+            _ctx = resolve_profile_context(user_id, _raw)
+            _gate_ok, _missing = evaluate_minimum_profile(_ctx)
+            if _gate_ok:
+                return self._handle_active_user(user_id, message)
+            # Gate failed — downgrade the DB row and return a missing-fields prompt.
+            if getattr(self, "_persist", True):
+                set_onboarding_status(user_id, ONBOARDING_IN_PROGRESS)
+            import re as _re
+            _is_ar = language == "ar" or bool(_re.search(r'[؀-ۿ]', message))
+            _labels_en = {
+                "target_roles": "target role(s)",
+                "preferred_cities": "preferred UAE city/cities",
+                "years_experience": "years of experience",
+                "skills": "key skills (or upload your CV)",
+            }
+            _labels_ar = {
+                "target_roles": "المسمى الوظيفي المستهدف",
+                "preferred_cities": "المدينة المفضلة بالإمارات",
+                "years_experience": "سنوات الخبرة",
+                "skills": "المهارات الرئيسية (أو ارفع سيرتك الذاتية)",
+            }
+            if _is_ar:
+                _missing_str = "، ".join(_labels_ar.get(f, f) for f in _missing)
+                _downgrade_msg = (
+                    f"لاستكمال ملفك المهني، يرجى مشاركتنا: {_missing_str}. "
+                    "يمكنك أيضاً رفع سيرتك الذاتية وسأملأ الملف تلقائياً."
+                )
+            else:
+                _missing_str = ", ".join(_labels_en.get(f, f) for f in _missing)
+                _downgrade_msg = (
+                    f"To complete your career profile, please share: {_missing_str}. "
+                    "You can also upload your CV and I will fill it in automatically."
+                )
+            _downgrade_response = {
+                "type": "onboarding",
+                "message": _downgrade_msg,
+                "missing_fields": _missing,
+                "onboarding_status": ONBOARDING_IN_PROGRESS,
+            }
+            self._append_chat(user_id, "assistant", _downgrade_msg)
+            return self._finalize(_downgrade_response, self.SOURCE_KEYWORD, profile=None)
 
         if self._looks_like_cv_upload(message):
             # If the user has announced they have a CV but hasn't attached a file,

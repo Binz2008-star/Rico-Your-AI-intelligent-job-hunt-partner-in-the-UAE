@@ -171,10 +171,17 @@ class TestFirstTimeOnboarding:
         mock_set.assert_called_once_with("new-user", ONBOARDING_IN_PROGRESS)
 
     def test_onboarding_welcome_not_shown_when_state_is_completed(self):
-        """Core regression: completed users must never see onboarding again."""
+        """Completed users with a valid career profile must never see onboarding."""
         api = _make_api()
-        api.memory.load_profile.return_value = None  # even if profile is gone
+        full_profile = RicoProfile(
+            user_id="done-user",
+            target_roles=["UX Designer"],
+            preferred_cities=["Dubai"],
+            years_experience=3.0,
+            skills=["Figma", "UX Research"],
+        )
         with patch("src.rico_chat_api.is_onboarding_complete", return_value=True), \
+             patch("src.rico_chat_api.get_profile", return_value=full_profile), \
              patch("src.rico_chat_api.mark_onboarding_complete"):
             response = api.process_message("done-user", "hello")
         assert response["type"] != "onboarding"
@@ -203,7 +210,15 @@ class TestFirstTimeOnboarding:
 class TestCompletedUserRouting:
     def _completed(self, message: str, user_id: str = "done-user") -> dict:
         api = _make_api()
-        profile = RicoProfile(user_id=user_id, target_roles=["Software Engineer"])
+        # Profile must pass the minimum gate: target_roles, preferred_cities,
+        # years_experience, and skills (or CV evidence) are all required.
+        profile = RicoProfile(
+            user_id=user_id,
+            target_roles=["Software Engineer"],
+            preferred_cities=["Dubai"],
+            years_experience=5.0,
+            skills=["Python", "FastAPI"],
+        )
         with patch("src.rico_chat_api.is_onboarding_complete", return_value=True), \
              patch("src.rico_chat_api.mark_onboarding_complete"), \
              patch("src.rico_chat_api.get_profile", return_value=profile):

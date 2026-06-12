@@ -10,10 +10,11 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from src.api.deps import get_current_user
+from src.models.onboarding import ONBOARDING_COMPLETED, ONBOARDING_IN_PROGRESS
 
 logger = logging.getLogger(__name__)
 
@@ -50,11 +51,31 @@ def onboarding_submit(request: Request, body: OnboardingSubmitRequest) -> Dict[s
         from src.role_normalization import validate_and_normalize_skills
         updates["skills"] = validate_and_normalize_skills(body.skills)
 
-    if updates:
-        from src.repositories.profile_repo import upsert_profile
-        upsert_profile(user_id, updates)
-        logger.info("onboarding_submit: profile updated user_id=%s fields=%s", user_id, list(updates.keys()))
-    else:
-        logger.info("onboarding_submit: no fields to update user_id=%s", user_id)
+    if not updates:
+        raise HTTPException(status_code=422, detail="No onboarding fields provided")
 
-    return {"status": "ok", "updated_fields": list(updates.keys())}
+    from src.repositories.profile_repo import get_profile, upsert_profile
+    upsert_profile(user_id, updates)
+    logger.info("onboarding_submit: profile updated user_id=%s fields=%s", user_id, list(updates.keys()))
+
+    # Re-read merged profile and evaluate minimum gate to decide status.
+    merged = get_profile(user_id)
+    from src.services.profile_context_resolver import (
+        evaluate_minimum_profile,
+        has_career_profile_data,
+        resolve_profile_context,
+    )
+    ctx = resolve_profile_context(user_id, merged)
+    gate_ok, missing_fields = evaluate_minimum_profile(ctx)
+
+    from src.repositories.onboarding_repo import set_onboarding_status
+    new_status = ONBOARDING_COMPLETED if gate_ok else ONBOARDING_IN_PROGRESS
+    set_onboarding_status(user_id, new_status)
+
+    return {
+        "status": new_status,
+        "updated_fields": list(updates.keys()),
+        "missing_fields": missing_fields,
+        "profile_exists": has_career_profile_data(ctx),
+        "profile_completeness": round(ctx.completion_score, 2),
+    }
