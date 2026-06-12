@@ -2,6 +2,7 @@
 
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { fetchMe } from "@/lib/api";
 import { useTranslation } from "@/lib/translations";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -141,8 +142,14 @@ export function MobileCommandHeader({
 
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [overflowOpen, setOverflowOpen] = useState(false);
+    const [userEmail, setUserEmail] = useState<string | null>(null);
     const overflowRef = useRef<HTMLDivElement>(null);
     const drawerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (chatAudience !== "authenticated") return;
+        fetchMe().then((me) => { if (me.authenticated && me.email) setUserEmail(me.email); }).catch(() => {});
+    }, [chatAudience]);
 
     useEffect(() => {
         if (drawerOpen) {
@@ -413,10 +420,10 @@ export function MobileCommandHeader({
                 {chatAudience === "authenticated" && (
                     <div className="relative mx-4 mt-4 mb-1 flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: "rgba(245,166,35,0.07)", border: "1px solid rgba(245,166,35,0.14)" }}>
                         <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gold/30 to-amber-400/10 text-[13px] font-bold text-gold shadow-[0_0_16px_rgba(245,166,35,0.2)]">
-                            R
+                            {userEmail ? userEmail[0].toUpperCase() : "?"}
                         </div>
                         <div className="min-w-0">
-                            <p className="text-[12px] font-semibold text-white/90 truncate">Rico Hunt</p>
+                            <p className="text-[12px] font-semibold text-white/90 truncate">{userEmail ?? (language === "ar" ? "حساب نشط" : "Active account")}</p>
                             <p className="text-[10px] text-white/40 uppercase tracking-[0.12em]">{language === "ar" ? "حساب نشط" : "Active account"}</p>
                         </div>
                         <span className="ms-auto flex h-2 w-2 flex-shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]" aria-hidden="true" />
@@ -446,7 +453,7 @@ export function MobileCommandHeader({
                                         )}
                                     >
                                         {isActive && (
-                                            <span aria-hidden="true" className="absolute start-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-gold shadow-[0_0_8px_rgba(245,166,35,0.6)]" />
+                                            <span aria-hidden="true" className={cn("absolute top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-gold shadow-[0_0_8px_rgba(245,166,35,0.6)]", isRTL ? "right-0" : "left-0")} />
                                         )}
                                         <span className={cn("flex-shrink-0 transition-colors", isActive ? "text-gold" : "text-white/35 group-hover:text-white/60")}>
                                             {item.icon}
