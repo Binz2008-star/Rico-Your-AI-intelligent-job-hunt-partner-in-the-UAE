@@ -3,11 +3,12 @@ src/api/routers/files.py
 User file / document management endpoints.
 
 Routes:
-  GET    /api/v1/user/files              list uploaded files   (JWT required)
-  POST   /api/v1/user/files              upload non-CV file    (JWT required)
-  DELETE /api/v1/user/files/{id}         delete a file         (JWT required)
-  PATCH  /api/v1/user/files/{id}         rename / retype file  (JWT required)
-  POST   /api/v1/user/files/{id}/set-primary  set primary CV  (JWT required)
+  GET    /api/v1/user/files                   list uploaded files   (JWT required)
+  POST   /api/v1/user/files                   upload document       (JWT required)
+  DELETE /api/v1/user/files/{id}              delete a file         (JWT required)
+  PATCH  /api/v1/user/files/{id}              rename / retype file  (JWT required)
+  POST   /api/v1/user/files/{id}/set-primary  set primary CV        (JWT required)
+  GET    /api/v1/user/files/quota             quota usage summary   (JWT required)
 """
 from __future__ import annotations
 
@@ -15,13 +16,18 @@ import logging
 import re
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
-from src.api.deps import get_current_user, get_current_user_id
+from src.api.deps import get_current_user
 from src.api.rate_limit import LIMIT_UPLOAD, limiter
 from src.repositories import profile_repo
 from src.rico_db import RicoDB
+from src.services.subscription_gating import (
+    check_document_quota,
+    enforce_document_quota,
+)
+from src.subscription_plans import resolve_effective_user_plan
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +51,43 @@ def _safe_filename(raw: str | None) -> str:
 class FileUpdateRequest(BaseModel):
     label: Optional[str] = None
     doc_type: Optional[str] = None
+
+
+# ── Quota summary ──────────────────────────────────────────────────────────────
+
+@router.get("/quota")
+def get_quota(request: Request) -> dict[str, Any]:
+    """Return document storage quota usage for the authenticated user."""
+    user = get_current_user(request)
+    user_id = user["email"]
+
+    resolved = resolve_effective_user_plan(user_id)
+    entitlements = resolved.subscription.entitlements
+    plan = resolved.subscription.plan.value
+
+    cv_limit = entitlements.cv_storage_limit
+    other_limit = entitlements.other_document_limit
+
+    if _db.available:
+        cv_used = _db.count_user_documents(user_id, "cv")
+        other_used = _db.count_user_documents(user_id, "other") + _db.count_user_documents(user_id, "cover_letter")
+    else:
+        cv_used = 0
+        other_used = 0
+
+    return {
+        "plan": plan,
+        "cv": {
+            "used": cv_used,
+            "limit": cv_limit,
+            "unlimited": cv_limit is None,
+        },
+        "other_documents": {
+            "used": other_used,
+            "limit": other_limit,
+            "unlimited": other_limit is None,
+        },
+    }
 
 
 # ── List files ─────────────────────────────────────────────────────────────────
@@ -86,10 +129,24 @@ def list_files(request: Request) -> dict[str, Any]:
         except Exception:
             logger.debug("list_files profile_fallback_failed user=%s", user_id)
 
-    return {"files": docs, "total": len(docs)}
+    # Attach quota info to the response
+    resolved = resolve_effective_user_plan(user_id)
+    entitlements = resolved.subscription.entitlements
+
+    return {
+        "files": docs,
+        "total": len(docs),
+        "quota": {
+            "plan": resolved.subscription.plan.value,
+            "cv_used": sum(1 for d in docs if d.get("doc_type") == "cv"),
+            "cv_limit": entitlements.cv_storage_limit,
+            "other_used": sum(1 for d in docs if d.get("doc_type") != "cv"),
+            "other_limit": entitlements.other_document_limit,
+        },
+    }
 
 
-# ── Upload non-CV file ─────────────────────────────────────────────────────────
+# ── Upload document ────────────────────────────────────────────────────────────
 
 @router.post("", status_code=201)
 @limiter.limit(LIMIT_UPLOAD)
@@ -98,12 +155,15 @@ async def upload_file(
     file: UploadFile = File(...),
     doc_type: str = "cover_letter",
 ) -> dict[str, Any]:
-    """Upload a document (cover letter, other). No CV parsing — metadata only."""
+    """Upload a document (CV, cover letter, or other). Quota-gated."""
     user = get_current_user(request)
     user_id = user["email"]
 
     if doc_type not in _ALLOWED_DOC_TYPES:
         raise HTTPException(status_code=422, detail=f"doc_type must be one of {sorted(_ALLOWED_DOC_TYPES)}")
+
+    # Enforce document storage quota before reading the file body
+    enforce_document_quota(user_id, doc_type)
 
     data = await file.read()
     if len(data) > _MAX_BYTES:
