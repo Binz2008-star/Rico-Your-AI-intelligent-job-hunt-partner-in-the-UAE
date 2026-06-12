@@ -333,3 +333,110 @@ class TestRicoChatContext:
         ctx = self._build_ctx([], db_available=False)
         # Should not raise; uploaded_documents simply absent
         assert "uploaded_documents" not in ctx
+
+
+# ── 6. /api/v1/rico/upload-cv — quota enforcement for authenticated uploads ────
+
+class TestUploadCvEndpointQuota:
+    """Tests that POST /api/v1/rico/upload-cv enforces quota for auth users."""
+
+    def _upload(self, user_id: str, cv_count: int, cv_limit):
+        """Drive rico_upload_cv with a patched quota check."""
+        from io import BytesIO
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+
+        pdf_bytes = b"%PDF-1.4 minimal"
+
+        resolved = _make_resolved(cv_limit, other_limit=2, plan_value="free")
+
+        with (
+            patch("src.services.subscription_gating.count_user_documents", return_value=cv_count),
+            patch("src.services.subscription_gating.resolve_effective_user_plan", return_value=resolved),
+            patch("src.api.routers.rico_chat._resolve_upload_user_id", return_value=user_id),
+            patch("src.api.routers.rico_chat._is_valid_public_user_id", return_value=False),
+        ):
+            client = TestClient(app, raise_server_exceptions=False)
+            response = client.post(
+                "/api/v1/rico/upload-cv",
+                files={"file": ("cv.pdf", BytesIO(pdf_bytes), "application/pdf")},
+            )
+        return response
+
+    def test_free_user_with_0_cvs_passes_quota_check(self):
+        """Free user with no CVs yet: upload proceeds past the quota gate."""
+        r = self._upload("user@test.com", cv_count=0, cv_limit=1)
+        # Quota passes — may fail later (parse error) but NOT 422 quota exceeded
+        assert r.status_code != 422 or (
+            isinstance(r.json().get("detail"), dict)
+            and r.json()["detail"].get("detail") != "cv_storage_limit_exceeded"
+        )
+
+    def test_free_user_with_1_cv_blocked_by_quota(self):
+        """Free user already has 1 CV (limit=1): upload must return 422."""
+        r = self._upload("user@test.com", cv_count=1, cv_limit=1)
+        assert r.status_code == 422
+        detail = r.json().get("detail", {})
+        assert isinstance(detail, dict), f"expected structured detail, got: {detail!r}"
+        assert detail.get("detail") == "cv_storage_limit_exceeded"
+        assert detail.get("used") == 1
+        assert detail.get("limit") == 1
+
+    def test_guest_user_bypasses_quota_check(self):
+        """Guest session (public:*) is exempt — quota check must be skipped."""
+        from io import BytesIO
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+
+        pdf_bytes = b"%PDF-1.4 minimal"
+
+        with (
+            patch("src.api.routers.rico_chat._resolve_upload_user_id",
+                  return_value="public:web-abc123"),
+            patch("src.api.routers.rico_chat._is_valid_public_user_id", return_value=True),
+            # Quota enforcer must NOT be called for guest — if called, fail the test
+            patch("src.services.subscription_gating.enforce_document_quota",
+                  side_effect=AssertionError("quota must not be called for guest")) as mock_quota,
+        ):
+            client = TestClient(app, raise_server_exceptions=False)
+            client.post(
+                "/api/v1/rico/upload-cv",
+                files={"file": ("cv.pdf", BytesIO(pdf_bytes), "application/pdf")},
+            )
+            mock_quota.assert_not_called()
+
+    def test_auth_upload_uses_jwt_identity_not_guest_id(self):
+        """
+        Authenticated CV upload must resolve identity via JWT/session,
+        NOT a public:* guest ID.  Verifies _resolve_upload_user_id is called
+        and its result (not a hardcoded public ID) drives the quota check.
+        """
+        from io import BytesIO
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+
+        pdf_bytes = b"%PDF-1.4 minimal"
+        quota_called_with: list = []
+
+        def _capture_quota(uid, doc_type):
+            quota_called_with.append((uid, doc_type))
+            # Allow (don't raise)
+
+        with (
+            patch("src.api.routers.rico_chat._resolve_upload_user_id",
+                  return_value="authed@example.com"),
+            patch("src.api.routers.rico_chat._is_valid_public_user_id", return_value=False),
+            patch("src.services.subscription_gating.enforce_document_quota",
+                  side_effect=_capture_quota),
+        ):
+            client = TestClient(app, raise_server_exceptions=False)
+            client.post(
+                "/api/v1/rico/upload-cv",
+                files={"file": ("cv.pdf", BytesIO(pdf_bytes), "application/pdf")},
+            )
+
+        assert len(quota_called_with) == 1, "enforce_document_quota must be called exactly once"
+        uid, doc_type = quota_called_with[0]
+        assert uid == "authed@example.com", f"must use JWT identity, got: {uid!r}"
+        assert not uid.startswith("public:"), f"must NOT be a guest ID, got: {uid!r}"
+        assert doc_type == "cv"

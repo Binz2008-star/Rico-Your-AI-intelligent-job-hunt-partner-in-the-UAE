@@ -1466,6 +1466,8 @@ export interface SubscriptionEntitlements {
   monthly_ai_message_limit: number | null;
   saved_jobs_limit: number | null;
   profile_optimization_limit: number | null;
+  cv_storage_limit: number | null;
+  other_document_limit: number | null;
   premium_recommendations_enabled: boolean;
   application_automation_enabled: boolean;
 }
