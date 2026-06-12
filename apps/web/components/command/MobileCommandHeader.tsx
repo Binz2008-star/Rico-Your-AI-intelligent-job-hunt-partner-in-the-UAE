@@ -433,7 +433,7 @@ export function MobileCommandHeader({
                             {userEmail ? userEmail[0].toUpperCase() : "?"}
                         </div>
                         <div className="min-w-0">
-                            <p className="text-[12px] font-semibold text-white/90 truncate">{userEmail ?? (language === "ar" ? "حساب نشط" : "Active account")}</p>
+                            <p className="text-[12px] font-semibold text-white/90 truncate">{userEmail ? userEmail.split("@")[0] : (language === "ar" ? "حساب نشط" : "Active account")}</p>
                             <p className="text-[10px] text-white/40 uppercase tracking-[0.12em]">{language === "ar" ? "حساب نشط" : "Active account"}</p>
                         </div>
                         <span className="ms-auto flex h-2 w-2 flex-shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]" aria-hidden="true" />

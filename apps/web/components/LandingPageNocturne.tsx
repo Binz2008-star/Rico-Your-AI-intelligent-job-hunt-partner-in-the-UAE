@@ -91,8 +91,15 @@ export default function LandingPageNocturne() {
     const { language, setLanguage } = useLanguage();
     const isAr = language === "ar";
     const [openFaq, setOpenFaq] = useState<number | null>(null);
+    const [headerScrolled, setHeaderScrolled] = useState(false);
     const { scrollYProgress } = useScroll();
     const scrollProgress = useSpring(scrollYProgress, { stiffness: 200, damping: 30, restDelta: 0.001 });
+
+    useEffect(() => {
+        const onScroll = () => setHeaderScrolled(window.scrollY > 12);
+        window.addEventListener("scroll", onScroll, { passive: true });
+        return () => window.removeEventListener("scroll", onScroll);
+    }, []);
 
     const t = {
         signIn: isAr ? "تسجيل الدخول" : "Sign in",
@@ -267,7 +274,7 @@ export default function LandingPageNocturne() {
             </div>
 
             {/* Header */}
-            <header className="sticky top-0 z-50 backdrop-blur-xl bg-void/55">
+            <header className={`sticky top-0 z-50 backdrop-blur-xl bg-void/55 transition-[border-color,box-shadow] duration-200 ${headerScrolled ? "border-b border-overlay/15 shadow-[0_1px_16px_rgba(0,0,0,0.35)]" : "border-b border-transparent"}`}>
                 {/* Gradient hairline + ember accent — ties the bar into the stage light */}
                 <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-overlay/20 to-transparent" aria-hidden="true" />
                 <div className="absolute inset-x-[30%] bottom-0 h-px bg-gradient-to-r from-transparent via-ember/30 to-transparent" aria-hidden="true" />
@@ -277,6 +284,11 @@ export default function LandingPageNocturne() {
                         <span>Rico<span className="text-ember font-bold"> Hunt</span></span>
                     </Link>
                     <nav className="flex items-center gap-2.5">
+                        <div className="hidden md:flex items-center gap-1 me-1">
+                            <a href="#how" className="text-sm text-text-secondary hover:text-text-primary transition-colors px-2 py-1 rounded-lg hover:bg-surface/40">{t.stepsEyebrow}</a>
+                            <a href="#pricing" className="text-sm text-text-secondary hover:text-text-primary transition-colors px-2 py-1 rounded-lg hover:bg-surface/40">{t.pricingEyebrow}</a>
+                            <a href="#faq" className="text-sm text-text-secondary hover:text-text-primary transition-colors px-2 py-1 rounded-lg hover:bg-surface/40">{t.faqEyebrow}</a>
+                        </div>
                         <button type="button" onClick={() => setLanguage(isAr ? "en" : "ar")} className="font-mono text-xs text-text-secondary border border-overlay/7 px-2.5 py-1.5 rounded-lg hover:text-text-primary hover:border-ember transition-colors bg-transparent">{t.langToggle}</button>
                         <Link href="/login" className="hidden sm:block text-sm text-text-secondary hover:text-text-primary transition-colors">{t.signIn}</Link>
                         <Link href="/signup"><RicoButton variant="primary" size="sm">{t.startFree}</RicoButton></Link>
@@ -451,7 +463,7 @@ export default function LandingPageNocturne() {
                 </section>
 
                 {/* Phase 4 - Product Window / Command UI */}
-                <section className="py-16 md:py-24 pt-0" aria-labelledby="command-heading">
+                <section id="command" className="py-16 md:py-24 pt-0" aria-labelledby="command-heading">
                     <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
                         <FadeUp className="max-w-[600px] mb-8 md:mb-12">
                             <Eyebrow className="mb-4">{t.cmdEyebrow}</Eyebrow>
@@ -583,7 +595,7 @@ export default function LandingPageNocturne() {
                 </section>
 
                 {/* Phase 4 - Pricing */}
-                <section className="py-16 md:py-24 pt-0" aria-labelledby="pricing-heading">
+                <section id="pricing" className="py-16 md:py-24 pt-0" aria-labelledby="pricing-heading">
                     <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
                         <FadeUp className="max-w-[600px] mb-8 md:mb-12 md:mx-auto md:text-center">
                             <Eyebrow className="mb-4 md:justify-center">{t.pricingEyebrow}</Eyebrow>
@@ -691,7 +703,7 @@ export default function LandingPageNocturne() {
                 </section>
 
                 {/* Phase 5 - FAQ */}
-                <section className="py-16 md:py-24 pt-0" aria-labelledby="faq-heading">
+                <section id="faq" className="py-16 md:py-24 pt-0" aria-labelledby="faq-heading">
                     <div className="max-w-[720px] mx-auto px-4 sm:px-6">
                         <FadeUp className="mb-8 md:mb-10 text-center">
                             <Eyebrow className="mb-4 justify-center">{t.faqEyebrow}</Eyebrow>

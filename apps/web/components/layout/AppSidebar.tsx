@@ -50,8 +50,12 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
     const enabled = Boolean(onLogout);
     const status = useSidebarStatus(enabled);
 
+    const emailPrefix = user?.email?.split("@")[0] ?? "";
+    const displayName = user?.name ?? emailPrefix ?? "User";
     const initials = user?.name
         ? user.name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()
+        : emailPrefix
+        ? emailPrefix.slice(0, 2).toUpperCase()
         : navMeta.brand.shortName;
 
     return (
@@ -268,7 +272,7 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                         </div>
                         <div className="flex-1 min-w-0 text-start">
                             <p className="text-sm font-medium text-text-primary truncate">
-                                {user?.name ?? "User"}
+                                {displayName}
                             </p>
                             <p className="truncate text-xs text-text-tertiary">
                                 {user?.email ?? ""}

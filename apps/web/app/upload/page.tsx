@@ -19,6 +19,7 @@ import {
 } from '@/lib/api';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useTranslation, type TranslationKey } from '@/lib/translations';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -447,10 +448,19 @@ function FileManagerView({ isAr, t, router }: FileManagerViewProps) {
 
             {/* CV pending-confirm notice */}
             {cvPendingConfirm && !error && (
-                <div className="rounded-lg border border-gold/30 bg-gold/[0.07] px-4 py-3 text-sm text-gold" role="status">
-                    <span className="font-semibold">{t('uploadCvPreviewReady')}</span>
-                    {' — '}
-                    {t('uploadCvConfirmHint')}
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gold/30 bg-gold/[0.07] px-4 py-3 text-sm text-gold" role="status">
+                    <span>
+                        <span className="font-semibold">{t('uploadCvPreviewReady')}</span>
+                        {' — '}
+                        {t('uploadCvConfirmHint')}
+                    </span>
+                    <Link
+                        href="/command"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-gold px-4 py-2 text-xs font-bold text-[#0a0a1a] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50"
+                    >
+                        <MaterialIcon icon="chat" className="text-sm" />
+                        {t('navAskRico')}
+                    </Link>
                 </div>
             )}
 
