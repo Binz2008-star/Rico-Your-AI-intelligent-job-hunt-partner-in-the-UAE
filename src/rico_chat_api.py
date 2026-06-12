@@ -2972,8 +2972,7 @@ class RicoChatAPI:
             # Re-verify the minimum career profile gate even when the DB row says
             # "completed".  Stale rows (e.g. signup-shell users who were incorrectly
             # marked complete) must not route directly to the active-user flow.
-            _raw = get_profile(user_id)
-            _ctx = resolve_profile_context(user_id, _raw)
+            _ctx = self._resolve_profile(user_id)
             _gate_ok, _missing = evaluate_minimum_profile(_ctx)
             if _gate_ok:
                 return self._handle_active_user(user_id, message)
