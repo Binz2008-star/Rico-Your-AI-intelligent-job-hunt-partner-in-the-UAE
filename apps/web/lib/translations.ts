@@ -430,6 +430,9 @@ export const translations = {
       "Your career trajectory has been mapped. Redirecting to command center...",
     uploadError: "Upload failed. Please try again.",
     uploadErrLoad: "Could not load files. Try refreshing.",
+    uploadErrQuota: "Storage quota reached. Upgrade your plan to upload more files.",
+    uploadCvPreviewReady: "CV preview ready",
+    uploadCvConfirmHint: "Complete the review in the chat to save it to My Files.",
 
     // Command page
     commandPlaceholder: "Tell Rico what you need...",
@@ -1428,6 +1431,9 @@ export const translations = {
       "تم تعيين مسارك المهني. إعادة التوجيه إلى مركز القيادة...",
     uploadError: "فشل الرفع. يرجى المحاولة مرة أخرى.",
     uploadErrLoad: "تعذّر تحميل الملفات. حاول التحديث.",
+    uploadErrQuota: "تم بلوغ الحصة التخزينية. ارقِ خطتك لرفع المزيد من الملفات.",
+    uploadCvPreviewReady: "معاينة السيرة الذاتية جاهزة",
+    uploadCvConfirmHint: "أكمل المراجعة في المحادثة لحفظها في ملفاتي.",
 
     // Command page
     commandPlaceholder: "أخبر ريكو بما تحتاج...",

@@ -65,6 +65,14 @@ interface FileCardProps {
 function FileCard({ doc, isAr, t, onSetPrimary, onDelete, onRename }: FileCardProps) {
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState(doc.label ?? doc.filename);
+
+    // Reset draft whenever the parent refetches and passes an updated doc prop.
+    // Without this, the local draft stays stale even after label is persisted.
+    useEffect(() => {
+        if (!editing) {
+            setDraft(doc.label ?? doc.filename);
+        }
+    }, [doc.label, doc.filename, editing]);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -312,6 +320,8 @@ function FileManagerView({ isAr, t, router }: FileManagerViewProps) {
     const [docType, setDocType] = useState<DocTypeOption>('cv');
     const [isUploading, setIsUploading] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
+    // True after CV parse+preview completes; user must visit /command to confirm.
+    const [cvPendingConfirm, setCvPendingConfirm] = useState(false);
 
     const loadFiles = useCallback(async () => {
         try {
@@ -334,10 +344,12 @@ function FileManagerView({ isAr, t, router }: FileManagerViewProps) {
     const handleFileSelected = useCallback(async (file: File) => {
         setIsUploading(true);
         setError('');
+        setCvPendingConfirm(false);
         try {
             if (docType === 'cv') {
-                // CV upload goes through the CV parsing pipeline.
-                // No user_id arg — backend resolves identity from JWT cookie.
+                // CV upload goes through the parse+preview pipeline (/rico/upload-cv).
+                // This does NOT write to user_documents. The file only becomes active
+                // after the user completes confirm-cv-profile in /command.
                 await uploadCV(file);
                 setIsUploading(false);
                 setIsProcessing(true);
@@ -348,16 +360,24 @@ function FileManagerView({ isAr, t, router }: FileManagerViewProps) {
                 await loadFiles();
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : t('uploadError'));
             setIsUploading(false);
+            // Surface quota errors explicitly so the user knows an upgrade is needed.
+            if (err instanceof ApiError && err.statusCode === 422) {
+                setError(t('uploadErrQuota'));
+            } else {
+                setError(err instanceof Error ? err.message : t('uploadError'));
+            }
         }
     }, [docType, loadFiles, t]);
 
-    const handleCvProcessingComplete = useCallback(async () => {
+    const handleCvProcessingComplete = useCallback(() => {
         setIsProcessing(false);
-        setUploadOpen(false);
-        await loadFiles();
-    }, [loadFiles]);
+        // The CV parse pipeline does NOT write to user_documents; the file
+        // only lands in My Files after the user confirms via /command.
+        // Mark as pending so the UI shows a "confirm to save" notice instead
+        // of calling loadFiles() and getting a confusing empty result.
+        setCvPendingConfirm(true);
+    }, []);
 
     const handleSetPrimary = useCallback(async (id: string) => {
         try {
@@ -377,8 +397,10 @@ function FileManagerView({ isAr, t, router }: FileManagerViewProps) {
         try {
             await updateUserFile(id, { label: label.trim() || undefined });
             await loadFiles();
-        } catch { /* silent */ }
-    }, [loadFiles]);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : t('uploadError'));
+        }
+    }, [loadFiles, t]);
 
     return (
         <div className="flex w-full max-w-3xl flex-col gap-4" dir={isAr ? 'rtl' : 'ltr'}>
@@ -404,6 +426,15 @@ function FileManagerView({ isAr, t, router }: FileManagerViewProps) {
             {error && (
                 <div className="rounded-lg border border-rico-red/25 bg-rico-red/10 px-4 py-3 text-sm text-rico-red" role="alert">
                     {error}
+                </div>
+            )}
+
+            {/* CV pending-confirm notice */}
+            {cvPendingConfirm && !error && (
+                <div className="rounded-lg border border-gold/30 bg-gold/[0.07] px-4 py-3 text-sm text-gold" role="status">
+                    <span className="font-semibold">{t('uploadCvPreviewReady')}</span>
+                    {' — '}
+                    {t('uploadCvConfirmHint')}
                 </div>
             )}
 
