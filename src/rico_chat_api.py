@@ -46,7 +46,6 @@ from src.repositories.onboarding_repo import (
 from src.repositories.profile_repo import get_profile, upsert_profile
 from src.services.profile_context_resolver import (
     evaluate_minimum_profile,
-    has_career_profile_data,
     resolve_profile_context,
 )
 from src.services.operation_state import (
@@ -2970,15 +2969,15 @@ class RicoChatAPI:
         completed = is_onboarding_complete(user_id)
 
         if completed:
-            # Re-verify against signup-shell bypass: if the DB row says "completed"
-            # but the profile carries zero career data (pure signup shell), downgrade
-            # and prompt.  Users with any career data route through normally — partial
-            # profiles are guided conversationally inside the active-user flow.
+            # Re-verify the minimum career profile gate even when the DB row says
+            # "completed".  Stale rows must not route directly to the active-user
+            # flow — a user with current_role but no target_roles/preferred_cities/
+            # years_experience is still not ready for job matching.
             _ctx = self._resolve_profile(user_id)
-            if has_career_profile_data(_ctx):
+            _gate_ok, _missing = evaluate_minimum_profile(_ctx)
+            if _gate_ok:
                 return self._handle_active_user(user_id, message)
-            # Pure signup shell with stale "completed" status — downgrade and prompt.
-            _, _missing = evaluate_minimum_profile(_ctx)
+            # Gate failed — downgrade the DB row and return a missing-fields prompt.
             if getattr(self, "_persist", True):
                 set_onboarding_status(user_id, ONBOARDING_IN_PROGRESS)
             import re as _re

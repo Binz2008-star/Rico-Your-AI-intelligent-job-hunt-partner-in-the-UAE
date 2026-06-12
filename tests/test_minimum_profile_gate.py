@@ -390,6 +390,41 @@ class TestCompletedRowBypassRegression:
         mock_active.assert_called_once()
         mock_set.assert_not_called()
 
+    def test_completed_db_partial_profile_missing_required_fields_is_downgraded(self):
+        """
+        User has status='completed' AND some career data (current_role is set, so
+        has_career_profile_data would return True).  But evaluate_minimum_profile
+        fails because target_roles, preferred_cities, years_experience, and skills
+        are all absent.
+
+        The strict gate must downgrade to in_progress — not route to active user.
+        This distinguishes evaluate_minimum_profile (4-field check) from the weaker
+        has_career_profile_data (any-field check).
+        """
+        api = _make_api_if_possible()
+        partial = RicoProfile(
+            user_id="partial-user",
+            current_role="Software Engineer",  # has_career_profile_data=True
+            # All minimum gate fields absent: no target_roles, preferred_cities,
+            # years_experience, skills, or CV evidence
+        )
+
+        with patch("src.rico_chat_api.is_onboarding_complete", return_value=True), \
+             patch("src.rico_chat_api.get_profile", return_value=partial), \
+             patch("src.rico_chat_api.set_onboarding_status") as mock_set, \
+             patch.object(api, "_handle_active_user") as mock_active:
+            response = api.process_message("partial-user", "find me a job")
+
+        assert response["type"] == "onboarding", (
+            "Expected downgrade for partial profile, got: " + response.get("type", "<none>")
+        )
+        assert "missing_fields" in response
+        assert set(response["missing_fields"]) == {
+            "target_roles", "preferred_cities", "years_experience", "skills"
+        }
+        mock_set.assert_called_once_with("partial-user", ONBOARDING_IN_PROGRESS)
+        mock_active.assert_not_called()
+
     def test_downgrade_is_bilingual_for_arabic_message(self):
         """Arabic input must produce an Arabic downgrade prompt."""
         api = _make_api_if_possible()

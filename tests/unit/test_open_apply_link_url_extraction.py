@@ -184,7 +184,7 @@ def _make_api() -> RicoChatAPI:
 def _make_profile() -> MagicMock:
     p = MagicMock()
     p.has_cv = False
-    p.target_roles = []
+    p.target_roles = ["HSE Officer"]  # must pass evaluate_minimum_profile gate
     p.skills = []
     p.name = "Test User"
     p.email = USER

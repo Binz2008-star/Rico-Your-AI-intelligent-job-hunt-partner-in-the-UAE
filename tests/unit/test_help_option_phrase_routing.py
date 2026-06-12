@@ -41,7 +41,7 @@ def _make_api() -> RicoChatAPI:
 def _make_profile(target_roles: list[str] | None = None) -> MagicMock:
     p = MagicMock()
     p.has_cv = True
-    p.target_roles = target_roles or []
+    p.target_roles = target_roles or ["HSE Officer"]  # default passes gate
     p.skills = ["NEBOSH", "ISO 45001", "risk assessment"]
     p.name = "Test User"
     p.email = USER
