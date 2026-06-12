@@ -25,6 +25,9 @@ class SubscriptionEntitlements(BaseModel):
     monthly_ai_message_limit: Optional[int] = None
     saved_jobs_limit: Optional[int] = None
     profile_optimization_limit: Optional[int] = None
+    # Document storage quotas — None = unlimited (Premium tier)
+    cv_storage_limit: Optional[int] = None
+    other_document_limit: Optional[int] = None
     premium_recommendations_enabled: bool = False
     application_automation_enabled: bool = False
 
