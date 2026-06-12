@@ -173,6 +173,24 @@ def test_application_backed_drafting_uses_matching_saved_application_only() -> N
     assert "Environmental Manager" not in message
 
 
+def test_company_only_without_saved_application_asks_for_role_without_recent_context() -> None:
+    contexts = {USER_B: _systra_context()}
+
+    result = _run(
+        "Write me a cover letter to DP World.",
+        user_id=USER_B,
+        contexts=contexts,
+        applications=[],
+    )
+
+    message = result["message"]
+    assert result["type"] == "cover_letter_prompt"
+    assert "DP World" in message
+    assert "Which role should I target" in message
+    assert "SYSTRA" not in message
+    assert "Environmental Manager" not in message
+
+
 def test_uploaded_cv_profile_precedence_over_stale_current_job_context() -> None:
     contexts = {USER_B: _systra_context()}
     applications = [
