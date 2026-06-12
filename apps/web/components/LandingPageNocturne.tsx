@@ -1,14 +1,49 @@
 "use client";
 
 import { useLanguage } from "@/contexts/LanguageContext";
+import { motion, MotionConfig, useInView } from "framer-motion";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Aura } from "./ui/rico/Aura";
 import { Eyebrow } from "./ui/rico/Eyebrow";
 import { FitRing } from "./ui/rico/FitRing";
 import { GlassCard } from "./ui/rico/GlassCard";
 import { RicoLogoMark } from "./ui/rico/RicoLogoMark";
 import { RicoButton } from "./ui/rico/RicoButton";
+
+// Reusable fade-up-on-scroll wrapper
+function FadeUp({ children, delay = 0, className = "" }: { children: React.ReactNode; delay?: number; className?: string }) {
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 28 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-40px" }}
+            transition={{ duration: 0.6, delay, ease: [0.22, 0.61, 0.36, 1] }}
+            className={className}
+        >
+            {children}
+        </motion.div>
+    );
+}
+
+// Animated counter that counts up when it enters the viewport
+function CountUp({ to, duration = 1.4 }: { to: number; duration?: number }) {
+    const ref = useRef<HTMLSpanElement>(null);
+    const inView = useInView(ref, { once: true, margin: "-40px" });
+    const [count, setCount] = useState(0);
+    useEffect(() => {
+        if (!inView) return;
+        const start = performance.now();
+        const tick = (now: number) => {
+            const p = Math.min((now - start) / (duration * 1000), 1);
+            const eased = 1 - Math.pow(1 - p, 3);
+            setCount(Math.round(eased * to));
+            if (p < 1) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+    }, [inView, to, duration]);
+    return <span ref={ref}>{count}</span>;
+}
 
 // SVG Icons
 const ShieldIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z" /></svg>;
@@ -179,6 +214,7 @@ export default function LandingPageNocturne() {
     };
 
     return (
+        <MotionConfig reducedMotion="user">
         <div dir={isAr ? "rtl" : "ltr"} className="relative min-h-screen overflow-x-hidden bg-void text-text-primary">
             {/* Atmosphere — layered command-center depth (all fixed, non-interactive) */}
             <div className="fixed inset-0 pointer-events-none z-0 motion-reduce:opacity-50" aria-hidden="true">
@@ -218,7 +254,7 @@ export default function LandingPageNocturne() {
                 {/* Hero */}
                 <section className="py-16 md:py-[78px] pb-12 md:pb-[70px]">
                     <div className="max-w-[1140px] mx-auto px-4 sm:px-6 grid lg:grid-cols-[1.05fr_0.95fr] gap-8 md:gap-14 items-center">
-                        <div>
+                        <FadeUp>
                             <Eyebrow className="mb-6">{t.eyebrow}</Eyebrow>
                             <h1 className="font-display font-semibold text-[clamp(2.3rem,5.6vw,4.2rem)] leading-[1.03] tracking-[-0.028em]">
                                 <span className="bg-gradient-to-b from-text-primary to-text-secondary bg-clip-text text-transparent">{t.headline1}</span>
@@ -237,8 +273,8 @@ export default function LandingPageNocturne() {
                                     </span>
                                 ))}
                             </div>
-                        </div>
-                        <div className="relative mt-8 lg:mt-0 [perspective:1300px]">
+                        </FadeUp>
+                        <FadeUp delay={0.18} className="relative mt-8 lg:mt-0 [perspective:1300px]">
                             {/* Halo grounding the card in the stage light (breathes with the orb) */}
                             <div aria-hidden="true" className="absolute -inset-10 bg-[radial-gradient(ellipse_at_50%_38%,rgb(var(--gold)/0.10),transparent_65%)] blur-2xl animate-glow-pulse motion-reduce:animate-none" />
                             {/* Floor shadow — sells the float */}
@@ -278,7 +314,7 @@ export default function LandingPageNocturne() {
                                 </div>
                             </GlassCard>
                             </div>
-                        </div>
+                        </FadeUp>
                     </div>
                 </section>
 
@@ -286,11 +322,18 @@ export default function LandingPageNocturne() {
                 <div className="border-y border-overlay/7 py-4 md:py-6 bg-surface/30 backdrop-blur-sm">
                     <div className="max-w-[1140px] mx-auto px-4 sm:px-6 flex flex-wrap justify-center md:justify-between gap-4 md:gap-6">
                         {[t.trustBar1, t.trustBar2, t.trustBar3, t.trustBar4].map((item, i) => (
-                            <div key={i} className="flex items-center gap-2.5 text-sm text-text-secondary">
+                            <motion.div
+                                key={i}
+                                initial={{ opacity: 0, y: 16 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true, margin: "-20px" }}
+                                transition={{ duration: 0.45, delay: i * 0.08, ease: "easeOut" }}
+                                className="flex items-center gap-2.5 text-sm text-text-secondary"
+                            >
                                 <span className="w-[34px] h-[34px] rounded-[10px] bg-surface border border-overlay/7 flex items-center justify-center text-ember">
                                     {i === 0 && <ShieldIcon />}{i === 1 && <CheckIcon />}{i === 2 && <GlobeIcon />}{i === 3 && <LanguagesIcon />}
                                 </span>{item}
-                            </div>
+                            </motion.div>
                         ))}
                     </div>
                 </div>
@@ -298,12 +341,13 @@ export default function LandingPageNocturne() {
                 {/* Steps */}
                 <section id="how" className="py-16 md:py-24">
                     <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
-                        <div className="max-w-[600px] mb-8 md:mb-12">
+                        <FadeUp className="max-w-[600px] mb-8 md:mb-12">
                             <Eyebrow className="mb-4">{t.stepsEyebrow}</Eyebrow>
                             <h2 className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.stepsTitle}</h2>
                             <p className="text-text-secondary text-sm md:text-base">{t.stepsSubtitle}</p>
-                        </div>
+                        </FadeUp>
                         <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-5">
+                            <motion.div initial={{ opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-40px" }} transition={{ duration: 0.55, delay: 0, ease: [0.22, 0.61, 0.36, 1] }}>
                             <GlassCard className="p-6" role="article" aria-label={t.step1Title}>
                                 <span className="font-mono text-xs text-ember tracking-[0.2em]">{t.step1Num}</span>
                                 <h3 className="font-display font-semibold text-lg mt-3 mb-2">{t.step1Title}</h3>
@@ -314,6 +358,8 @@ export default function LandingPageNocturne() {
                                     </div>
                                 </div>
                             </GlassCard>
+                            </motion.div>
+                            <motion.div initial={{ opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-40px" }} transition={{ duration: 0.55, delay: 0.1, ease: [0.22, 0.61, 0.36, 1] }}>
                             <GlassCard className="p-6" role="article" aria-label={t.step2Title}>
                                 <span className="font-mono text-xs text-ember tracking-[0.2em]">{t.step2Num}</span>
                                 <h3 className="font-display font-semibold text-lg mt-3 mb-2">{t.step2Title}</h3>
@@ -324,6 +370,8 @@ export default function LandingPageNocturne() {
                                     </div>
                                 </div>
                             </GlassCard>
+                            </motion.div>
+                            <motion.div initial={{ opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-40px" }} transition={{ duration: 0.55, delay: 0.2, ease: [0.22, 0.61, 0.36, 1] }}>
                             <GlassCard className="p-6" role="article" aria-label={t.step3Title}>
                                 <span className="font-mono text-xs text-ember tracking-[0.2em]">{t.step3Num}</span>
                                 <h3 className="font-display font-semibold text-lg mt-3 mb-2">{t.step3Title}</h3>
@@ -334,6 +382,7 @@ export default function LandingPageNocturne() {
                                     <span className="font-mono text-[10px] px-2 py-1 rounded-md border border-aura/40 text-aura">{isAr ? "متقدَّم" : "Applied"}</span>
                                 </div>
                             </GlassCard>
+                            </motion.div>
                         </div>
                     </div>
                 </section>
@@ -341,12 +390,13 @@ export default function LandingPageNocturne() {
                 {/* Phase 4 - Product Window / Command UI */}
                 <section className="py-16 md:py-24 pt-0" aria-labelledby="command-heading">
                     <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
-                        <div className="max-w-[600px] mb-8 md:mb-12">
+                        <FadeUp className="max-w-[600px] mb-8 md:mb-12">
                             <Eyebrow className="mb-4">{t.cmdEyebrow}</Eyebrow>
                             <h2 id="command-heading" className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.cmdTitle}</h2>
                             <p className="text-text-secondary text-sm md:text-base">{t.cmdSubtitle}</p>
-                        </div>
+                        </FadeUp>
                         {/* Window Frame */}
+                        <FadeUp delay={0.12}>
                         <div className="rounded-rico-lg overflow-hidden border border-overlay/12 shadow-[0_40px_120px_rgba(0,0,0,0.6)]" role="img" aria-label="Rico command center interface preview">
                             {/* Title Bar */}
                             <div className="flex items-center gap-2 px-4 py-3 bg-surface-elevated border-b border-overlay/7">
@@ -368,21 +418,21 @@ export default function LandingPageNocturne() {
                                 <div className="p-6 flex flex-col">
                                     <div className="flex-1 space-y-4 max-w-[560px]">
                                         {/* User Message */}
-                                        <div className="self-end bg-surface-elevated border border-overlay/7 rounded-[14px] rounded-br-[5px] px-4 py-3 text-sm max-w-[90%] md:max-w-[78%] ms-auto">
+                                        <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.4, delay: 0.1 }} className="self-end bg-surface-elevated border border-overlay/7 rounded-[14px] rounded-br-[5px] px-4 py-3 text-sm max-w-[90%] md:max-w-[78%] ms-auto">
                                             {t.chatMsg1}
-                                        </div>
+                                        </motion.div>
                                         {/* Rico Response */}
-                                        <div className="self-start bg-gradient-to-br from-ember/13 to-ember/5 border border-ember/20 rounded-[14px] rounded-bl-[5px] px-4 py-3 text-sm max-w-[90%] md:max-w-[78%]">
+                                        <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.4, delay: 0.3 }} className="self-start bg-gradient-to-br from-ember/13 to-ember/5 border border-ember/20 rounded-[14px] rounded-bl-[5px] px-4 py-3 text-sm max-w-[90%] md:max-w-[78%]">
                                             <div className="flex items-center gap-2 mb-2 font-mono text-[10.5px] uppercase tracking-[0.16em] text-ember">
                                                 <Aura size="sm" variant="ember" animate={false} aria-hidden="true" />
                                                 <span>Rico</span>
                                             </div>
                                             {t.chatMsg2}
-                                        </div>
+                                        </motion.div>
                                         {/* User Follow-up */}
-                                        <div className="self-end bg-surface-elevated border border-overlay/7 rounded-[14px] rounded-br-[5px] px-4 py-3 text-sm max-w-[90%] md:max-w-[78%] ms-auto">
+                                        <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.4, delay: 0.5 }} className="self-end bg-surface-elevated border border-overlay/7 rounded-[14px] rounded-br-[5px] px-4 py-3 text-sm max-w-[90%] md:max-w-[78%] ms-auto">
                                             {t.chatMsg3}
-                                        </div>
+                                        </motion.div>
                                     </div>
                                     {/* Input */}
                                     <div className="mt-5 flex items-center gap-3 p-3 rounded-xl bg-void border border-overlay/12 max-w-[560px]">
@@ -395,17 +445,18 @@ export default function LandingPageNocturne() {
                                 </div>
                             </div>
                         </div>
+                        </FadeUp>
                     </div>
                 </section>
 
                 {/* Phase 4 - Dashboard Preview */}
                 <section className="py-16 md:py-24 pt-0" aria-labelledby="dashboard-heading">
                     <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
-                        <div className="max-w-[600px] mb-8 md:mb-12">
+                        <FadeUp className="max-w-[600px] mb-8 md:mb-12">
                             <Eyebrow className="mb-4">{t.dashEyebrow}</Eyebrow>
                             <h2 id="dashboard-heading" className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.dashTitle}</h2>
                             <p className="text-text-secondary text-sm md:text-base">{t.dashSubtitle}</p>
-                        </div>
+                        </FadeUp>
                         <GlassCard className="p-6 md:p-8 overflow-x-auto">
                             <div className="min-w-[600px]">
                                 {/* Dashboard Header */}
@@ -425,19 +476,19 @@ export default function LandingPageNocturne() {
                                 <div className="grid grid-cols-4 gap-4 mb-6">
                                     <div className="p-4 rounded-xl bg-surface border border-overlay/7">
                                         <p className="text-xs text-text-tertiary mb-1">{isAr ? "محفوظة" : "Saved"}</p>
-                                        <p className="font-display text-2xl font-semibold text-text-primary">12</p>
+                                        <p className="font-display text-2xl font-semibold text-text-primary"><CountUp to={12} /></p>
                                     </div>
                                     <div className="p-4 rounded-xl bg-surface border border-overlay/7">
                                         <p className="text-xs text-text-tertiary mb-1">{isAr ? "مفتوحة" : "Opened"}</p>
-                                        <p className="font-display text-2xl font-semibold text-ember">8</p>
+                                        <p className="font-display text-2xl font-semibold text-ember"><CountUp to={8} /></p>
                                     </div>
                                     <div className="p-4 rounded-xl bg-surface border border-overlay/7">
                                         <p className="text-xs text-text-tertiary mb-1">{isAr ? "متقدم" : "Applied"}</p>
-                                        <p className="font-display text-2xl font-semibold text-aura">5</p>
+                                        <p className="font-display text-2xl font-semibold text-aura"><CountUp to={5} /></p>
                                     </div>
                                     <div className="p-4 rounded-xl bg-surface border border-overlay/7">
                                         <p className="text-xs text-text-tertiary mb-1">{isAr ? "مقابلة" : "Interview"}</p>
-                                        <p className="font-display text-2xl font-semibold text-ember">2</p>
+                                        <p className="font-display text-2xl font-semibold text-ember"><CountUp to={2} /></p>
                                     </div>
                                 </div>
                                 {/* Job List Preview */}
@@ -471,12 +522,13 @@ export default function LandingPageNocturne() {
                 {/* Phase 4 - Pricing */}
                 <section className="py-16 md:py-24 pt-0" aria-labelledby="pricing-heading">
                     <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
-                        <div className="max-w-[600px] mb-8 md:mb-12 md:mx-auto md:text-center">
+                        <FadeUp className="max-w-[600px] mb-8 md:mb-12 md:mx-auto md:text-center">
                             <Eyebrow className="mb-4 md:justify-center">{t.pricingEyebrow}</Eyebrow>
                             <h2 id="pricing-heading" className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.pricingTitle}</h2>
-                        </div>
+                        </FadeUp>
                         <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-5">
                             {/* Free */}
+                            <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-40px" }} transition={{ duration: 0.5, delay: 0, ease: [0.22, 0.61, 0.36, 1] }}>
                             <GlassCard className="p-6 flex flex-col">
                                 <div className="mb-6">
                                     <p className="font-mono text-xs uppercase tracking-[0.16em] text-text-tertiary">{t.freeName}</p>
@@ -489,7 +541,9 @@ export default function LandingPageNocturne() {
                                 </ul>
                                 <Link href="/signup"><RicoButton variant="ghost" size="md" className="w-full">{t.startFree}</RicoButton></Link>
                             </GlassCard>
+                            </motion.div>
                             {/* Pro - Featured */}
+                            <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-40px" }} transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 0.61, 0.36, 1] }}>
                             <GlassCard className="p-6 flex flex-col relative border-ember/30">
                                 <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-ember text-void text-xs font-mono font-semibold">{t.popular}</span>
                                 <div className="mb-6">
@@ -504,7 +558,9 @@ export default function LandingPageNocturne() {
                                 </ul>
                                 <Link href="/subscription"><RicoButton variant="primary" size="md" className="w-full">{t.proName}</RicoButton></Link>
                             </GlassCard>
+                            </motion.div>
                             {/* Premium */}
+                            <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-40px" }} transition={{ duration: 0.5, delay: 0.2, ease: [0.22, 0.61, 0.36, 1] }}>
                             <GlassCard className="p-6 flex flex-col">
                                 <div className="mb-6">
                                     <p className="font-mono text-xs uppercase tracking-[0.16em] text-text-tertiary">{t.premiumName}</p>
@@ -518,6 +574,7 @@ export default function LandingPageNocturne() {
                                 </ul>
                                 <Link href="/subscription"><RicoButton variant="ghost" size="md" className="w-full">{t.premiumName}</RicoButton></Link>
                             </GlassCard>
+                            </motion.div>
                         </div>
                         <p className="text-center text-sm text-text-tertiary mt-6">{t.cancelAnytime}</p>
                     </div>
@@ -526,6 +583,7 @@ export default function LandingPageNocturne() {
                 {/* Phase 5 - Credibility */}
                 <section className="py-16 md:py-24 pt-0" aria-labelledby="credibility-heading">
                     <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
+                        <FadeUp>
                         <GlassCard className="p-6 md:p-8 lg:p-10">
                             <div className="grid md:grid-cols-2 gap-10 items-center">
                                 <div>
@@ -565,16 +623,17 @@ export default function LandingPageNocturne() {
                                 </div>
                             </div>
                         </GlassCard>
+                        </FadeUp>
                     </div>
                 </section>
 
                 {/* Phase 5 - FAQ */}
                 <section className="py-16 md:py-24 pt-0" aria-labelledby="faq-heading">
                     <div className="max-w-[720px] mx-auto px-4 sm:px-6">
-                        <div className="mb-8 md:mb-10 text-center">
+                        <FadeUp className="mb-8 md:mb-10 text-center">
                             <Eyebrow className="mb-4 justify-center">{t.faqEyebrow}</Eyebrow>
                             <h2 id="faq-heading" className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em]">{t.faqTitle}</h2>
-                        </div>
+                        </FadeUp>
                         <div className="space-y-3">
                             {[
                                 { q: t.faq1Q, a: t.faq1A },
@@ -603,14 +662,14 @@ export default function LandingPageNocturne() {
 
                 {/* Phase 5 - Final CTA */}
                 <section className="py-16 md:py-24" aria-labelledby="final-cta-heading">
-                    <div className="max-w-[600px] mx-auto px-4 sm:px-6 text-center">
+                    <FadeUp className="max-w-[600px] mx-auto px-4 sm:px-6 text-center">
                         <div className="mb-6 flex justify-center">
                             <Aura size="md" variant="ember" aria-hidden="true" />
                         </div>
                         <h2 id="final-cta-heading" className="font-display font-semibold text-[clamp(1.7rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-4">{t.finalTitle}</h2>
                         <p className="text-text-secondary mb-8">{t.finalSubtitle}</p>
                         <Link href="/upload"><RicoButton variant="primary" size="lg">{t.finalCta}</RicoButton></Link>
-                    </div>
+                    </FadeUp>
                 </section>
             </main>
 
@@ -639,5 +698,6 @@ export default function LandingPageNocturne() {
                 </div>
             </footer>
         </div>
+        </MotionConfig>
     );
 }
