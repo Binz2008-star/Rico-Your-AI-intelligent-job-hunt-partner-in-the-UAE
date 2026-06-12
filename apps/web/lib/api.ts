@@ -254,9 +254,12 @@ export async function fetchProfile(): Promise<ProfileResponse> {
     credentials: "include",
   });
   if (!res.ok) throw new Error(`Profile fetch failed: ${res.status}`);
+  // Guard against non-JSON responses (e.g. Vercel timeout HTML on cold start)
+  const body = await res.json().catch(() => null);
+  if (body === null) throw new Error("Profile response was not valid JSON");
   return validateShape(
     RicoProfileResponseSchema,
-    await res.json(),
+    body,
     "Rico profile",
   );
 }

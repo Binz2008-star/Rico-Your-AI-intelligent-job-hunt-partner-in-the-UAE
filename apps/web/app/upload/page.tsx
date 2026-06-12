@@ -350,8 +350,14 @@ function FileManagerView({ isAr, t, router }: FileManagerViewProps) {
                 // CV upload goes through the parse+preview pipeline (/rico/upload-cv).
                 // This does NOT write to user_documents. The file only becomes active
                 // after the user completes confirm-cv-profile in /command.
-                await uploadCV(file);
+                const cvResult = await uploadCV(file);
                 setIsUploading(false);
+                if (!cvResult.ok) {
+                    // Backend rejected the upload (e.g. company profile, parse error).
+                    // Show the backend message so the user knows what to fix.
+                    setError(cvResult.message ?? t('uploadError'));
+                    return;
+                }
                 setIsProcessing(true);
             } else {
                 await uploadUserFile(file, docType as 'cover_letter' | 'other');
