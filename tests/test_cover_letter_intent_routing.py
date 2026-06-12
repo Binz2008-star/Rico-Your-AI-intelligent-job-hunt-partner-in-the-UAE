@@ -105,40 +105,21 @@ class TestDraftMessageFallback:
 
     def test_fallback_includes_target_roles(self):
         profile = self._profile()
-        # Simulate no routed tool — call handler directly via the method body logic
-        name = self.api._profile_value(profile, "name") or ""
-        target_roles = self.api._as_list(self.api._profile_value(profile, "target_roles"))
-
-        assert target_roles, "Profile should have target roles"
-        roles_hint = ", ".join(target_roles[:3])
-        msg = (
-            f"I can write a cover letter for you{', ' + name if name else ''}. "
-            f"Which role should I tailor it for?\n\n"
-            f"Your target roles: **{roles_hint}**\n\n"
-            "Reply with a role name, or paste a job posting and I'll tailor it directly."
-        )
+        msg = self.api._cover_letter_clarification_message(profile)
 
         assert "Environmental Manager" in msg
         assert "Ahmed" in msg
         assert "cover letter" in msg.lower()
+        assert "Which role and company" in msg
         # Must NOT claim it cannot help
         assert "cannot" not in msg.lower()
         assert "don't have" not in msg.lower()
 
     def test_fallback_no_profile_generic_prompt(self):
         profile = self._profile(name="", target_roles=[])
-        name = self.api._profile_value(profile, "name") or ""
-        target_roles = self.api._as_list(self.api._profile_value(profile, "target_roles"))
-
-        assert not target_roles
-        msg = (
-            f"I can write a cover letter for you{', ' + name if name else ''}. "
-            "Which role and company should I target?\n\n"
-            "Reply with:\n"
-            "• Role title and company name\n"
-            "• Or paste the job posting directly"
-        )
+        msg = self.api._cover_letter_clarification_message(profile)
 
         assert "cover letter" in msg.lower()
         assert "role" in msg.lower()
+        assert "company" in msg.lower()
         assert "cannot" not in msg.lower()
