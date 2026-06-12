@@ -199,13 +199,11 @@ body {
         rgb(var(--bg));
     color: rgb(var(--text-primary));
     font-family: var(--font-body), system-ui, sans-serif;
-    height: 100%;
+    /* Do NOT set height: 100% here. Combining height:100% with overflow-x:hidden
+       forces overflow-y:auto on body (CSS spec), making body a fixed-height scroll
+       container instead of the window — this breaks Framer Motion whileInView for
+       all below-fold content. Let body grow naturally to fit content. */
     overflow-x: hidden;
-}
-
-#root,
-body>div:first-child {
-    height: 100%;
 }
 
 /* Glass panel utility */
