@@ -433,6 +433,11 @@ export const translations = {
     uploadErrQuota: "Storage quota reached. Upgrade your plan to upload more files.",
     uploadCvPreviewReady: "CV preview ready",
     uploadCvConfirmHint: "Complete the review in the chat to save it to My Files.",
+    processingStage1: "Reading your CV...",
+    processingStage2: "Understanding your experience...",
+    processingStage3: "Identifying your skills and roles...",
+    processingStage4: "Building your career profile...",
+    processingStage5: "Preparing your job search dashboard...",
 
     // Command page
     commandPlaceholder: "Tell Rico what you need...",
@@ -1434,6 +1439,11 @@ export const translations = {
     uploadErrQuota: "تم بلوغ الحصة التخزينية. ارقِ خطتك لرفع المزيد من الملفات.",
     uploadCvPreviewReady: "معاينة السيرة الذاتية جاهزة",
     uploadCvConfirmHint: "أكمل المراجعة في المحادثة لحفظها في ملفاتي.",
+    processingStage1: "قراءة سيرتك الذاتية...",
+    processingStage2: "فهم خبرتك المهنية...",
+    processingStage3: "تحديد مهاراتك وأدوارك...",
+    processingStage4: "بناء ملفك المهني...",
+    processingStage5: "تحضير لوحة البحث الوظيفي...",
 
     // Command page
     commandPlaceholder: "أخبر ريكو بما تحتاج...",
