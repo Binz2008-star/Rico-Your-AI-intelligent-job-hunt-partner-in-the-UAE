@@ -7,14 +7,16 @@ const backendUrl =
     process.env.NEXT_PUBLIC_API_BASE_URL ||
     process.env.NEXT_PUBLIC_RICO_API;
 
-// CSP enforced. Inline scripts in layout.tsx (theme + lang init) are locked to
-// their SHA-256 hashes so 'unsafe-inline' is not needed.
+// CSP in report-only mode. Our two inline init scripts are whitelisted by their
+// SHA-256 hashes (no 'unsafe-inline' needed for them). Next.js injects additional
+// inline scripts that vary per build; full enforcement requires nonce-based CSP
+// via Next.js middleware — flip to Content-Security-Policy once that is wired up.
 // To update hashes: python3 -c "import hashlib,base64; print('sha256-' + base64.b64encode(hashlib.sha256('<script content>'.encode()).digest()).decode())"
 const csp = [
     "default-src 'self'",
     // theme-init hash: sha256-e3jHsOXxdXVtROmxFsrXZluLXMJZalSnzegpELleX6Y=
     // lang-init hash:  sha256-y0eJobwms3FTv51+hvoyq6L38bxbY6yjgcfFsbD/Hmk=
-    "script-src 'self' 'sha256-e3jHsOXxdXVtROmxFsrXZluLXMJZalSnzegpELleX6Y=' 'sha256-y0eJobwms3FTv51+hvoyq6L38bxbY6yjgcfFsbD/Hmk=' https://va.vercel-scripts.com",
+    "script-src 'self' 'unsafe-inline' 'sha256-e3jHsOXxdXVtROmxFsrXZluLXMJZalSnzegpELleX6Y=' 'sha256-y0eJobwms3FTv51+hvoyq6L38bxbY6yjgcfFsbD/Hmk=' https://va.vercel-scripts.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob: https:",
@@ -52,7 +54,7 @@ const nextConfig = {
                     // Explicit scoped ACAO overrides any platform-level wildcard; same-origin BFF calls don't need CORS.
                     { key: "Access-Control-Allow-Origin", value: "https://ricohunt.com" },
                     { key: "Vary", value: "Origin" },
-                    { key: "Content-Security-Policy", value: csp },
+                    { key: "Content-Security-Policy-Report-Only", value: csp },
                 ],
             },
         ];
