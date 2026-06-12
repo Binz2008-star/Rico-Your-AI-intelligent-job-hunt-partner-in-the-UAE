@@ -1,7 +1,7 @@
 "use client";
 
 import { useLanguage } from "@/contexts/LanguageContext";
-import { motion, MotionConfig, useInView } from "framer-motion";
+import { AnimatePresence, motion, MotionConfig, useInView, useMotionValue, useScroll, useSpring, useTransform } from "framer-motion";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Aura } from "./ui/rico/Aura";
@@ -45,6 +45,32 @@ function CountUp({ to, duration = 1.4 }: { to: number; duration?: number }) {
     return <span ref={ref}>{count}</span>;
 }
 
+// Mouse-tracking 3-D tilt wrapper for the hero match card
+function TiltCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+    const cardX = useMotionValue(0);
+    const cardY = useMotionValue(0);
+    const rotateX = useSpring(useTransform(cardY, [-0.5, 0.5], [5, -5]), { stiffness: 300, damping: 30 });
+    const rotateY = useSpring(useTransform(cardX, [-0.5, 0.5], [-5, 5]), { stiffness: 300, damping: 30 });
+
+    const onMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        cardX.set((e.clientX - rect.left) / rect.width - 0.5);
+        cardY.set((e.clientY - rect.top) / rect.height - 0.5);
+    };
+    const onMouseLeave = () => { cardX.set(0); cardY.set(0); };
+
+    return (
+        <motion.div
+            className={`relative [transform-style:preserve-3d] ${className}`}
+            style={{ rotateX, rotateY }}
+            onMouseMove={onMouseMove}
+            onMouseLeave={onMouseLeave}
+        >
+            {children}
+        </motion.div>
+    );
+}
+
 // SVG Icons
 const ShieldIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z" /></svg>;
 const CheckIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" /></svg>;
@@ -65,6 +91,8 @@ export default function LandingPageNocturne() {
     const { language, setLanguage } = useLanguage();
     const isAr = language === "ar";
     const [openFaq, setOpenFaq] = useState<number | null>(null);
+    const { scrollYProgress } = useScroll();
+    const scrollProgress = useSpring(scrollYProgress, { stiffness: 200, damping: 30, restDelta: 0.001 });
 
     const t = {
         signIn: isAr ? "تسجيل الدخول" : "Sign in",
@@ -215,6 +243,12 @@ export default function LandingPageNocturne() {
 
     return (
         <MotionConfig reducedMotion="user">
+        {/* Scroll progress bar — gold line at the top of the viewport */}
+        <motion.div
+            className="fixed top-0 inset-x-0 h-[2px] origin-left z-[60] motion-reduce:hidden"
+            style={{ scaleX: scrollProgress, background: "linear-gradient(90deg, rgb(var(--gold-hover)), rgb(var(--gold)))" }}
+            aria-hidden="true"
+        />
         <div dir={isAr ? "rtl" : "ltr"} className="relative min-h-screen overflow-x-hidden bg-void text-text-primary">
             {/* Atmosphere — layered command-center depth (all fixed, non-interactive) */}
             <div className="fixed inset-0 pointer-events-none z-0 motion-reduce:opacity-50" aria-hidden="true">
@@ -257,9 +291,31 @@ export default function LandingPageNocturne() {
                         <FadeUp>
                             <Eyebrow className="mb-6">{t.eyebrow}</Eyebrow>
                             <h1 className="font-display font-semibold text-[clamp(2.3rem,5.6vw,4.2rem)] leading-[1.03] tracking-[-0.028em]">
-                                <span className="bg-gradient-to-b from-text-primary to-text-secondary bg-clip-text text-transparent">{t.headline1}</span>
+                                <span className="bg-gradient-to-b from-text-primary to-text-secondary bg-clip-text text-transparent">
+                                    {t.headline1.split(" ").map((word, i, arr) => (
+                                        <motion.span
+                                            key={`h1-${i}`}
+                                            initial={{ opacity: 0, y: 14 }}
+                                            whileInView={{ opacity: 1, y: 0 }}
+                                            viewport={{ once: true, margin: "-40px" }}
+                                            transition={{ duration: 0.5, delay: i * 0.04, ease: [0.22, 0.61, 0.36, 1] }}
+                                            className="inline-block"
+                                        >{word}{i < arr.length - 1 ? " " : ""}</motion.span>
+                                    ))}
+                                </span>
                                 <br />
-                                <span className="bg-gradient-to-b from-ember-bright to-ember bg-clip-text text-transparent">{t.headline2}</span>
+                                <span className="bg-gradient-to-b from-ember-bright to-ember bg-clip-text text-transparent">
+                                    {t.headline2.split(" ").map((word, i, arr) => (
+                                        <motion.span
+                                            key={`h2-${i}`}
+                                            initial={{ opacity: 0, y: 14 }}
+                                            whileInView={{ opacity: 1, y: 0 }}
+                                            viewport={{ once: true, margin: "-40px" }}
+                                            transition={{ duration: 0.5, delay: (t.headline1.split(" ").length + i) * 0.04, ease: [0.22, 0.61, 0.36, 1] }}
+                                            className="inline-block"
+                                        >{word}{i < arr.length - 1 ? " " : ""}</motion.span>
+                                    ))}
+                                </span>
                             </h1>
                             <p className="mt-6 max-w-[42ch] text-lg leading-relaxed text-text-secondary">{t.subtitle}</p>
                             <div className="mt-9 flex flex-wrap gap-3">
@@ -267,10 +323,17 @@ export default function LandingPageNocturne() {
                                 <Link href="#how"><RicoButton variant="ghost" size="md">{t.ctaHow}</RicoButton></Link>
                             </div>
                             <div className="mt-8 flex flex-wrap gap-2">
-                                {[t.trust1, t.trust2, t.trust3].map((item) => (
-                                    <span key={item} className="inline-flex items-center gap-1.5 font-mono text-[11px] text-text-tertiary border border-overlay/7 rounded-full px-3 py-1.5 bg-surface/30">
+                                {[t.trust1, t.trust2, t.trust3].map((item, i) => (
+                                    <motion.span
+                                        key={item}
+                                        initial={{ opacity: 0, y: 10 }}
+                                        whileInView={{ opacity: 1, y: 0 }}
+                                        viewport={{ once: true, margin: "-40px" }}
+                                        transition={{ duration: 0.4, delay: 0.45 + i * 0.06, ease: "easeOut" }}
+                                        className="inline-flex items-center gap-1.5 font-mono text-[11px] text-text-tertiary border border-overlay/7 rounded-full px-3 py-1.5 bg-surface/30"
+                                    >
                                         <span className="h-1 w-1 rounded-full bg-aura shadow-[0_0_6px_rgb(var(--aura)/0.5)]" />{item}
-                                    </span>
+                                    </motion.span>
                                 ))}
                             </div>
                         </FadeUp>
@@ -279,8 +342,8 @@ export default function LandingPageNocturne() {
                             <div aria-hidden="true" className="absolute -inset-10 bg-[radial-gradient(ellipse_at_50%_38%,rgb(var(--gold)/0.10),transparent_65%)] blur-2xl animate-glow-pulse motion-reduce:animate-none" />
                             {/* Floor shadow — sells the float */}
                             <div aria-hidden="true" className="absolute -bottom-10 inset-x-12 h-10 bg-[radial-gradient(ellipse_at_center,rgb(var(--shadow-color)/0.6),transparent_70%)] blur-md" />
-                            {/* Tilt layer — subtle 3D facing the headline; mirrored for RTL */}
-                            <div className="relative [transform-style:preserve-3d] lg:[transform:rotateX(1.5deg)_rotateY(-2.5deg)] lg:rtl:[transform:rotateX(1.5deg)_rotateY(2.5deg)]">
+                            {/* Tilt layer — mouse-tracking 3-D */}
+                            <TiltCard>
                             <GlassCard className="p-5 relative overflow-visible animate-drift motion-reduce:animate-none">
                                 {/* Top edge-light */}
                                 <div aria-hidden="true" className="absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-ember/40 to-transparent" />
@@ -313,7 +376,7 @@ export default function LandingPageNocturne() {
                                     <RicoButton variant="ghost" size="sm">{t.matchReview}</RicoButton>
                                 </div>
                             </GlassCard>
-                            </div>
+                            </TiltCard>
                         </FadeUp>
                     </div>
                 </section>
@@ -651,9 +714,21 @@ export default function LandingPageNocturne() {
                                         <span className="font-display font-semibold text-base">{faq.q}</span>
                                         <span className={`transform transition-transform duration-200 ${openFaq === i ? 'rotate-180' : ''}`}><ChevronDownIcon /></span>
                                     </button>
-                                    <div id={`faq-answer-${i}`} className={`overflow-hidden transition-all duration-300 ${openFaq === i ? 'max-h-48' : 'max-h-0'}`}>
-                                        <p className="px-5 pb-5 text-sm text-text-secondary">{faq.a}</p>
-                                    </div>
+                                    <AnimatePresence initial={false}>
+                                        {openFaq === i && (
+                                            <motion.div
+                                                id={`faq-answer-${i}`}
+                                                key="answer"
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: "auto", opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                transition={{ duration: 0.3, ease: [0.22, 0.61, 0.36, 1] }}
+                                                className="overflow-hidden"
+                                            >
+                                                <p className="px-5 pb-5 text-sm text-text-secondary">{faq.a}</p>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
                                 </GlassCard>
                             ))}
                         </div>
