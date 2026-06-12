@@ -244,7 +244,6 @@ app.include_router(subscription_router)
 app.include_router(admin_subscriptions_router)
 app.include_router(job_lifecycle_router)
 app.include_router(apply_queue_router)
-app.include_router(files_router)
 
 
 @app.get("/health")
