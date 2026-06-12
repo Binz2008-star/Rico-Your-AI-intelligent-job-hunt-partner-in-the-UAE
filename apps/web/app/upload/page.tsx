@@ -411,7 +411,17 @@ function FileManagerView({ isAr, t, router }: FileManagerViewProps) {
     return (
         <div className="flex w-full max-w-3xl flex-col gap-4" dir={isAr ? 'rtl' : 'ltr'}>
             {/* Processing overlay for CV uploads */}
-            <ProcessingOverlay active={isProcessing} onComplete={handleCvProcessingComplete} />
+            <ProcessingOverlay
+                active={isProcessing}
+                onComplete={handleCvProcessingComplete}
+                stages={[
+                    t('processingStage1'),
+                    t('processingStage2'),
+                    t('processingStage3'),
+                    t('processingStage4'),
+                    t('processingStage5'),
+                ]}
+            />
 
             {/* Header row */}
             <div className="flex items-center justify-between">
@@ -529,7 +539,17 @@ function GuestUploadView({ isAr, t, router }: GuestUploadViewProps) {
 
     return (
         <div dir={isAr ? 'rtl' : 'ltr'} className="flex w-full max-w-5xl flex-col gap-6 text-start">
-            <ProcessingOverlay active={isProcessing} onComplete={handleProcessingComplete} />
+            <ProcessingOverlay
+                active={isProcessing}
+                onComplete={handleProcessingComplete}
+                stages={[
+                    t('processingStage1'),
+                    t('processingStage2'),
+                    t('processingStage3'),
+                    t('processingStage4'),
+                    t('processingStage5'),
+                ]}
+            />
 
             {uploadComplete ? (
                 <PageTransition>
