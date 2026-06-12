@@ -2050,6 +2050,129 @@ class RicoChatAPI:
             parts.append(salary)
         return " - ".join(parts)
 
+    @staticmethod
+    def _clean_explicit_job_value(value: Any) -> str:
+        text = str(value or "")
+        text = re.sub(r"\s+", " ", text).strip(" \t\r\n\"'`.,!?;:")
+        text = re.sub(
+            r"\b(?:please|use what you know about me|using what you know about me)$",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        )
+        return text.strip(" \t\r\n\"'`.,!?;:")
+
+    @classmethod
+    def _extract_explicit_draft_job_from_message(cls, message: str) -> dict[str, str]:
+        text = str(message or "")
+        if not cls._requests_application_draft(text):
+            return {}
+
+        title_company = re.search(
+            r"\b(?:for|to)\s+"
+            r"(?P<title>[A-Za-z][A-Za-z0-9&/()+.' -]{1,90}?)"
+            r"\s+\bat\s+"
+            r"(?P<company>[A-Za-z][A-Za-z0-9&/()+.' -]{1,90}?)"
+            r"(?:\s+\bin\s+(?P<location>[A-Za-z][A-Za-z .'-]{1,40}))?"
+            r"(?=$|[.?!,;])",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if title_company:
+            job = {
+                "title": cls._clean_explicit_job_value(title_company.group("title")),
+                "company": cls._clean_explicit_job_value(title_company.group("company")),
+            }
+            location = cls._clean_explicit_job_value(title_company.group("location"))
+            if location:
+                job["location"] = location
+            return {k: v for k, v in job.items() if v}
+
+        company_only = re.search(
+            r"\b(?:to|at)\s+"
+            r"(?P<company>[A-Z][A-Za-z0-9&/()+.' -]{1,90}?)"
+            r"(?:\s+\bin\s+(?P<location>[A-Za-z][A-Za-z .'-]{1,40}))?"
+            r"(?=$|[.?!,;])",
+            text,
+        )
+        if company_only:
+            job = {"company": cls._clean_explicit_job_value(company_only.group("company"))}
+            location = cls._clean_explicit_job_value(company_only.group("location"))
+            if location:
+                job["location"] = location
+            return {k: v for k, v in job.items() if v}
+
+        return {}
+
+    @staticmethod
+    def _normalize_context_match_value(value: Any) -> str:
+        return re.sub(r"[^a-z0-9]+", " ", str(value or "").lower()).strip()
+
+    def _resolve_explicit_draft_job_context(
+        self,
+        user_id: str,
+        explicit_job: dict[str, str],
+    ) -> tuple[dict[str, Any], str]:
+        """Enrich explicit drafting targets from the authenticated user's applications only."""
+        company = self._normalize_context_match_value(explicit_job.get("company"))
+        title = self._normalize_context_match_value(explicit_job.get("title"))
+        if not company:
+            return dict(explicit_job), "explicit_message"
+
+        try:
+            from src.repositories import applications_repo
+
+            applications = applications_repo.get_all(user_id=user_id)
+        except Exception:
+            applications = []
+
+        for app in applications or []:
+            if not isinstance(app, dict):
+                continue
+            app_company = self._normalize_context_match_value(
+                self._job_context_value(app, "company", "company_name")
+            )
+            if not app_company or app_company != company:
+                continue
+            app_title = self._normalize_context_match_value(
+                self._job_context_value(app, "title", "job_title")
+            )
+            if title and app_title and title != app_title:
+                continue
+            merged = dict(app)
+            merged.update({k: v for k, v in explicit_job.items() if v})
+            return merged, "explicit_message_saved_application"
+
+        return dict(explicit_job), "explicit_message"
+
+    @staticmethod
+    def _log_document_draft_context_source(source: str, job: dict[str, Any] | None = None) -> None:
+        logger.info(
+            "document_draft_context source=%s has_title=%s has_company=%s",
+            source,
+            bool((job or {}).get("title")),
+            bool((job or {}).get("company")),
+        )
+
+    def _cover_letter_clarification_message(self, profile: Any) -> str:
+        name = self._profile_value(profile, "name") or ""
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        if target_roles:
+            roles_hint = ", ".join(target_roles[:3])
+            return (
+                f"I can write a cover letter for you{', ' + name if name else ''}. "
+                "Which role and company should I target?\n\n"
+                f"Your target roles: **{roles_hint}**\n\n"
+                "Reply with the role title and company name, or paste the job posting directly."
+            )
+        return (
+            f"I can write a cover letter for you{', ' + name if name else ''}. "
+            "Which role and company should I target?\n\n"
+            "Reply with:\n"
+            "• Role title and company name\n"
+            "• Or paste the job posting directly"
+        )
+
     def _draft_application_message(self, job: dict[str, Any], profile: Any, *, arabic: bool) -> str:
         title = self._job_context_value(job, "title") or ("الدور" if arabic else "the role")
         company = self._job_context_value(job, "company") or ("الشركة" if arabic else "the company")
@@ -2079,15 +2202,19 @@ class RicoChatAPI:
         if not self._looks_like_application_channel_followup(message):
             return None
 
-        job = self._resolve_recent_application_job(user_id)
-        if not job:
-            return None
-
-        arabic = self._is_arabic_text(message)
         wants_draft = self._requests_application_draft(message)
         wants_send = self._requests_application_send(message)
         no_favorite = self._wants_no_favorite(message)
         recruiter_email = EMAIL_RE.search(message or "")
+        if wants_draft and not (wants_send or no_favorite or recruiter_email):
+            return None
+
+        job = self._resolve_recent_application_job(user_id)
+        if not job:
+            return None
+        self._log_document_draft_context_source("recent_followup_context", job)
+
+        arabic = self._is_arabic_text(message)
         link = self._job_context_value(job, "link", "apply_url", "source_url")
         linkedin_context = self._mentions_linkedin_channel(message) or "linkedin" in link.lower() or "inmail" in link.lower()
         job_context = self._format_application_job_context(job, arabic=arabic)
@@ -3443,7 +3570,10 @@ class RicoChatAPI:
         # Follow-ups like "go ahead", "send it", or Arabic "صيغ رسالة ... وارسلها"
         # must preserve the current job context without claiming unsupported
         # LinkedIn/job-portal submission or re-showing the same action menu.
-        application_channel_result = self._handle_application_channel_followup(user_id, message, profile)
+        explicit_draft_job = self._extract_explicit_draft_job_from_message(message)
+        application_channel_result = None
+        if not explicit_draft_job:
+            application_channel_result = self._handle_application_channel_followup(user_id, message, profile)
         if application_channel_result is not None:
             return self._finalize(application_channel_result, self.SOURCE_KEYWORD, profile=profile)
 
@@ -4307,19 +4437,10 @@ class RicoChatAPI:
                 raw_company = ""
 
             title, company, _ctx_row = raw_title, raw_company, None
-            if not title or not company:
-                try:
-                    from src.repositories.user_job_context_repo import (
-                        get_recently_discussed as _grd_pa,
-                        get_recently_interacted as _gri_pa,
-                    )
-                    _recent_pa = _grd_pa(user_id, limit=1) or _gri_pa(user_id, limit=1)
-                    if _recent_pa:
-                        _ctx_row = _recent_pa[0]
-                        title = title or (_ctx_row.get("title") or "")
-                        company = company or (_ctx_row.get("company") or "")
-                except Exception:
-                    pass
+            self._log_document_draft_context_source(
+                "explicit_message" if title and company else "clarification_required",
+                {"title": title, "company": company},
+            )
 
             if not title or not company:
                 msg = (
@@ -5102,60 +5223,38 @@ class RicoChatAPI:
 
         # Draft message / cover letter
         if legacy_intent == "draft_message":
-            context = self._build_router_context(user_id, profile)
-            routed = _route(message, user_id=user_id, context=context)
-            if routed.tool_name:
-                job_key = routed.tool_args.get("job_key", "")
-                # Resolve job dict so generate_message gets full context + profile identity
-                _routed_job = self._resolve_recent_application_job(user_id) or {}
-                if _routed_job:
-                    from src.message_generator import generate_message as _gen_msg
-                    cover = _gen_msg(_routed_job, profile=profile)
-                    self._append_chat(user_id, "assistant", cover)
-                    return self._finalize(
-                        {"type": "draft_message", "intent": "draft_message", "message": cover},
-                        routed.source, profile=profile,
-                    )
-                result = agent_runtime.handle_action(
-                    user_id=user_id, action="draft", job_key=job_key, source="chat",
-                )
-                response = {
-                    "type": "draft_message",
-                    "intent": "draft_message",
-                    "message": result.message,
-                }
-                self._append_chat(user_id, "assistant", result.message)
-                return self._finalize(response, routed.source, profile=profile)
-            # Try latest-job context before asking user to specify
-            _latest_job = self._resolve_recent_application_job(user_id)
-            if _latest_job and (_latest_job.get("title") or _latest_job.get("company")):
-                from src.message_generator import generate_message
-                cover = generate_message(_latest_job, profile=profile)
+            explicit_draft_job = explicit_draft_job or self._extract_explicit_draft_job_from_message(message)
+            if explicit_draft_job:
+                from src.message_generator import generate_message as _gen_msg
+
+                draft_job, context_source = self._resolve_explicit_draft_job_context(user_id, explicit_draft_job)
+                self._log_document_draft_context_source(context_source, draft_job)
+                cover = _gen_msg(draft_job, profile=profile)
                 self._append_chat(user_id, "assistant", cover)
                 return self._finalize(
                     {"type": "draft_message", "intent": "draft_message", "message": cover},
                     self.SOURCE_KEYWORD,
                     profile=profile,
                 )
-            # No job in context at all — guide user to pick a role or job first
-            name = self._profile_value(profile, "name") or ""
-            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
-            if target_roles:
-                roles_hint = ", ".join(target_roles[:3])
-                msg = (
-                    f"I can write a cover letter for you{', ' + name if name else ''}. "
-                    f"Which role should I tailor it for?\n\n"
-                    f"Your target roles: **{roles_hint}**\n\n"
-                    "Reply with a role name, or paste a job posting and I'll tailor it directly."
-                )
-            else:
-                msg = (
-                    f"I can write a cover letter for you{', ' + name if name else ''}. "
-                    "Which role and company should I target?\n\n"
-                    "Reply with:\n"
-                    "• Role title and company name\n"
-                    "• Or paste the job posting directly"
-                )
+
+            context = self._build_router_context(user_id, profile)
+            routed = _route(message, user_id=user_id, context=context)
+            if routed.tool_name:
+                job_key = routed.tool_args.get("job_key", "")
+                if job_key:
+                    result = agent_runtime.handle_action(
+                        user_id=user_id, action="draft", job_key=job_key, source="chat",
+                    )
+                    response = {
+                        "type": "draft_message",
+                        "intent": "draft_message",
+                        "message": result.message,
+                    }
+                    self._append_chat(user_id, "assistant", result.message)
+                    return self._finalize(response, routed.source, profile=profile)
+
+            self._log_document_draft_context_source("clarification_required", {})
+            msg = self._cover_letter_clarification_message(profile)
             self._append_chat(user_id, "assistant", msg)
             return self._finalize(
                 {"type": "cover_letter_prompt", "message": msg, "next_action": "provide_job_for_cover_letter"},
