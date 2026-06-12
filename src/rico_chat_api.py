@@ -46,6 +46,7 @@ from src.repositories.onboarding_repo import (
 from src.repositories.profile_repo import get_profile, upsert_profile
 from src.services.profile_context_resolver import (
     evaluate_minimum_profile,
+    has_career_profile_data,
     resolve_profile_context,
 )
 from src.services.operation_state import (
@@ -2969,6 +2970,24 @@ class RicoChatAPI:
         completed = is_onboarding_complete(user_id)
 
         if completed:
+            # Stale-completion guard: production rows can say 'completed' even
+            # though the user only has a signup shell row and no career data
+            # was ever saved. Do not trust the flag alone — shell users are
+            # downgraded to in_progress and asked for the missing fields.
+            # Only positive evidence of a shell (non-None profile with zero
+            # career data) triggers the downgrade: when get_profile() returns
+            # None (e.g. DB degraded) the completed flag is trusted so a DB
+            # hiccup never re-onboards real users. Users with ANY career data
+            # (e.g. CV-confirmed profiles without preferred_cities) are not
+            # downgraded either.
+            stale_profile = get_profile(user_id)
+            if stale_profile is not None:
+                ctx = resolve_profile_context(user_id, stale_profile)
+                if not has_career_profile_data(ctx):
+                    _, missing_fields = evaluate_minimum_profile(ctx)
+                    return self._missing_fields_onboarding_response(
+                        user_id, message, language, missing_fields
+                    )
             return self._handle_active_user(user_id, message)
 
         if self._looks_like_cv_upload(message):
@@ -3035,21 +3054,33 @@ class RicoChatAPI:
         ctx = resolve_profile_context(user_id, profile)
         min_complete, missing_fields = evaluate_minimum_profile(ctx)
         if not min_complete:
-            if getattr(self, "_persist", True):
-                set_onboarding_status(user_id, ONBOARDING_IN_PROGRESS)
-            import re as _re
-            _is_ar = language == "ar" or bool(_re.search(r'[؀-ۿ]', message))
-            response = {
-                "type": "onboarding",
-                "message": self._build_missing_fields_prompt(missing_fields, _is_ar),
-                "missing_fields": missing_fields,
-                "next_action": "complete_profile",
-            }
-            self._append_chat(user_id, "assistant", response["message"])
-            return self._finalize(response, self.SOURCE_KEYWORD, profile=None)
+            return self._missing_fields_onboarding_response(
+                user_id, message, language, missing_fields
+            )
 
         mark_onboarding_complete(user_id)
         return self._handle_active_user(user_id, message)
+
+    def _missing_fields_onboarding_response(
+        self,
+        user_id: str,
+        message: str,
+        language: str | None,
+        missing_fields: list[str],
+    ) -> dict[str, Any]:
+        """Set onboarding in_progress and ask for the missing career fields."""
+        if getattr(self, "_persist", True):
+            set_onboarding_status(user_id, ONBOARDING_IN_PROGRESS)
+        import re as _re
+        _is_ar = language == "ar" or bool(_re.search(r'[؀-ۿ]', message))
+        response = {
+            "type": "onboarding",
+            "message": self._build_missing_fields_prompt(missing_fields, _is_ar),
+            "missing_fields": missing_fields,
+            "next_action": "complete_profile",
+        }
+        self._append_chat(user_id, "assistant", response["message"])
+        return self._finalize(response, self.SOURCE_KEYWORD, profile=None)
 
     @staticmethod
     def _build_missing_fields_prompt(missing_fields: list[str], arabic: bool) -> str:

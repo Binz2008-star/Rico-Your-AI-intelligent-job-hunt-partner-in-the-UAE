@@ -57,6 +57,9 @@ class RicoProfile:
     red_flags: List[str] = field(default_factory=list)
     cv_filename: Optional[str] = None
     cv_status: Optional[str] = None
+    # CV evidence stored at the rico_profiles column level (the Jotform flow
+    # writes cv_file_url without setting cv_filename/cv_status in the JSONB).
+    cv_file_url: Optional[str] = None
     profile_creation_mode: Optional[str] = None
     manual_profile_wizard_disabled: bool = False
     normalization_version: Optional[int] = None

@@ -110,6 +110,7 @@ class ProfileContext:
     red_flags: List[str] = field(default_factory=list)
     cv_filename: Optional[str] = None
     cv_status: Optional[str] = None
+    cv_file_url: Optional[str] = None
     profile_creation_mode: Optional[str] = None
     manual_profile_wizard_disabled: bool = False
 
@@ -198,8 +199,13 @@ MINIMUM_PROFILE_FIELDS: List[str] = [
 
 
 def _has_cv_evidence(ctx: ProfileContext) -> bool:
-    """True only when a CV was actually uploaded/parsed (not inferred from skills)."""
-    return bool(ctx.cv_filename or ctx.cv_status == "parsed")
+    """True only when a CV was actually uploaded/parsed (not inferred from skills).
+
+    Covers both storage shapes in production:
+    - chat/web confirm flow: cv_filename + cv_status="parsed" in profile JSONB
+    - Jotform flow: cv_file_url at the rico_profiles column level
+    """
+    return bool(ctx.cv_filename or ctx.cv_file_url or ctx.cv_status == "parsed")
 
 
 def evaluate_minimum_profile(ctx: ProfileContext) -> tuple[bool, List[str]]:
@@ -365,6 +371,7 @@ def resolve_profile_context(
         red_flags=_as_list(_read("red_flags")),
         cv_filename=_as_str(_read("cv_filename")),
         cv_status=_as_str(_read("cv_status")),
+        cv_file_url=_as_str(_read("cv_file_url")),
         profile_creation_mode=_as_str(_read("profile_creation_mode")),
         manual_profile_wizard_disabled=_read_bool("manual_profile_wizard_disabled"),
     )

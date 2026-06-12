@@ -171,13 +171,67 @@ class TestFirstTimeOnboarding:
         mock_set.assert_called_once_with("new-user", ONBOARDING_IN_PROGRESS)
 
     def test_onboarding_welcome_not_shown_when_state_is_completed(self):
-        """Core regression: completed users must never see onboarding again."""
+        """Core regression: completed users with real career data never see onboarding again."""
         api = _make_api()
-        api.memory.load_profile.return_value = None  # even if profile is gone
+        profile = RicoProfile(user_id="done-user", target_roles=["HSE Officer"])
         with patch("src.rico_chat_api.is_onboarding_complete", return_value=True), \
+             patch("src.rico_chat_api.get_profile", return_value=profile), \
              patch("src.rico_chat_api.mark_onboarding_complete"):
             response = api.process_message("done-user", "hello")
         assert response["type"] != "onboarding"
+
+    def test_stale_completed_shell_user_is_downgraded(self):
+        """Stale 'completed' rows must not bypass the gate: a user whose
+        onboarding state says completed but who only has a signup shell row
+        (no career data) is downgraded to in_progress and asked for the
+        missing fields instead of being routed as an active user."""
+        api = _make_api()
+        shell = RicoProfile(user_id="stale-user", name="Vishnu Santhosh",
+                            email="stale-user@example.com")
+        with patch("src.rico_chat_api.is_onboarding_complete", return_value=True), \
+             patch("src.rico_chat_api.get_profile", return_value=shell), \
+             patch("src.rico_chat_api.set_onboarding_status") as mock_set, \
+             patch("src.rico_chat_api.mark_onboarding_complete") as mock_complete, \
+             patch.object(api, "_handle_active_user") as mock_active:
+            response = api.process_message("stale-user", "find me jobs")
+        mock_active.assert_not_called()
+        mock_complete.assert_not_called()
+        mock_set.assert_called_once_with("stale-user", ONBOARDING_IN_PROGRESS)
+        assert response["type"] == "onboarding"
+        assert set(response["missing_fields"]) == {
+            "target_roles", "preferred_cities", "years_experience", "skills",
+        }
+        assert "profile isn't complete" in response["message"]
+
+    def test_completed_user_with_unavailable_profile_not_downgraded(self):
+        """Graceful degradation: when get_profile() returns None (DB down),
+        trust the completed flag — a DB hiccup must never re-onboard users."""
+        api = _make_api()
+        with patch("src.rico_chat_api.is_onboarding_complete", return_value=True), \
+             patch("src.rico_chat_api.get_profile", return_value=None), \
+             patch("src.rico_chat_api.set_onboarding_status") as mock_set, \
+             patch.object(api, "_handle_active_user",
+                          return_value={"type": "job_matches", "message": "Here are jobs"}) as mock_active:
+            response = api.process_message("done-user", "find jobs")
+        mock_active.assert_called_once()
+        mock_set.assert_not_called()
+        assert response["type"] == "job_matches"
+
+    def test_stale_completed_user_with_career_data_stays_active(self):
+        """Completed users with any real career data (e.g. CV-confirmed
+        profiles without preferred_cities) must NOT be downgraded."""
+        api = _make_api()
+        cv_profile = RicoProfile(user_id="cv-done", skills=["nebosh"],
+                                 years_experience=5, cv_status="parsed")
+        with patch("src.rico_chat_api.is_onboarding_complete", return_value=True), \
+             patch("src.rico_chat_api.get_profile", return_value=cv_profile), \
+             patch("src.rico_chat_api.set_onboarding_status") as mock_set, \
+             patch.object(api, "_handle_active_user",
+                          return_value={"type": "job_matches", "message": "Here are jobs"}) as mock_active:
+            response = api.process_message("cv-done", "find me jobs")
+        mock_active.assert_called_once()
+        mock_set.assert_not_called()
+        assert response["type"] == "job_matches"
 
     def test_shell_profile_does_not_mark_onboarding_complete(self):
         """A signup shell row (empty RicoProfile) must NOT mark onboarding completed."""

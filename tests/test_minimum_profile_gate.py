@@ -94,6 +94,42 @@ class TestEvaluateMinimumProfile:
         assert complete is True
         assert missing == []
 
+    def test_jotform_cv_file_url_substitutes_for_skills(self):
+        """Jotform stores CV evidence only as rico_profiles.cv_file_url —
+        it must satisfy the skills-or-CV requirement too."""
+        ctx = ProfileContext(
+            user_id="u1",
+            target_roles=["HSE Officer"],
+            preferred_cities=["Dubai"],
+            years_experience=4.0,
+            cv_file_url="https://jotform.com/uploads/cv.pdf",
+        )
+        complete, missing = evaluate_minimum_profile(ctx)
+        assert complete is True
+        assert missing == []
+
+    def test_bundle_cv_file_url_survives_profile_mapping(self):
+        """DB bundle → RicoProfile → ProfileContext must not drop column-level
+        CV evidence (cv_file_url lives outside the profile JSONB)."""
+        from src.repositories.profile_repo import _bundle_to_profile
+        bundle = {
+            "id": 7,
+            "external_user_id": "jf-user",
+            "name": "Jot User",
+            "email": "jf@example.com",
+            "phone": None,
+            "telegram_username": None,
+            "telegram_chat_id": None,
+            "cv_file_url": "https://jotform.com/uploads/cv.pdf",
+            "profile": {"target_roles": ["HSE Officer"]},
+            "settings": {},
+        }
+        profile = _bundle_to_profile(bundle)
+        assert profile.cv_file_url == "https://jotform.com/uploads/cv.pdf"
+        ctx = resolve_profile_context("jf-user", profile)
+        assert ctx.cv_file_url == "https://jotform.com/uploads/cv.pdf"
+        assert has_career_profile_data(ctx) is True
+
     def test_zero_years_experience_counts_as_present(self):
         ctx = ProfileContext(
             user_id="u1",
@@ -118,6 +154,9 @@ class TestHasCareerProfileData:
         assert has_career_profile_data(ProfileContext(user_id="u1", skills=["python"])) is True
         assert has_career_profile_data(ProfileContext(user_id="u1", cv_filename="cv.pdf")) is True
         assert has_career_profile_data(ProfileContext(user_id="u1", years_experience=2.0)) is True
+        assert has_career_profile_data(
+            ProfileContext(user_id="u1", cv_file_url="https://x/cv.pdf")
+        ) is True
 
 
 # ── GET /api/v1/rico/profile ──────────────────────────────────────────────────

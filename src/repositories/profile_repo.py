@@ -135,6 +135,9 @@ def _bundle_to_profile(bundle: dict[str, Any]) -> RicoProfile:
         red_flags=pdata.get("red_flags") or [],
         cv_filename=pdata.get("cv_filename"),
         cv_status=pdata.get("cv_status"),
+        # Jotform stores the CV at the rico_profiles column level only;
+        # surface it so CV evidence survives the bundle → profile mapping.
+        cv_file_url=bundle.get("cv_file_url") or pdata.get("cv_file_url"),
         profile_creation_mode=pdata.get("profile_creation_mode"),
         manual_profile_wizard_disabled=pdata.get("manual_profile_wizard_disabled", False),
         normalization_version=pdata.get("normalization_version"),
