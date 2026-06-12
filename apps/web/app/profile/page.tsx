@@ -731,7 +731,7 @@ export default function ProfilePage() {
         <AppShell
             title={t("profileTitle")}
             sidebarProps={{
-                user: profile ? { name: profile.name ?? undefined, email: profile.email } : undefined,
+                user: profile ? { name: profile.name ?? undefined, email: profile.email ?? undefined } : undefined,
                 onLogout: handleLogout,
             }}
         >

@@ -322,8 +322,8 @@ export const RicoChatResponseSchema = z.object({
 
 export const RicoProfileResponseSchema = z.object({
     profile_exists: z.boolean(),
-    email: z.string().optional(),
-    user_id: z.string().optional(),
+    email: z.string().nullable().optional(),
+    user_id: z.string().nullable().optional(),
     name: z.string().nullable().optional(),
     phone: z.string().nullable().optional(),
     telegram_username: z.string().nullable().optional(),

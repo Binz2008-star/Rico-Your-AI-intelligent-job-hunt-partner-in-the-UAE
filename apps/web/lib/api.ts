@@ -228,8 +228,10 @@ export async function logout(): Promise<void> {
 
 export interface ProfileResponse {
   profile_exists: boolean;
-  email?: string;
-  user_id?: string;
+  /** Null for new users who have not completed profile setup. */
+  email?: string | null;
+  /** Null for new users who have not completed profile setup. */
+  user_id?: string | null;
   name?: string | null;
   phone?: string | null;
   telegram_username?: string | null;
@@ -254,9 +256,12 @@ export async function fetchProfile(): Promise<ProfileResponse> {
     credentials: "include",
   });
   if (!res.ok) throw new Error(`Profile fetch failed: ${res.status}`);
+  // Guard against non-JSON responses (e.g. Vercel timeout HTML on cold start)
+  const body = await res.json().catch(() => null);
+  if (body === null) throw new Error("Profile response was not valid JSON");
   return validateShape(
     RicoProfileResponseSchema,
-    await res.json(),
+    body,
     "Rico profile",
   );
 }

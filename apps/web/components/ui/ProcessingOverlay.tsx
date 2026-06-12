@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 
-const PROCESSING_STAGES = [
+const DEFAULT_STAGES = [
     'Reading your CV...',
     'Understanding your experience...',
     'Identifying your skills and roles...',
@@ -13,13 +13,18 @@ const PROCESSING_STAGES = [
 interface ProcessingOverlayProps {
     active: boolean;
     onComplete?: () => void;
+    /** Optional translated stage labels. Falls back to English defaults. */
+    stages?: readonly string[];
 }
 
 /**
  * Cinematic processing overlay with pulsing rings and rotating status text.
  * Shows during CV upload / profile generation.
+ *
+ * Pass `stages` to render translated status text (e.g. Arabic).
  */
-export function ProcessingOverlay({ active, onComplete }: ProcessingOverlayProps) {
+export function ProcessingOverlay({ active, onComplete, stages }: ProcessingOverlayProps) {
+    const STAGES = stages ?? DEFAULT_STAGES;
     const [stageIndex, setStageIndex] = useState(0);
 
     useEffect(() => {
@@ -31,17 +36,17 @@ export function ProcessingOverlay({ active, onComplete }: ProcessingOverlayProps
         if (!active) return;
 
         const timeout = setTimeout(() => {
-            if (stageIndex >= PROCESSING_STAGES.length - 1) {
+            if (stageIndex >= STAGES.length - 1) {
                 onComplete?.();
                 return;
             }
-            setStageIndex((prev) => Math.min(prev + 1, PROCESSING_STAGES.length - 1));
+            setStageIndex((prev) => Math.min(prev + 1, STAGES.length - 1));
         }, 1800);
 
         return () => {
             clearTimeout(timeout);
         };
-    }, [active, onComplete, stageIndex]);
+    }, [active, onComplete, stageIndex, STAGES.length]);
 
     if (!active) return null;
 
@@ -63,12 +68,12 @@ export function ProcessingOverlay({ active, onComplete }: ProcessingOverlayProps
                 key={stageIndex}
                 className="text-[10px] uppercase tracking-[0.25em] text-white/60 animate-[fadeSlideIn_0.5s_ease-out]"
             >
-                {PROCESSING_STAGES[stageIndex]}
+                {STAGES[stageIndex]}
             </p>
 
             {/* Progress dots */}
             <div className="flex gap-1.5 mt-6">
-                {PROCESSING_STAGES.map((_, i) => (
+                {STAGES.map((_, i) => (
                     <div
                         key={i}
                         className={`w-1.5 h-1.5 rounded-full transition-all duration-500 ${
