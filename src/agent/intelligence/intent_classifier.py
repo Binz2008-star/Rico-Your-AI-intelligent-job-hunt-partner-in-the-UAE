@@ -481,6 +481,32 @@ _ROLE_CHANGE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Source-filter intent: exclude/include specific job board by name.
+# Must be checked BEFORE _JOB_SEARCH_EXPLICIT_RE so "exclude LinkedIn results"
+# is not treated as a role-extraction query.
+_SOURCE_FILTER_RE = re.compile(
+    r"\b(exclude|filter\s+out|don'?t\s+show|hide|remove|without|no\s+more)\b"
+    r".{0,40}\b(linkedin|naukri|bayt|indeed|glassdoor|monster|ziprecruiter|results?|listings?)\b"
+    r"|\b(only\s+from|only\s+show\s+from|show\s+only\s+from|just\s+(?:show|from))\b"
+    r".{0,30}\b(linkedin|naukri|bayt|indeed|glassdoor)\b"
+    r"|\b(exclude|filter)\s+(linkedin|naukri|bayt|indeed|glassdoor)\b",
+    re.IGNORECASE,
+)
+
+# Compound search-refinement: employment-type negation or location-only constraint
+# without an explicit role name.  "show me only jobs in Dubai, no contract roles"
+# fires this before _JOB_SEARCH_EXPLICIT_RE can misclassify "only" or "contract"
+# as a role to search for.
+_SEARCH_REFINE_RE = re.compile(
+    r"\bno\s+(contract|temp|temporary|freelance|part.time)\b"
+    r"|\bnot\s+contract(ing)?\b"
+    r"|\b(permanent|full.time|full\s+time)\s+only\b"
+    r"|\bonly\s+(permanent|full.time|full\s+time|on.site|onsite|remote|hybrid)\b"
+    r"|\bonly\s+in\s+(dubai|abu\s+dhabi|sharjah|ajman|ras\s+al\s+khaimah|fujairah|uae)\b"
+    r"|\b(dubai|abu\s+dhabi|sharjah|ajman|uae)\s+only\b",
+    re.IGNORECASE,
+)
+
 _JOB_SEARCH_EXPLICIT_RE = re.compile(
     r"\b(find|search|show|get|look for|looking for|any|need|want)\b.{0,60}"
     r"\b(jobs?|roles?|positions?|vacancy|vacancies|openings?|work)\b"
@@ -604,6 +630,8 @@ _ROLE_PREFIX_STOPWORDS = frozenset({
     "more", "the", "a", "an", "please", "kindly", "i", "i'm", "im", "we",
     "am", "are", "is", "was", "were", "to", "of", "currently", "interested",
     "really", "just", "good", "great", "now", "today",
+    # filter/constraint words — must not be extracted as role names
+    "only", "filter", "exclude", "include", "no", "not", "without", "remove",
 })
 
 # Matches job-card action messages sent from RicoJobMatchCard:
@@ -1199,6 +1227,14 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         return IntentResult("application_tracking", 0.8, "regex")
 
     # ── 4. Job search patterns ───────────────────────────────────────────
+    # Source-filter and compound-refinement checks must precede _JOB_SEARCH_EXPLICIT_RE
+    # so filter tokens ("exclude", "only", "no contract") are never misclassified as roles.
+    if _SOURCE_FILTER_RE.search(text):
+        return IntentResult("search_refine", 0.88, "regex", action="source_filter")
+
+    if _SEARCH_REFINE_RE.search(text):
+        return IntentResult("search_refine", 0.85, "regex", action="filter_constraints")
+
     # Check explicit job search FIRST (has job/role/position keyword)
     if _JOB_SEARCH_EXPLICIT_RE.search(text):
         # Try to extract an explicit role target so the handler can search for that role

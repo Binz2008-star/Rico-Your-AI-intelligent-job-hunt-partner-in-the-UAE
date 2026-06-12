@@ -2793,7 +2793,12 @@ class RicoChatAPI:
                 search_role, _search_elapsed, operation_id, type(exc).__name__,
             )
             mark_failed(user_id, operation_id, str(exc))
-            raise
+            _graceful_msg = (
+                "I couldn't complete that search right now. "
+                "Try specifying a role name — for example: 'Compliance Manager jobs in Dubai'."
+            )
+            self._append_chat(user_id, "assistant", _graceful_msg)
+            return {"type": "search_error", "message": _graceful_msg, "intent": "job_search_explicit"}
 
         # Filter out already-applied jobs
         try:
@@ -4169,6 +4174,28 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        # Search refinement / source filter — compound constraints without an explicit role.
+        # "exclude LinkedIn results", "show me only Dubai jobs, no contract roles", etc.
+        if legacy_intent == "search_refine":
+            _refine_action = getattr(intent_result, "action", "") or ""
+            if _refine_action == "source_filter":
+                _refine_msg = (
+                    "I don't currently filter results by source — all UAE job boards are searched together. "
+                    "Try refining by role, city, or employment type instead, e.g. 'Compliance Manager jobs in Dubai, permanent only'."
+                )
+            else:
+                # Compound location/employment-type constraint — ask for the missing role
+                _refine_msg = (
+                    "Got it — I can apply those filters. Which role are you looking for? "
+                    "For example: 'Compliance Manager jobs in Dubai, permanent only'."
+                )
+            self._append_chat(user_id, "assistant", _refine_msg)
+            return self._finalize(
+                {"type": "search_refine", "message": _refine_msg, "intent": "search_refine"},
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
         # Explicit job search (regex-matched "find ... jobs" etc.)
         if legacy_intent == "job_search_explicit":
             # If the message names an explicit role ("find jobs for Environmental
@@ -4368,6 +4395,14 @@ class RicoChatAPI:
                     _cv_text = (_bundle.get("cv_text") or "").strip()
             except Exception:
                 pass
+
+            # Fall back to already-loaded profile before asking for re-upload.
+            if not _cv_text:
+                _cv_text = (
+                    self._profile_value(profile, "cv_text")
+                    or self._profile_value(profile, "pasted_cv_text")
+                    or ""
+                ).strip()
 
             if not _cv_text:
                 msg = (
