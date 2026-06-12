@@ -212,20 +212,22 @@ def build_match_explanation(job: Dict[str, Any], profile: Any | None) -> Dict[st
     major_red_flags = 0
 
     if _role_match(job_data, profile_data):
-        match_reasons.append("The role title matches your target role.")
+        _title_label = f" — {title}" if title and title != "This role" else ""
+        match_reasons.append(f"Role title{_title_label} aligns with your target.")
     elif _as_list(profile_data.get("target_roles")):
-        match_concerns.append("The role title does not clearly match your target roles.")
+        match_concerns.append("Role title doesn't clearly match your saved targets — review before applying.")
         major_red_flags += 1
     else:
-        match_concerns.append("Your target role is not fully set yet.")
+        match_concerns.append("No target role set yet — update your profile to improve match quality.")
 
     if _location_match(job_data, profile_data):
-        match_reasons.append("The location matches one of your preferred cities.")
+        _loc_label = f" ({location})" if location else ""
+        match_reasons.append(f"Location{_loc_label} matches your preferred cities.")
     elif _location_mismatch(job_data, profile_data):
-        match_concerns.append("The location appears outside your preferred cities.")
+        match_concerns.append(f"Location ({location}) is outside your preferred cities." if location else "Location is outside your preferred cities.")
         major_red_flags += 1
     elif location:
-        match_reasons.append("The job location is available for review.")
+        match_reasons.append(f"Location: {location}.")
 
     skills = _skill_overlap(job_data, profile_data)
     if skills:
