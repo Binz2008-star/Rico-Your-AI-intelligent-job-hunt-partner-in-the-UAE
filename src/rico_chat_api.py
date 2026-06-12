@@ -2803,7 +2803,13 @@ class RicoChatAPI:
         import time as _time
         _search_start = _time.monotonic()
         try:
-            fetch = self._search_jsearch_meta(search_role, location)
+            # Pass location only when set — keeps single-arg monkeypatched
+            # stand-ins (tests) and any legacy overrides working unchanged.
+            fetch = (
+                self._search_jsearch_meta(search_role, location)
+                if location
+                else self._search_jsearch_meta(search_role)
+            )
             all_matches = fetch.items
             rate_limited = fetch.rate_limited
             _search_elapsed = _time.monotonic() - _search_start
@@ -4368,7 +4374,7 @@ class RicoChatAPI:
                     "أخبرني بالمسمى الوظيفي المستهدف — على سبيل المثال: مهندس برمجيات، محاسب، مدير مشاريع."
                     if _is_ar else
                     "What role are you looking for? "
-                    "Tell me your target job title and I'll search UAE jobs right away — "
+                    "Tell me your target role and I'll search UAE jobs right away — "
                     "for example: 'HSE Manager', 'Finance Analyst', or 'Compliance Officer'."
                 )
                 response = {

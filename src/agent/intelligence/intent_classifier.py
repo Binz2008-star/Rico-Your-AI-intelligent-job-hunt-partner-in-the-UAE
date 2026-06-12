@@ -1261,7 +1261,8 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         if not _has_explicit or not _tentative:
             _refine_entities: dict = {}
             _rc_m = _UAE_CITY_EXTRACT_RE.search(text)
-            if _rc_m:
+            # "UAE" is the default search scope, not a city constraint — skip it.
+            if _rc_m and _rc_m.group(1).strip().lower() != "uae":
                 _refine_entities["location"] = _rc_m.group(1).strip().title()
             _re_m = _EMPLOYMENT_TYPE_EXTRACT_RE.search(text)
             if _re_m:
@@ -1283,7 +1284,8 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         # Extract location and employment_type entities for richer search queries.
         _search_entities: dict = {}
         _city_m = _UAE_CITY_EXTRACT_RE.search(text)
-        if _city_m:
+        # "UAE" is the default search scope, not a city constraint — skip it.
+        if _city_m and _city_m.group(1).strip().lower() != "uae":
             _search_entities["location"] = _city_m.group(1).strip().title()
         _emp_m = _EMPLOYMENT_TYPE_EXTRACT_RE.search(text)
         if _emp_m:
