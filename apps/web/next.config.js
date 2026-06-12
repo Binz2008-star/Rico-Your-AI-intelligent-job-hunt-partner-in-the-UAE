@@ -7,12 +7,16 @@ const backendUrl =
     process.env.NEXT_PUBLIC_API_BASE_URL ||
     process.env.NEXT_PUBLIC_RICO_API;
 
-// CSP in report-only mode while the policy is tuned; flip to Content-Security-Policy to enforce.
-// 'unsafe-inline' in script-src covers the theme/lang init scripts in layout.tsx;
-// replace with per-script SHA-256 hashes to remove it before switching to enforcing mode.
+// CSP in report-only mode. Our two inline init scripts are whitelisted by their
+// SHA-256 hashes (no 'unsafe-inline' needed for them). Next.js injects additional
+// inline scripts that vary per build; full enforcement requires nonce-based CSP
+// via Next.js middleware — flip to Content-Security-Policy once that is wired up.
+// To update hashes: python3 -c "import hashlib,base64; print('sha256-' + base64.b64encode(hashlib.sha256('<script content>'.encode()).digest()).decode())"
 const csp = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' https://va.vercel-scripts.com",
+    // theme-init hash: sha256-e3jHsOXxdXVtROmxFsrXZluLXMJZalSnzegpELleX6Y=
+    // lang-init hash:  sha256-y0eJobwms3FTv51+hvoyq6L38bxbY6yjgcfFsbD/Hmk=
+    "script-src 'self' 'unsafe-inline' 'sha256-e3jHsOXxdXVtROmxFsrXZluLXMJZalSnzegpELleX6Y=' 'sha256-y0eJobwms3FTv51+hvoyq6L38bxbY6yjgcfFsbD/Hmk=' https://va.vercel-scripts.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob: https:",
