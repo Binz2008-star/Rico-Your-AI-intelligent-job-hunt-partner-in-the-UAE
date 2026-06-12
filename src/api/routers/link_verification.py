@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, HttpUrl, validator
+from pydantic import BaseModel, HttpUrl, field_validator
 
 from src.services.link_verifier import LinkVerifier, LinkStatus, VerificationResult, get_link_verifier, _is_safe_url
 from src.api.rate_limit import limiter
@@ -16,16 +16,17 @@ router = APIRouter(prefix="/api/v1/links", tags=["link-verification"])
 class VerifyLinkRequest(BaseModel):
     """Request model for link verification."""
     url: str
-    
-    @validator('url')
-    def validate_url(cls, v):
+
+    @field_validator('url')
+    @classmethod
+    def validate_url(cls, v: str) -> str:
         """Validate URL is safe from SSRF."""
         if not v:
             raise ValueError("URL is required")
-        
+
         if not _is_safe_url(v):
             raise ValueError("URL is not allowed (SSRF protection)")
-        
+
         return v
 
 
@@ -66,17 +67,18 @@ async def verify_link(request: Request, link_request: VerifyLinkRequest, _user: 
 class BatchVerifyRequest(BaseModel):
     """Request model for batch link verification."""
     urls: list[str]
-    
-    @validator('urls')
-    def validate_urls(cls, v):
+
+    @field_validator('urls')
+    @classmethod
+    def validate_urls(cls, v: list[str]) -> list[str]:
         """Validate all URLs are safe from SSRF."""
         if len(v) > 10:  # Limit batch size
             raise ValueError("Maximum 10 URLs per batch")
-        
+
         for url in v:
             if not _is_safe_url(url):
                 raise ValueError(f"URL '{url}' is not allowed (SSRF protection)")
-        
+
         return v
 
 

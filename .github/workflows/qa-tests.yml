@@ -26,6 +26,16 @@ jobs:
           pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Run backend tests
+        env:
+          # Explicitly unset REDIS_URL so slowapi falls back to memory://
+          # instead of attempting a real Redis connection that doesn't exist in CI.
+          # Without this, every rate-limited route returns HTTP 500 in tests.
+          REDIS_URL: ""
+          DATABASE_URL: "postgresql://fake:fake@localhost/fake"
+          JWT_SECRET: "test-secret-ci-only"
+          DEEPSEEK_API_KEY: "sk-fake"
+          OPENAI_API_KEY: "sk-fake"
+          ENVIRONMENT: "test"
         run: |
           PYTHONPATH=$GITHUB_WORKSPACE pytest \
             tests/unit/ \

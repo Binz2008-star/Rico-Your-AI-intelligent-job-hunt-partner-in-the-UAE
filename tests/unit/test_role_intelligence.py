@@ -158,8 +158,11 @@ def test_weak_fit_role_with_better_recommendations():
     assert len(recommendations) > 0
 
 
-def test_active_search_context_persistence():
-    """Test active search context persistence."""
+def test_active_search_context_persistence(monkeypatch):
+    """Test active search context persistence (cache-only — no DB required)."""
+    import src.repositories.search_context_repo as _scr
+    monkeypatch.setattr(_scr, "is_db_available", lambda: False)
+
     from src.repositories.search_context_repo import (
         SearchContext,
         SearchContextRepository,

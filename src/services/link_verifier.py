@@ -3,7 +3,7 @@
 import asyncio
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Optional
 import httpx
@@ -281,7 +281,7 @@ class LinkVerifier:
                 status=LinkStatus.SOURCE_ONLY,
                 http_status=None,
                 error_message="No URL provided",
-                verified_at=datetime.utcnow(),
+                verified_at=datetime.now(timezone.utc),
             )
         
         try:
@@ -301,7 +301,7 @@ class LinkVerifier:
                         status=LinkStatus.EXPIRED,
                         http_status=response.status_code,
                         error_message=f"HTTP {response.status_code}",
-                        verified_at=datetime.utcnow(),
+                        verified_at=datetime.now(timezone.utc),
                     )
                 
                 # Check for server errors
@@ -310,7 +310,7 @@ class LinkVerifier:
                         status=LinkStatus.NEEDS_REVIEW,
                         http_status=response.status_code,
                         error_message=f"Server error: HTTP {response.status_code}",
-                        verified_at=datetime.utcnow(),
+                        verified_at=datetime.now(timezone.utc),
                     )
                 
                 # Check for client errors that indicate issues
@@ -319,7 +319,7 @@ class LinkVerifier:
                         status=LinkStatus.NEEDS_REVIEW,
                         http_status=response.status_code,
                         error_message=f"Client error: HTTP {response.status_code}",
-                        verified_at=datetime.utcnow(),
+                        verified_at=datetime.now(timezone.utc),
                     )
                 
                 # Check for redirects
@@ -330,7 +330,7 @@ class LinkVerifier:
                             status=LinkStatus.NEEDS_REVIEW,
                             http_status=response.status_code,
                             error_message="Redirect without location header",
-                            verified_at=datetime.utcnow(),
+                            verified_at=datetime.now(timezone.utc),
                         )
                     
                     # Resolve relative redirects before SSRF validation
@@ -343,7 +343,7 @@ class LinkVerifier:
                             status=LinkStatus.BLOCKED,
                             http_status=response.status_code,
                             error_message="Redirect to blocked URL (SSRF protection)",
-                            verified_at=datetime.utcnow(),
+                            verified_at=datetime.now(timezone.utc),
                             redirect_url=redirect_url,
                         )
                     
@@ -359,7 +359,7 @@ class LinkVerifier:
                             status=LinkStatus.EXPIRED,
                             http_status=response.status_code,
                             error_message="Dead page pattern detected",
-                            verified_at=datetime.utcnow(),
+                            verified_at=datetime.now(timezone.utc),
                         )
                 
                 # Link is live
@@ -367,7 +367,7 @@ class LinkVerifier:
                     status=LinkStatus.LIVE,
                     http_status=response.status_code,
                     error_message=None,
-                    verified_at=datetime.utcnow(),
+                    verified_at=datetime.now(timezone.utc),
                 )
             
             # Too many redirects
@@ -375,7 +375,7 @@ class LinkVerifier:
                 status=LinkStatus.BLOCKED,
                 http_status=None,
                 error_message="Too many redirects (possible redirect loop)",
-                verified_at=datetime.utcnow(),
+                verified_at=datetime.now(timezone.utc),
             )
             
         except httpx.TimeoutException:
@@ -383,21 +383,21 @@ class LinkVerifier:
                 status=LinkStatus.NEEDS_REVIEW,
                 http_status=None,
                 error_message="Request timeout",
-                verified_at=datetime.utcnow(),
+                verified_at=datetime.now(timezone.utc),
             )
         except httpx.ConnectError:
             return VerificationResult(
                 status=LinkStatus.NEEDS_REVIEW,
                 http_status=None,
                 error_message="Connection failed",
-                verified_at=datetime.utcnow(),
+                verified_at=datetime.now(timezone.utc),
             )
         except Exception as e:
             return VerificationResult(
                 status=LinkStatus.NEEDS_REVIEW,
                 http_status=None,
                 error_message=str(e),
-                verified_at=datetime.utcnow(),
+                verified_at=datetime.now(timezone.utc),
             )
     
     def _is_dead_page(self, content: str, url: str) -> bool:
