@@ -4033,6 +4033,56 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        if legacy_intent == "salary_enquiry":
+            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            role_hint = str(target_roles[0]) if target_roles else "your target role"
+            _sal_msg = (
+                f"Salary benchmarks for {role_hint} in the UAE:\n\n"
+                "• **Entry level (0–3 yrs):** AED 8,000–15,000/month\n"
+                "• **Mid level (3–7 yrs):** AED 15,000–25,000/month\n"
+                "• **Senior level (7+ yrs):** AED 25,000–45,000/month\n\n"
+                "These are broad market ranges. Actual packages vary by industry, company size, "
+                "and whether benefits (housing, transport, medical) are included.\n\n"
+                "For a precise benchmark, say: **'What salary for [Role] at [Company]?'** "
+                "or set your minimum salary in your profile and I'll flag roles that fall short."
+            )
+            self._append_chat(user_id, "assistant", _sal_msg)
+            return self._finalize(
+                {"type": "career_advice", "message": _sal_msg},
+                self.SOURCE_KEYWORD, profile=profile,
+            )
+
+        if legacy_intent == "cv_analysis":
+            _skills = self._as_list(self._profile_value(profile, "skills"))
+            _certs = self._as_list(self._profile_value(profile, "certifications"))
+            _exp = self._profile_value(profile, "years_experience")
+            _has_cv = self._profile_value(profile, "has_cv") or self._profile_value(profile, "cv_status") == "parsed"
+            if not _has_cv:
+                _cv_msg = (
+                    "I can't review your CV yet — you haven't uploaded one.\n\n"
+                    "Upload your CV and I'll identify weak areas, gaps, and improvements."
+                )
+            else:
+                gaps = []
+                if not _skills:
+                    gaps.append("No skills listed — add key technical and soft skills relevant to your target role.")
+                if not _certs:
+                    gaps.append("No certifications — even one relevant certification (ISO, NEBOSH, CMA, etc.) significantly improves match rates.")
+                if not _exp:
+                    gaps.append("Years of experience not set — this affects seniority matching.")
+                if not gaps:
+                    gaps.append("Your profile looks reasonably complete. The strongest CV improvements come from quantified achievements (e.g. 'Reduced audit findings by 40%') rather than duties.")
+                _cv_msg = (
+                    "**CV gaps and improvements based on your current profile:**\n\n"
+                    + "\n".join(f"• {g}" for g in gaps)
+                    + "\n\nFor a full CV rewrite, say: **'Rewrite my CV'** and I'll generate an optimised version."
+                )
+            self._append_chat(user_id, "assistant", _cv_msg)
+            return self._finalize(
+                {"type": "cv_analysis", "message": _cv_msg},
+                self.SOURCE_KEYWORD, profile=profile,
+            )
+
         # Profile summary
         if legacy_intent == "profile_summary":
             from src.agent.context.resolver import resolve_profile_context

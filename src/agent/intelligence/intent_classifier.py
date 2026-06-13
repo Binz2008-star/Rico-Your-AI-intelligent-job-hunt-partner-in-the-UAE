@@ -418,6 +418,28 @@ _APP_INSIGHTS_RE = re.compile(
     re.IGNORECASE,
 )
 
+_SALARY_ENQUIRY_RE = re.compile(
+    r"\b(what|how\s+much|what'?s?).{0,30}(salary|salaries|pay|compensation|package|ctc|earnings?)\b"
+    r"|\b(salary|pay|compensation)\s+(range|expectation|benchmark|market|typical|average|expected)\b"
+    r"|\b(expect(ed)?|typical|average|market).{0,30}(salary|pay|compensation)\b"
+    r"|\bhow\s+much.{0,40}\b(earn|make|get\s+paid)\b"
+    r"|\bwhat.{0,50}(earn|make|get\s+paid)\b"
+    r"|\bhow\s+(much|well)\s+(is|are).{0,40}(paid|compensated|earning)\b",
+    re.IGNORECASE,
+)
+
+_CV_ANALYSIS_RE = re.compile(
+    r"\b(weak|weakness|weaker|gap|gaps|lacking|missing|improve|improvement|deficiency)\b"
+    r".{0,30}\b(cv|resume|profile|application)\b"
+    r"|\b(cv|resume|profile|application)\b.{0,30}"
+    r"\b(weak|weakness|gap|gaps|lacking|missing|improv|deficien)\b"
+    r"|\bwhat.{0,20}wrong\b.{0,20}\b(cv|resume|profile)\b"
+    r"|\bstrengthen.{0,20}\b(cv|resume|profile)\b"
+    r"|\breview\s+my\s+(cv|resume)\b"
+    r"|\b(cv|resume)\s+review\b",
+    re.IGNORECASE,
+)
+
 _PROFILE_ROLE_SUGGESTIONS_PHRASES = frozenset([
     "show roles from my cv",
     "what roles fit my cv",
@@ -439,6 +461,9 @@ _SKIP_PHRASES = frozenset([
 _PROFILE_UPDATE_PHRASES = frozenset([
     "update my name", "update my skills", "change my", "edit my profile",
     "update my phone", "update my salary", "update my city", "update my role",
+    "update my profile", "update profile", "edit profile", "update my details",
+    "update my information", "update my info", "update my cv", "update my experience",
+    "تحديث ملفي", "تعديل ملفي", "تحديث البيانات",
 ])
 
 # ── Subscription / pricing phrases ─────────────────────────────────────────
@@ -1217,6 +1242,14 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
 
     if _APP_INSIGHTS_RE.search(text):
         return IntentResult("application_insights", 0.9, "regex")
+
+    # Salary must be checked BEFORE _SUBSCRIPTION_RE — "how much do X earn" is a salary
+    # question, not a pricing query, and _SUBSCRIPTION_RE matches "how much" broadly.
+    if _SALARY_ENQUIRY_RE.search(text):
+        return IntentResult("salary_enquiry", 0.88, "regex")
+
+    if _CV_ANALYSIS_RE.search(text):
+        return IntentResult("cv_analysis", 0.88, "regex")
 
     # Subscription / pricing regex (check before job search)
     if _SUBSCRIPTION_RE.search(text):
