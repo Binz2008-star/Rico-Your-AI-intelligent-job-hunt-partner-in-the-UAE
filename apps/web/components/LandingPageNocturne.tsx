@@ -11,13 +11,13 @@ import { GlassCard } from "./ui/rico/GlassCard";
 import { RicoLogoMark } from "./ui/rico/RicoLogoMark";
 import { RicoButton } from "./ui/rico/RicoButton";
 
-// Reusable fade-up-on-scroll wrapper
+// Reusable fade-up wrapper — uses `animate` (not whileInView) so content is always
+// visible on mount regardless of scroll position or IntersectionObserver state.
 function FadeUp({ children, delay = 0, className = "" }: { children: React.ReactNode; delay?: number; className?: string }) {
     return (
         <motion.div
             initial={{ opacity: 0, y: 28 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-40px" }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay, ease: [0.22, 0.61, 0.36, 1] }}
             className={className}
         >
@@ -29,7 +29,7 @@ function FadeUp({ children, delay = 0, className = "" }: { children: React.React
 // Animated counter that counts up when it enters the viewport
 function CountUp({ to, duration = 1.4 }: { to: number; duration?: number }) {
     const ref = useRef<HTMLSpanElement>(null);
-    const inView = useInView(ref, { once: true, margin: "-40px" });
+    const inView = useInView(ref, { once: true, margin: "0px" });
     const [count, setCount] = useState(0);
     useEffect(() => {
         if (!inView) return;
@@ -308,8 +308,7 @@ export default function LandingPageNocturne() {
                                         <motion.span
                                             key={`h1-${i}`}
                                             initial={{ opacity: 0, y: 14 }}
-                                            whileInView={{ opacity: 1, y: 0 }}
-                                            viewport={{ once: true, margin: "-40px" }}
+                                            animate={{ opacity: 1, y: 0 }}
                                             transition={{ duration: 0.5, delay: i * 0.04, ease: [0.22, 0.61, 0.36, 1] }}
                                             className="inline-block"
                                         >{word}{i < arr.length - 1 ? " " : ""}</motion.span>
@@ -321,8 +320,7 @@ export default function LandingPageNocturne() {
                                         <motion.span
                                             key={`h2-${i}`}
                                             initial={{ opacity: 0, y: 14 }}
-                                            whileInView={{ opacity: 1, y: 0 }}
-                                            viewport={{ once: true, margin: "-40px" }}
+                                            animate={{ opacity: 1, y: 0 }}
                                             transition={{ duration: 0.5, delay: (t.headline1.split(" ").length + i) * 0.04, ease: [0.22, 0.61, 0.36, 1] }}
                                             className="inline-block"
                                         >{word}{i < arr.length - 1 ? " " : ""}</motion.span>
@@ -339,8 +337,7 @@ export default function LandingPageNocturne() {
                                     <motion.span
                                         key={item}
                                         initial={{ opacity: 0, y: 10 }}
-                                        whileInView={{ opacity: 1, y: 0 }}
-                                        viewport={{ once: true, margin: "-40px" }}
+                                        animate={{ opacity: 1, y: 0 }}
                                         transition={{ duration: 0.4, delay: 0.45 + i * 0.06, ease: "easeOut" }}
                                         className="inline-flex items-center gap-1.5 font-mono text-[11px] text-text-tertiary border border-overlay/7 rounded-full px-3 py-1.5 bg-surface/30"
                                     >
@@ -400,8 +397,7 @@ export default function LandingPageNocturne() {
                             <motion.div
                                 key={i}
                                 initial={{ opacity: 0, y: 16 }}
-                                whileInView={{ opacity: 1, y: 0 }}
-                                viewport={{ once: true, margin: "-20px" }}
+                                animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.45, delay: i * 0.08, ease: "easeOut" }}
                                 className="flex items-center gap-2.5 text-sm text-text-secondary"
                             >
@@ -422,7 +418,7 @@ export default function LandingPageNocturne() {
                             <p className="text-text-secondary text-sm md:text-base">{t.stepsSubtitle}</p>
                         </FadeUp>
                         <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-5">
-                            <motion.div initial={{ opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-40px" }} transition={{ duration: 0.55, delay: 0, ease: [0.22, 0.61, 0.36, 1] }}>
+                            <motion.div initial={{ opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px" }} transition={{ duration: 0.55, delay: 0, ease: [0.22, 0.61, 0.36, 1] }}>
                             <GlassCard className="p-6" role="article" aria-label={t.step1Title}>
                                 <span className="font-mono text-xs text-ember tracking-[0.2em]">{t.step1Num}</span>
                                 <h3 className="font-display font-semibold text-lg mt-3 mb-2">{t.step1Title}</h3>
@@ -434,7 +430,7 @@ export default function LandingPageNocturne() {
                                 </div>
                             </GlassCard>
                             </motion.div>
-                            <motion.div initial={{ opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-40px" }} transition={{ duration: 0.55, delay: 0.1, ease: [0.22, 0.61, 0.36, 1] }}>
+                            <motion.div initial={{ opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px" }} transition={{ duration: 0.55, delay: 0.1, ease: [0.22, 0.61, 0.36, 1] }}>
                             <GlassCard className="p-6" role="article" aria-label={t.step2Title}>
                                 <span className="font-mono text-xs text-ember tracking-[0.2em]">{t.step2Num}</span>
                                 <h3 className="font-display font-semibold text-lg mt-3 mb-2">{t.step2Title}</h3>
@@ -446,7 +442,7 @@ export default function LandingPageNocturne() {
                                 </div>
                             </GlassCard>
                             </motion.div>
-                            <motion.div initial={{ opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-40px" }} transition={{ duration: 0.55, delay: 0.2, ease: [0.22, 0.61, 0.36, 1] }}>
+                            <motion.div initial={{ opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px" }} transition={{ duration: 0.55, delay: 0.2, ease: [0.22, 0.61, 0.36, 1] }}>
                             <GlassCard className="p-6" role="article" aria-label={t.step3Title}>
                                 <span className="font-mono text-xs text-ember tracking-[0.2em]">{t.step3Num}</span>
                                 <h3 className="font-display font-semibold text-lg mt-3 mb-2">{t.step3Title}</h3>
@@ -603,7 +599,7 @@ export default function LandingPageNocturne() {
                         </FadeUp>
                         <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-5">
                             {/* Free */}
-                            <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-40px" }} transition={{ duration: 0.5, delay: 0, ease: [0.22, 0.61, 0.36, 1] }}>
+                            <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px" }} transition={{ duration: 0.5, delay: 0, ease: [0.22, 0.61, 0.36, 1] }}>
                             <GlassCard className="p-6 flex flex-col">
                                 <div className="mb-6">
                                     <p className="font-mono text-xs uppercase tracking-[0.16em] text-text-tertiary">{t.freeName}</p>
@@ -618,7 +614,7 @@ export default function LandingPageNocturne() {
                             </GlassCard>
                             </motion.div>
                             {/* Pro - Featured */}
-                            <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-40px" }} transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 0.61, 0.36, 1] }}>
+                            <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px" }} transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 0.61, 0.36, 1] }}>
                             <GlassCard className="p-6 flex flex-col relative border-ember/30">
                                 <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-ember text-void text-xs font-mono font-semibold">{t.popular}</span>
                                 <div className="mb-6">
@@ -635,7 +631,7 @@ export default function LandingPageNocturne() {
                             </GlassCard>
                             </motion.div>
                             {/* Premium */}
-                            <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-40px" }} transition={{ duration: 0.5, delay: 0.2, ease: [0.22, 0.61, 0.36, 1] }}>
+                            <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px" }} transition={{ duration: 0.5, delay: 0.2, ease: [0.22, 0.61, 0.36, 1] }}>
                             <GlassCard className="p-6 flex flex-col">
                                 <div className="mb-6">
                                     <p className="font-mono text-xs uppercase tracking-[0.16em] text-text-tertiary">{t.premiumName}</p>
