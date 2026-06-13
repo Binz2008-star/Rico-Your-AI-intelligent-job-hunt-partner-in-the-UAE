@@ -31,6 +31,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from decimal import Decimal
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
@@ -136,8 +137,13 @@ class RicoOpenAIAgent:
 
         # Premium path: RICO_AI_PROVIDER=openai|deepseek explicitly set
         provider = "deepseek" if self._use_deepseek else "openai"
+        def _json_default(obj):
+            if isinstance(obj, Decimal):
+                return float(obj)
+            raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
+
         profile_context = (
-            json.dumps(user_context, ensure_ascii=False)
+            json.dumps(user_context, ensure_ascii=False, default=_json_default)
             if user_context else None
         )
         conversation_history = (

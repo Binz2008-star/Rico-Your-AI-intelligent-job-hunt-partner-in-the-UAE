@@ -169,6 +169,7 @@ CREATE TABLE IF NOT EXISTS user_documents (
     label TEXT,
     is_primary BOOLEAN NOT NULL DEFAULT FALSE,
     skills_count INTEGER DEFAULT 0,
+    skills_json JSONB DEFAULT '[]'::jsonb,
     years_experience NUMERIC(4,1),
     "current_role" TEXT,
     created_at TIMESTAMPTZ DEFAULT now(),
@@ -176,6 +177,8 @@ CREATE TABLE IF NOT EXISTS user_documents (
 );
 CREATE INDEX IF NOT EXISTS idx_user_documents_user_created
     ON user_documents(user_id, created_at DESC);
+-- Idempotent column migration for existing installations (migration 026).
+ALTER TABLE user_documents ADD COLUMN IF NOT EXISTS skills_json JSONB DEFAULT '[]'::jsonb;
 """
 
 _APPLY_DRAFTS_DDL = """
@@ -292,6 +295,7 @@ class RicoDB:
         file_size: int = 0,
         label: Optional[str] = None,
         skills_count: int = 0,
+        skills_json: Optional[List[str]] = None,
         years_experience: Optional[float] = None,
         current_role: Optional[str] = None,
         is_primary: bool = False,
@@ -305,12 +309,14 @@ class RicoDB:
                     """
                     INSERT INTO user_documents
                         (user_id, filename, original_filename, doc_type, file_size,
-                         label, is_primary, skills_count, years_experience, "current_role")
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         label, is_primary, skills_count, skills_json,
+                         years_experience, "current_role")
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (user_id, filename, original_filename, doc_type, file_size,
-                     label, is_primary, skills_count, years_experience, current_role),
+                     label, is_primary, skills_count, Json(skills_json or []),
+                     years_experience, current_role),
                 )
                 row = cur.fetchone()
         return str(row["id"]) if row else None
@@ -323,7 +329,7 @@ class RicoDB:
                     """
                     SELECT id, user_id, filename, original_filename, doc_type,
                            file_size, label, is_primary,
-                           skills_count, years_experience, "current_role",
+                           skills_count, skills_json, years_experience, "current_role",
                            created_at, updated_at
                     FROM user_documents
                     WHERE user_id = %s
@@ -351,7 +357,7 @@ class RicoDB:
                     """
                     SELECT id, user_id, filename, original_filename, doc_type,
                            file_size, label, is_primary,
-                           skills_count, years_experience, "current_role",
+                           skills_count, skills_json, years_experience, "current_role",
                            created_at, updated_at
                     FROM user_documents
                     WHERE user_id = %s AND doc_type = %s AND is_primary = TRUE

@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from src.api.deps import get_current_user
 from src.api.rate_limit import LIMIT_UPLOAD, limiter
 from src.repositories import profile_repo
+from src.repositories.profile_repo import upsert_profile
 from src.rico_db import RicoDB
 from src.services.subscription_gating import (
     check_document_quota,
@@ -273,4 +274,25 @@ def set_primary(file_id: str, request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="File not found or not a CV")
 
     logger.info("file_set_primary user=%s id=%s", user_id, file_id)
+
+    # Re-sync profile fields from the newly activated CV document.
+    # Without this, switching active CVs leaves years_experience / skills / current_role
+    # pointing at the previously confirmed CV's data.
+    try:
+        doc = _db.get_primary_document(user_id, doc_type="cv")
+        if doc:
+            resync: dict[str, Any] = {}
+            if doc.get("years_experience") is not None:
+                resync["years_experience"] = float(doc["years_experience"])
+            if doc.get("current_role"):
+                resync["current_role"] = doc["current_role"]
+            skills = doc.get("skills_json") or []
+            if skills:
+                resync["skills"] = list(skills)
+            if resync:
+                upsert_profile(user_id, resync)
+                logger.info("file_set_primary_profile_resynced user=%s fields=%s", user_id, list(resync.keys()))
+    except Exception as _exc:
+        logger.warning("file_set_primary_resync_failed user=%s error=%s", user_id, str(_exc))
+
     return {"ok": True}
