@@ -1417,8 +1417,14 @@ class RicoChatAPI:
 
     @staticmethod
     def _format_match(m: dict[str, Any], profile: Any) -> dict[str, Any]:
-        """Return a backward-compatible chat match with v1 structured guidance."""
+        """Return a backward-compatible chat match with v1 + v2 structured guidance."""
         explanation = build_match_explanation(m, profile)
+        # v2 explanation: richer "why this fits" / "worth checking" copy
+        try:
+            from src.services.job_match_explanation import build_match_explanation as _build_v2
+            _v2 = _build_v2(m, profile)
+        except Exception:
+            _v2 = {}
 
         # rico_score takes priority; fall back to score. Use explicit None check
         # so that 0 and 0.0 (valid "scored zero" states) are not confused with
@@ -1470,6 +1476,10 @@ class RicoChatAPI:
             verification_status = "needs_source_verification" if apply_url else "lead_needs_verification"
             company_quality = "ok"
 
+        # Description snippet — first 350 chars of real job description for richer cards.
+        _raw_desc = str(m.get("description") or m.get("job_description") or "").strip()
+        _snippet = _raw_desc[:350].rsplit(" ", 1)[0] + ("…" if len(_raw_desc) > 350 else "") if _raw_desc else ""
+
         result = {
             "title": str(m.get("title") or "Untitled role"),
             "company": str(m.get("company") or "Unknown company"),
@@ -1481,11 +1491,27 @@ class RicoChatAPI:
             "company_quality": company_quality,
             "actions": ["Prepare application", "Save", "Ask why", "Skip"],
             **explanation,
+            # v2 richer explanation fields (preferred by updated UI over v1 match_reasons)
+            "why_this_fits": _v2.get("why_this_fits") or explanation.get("match_reasons") or [],
+            "worth_checking": _v2.get("worth_checking") or explanation.get("match_concerns") or [],
+            "verdict": _v2.get("verdict", ""),
+            "summary": _v2.get("summary", ""),
         }
 
         location = m.get("location")
         if location:
             result["location"] = str(location)
+
+        employment_type = str(m.get("employment_type") or "").strip()
+        if employment_type:
+            result["employment_type"] = employment_type
+
+        salary_string = str(m.get("salary_string") or m.get("salary") or "").strip()
+        if salary_string:
+            result["salary_string"] = salary_string
+
+        if _snippet:
+            result["description"] = _snippet
 
         why = m.get("rico_explanation")
         if why:
@@ -2725,18 +2751,22 @@ class RicoChatAPI:
     }
 
     @staticmethod
-    def _search_jsearch_meta(role: str) -> Any:
+    def _search_jsearch_meta(role: str, location: str = "") -> Any:
         """Query JSearch for live UAE jobs matching *role*, with cache + retry.
+
+        When *location* is given the query targets that specific UAE city instead of
+        the generic "UAE" suffix, producing sharper results for city-constrained searches.
 
         Returns a ``jsearch_client.FetchResult`` so the caller can tell a genuine
         empty result apart from a rate-limited source. Never raises.
         """
         from src import jsearch_client
 
-        result = jsearch_client.search(f"{role} UAE")
+        query = f"{role} {location}".strip() if location else f"{role} UAE"
+        result = jsearch_client.search(query)
         logger.info(
-            "jsearch_direct role=%r results=%d cache_hit=%s rate_limited=%s",
-            role, len(result.items), result.cache_hit, result.rate_limited,
+            "jsearch_direct role=%r location=%r results=%d cache_hit=%s rate_limited=%s",
+            role, location or "UAE", len(result.items), result.cache_hit, result.rate_limited,
         )
         return result
 
@@ -2746,7 +2776,10 @@ class RicoChatAPI:
         return RicoChatAPI._search_jsearch_meta(role).items
 
     def _target_role_search_response(
-        self, user_id: str, role: str, profile: Any, from_saved_profile: bool = False
+        self, user_id: str, role: str, profile: Any,
+        from_saved_profile: bool = False,
+        location: str = "",
+        employment_type_filter: str = "",
     ) -> dict[str, Any]:
         """Handle target role search with role intelligence integration."""
         try:
@@ -2770,7 +2803,13 @@ class RicoChatAPI:
         import time as _time
         _search_start = _time.monotonic()
         try:
-            fetch = self._search_jsearch_meta(search_role)
+            # Pass location only when set — keeps single-arg monkeypatched
+            # stand-ins (tests) and any legacy overrides working unchanged.
+            fetch = (
+                self._search_jsearch_meta(search_role, location)
+                if location
+                else self._search_jsearch_meta(search_role)
+            )
             all_matches = fetch.items
             rate_limited = fetch.rate_limited
             _search_elapsed = _time.monotonic() - _search_start
@@ -2793,7 +2832,12 @@ class RicoChatAPI:
                 search_role, _search_elapsed, operation_id, type(exc).__name__,
             )
             mark_failed(user_id, operation_id, str(exc))
-            raise
+            _graceful_msg = (
+                "I couldn't complete that search right now. "
+                "Try specifying a role name — for example: 'Compliance Manager jobs in Dubai'."
+            )
+            self._append_chat(user_id, "assistant", _graceful_msg)
+            return {"type": "search_error", "message": _graceful_msg, "intent": "job_search_explicit"}
 
         # Filter out already-applied jobs
         try:
@@ -2816,6 +2860,30 @@ class RicoChatAPI:
                 all_matches = filter_for_non_nationals(all_matches)
         except Exception as e:
             logger.debug("Eligibility filter unavailable: %s", e)
+
+        # Client-side employment_type filter — JSearch does not expose this as a query
+        # parameter, so we filter post-fetch when the user specified a constraint.
+        if employment_type_filter and all_matches:
+            _emp_norm = employment_type_filter.lower().replace("-", "").replace(" ", "")
+            _contract_terms = {"contract", "contractor", "freelance", "temp", "temporary"}
+            _fulltime_terms = {"permanent", "fulltime", "direct"}
+            _remote_terms = {"remote"}
+
+            def _emp_ok(job: dict) -> bool:
+                jt = (job.get("employment_type") or "").lower().replace("-", "").replace(" ", "")
+                if not jt:
+                    return True  # unknown → keep
+                if _emp_norm in _contract_terms:
+                    return any(t in jt for t in _contract_terms)
+                if _emp_norm in _fulltime_terms:
+                    return not any(t in jt for t in _contract_terms)
+                if _emp_norm in _remote_terms:
+                    return "remote" in jt
+                return True
+
+            _filtered = [m for m in all_matches if _emp_ok(m)]
+            if _filtered:
+                all_matches = _filtered
 
         # Deduplicate by title+company fingerprint within this response.
         # JSearch deduplicates by job_id, but the same role at the same company
@@ -2963,7 +3031,11 @@ class RicoChatAPI:
         self._append_chat(user_id, "assistant", response)
         mark_completed(user_id, operation_id, len(formatted))
         if formatted:
-            self._store_search_matches_context(user_id, formatted, search_role=search_role)
+            self._store_search_matches_context(
+                user_id, formatted,
+                search_role=search_role,
+                search_location=location,
+            )
         return response
 
     def _enrich_with_role_intelligence(
@@ -4169,13 +4241,93 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        # Search refinement / source filter — compound constraints without an explicit role.
+        # "exclude LinkedIn results", "show me only Dubai jobs, no contract roles", etc.
+        if legacy_intent == "search_refine":
+            _refine_action = getattr(intent_result, "action", "") or ""
+            _refine_entities = getattr(intent_result, "entities", None) or {}
+            _refine_location = _refine_entities.get("location", "")
+            _refine_emp_type = _refine_entities.get("employment_type", "")
+
+            if _refine_action == "source_filter":
+                _refine_msg = (
+                    "I don't currently filter results by source — all UAE job boards are searched together. "
+                    "Try refining by role, city, or employment type instead, "
+                    "e.g. 'Compliance Manager jobs in Dubai, permanent only'."
+                )
+                self._append_chat(user_id, "assistant", _refine_msg)
+                return self._finalize(
+                    {"type": "search_refine", "message": _refine_msg, "intent": "search_refine"},
+                    self.SOURCE_KEYWORD, profile=profile,
+                )
+
+            # Resolve prior role from context or profile — enables compositional refinement:
+            # "Compliance Manager jobs" followed by "only Dubai" → searches Compliance Manager in Dubai
+            _prior_role: str = ""
+            try:
+                _rctx = self._get_recent_context(user_id)
+                _prior_role = (
+                    _rctx.get("recent_search_role")
+                    or _rctx.get("recent_role")
+                    or ""
+                )
+            except Exception:
+                pass
+            if not _prior_role:
+                _tgt = self._effective_target_roles(
+                    self._as_list(self._profile_value(profile, "target_roles"))
+                )
+                _prior_role = str(_tgt[0]) if _tgt else ""
+
+            if _prior_role and (_refine_location or _refine_emp_type):
+                # Execute the refined search directly — no need to ask again
+                return self._finalize(
+                    self._target_role_search_response(
+                        user_id, _prior_role, profile,
+                        location=_refine_location,
+                        employment_type_filter=_refine_emp_type,
+                    ),
+                    self.SOURCE_KEYWORD, profile=profile,
+                )
+
+            # Can't refine without a role — ask just for the missing piece
+            if _refine_location:
+                _refine_msg = (
+                    f"Got it — focusing on {_refine_location}. "
+                    f"Which role are you targeting? For example: "
+                    f"'Compliance Manager jobs in {_refine_location}'."
+                )
+            elif _refine_emp_type:
+                _refine_msg = (
+                    f"Got it — {_refine_emp_type} roles only. "
+                    "Which role are you targeting? For example: "
+                    f"'Compliance Manager, {_refine_emp_type} only'."
+                )
+            else:
+                _refine_msg = (
+                    "Got it — I can apply those filters. Which role are you looking for? "
+                    "For example: 'Compliance Manager jobs in Dubai, permanent only'."
+                )
+            self._append_chat(user_id, "assistant", _refine_msg)
+            return self._finalize(
+                {"type": "search_refine", "message": _refine_msg, "intent": "search_refine"},
+                self.SOURCE_KEYWORD, profile=profile,
+            )
+
         # Explicit job search (regex-matched "find ... jobs" etc.)
         if legacy_intent == "job_search_explicit":
+            _js_entities = getattr(intent_result, "entities", None) or {}
+            _js_location = _js_entities.get("location", "")
+            _js_emp_type = _js_entities.get("employment_type", "")
             # If the message names an explicit role ("find jobs for Environmental
             # Compliance Officer"), honour it and bypass profile target_roles fallback.
             if intent_result.extracted_role:
                 return self._finalize(
-                    self._classified_role_search(user_id, intent_result.extracted_role, profile),
+                    self._classified_role_search(
+                        user_id, intent_result.extracted_role, profile,
+                        location=_js_location,
+                        employment_type_filter=_js_emp_type,
+                    ),
                     self.SOURCE_KEYWORD,
                     profile=profile,
                 )
@@ -4218,17 +4370,12 @@ class RicoChatAPI:
                     )
                 _is_ar = self._is_arabic_text(message)
                 _incomplete_msg = (
-                    "لإجراء البحث أحتاج إلى معرفة المسمى الوظيفي المستهدف أولاً.\n"
-                    "أخبرني:\n"
-                    "• المسمى الوظيفي (مثل: مهندس برمجيات، محاسب)\n"
-                    "• المدينة المفضلة (مثل: دبي، أبوظبي)\n"
-                    "• توقعات الراتب (اختياري)"
+                    "لإجراء البحث أحتاج إلى معرفة المسمى الوظيفي المستهدف.\n"
+                    "أخبرني بالمسمى الوظيفي المستهدف — على سبيل المثال: مهندس برمجيات، محاسب، مدير مشاريع."
                     if _is_ar else
-                    "I can search jobs using your profile. Please confirm:\n"
-                    "• Target role (e.g., HSE Manager, ESG Specialist)\n"
-                    "• Preferred city (e.g., Dubai, Abu Dhabi)\n"
-                    "• Expected salary (optional)\n\n"
-                    "I cannot search for jobs until at least your target role is known."
+                    "What role are you looking for? "
+                    "Tell me your target role and I'll search UAE jobs right away — "
+                    "for example: 'HSE Manager', 'Finance Analyst', or 'Compliance Officer'."
                 )
                 response = {
                     "type": "profile_incomplete",
@@ -4368,6 +4515,14 @@ class RicoChatAPI:
                     _cv_text = (_bundle.get("cv_text") or "").strip()
             except Exception:
                 pass
+
+            # Fall back to already-loaded profile before asking for re-upload.
+            if not _cv_text:
+                _cv_text = (
+                    self._profile_value(profile, "cv_text")
+                    or self._profile_value(profile, "pasted_cv_text")
+                    or ""
+                ).strip()
 
             if not _cv_text:
                 msg = (
@@ -5306,12 +5461,17 @@ class RicoChatAPI:
 
     # ── New intent-specific handlers ─────────────────────────────────────────
 
-    def _store_search_matches_context(self, user_id: str, formatted: list[dict[str, Any]], search_role: str = "") -> None:
+    def _store_search_matches_context(
+        self, user_id: str, formatted: list[dict[str, Any]],
+        search_role: str = "", search_location: str = "",
+    ) -> None:
         """Merge recent search results into context and persist to Neon."""
         try:
             ctx = self._get_recent_context(user_id)
             if search_role:
                 ctx["recent_search_role"] = search_role
+            if search_location:
+                ctx["recent_search_location"] = search_location
             ctx["recent_search_matches"] = [
                 {
                     "title": m.get("title", ""),
@@ -6836,7 +6996,10 @@ class RicoChatAPI:
             for r in result.get("roles", [])
         ]
 
-    def _classified_role_search(self, user_id: str, role_text: str, profile: Any) -> dict[str, Any]:
+    def _classified_role_search(
+        self, user_id: str, role_text: str, profile: Any,
+        location: str = "", employment_type_filter: str = "",
+    ) -> dict[str, Any]:
         """Use 3-tier role classifier before searching.
 
         - profile_relevant → search directly
@@ -6854,7 +7017,10 @@ class RicoChatAPI:
         if role_tokens and all(t in _LOCATION_TERMS or t in _loc_fillers for t in role_tokens):
             saved_roles = self._as_list(self._profile_value(profile, "target_roles"))
             if saved_roles:
-                return self._target_role_search_response(user_id, str(saved_roles[0]), profile)
+                return self._target_role_search_response(
+                    user_id, str(saved_roles[0]), profile,
+                    location=location, employment_type_filter=employment_type_filter,
+                )
             response = {
                 "type": "clarification",
                 "message": (
@@ -6881,7 +7047,8 @@ class RicoChatAPI:
                 self._append_chat(user_id, "assistant", response["message"])
                 return response
             return self._target_role_search_response(
-                user_id, str(saved_roles[0]), profile, from_saved_profile=True
+                user_id, str(saved_roles[0]), profile, from_saved_profile=True,
+                location=location, employment_type_filter=employment_type_filter,
             )
 
         from rapidfuzz import fuzz as _fuzz
@@ -6894,7 +7061,10 @@ class RicoChatAPI:
 
         for tr in target_roles:
             if _fuzz.ratio(role_lower, str(tr).lower()) >= 70:
-                return self._target_role_search_response(user_id, role_text.strip(), profile)
+                return self._target_role_search_response(
+                    user_id, role_text.strip(), profile,
+                    location=location, employment_type_filter=employment_type_filter,
+                )
 
         # Rico's own suggestions are always profile_relevant — they came from the CV.
         suggested = self._generate_role_suggestions(
@@ -6906,12 +7076,18 @@ class RicoChatAPI:
         )
         suggested_lower = {s["label"].lower() for s in suggested}
         if role_lower in suggested_lower:
-            return self._target_role_search_response(user_id, role_text.strip(), profile)
+            return self._target_role_search_response(
+                user_id, role_text.strip(), profile,
+                location=location, employment_type_filter=employment_type_filter,
+            )
 
         classification, canonical_role = classify_role_candidate(role_text, profile)
 
         if classification == "profile_relevant" and canonical_role:
-            return self._target_role_search_response(user_id, canonical_role, profile)
+            return self._target_role_search_response(
+                user_id, canonical_role, profile,
+                location=location, employment_type_filter=employment_type_filter,
+            )
 
         if classification == "known_but_off_profile" and canonical_role:
             response = {

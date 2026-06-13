@@ -481,6 +481,44 @@ _ROLE_CHANGE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# UAE city name extraction — used to populate entities["location"] in search intents.
+_UAE_CITY_EXTRACT_RE = re.compile(
+    r"\b(dubai|abu\s+dhabi|sharjah|ajman|ras\s+al\s+khaimah|fujairah|al\s+ain|umm\s+al\s+quwain|uae)\b",
+    re.IGNORECASE,
+)
+
+# Employment-type extraction — used to populate entities["employment_type"].
+_EMPLOYMENT_TYPE_EXTRACT_RE = re.compile(
+    r"\b(permanent|full[- ]?time|part[- ]?time|contract(?:or)?|freelance|remote|hybrid|on[- ]?site)\b",
+    re.IGNORECASE,
+)
+
+# Source-filter intent: exclude/include specific job board by name.
+# Must be checked BEFORE _JOB_SEARCH_EXPLICIT_RE so "exclude LinkedIn results"
+# is not treated as a role-extraction query.
+_SOURCE_FILTER_RE = re.compile(
+    r"\b(exclude|filter\s+out|don'?t\s+show|hide|remove|without|no\s+more)\b"
+    r".{0,40}\b(linkedin|naukri|bayt|indeed|glassdoor|monster|ziprecruiter|results?|listings?)\b"
+    r"|\b(only\s+from|only\s+show\s+from|show\s+only\s+from|just\s+(?:show|from))\b"
+    r".{0,30}\b(linkedin|naukri|bayt|indeed|glassdoor)\b"
+    r"|\b(exclude|filter)\s+(linkedin|naukri|bayt|indeed|glassdoor)\b",
+    re.IGNORECASE,
+)
+
+# Compound search-refinement: employment-type negation or location-only constraint
+# without an explicit role name.  "show me only jobs in Dubai, no contract roles"
+# fires this before _JOB_SEARCH_EXPLICIT_RE can misclassify "only" or "contract"
+# as a role to search for.
+_SEARCH_REFINE_RE = re.compile(
+    r"\bno\s+(contract|temp|temporary|freelance|part.time)\b"
+    r"|\bnot\s+contract(ing)?\b"
+    r"|\b(permanent|full.time|full\s+time)\s+only\b"
+    r"|\bonly\s+(permanent|full.time|full\s+time|on.site|onsite|remote|hybrid)\b"
+    r"|\bonly\s+(?:in\s+)?(dubai|abu\s+dhabi|sharjah|ajman|ras\s+al\s+khaimah|fujairah|al\s+ain|umm\s+al\s+quwain|uae)\b"
+    r"|\b(dubai|abu\s+dhabi|sharjah|ajman|uae)\s+only\b",
+    re.IGNORECASE,
+)
+
 _JOB_SEARCH_EXPLICIT_RE = re.compile(
     r"\b(find|search|show|get|look for|looking for|any|need|want)\b.{0,60}"
     r"\b(jobs?|roles?|positions?|vacancy|vacancies|openings?|work)\b"
@@ -604,6 +642,8 @@ _ROLE_PREFIX_STOPWORDS = frozenset({
     "more", "the", "a", "an", "please", "kindly", "i", "i'm", "im", "we",
     "am", "are", "is", "was", "were", "to", "of", "currently", "interested",
     "really", "just", "good", "great", "now", "today",
+    # filter/constraint words — must not be extracted as role names
+    "only", "filter", "exclude", "include", "no", "not", "without", "remove",
 })
 
 # Matches job-card action messages sent from RicoJobMatchCard:
@@ -1199,6 +1239,39 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         return IntentResult("application_tracking", 0.8, "regex")
 
     # ── 4. Job search patterns ───────────────────────────────────────────
+    # Source-filter and compound-refinement checks must precede _JOB_SEARCH_EXPLICIT_RE
+    # so filter tokens ("exclude", "only", "no contract") are never misclassified as roles.
+    if _SOURCE_FILTER_RE.search(text):
+        return IntentResult("search_refine", 0.88, "regex", action="source_filter")
+
+    # Fire search_refine when:
+    #   (a) _SEARCH_REFINE_RE matches and _JOB_SEARCH_EXPLICIT_RE does NOT — pure constraint, or
+    #   (b) both match but no role is extractable — e.g. "show me only jobs in Dubai,
+    #       no contract" has "show me…jobs" but no role to search for.
+    # "find HSE manager jobs in Abu Dhabi permanent only" matches both but has a role
+    # → falls through to job_search_explicit where role + entities are extracted together.
+    if _SEARCH_REFINE_RE.search(text):
+        _has_explicit = _JOB_SEARCH_EXPLICIT_RE.search(text)
+        if _has_explicit:
+            # Quick role extraction to decide routing.
+            _for_m = _JOB_SEARCH_FOR_ROLE_RE.search(text)
+            _tentative = _for_m.group(1).strip() if _for_m else _extract_role_before_noun(text)
+        else:
+            _tentative = None
+        if not _has_explicit or not _tentative:
+            _refine_entities: dict = {}
+            _rc_m = _UAE_CITY_EXTRACT_RE.search(text)
+            # "UAE" is the default search scope, not a city constraint — skip it.
+            if _rc_m and _rc_m.group(1).strip().lower() != "uae":
+                _refine_entities["location"] = _rc_m.group(1).strip().title()
+            _re_m = _EMPLOYMENT_TYPE_EXTRACT_RE.search(text)
+            if _re_m:
+                _refine_entities["employment_type"] = _re_m.group(1).lower()
+            return IntentResult(
+                "search_refine", 0.85, "regex", action="filter_constraints",
+                entities=_refine_entities if _refine_entities else None,
+            )
+
     # Check explicit job search FIRST (has job/role/position keyword)
     if _JOB_SEARCH_EXPLICIT_RE.search(text):
         # Try to extract an explicit role target so the handler can search for that role
@@ -1208,7 +1281,20 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         extracted_role = for_role_m.group(1).strip() if for_role_m else None
         if not extracted_role:
             extracted_role = _extract_role_before_noun(text)
-        return IntentResult("job_search_explicit", 0.85, "regex", extracted_role=extracted_role)
+        # Extract location and employment_type entities for richer search queries.
+        _search_entities: dict = {}
+        _city_m = _UAE_CITY_EXTRACT_RE.search(text)
+        # "UAE" is the default search scope, not a city constraint — skip it.
+        if _city_m and _city_m.group(1).strip().lower() != "uae":
+            _search_entities["location"] = _city_m.group(1).strip().title()
+        _emp_m = _EMPLOYMENT_TYPE_EXTRACT_RE.search(text)
+        if _emp_m:
+            _search_entities["employment_type"] = _emp_m.group(1).lower()
+        return IntentResult(
+            "job_search_explicit", 0.85, "regex",
+            extracted_role=extracted_role,
+            entities=_search_entities if _search_entities else None,
+        )
 
     # Arabic job search: request verb + job noun, or request verb + English role name
     if has_arabic and _is_arabic_job_search(lower, has_cv=has_cv_profile):

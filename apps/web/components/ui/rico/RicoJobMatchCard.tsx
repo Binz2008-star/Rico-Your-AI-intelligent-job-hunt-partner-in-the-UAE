@@ -13,16 +13,26 @@ export interface JobMatchData {
   location?: string;
   score?: number;
   confidence?: "high" | "medium" | "low";
+  // v1 explanation fields (legacy)
   match_reasons?: string[];
   match_concerns?: string[];
   missing_facts?: string[];
   recommended_action?: string;
+  // v2 explanation fields (preferred)
+  why_this_fits?: string[];
+  worth_checking?: string[];
+  verdict?: "strong_fit" | "worth_checking" | "weak_fit" | string;
+  summary?: string;
   actions?: string[];
-  why?: string; // Legacy fallback field for backward compatibility
+  why?: string; // legacy fallback
+  // Job details
+  description?: string;
+  employment_type?: string;
+  salary_string?: string;
   // Job authenticity fields (optional — absent on older responses)
   apply_url?: string;
   source_url?: string;
-  verification_status?: "live" | "lead_needs_verification";
+  verification_status?: "live" | "lead_needs_verification" | string;
 }
 
 interface RicoJobMatchCardProps {
@@ -104,30 +114,44 @@ export function RicoJobMatchCard({ match, onActionClick, className }: RicoJobMat
         </div>
       </div>
 
-      {/* Reasons section */}
-      {match.match_reasons && match.match_reasons.length > 0 && (
+      {/* Description snippet — real job text when available */}
+      {match.description && (
+        <p className="text-[10px] text-[var(--rico-fg-3)] leading-relaxed line-clamp-3 border-l-2 border-[var(--rico-border-subtle)] pl-2">
+          {match.description}
+        </p>
+      )}
+
+      {/* Employment type + salary metadata */}
+      {(match.employment_type || match.salary_string) && (
+        <div className="flex flex-wrap gap-1.5">
+          {match.employment_type && (
+            <RicoPill variant="default">{match.employment_type}</RicoPill>
+          )}
+          {match.salary_string && (
+            <RicoPill variant="cyan">{match.salary_string}</RicoPill>
+          )}
+        </div>
+      )}
+
+      {/* Reasons section — prefer v2 why_this_fits, fall back to v1 match_reasons */}
+      {((match.why_this_fits && match.why_this_fits.length > 0) || (match.match_reasons && match.match_reasons.length > 0)) && (
         <section className="space-y-1.5">
           <p className="text-[10px] font-semibold text-[var(--rico-secondary-dim)] uppercase tracking-wider">
             Why this fits
           </p>
           <ul className="space-y-1">
-            {match.match_reasons.slice(0, 4).map((reason, idx) => (
+            {(match.why_this_fits?.length ? match.why_this_fits : match.match_reasons!).slice(0, 4).map((reason, idx) => (
               <li key={idx} className="flex items-start gap-2 text-[10px] text-[var(--rico-fg-2)]">
                 <RicoStatusNode variant="cyan" className="mt-0.5" />
                 <span>{reason}</span>
               </li>
             ))}
-            {match.match_reasons.length > 4 && (
-              <li className="text-[9px] text-[var(--rico-fg-4)] italic">
-                +{match.match_reasons.length - 4} more reasons
-              </li>
-            )}
           </ul>
         </section>
       )}
 
       {/* Legacy why fallback for backward compatibility */}
-      {(!match.match_reasons || match.match_reasons.length === 0) && match.why && (
+      {!match.why_this_fits?.length && !match.match_reasons?.length && match.why && (
         <section className="space-y-1.5">
           <p className="text-[10px] font-semibold text-[var(--rico-secondary-dim)] uppercase tracking-wider">
             Why this fits
@@ -138,24 +162,19 @@ export function RicoJobMatchCard({ match, onActionClick, className }: RicoJobMat
         </section>
       )}
 
-      {/* Concerns section */}
-      {match.match_concerns && match.match_concerns.length > 0 && (
+      {/* Concerns section — prefer v2 worth_checking, fall back to v1 match_concerns */}
+      {((match.worth_checking && match.worth_checking.length > 0) || (match.match_concerns && match.match_concerns.length > 0)) && (
         <section className="space-y-1.5">
           <p className="text-[10px] font-semibold text-[var(--rico-primary)] uppercase tracking-wider">
             Worth checking
           </p>
           <ul className="space-y-1">
-            {match.match_concerns.slice(0, 3).map((concern, idx) => (
+            {(match.worth_checking?.length ? match.worth_checking : match.match_concerns!).slice(0, 3).map((concern, idx) => (
               <li key={idx} className="flex items-start gap-2 text-[10px] text-[var(--rico-fg-2)]">
                 <RicoStatusNode variant="magenta" className="mt-0.5" />
                 <span>{concern}</span>
               </li>
             ))}
-            {match.match_concerns.length > 3 && (
-              <li className="text-[9px] text-[var(--rico-fg-4)] italic">
-                +{match.match_concerns.length - 3} more
-              </li>
-            )}
           </ul>
         </section>
       )}
