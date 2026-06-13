@@ -79,7 +79,7 @@ class TestExpireSubscriptionsWrapper:
         from src.run_daily import _expire_subscriptions
 
         with patch("src.run_daily.expire_stale_subscriptions", return_value=5):
-            with caplog.at_level(logging.INFO, logger="src.run_daily"):
+            with caplog.at_level(logging.INFO, logger="run_daily"):
                 _expire_subscriptions()
 
         assert "expired_count=5" in caplog.text

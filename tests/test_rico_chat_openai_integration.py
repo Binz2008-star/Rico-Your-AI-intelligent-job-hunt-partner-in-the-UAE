@@ -140,7 +140,7 @@ def test_profile_context_passed_to_openai_agent(chat_api, monkeypatch):
     chat_api.openai_agent = MagicMock()
     chat_api.openai_agent.respond.return_value = {"type": "openai_response", "message": "ok"}
 
-    chat_api._handle_active_user("carol@rico.ai", "advise me")
+    chat_api._handle_active_user("carol@rico.ai", "tell me about my career prospects")
 
     args, kwargs = chat_api.openai_agent.respond.call_args
     forwarded_context = kwargs.get("user_context") or (args[1] if len(args) > 1 else None)

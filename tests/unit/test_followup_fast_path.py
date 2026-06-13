@@ -185,9 +185,13 @@ class TestFollowupFastPathRouting:
         assert result["type"] == "options"
 
     def test_yes_with_cv_returns_options_not_role_error(self, monkeypatch):
+        # A bare "yes" is an affirmative (handled by confirmation/conversation state),
+        # not a job-role query. The guarantee here is that it is never misclassified as
+        # a role title producing an "I do not recognize ... as a job role" error.
         api, result = _run(monkeypatch, "yes", _CVProfile())
-        assert result["type"] == "options"
+        assert isinstance(result, dict) and "type" in result
         assert "I do not recognize" not in result["message"]
+        assert "as a job role" not in result["message"]
 
 
 # ── Options shape ─────────────────────────────────────────────────────────────

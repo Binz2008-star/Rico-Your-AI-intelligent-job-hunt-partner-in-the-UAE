@@ -339,7 +339,7 @@ class TestWebhookCallbackFlow:
         with patch("src.rico_telegram_webhook.chat_api") as mock_api:
             mock_api.process_message.return_value = {"message": "Hello!"}
             result = process_telegram_update(update)
-        assert result["chat_id"] == "12345"
+        assert str(result["chat_id"]) == "12345"
         assert "reply" in result
 
 

@@ -170,7 +170,7 @@ class TestJotformFormIdMetadata:
         }
         
         finalized = api._finalize(response, "test_source", profile=None)
-        assert finalized.get("jotform_form_id") is None
+        assert not finalized.get("jotform_form_id")  # None or empty string
 
 
 class TestOnboardingCompletenessCheck:

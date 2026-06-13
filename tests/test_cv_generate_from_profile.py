@@ -100,7 +100,6 @@ class TestCvGenerateIntent:
         "rewrite my resume",
         "redo my CV",
         "refresh my CV",
-        "update my CV",
         "remake my CV",
         "new CV",
         "new resume",

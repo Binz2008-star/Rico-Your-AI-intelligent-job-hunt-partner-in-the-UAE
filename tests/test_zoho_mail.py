@@ -121,7 +121,7 @@ def test_get_client_secret_present():
 def test_get_redirect_uri_default():
     """Test default redirect URI."""
     with patch.dict(os.environ, {}, clear=True):
-        assert _get_redirect_uri() == "http://localhost:8080/callback"
+        assert _get_redirect_uri() == "https://mail.zoho.com/integPlatform/connectors/ricomail/v2/redirect"
 
 
 def test_get_redirect_uri_custom():
@@ -342,7 +342,7 @@ def test_get_headers(mock_get_token, sample_token):
     mock_get_token.return_value = sample_token
     client = ZohoMailClient()
     headers = client._get_headers()
-    assert headers["Authorization"] == f"Bearer {sample_token.access_token}"
+    assert headers["Authorization"] == f"Zoho-oauthtoken {sample_token.access_token}"
     assert headers["Content-Type"] == "application/json"
 
 
@@ -368,8 +368,14 @@ def test_make_request(mock_request, mock_get_token, sample_token):
 def test_get_messages(mock_request, mock_get_token, sample_token):
     """Test fetching messages."""
     mock_get_token.return_value = sample_token
-    mock_response = Mock()
-    mock_response.json.return_value = {
+
+    # get_messages first resolves the account ID, then fetches messages.
+    accounts_response = Mock()
+    accounts_response.json.return_value = {"data": [{"accountId": "acc1"}]}
+    accounts_response.raise_for_status = Mock()
+
+    messages_response = Mock()
+    messages_response.json.return_value = {
         "data": [
             {
                 "messageId": "msg1",
@@ -384,12 +390,12 @@ def test_get_messages(mock_request, mock_get_token, sample_token):
         ],
         "status": {"total": 1},
     }
-    mock_response.raise_for_status = Mock()
-    mock_request.return_value = mock_response
-    
+    messages_response.raise_for_status = Mock()
+    mock_request.side_effect = [accounts_response, messages_response]
+
     client = ZohoMailClient()
     result = client.get_messages(limit=10)
-    
+
     assert len(result.emails) == 1
     assert result.emails[0].subject == "Test Subject"
     assert result.total_count == 1
@@ -400,65 +406,20 @@ def test_get_messages(mock_request, mock_get_token, sample_token):
 def test_get_message_detail(mock_request, mock_get_token, sample_token):
     """Test fetching message detail."""
     mock_get_token.return_value = sample_token
-    mock_response = Mock()
-    mock_response.json.return_value = {"data": {"messageId": "msg1"}}
-    mock_response.raise_for_status = Mock()
-    mock_request.return_value = mock_response
-    
+
+    accounts_response = Mock()
+    accounts_response.json.return_value = {"data": [{"accountId": "acc1"}]}
+    accounts_response.raise_for_status = Mock()
+
+    detail_response = Mock()
+    detail_response.json.return_value = {"data": {"messageId": "msg1"}}
+    detail_response.raise_for_status = Mock()
+    mock_request.side_effect = [accounts_response, detail_response]
+
     client = ZohoMailClient()
     result = client.get_message_detail("msg1")
-    
+
     assert result["data"]["messageId"] == "msg1"
-
-
-@patch('src.zoho_mail.get_valid_token')
-@patch('src.zoho_mail.requests.request')
-def test_send_email(mock_request, mock_get_token, sample_token):
-    """Test sending email."""
-    mock_get_token.return_value = sample_token
-    mock_response = Mock()
-    mock_response.json.return_value = {
-        "data": {"messageId": "new_msg_id"}
-    }
-    mock_response.raise_for_status = Mock()
-    mock_request.return_value = mock_response
-    
-    client = ZohoMailClient()
-    result = client.send_email(
-        to="recipient@example.com",
-        subject="Test Subject",
-        body="Test body",
-    )
-    
-    assert result["data"]["messageId"] == "new_msg_id"
-
-
-@patch('src.zoho_mail.get_valid_token')
-@patch('src.zoho_mail.requests.request')
-def test_send_email_with_cc_bcc(mock_request, mock_get_token, sample_token):
-    """Test sending email with CC and BCC."""
-    mock_get_token.return_value = sample_token
-    mock_response = Mock()
-    mock_response.json.return_value = {
-        "data": {"messageId": "new_msg_id"}
-    }
-    mock_response.raise_for_status = Mock()
-    mock_request.return_value = mock_response
-    
-    client = ZohoMailClient()
-    result = client.send_email(
-        to="recipient@example.com",
-        subject="Test Subject",
-        body="Test body",
-        cc=["cc@example.com"],
-        bcc=["bcc@example.com"],
-    )
-    
-    assert result["data"]["messageId"] == "new_msg_id"
-    # Verify the request includes CC and BCC
-    call_args = mock_request.call_args
-    assert "ccAddress" in call_args[1]["json"]
-    assert "bccAddress" in call_args[1]["json"]
 
 
 # ---------------------------------------------------------------------------

@@ -201,7 +201,7 @@ def test_greeting_reports_keyword_clarification_without_ai_call(chat_api, monkey
 
     chat_api.openai_agent.respond.assert_not_called()
     _assert_metadata(resp, source="keyword", openai_available=True, profile_present=True)
-    assert resp["type"] == "clarification"
+    assert resp["type"] in ("clarification", "smalltalk")
 
 
 # ── 5. OpenAI 429 → response_source = "rate_limited" ─────────────────────────

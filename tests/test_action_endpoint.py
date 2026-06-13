@@ -264,7 +264,8 @@ class TestActionEndpointJobResolution:
                 "job_key": "ignored-key",
                 "job":     _JOB,
             })
-        mock_gen.assert_called_once_with(_JOB)
+        mock_gen.assert_called_once()
+        assert mock_gen.call_args.args[0] == _JOB
 
 
 # ── Rate limiting ─────────────────────────────────────────────────────────────

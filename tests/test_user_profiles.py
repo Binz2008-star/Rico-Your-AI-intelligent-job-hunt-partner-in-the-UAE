@@ -137,12 +137,20 @@ class TestUpsertProfile:
         mem.upsert_profile_from_dict.assert_called_once()
 
     def test_writes_user_to_db(self):
+        from contextlib import contextmanager
         from src.repositories.profile_repo import upsert_profile
         db = _mock_db()
         db.upsert_profile = MagicMock()
         mem = _mock_mem()
+        mock_conn = MagicMock()
+
+        @contextmanager
+        def _fake_transaction():
+            yield mock_conn
+
         with patch("src.repositories.profile_repo._db", return_value=db), \
-             patch("src.repositories.profile_repo._memory", return_value=mem):
+             patch("src.repositories.profile_repo._memory", return_value=mem), \
+             patch("src.repositories.profile_repo._db_transaction", _fake_transaction):
             upsert_profile("u@x.com", {"name": "Test", "email": "u@x.com"})
         db.upsert_user.assert_called_once()
         args = db.upsert_user.call_args[0][0]
@@ -150,12 +158,20 @@ class TestUpsertProfile:
         assert args["email"] == "u@x.com"
 
     def test_writes_profile_fields_to_db(self):
+        from contextlib import contextmanager
         from src.repositories.profile_repo import upsert_profile
         db = _mock_db()
         db.upsert_profile = MagicMock()
         mem = _mock_mem()
+        mock_conn = MagicMock()
+
+        @contextmanager
+        def _fake_transaction():
+            yield mock_conn
+
         with patch("src.repositories.profile_repo._db", return_value=db), \
-             patch("src.repositories.profile_repo._memory", return_value=mem):
+             patch("src.repositories.profile_repo._memory", return_value=mem), \
+             patch("src.repositories.profile_repo._db_transaction", _fake_transaction):
             upsert_profile("u@x.com", {"target_roles": ["HSE"], "skills": ["ISO"]})
         db.upsert_profile.assert_called_once()
         profile_data = db.upsert_profile.call_args[0][1]
@@ -225,9 +241,17 @@ class TestGetPreferences:
 
 class TestSavePreferences:
     def test_upserts_via_db(self):
+        from contextlib import contextmanager
         from src.repositories.profile_repo import save_preferences
         db = _mock_db()
-        with patch("src.repositories.profile_repo._db", return_value=db):
+        mock_conn = MagicMock()
+
+        @contextmanager
+        def _fake_transaction():
+            yield mock_conn
+
+        with patch("src.repositories.profile_repo._db", return_value=db), \
+             patch("src.repositories.profile_repo._db_transaction", _fake_transaction):
             save_preferences("u@x.com", {"match_strictness": "strict"})
         db.upsert_user.assert_called_once()
         db.upsert_settings.assert_called_once()
@@ -242,13 +266,17 @@ class TestSavePreferences:
 
 class TestSavedSearches:
     def test_save_search_inserts_row(self):
+        from contextlib import contextmanager
         from src.repositories.profile_repo import save_search
         db = _mock_db(bundle=_bundle())
-        conn = MagicMock()
-        db.connect.return_value.__enter__ = MagicMock(return_value=conn)
-        db.connect.return_value.__exit__ = MagicMock(return_value=False)
+        mock_conn = MagicMock()
+
+        @contextmanager
+        def _fake_transaction():
+            yield mock_conn
+
         with patch("src.repositories.profile_repo._db", return_value=db), \
-             patch("src.repositories.profile_repo.psycopg2", create=True):
+             patch("src.repositories.profile_repo._db_transaction", _fake_transaction):
             save_search("u@x.com", "HSE Manager Dubai")
         db.upsert_user.assert_called_once()
 

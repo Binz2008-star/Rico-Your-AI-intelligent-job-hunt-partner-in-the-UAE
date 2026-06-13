@@ -20,11 +20,16 @@ def test_generic_find_jobs_executes_search_workflow():
 
     Regression for: Issue #136 - job-search intent interception
     """
+    import uuid
     from src.rico_chat_api import RicoChatAPI
+
+    # Unique id per run: conversation state is JSON-backed and persists across
+    # tests, so a static id can leak a prior turn's state and re-route "find jobs".
+    user_id = f"routing-{uuid.uuid4().hex}@example.com"
 
     # Mock the profile and system
     mock_profile = MagicMock()
-    mock_profile.user_id = "test@example.com"
+    mock_profile.user_id = user_id
     mock_profile.target_roles = ["HSE Manager"]
     mock_profile.skills = ["HSE"]
     mock_profile.has_cv = True
@@ -44,7 +49,7 @@ def test_generic_find_jobs_executes_search_workflow():
          patch("src.rico_intent_router.route", return_value=MagicMock(entities={})):
 
         result = chat_api.process_message(
-            user_id="test@example.com",
+            user_id=user_id,
             message="find jobs"
         )
 

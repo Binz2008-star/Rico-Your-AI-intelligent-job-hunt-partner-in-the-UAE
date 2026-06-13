@@ -89,11 +89,16 @@ class TestForgotPasswordTiming:
         dispatch.assert_called_once_with("real@x.com")
 
     def test_unregistered_email_does_not_dispatch(self, client):
+        # The endpoint always schedules the helper (to keep response timing constant);
+        # the no-send guarantee for unknown emails now lives inside the helper, which
+        # returns early before creating a token or sending an email.
         with patch("src.repositories.users_repo.get_user_by_email", return_value=None), \
-             patch("src.api.auth._dispatch_password_reset_email") as dispatch:
+             patch("src.repositories.password_reset_repo.create_reset_token") as create_tok, \
+             patch("src.services.password_reset_email.send_password_reset_email") as send:
             r = client.post("/api/v1/auth/forgot-password", json={"email": "ghost@x.com"})
         assert r.status_code == 200
-        dispatch.assert_not_called()
+        create_tok.assert_not_called()
+        send.assert_not_called()
 
     def test_response_body_identical_for_both(self, client):
         from src.repositories.users_repo import User
@@ -110,7 +115,14 @@ class TestForgotPasswordTiming:
 
     def test_dispatch_helper_creates_token_and_sends(self):
         from src.api import auth as auth_mod
-        with patch("src.repositories.password_reset_repo.create_reset_token", return_value="tok123"), \
+        from src.repositories.users_repo import User
+        from datetime import datetime
+        user = User(id=1, email="real@x.com", password_hash="x", role="user",
+                    is_active=True, created_at=datetime.now(), last_login_at=None)
+        # The helper now resolves the user before creating a token — patch the lookup
+        # so it proceeds to token creation and email delivery.
+        with patch("src.repositories.users_repo.get_user_by_email", return_value=user), \
+             patch("src.repositories.password_reset_repo.create_reset_token", return_value="tok123"), \
              patch("src.services.password_reset_email.send_password_reset_email", return_value=True) as send:
             auth_mod._dispatch_password_reset_email("real@x.com")
         send.assert_called_once_with("real@x.com", "tok123")

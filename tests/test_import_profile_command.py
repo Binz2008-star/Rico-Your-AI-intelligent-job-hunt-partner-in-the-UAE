@@ -130,11 +130,23 @@ class TestCleanProfile:
         assert "email" in result
         assert "skills" not in result
 
-    def test_adds_profile_creation_mode(self):
-        """Should add profile_creation_mode field."""
-        data = {"email": "test@example.com"}
-        result = _clean_profile(data)
-        assert result["profile_creation_mode"] == "file_import"
+    def test_adds_profile_creation_mode(self, tmp_path):
+        """import_profile_file should stamp profile_creation_mode=file_import on the upsert."""
+        file_path = tmp_path / "profile.json"
+        file_path.write_text(
+            json.dumps({"email": "test@example.com"}),
+            encoding="utf-8",
+        )
+
+        mock_upsert = MagicMock()
+        with patch("src.cli.import_profile.upsert_profile", mock_upsert), \
+             patch("src.cli.import_profile.mark_onboarding_complete"), \
+             patch("src.cli.import_profile.resolve_profile_context", return_value=MagicMock()):
+            import_profile_file(file_path=str(file_path))
+
+        # profile_creation_mode is stamped by import_profile_file (not _clean_profile).
+        _, kwargs = mock_upsert.call_args
+        assert kwargs["updates"]["profile_creation_mode"] == "file_import"
 
 
 class TestImportProfileFile:
@@ -209,36 +221,49 @@ class TestImportProfileFile:
 
         assert result.get("telegram") is None
 
-    def test_includes_todo_placeholder_for_jobs_flag(self, tmp_path, monkeypatch):
-        """Should include TODO placeholder when --run-jobs is True."""
+    def test_runs_job_pipeline_when_jobs_flag(self, tmp_path, monkeypatch):
+        """Should run the scoring pipeline and summarise results when --run-jobs is True."""
         file_path = tmp_path / "profile.json"
         file_path.write_text(
             json.dumps({"email": "test@example.com"}),
             encoding="utf-8"
         )
 
+        mock_adapter = MagicMock()
+        mock_adapter.fetch_jobs.return_value = [
+            {"title": "HSE Manager", "company": "Acme"},
+        ]
+        mock_adapter.score_jobs.return_value = [
+            ({"title": "HSE Manager", "company": "Acme"}, 0.91),
+        ]
+
         with patch("src.cli.import_profile.upsert_profile"), \
              patch("src.cli.import_profile.mark_onboarding_complete"), \
-             patch("src.cli.import_profile.resolve_profile_context") as mock_resolve:
-            mock_resolve.return_value = MagicMock()
+             patch("src.cli.import_profile.resolve_profile_context", return_value=MagicMock()), \
+             patch("src.rico_repo_adapter.RicoRepoAdapter", return_value=mock_adapter), \
+             patch("src.profile.get_candidate_profile", return_value={"target_roles": []}):
 
             result = import_profile_file(file_path=str(file_path), run_jobs=True)
 
-        assert result["jobs"] == "TODO: connect existing job pipeline entrypoint"
+        assert result["jobs"]["fetched"] == 1
+        assert result["jobs"]["scored"] == 1
+        assert result["jobs"]["top_matches"][0]["title"] == "HSE Manager"
 
-    def test_includes_todo_placeholder_for_telegram_flag(self, tmp_path, monkeypatch):
-        """Should include TODO placeholder when --send-telegram is True."""
+    def test_sends_telegram_when_telegram_flag(self, tmp_path, monkeypatch):
+        """Should send a Telegram alert and mark it sent when --send-telegram is True."""
         file_path = tmp_path / "profile.json"
         file_path.write_text(
             json.dumps({"email": "test@example.com"}),
             encoding="utf-8"
         )
 
+        mock_send = MagicMock()
         with patch("src.cli.import_profile.upsert_profile"), \
              patch("src.cli.import_profile.mark_onboarding_complete"), \
-             patch("src.cli.import_profile.resolve_profile_context") as mock_resolve:
-            mock_resolve.return_value = MagicMock()
+             patch("src.cli.import_profile.resolve_profile_context", return_value=MagicMock()), \
+             patch("src.telegram_bot.send_telegram_message", mock_send):
 
             result = import_profile_file(file_path=str(file_path), send_telegram=True)
 
-        assert result["telegram"] == "TODO: connect existing Telegram alert entrypoint"
+        assert result["telegram"] == "sent"
+        mock_send.assert_called_once()

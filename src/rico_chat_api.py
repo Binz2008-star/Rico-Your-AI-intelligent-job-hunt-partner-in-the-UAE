@@ -1406,8 +1406,7 @@ class RicoChatAPI:
             _s = float(raw_score)
             normalized_score: float = round(max(0.0, min(1.0, _s / 100.0 if _s > 1.0 else _s)), 4)
         else:
-            # No scorer ran — emit 0.0 so the frontend can safely multiply by 100
-            # and show a 0% badge rather than crash on None arithmetic.
+            # No scorer ran — emit 0.0 as the canonical "no score" sentinel; frontend checks for 0.0 to hide badge.
             normalized_score = 0.0
 
         # Preserve URL fields so the frontend can surface apply links and distinguish
@@ -6716,7 +6715,7 @@ class RicoChatAPI:
         sections: list[str] = []
 
         header_parts = [name] if name else []
-        contact_parts = [p for p in [email, phone] if p]
+        contact_parts = [p for p in [email, phone] if isinstance(p, str) and p]
         if contact_parts:
             header_parts.append(" | ".join(contact_parts))
         if preferred_cities:

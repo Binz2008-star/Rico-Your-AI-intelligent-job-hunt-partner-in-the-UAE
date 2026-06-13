@@ -42,6 +42,7 @@ def _client_with_token(email: str) -> tuple:
 def _mock_db_for(user_id: str, recs: list) -> MagicMock:
     db = MagicMock()
     db.available = True
+    db._exact_auth_lookup_enabled = False  # prevent SQL auth resolver; use get_user_bundle path
     db.get_user_bundle.side_effect = lambda uid: {"id": f"uuid-{uid}"} if uid == user_id else None
     db.get_recommendations.return_value = recs
     db.get_recommendation_stats.return_value = {"total": len(recs)}
@@ -131,6 +132,7 @@ class TestApplicationsRouteIsolation:
         def _db_side_effect():
             db = MagicMock()
             db.available = True
+            db._exact_auth_lookup_enabled = False
             db.get_user_bundle.side_effect = lambda uid: {"id": f"uuid-{uid}"}
             db.get_recommendations.side_effect = lambda uid, **kw: (
                 alice_recs if uid == "uuid-alice@rico.ai" else
@@ -161,6 +163,7 @@ class TestApplicationsRouteIsolation:
         """New auth user with no rico_users row is auto-provisioned and gets empty list."""
         db = MagicMock()
         db.available = True
+        db._exact_auth_lookup_enabled = False
         db.get_user_bundle.return_value = None
         db.upsert_user.return_value = {"id": "new-uuid"}
         db.get_recommendations.return_value = []
@@ -316,6 +319,7 @@ class TestApplicationsRepoFallbackRemoval:
         """P1: user in auth table but not rico_users → auto-provision, return empty list."""
         from src.repositories.applications_repo import get_all
         db = MagicMock()
+        db._exact_auth_lookup_enabled = False
         db.get_user_bundle.return_value = None
         db.upsert_user.return_value = {"id": "new-uuid"}
         db.get_recommendations.return_value = []
@@ -331,6 +335,7 @@ class TestApplicationsRepoFallbackRemoval:
         """P2: transient DB error in resolver must surface as 503, not 404."""
         from src.repositories.applications_repo import get_all
         db = MagicMock()
+        db._exact_auth_lookup_enabled = False
         db.get_user_bundle.side_effect = Exception("connection timeout")
         with patch("src.repositories.applications_repo._db", return_value=db):
             with pytest.raises(HTTPException) as exc_info:
@@ -375,6 +380,7 @@ class TestApplicationsRepoFallbackRemoval:
 
         def _db_factory():
             db = MagicMock()
+            db._exact_auth_lookup_enabled = False
             db.get_user_bundle.side_effect = lambda uid: {"id": f"uuid-{uid}"}
             db.get_recommendations.side_effect = lambda uid, **kw: (
                 alice_recs if uid == "uuid-alice@rico.ai" else

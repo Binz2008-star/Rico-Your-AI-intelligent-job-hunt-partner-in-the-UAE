@@ -1,9 +1,47 @@
 """Test profile field persistence end-to-end through DB and API."""
+import os
 import pytest
 from fastapi.testclient import TestClient
 from src.repositories.profile_repo import upsert_profile, get_profile
 from src.rico_agent import RicoProfile
 from src.api.app import app
+
+
+def _db_available() -> bool:
+    """True only when a live Postgres connection can be opened.
+
+    The DB roundtrip tests issue raw SQL (INSERT/DELETE, ORDER BY semantics) and
+    require a real database. They are skipped when no DATABASE_URL/psycopg2 is
+    configured so the suite stays runnable in unit-only environments.
+    """
+    if not os.getenv("DATABASE_URL"):
+        return False
+    try:
+        from src.rico_db import RicoDB
+        with RicoDB().connect():
+            return True
+    except Exception:
+        return False
+
+
+requires_db = pytest.mark.skipif(
+    not _db_available(),
+    reason="requires a live DATABASE_URL (DB integration test)",
+)
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """Give each test a fresh rate-limit budget.
+
+    The profile PATCH/GET endpoints are rate-limited (20/min) keyed by client IP.
+    All TestClient calls share the "testclient" IP, so without a reset the suite's
+    cumulative profile calls can exhaust the budget and surface spurious 429s in
+    whichever profile test happens to run last.
+    """
+    from src.api.rate_limit import limiter
+    limiter.reset()
+    yield
 
 
 def test_profile_name_persists_through_db():
@@ -201,6 +239,9 @@ def test_api_patch_name_persists(monkeypatch):
 
     client = TestClient(app)
 
+    # Establish a real (non-signup-shell) profile so GET returns career fields.
+    client.patch("/api/v1/rico/profile", json={"current_role": "HSE Engineer"})
+
     # PATCH name
     response = client.patch("/api/v1/rico/profile", json={"name": "Roben Edwan"})
     assert response.status_code == 200
@@ -256,6 +297,9 @@ def test_api_patch_current_company_persists(monkeypatch):
 
     client = TestClient(app)
 
+    # Establish a real (non-signup-shell) profile so GET returns career fields.
+    client.patch("/api/v1/rico/profile", json={"current_role": "HSE Engineer"})
+
     response = client.patch("/api/v1/rico/profile", json={"current_company": "Eco Technology Environmental Protection Services LLC"})
     assert response.status_code == 200
     assert "current_company" in response.json()["updated_fields"]
@@ -281,6 +325,9 @@ def test_api_patch_linkedin_url_persists(monkeypatch):
     monkeypatch.setattr(rico_chat_router, "get_current_user", mock_get_user)
 
     client = TestClient(app)
+
+    # Establish a real (non-signup-shell) profile so GET returns career fields.
+    client.patch("/api/v1/rico/profile", json={"current_role": "HSE Engineer"})
 
     response = client.patch("/api/v1/rico/profile", json={"linkedin_url": "https://linkedin.com/in/robin-edwan-environmental"})
     assert response.status_code == 200
@@ -334,6 +381,9 @@ def test_api_patch_salary_fields_persist(monkeypatch):
 
     client = TestClient(app)
 
+    # Establish a real (non-signup-shell) profile so GET returns career fields.
+    client.patch("/api/v1/rico/profile", json={"current_role": "HSE Engineer"})
+
     response = client.patch("/api/v1/rico/profile", json={"salary_expectation_aed": 15000, "minimum_salary_aed": 10000})
     assert response.status_code == 200
     assert "salary_expectation_aed" in response.json()["updated_fields"]
@@ -362,6 +412,9 @@ def test_api_patch_visa_status_persists(monkeypatch):
 
     client = TestClient(app)
 
+    # Establish a real (non-signup-shell) profile so GET returns career fields.
+    client.patch("/api/v1/rico/profile", json={"current_role": "HSE Engineer"})
+
     response = client.patch("/api/v1/rico/profile", json={"visa_status": "Employment Visa"})
     assert response.status_code == 200
     assert "visa_status" in response.json()["updated_fields"]
@@ -387,6 +440,9 @@ def test_api_patch_notice_period_persists(monkeypatch):
     monkeypatch.setattr(rico_chat_router, "get_current_user", mock_get_user)
 
     client = TestClient(app)
+
+    # Establish a real (non-signup-shell) profile so GET returns career fields.
+    client.patch("/api/v1/rico/profile", json={"current_role": "HSE Engineer"})
 
     response = client.patch("/api/v1/rico/profile", json={"notice_period": "1 month"})
     assert response.status_code == 200
@@ -492,6 +548,10 @@ def test_api_patch_empty_cities_persist(monkeypatch):
 
     client = TestClient(app)
 
+    # Establish a real (non-signup-shell) profile so GET returns career fields
+    # even after preferred_cities is cleared.
+    client.patch("/api/v1/rico/profile", json={"current_role": "HSE Engineer"})
+
     # First set some cities
     client.patch("/api/v1/rico/profile", json={"preferred_cities": ["Dubai"]})
 
@@ -579,6 +639,7 @@ def test_profile_renormalization_with_versioning():
 # DB Roundtrip Tests - Diagnostic for production issue
 # ============================================================================
 
+@requires_db
 def test_db_user_upsert_read_roundtrip():
     """Test that db.upsert_user and db.get_user_bundle use the same identity key and name persists."""
     from src.rico_db import RicoDB
@@ -609,6 +670,7 @@ def test_db_user_upsert_read_roundtrip():
         conn.commit()
 
 
+@requires_db
 def test_get_user_bundle_with_duplicate_rows():
     """Test that get_user_bundle returns the latest row when multiple rows match the same email."""
     from src.rico_db import RicoDB
@@ -672,6 +734,7 @@ def test_get_user_bundle_with_duplicate_rows():
             conn.commit()
 
 
+@requires_db
 def test_api_patch_to_db_to_get_roundtrip(monkeypatch):
     """Test full path: PATCH endpoint -> DB -> GET endpoint."""
     import src.api.routers.rico_chat as rico_chat_router
@@ -723,6 +786,7 @@ def test_api_patch_to_db_to_get_roundtrip(monkeypatch):
             conn.commit()
 
 
+@requires_db
 def test_canonical_row_selection_with_duplicate_emails():
     """Regression test: PATCH and GET must choose same canonical row when duplicate email rows exist.
 
@@ -838,6 +902,7 @@ def test_canonical_row_selection_with_duplicate_emails():
             conn.commit()
 
 
+@requires_db
 def test_email_external_user_id_fallback_row_still_roundtrips():
     """Regression test: email users with only external_user_id=email still PATCH/GET correctly."""
     import os
@@ -904,6 +969,7 @@ def test_email_external_user_id_fallback_row_still_roundtrips():
             conn.commit()
 
 
+@requires_db
 def test_non_email_identifiers_still_work():
     """Regression test: non-email identifiers (Telegram/JotForm/external_user_id) path is not broken by canonical email fix.
 
@@ -1004,6 +1070,7 @@ def test_non_email_identifiers_still_work():
             conn.commit()
 
 
+@requires_db
 def test_api_patch_get_consistency_with_duplicate_rows(monkeypatch):
     """Regression test: PATCH /api/v1/rico/profile then GET /api/v1/rico/profile must return saved data when duplicate rows exist.
 
