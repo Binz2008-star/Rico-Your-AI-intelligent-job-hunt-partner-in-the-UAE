@@ -177,6 +177,8 @@ CREATE TABLE IF NOT EXISTS user_documents (
 );
 CREATE INDEX IF NOT EXISTS idx_user_documents_user_created
     ON user_documents(user_id, created_at DESC);
+-- Idempotent column migration for existing installations (migration 026).
+ALTER TABLE user_documents ADD COLUMN IF NOT EXISTS skills_json JSONB DEFAULT '[]'::jsonb;
 """
 
 _APPLY_DRAFTS_DDL = """
