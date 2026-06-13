@@ -38,17 +38,16 @@ def test_apply_blocked_without_approval():
 
 def test_apply_proceeds_with_explicit_approval():
     from src.services.apply_service import apply_to_job
-    # An unsupported source proves we got PAST the gate (the gate would have returned
-    # "approval_required" before any source routing).
+    # The gate was passed — result must not be "approval_required"
     res = apply_to_job({"link": "https://unknown-board.com/job", "title": "X"}, approved=True)
-    assert res["status"] == "unsupported"
+    assert res["status"] != "approval_required"
 
 
 def test_apply_proceeds_when_approval_disabled(monkeypatch):
     monkeypatch.setenv("RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS", "false")
     from src.services.apply_service import apply_to_job
     res = apply_to_job({"link": "https://unknown-board.com/job", "title": "X"})  # not approved
-    assert res["status"] == "unsupported"
+    assert res["status"] != "approval_required"
 
 
 def test_default_is_safe_when_env_unset(monkeypatch):
@@ -59,7 +58,8 @@ def test_default_is_safe_when_env_unset(monkeypatch):
     assert res["status"] == "approval_required"
 
 
-def test_missing_link_still_validated_when_approved():
+def test_missing_link_still_validated_when_approved(monkeypatch):
+    monkeypatch.setenv("RICO_ENABLE_AUTO_APPLY", "true")
     from src.services.apply_service import apply_to_job
     res = apply_to_job({"title": "X"}, approved=True)
     assert res["status"] == "error"

@@ -1,4 +1,5 @@
 """Test chat history persistence for authenticated users."""
+import os
 import pytest
 from unittest.mock import patch, MagicMock
 from src.rico_db import RicoDB
@@ -7,6 +8,24 @@ from src.api.routers.rico_chat import RicoSessionContext
 from src.rico_chat_api import RicoChatAPI
 
 
+def _db_available() -> bool:
+    """True only when a live Postgres connection can be opened."""
+    if not os.getenv("DATABASE_URL"):
+        return False
+    try:
+        with RicoDB().connect():
+            return True
+    except Exception:
+        return False
+
+
+requires_db = pytest.mark.skipif(
+    not _db_available(),
+    reason="requires a live DATABASE_URL (DB integration test)",
+)
+
+
+@requires_db
 def test_db_append_chat_direct():
     """Test direct DB append function for chat history."""
     db = RicoDB()
@@ -42,6 +61,7 @@ def test_db_append_chat_direct():
             conn.commit()
 
 
+@requires_db
 def test_rico_chat_api_get_recent_messages_db_first():
     """Test that RicoChatAPI._get_recent_messages prefers DB-backed history."""
     db = RicoDB()
@@ -80,7 +100,10 @@ def test_rico_chat_api_get_recent_messages_db_first():
 
 def test_rico_chat_api_get_recent_messages_memory_fallback():
     """Test that RicoChatAPI._get_recent_messages falls back to memory when DB fails."""
-    test_user_id = "memory_fallback_test@example.com"
+    import uuid
+    # Unique id per run: the memory store is JSON-backed and persists across runs,
+    # so a static id would accumulate messages and break the count assertion.
+    test_user_id = f"memory_fallback_{uuid.uuid4().hex}@example.com"
 
     # Create RicoChatAPI instance
     api = RicoChatAPI(persist=True)
@@ -90,25 +113,29 @@ def test_rico_chat_api_get_recent_messages_memory_fallback():
     api.memory.append_chat_message(test_user_id, "assistant", "Memory assistant message")
 
     # Mock get_chat_history to raise exception (simulating DB failure)
-    with patch('src.rico_chat_api.get_chat_history', side_effect=Exception("DB connection failed")):
+    with patch('src.services.chat_service.get_chat_history', side_effect=Exception("DB connection failed")):
         messages = api._get_recent_messages(test_user_id, limit=10)
 
         # Should fall back to memory
         assert len(messages) == 2, f"Expected 2 messages from memory fallback, got {len(messages)}"
 
         user_msg = [msg for msg in messages if msg.get("role") == "user"][0]
-        assert user_msg.get("content") == "Memory user message", f"Expected memory user message, got: {user_msg}"
+        # Memory-format turns carry their text under "message"; DB-format under
+        # "content". _sanitize_history_for_llm reads either, so accept both here.
+        user_text = user_msg.get("content") or user_msg.get("message")
+        assert user_text == "Memory user message", f"Expected memory user message, got: {user_msg}"
 
 
 def test_rico_chat_api_get_recent_messages_empty_when_both_fail():
     """Test that RicoChatAPI._get_recent_messages returns empty when both DB and memory fail."""
-    test_user_id = "both_fail_test@example.com"
+    import uuid
+    test_user_id = f"both_fail_{uuid.uuid4().hex}@example.com"
 
     # Create RicoChatAPI instance
     api = RicoChatAPI(persist=True)
 
     # Mock both DB and memory to fail
-    with patch('src.rico_chat_api.get_chat_history', side_effect=Exception("DB failed")):
+    with patch('src.services.chat_service.get_chat_history', side_effect=Exception("DB failed")):
         with patch.object(api.memory, 'get_chat_messages', side_effect=Exception("Memory failed")):
             messages = api._get_recent_messages(test_user_id, limit=10)
 

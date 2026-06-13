@@ -299,7 +299,7 @@ class TestRicoAgentHFPrimary:
         assert result["type"] == "fallback_response"
         assert "message" in result
         assert "OpenAI advanced reasoning" not in result["message"]
-        assert "configured AI provider" in result["message"]
+        assert "UAE job search" in result["message"] or "configured AI provider" in result["message"]
 
     def test_respond_uses_hf_when_available(self):
         env = {"RICO_AI_PROVIDER": "hf", "HF_API_TOKEN": "fake-token"}

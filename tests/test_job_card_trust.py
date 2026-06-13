@@ -35,24 +35,24 @@ def _format(job, profile=None) -> dict:
 
 class TestScoreTruthfulness:
 
-    def test_no_score_field_emits_none(self):
-        """When provider returns no score, output score must be None."""
+    def test_no_score_field_emits_zero(self):
+        """When provider returns no score, output score must be 0.0 (canonical no-score sentinel)."""
         result = _format(_make_job())
-        assert result["score"] is None, f"Expected None, got {result['score']!r}"
+        assert result["score"] == 0.0, f"Expected 0.0, got {result['score']!r}"
 
-    def test_score_zero_emits_none(self):
-        """score=0 from provider must not be shown as 0% — emit None."""
+    def test_score_zero_emits_zero(self):
+        """score=0 from provider normalizes to 0.0."""
         result = _format(_make_job(score=0))
-        assert result["score"] is None
+        assert result["score"] == 0.0
 
     def test_default_50_is_never_emitted(self):
         """The old bug: _search_jsearch_meta stamped score=50 as default.
         Removing that stamp means score field is absent, so _format_match
-        must emit None — not 0.5.
+        must emit 0.0 — not 0.5.
         """
         result = _format(_make_job())  # no score key at all
         assert result["score"] != 0.5, "Default 50% score must never be rendered"
-        assert result["score"] is None
+        assert result["score"] == 0.0
 
     def test_real_score_100_int_normalised(self):
         """Legacy scorer emits 0-100 integers — must normalize to [0.0, 1.0]."""

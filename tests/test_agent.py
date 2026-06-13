@@ -564,7 +564,8 @@ class TestOrchestratorNoArgTools:
 class TestApplyServiceIndeedMethod:
     """apply_service must call IndeedApplyEngine.apply_one(), not .apply()."""
 
-    def test_apply_to_job_uses_apply_link_when_link_missing(self):
+    def test_apply_to_job_uses_apply_link_when_link_missing(self, monkeypatch):
+        monkeypatch.setenv("RICO_ENABLE_AUTO_APPLY", "true")
         from src.services import apply_service
 
         with patch.object(
@@ -582,7 +583,8 @@ class TestApplyServiceIndeedMethod:
         mock_apply.assert_called_once()
         assert mock_apply.call_args.args[0]["link"] == "https://indeed.com/viewjob?jk=abc"
 
-    def test_apply_to_job_uses_nested_job_apply_link(self):
+    def test_apply_to_job_uses_nested_job_apply_link(self, monkeypatch):
+        monkeypatch.setenv("RICO_ENABLE_AUTO_APPLY", "true")
         from src.services import apply_service
 
         with patch.object(
@@ -598,7 +600,8 @@ class TestApplyServiceIndeedMethod:
         assert result["status"] == "success"
         assert mock_apply.call_args.args[0]["link"] == "https://indeed.com/viewjob?jk=nested"
 
-    def test_apply_to_job_manual_message_uses_alt_link(self):
+    def test_apply_to_job_manual_message_uses_alt_link(self, monkeypatch):
+        monkeypatch.setenv("RICO_ENABLE_AUTO_APPLY", "true")
         from src.services import apply_service
 
         result = apply_service.apply_to_job({
@@ -606,7 +609,7 @@ class TestApplyServiceIndeedMethod:
             "alt_link": "https://jobs.example.com/posting/123",
         }, approved=True)
 
-        assert result["status"] == "unsupported"
+        assert result["status"] == "manual_required"
         assert "https://jobs.example.com/posting/123" in result["message"]
 
     def test_indeed_apply_calls_apply_one(self):

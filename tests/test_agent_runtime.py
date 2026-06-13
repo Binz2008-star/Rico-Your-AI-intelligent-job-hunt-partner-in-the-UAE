@@ -174,7 +174,8 @@ class TestDraftAction:
                 result = _run("draft")
         assert result.ok is True
         assert "Dear Hiring Manager" in result.message
-        mock_gen.assert_called_once_with(_JOB)
+        mock_gen.assert_called_once()
+        assert mock_gen.call_args.args[0] == _JOB
 
     def test_draft_data_contains_draft_key(self):
         with _patch_audit(), _patch_is_duplicate():
@@ -284,7 +285,8 @@ class TestJobResolution:
             with patch("src.message_generator.generate_message") as mock_gen:
                 mock_gen.return_value = "msg"
                 _run("draft", job=_JOB)
-        mock_gen.assert_called_once_with(_JOB)
+        mock_gen.assert_called_once()
+        assert mock_gen.call_args.args[0] == _JOB
 
     def test_falls_back_to_cache_when_no_job(self):
         from src.agent.runtime import AgentRuntime
@@ -298,7 +300,8 @@ class TestJobResolution:
                     user_id="u", action="draft",
                     job_key="some-key", job=None, source="test",
                 )
-        mock_gen.assert_called_once_with(cached)
+        mock_gen.assert_called_once()
+        assert mock_gen.call_args.args[0] == cached
 
     def test_stubs_job_from_key_when_cache_misses(self):
         from src.agent.runtime import AgentRuntime

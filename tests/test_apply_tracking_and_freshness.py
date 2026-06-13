@@ -147,8 +147,9 @@ def test_list_from_db_includes_freshness_filter(monkeypatch):
 
     jobs_repo.list_from_db(offset=0, limit=20, min_score=60, source=None)
 
-    # At least one of the captured SQL statements must contain the freshness clause
-    combined = " ".join(captured_sql)
+    # At least one of the captured SQL statements must contain the freshness clause.
+    # SQL may be built with psycopg2.sql.Composed objects, so stringify each first.
+    combined = " ".join(str(s) for s in captured_sql)
     assert "14 days" in combined or "interval" in combined, (
         "jobs query must filter by date_found >= now() - interval '14 days'"
     )

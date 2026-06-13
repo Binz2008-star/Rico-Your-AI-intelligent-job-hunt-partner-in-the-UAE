@@ -327,8 +327,8 @@ def test_smoke_endpoint_returns_success_shape_when_helper_succeeds(client):
         "openai_available": True,
         "profile_context_present": False,
     }
-    with patch("src.rico_env.get_ai_provider", return_value="openai"), \
-         patch("src.rico_openai_runtime.call_openai_minimal", return_value=fake_result):
+    with patch("src.api.routers.rico_chat.get_ai_provider", return_value="openai"), \
+         patch("src.api.routers.rico_chat.call_openai_minimal", return_value=fake_result):
         r = client.get("/api/v1/rico/openai-smoke")
     assert r.status_code == 200, r.text
     body = r.json()
@@ -358,8 +358,8 @@ def test_smoke_endpoint_returns_failure_shape_when_helper_fails(client):
         },
         "text": "I understood. I can still help while the AI reasoning layer is being configured.",
     }
-    with patch("src.rico_env.get_ai_provider", return_value="openai"), \
-         patch("src.rico_openai_runtime.call_openai_minimal", return_value=fake_result):
+    with patch("src.api.routers.rico_chat.get_ai_provider", return_value="openai"), \
+         patch("src.api.routers.rico_chat.call_openai_minimal", return_value=fake_result):
         r = client.get("/api/v1/rico/openai-smoke")
     assert r.status_code == 200, r.text
     body = r.json()

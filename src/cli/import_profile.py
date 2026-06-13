@@ -108,7 +108,7 @@ def import_profile_file(
         from src.profile import get_candidate_profile
 
         adapter = RicoRepoAdapter()
-        profile = get_candidate_profile(user_id=resolved_user_id)
+        profile = get_candidate_profile()
         jobs = adapter.fetch_jobs(use_cache=False)
         scored = adapter.score_jobs(jobs, profile)
         result["jobs"] = {

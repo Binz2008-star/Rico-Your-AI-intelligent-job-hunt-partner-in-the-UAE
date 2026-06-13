@@ -35,6 +35,9 @@ def test_telegram_public_alerts_kill_switch(monkeypatch):
     monkeypatch.setenv("RICO_TELEGRAM_PUBLIC_ALERTS", "false")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "123")
+    # _PUBLIC_ALERTS_ENABLED is evaluated at import time; patch it directly
+    # to reflect the kill-switch env var.
+    monkeypatch.setattr("src.telegram_bot._PUBLIC_ALERTS_ENABLED", False)
 
     with patch("requests.post") as post:
         assert send_telegram_message("hello") is False

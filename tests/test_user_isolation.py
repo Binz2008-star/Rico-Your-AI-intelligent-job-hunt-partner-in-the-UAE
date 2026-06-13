@@ -176,6 +176,7 @@ class TestUserApplicationsIsolation:
 
         db = MagicMock()
         db.available = True
+        db._exact_auth_lookup_enabled = False
         db.get_user_bundle.side_effect = lambda uid: {"id": f"uuid-{uid}"}
         # get_recommendations is called with the resolved UUID
         db.get_recommendations.side_effect = lambda uid, **kw: (
@@ -197,6 +198,7 @@ class TestUserApplicationsIsolation:
 
         db = MagicMock()
         db.available = True
+        db._exact_auth_lookup_enabled = False
         db.get_user_bundle.side_effect = lambda uid: {"id": f"uuid-{uid}"}
         db.get_recommendation_stats.side_effect = lambda uid: (
             {"total": 5, "applied": 3, "saved": 2} if uid == "uuid-alice@rico.ai" else
@@ -221,6 +223,7 @@ class TestUserApplicationsIsolation:
 
         db = MagicMock()
         db.available = True
+        db._exact_auth_lookup_enabled = False
         db.get_user_bundle.side_effect = lambda uid: {"id": f"uuid-{uid}"}
         db.get_recommendations.side_effect = lambda uid, **kw: (
             alice_recs if uid == "uuid-alice@rico.ai" else

@@ -43,7 +43,7 @@ def test_get_db_connection_keeps_transactional_default(monkeypatch):
     conn = FakeConnection()
     monkeypatch.setattr(legacy_db, "DB_ENABLED", True)
     monkeypatch.setattr(legacy_db, "DATABASE_URL", "postgresql://example")
-    monkeypatch.setattr(legacy_db.psycopg2, "connect", lambda url: conn)
+    monkeypatch.setattr(legacy_db.psycopg2, "connect", lambda url, **kw: conn)
 
     assert legacy_db.get_db_connection() is conn
     assert conn.autocommit is False

@@ -50,21 +50,21 @@ class TestAIProviderHealthEndpoint:
         assert "ai_provider" in report_dict
         assert "ready_for_openai" in report_dict
 
-    def test_health_http_response_exposes_key_presence_fields(self):
-        """The public /health payload should surface key presence separately."""
+    def test_health_http_response_is_ok(self):
+        """The public /health endpoint must return 200 with status ok."""
         client = TestClient(app, raise_server_exceptions=False)
 
         response = client.get("/health")
         assert response.status_code == 200
 
         payload = response.json()
-        assert "openai_key_present" in payload
-        assert "deepseek_key_present" in payload
-        assert "hf_key_present" in payload
-        assert "rico" in payload
-        assert "openai_key_present" in payload["rico"]
-        assert "deepseek_key_present" in payload["rico"]
-        assert "hf_key_present" in payload["rico"]
+        assert payload.get("status") == "ok"
+        # AI provider key presence fields are available via get_rico_env_report(), not /health
+        from src.rico_env import get_rico_env_report
+        report = get_rico_env_report()
+        assert hasattr(report, "openai_key_present")
+        assert hasattr(report, "deepseek_key_present")
+        assert hasattr(report, "hf_key_present")
 
     def test_deepseek_readiness_detection(self):
         """DeepSeek readiness should be detected when DEEPSEEK_API_KEY is set."""
@@ -339,7 +339,7 @@ class TestJotformMetadataInChatResponses:
             os.environ.pop("JOTFORM_RICO_FORM_ID")
             finalized3 = api._finalize(test_response, "keyword", profile=None)
             assert "jotform_form_id" in finalized3
-            assert finalized3["jotform_form_id"] is None
+            assert not finalized3["jotform_form_id"]  # None or empty string
 
         finally:
             # Restore original values

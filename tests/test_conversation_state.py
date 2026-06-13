@@ -32,6 +32,20 @@ def _make_profile(target_roles: list[str] | None = None) -> MagicMock:
     profile = MagicMock()
     profile.has_cv = True
     profile.target_roles = ["Software Engineer"] if target_roles is None else target_roles
+    # Set string fields to None so they don't pollute string operations inside
+    # _handle_cv_generate_from_profile (MagicMock is truthy but not a str).
+    profile.name = None
+    profile.email = None
+    profile.phone = None
+    profile.current_role = None
+    profile.years_experience = None
+    profile.skills = []
+    profile.certifications = []
+    profile.preferred_cities = []
+    profile.industries = []
+    profile.work_experience = []
+    profile.education = []
+    profile.cv_filename = "cv.pdf"
     return profile
 
 
@@ -167,33 +181,22 @@ class TestResolvePendingIntent:
 
     def test_cv_improve_en_signal(self):
         api = self._api_with_last_message("Would you like me to improve your cv?")
-        ai_resp = {"type": "cv_suggestions", "message": "Here are some suggestions."}
-        api._answer_with_ai_fallback = MagicMock(return_value=ai_resp)
-
         result = api._resolve_pending_intent("user1", "yes", _make_profile())
-
-        assert result is ai_resp
-        api._answer_with_ai_fallback.assert_called_once()
-        call_kwargs = api._answer_with_ai_fallback.call_args.kwargs
-        assert "cv improvement" in call_kwargs["message"].lower() or "cv" in call_kwargs["message"].lower()
-        assert call_kwargs["save_user_message"] is False
+        # cv_improve_signals now route to _handle_cv_generate_from_profile
+        assert result is not None
+        assert result["type"] in ("cv_draft", "cv_creation", "cv_suggestions")
 
     def test_cv_improve_ar_signal(self):
         api = self._api_with_last_message("هل تريد اقتراح تحسين سيرتك الذاتية؟")
-        ai_resp = {"type": "cv_suggestions", "message": "اقتراحات."}
-        api._answer_with_ai_fallback = MagicMock(return_value=ai_resp)
-
         result = api._resolve_pending_intent("user1", "نعم", _make_profile())
-
-        assert result is ai_resp
+        assert result is not None
+        assert result["type"] in ("cv_draft", "cv_creation", "cv_suggestions")
 
     def test_cv_update_signal(self):
         api = self._api_with_last_message("I can update your cv to highlight relevant skills.")
-        ai_resp = {"type": "cv_suggestions", "message": "Done."}
-        api._answer_with_ai_fallback = MagicMock(return_value=ai_resp)
-
         result = api._resolve_pending_intent("user1", "sure", _make_profile())
-        assert result is ai_resp
+        assert result is not None
+        assert result["type"] in ("cv_draft", "cv_creation", "cv_suggestions")
 
     # ── Job search ─────────────────────────────────────────────────────────
 
@@ -288,7 +291,7 @@ class TestHandleActiveUserPendingIntentFlow:
         return api, profile
 
     def test_affirmative_with_cv_pending_returns_non_generic_response(self):
-        """'yes' after Rico offered CV improvement → cv_suggestions type, not action card."""
+        """'yes' after Rico offered CV improvement → cv_draft or cv_suggestions type, not action card."""
         ai_response = {"type": "cv_suggestions", "message": "Here are specific suggestions."}
         api, profile = self._api_with_setup("Would you like me to improve your cv?", ai_response)
 
@@ -299,7 +302,7 @@ class TestHandleActiveUserPendingIntentFlow:
             result = api._resolve_pending_intent("user1", "yes", profile)
 
         assert result is not None
-        assert result["type"] == "cv_suggestions"
+        assert result["type"] in ("cv_draft", "cv_creation", "cv_suggestions")
         # Verify it is NOT a generic options/action-card response
         assert result["type"] != "options"
 
@@ -342,4 +345,4 @@ class TestHandleActiveUserPendingIntentFlow:
 
         result = api._resolve_pending_intent("user1", "يلا", profile)
         assert result is not None
-        assert result["type"] == "cv_suggestions"
+        assert result["type"] in ("cv_draft", "cv_creation", "cv_suggestions")

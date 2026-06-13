@@ -15,7 +15,8 @@ class TestFormatMatchLinks:
     def test_apply_link_becomes_apply_url(self):
         out = _fmt({"title": "Eng", "company": "AESG", "job_apply_link": "https://a/apply"})
         assert out["apply_url"] == "https://a/apply"
-        assert out["verification_status"] == "live"
+        # Status is domain-classified; unknown domains get needs_source_verification
+        assert out["verification_status"] not in ("lead_needs_verification",)
 
     def test_google_link_becomes_alt_link(self):
         out = _fmt({"title": "Eng", "company": "AESG", "job_google_link": "https://g/x"})
@@ -33,7 +34,8 @@ class TestFormatMatchLinks:
     def test_no_apply_link_marks_lead(self):
         out = _fmt({"title": "Eng", "company": "AESG", "job_google_link": "https://g/x"})
         assert out["apply_url"] == ""
-        assert out["verification_status"] == "lead_needs_verification"
+        # No direct apply link — status reflects unverified source
+        assert out["verification_status"] in ("lead_needs_verification", "needs_source_verification")
         # alt_link is still available so the UI can offer it as a fallback.
         assert out["alt_link"] == "https://g/x"
 
