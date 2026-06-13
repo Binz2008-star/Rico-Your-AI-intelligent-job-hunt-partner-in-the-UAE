@@ -33,16 +33,26 @@ OPENAI_PRIMARY_MODEL = (
 )
 OPENAI_FALLBACK_MODEL = os.getenv("OPENAI_FALLBACK_MODEL", "gpt-4.1-mini")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+# Stable DeepSeek OpenAI-compatible model aliases.
+# deepseek-chat  → latest instruction-following model (V3 family)
+# deepseek-reasoner → DeepSeek-R1 reasoning model
+# Previous defaults (deepseek-v4-flash / deepseek-v4-pro) are not real model
+# names and caused 400 "Invalid model" errors on every request.
 DEEPSEEK_PRIMARY_MODEL = (
     os.getenv("RICO_DEEPSEEK_MODEL")
     or os.getenv("DEEPSEEK_MODEL")
-    or "deepseek-v4-flash"
+    or "deepseek-chat"
 )
-DEEPSEEK_FALLBACK_MODEL = os.getenv("DEEPSEEK_FALLBACK_MODEL", "deepseek-v4-pro")
+DEEPSEEK_FALLBACK_MODEL = os.getenv("DEEPSEEK_FALLBACK_MODEL", "deepseek-reasoner")
+# DEEPSEEK_MODEL_CHAIN overrides the model list entirely (comma-separated).
+# When unset the chain is built from PRIMARY + FALLBACK + hardcoded "deepseek-chat"
+# so the stable canonical name is always the last resort even if env vars change.
+_DEEPSEEK_MODEL_CHAIN_ENV = os.getenv("DEEPSEEK_MODEL_CHAIN", "").strip()
 
 _FALLBACK_TEXT = (
-    "Free mode is active. Rico can help set up your profile and guide your job search using free AI/fallback tools. "
-    "Advanced reasoning will activate after the configured AI provider is available."
+    "I'm here to help with your UAE job search. I can still assist with your profile, "
+    "job search, CV review, and applications. The AI reasoning provider is temporarily "
+    "unavailable — please try again in a moment."
 )
 _RATE_LIMITED_TEXT = (
     "Rico's AI provider is currently rate-limited. "
@@ -93,6 +103,26 @@ def _provider_models(provider: str) -> tuple[str, str]:
     if provider == "deepseek":
         return DEEPSEEK_PRIMARY_MODEL, DEEPSEEK_FALLBACK_MODEL
     return OPENAI_PRIMARY_MODEL, OPENAI_FALLBACK_MODEL
+
+
+def _deepseek_model_chain() -> list[str]:
+    """Return the ordered list of DeepSeek models to attempt.
+
+    Priority:
+      1. DEEPSEEK_MODEL_CHAIN env var (comma-separated override)
+      2. Primary → Fallback → hardcoded "deepseek-chat" safe anchor
+    The safe anchor ensures at least one well-known stable alias is always tried
+    even when env-configured model names are invalid or stale.
+    """
+    if _DEEPSEEK_MODEL_CHAIN_ENV:
+        return [m.strip() for m in _DEEPSEEK_MODEL_CHAIN_ENV.split(",") if m.strip()]
+    chain: list[str] = [DEEPSEEK_PRIMARY_MODEL]
+    if DEEPSEEK_FALLBACK_MODEL and DEEPSEEK_FALLBACK_MODEL != DEEPSEEK_PRIMARY_MODEL:
+        chain.append(DEEPSEEK_FALLBACK_MODEL)
+    # Always include the stable canonical alias as a last-resort safe anchor.
+    if "deepseek-chat" not in chain:
+        chain.append("deepseek-chat")
+    return chain
 
 
 def _provider_key(provider: str) -> Optional[str]:
@@ -190,17 +220,22 @@ def _failure_payload(
     provider: str,
     primary_model: str,
     fallback_model: str,
+    *,
+    models_tried: Optional[list] = None,
 ) -> Dict[str, Any]:
     payload = {
         "success": False,
         "type": f"{provider}_error_fallback",
         "response_source": "fallback",
+        "provider_state": "degraded",
         "error": last_error.get("error_type") if last_error else "UnknownAIError",
         "error_detail": last_error,
         "text": _FALLBACK_TEXT,
         "fallback_model": fallback_model,
         **_base_payload(provider, primary_model),
     }
+    if models_tried:
+        payload["models_tried"] = models_tried
     if provider == "deepseek":
         payload["deepseek_model"] = primary_model
     else:
@@ -351,11 +386,17 @@ def call_openai_minimal(
     safe_history = (conversation_history or [])[:8] if not smoke else []
 
     last_error: Optional[Dict[str, Any]] = None
-    model_attempts = [primary_model]
-    if fallback_model and fallback_model != primary_model:
-        model_attempts.append(fallback_model)
+    if active_provider == "deepseek":
+        model_attempts = _deepseek_model_chain()
+    else:
+        model_attempts = [primary_model]
+        if fallback_model and fallback_model != primary_model:
+            model_attempts.append(fallback_model)
+
+    models_tried: list = []
 
     for model in model_attempts:
+        models_tried.append(model)
         try:
             if active_provider == "deepseek":
                 text = _call_deepseek_chat(
@@ -395,13 +436,20 @@ def call_openai_minimal(
                 last_error.get("status_code") == 429
                 or "RateLimitError" in last_error.get("error_type", "")
             )
-            logger.warning(
+            is_invalid_model = last_error.get("status_code") == 400
+            log_level = (
                 "Rico AI provider rate limited — skipping retry"
                 if is_rate_limit
-                else "Rico AI provider call failed safely",
+                else f"Rico AI model {model!r} invalid or failed — trying next"
+                if is_invalid_model
+                else "Rico AI provider call failed safely"
+            )
+            logger.warning(
+                log_level,
                 extra={
                     "provider": active_provider,
-                    "ai_error": last_error,
+                    "error_type": last_error.get("error_type"),
+                    "status_code": last_error.get("status_code"),
                     "model": model,
                     "smoke": smoke,
                     "profile_context_present": profile_present,
@@ -412,8 +460,13 @@ def call_openai_minimal(
                 payload["profile_context_present"] = profile_present
                 payload["is_rate_limited"] = True
                 return payload
+            # For non-429 errors (including 400 invalid model, 401, 500, timeout)
+            # continue to next model in chain.
 
-    payload = _failure_payload(last_error, active_provider, primary_model, fallback_model)
+    payload = _failure_payload(
+        last_error, active_provider, primary_model, fallback_model,
+        models_tried=models_tried,
+    )
     payload["profile_context_present"] = profile_present
     return payload
 

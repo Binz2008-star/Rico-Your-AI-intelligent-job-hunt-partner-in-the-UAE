@@ -1003,6 +1003,21 @@ def rico_ai_provider_health_admin(request: Request) -> dict[str, Any]:
     # Check webhook secret status (without exposing the secret)
     webhook_secret_configured = bool(os.getenv("JOTFORM_WEBHOOK_SECRET"))
 
+    from src.rico_openai_runtime import (
+        DEEPSEEK_PRIMARY_MODEL,
+        DEEPSEEK_FALLBACK_MODEL,
+        OPENAI_PRIMARY_MODEL,
+        OPENAI_FALLBACK_MODEL,
+        _deepseek_model_chain,
+    )
+
+    if provider == "deepseek":
+        selected_model = DEEPSEEK_PRIMARY_MODEL
+        fallback_models = _deepseek_model_chain()[1:]
+    else:
+        selected_model = OPENAI_PRIMARY_MODEL
+        fallback_models = [OPENAI_FALLBACK_MODEL]
+
     return {
         "active_provider": provider,
         "provider_available": agent.provider_available,
@@ -1010,6 +1025,8 @@ def rico_ai_provider_health_admin(request: Request) -> dict[str, Any]:
         "deepseek_available": agent.deepseek_available,
         "hf_available": agent.hf_available,
         "provider_state": "available" if agent.provider_available else "unavailable",
+        "selected_model": selected_model,
+        "fallback_models": fallback_models,
         "jotform_form_configured": jotform_configured,
         "jotform_webhook_secret_configured": webhook_secret_configured,
         "timestamp": datetime.now(_UTC).isoformat(),
