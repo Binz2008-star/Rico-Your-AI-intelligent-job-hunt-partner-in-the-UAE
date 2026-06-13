@@ -1442,6 +1442,7 @@ async def confirm_cv_profile(
                         doc_type="cv",
                         file_size=0,
                         skills_count=len(skills),
+                        skills_json=list(skills),
                         years_experience=profile_updates.get("years_experience"),
                         current_role=profile_updates.get("current_role"),
                         is_primary=True,
