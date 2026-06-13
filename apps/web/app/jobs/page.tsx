@@ -14,7 +14,7 @@ import { ApiError, createApplication, getJobs, logout as apiLogout, saveJob, ski
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import type { Job } from "@/types";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const SCORE_THRESHOLDS = { HIGH: 85, MID: 65 };
 const SUCCESS_STATUSES = ["applied", "success", "submitted", "saved"];
@@ -50,6 +50,9 @@ export default function JobsPage() {
     const [sort, setSort] = useState<SortKey>("score_desc");
     const [search, setSearch] = useState("");
     const [submittingId, setSubmittingId] = useState<string | null>(null);
+    // Ref-based lock prevents the double-click race where two rapid clicks both
+    // pass the submittingId state check before setSubmittingId completes.
+    const _submittingRef = useRef(false);
 
     const fetchJobs = useCallback(async () => {
         if (!user) return;
@@ -111,9 +114,10 @@ export default function JobsPage() {
     }, [jobs, filter, sort, search]);
 
     const handleAction = async (jobId: string, action: string) => {
-        if (!user || submittingId) return;
+        if (!user || submittingId || _submittingRef.current) return;
         const job = jobs.find((j) => j.job_id === jobId);
         if (!job) return;
+        _submittingRef.current = true;
         setSubmittingId(jobId);
         const jobLink = getJobLink(job);
 
@@ -194,6 +198,7 @@ export default function JobsPage() {
             const errorMessage = err instanceof Error ? err.message : "Action failed. Please try again.";
             toast(errorMessage, "error");
         } finally {
+            _submittingRef.current = false;
             setSubmittingId(null);
         }
     };

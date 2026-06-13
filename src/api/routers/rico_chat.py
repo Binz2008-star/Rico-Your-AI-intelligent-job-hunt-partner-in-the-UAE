@@ -454,9 +454,10 @@ def rico_get_profile(request: Request) -> ProfileResponse:
         _metrics.record_request((time.time() - start_time) * 1000)
         return ProfileResponse(profile_exists=False, email=user_id)
 
-    # Calculate completeness (simplified - use resolver for full)
+    # completeness_score lives only on the agent context resolver's ProfileContext,
+    # not on the service resolver's — fetch it separately.
     from src.agent.context.resolver import resolve_profile_context
-    context = resolve_profile_context(user_id)
+    agent_ctx = resolve_profile_context(user_id)
 
     response = ProfileResponse(
         profile_exists=True,
@@ -477,7 +478,7 @@ def rico_get_profile(request: Request) -> ProfileResponse:
         current_role=getattr(profile, "current_role", None),
         current_company=getattr(profile, "current_company", None),
         linkedin_url=getattr(profile, "linkedin_url", None),
-        completeness_score=context.completeness_score,
+        completeness_score=agent_ctx.completeness_score,
     )
 
     _metrics.record_request((time.time() - start_time) * 1000)

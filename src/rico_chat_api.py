@@ -19,7 +19,11 @@ from typing import Any, NamedTuple
 # Standard library imports first
 # Third-party imports (none currently)
 # Local imports
-from src.agent.intelligence.intent_classifier import classify_intent
+from src.agent.intelligence.intent_classifier import (
+    classify_intent,
+    _LEGACY_INTENT_MAP,
+    _map_intent_to_legacy,
+)
 from src.agent.intelligence.normalizer import normalize_role
 from src.agent.intelligence.recommender import recommend_adjacent_roles
 from src.agent.intelligence.role_classifier import classify_role_candidate
@@ -57,46 +61,7 @@ from src.services.operation_state import (
 logger = logging.getLogger(__name__)
 
 
-# ── Intent v2 backward compatibility mapping ────────────────────────────────
-
-_LEGACY_INTENT_MAP = {
-    # Job search
-    "job_search.explicit_role": "job_search_explicit",
-    "job_search.profile_match": "job_search_profile_match",
-    "job_search.role_suggestions": "profile_role_suggestions",
-    # Job actions
-    "job_action.prepare_application": "prepare_application",
-    "job_action.open_apply_link": "open_apply_link",
-    "job_action.track_job": "track_job",
-    "job_action.mark_applied": "mark_applied",
-    "job_action.save_job": "save_job",
-    "job_action.apply_job": "apply_job",
-    "job_action.bulk_apply_unsafe": "bulk_apply_unsafe",
-    "job_action.explain_fit": "explain_match",
-    # Application tracking
-    "application.show_flow": "application_tracking",
-    "application.recent_context": "application_tracking",
-    # Lifecycle queries (chat-side funnel memory)
-    "lifecycle.show_saved": "lifecycle_show_saved",
-    "lifecycle.show_applied": "lifecycle_show_applied",
-    "lifecycle.show_opened_not_applied": "lifecycle_show_opened_not_applied",
-    # Recent context follow-up (native legacy name, pass through)
-    "recent_context": "recent_context",
-    # Profile
-    "profile.show": "profile_summary",
-    "profile.update": "profile_update",
-    "profile.update_target_roles": "save_target_role",
-    "cv.create": "cv_create",
-    "cv.generate": "cv_generate",
-    # Career prep
-    "career_prep.interview": "interview_prep",
-    "career_prep.application_angle": "draft_message",
-}
-
-
-def _map_intent_to_legacy(intent: str) -> str:
-    """Map Intent v2 dotted notation to legacy intent names for backward compatibility."""
-    return _LEGACY_INTENT_MAP.get(intent, intent)
+# _LEGACY_INTENT_MAP and _map_intent_to_legacy are imported from intent_classifier above.
 
 # Constants
 CV_FILE_RE = re.compile(r"\b[\w .()_-]+\.(?:pdf|docx?|txt)\b", re.IGNORECASE)

@@ -147,7 +147,6 @@ _LEGACY_INTENT_MAP = {
     "job_action.apply_job": "apply_job",
     "job_action.bulk_apply_unsafe": "bulk_apply_unsafe",
     "job_action.explain_fit": "explain_match",
-    "job_action.bulk_apply_unsafe": "bulk_apply_unsafe",
     # Application tracking
     "application.show_flow": "application_tracking",
     "application.recent_context": "application_tracking",
@@ -155,10 +154,14 @@ _LEGACY_INTENT_MAP = {
     "lifecycle.show_saved": "lifecycle_show_saved",
     "lifecycle.show_applied": "lifecycle_show_applied",
     "lifecycle.show_opened_not_applied": "lifecycle_show_opened_not_applied",
+    # Recent context follow-up (native legacy name, pass through)
+    "recent_context": "recent_context",
     # Profile
     "profile.show": "profile_summary",
     "profile.update": "profile_update",
     "profile.update_target_roles": "save_target_role",
+    "cv.create": "cv_create",
+    "cv.generate": "cv_generate",
     # Career prep
     "career_prep.interview": "interview_prep",
     "career_prep.application_angle": "draft_message",
@@ -693,14 +696,6 @@ _OPEN_APPLY_LINK_RE = re.compile(
     r"(?:\s+for\s+(.+?)\s+at\s+(.+?)"
     r"(?:[\s,;:]+(?:please|pls|thanks|thank\s+you))?"
     r")?\s*[.!?]*\s*$",
-    re.IGNORECASE,
-)
-
-# Bulk apply detection — safety-critical: catch "apply to everything/all jobs" before regular apply
-_BULK_APPLY_RE = re.compile(
-    r"\b(apply|submit).{0,20}(everything|all jobs|every job|all|each one|all of them)\b"
-    r"|\b(find|get).{0,30}(all|every).{0,20}(job|position).{0,20}(and apply|then apply|and submit)"
-    r"|\b(apply to|submit for).{0,10}(all|everything|every)\b",
     re.IGNORECASE,
 )
 
