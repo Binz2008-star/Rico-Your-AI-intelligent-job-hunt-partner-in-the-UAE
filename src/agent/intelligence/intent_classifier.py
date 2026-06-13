@@ -1171,18 +1171,6 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
             extracted_company=extracted_company,
         )
 
-    # Safety-first: detect bulk/unsafe apply attempts before regular apply
-    if _BULK_APPLY_RE.search(text):
-        return IntentResult(
-            "job_action.bulk_apply_unsafe",
-            0.95,
-            "regex",
-            context_required=True,
-            context_type="recent_job",
-            action="require_explicit_consent",
-            target_route="/jobs",
-        )
-
     if not has_arabic and _is_english_manual_applied_status(text):
         return IntentResult(
             "application_status_update",
