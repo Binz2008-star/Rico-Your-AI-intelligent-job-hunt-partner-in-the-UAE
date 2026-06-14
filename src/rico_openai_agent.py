@@ -239,8 +239,35 @@ class RicoOpenAIAgent:
             "Answer clearly, practically, and briefly. "
             "Help users find jobs, prepare applications, and track opportunities in the UAE."
         )
-        context_str = json.dumps(user_context, ensure_ascii=False) if user_context else ""
-        prompt = f"{user_message}\nContext: {context_str}" if context_str else user_message
+
+        # Build a structured chat-style prompt so the model sees conversation turns
+        # rather than a raw JSON blob it cannot parse.
+        ctx = user_context or {}
+        history: List[Dict[str, Any]] = ctx.get("conversation_history", [])
+
+        # Profile summary: skip large/nested fields that add noise without meaning
+        _skip = {"conversation_history", "uploaded_documents", "recently_discussed_jobs",
+                  "recent_job_verification_status", "learned_preferences", "blocked_questions"}
+        profile_fields = {k: v for k, v in ctx.items() if k not in _skip}
+
+        parts: List[str] = []
+        if profile_fields:
+            parts.append(f"[User profile]\n{json.dumps(profile_fields, ensure_ascii=False)}")
+
+        for m in history[-6:]:
+            role = str(m.get("role", "")).lower()
+            content = str(m.get("content") or m.get("message") or "").strip()
+            if not content:
+                continue
+            if role == "assistant":
+                parts.append(f"Rico: {content}")
+            else:
+                parts.append(f"User: {content}")
+
+        parts.append(f"User: {user_message}")
+        parts.append("Rico:")
+
+        prompt = "\n".join(parts)
 
         model = os.getenv("HF_TEXT_MODEL", "HuggingFaceH4/zephyr-7b-beta")
         text = generate_text(prompt, system=system, max_new_tokens=300, model=model)

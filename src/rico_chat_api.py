@@ -171,6 +171,8 @@ _NON_ROLE_STARTERS: frozenset[str] = frozenset({
     # Imperative command / toggle verbs — start a settings command, never a job title
     "enable", "disable", "turn", "activate", "deactivate",
     "mute", "unmute", "configure", "connect",
+    # Verb imperatives missing from earlier list — never start a job title
+    "make", "look", "write", "draft",
 })
 _QUESTION_CHARS: frozenset[str] = frozenset("?？!！;:")
 _MAX_ROLE_WORDS: int = 6
@@ -211,6 +213,28 @@ _SETTINGS_COMMAND_RE = re.compile(
     r"switch\s+(?:on|off)|stop|start)\b"
     r".{0,40}"
     r"\b(notification|notifications|alert|alerts|telegram|whatsapp|reminder|reminders)\b",
+    re.IGNORECASE,
+)
+
+# UAE-wide search expansion: "look all over UAE", "search all UAE", "all over UAE",
+# "look across uae" — user wants to widen a previous search to the whole country.
+_UAE_WIDE_SEARCH_RE = re.compile(
+    # "all over/across/around [the] UAE"
+    r"\ball\s+(?:over|across|around)\s+(?:the\s+)?(?:uae|emirates)\b"
+    # "search/look/find all [of] UAE" — but not "find all UAE jobs" (role follows UAE)
+    r"|\b(?:look|search|find)\s+all\s+(?:of\s+|the\s+)?(?:uae|emirates)(?!\s+(?:jobs?|roles?|vacancies))\b"
+    # "look/search across/around [the] UAE"
+    r"|\b(?:look|search|find)\b.{0,15}\b(?:across|around)\b.{0,20}\b(?:uae|emirates)\b"
+    # "look all over [the] UAE"
+    r"|\blook\s+all\s+over\s+(?:the\s+)?(?:uae|emirates)\b",
+    re.IGNORECASE,
+)
+
+# Cover-letter command: "make me a cover [letter]", "write a cover letter",
+# "draft a cover letter" — route to the cover-letter clarification flow before
+# the intent classifier, which returns "unknown" for bare "cover" forms.
+_COVER_LETTER_COMMAND_RE = re.compile(
+    r"\b(?:write|make|draft|create|generate)\b.{0,20}\bcover(?:\s+letter)?\s*$",
     re.IGNORECASE,
 )
 
@@ -1601,6 +1625,8 @@ class RicoChatAPI:
 
         # Provider diagnostics are only logged internally, not exposed to users
         # Admin diagnostics available at /health/ai-provider endpoint
+        from src.rico_env import get_ai_provider as _get_active_provider
+        _active = _get_active_provider()
         return {
             **response,
             "response_source": response.get("response_source", source),
@@ -1609,6 +1635,8 @@ class RicoChatAPI:
             "hf_available": self._bool_attr(agent, "hf_available"),
             "provider_available": self._bool_attr(agent, "provider_available", fallback="available"),
             "openai_model": str(getattr(agent, "model", "") or ""),
+            # active_provider = what RICO_AI_PROVIDER selects; provider = what actually responded
+            "active_provider": _active,
             "profile_context_present": profile is not None,
             # Always a string — null would fail frontend Zod schema validation.
             "jotform_form_id": jotform_form_id or "",
@@ -3747,6 +3775,56 @@ class RicoChatAPI:
         ):
             return self._finalize(
                 self._handle_profile_role_suggestions(profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── UAE-wide search expansion ─────────────────────────────────────────
+        # "look all over UAE", "search all UAE", "all over UAE" — expand a
+        # previous role search to the whole country or ask for a role.
+        if _UAE_WIDE_SEARCH_RE.search(message):
+            _prior_role_uae = ""
+            try:
+                _rctx = self._get_recent_context(user_id)
+                _ctx_role = _rctx.get("recent_search_role") or _rctx.get("recent_role") or ""
+                if isinstance(_ctx_role, str) and _ctx_role.strip():
+                    _prior_role_uae = _ctx_role.strip()
+            except Exception:
+                pass
+            if not _prior_role_uae:
+                _tgt_uae = self._effective_target_roles(
+                    self._as_list(self._profile_value(profile, "target_roles"))
+                )
+                _prior_role_uae = str(_tgt_uae[0]).strip() if _tgt_uae else ""
+            if _prior_role_uae:
+                return self._finalize(
+                    self._target_role_search_response(
+                        user_id, _prior_role_uae, profile, location="UAE"
+                    ),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
+            _uae_clarify = "I can search across the UAE. Which role should I search for?"
+            self._append_chat(user_id, "assistant", _uae_clarify)
+            return self._finalize(
+                {"type": "clarification", "message": _uae_clarify},
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Cover letter command ──────────────────────────────────────────────
+        # "make me a cover [letter]", "write a cover letter", "draft a cover letter"
+        # The intent classifier returns "unknown" for bare "make me a cover", so
+        # route deterministically here before classify_intent runs.
+        if _COVER_LETTER_COMMAND_RE.search(message):
+            _cl_msg = self._cover_letter_clarification_message(profile)
+            self._append_chat(user_id, "assistant", _cl_msg)
+            return self._finalize(
+                {
+                    "type": "cover_letter_prompt",
+                    "message": _cl_msg,
+                    "next_action": "provide_job_for_cover_letter",
+                },
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )

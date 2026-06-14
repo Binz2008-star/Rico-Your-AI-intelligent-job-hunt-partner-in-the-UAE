@@ -60,6 +60,14 @@ def _list_from_json(offset: int, limit: int, min_score: int, user_id: Optional[s
     from src.job_history import load_job_history
     all_jobs = load_job_history()
 
+    # When the static history is empty and we have a user, try a live JSearch
+    # call against their target roles so the /jobs page shows real results
+    # rather than a blank feed.
+    if not all_jobs and user_id:
+        live = _try_live_jsearch_for_user(user_id)
+        if live:
+            all_jobs = live
+
     if all_jobs and user_id:
         return _score_and_paginate_jobs(
             jobs=all_jobs,
@@ -80,6 +88,31 @@ def _list_from_json(offset: int, limit: int, min_score: int, user_id: Optional[s
         "limit": limit,
         "pages": max(1, -(-total // limit)),
     }, user_id=user_id)
+
+
+def _try_live_jsearch_for_user(user_id: str) -> list[Dict[str, Any]]:
+    """Best-effort live JSearch fetch for the user's first target role.
+
+    Returns an empty list on any failure so the caller degrades gracefully.
+    Only called when both DB and job_history JSON are empty.
+    """
+    try:
+        from src import jsearch_client
+        profile = get_user_profile(user_id)
+        if profile is None:
+            return []
+        roles = getattr(profile, "target_roles", None) or (profile.get("target_roles") if isinstance(profile, dict) else None)
+        if not roles:
+            return []
+        role = roles[0] if isinstance(roles, list) else str(roles).split(",")[0].strip()
+        if not role:
+            return []
+        result = jsearch_client.search(f"{role} UAE")
+        logger.info("jobs_service live_jsearch role=%r results=%d", role, len(result.items))
+        return result.items
+    except Exception:
+        logger.debug("jobs_service live_jsearch failed", exc_info=True)
+        return []
 
 
 def _score_and_paginate_jobs(
