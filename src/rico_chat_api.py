@@ -258,6 +258,25 @@ _COVER_LETTER_COMMAND_RE = re.compile(
     re.IGNORECASE,
 )
 
+# "Retry / again" — user wants to replay the last job search unchanged.
+# Only intercepts bare retry phrases; specific role phrases still go to job_search_explicit.
+_RETRY_SEARCH_RE = re.compile(
+    r"^(?:retry|again|repeat|redo|run\s+it\s+again|search\s+again|"
+    r"same\s+search|once\s+more|try\s+again|re[- ]?run)\s*[.!?]?$"
+    r"|^(?:مرة\s+أخرى|مجددا|مجدداً|أعد\s+البحث|كرر\s+البحث|نفس\s+البحث)\s*[.!?]?$",
+    re.IGNORECASE,
+)
+
+# Application withdrawal: "withdraw my application", "cancel my application",
+# Arabic equivalents — must route before intent classifier (returns "unknown").
+_APPLICATION_WITHDRAW_RE = re.compile(
+    r"\b(?:withdraw|cancel|retract|pull\s+out|recall)\b.{0,35}"
+    r"\b(?:application|apply|applied|submission|candidacy|request)\b"
+    r"|\b(?:application|candidacy)\b.{0,25}\b(?:withdraw|cancel|retract)\b"
+    r"|\b(?:سحب|اسحب|ألغ|إلغاء)\b.{0,25}\b(?:الطلب|التقديم|ترشيح)",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -3851,6 +3870,86 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        # ── Retry last search ─────────────────────────────────────────────
+        # "again", "retry", "same search" — replay the most recent job search.
+        if _RETRY_SEARCH_RE.search(message):
+            _retry_role = _retry_loc = ""
+            try:
+                _rctx = self._get_recent_context(user_id)
+                _retry_role = str(_rctx.get("recent_search_role") or "").strip()
+                _retry_loc  = str(_rctx.get("recent_search_location") or "").strip()
+            except Exception:
+                pass
+            if not _retry_role:
+                _tgt_r = self._effective_target_roles(
+                    self._as_list(self._profile_value(profile, "target_roles"))
+                )
+                _retry_role = str(_tgt_r[0]).strip() if _tgt_r else ""
+            if _retry_role:
+                return self._finalize(
+                    self._target_role_search_response(
+                        user_id, _retry_role, profile,
+                        location=_retry_loc or None,
+                    ),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
+            _retry_ask = "What role should I search for? Tell me a job title and I'll run the search."
+            self._append_chat(user_id, "assistant", _retry_ask)
+            return self._finalize(
+                {"type": "clarification", "message": _retry_ask},
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Application withdrawal ─────────────────────────────────────────
+        # "withdraw my application", "cancel my application" — update status
+        # in DB and confirm, or guide to Applications tab if no context.
+        if _APPLICATION_WITHDRAW_RE.search(message):
+            _wd_ctx = {}
+            try:
+                _wd_ctx = self._get_recent_context(user_id)
+            except Exception:
+                pass
+            _wd_title   = str(_wd_ctx.get("recent_job") or "").strip()
+            _wd_company = str(_wd_ctx.get("recent_company") or "").strip()
+            _wd_job_key = str(_wd_ctx.get("recent_job_key") or "").strip()
+            if _wd_title and _wd_job_key:
+                try:
+                    from src.repositories import applications_repo
+                    applications_repo.update_status(
+                        job={"job_id": _wd_job_key, "title": _wd_title, "company": _wd_company},
+                        status="withdrawn",
+                        user_id=user_id,
+                    )
+                    _wd_msg = (
+                        f"Done — your application for **{_wd_title}**"
+                        f"{f' at {_wd_company}' if _wd_company else ''} "
+                        "has been marked as withdrawn."
+                    )
+                except Exception:
+                    _wd_msg = (
+                        f"I've noted that you'd like to withdraw your application for "
+                        f"**{_wd_title}**{f' at {_wd_company}' if _wd_company else ''}. "
+                        "Please confirm this in your Applications tab."
+                    )
+            else:
+                _wd_msg = (
+                    "أي طلب تريد سحبه؟ ذكر لي اسم الوظيفة أو الشركة، أو راجع تبويب 'الطلبات' مباشرةً."
+                    if self._is_arabic_text(message) else
+                    "Which application would you like to withdraw? "
+                    "Tell me the job title or company name, or go to your Applications tab."
+                )
+            self._append_chat(user_id, "assistant", _wd_msg)
+            return self._finalize(
+                {
+                    "type": "application_withdrawn" if (_wd_title and _wd_job_key) else "clarification",
+                    "message": _wd_msg,
+                },
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
         # ── Step 1: Unified intent classification ────────────────────────────
         if has_cv and self._looks_like_career_execution_request(message):
             return self._finalize(
@@ -5497,13 +5596,14 @@ class RicoChatAPI:
 
         # Nonsense — do NOT search
         if legacy_intent == "nonsense":
-            response = {
-                "type": "clarification",
-                "message": (
-                    "I could not understand that message. "
-                    "Try telling me a job role to search, or say 'help' for options."
-                ),
-            }
+            _ns_msg = (
+                "لم أفهم رسالتك. جرّب أن تذكر المسمى الوظيفي الذي تبحث عنه، "
+                "أو اكتب 'مساعدة' لرؤية الخيارات."
+                if self._is_arabic_text(message) else
+                "I could not understand that message. "
+                "Try telling me a job role to search, or say 'help' for options."
+            )
+            response = {"type": "clarification", "message": _ns_msg}
             self._append_chat(user_id, "assistant", response["message"])
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 

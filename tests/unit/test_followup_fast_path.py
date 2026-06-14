@@ -373,3 +373,62 @@ class TestUAEWideSearchRouting:
     def test_uae_wide_no_cv(self, monkeypatch):
         _, result = _run(monkeypatch, "do a UAE-wide search", _EmptyProfile())
         assert result["type"] == "clarification"
+
+
+# ── Retry last search ──────────────────────────────────────────────────────────
+
+class TestRetryLastSearch:
+    """Regression: 'again' / 'retry' must replay the last search, not fall to unknown."""
+
+    def test_again_no_cv_asks_for_role(self, monkeypatch):
+        _, result = _run(monkeypatch, "again", _EmptyProfile())
+        assert result["type"] == "clarification"
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_retry_no_cv_asks_for_role(self, monkeypatch):
+        _, result = _run(monkeypatch, "retry", _EmptyProfile())
+        assert result["type"] == "clarification"
+
+    def test_again_with_cv_triggers_search(self, monkeypatch):
+        _, result = _run(monkeypatch, "again", _CVProfile())
+        # CVProfile has target_roles — must trigger search, not unknown
+        assert result["type"] in ("job_matches", "search_error", "clarification")
+        assert "I do not recognize" not in result.get("message", "")
+
+    def test_retry_not_unknown_intent(self, monkeypatch):
+        _, result = _run(monkeypatch, "retry", _CVProfile())
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_same_search_phrase(self, monkeypatch):
+        _, result = _run(monkeypatch, "same search", _CVProfile())
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_try_again_phrase(self, monkeypatch):
+        _, result = _run(monkeypatch, "try again", _CVProfile())
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+
+# ── Application withdrawal ─────────────────────────────────────────────────────
+
+class TestApplicationWithdrawal:
+    """Regression: withdrawal phrases must not fall to unknown intent."""
+
+    def test_withdraw_application_no_context(self, monkeypatch):
+        _, result = _run(monkeypatch, "withdraw my application", _CVProfile())
+        # No recent_job_key in context → clarification asking which application
+        assert result["type"] == "clarification"
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_cancel_application_no_context(self, monkeypatch):
+        _, result = _run(monkeypatch, "cancel my application", _CVProfile())
+        assert result["type"] == "clarification"
+
+    def test_withdrawal_message_not_unknown_error(self, monkeypatch):
+        _, result = _run(monkeypatch, "withdraw my application", _CVProfile())
+        assert "I do not recognize" not in result.get("message", "")
+        assert "I could not understand" not in result.get("message", "")
+
+    def test_withdrawal_no_cv_also_handled(self, monkeypatch):
+        _, result = _run(monkeypatch, "withdraw my application", _EmptyProfile())
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+        assert "I do not recognize" not in result.get("message", "")
