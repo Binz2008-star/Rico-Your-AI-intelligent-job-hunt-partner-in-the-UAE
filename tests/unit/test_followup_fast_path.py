@@ -54,6 +54,10 @@ def _run(monkeypatch, message: str, profile) -> dict:
 
     api = RicoChatAPI()
     api.system.run_for_profile = MagicMock(return_value={"matches": []})
+    # _get_recent_context must return a real dict so pending-intent checks
+    # don't trigger DB operations against MagicMock memory (which returns
+    # truthy MagicMocks for every .get() call, causing spurious DB access).
+    api._get_recent_context = lambda uid: {}
 
     return api, api._handle_active_user("test-user", message)
 
@@ -241,3 +245,79 @@ class TestFollowupOptionsShape:
         api, result = _run(monkeypatch, "so?", _CVProfile())
         assert "message" in result
         assert result["message"]  # non-empty
+
+
+# ── Cover letter command routing ───────────────────────────────────────────────
+
+class TestCoverLetterCommandRouting:
+    """Regression: cover-letter command phrases must route to cover_letter_prompt,
+    not unknown intent / bare-role fallback / job search."""
+
+    def test_make_me_a_cover(self, monkeypatch):
+        _, result = _run(monkeypatch, "make me a cover", _CVProfile())
+        assert result["type"] == "cover_letter_prompt", (
+            f"Expected cover_letter_prompt, got {result['type']}: {result.get('message', '')[:80]}"
+        )
+
+    def test_make_me_a_cover_letter(self, monkeypatch):
+        _, result = _run(monkeypatch, "make me a cover letter", _CVProfile())
+        assert result["type"] == "cover_letter_prompt"
+
+    def test_write_me_a_cover_letter(self, monkeypatch):
+        _, result = _run(monkeypatch, "write me a cover letter", _CVProfile())
+        assert result["type"] == "cover_letter_prompt"
+
+    def test_draft_a_cover_letter(self, monkeypatch):
+        _, result = _run(monkeypatch, "draft a cover letter", _CVProfile())
+        assert result["type"] == "cover_letter_prompt"
+
+    def test_make_me_a_cover_no_cv(self, monkeypatch):
+        _, result = _run(monkeypatch, "make me a cover", _EmptyProfile())
+        assert result["type"] == "cover_letter_prompt"
+
+    def test_cover_letter_prompt_has_message(self, monkeypatch):
+        _, result = _run(monkeypatch, "make me a cover letter", _CVProfile())
+        assert "message" in result and result["message"]
+
+    def test_cover_letter_next_action(self, monkeypatch):
+        _, result = _run(monkeypatch, "make me a cover", _CVProfile())
+        assert result.get("next_action") == "provide_job_for_cover_letter"
+
+    def test_not_bare_role_error(self, monkeypatch):
+        _, result = _run(monkeypatch, "make me a cover letter", _CVProfile())
+        assert "I do not recognize" not in result.get("message", "")
+
+
+# ── UAE-wide search routing ────────────────────────────────────────────────────
+
+class TestUAEWideSearchRouting:
+    """Regression: UAE-wide expansion phrases must route to job search or
+    clarification — never unknown intent or bare-role error."""
+
+    def test_look_all_over_uae_no_target_role_asks_for_role(self, monkeypatch):
+        _, result = _run(monkeypatch, "Look all over uae", _EmptyProfile())
+        assert result["type"] == "clarification"
+        assert "UAE" in result["message"] or "role" in result["message"].lower(), (
+            f"Expected role prompt in message, got: {result['message'][:100]}"
+        )
+
+    def test_look_all_over_uae_clarification_text(self, monkeypatch):
+        _, result = _run(monkeypatch, "Look all over uae", _EmptyProfile())
+        assert "Which role" in result["message"] or "which role" in result["message"]
+
+    def test_search_all_uae_no_target_role_asks_for_role(self, monkeypatch):
+        _, result = _run(monkeypatch, "search all UAE", _EmptyProfile())
+        assert result["type"] == "clarification"
+
+    def test_look_all_over_uae_with_cv_triggers_search(self, monkeypatch):
+        _, result = _run(monkeypatch, "Look all over uae", _CVProfile())
+        # CVProfile has target_roles — must trigger a job search, not bare-role error
+        assert result["type"] in ("job_matches", "search_error", "clarification"), (
+            f"Expected job search response, got {result['type']}: {result.get('message', '')[:80]}"
+        )
+        assert "I do not recognize" not in result.get("message", "")
+
+    def test_not_unknown_intent(self, monkeypatch):
+        _, result = _run(monkeypatch, "Look all over uae", _EmptyProfile())
+        # Must not fall through to AI fallback (type would be 'openai_response' or 'fallback')
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
