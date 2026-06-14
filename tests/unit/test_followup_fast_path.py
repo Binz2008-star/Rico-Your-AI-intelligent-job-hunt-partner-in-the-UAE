@@ -972,3 +972,124 @@ class TestJobDetailAppliedFallback:
             monkeypatch, "tell me more about that job", applied_job=self._APPLIED_JOB
         )
         assert "HSE Manager" in result["message"]
+
+
+# ── Ordinal job selection ──────────────────────────────────────────────────────
+
+class TestOrdinalJobSelection:
+    """'tell me more about the second job', 'the third one' → detail for matches[N-1]."""
+
+    _MATCHES = [
+        {"title": "HSE Manager", "company": "ADNOC", "location": "Abu Dhabi",
+         "apply_url": "https://example.com/1", "employment_type": "Full-time",
+         "salary_string": "AED 25,000", "description": "First job.", "why_this_fits": "", "worth_checking": ""},
+        {"title": "Safety Engineer", "company": "Petrofac", "location": "Dubai",
+         "apply_url": "https://example.com/2", "employment_type": "Full-time",
+         "salary_string": "AED 18,000", "description": "Second job.", "why_this_fits": "", "worth_checking": ""},
+        {"title": "EHS Specialist", "company": "Shell", "location": "Sharjah",
+         "apply_url": "https://example.com/3", "employment_type": "Contract",
+         "salary_string": "AED 22,000", "description": "Third job.", "why_this_fits": "", "worth_checking": ""},
+    ]
+
+    def _run_ordinal(self, monkeypatch, message: str, matches=None):
+        import src.rico_chat_api as mod
+        from src.rico_chat_api import RicoChatAPI
+        from unittest.mock import MagicMock
+
+        mock_route = MagicMock()
+        mock_route.tool_name = None
+        mock_route.entities = {}
+        mock_route.tool_args = {}
+        mock_route.confirmation_prompt = None
+        mock_route.source = "keyword"
+
+        monkeypatch.setattr(mod, "get_profile", lambda uid: _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: mock_route)
+        monkeypatch.setattr(mod, "upsert_profile", lambda uid, u: _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+
+        api = RicoChatAPI()
+        api.system.run_for_profile = MagicMock(return_value={"matches": []})
+        ctx = {"recent_search_matches": matches if matches is not None else self._MATCHES}
+        api._get_recent_context = lambda uid: ctx
+        api._append_chat = MagicMock()
+        api._store_recent_context = MagicMock()
+
+        return api._handle_active_user("test-user", message)
+
+    def test_second_job_returns_second_match(self, monkeypatch):
+        result = self._run_ordinal(monkeypatch, "tell me more about the second job")
+        assert result["type"] == "job_detail"
+        assert "Safety Engineer" in result["message"]
+
+    def test_third_one_returns_third_match(self, monkeypatch):
+        result = self._run_ordinal(monkeypatch, "the third one looks interesting")
+        assert result["type"] == "job_detail"
+        assert "EHS Specialist" in result["message"]
+
+    def test_job_number_2(self, monkeypatch):
+        result = self._run_ordinal(monkeypatch, "job number 2")
+        assert result["type"] == "job_detail"
+        assert "Petrofac" in result["message"]
+
+    def test_option_2(self, monkeypatch):
+        result = self._run_ordinal(monkeypatch, "option 2 looks good, tell me more")
+        assert result["type"] == "job_detail"
+
+    def test_first_job_default(self, monkeypatch):
+        result = self._run_ordinal(monkeypatch, "tell me more about that job")
+        assert result["type"] == "job_detail"
+        assert "HSE Manager" in result["message"]
+
+    def test_ordinal_to_index_static(self):
+        from src.rico_chat_api import RicoChatAPI
+        assert RicoChatAPI._ordinal_to_index("second") == 1
+        assert RicoChatAPI._ordinal_to_index("third") == 2
+        assert RicoChatAPI._ordinal_to_index("2") == 1
+        assert RicoChatAPI._ordinal_to_index("first") == 0
+
+
+# ── Salary expectation readback ────────────────────────────────────────────────
+
+class TestSalaryReadback:
+    """'what salary did I set?', 'what's my expected salary?' → saved salary."""
+
+    def test_what_salary_did_i_set(self, monkeypatch):
+        from dataclasses import dataclass, field
+        from typing import List, Optional
+
+        @dataclass
+        class _SalaryProfile:
+            skills:           List[str] = field(default_factory=lambda: ["hse"])
+            certifications:   List[str] = field(default_factory=list)
+            years_experience: float     = 5.0
+            target_roles:     List[str] = field(default_factory=lambda: ["HSE Manager"])
+            industries:       List[str] = field(default_factory=list)
+            cv_status:        str       = "parsed"
+            cv_filename:      str       = "cv.pdf"
+            salary_expectation_aed:     int = 20000
+
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: _SalaryProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: __import__("unittest.mock", fromlist=["MagicMock"]).MagicMock())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+
+        from src.rico_chat_api import RicoChatAPI
+        from unittest.mock import MagicMock
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        result = api._handle_active_user("test-user", "what salary did I set?")
+        assert result["type"] == "salary_readback"
+        assert "20,000" in result["message"]
+
+    def test_no_salary_set_returns_clarification_type(self, monkeypatch):
+        _, result = _run(monkeypatch, "what's my expected salary?", _CVProfile())
+        assert result["type"] == "salary_readback"
+
+    def test_what_is_my_minimum_salary(self, monkeypatch):
+        _, result = _run(monkeypatch, "what is my minimum salary?", _CVProfile())
+        assert result["type"] == "salary_readback"
+
+    def test_my_salary_expectation(self, monkeypatch):
+        _, result = _run(monkeypatch, "my salary expectation", _CVProfile())
+        assert result["type"] == "salary_readback"
