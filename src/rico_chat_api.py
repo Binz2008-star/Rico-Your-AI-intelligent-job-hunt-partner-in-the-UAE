@@ -173,6 +173,14 @@ _NON_ROLE_STARTERS: frozenset[str] = frozenset({
     "mute", "unmute", "configure", "connect",
     # Verb imperatives missing from earlier list — never start a job title
     "make", "look", "write", "draft",
+    # Common action imperatives — never start a job title
+    "create", "generate", "send", "change", "apply", "submit", "check",
+    "review", "save", "build", "prepare", "edit", "add", "remove", "start",
+    "open", "try", "set", "use", "share", "update", "improve", "track",
+    # Gerund forms of the above that were missing
+    "creating", "generating", "sending", "changing", "applying", "submitting",
+    "checking", "reviewing", "saving", "building", "preparing", "editing",
+    "adding", "removing", "starting", "opening", "setting", "sharing",
 })
 _QUESTION_CHARS: frozenset[str] = frozenset("?？!！;:")
 _MAX_ROLE_WORDS: int = 6
@@ -226,7 +234,15 @@ _UAE_WIDE_SEARCH_RE = re.compile(
     # "look/search across/around [the] UAE"
     r"|\b(?:look|search|find)\b.{0,15}\b(?:across|around)\b.{0,20}\b(?:uae|emirates)\b"
     # "look all over [the] UAE"
-    r"|\blook\s+all\s+over\s+(?:the\s+)?(?:uae|emirates)\b",
+    r"|\blook\s+all\s+over\s+(?:the\s+)?(?:uae|emirates)\b"
+    # "expand/broaden/widen [my search] to/across UAE"
+    r"|\b(?:expand|broaden|widen)\b.{0,25}\b(?:uae|emirates)\b"
+    # "entire/whole [the] UAE"
+    r"|\b(?:entire|whole)\s+(?:the\s+)?(?:uae|emirates)\b"
+    # "anywhere in [the] UAE"
+    r"|\banywhere\s+in\s+(?:the\s+)?(?:uae|emirates)\b"
+    # "UAE-wide" / "UAE wide"
+    r"|\b(?:uae|emirates)[- ]wide\b",
     re.IGNORECASE,
 )
 
@@ -234,7 +250,11 @@ _UAE_WIDE_SEARCH_RE = re.compile(
 # "draft a cover letter" — route to the cover-letter clarification flow before
 # the intent classifier, which returns "unknown" for bare "cover" forms.
 _COVER_LETTER_COMMAND_RE = re.compile(
-    r"\b(?:write|make|draft|create|generate)\b.{0,20}\bcover(?:\s+letter)?\s*$",
+    # "write/make/draft/create/generate/prepare [me/a/my] cover [letter] [for ...]"
+    # No end-anchor so trailing context ("for ADNOC", "for the HSE role") still matches.
+    r"\b(?:write|make|draft|create|generate|prepare)\b.{0,30}\bcover(?:\s+letter)?\b"
+    # "I need/want a cover letter" — common phrasing without a command verb
+    r"|\b(?:need|want)\b.{0,15}\bcover\s+letter\b",
     re.IGNORECASE,
 )
 
@@ -3816,7 +3836,9 @@ class RicoChatAPI:
         # "make me a cover [letter]", "write a cover letter", "draft a cover letter"
         # The intent classifier returns "unknown" for bare "make me a cover", so
         # route deterministically here before classify_intent runs.
-        if _COVER_LETTER_COMMAND_RE.search(message):
+        # Exception: if the message already contains explicit job context (company/role),
+        # skip and let the draft_message intent handler extract and use that context.
+        if _COVER_LETTER_COMMAND_RE.search(message) and not self._extract_explicit_draft_job_from_message(message):
             _cl_msg = self._cover_letter_clarification_message(profile)
             self._append_chat(user_id, "assistant", _cl_msg)
             return self._finalize(
