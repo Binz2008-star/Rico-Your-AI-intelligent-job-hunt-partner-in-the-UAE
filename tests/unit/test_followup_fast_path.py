@@ -469,3 +469,61 @@ class TestShowMoreJobs:
     def test_show_more_no_role_not_unknown(self, monkeypatch):
         _, result = _run(monkeypatch, "show more", _EmptyProfile())
         assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+
+# ── Profile completeness check ─────────────────────────────────────────────────
+
+class TestProfileCompletenessCheck:
+    """Regression: profile completeness queries must return deterministic report."""
+
+    def test_whats_missing_from_profile(self, monkeypatch):
+        _, result = _run(monkeypatch, "what's missing from my profile", _EmptyProfile())
+        assert result["type"] == "profile_completeness"
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_is_my_profile_complete(self, monkeypatch):
+        _, result = _run(monkeypatch, "is my profile complete?", _CVProfile())
+        assert result["type"] == "profile_completeness"
+
+    def test_complete_profile_shows_ready(self, monkeypatch):
+        _, result = _run(monkeypatch, "is my profile complete?", _CVProfile())
+        assert result["type"] == "profile_completeness"
+        # CVProfile has target_roles + cv — should pass mandatory gate
+        assert "complete" in result
+
+    def test_empty_profile_shows_missing_fields(self, monkeypatch):
+        _, result = _run(monkeypatch, "what's missing from my profile", _EmptyProfile())
+        assert result["type"] == "profile_completeness"
+        assert len(result.get("missing_mandatory", [])) > 0
+
+    def test_what_do_i_need_to_add(self, monkeypatch):
+        _, result = _run(monkeypatch, "what do I need to add to my profile?", _EmptyProfile())
+        assert result["type"] == "profile_completeness"
+
+    def test_profile_completeness_phrase(self, monkeypatch):
+        _, result = _run(monkeypatch, "show me my profile completeness", _CVProfile())
+        assert result["type"] == "profile_completeness"
+
+
+# ── Application status query (not report) ─────────────────────────────────────
+
+class TestApplicationStatusQuery:
+    """Regression: 'any updates on my applications?' must route to tracking, not reporting."""
+
+    def test_any_updates_on_applications(self, monkeypatch):
+        _, result = _run(monkeypatch, "any updates on my applications?", _CVProfile())
+        # Must not be classified as status_update (reporting path)
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+        assert result.get("intent") != "application_status_update"
+
+    def test_has_anyone_replied(self, monkeypatch):
+        _, result = _run(monkeypatch, "has anyone replied?", _CVProfile())
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_any_interviews(self, monkeypatch):
+        _, result = _run(monkeypatch, "any interviews?", _CVProfile())
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_how_are_my_applications_going(self, monkeypatch):
+        _, result = _run(monkeypatch, "how are my applications going?", _CVProfile())
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")

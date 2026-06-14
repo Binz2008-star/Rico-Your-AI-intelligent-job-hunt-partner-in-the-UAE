@@ -284,6 +284,32 @@ _APPLICATION_WITHDRAW_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Profile completeness query: "what's missing from my profile?", "is my profile complete?"
+# Routes to a deterministic completeness report using evaluate_minimum_profile.
+_PROFILE_COMPLETE_RE = re.compile(
+    r"\b(?:what(?:'s|\s+is)?(?:\s+still)?)\s+missing\s+(?:from\s+)?(?:my\s+)?profile\b"
+    r"|\bis\s+my\s+profile\s+(?:complete|ready|done|strong|finished|enough)\b"
+    r"|\b(?:what\s+(?:do\s+I\s+)?(?:need\s+to\s+)?(?:add|fill\s+in|complete|update))\b.{0,25}\bprofile\b"
+    r"|\bprofile\s+(?:completeness|gaps?|status|strength)\b"
+    r"|\b(?:complete|finish|finalize)\s+my\s+profile\b"
+    r"|\b(?:ما|ماذا)\s+(?:يحتاج|ينقص|ناقص)\b.{0,20}\bالملف\b"
+    r"|\bملفي\s+الشخصي\s+(?:مكتمل|ناقص|جاهز)\b",
+    re.IGNORECASE,
+)
+
+# Application status query (user asking for updates, not reporting a submission).
+# Intercept before classify_intent to route to application_tracking, not status_update.
+_APPLICATION_STATUS_QUERY_RE = re.compile(
+    r"\b(?:any|got\s+any)\s+(?:update|reply|response|news|feedback)s?\s+"
+    r"(?:on|about|from|for)?\s*(?:my\s+)?applications?\b"
+    r"|\bwhat(?:'s|\s+is)?\s+(?:happening|going\s+on)\s+with\s+my\s+applications?\b"
+    r"|\b(?:have|has)\s+(?:anyone|any\s+(?:company|employer))\s+(?:replied|responded|contacted)\b"
+    r"|\bany\s+(?:interviews?|callbacks?|responses?|rejections?|offers?)\s*[.!?]?\s*$"
+    r"|\bhow\s+(?:are|is)\s+(?:my\s+)?applications?\s+(?:going|doing)\b"
+    r"|\b(?:أي|هل)\s+(?:ردود?|أخبار|تحديثات?)\s+(?:على|عن)?\s*(?:طلباتي|التقديمات)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -3957,6 +3983,27 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        # ── Application status query ─────────────────────────────────────────
+        # "any updates on my applications?" / "has anyone replied?" routes to
+        # application_tracking (show status list), not application_status_update
+        # (which is the "I applied" reporting path).
+        if _APPLICATION_STATUS_QUERY_RE.search(message):
+            return self._finalize(
+                self._handle_application_tracking(user_id, intent=None),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Profile completeness check ────────────────────────────────────────
+        # "what's missing from my profile?" / "is my profile complete?" → deterministic
+        # completeness report using evaluate_minimum_profile, with optional field hints.
+        if _PROFILE_COMPLETE_RE.search(message):
+            return self._finalize(
+                self._handle_profile_completeness(user_id, profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
         # ── Step 1: Unified intent classification ────────────────────────────
         if has_cv and self._looks_like_career_execution_request(message):
             return self._finalize(
@@ -4204,17 +4251,44 @@ class RicoChatAPI:
             )
 
         if legacy_intent == "salary_enquiry":
+            # Extract explicit role from message before falling back to profile
+            _explicit_sal_role: str | None = None
+            _sal_role_m = re.search(
+                r"(?:salary|pay|earn|paid|worth)\s+(?:for\s+(?:a\s+|an\s+)?|of\s+(?:a\s+|an\s+)?)?([A-Za-z][A-Za-z &/\-]{2,40})"
+                r"|([A-Za-z][A-Za-z &/\-]{2,40})\s+(?:salary|pay|earn|wage)",
+                message,
+                re.IGNORECASE,
+            )
+            if _sal_role_m:
+                _candidate = (_sal_role_m.group(1) or _sal_role_m.group(2) or "").strip()
+                # Exclude common non-role words from the match
+                _sal_stopwords = {"the", "a", "an", "my", "your", "in", "uae", "dubai", "abudhabi"}
+                if _candidate and _candidate.lower() not in _sal_stopwords and len(_candidate) > 2:
+                    _explicit_sal_role = _candidate
             target_roles = self._as_list(self._profile_value(profile, "target_roles"))
-            role_hint = str(target_roles[0]) if target_roles else "your target role"
+            role_hint = _explicit_sal_role or (str(target_roles[0]) if target_roles else "your target role")
+            _exp = self._profile_value(profile, "years_experience")
+            # Show experience-adjusted highlight if we know the user's seniority
+            _exp_note = ""
+            if _exp is not None:
+                _exp_val = float(_exp) if str(_exp).replace(".", "").isdigit() else None
+                if _exp_val is not None:
+                    if _exp_val < 3:
+                        _exp_note = f"\nBased on your **{int(_exp_val)} year(s)** of experience, you're in the **entry-level** bracket."
+                    elif _exp_val < 7:
+                        _exp_note = f"\nBased on your **{int(_exp_val)} years** of experience, you're in the **mid-level** bracket."
+                    else:
+                        _exp_note = f"\nBased on your **{int(_exp_val)} years** of experience, you're in the **senior** bracket."
             _sal_msg = (
-                f"Salary benchmarks for {role_hint} in the UAE:\n\n"
+                f"Salary benchmarks for **{role_hint}** in the UAE:\n\n"
                 "• **Entry level (0–3 yrs):** AED 8,000–15,000/month\n"
                 "• **Mid level (3–7 yrs):** AED 15,000–25,000/month\n"
-                "• **Senior level (7+ yrs):** AED 25,000–45,000/month\n\n"
-                "These are broad market ranges. Actual packages vary by industry, company size, "
-                "and whether benefits (housing, transport, medical) are included.\n\n"
-                "For a precise benchmark, say: **'What salary for [Role] at [Company]?'** "
-                "or set your minimum salary in your profile and I'll flag roles that fall short."
+                "• **Senior level (7+ yrs):** AED 25,000–45,000/month\n"
+                f"{_exp_note}\n\n"
+                "Packages vary by industry, company size, and whether benefits "
+                "(housing, transport, medical) are included.\n\n"
+                "To set a minimum salary so I can filter out low offers, say: "
+                "**'My minimum salary is X AED'**"
             )
             self._append_chat(user_id, "assistant", _sal_msg)
             return self._finalize(
@@ -4445,12 +4519,39 @@ class RicoChatAPI:
             prefs = routed.tool_args.get("preferences", {})
             if prefs:
                 upsert_profile(user_id=user_id, updates=prefs)
+            _PREF_LABELS: dict[str, str] = {
+                "target_roles": "Target role",
+                "preferred_cities": "Preferred city",
+                "years_experience": "Years of experience",
+                "skills": "Skills",
+                "industries": "Industry",
+                "salary_expectation_aed": "Salary expectation",
+                "employment_type": "Employment type",
+                "visa_status": "Visa status",
+                "nationality": "Nationality",
+                "telegram_username": "Telegram username",
+            }
+            if prefs:
+                _changes = []
+                for _k, _v in prefs.items():
+                    _label = _PREF_LABELS.get(_k, _k.replace("_", " ").title())
+                    _val_str = ", ".join(str(x) for x in _v) if isinstance(_v, list) else str(_v)
+                    if _k == "salary_expectation_aed":
+                        _val_str = f"AED {_val_str}/month"
+                    _changes.append(f"**{_label}** → {_val_str}")
+                _upd_msg = (
+                    "Updated:\n"
+                    + "\n".join(f"• {c}" for c in _changes)
+                    + "\n\nThese will be applied to future job searches."
+                )
+            else:
+                _upd_msg = "Got it. I have updated your preferences and will apply them to future searches."
             response = {
                 "type": "preferences_updated",
-                "message": "Got it. I have updated your preferences and will apply them to future searches.",
+                "message": _upd_msg,
                 "updated": prefs,
             }
-            self._append_chat(user_id, "assistant", response["message"])
+            self._append_chat(user_id, "assistant", _upd_msg)
             return self._finalize(response, routed.source, profile=profile)
 
         # Role change — extract role and classify
@@ -6974,6 +7075,61 @@ class RicoChatAPI:
             "missing_fields": missing,
             "unparsed_sections": unparsed_sections,
             "next_action": "collect_missing_cv_fields" if missing else "cv_ready",
+        }
+
+    def _handle_profile_completeness(self, user_id: str, profile: Any) -> dict[str, Any]:
+        """Deterministic profile completeness report using evaluate_minimum_profile."""
+        from src.agent.context.resolver import resolve_profile_context
+        try:
+            ctx = resolve_profile_context(user_id)
+        except Exception:
+            ctx = profile
+        gate_ok, missing = evaluate_minimum_profile(ctx)
+        _FIELD_LABELS: dict[str, str] = {
+            "target_roles": "Target role(s)",
+            "preferred_cities": "Preferred UAE city",
+            "years_experience": "Years of experience",
+            "skills": "Skills or CV upload",
+        }
+        optional_gaps: list[str] = []
+        if not self._as_list(self._profile_value(profile, "industries")):
+            optional_gaps.append("Industry sector (improves match quality)")
+        if not self._profile_value(profile, "salary_expectation_aed"):
+            optional_gaps.append("Salary expectation (filters out low offers)")
+        if not self._profile_value(profile, "telegram_username"):
+            optional_gaps.append("Telegram username (enables real-time job alerts)")
+        if gate_ok:
+            parts = ["**Your profile is complete for job matching.**"]
+            if optional_gaps:
+                parts.append(
+                    "\nOptional fields that improve your results:\n"
+                    + "\n".join(f"• {f}" for f in optional_gaps)
+                )
+            parts.append("\nSay **'search for jobs'** and I'll start matching.")
+        else:
+            mandatory_labels = [_FIELD_LABELS.get(f, f) for f in missing]
+            parts = [
+                "**Missing required fields:**\n"
+                + "\n".join(f"• {l}" for l in mandatory_labels)
+            ]
+            if optional_gaps:
+                parts.append(
+                    "\nAlso missing (optional but recommended):\n"
+                    + "\n".join(f"• {f}" for f in optional_gaps)
+                )
+            parts.append(
+                "\nYou can fill these by:\n"
+                "• Uploading your CV — auto-fills most fields\n"
+                "• Telling me directly: *'My target role is Safety Manager'*"
+            )
+        msg = "\n".join(parts)
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "profile_completeness",
+            "message": msg,
+            "complete": gate_ok,
+            "missing_mandatory": missing,
+            "missing_optional": optional_gaps,
         }
 
     def _handle_application_tracking(self, user_id: str, intent: str = "application_tracking") -> dict[str, Any]:
