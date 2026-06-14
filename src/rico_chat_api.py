@@ -317,7 +317,21 @@ _SALARY_SET_RE = re.compile(
     r"|\b(?:set|update|change)\s+(?:my\s+)?salary\s+(?:expectation\s+)?to\s*(?:AED\s*)?(\d[\d,.]*)([Kk]?)\b"
     r"|\bI\s+(?:want|expect|need|require)\s+(?:at\s+least\s+)?(?:AED\s*)?(\d[\d,.]*)([Kk]?)\s*(?:AED\s*)?"
     r"(?:per\s+month|\/month|monthly|a\s+month)\b"
-    r"|\براتبي\s+(?:المتوقع|الأدنى|المرغوب)\s*(?:AED\s*|درهم\s*)?(\d[\d,.]*)([Kk]?)",
+    r"|\براتبي\s+(?:المتوقع|الأدنى|المرغوب)\s*(?:AED\s*|درهم\s*)?(\d[\d,.]*)([Kk]?)"
+    r"|\براتبي\s+(?:المتوقع|الأدنى|المرغوب)\b.{0,30}\b(?:ألف|آلاف|مئة\s+ألف|مائة\s+ألف)\b"
+    r"|\b(?:أريد|أتوقع|أحتاج)\s+(?:راتب|أجر)\b.{0,25}\b(?:\d[\d,.]*[Kk]?|ألف|آلاف)\b",
+    re.IGNORECASE,
+)
+
+# Job detail inquiry: "tell me more about that job", "more details on the first one",
+# "what's the job description?" — shows extended cached fields from recent_search_matches.
+_JOB_DETAIL_RE = re.compile(
+    r"\b(?:tell\s+me\s+more|more\s+(?:details?|info(?:rmation)?)|describe)\s+"
+    r"(?:(?:about|on|for|of)\s+)?(?:that|this|the\s+(?:first|second|third|last|top))?\s*(?:job|role|position|opportunity|one)\b"
+    r"|\b(?:what(?:'s|\s+is)?\s+the\s+(?:job\s+)?description|job\s+details?|role\s+details?)\b"
+    r"|\bshow\s+(?:me\s+)?(?:the\s+)?(?:requirements?|details?)\b"
+    r"|\bmore\s+(?:(?:about|on|for)\s+)?(?:the\s+)?(?:first|that|this)\s+(?:job|role|one)\b"
+    r"|\b(?:المزيد|مزيد)\s+(?:من\s+)?(?:التفاصيل|المعلومات)\s+(?:عن|حول)?\s*(?:هذه?\s+الوظيفة|هذا\s+الدور)?\b",
     re.IGNORECASE,
 )
 
@@ -4036,6 +4050,16 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        # ── Job detail inquiry ────────────────────────────────────────────────
+        # "tell me more about that job", "job details", "show me the requirements"
+        # → shows extended fields from the most recent cached job match.
+        if _JOB_DETAIL_RE.search(message):
+            return self._finalize(
+                self._handle_job_detail(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
         # ── Profile pitch/bio ─────────────────────────────────────────────────
         # "write me a professional bio", "summarize my profile for an employer"
         # → deterministic pitch built from profile fields; no AI token spend.
@@ -5728,13 +5752,17 @@ class RicoChatAPI:
 
         # Interview prep — use full AI chain (DeepSeek/OpenAI) for rich, personalised tips.
         # User message already stored in _process_message_inner; save_user_message=False.
+        # Type is forced to "interview_prep" so the frontend renders the correct UI
+        # regardless of which provider (or keyword fallback) handled the response.
         if legacy_intent == "interview_prep":
-            return self._answer_with_ai_fallback(
+            _ip_resp = self._answer_with_ai_fallback(
                 user_id=user_id,
                 message=message,
                 profile=profile,
                 save_user_message=False,
             )
+            _ip_resp["type"] = "interview_prep"
+            return _ip_resp
 
         # Nonsense — do NOT search
         if legacy_intent == "nonsense":
@@ -5837,6 +5865,12 @@ class RicoChatAPI:
                     "source_url": m.get("source_url", ""),
                     "link": m.get("apply_url", ""),
                     "verification_status": m.get("verification_status", "lead_needs_verification"),
+                    # Extended fields for "tell me more about that job"
+                    "employment_type": m.get("employment_type", ""),
+                    "salary_string": m.get("salary_string", ""),
+                    "description": (m.get("description") or "")[:400],
+                    "why_this_fits": m.get("why_this_fits", ""),
+                    "worth_checking": m.get("worth_checking", ""),
                 }
                 for m in formatted
             ]
@@ -7120,12 +7154,78 @@ class RicoChatAPI:
             "next_action": "collect_missing_cv_fields" if missing else "cv_ready",
         }
 
+    # ── Job detail inquiry ──────────────────────────────────────────────────────
+
+    def _handle_job_detail(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        """Show extended details for the most recently cached job match."""
+        arabic = self._is_arabic_text(message)
+        matches: list[dict[str, Any]] = []
+        try:
+            ctx = self._get_recent_context(user_id)
+            matches = ctx.get("recent_search_matches") or []
+        except Exception:
+            pass
+        if not matches or not isinstance(matches, list):
+            msg = (
+                "لا يوجد بحث حديث في جلستك. ابدأ بالبحث عن وظيفة وسأعرض التفاصيل."
+                if arabic else
+                "No recent job search in this session. Search for a role first and I'll show the details."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "message": msg}
+        job = matches[0]
+        title = job.get("title") or "Unknown role"
+        company = job.get("company") or ""
+        location = job.get("location") or ""
+        employment_type = job.get("employment_type") or ""
+        salary = job.get("salary_string") or ""
+        description = (job.get("description") or "").strip()
+        why_fits = (job.get("why_this_fits") or "").strip()
+        worth_check = (job.get("worth_checking") or "").strip()
+        apply_url = job.get("apply_url") or job.get("link") or ""
+        lines = [f"**{title}**" + (f" — {company}" if company else "")]
+        if location:
+            lines.append(f"📍 {location}")
+        if employment_type:
+            lines.append(f"🕐 {employment_type}")
+        if salary:
+            lines.append(f"💰 {salary}")
+        if description:
+            lines.append(f"\n**About the role:**\n{description[:350]}{'…' if len(description) > 350 else ''}")
+        if why_fits:
+            lines.append(f"\n**Why it fits your profile:**\n{why_fits}")
+        if worth_check:
+            lines.append(f"\n**Worth checking:**\n{worth_check}")
+        if apply_url:
+            lines.append(f"\n[Apply now]({apply_url})")
+        msg = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "job_detail", "message": msg, "job": job}
+
     # ── Salary expectation setting ──────────────────────────────────────────────
 
     @staticmethod
     def _parse_salary_value(text: str) -> int | None:
-        """Extract AED monthly salary from text, handling K/k suffix and commas."""
-        m = re.search(r"(\d[\d,.]*)([Kk]?)", text.replace(",", ""))
+        """Extract AED monthly salary from text, handling K/k suffix, commas, and Arabic word-numbers."""
+        # Arabic word-number phrases → value. Longest match first to avoid substring
+        # false-positives ("مئة ألف" must not match "ألف" = 1000 first).
+        _AR_NUM: list[tuple[str, int]] = [
+            ("مئة ألف", 100000), ("مائة ألف", 100000),
+            ("تسعين ألف", 90000), ("ثمانين ألف", 80000),
+            ("سبعين ألف", 70000), ("ستين ألف", 60000),
+            ("خمسين ألف", 50000), ("أربعين ألف", 40000),
+            ("ثلاثين ألف", 30000), ("خمسة وعشرين ألف", 25000),
+            ("عشرين ألف", 20000), ("خمسة عشر ألف", 15000),
+            ("عشرة آلاف", 10000), ("عشرة ألاف", 10000),
+            ("آلاف", 1000), ("ألف", 1000),  # digit-multiplier handled below
+        ]
+        _clean = text.replace(",", "")
+        for ar_word, ar_val in _AR_NUM:
+            if ar_word in _clean:
+                _mult_m = re.search(r"(\d+)\s*" + re.escape(ar_word), _clean)
+                amount = int(float(_mult_m.group(1)) * ar_val) if _mult_m else ar_val
+                return amount if 1000 <= amount <= 500000 else None
+        m = re.search(r"(\d[\d.]*)([Kk]?)", _clean)
         if not m:
             return None
         try:
@@ -7133,7 +7233,6 @@ class RicoChatAPI:
             if m.group(2).lower() == "k":
                 val *= 1000
             amount = int(val)
-            # Sanity: plausible AED monthly salary (1k–500k)
             return amount if 1000 <= amount <= 500000 else None
         except (ValueError, OverflowError):
             return None

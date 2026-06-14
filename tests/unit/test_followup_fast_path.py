@@ -665,3 +665,149 @@ class TestContextAwareHelp:
         _, result = _run(monkeypatch, "what can you do?", _CVProfile())
         # May route through help or smalltalk; must not be unknown
         assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+
+# ── Job detail inquiry ────────────────────────────────────────────────────────
+
+class TestJobDetailInquiry:
+    """Fast-path for 'tell me more about that job' / job detail requests."""
+
+    _CACHED_JOB = {
+        "title": "HSE Manager",
+        "company": "ADNOC",
+        "location": "Abu Dhabi",
+        "apply_url": "https://example.com/apply",
+        "source_url": "https://example.com/job",
+        "link": "https://example.com/apply",
+        "verification_status": "verified",
+        "employment_type": "Full-time",
+        "salary_string": "AED 25,000/month",
+        "description": "Responsible for all HSE activities across the refinery.",
+        "why_this_fits": "Your NEBOSH IGC and 8 years experience are a strong match.",
+        "worth_checking": "Strong brand name employer with benefits package.",
+    }
+
+    def _run_with_context(self, monkeypatch, message: str, context_matches=None):
+        import src.rico_chat_api as mod
+        from src.rico_chat_api import RicoChatAPI
+        from unittest.mock import MagicMock
+
+        mock_route = MagicMock()
+        mock_route.tool_name = None
+        mock_route.entities = {}
+        mock_route.tool_args = {}
+        mock_route.confirmation_prompt = None
+        mock_route.source = "keyword"
+
+        monkeypatch.setattr(mod, "get_profile", lambda uid: _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: mock_route)
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id, updates: _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+
+        api = RicoChatAPI()
+        api.system.run_for_profile = MagicMock(return_value={"matches": []})
+        ctx = {"recent_search_matches": context_matches} if context_matches is not None else {}
+        api._get_recent_context = lambda uid: ctx
+        api._append_chat = MagicMock()
+        api._store_recent_context = MagicMock()
+
+        result = api._handle_active_user("test-user", message)
+        return result
+
+    def test_tell_me_more_no_context(self, monkeypatch):
+        result = self._run_with_context(monkeypatch, "tell me more about that job", context_matches=[])
+        assert result["type"] == "clarification"
+
+    def test_tell_me_more_no_context_empty(self, monkeypatch):
+        result = self._run_with_context(monkeypatch, "tell me more about that job", context_matches=None)
+        assert result["type"] == "clarification"
+
+    def test_more_details_on_this_job(self, monkeypatch):
+        result = self._run_with_context(
+            monkeypatch, "more details on this job", context_matches=[self._CACHED_JOB]
+        )
+        assert result["type"] == "job_detail"
+
+    def test_whats_the_job_description(self, monkeypatch):
+        result = self._run_with_context(
+            monkeypatch, "what's the job description?", context_matches=[self._CACHED_JOB]
+        )
+        assert result["type"] == "job_detail"
+
+    def test_job_details_phrase(self, monkeypatch):
+        result = self._run_with_context(
+            monkeypatch, "job details please", context_matches=[self._CACHED_JOB]
+        )
+        assert result["type"] == "job_detail"
+
+    def test_tell_me_more_with_cached_match_has_title(self, monkeypatch):
+        result = self._run_with_context(
+            monkeypatch, "tell me more about that job", context_matches=[self._CACHED_JOB]
+        )
+        assert result["type"] == "job_detail"
+        assert "HSE Manager" in result["message"]
+        assert "ADNOC" in result["message"]
+
+    def test_tell_me_more_includes_employment_type(self, monkeypatch):
+        result = self._run_with_context(
+            monkeypatch, "tell me more about that job", context_matches=[self._CACHED_JOB]
+        )
+        assert "Full-time" in result["message"]
+
+    def test_tell_me_more_includes_salary(self, monkeypatch):
+        result = self._run_with_context(
+            monkeypatch, "tell me more about that job", context_matches=[self._CACHED_JOB]
+        )
+        assert "25,000" in result["message"]
+
+    def test_arabic_more_details(self, monkeypatch):
+        result = self._run_with_context(
+            monkeypatch, "المزيد من التفاصيل عن هذه الوظيفة", context_matches=[self._CACHED_JOB]
+        )
+        assert result["type"] == "job_detail"
+
+
+# ── Arabic salary word-number parsing ─────────────────────────────────────────
+
+class TestArabicSalaryParsing:
+    """Unit tests for _parse_salary_value with Arabic word-numbers."""
+
+    def _parse(self, text: str):
+        from src.rico_chat_api import RicoChatAPI
+        return RicoChatAPI._parse_salary_value(text)
+
+    def test_fifty_thousand_arabic(self):
+        assert self._parse("أريد راتب خمسين ألف") == 50000
+
+    def test_hundred_thousand_arabic_mia(self):
+        assert self._parse("براتبي المتوقع مئة ألف") == 100000
+
+    def test_hundred_thousand_arabic_mia2(self):
+        assert self._parse("مائة ألف درهم") == 100000
+
+    def test_twenty_thousand_arabic(self):
+        assert self._parse("عشرين ألف") == 20000
+
+    def test_numeric_with_alf(self):
+        assert self._parse("5 ألف") == 5000
+
+    def test_numeric_with_alaf(self):
+        assert self._parse("10 آلاف") == 10000
+
+    def test_fifteen_thousand_arabic(self):
+        assert self._parse("خمسة عشر ألف") == 15000
+
+    def test_numeric_k_suffix(self):
+        assert self._parse("set my salary to 18k") == 18000
+
+    def test_numeric_with_commas(self):
+        assert self._parse("my expected salary is AED 22,000") == 22000
+
+    def test_numeric_plain(self):
+        assert self._parse("I want AED 15000 per month") == 15000
+
+    def test_out_of_range_low(self):
+        assert self._parse("500") is None
+
+    def test_out_of_range_high(self):
+        assert self._parse("AED 600000") is None
