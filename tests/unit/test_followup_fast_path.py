@@ -583,3 +583,85 @@ class TestApplicationStatusQuery:
     def test_how_are_my_applications_going(self, monkeypatch):
         _, result = _run(monkeypatch, "how are my applications going?", _CVProfile())
         assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+
+# ── Salary expectation setting ─────────────────────────────────────────────────
+
+class TestSalaryExpectationSetting:
+    """Regression: salary setting phrases must save to profile, not fall to unknown."""
+
+    def test_my_minimum_salary_is(self, monkeypatch):
+        _, result = _run(monkeypatch, "my minimum salary is 50000", _CVProfile())
+        # Must route to salary setting, not unknown
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+        assert result["type"] in ("preferences_updated", "clarification")
+
+    def test_set_salary_to(self, monkeypatch):
+        _, result = _run(monkeypatch, "set my salary expectation to 60000", _CVProfile())
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_salary_with_k_suffix(self, monkeypatch):
+        _, result = _run(monkeypatch, "my minimum salary is 50k", _CVProfile())
+        assert result["type"] in ("preferences_updated", "clarification")
+
+    def test_salary_parse_value(self):
+        from src.rico_chat_api import RicoChatAPI
+        api = RicoChatAPI()
+        assert api._parse_salary_value("50000") == 50000
+        assert api._parse_salary_value("50k") == 50000
+        assert api._parse_salary_value("50K") == 50000
+        assert api._parse_salary_value("60,000") == 60000
+        # Out of range — should return None
+        assert api._parse_salary_value("999") is None
+        assert api._parse_salary_value("600k") is None
+
+
+# ── Profile pitch / bio ────────────────────────────────────────────────────────
+
+class TestProfilePitch:
+    """Regression: profile pitch requests must return a deterministic pitch."""
+
+    def test_write_professional_bio(self, monkeypatch):
+        _, result = _run(monkeypatch, "write me a professional bio", _CVProfile())
+        assert result["type"] == "profile_pitch"
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_summarize_my_profile(self, monkeypatch):
+        _, result = _run(monkeypatch, "summarize my profile for an employer", _CVProfile())
+        assert result["type"] == "profile_pitch"
+
+    def test_pitch_no_profile_asks_for_data(self, monkeypatch):
+        _, result = _run(monkeypatch, "write me a professional bio", _EmptyProfile())
+        # Empty profile → clarification asking for CV or role
+        assert result["type"] in ("profile_pitch", "clarification")
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_elevator_pitch(self, monkeypatch):
+        _, result = _run(monkeypatch, "give me an elevator pitch", _CVProfile())
+        assert result["type"] == "profile_pitch"
+
+
+# ── Context-aware help ─────────────────────────────────────────────────────────
+
+class TestContextAwareHelp:
+    """Regression: help must return options type, personalised to profile state."""
+
+    def test_help_with_cv_returns_options(self, monkeypatch):
+        _, result = _run(monkeypatch, "help", _CVProfile())
+        assert result["type"] == "options"
+
+    def test_help_without_cv_returns_options(self, monkeypatch):
+        _, result = _run(monkeypatch, "help", _EmptyProfile())
+        assert result["type"] == "options"
+
+    def test_help_empty_profile_has_upload_option(self, monkeypatch):
+        _, result = _run(monkeypatch, "help", _EmptyProfile())
+        assert result["type"] == "options"
+        # Empty profile should have upload or setup-oriented options
+        actions = [o["action"] for o in result.get("options", [])]
+        assert len(actions) > 0
+
+    def test_what_can_you_do(self, monkeypatch):
+        _, result = _run(monkeypatch, "what can you do?", _CVProfile())
+        # May route through help or smalltalk; must not be unknown
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")

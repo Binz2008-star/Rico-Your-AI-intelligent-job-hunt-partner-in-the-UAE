@@ -310,6 +310,28 @@ _APPLICATION_STATUS_QUERY_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Salary expectation setting: "my minimum salary is 50k", "set salary to 60000 AED/month".
+# Conservative pattern — requires explicit salary/pay keyword to avoid false positives.
+_SALARY_SET_RE = re.compile(
+    r"\b(?:my\s+)?(?:minimum|expected?|target|desired?)\s+salary\s+is\s*(?:AED\s*)?(\d[\d,.]*)([Kk]?)\b"
+    r"|\b(?:set|update|change)\s+(?:my\s+)?salary\s+(?:expectation\s+)?to\s*(?:AED\s*)?(\d[\d,.]*)([Kk]?)\b"
+    r"|\bI\s+(?:want|expect|need|require)\s+(?:at\s+least\s+)?(?:AED\s*)?(\d[\d,.]*)([Kk]?)\s*(?:AED\s*)?"
+    r"(?:per\s+month|\/month|monthly|a\s+month)\b"
+    r"|\براتبي\s+(?:المتوقع|الأدنى|المرغوب)\s*(?:AED\s*|درهم\s*)?(\d[\d,.]*)([Kk]?)",
+    re.IGNORECASE,
+)
+
+# Profile bio/pitch: "write me a professional bio", "summarize my profile for an employer".
+# Returns a deterministic pitch built from profile fields.
+_PROFILE_PITCH_RE = re.compile(
+    r"\b(?:write|create|generate|make|give\s+me)\b.{0,30}"
+    r"\b(?:professional\s+bio|profile\s+(?:summary|pitch|description)|bio(?:\s+for\s+(?:employer|recruiter|linkedin))?)\b"
+    r"|\b(?:summarize|describe|pitch)\s+my\s+(?:profile|background|experience|skills)\b"
+    r"|\b(?:elevator\s+pitch|30[\s-]second\s+pitch|one[\s-]liner)\b"
+    r"|\bاكتب\b.{0,25}\b(?:ملخص|نبذة)\b.{0,25}\b(?:ملفي|خبرتي|مهاراتي)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -4004,6 +4026,26 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        # ── Salary expectation setting ─────────────────────────────────────────
+        # "my minimum salary is 50k", "set salary to 60,000 AED" → parse number,
+        # save to profile, return field-specific confirmation.
+        if _SALARY_SET_RE.search(message):
+            return self._finalize(
+                self._handle_salary_set(user_id, message, profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Profile pitch/bio ─────────────────────────────────────────────────
+        # "write me a professional bio", "summarize my profile for an employer"
+        # → deterministic pitch built from profile fields; no AI token spend.
+        if _PROFILE_PITCH_RE.search(message):
+            return self._finalize(
+                self._handle_profile_pitch(user_id, profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
         # ── Step 1: Unified intent classification ────────────────────────────
         if has_cv and self._looks_like_career_execution_request(message):
             return self._finalize(
@@ -4025,10 +4067,11 @@ class RicoChatAPI:
 
         # ── Step 2: Route by intent ──────────────────────────────────────────
 
-        # Help / menu
+        # Help / menu — context-aware options based on profile state
         if legacy_intent == "help":
-            self._append_chat(user_id, "assistant", self._JOB_SEARCH_OPTIONS)
-            return self._finalize(self._JOB_SEARCH_OPTIONS, self.SOURCE_KEYWORD, profile=profile)
+            _help_resp = self._build_context_aware_help(user_id, profile, has_cv, message)
+            self._append_chat(user_id, "assistant", _help_resp)
+            return self._finalize(_help_resp, self.SOURCE_KEYWORD, profile=profile)
 
         # Acknowledgement — short warm reply; never restarts or greets
         if legacy_intent == "acknowledgement":
@@ -7076,6 +7119,137 @@ class RicoChatAPI:
             "unparsed_sections": unparsed_sections,
             "next_action": "collect_missing_cv_fields" if missing else "cv_ready",
         }
+
+    # ── Salary expectation setting ──────────────────────────────────────────────
+
+    @staticmethod
+    def _parse_salary_value(text: str) -> int | None:
+        """Extract AED monthly salary from text, handling K/k suffix and commas."""
+        m = re.search(r"(\d[\d,.]*)([Kk]?)", text.replace(",", ""))
+        if not m:
+            return None
+        try:
+            val = float(m.group(1))
+            if m.group(2).lower() == "k":
+                val *= 1000
+            amount = int(val)
+            # Sanity: plausible AED monthly salary (1k–500k)
+            return amount if 1000 <= amount <= 500000 else None
+        except (ValueError, OverflowError):
+            return None
+
+    def _handle_salary_set(self, user_id: str, message: str, profile: Any) -> dict[str, Any]:
+        """Parse salary from message, save to profile, confirm with the exact amount."""
+        arabic = self._is_arabic_text(message)
+        amount = self._parse_salary_value(message)
+        if amount is not None:
+            try:
+                upsert_profile(user_id=user_id, updates={"salary_expectation_aed": amount})
+                msg = (
+                    f"تم تحديث الراتب المتوقع إلى **{amount:,} درهم/شهر**. "
+                    "سأستثني الوظائف التي تقل عن هذا الحد تلقائياً."
+                    if arabic else
+                    f"Salary expectation set to **AED {amount:,}/month**. "
+                    "I'll flag jobs that fall below this threshold."
+                )
+                response_type = "preferences_updated"
+            except Exception:
+                msg = (
+                    "لم أتمكن من حفظ الراتب المتوقع، جرب مجدداً."
+                    if arabic else
+                    "I couldn't save that — please try again."
+                )
+                response_type = "clarification"
+        else:
+            msg = (
+                "لم أفهم قيمة الراتب. أرسل مثلاً: 'الراتب المتوقع 50,000 درهم'."
+                if arabic else
+                "I couldn't read the salary amount. Try: 'my minimum salary is 50,000 AED'."
+            )
+            response_type = "clarification"
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": response_type, "message": msg}
+
+    # ── Profile pitch / bio ─────────────────────────────────────────────────────
+
+    def _handle_profile_pitch(self, user_id: str, profile: Any) -> dict[str, Any]:
+        """Build a 2-3 sentence professional pitch from profile fields."""
+        arabic = self._is_arabic_text("")
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        skills = self._as_list(self._profile_value(profile, "skills"))[:4]
+        exp = self._profile_value(profile, "years_experience")
+        industries = self._as_list(self._profile_value(profile, "industries"))[:1]
+        certs = self._as_list(self._profile_value(profile, "certifications"))[:1]
+        cities = self._as_list(self._profile_value(profile, "preferred_cities"))[:1]
+
+        if not target_roles and not skills:
+            msg = (
+                "I need more profile data to write a pitch. "
+                "Upload your CV or tell me your target role and key skills first."
+            )
+        else:
+            role = target_roles[0] if target_roles else "professional"
+            exp_str = f"{int(float(exp))}-year " if exp and str(exp).replace(".", "").isdigit() else ""
+            skills_str = ", ".join(skills[:3]) if skills else ""
+            industry_str = f" in the {industries[0]} sector" if industries else ""
+            cert_str = f", holding {certs[0]}" if certs else ""
+            city_str = f", based in {cities[0]}" if cities else " based in the UAE"
+            skills_sentence = f" Skilled in {skills_str}." if skills_str else ""
+
+            msg = (
+                f"**Your professional pitch:**\n\n"
+                f"{exp_str}experienced **{role}**{industry_str}{cert_str}{city_str}."
+                f"{skills_sentence} "
+                f"Open to opportunities across the Emirates.\n\n"
+                "Say **'improve it'** for a more detailed version, or use it as-is on LinkedIn or in emails."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "profile_pitch", "message": msg}
+
+    # ── Context-aware help ──────────────────────────────────────────────────────
+
+    def _build_context_aware_help(
+        self, user_id: str, profile: Any, has_cv: bool, message: str = ""
+    ) -> dict[str, Any]:
+        """Return a help menu personalised to the user's current profile state."""
+        arabic = self._is_arabic_text(message)
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        recent_role = ""
+        try:
+            _rctx = self._get_recent_context(user_id)
+            recent_role = str(_rctx.get("recent_search_role") or "").strip()
+        except Exception:
+            pass
+
+        if not has_cv and not target_roles:
+            # New / empty profile — guide them to set up first
+            options = [
+                {"action": "upload_cv",    "label": "Upload my CV to get started" if not arabic else "رفع سيرتي الذاتية"},
+                {"action": "set_role",     "label": "Set my target job role"      if not arabic else "تحديد الوظيفة المستهدفة"},
+                {"action": "find_jobs",    "label": "Search for UAE jobs"          if not arabic else "البحث عن وظائف في الإمارات"},
+            ]
+            intro = "مرحبًا! لنبدأ بإعداد ملفك:" if arabic else "Welcome! Let's set up your profile first:"
+        elif recent_role:
+            # Continuing an active search
+            options = [
+                {"action": "find_jobs",          "label": f"Search more {recent_role} jobs"},
+                {"action": "prepare_application", "label": "Prepare application / cover letter"},
+                {"action": "interview_prep",      "label": "Prepare for an interview"},
+                {"action": "track_applications",  "label": "Check my applications"},
+                {"action": "profile_completeness","label": "See what's missing from my profile"},
+            ]
+            intro = "Here is what I can help you with:"
+        else:
+            options = [
+                {"action": "find_jobs",           "label": "Find matching UAE jobs"          if not arabic else "البحث عن وظائف تناسبني"},
+                {"action": "prepare_application",  "label": "Prepare a job application"      if not arabic else "إعداد طلب توظيف"},
+                {"action": "interview_prep",       "label": "Prepare for an interview"       if not arabic else "التحضير لمقابلة عمل"},
+                {"action": "track_applications",   "label": "Track my applications"          if not arabic else "متابعة طلباتي"},
+                {"action": "profile_completeness", "label": "Check my profile completeness"  if not arabic else "التحقق من اكتمال ملفي"},
+            ]
+            intro = "إليك ما يمكنني مساعدتك به:" if arabic else "Here is what I can help you with:"
+
+        return {"type": "options", "message": intro, "options": options}
 
     def _handle_profile_completeness(self, user_id: str, profile: Any) -> dict[str, Any]:
         """Deterministic profile completeness report using evaluate_minimum_profile."""
