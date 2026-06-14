@@ -346,6 +346,30 @@ _PROFILE_PITCH_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Application list query: "list my applications", "what jobs did I apply to?",
+# "show my applied jobs", "how many applications do I have?"
+_APPLICATIONS_LIST_RE = re.compile(
+    r"\b(?:list|show|display|view|see)\b.{0,30}"
+    r"\b(?:my\s+)?(?:applications?|applied\s+jobs?|jobs?\s+i(?:'ve|\s+have)?\s+applied(?:\s+to)?|submitted(?:\s+applications?)?)\b"
+    r"|\b(?:what|which)\s+(?:jobs?|companies?|roles?|positions?)\s+(?:have\s+I|did\s+I|have\s+i)\s+appl(?:ied|y)(?:\s+to)?\b"
+    r"|\b(?:my\s+)?application\s+(?:list|history|tracker|overview)\b"
+    r"|\bhow\s+many\s+(?:applications?|jobs?\s+(?:have\s+I|did\s+I)\s+applied(?:\s+to)?)\b"
+    r"|\b(?:عرض|أظهر|كم)\b.{0,20}\b(?:طلباتي|التقديمات|وظائف\s+تقدمت\s+إليها)\b",
+    re.IGNORECASE,
+)
+
+# Profile data readback: "what skills do you have for me?", "what do you know about me?",
+# "show my profile data". Distinct from _PROFILE_PITCH_RE (which generates a bio).
+_PROFILE_READBACK_RE = re.compile(
+    r"\b(?:what|show|display|tell\s+me)\b.{0,25}"
+    r"\b(?:(?:on\s+)?(?:my\s+)?(?:file|saved|stored|in\s+(?:my\s+)?profile)|my\s+profile\s+(?:data|info(?:rmation)?))\b"
+    r"|\b(?:what\s+(?:skills?|experience|data|info(?:rmation)?))\s+(?:do\s+you|have\s+you|did\s+you)\s+(?:have|got|store|save|know)\b"
+    r"|\bwhat\s+do\s+you\s+know\s+about\s+me\b"
+    r"|\b(?:show|list|display)\s+(?:all\s+)?my\s+(?:skills?|certifications?|profile\s+info(?:rmation)?|saved\s+experience)\b"
+    r"|\b(?:ما|ماذا)\b.{0,20}\b(?:معلوماتي|مهاراتي|بياناتي)\b.{0,15}\b(?:لديك|عندك|حفظت)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -4070,6 +4094,28 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        # ── Application list query ────────────────────────────────────────────
+        # "what jobs did I apply to?", "how many applications do I have?",
+        # "show my applied jobs", "application history" — patterns NOT covered
+        # by the earlier _SHOW_MY_APPLICATIONS_RE guard (which handles the
+        # short "show/list my applications" commands routed to the tracker UI).
+        if _APPLICATIONS_LIST_RE.search(message):
+            return self._finalize(
+                self._handle_applications_list(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Profile data readback ─────────────────────────────────────────────
+        # "what skills do you have for me?", "what do you know about me?"
+        # → show profile fields as formatted summary; distinct from pitch generator.
+        if _PROFILE_READBACK_RE.search(message):
+            return self._finalize(
+                self._handle_profile_readback(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
         # ── Step 1: Unified intent classification ────────────────────────────
         if has_cv and self._looks_like_career_execution_request(message):
             return self._finalize(
@@ -7166,6 +7212,15 @@ class RicoChatAPI:
         except Exception:
             pass
         if not matches or not isinstance(matches, list):
+            # Fall back to the most recently applied-to job stored in context.
+            try:
+                ctx = self._get_recent_context(user_id)
+                recent_app = ctx.get("recent_application") if isinstance(ctx, dict) else None
+                if isinstance(recent_app, dict) and recent_app.get("title"):
+                    matches = [recent_app]
+            except Exception:
+                pass
+        if not matches or not isinstance(matches, list):
             msg = (
                 "لا يوجد بحث حديث في جلستك. ابدأ بالبحث عن وظيفة وسأعرض التفاصيل."
                 if arabic else
@@ -7304,6 +7359,121 @@ class RicoChatAPI:
             )
         self._append_chat(user_id, "assistant", msg)
         return {"type": "profile_pitch", "message": msg}
+
+    # ── Application list query ──────────────────────────────────────────────────
+
+    def _handle_applications_list(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        """Fetch and format the user's application list from DB."""
+        arabic = self._is_arabic_text(message)
+        apps: list[dict[str, Any]] = []
+        try:
+            from src.repositories import applications_repo
+            apps = applications_repo.get_all(user_id) or []
+        except Exception:
+            pass
+
+        if not apps:
+            msg = (
+                "لا يوجد تقديمات مسجلة بعد. ابحث عن وظيفة وتقدّم إليها أولاً."
+                if arabic else
+                "No applications on record yet. Search for a role and apply to start tracking them here."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "message": msg}
+
+        _STATUS_LABELS: dict[str, str] = {
+            "applied":       "Applied",
+            "interview":     "Interview",
+            "offer":         "Offer",
+            "rejected":      "Rejected",
+            "saved":         "Saved",
+            "opened_external": "Opened",
+            "draft":         "Draft",
+        }
+
+        total = len(apps)
+        lines = [f"**Your applications ({total} total):**\n"]
+        for app in apps[:10]:
+            title   = app.get("title") or app.get("role") or "Unknown role"
+            company = app.get("company") or ""
+            status  = app.get("status") or ""
+            label   = _STATUS_LABELS.get(status, status.replace("_", " ").title() if status else "Tracked")
+            entry   = f"• **{title}**" + (f" — {company}" if company else "")
+            if label:
+                entry += f"  `{label}`"
+            lines.append(entry)
+
+        if total > 10:
+            lines.append(f"\n_…and {total - 10} more. Open the dashboard to see all._")
+
+        # Quick counts by status
+        from collections import Counter
+        counts = Counter(app.get("status", "unknown") for app in apps)
+        summary_parts = []
+        if counts.get("applied"):
+            summary_parts.append(f"{counts['applied']} applied")
+        if counts.get("interview"):
+            summary_parts.append(f"{counts['interview']} at interview stage")
+        if counts.get("offer"):
+            summary_parts.append(f"{counts['offer']} with offers")
+        if summary_parts:
+            lines.append("\n" + " · ".join(summary_parts))
+
+        msg = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "application_list", "message": msg, "applications": apps[:10], "total": total}
+
+    # ── Profile data readback ───────────────────────────────────────────────────
+
+    def _handle_profile_readback(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        """Show the user's saved profile fields as a formatted summary."""
+        arabic = self._is_arabic_text(message)
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        skills       = self._as_list(self._profile_value(profile, "skills"))
+        certs        = self._as_list(self._profile_value(profile, "certifications"))
+        exp          = self._profile_value(profile, "years_experience")
+        cities       = self._as_list(self._profile_value(profile, "preferred_cities"))
+        industries   = self._as_list(self._profile_value(profile, "industries"))
+        salary       = self._profile_value(profile, "salary_expectation_aed")
+        cv_ok        = bool(self._profile_value(profile, "cv_filename") or self._profile_value(profile, "cv_status") == "parsed")
+
+        if not target_roles and not skills and not exp and not cities:
+            msg = (
+                "ملفك الشخصي فارغ حتى الآن. ارفع سيرتك الذاتية أو أخبرني عن مسماك الوظيفي ومهاراتك."
+                if arabic else
+                "Your profile is empty. Upload your CV or tell me your target role and key skills to get started."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "message": msg}
+
+        lines = ["**Here's what I have on file for you:**\n"]
+        if cv_ok:
+            lines.append("📄 CV uploaded and parsed")
+        if target_roles:
+            lines.append(f"🎯 **Target roles:** {', '.join(target_roles[:3])}")
+        if cities:
+            lines.append(f"📍 **Preferred cities:** {', '.join(cities[:3])}")
+        if exp is not None:
+            try:
+                lines.append(f"🕐 **Years of experience:** {int(float(exp))}")
+            except (ValueError, TypeError):
+                lines.append(f"🕐 **Years of experience:** {exp}")
+        if industries:
+            lines.append(f"🏭 **Industries:** {', '.join(industries[:3])}")
+        if skills:
+            lines.append(f"💡 **Skills:** {', '.join(skills[:6])}")
+        if certs:
+            lines.append(f"🏅 **Certifications:** {', '.join(certs[:3])}")
+        if salary:
+            try:
+                lines.append(f"💰 **Salary expectation:** AED {int(float(salary)):,}/month")
+            except (ValueError, TypeError):
+                lines.append(f"💰 **Salary expectation:** AED {salary}")
+
+        lines.append("\nSay **'update my profile'** to change any of these.")
+        msg = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "profile_summary", "message": msg}
 
     # ── Context-aware help ──────────────────────────────────────────────────────
 

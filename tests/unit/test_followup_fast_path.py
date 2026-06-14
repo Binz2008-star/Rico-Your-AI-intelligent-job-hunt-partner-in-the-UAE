@@ -811,3 +811,164 @@ class TestArabicSalaryParsing:
 
     def test_out_of_range_high(self):
         assert self._parse("AED 600000") is None
+
+
+# ── Application list query ─────────────────────────────────────────────────────
+
+class TestApplicationsListQuery:
+    """Fast-path for 'list my applications', 'what jobs did I apply to?'"""
+
+    def _run_apps_list(self, monkeypatch, message: str, fake_apps=None):
+        import src.rico_chat_api as mod
+        from src.rico_chat_api import RicoChatAPI
+        from unittest.mock import MagicMock, patch
+
+        mock_route = MagicMock()
+        mock_route.tool_name = None
+        mock_route.entities = {}
+        mock_route.tool_args = {}
+        mock_route.confirmation_prompt = None
+        mock_route.source = "keyword"
+
+        monkeypatch.setattr(mod, "get_profile", lambda uid: _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: mock_route)
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id, updates: _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+
+        api = RicoChatAPI()
+        api.system.run_for_profile = MagicMock(return_value={"matches": []})
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+
+        apps = fake_apps if fake_apps is not None else []
+        with patch("src.repositories.applications_repo.get_all", return_value=apps):
+            result = api._handle_active_user("test-user", message)
+        return result
+
+    def test_what_jobs_did_i_apply_to_empty(self, monkeypatch):
+        result = self._run_apps_list(monkeypatch, "what jobs did I apply to?", fake_apps=[])
+        assert result["type"] == "clarification"
+
+    def test_what_jobs_did_i_apply_to_with_data(self, monkeypatch):
+        apps = [{"title": "HSE Manager", "company": "ADNOC", "status": "applied"}]
+        result = self._run_apps_list(monkeypatch, "what jobs did I apply to?", fake_apps=apps)
+        assert result["type"] == "application_list"
+
+    def test_how_many_applications(self, monkeypatch):
+        apps = [
+            {"title": "HSE Manager", "company": "ADNOC", "status": "applied"},
+            {"title": "Safety Lead", "company": "BP", "status": "interview"},
+            {"title": "EHS Manager", "company": "Shell", "status": "rejected"},
+        ]
+        result = self._run_apps_list(monkeypatch, "how many applications do I have?", fake_apps=apps)
+        assert result["type"] == "application_list"
+        assert result["total"] == 3
+
+    def test_show_applied_jobs_with_data(self, monkeypatch):
+        apps = [{"title": "HSE Manager", "company": "ADNOC", "status": "applied"}]
+        result = self._run_apps_list(monkeypatch, "show my applied jobs", fake_apps=apps)
+        assert result["type"] == "application_list"
+        assert "HSE Manager" in result["message"]
+
+    def test_application_history(self, monkeypatch):
+        apps = [{"title": "Senior HSE Manager", "company": "Emirates", "status": "saved"}]
+        result = self._run_apps_list(monkeypatch, "show my application history", fake_apps=apps)
+        assert result["type"] == "application_list"
+
+    def test_what_jobs_did_i_apply_to_has_titles(self, monkeypatch):
+        apps = [{"title": "Safety Engineer", "company": "Petrofac", "status": "applied"}]
+        result = self._run_apps_list(monkeypatch, "what jobs did I apply to?", fake_apps=apps)
+        assert "Safety Engineer" in result["message"]
+
+
+# ── Profile data readback ─────────────────────────────────────────────────────
+
+class TestProfileReadback:
+    """Fast-path for 'what skills do you have for me?', 'what do you know about me?'"""
+
+    def test_what_skills_do_you_have(self, monkeypatch):
+        _, result = _run(monkeypatch, "what skills do you have for me?", _CVProfile())
+        assert result["type"] == "profile_summary"
+
+    def test_what_do_you_know_about_me(self, monkeypatch):
+        _, result = _run(monkeypatch, "what do you know about me", _CVProfile())
+        assert result["type"] == "profile_summary"
+
+    def test_show_my_skills(self, monkeypatch):
+        _, result = _run(monkeypatch, "show my skills", _CVProfile())
+        assert result["type"] == "profile_summary"
+
+    def test_what_skills_did_you_store(self, monkeypatch):
+        _, result = _run(monkeypatch, "what skills did you store for me?", _CVProfile())
+        assert result["type"] == "profile_summary"
+
+    def test_message_contains_skills(self, monkeypatch):
+        _, result = _run(monkeypatch, "what do you know about me", _CVProfile())
+        assert "hse" in result["message"].lower() or "safety" in result["message"].lower()
+
+    def test_empty_profile_returns_clarification(self, monkeypatch):
+        _, result = _run(monkeypatch, "what do you know about me", _EmptyProfile())
+        assert result["type"] == "clarification"
+
+    def test_show_my_profile_data(self, monkeypatch):
+        _, result = _run(monkeypatch, "show my profile data", _CVProfile())
+        assert result["type"] == "profile_summary"
+
+
+# ── Job detail fallback to recent_application context ─────────────────────────
+
+class TestJobDetailAppliedFallback:
+    """_handle_job_detail falls back to recent_application when no search matches."""
+
+    _APPLIED_JOB = {
+        "job_id": "abc123",
+        "title": "HSE Manager",
+        "company": "ADNOC",
+        "status": "applied",
+        "link": "https://example.com/apply",
+    }
+
+    def _run_with_applied_ctx(self, monkeypatch, message: str, applied_job=None):
+        import src.rico_chat_api as mod
+        from src.rico_chat_api import RicoChatAPI
+        from unittest.mock import MagicMock
+
+        mock_route = MagicMock()
+        mock_route.tool_name = None
+        mock_route.entities = {}
+        mock_route.tool_args = {}
+        mock_route.confirmation_prompt = None
+        mock_route.source = "keyword"
+
+        monkeypatch.setattr(mod, "get_profile", lambda uid: _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: mock_route)
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id, updates: _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+
+        api = RicoChatAPI()
+        api.system.run_for_profile = MagicMock(return_value={"matches": []})
+        ctx: dict = {}
+        if applied_job:
+            ctx["recent_application"] = applied_job
+        api._get_recent_context = lambda uid: ctx
+        api._append_chat = MagicMock()
+        api._store_recent_context = MagicMock()
+
+        result = api._handle_active_user("test-user", message)
+        return result
+
+    def test_no_context_returns_clarification(self, monkeypatch):
+        result = self._run_with_applied_ctx(monkeypatch, "tell me more about that job")
+        assert result["type"] == "clarification"
+
+    def test_applied_job_context_returns_job_detail(self, monkeypatch):
+        result = self._run_with_applied_ctx(
+            monkeypatch, "tell me more about that job", applied_job=self._APPLIED_JOB
+        )
+        assert result["type"] == "job_detail"
+
+    def test_applied_job_detail_has_title(self, monkeypatch):
+        result = self._run_with_applied_ctx(
+            monkeypatch, "tell me more about that job", applied_job=self._APPLIED_JOB
+        )
+        assert "HSE Manager" in result["message"]
