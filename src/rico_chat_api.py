@@ -258,12 +258,19 @@ _COVER_LETTER_COMMAND_RE = re.compile(
     re.IGNORECASE,
 )
 
-# "Retry / again" — user wants to replay the last job search unchanged.
-# Only intercepts bare retry phrases; specific role phrases still go to job_search_explicit.
+# "Retry / again / show more" — user wants to replay or extend the last job search.
+# Bare retry phrases and "show more jobs" / "any new jobs?" are intercepted before
+# classify_intent; longer messages with these words still pass through normally.
 _RETRY_SEARCH_RE = re.compile(
     r"^(?:retry|again|repeat|redo|run\s+it\s+again|search\s+again|"
     r"same\s+search|once\s+more|try\s+again|re[- ]?run)\s*[.!?]?$"
-    r"|^(?:مرة\s+أخرى|مجددا|مجدداً|أعد\s+البحث|كرر\s+البحث|نفس\s+البحث)\s*[.!?]?$",
+    r"|^(?:show\s+more(?:\s+(?:jobs?|results?|listings?|options?|roles?))?"
+    r"|more\s+(?:jobs?|results?|listings?|roles?)"
+    r"|(?:any\s+)?(?:new|other|more)\s+(?:jobs?|roles?|results?|openings?|listings?|vacancies)"
+    r"|(?:show|find)\s+(?:more|other|different)\s+(?:jobs?|roles?|options?)"
+    r"|load\s+more)\s*[.!?]?$"
+    r"|^(?:مرة\s+أخرى|مجددا|مجدداً|أعد\s+البحث|كرر\s+البحث|نفس\s+البحث"
+    r"|وظائف\s+أخرى|أكثر\s+من\s+ذلك|عرض\s+المزيد|هل\s+يوجد\s+غيرها)\s*[.!?]?$",
     re.IGNORECASE,
 )
 
@@ -5575,24 +5582,15 @@ class RicoChatAPI:
             self._append_chat(user_id, "assistant", msg)
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
-        # Interview prep
+        # Interview prep — use full AI chain (DeepSeek/OpenAI) for rich, personalised tips.
+        # User message already stored in _process_message_inner; save_user_message=False.
         if legacy_intent == "interview_prep":
-            user_context = self._build_openai_context(profile, user_id=user_id)
-            system_prompt = (
-                "You are Rico, a UAE career coach. Give concise, practical interview preparation "
-                "tips including likely questions, company research pointers, and answer frameworks."
+            return self._answer_with_ai_fallback(
+                user_id=user_id,
+                message=message,
+                profile=profile,
+                save_user_message=False,
             )
-            hf_text = None
-            if hf_ok():
-                hf_text = generate_text(message, system=system_prompt, max_new_tokens=400)
-            msg = hf_text or (
-                "I will prepare interview notes, likely questions, and suggested answers based on your target role. "
-                "Share the specific job title or company name for a more tailored response."
-            )
-            response = {"type": "interview_prep", "message": msg}
-            self._append_chat(user_id, "assistant", msg)
-            src = self.SOURCE_HF if hf_text else self.SOURCE_FALLBACK
-            return self._finalize(response, src, profile=profile)
 
         # Nonsense — do NOT search
         if legacy_intent == "nonsense":

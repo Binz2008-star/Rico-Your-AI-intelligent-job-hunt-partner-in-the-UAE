@@ -432,3 +432,40 @@ class TestApplicationWithdrawal:
         _, result = _run(monkeypatch, "withdraw my application", _EmptyProfile())
         assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
         assert "I do not recognize" not in result.get("message", "")
+
+
+# ── Show more jobs / load more results ────────────────────────────────────────
+
+class TestShowMoreJobs:
+    """Regression: 'show more jobs' / 'any new jobs?' must replay the search,
+    not fall to unknown intent."""
+
+    def test_show_more_jobs_with_cv(self, monkeypatch):
+        _, result = _run(monkeypatch, "show more jobs", _CVProfile())
+        assert result["type"] in ("job_matches", "search_error", "clarification")
+        assert "I do not recognize" not in result.get("message", "")
+
+    def test_show_more_jobs_no_cv_asks_for_role(self, monkeypatch):
+        _, result = _run(monkeypatch, "show more jobs", _EmptyProfile())
+        assert result["type"] == "clarification"
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_more_jobs_phrase(self, monkeypatch):
+        _, result = _run(monkeypatch, "more jobs", _CVProfile())
+        assert result["type"] in ("job_matches", "search_error", "clarification")
+
+    def test_more_results_phrase(self, monkeypatch):
+        _, result = _run(monkeypatch, "more results", _CVProfile())
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_any_new_jobs_phrase(self, monkeypatch):
+        _, result = _run(monkeypatch, "any new jobs", _CVProfile())
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_other_roles_phrase(self, monkeypatch):
+        _, result = _run(monkeypatch, "other roles", _CVProfile())
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_show_more_no_role_not_unknown(self, monkeypatch):
+        _, result = _run(monkeypatch, "show more", _EmptyProfile())
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
