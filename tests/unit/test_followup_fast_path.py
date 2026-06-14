@@ -373,3 +373,99 @@ class TestUAEWideSearchRouting:
     def test_uae_wide_no_cv(self, monkeypatch):
         _, result = _run(monkeypatch, "do a UAE-wide search", _EmptyProfile())
         assert result["type"] == "clarification"
+
+
+# ── Retry last search ──────────────────────────────────────────────────────────
+
+class TestRetryLastSearch:
+    """Regression: 'again' / 'retry' must replay the last search, not fall to unknown."""
+
+    def test_again_no_cv_asks_for_role(self, monkeypatch):
+        _, result = _run(monkeypatch, "again", _EmptyProfile())
+        assert result["type"] == "clarification"
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_retry_no_cv_asks_for_role(self, monkeypatch):
+        _, result = _run(monkeypatch, "retry", _EmptyProfile())
+        assert result["type"] == "clarification"
+
+    def test_again_with_cv_triggers_search(self, monkeypatch):
+        _, result = _run(monkeypatch, "again", _CVProfile())
+        # CVProfile has target_roles — must trigger search, not unknown
+        assert result["type"] in ("job_matches", "search_error", "clarification")
+        assert "I do not recognize" not in result.get("message", "")
+
+    def test_retry_not_unknown_intent(self, monkeypatch):
+        _, result = _run(monkeypatch, "retry", _CVProfile())
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_same_search_phrase(self, monkeypatch):
+        _, result = _run(monkeypatch, "same search", _CVProfile())
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_try_again_phrase(self, monkeypatch):
+        _, result = _run(monkeypatch, "try again", _CVProfile())
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+
+# ── Application withdrawal ─────────────────────────────────────────────────────
+
+class TestApplicationWithdrawal:
+    """Regression: withdrawal phrases must not fall to unknown intent."""
+
+    def test_withdraw_application_no_context(self, monkeypatch):
+        _, result = _run(monkeypatch, "withdraw my application", _CVProfile())
+        # No recent_job_key in context → clarification asking which application
+        assert result["type"] == "clarification"
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_cancel_application_no_context(self, monkeypatch):
+        _, result = _run(monkeypatch, "cancel my application", _CVProfile())
+        assert result["type"] == "clarification"
+
+    def test_withdrawal_message_not_unknown_error(self, monkeypatch):
+        _, result = _run(monkeypatch, "withdraw my application", _CVProfile())
+        assert "I do not recognize" not in result.get("message", "")
+        assert "I could not understand" not in result.get("message", "")
+
+    def test_withdrawal_no_cv_also_handled(self, monkeypatch):
+        _, result = _run(monkeypatch, "withdraw my application", _EmptyProfile())
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+        assert "I do not recognize" not in result.get("message", "")
+
+
+# ── Show more jobs / load more results ────────────────────────────────────────
+
+class TestShowMoreJobs:
+    """Regression: 'show more jobs' / 'any new jobs?' must replay the search,
+    not fall to unknown intent."""
+
+    def test_show_more_jobs_with_cv(self, monkeypatch):
+        _, result = _run(monkeypatch, "show more jobs", _CVProfile())
+        assert result["type"] in ("job_matches", "search_error", "clarification")
+        assert "I do not recognize" not in result.get("message", "")
+
+    def test_show_more_jobs_no_cv_asks_for_role(self, monkeypatch):
+        _, result = _run(monkeypatch, "show more jobs", _EmptyProfile())
+        assert result["type"] == "clarification"
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_more_jobs_phrase(self, monkeypatch):
+        _, result = _run(monkeypatch, "more jobs", _CVProfile())
+        assert result["type"] in ("job_matches", "search_error", "clarification")
+
+    def test_more_results_phrase(self, monkeypatch):
+        _, result = _run(monkeypatch, "more results", _CVProfile())
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_any_new_jobs_phrase(self, monkeypatch):
+        _, result = _run(monkeypatch, "any new jobs", _CVProfile())
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_other_roles_phrase(self, monkeypatch):
+        _, result = _run(monkeypatch, "other roles", _CVProfile())
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_show_more_no_role_not_unknown(self, monkeypatch):
+        _, result = _run(monkeypatch, "show more", _EmptyProfile())
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
