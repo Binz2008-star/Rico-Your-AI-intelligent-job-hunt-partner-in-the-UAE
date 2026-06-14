@@ -7080,11 +7080,27 @@ class RicoChatAPI:
     def _handle_profile_completeness(self, user_id: str, profile: Any) -> dict[str, Any]:
         """Deterministic profile completeness report using evaluate_minimum_profile."""
         from src.agent.context.resolver import resolve_profile_context
+        # Try DB-backed ProfileContext first; on failure check fields directly
+        # via self._profile_value() so CI (no DB) and tests still work.
         try:
             ctx = resolve_profile_context(user_id)
+            gate_ok, missing = evaluate_minimum_profile(ctx)
         except Exception:
-            ctx = profile
-        gate_ok, missing = evaluate_minimum_profile(ctx)
+            missing = []
+            if not self._as_list(self._profile_value(profile, "target_roles")):
+                missing.append("target_roles")
+            if not self._as_list(self._profile_value(profile, "preferred_cities")):
+                missing.append("preferred_cities")
+            if self._profile_value(profile, "years_experience") is None:
+                missing.append("years_experience")
+            _has_skills = bool(self._as_list(self._profile_value(profile, "skills")))
+            _has_cv = bool(
+                self._profile_value(profile, "cv_filename")
+                or self._profile_value(profile, "cv_status") == "parsed"
+            )
+            if not _has_skills and not _has_cv:
+                missing.append("skills")
+            gate_ok = len(missing) == 0
         _FIELD_LABELS: dict[str, str] = {
             "target_roles": "Target role(s)",
             "preferred_cities": "Preferred UAE city",
