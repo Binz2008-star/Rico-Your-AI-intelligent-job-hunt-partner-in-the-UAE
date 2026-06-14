@@ -291,6 +291,31 @@ class TestCoverLetterCommandRouting:
         _, result = _run(monkeypatch, "make me a cover letter", _CVProfile())
         assert "I do not recognize" not in result.get("message", "")
 
+    # Extended cover-letter patterns (no end-anchor, trailing context, need/want)
+    def test_write_cover_letter_for_role(self, monkeypatch):
+        _, result = _run(monkeypatch, "write a cover letter for Senior HSE Manager", _CVProfile())
+        assert result["type"] == "cover_letter_prompt"
+
+    def test_create_cover_letter_for_company(self, monkeypatch):
+        _, result = _run(monkeypatch, "create a cover letter for ADNOC", _CVProfile())
+        assert result["type"] == "cover_letter_prompt"
+
+    def test_prepare_cover_letter(self, monkeypatch):
+        _, result = _run(monkeypatch, "prepare a cover letter", _CVProfile())
+        assert result["type"] == "cover_letter_prompt"
+
+    def test_i_need_a_cover_letter(self, monkeypatch):
+        _, result = _run(monkeypatch, "I need a cover letter", _CVProfile())
+        assert result["type"] == "cover_letter_prompt"
+
+    def test_i_want_a_cover_letter(self, monkeypatch):
+        _, result = _run(monkeypatch, "I want a cover letter", _CVProfile())
+        assert result["type"] == "cover_letter_prompt"
+
+    def test_i_need_a_cover_letter_no_cv(self, monkeypatch):
+        _, result = _run(monkeypatch, "I need a cover letter", _EmptyProfile())
+        assert result["type"] == "cover_letter_prompt"
+
 
 # ── UAE-wide search routing ────────────────────────────────────────────────────
 
@@ -325,3 +350,26 @@ class TestUAEWideSearchRouting:
         _, result = _run(monkeypatch, "Look all over uae", _EmptyProfile())
         # Must not fall through to AI fallback (type would be 'openai_response' or 'fallback')
         assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    # Extended UAE-wide patterns
+    def test_expand_search_to_uae(self, monkeypatch):
+        _, result = _run(monkeypatch, "expand my search to UAE", _EmptyProfile())
+        assert result["type"] == "clarification"
+        assert result["type"] not in ("openai_response", "hf_response", "fallback_response")
+
+    def test_expand_to_uae_with_cv(self, monkeypatch):
+        _, result = _run(monkeypatch, "expand my search to UAE", _CVProfile())
+        assert result["type"] in ("job_matches", "search_error", "clarification")
+        assert "I do not recognize" not in result.get("message", "")
+
+    def test_anywhere_in_uae_no_cv(self, monkeypatch):
+        _, result = _run(monkeypatch, "find me jobs anywhere in UAE", _EmptyProfile())
+        assert result["type"] == "clarification"
+
+    def test_entire_uae_no_cv(self, monkeypatch):
+        _, result = _run(monkeypatch, "search the entire UAE", _EmptyProfile())
+        assert result["type"] == "clarification"
+
+    def test_uae_wide_no_cv(self, monkeypatch):
+        _, result = _run(monkeypatch, "do a UAE-wide search", _EmptyProfile())
+        assert result["type"] == "clarification"
