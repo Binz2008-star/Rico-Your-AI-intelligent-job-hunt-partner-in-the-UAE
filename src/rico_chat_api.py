@@ -370,6 +370,31 @@ _PROFILE_READBACK_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Ordinal job selection: "tell me more about the second job", "the third one",
+# "job number 2 looks interesting", "option 3" — extracts index from search results.
+_ORDINAL_JOB_RE = re.compile(
+    r"\b(?:the\s+)?(?:job\s+(?:number\s+)?|option\s+|result\s+|#\s*)"
+    r"(?P<n>[2-9]|1[0-9]?|first|second|third|fourth|fifth|last)\b"
+    r"|\b(?:tell\s+me\s+more|more\s+(?:details?|info(?:rmation)?)|describe|about)\s+"
+    r"(?:(?:about|on|for)\s+)?(?:the\s+)?"
+    r"(?P<n2>second|third|fourth|fifth|last|[2-9](?:st|nd|rd|th)?|1[0-9]?(?:st|nd|rd|th)?)\s*"
+    r"(?:job|role|position|opportunity|one|option)?\b"
+    r"|\b(?P<n3>second|third|fourth|fifth|last)\s+(?:one|job|role|option|position)\b"
+    r"|\b(?:الثاني|الثالث|الرابع|الخامس)\b.{0,20}\b(?:وظيفة|دور|خيار)?\b",
+    re.IGNORECASE,
+)
+
+# Salary expectation readback: "what salary did I set?", "what's my expected salary?",
+# "how much am I asking for?", "what's my minimum salary?".
+_SALARY_READBACK_RE = re.compile(
+    r"\bwhat(?:'s|\s+is|\s+was)?\s+my\s+(?:expected?|desired?|minimum|target|saved|set|current)?\s*salary\b"
+    r"|\bwhat\s+salary\s+(?:did\s+I|have\s+I)\s+(?:set|saved?|entered?|entered?|told\s+you)\b"
+    r"|\bhow\s+much\s+(?:am\s+I|do\s+I)\s+(?:asking|expecting|wanting|need(?:ing)?)\b"
+    r"|\bmy\s+salary\s+(?:expectation|target|requirement|preference)\b"
+    r"|\b(?:ما|كم)\b.{0,20}\b(?:راتبي\s+المتوقع|توقعاتي\s+للراتب|الراتب\s+الذي\s+(?:طلبت|حددت))\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -3951,6 +3976,33 @@ class RicoChatAPI:
         # Exception: if the message already contains explicit job context (company/role),
         # skip and let the draft_message intent handler extract and use that context.
         if _COVER_LETTER_COMMAND_RE.search(message) and not self._extract_explicit_draft_job_from_message(message):
+            # If there's a cached job from a recent search, use it as context so the
+            # cover letter is tailored to that specific role instead of asking the user.
+            _cached_job: dict[str, Any] = {}
+            try:
+                _cl_ctx = self._get_recent_context(user_id)
+                _cl_matches = _cl_ctx.get("recent_search_matches") or []
+                if isinstance(_cl_matches, list) and _cl_matches:
+                    _cached_job = _cl_matches[0]
+            except Exception:
+                pass
+            if _cached_job and _cached_job.get("title"):
+                _cl_role    = _cached_job.get("title", "")
+                _cl_company = _cached_job.get("company", "")
+                _cl_desc    = (_cached_job.get("description") or "")[:300]
+                _cl_augmented = (
+                    f"{message}\n\n"
+                    f"[Job context: {_cl_role}"
+                    + (f" at {_cl_company}" if _cl_company else "")
+                    + (f". Description: {_cl_desc}" if _cl_desc else "")
+                    + "]"
+                )
+                return self._answer_with_ai_fallback(
+                    user_id=user_id,
+                    message=_cl_augmented,
+                    profile=profile,
+                    save_user_message=False,
+                )
             _cl_msg = self._cover_letter_clarification_message(profile)
             self._append_chat(user_id, "assistant", _cl_msg)
             return self._finalize(
@@ -4074,12 +4126,35 @@ class RicoChatAPI:
                 profile=profile,
             )
 
-        # ── Job detail inquiry ────────────────────────────────────────────────
-        # "tell me more about that job", "job details", "show me the requirements"
-        # → shows extended fields from the most recent cached job match.
-        if _JOB_DETAIL_RE.search(message):
+        # ── Salary expectation readback ───────────────────────────────────────
+        # "what salary did I set?", "what's my expected salary?" → return saved
+        # salary_expectation_aed from profile; distinct from _SALARY_SET_RE.
+        if _SALARY_READBACK_RE.search(message):
             return self._finalize(
-                self._handle_job_detail(user_id, profile, message),
+                self._handle_salary_readback(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Job detail / ordinal job selection ───────────────────────────────
+        # "tell me more about that job" → first cached match.
+        # "tell me more about the second job", "job number 2", "the third one"
+        # → Nth cached match. Ordinal extraction runs inside this gate so that
+        # "tell me more about the second job" is not blocked by _JOB_DETAIL_RE
+        # returning match[0] before the ordinal gate fires.
+        _jd_detail_match = _JOB_DETAIL_RE.search(message)
+        _jd_ordinal_match = _ORDINAL_JOB_RE.search(message)
+        if _jd_detail_match or _jd_ordinal_match:
+            _ord_hint = ""
+            if _jd_ordinal_match:
+                _ord_hint = (
+                    _jd_ordinal_match.group("n")
+                    or _jd_ordinal_match.group("n2")
+                    or _jd_ordinal_match.group("n3")
+                    or ""
+                ).strip()
+            return self._finalize(
+                self._handle_job_detail(user_id, profile, message, ordinal_hint=_ord_hint),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -7202,8 +7277,28 @@ class RicoChatAPI:
 
     # ── Job detail inquiry ──────────────────────────────────────────────────────
 
-    def _handle_job_detail(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
-        """Show extended details for the most recently cached job match."""
+    @staticmethod
+    def _ordinal_to_index(ordinal: str) -> int:
+        """Convert an ordinal word or digit string to a 0-based list index."""
+        _MAP = {
+            "1": 0, "first": 0,
+            "2": 1, "second": 1,
+            "3": 2, "third": 2,
+            "4": 3, "fourth": 3,
+            "5": 4, "fifth": 4,
+            "الثاني": 1, "الثالث": 2, "الرابع": 3, "الخامس": 4,
+        }
+        key = ordinal.lower().rstrip("stndrdth")
+        return _MAP.get(key, _MAP.get(ordinal.lower(), 0))
+
+    def _handle_job_detail(
+        self,
+        user_id: str,
+        profile: Any,
+        message: str,
+        ordinal_hint: str = "",
+    ) -> dict[str, Any]:
+        """Show extended details for a cached job match (first by default, or by ordinal)."""
         arabic = self._is_arabic_text(message)
         matches: list[dict[str, Any]] = []
         try:
@@ -7228,7 +7323,13 @@ class RicoChatAPI:
             )
             self._append_chat(user_id, "assistant", msg)
             return {"type": "clarification", "message": msg}
-        job = matches[0]
+        idx = 0
+        if ordinal_hint:
+            if ordinal_hint.lower() in ("last",):
+                idx = len(matches) - 1
+            else:
+                idx = min(self._ordinal_to_index(ordinal_hint), len(matches) - 1)
+        job = matches[idx]
         title = job.get("title") or "Unknown role"
         company = job.get("company") or ""
         location = job.get("location") or ""
@@ -7256,6 +7357,38 @@ class RicoChatAPI:
         msg = "\n".join(lines)
         self._append_chat(user_id, "assistant", msg)
         return {"type": "job_detail", "message": msg, "job": job}
+
+    # ── Salary expectation readback ─────────────────────────────────────────────
+
+    def _handle_salary_readback(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        """Return the user's saved salary expectation without modifying it."""
+        arabic = self._is_arabic_text(message)
+        salary = self._profile_value(profile, "salary_expectation_aed")
+        if not salary:
+            msg = (
+                "لم تحدد راتبًا متوقعًا بعد. قل مثلاً: 'راتبي المتوقع 15,000 درهم'."
+                if arabic else
+                "You haven't set a salary expectation yet. "
+                "Say something like: 'My expected salary is AED 15,000/month'."
+            )
+        else:
+            try:
+                formatted = f"AED {int(float(salary)):,}/month"
+            except (ValueError, TypeError):
+                formatted = f"AED {salary}"
+            msg = (
+                f"راتبك المتوقع المحفوظ هو **{formatted}**.\n"
+                "قل 'غيّر راتبي إلى [مبلغ]' إذا أردت تعديله."
+                if arabic else
+                f"Your saved salary expectation is **{formatted}**.\n"
+                "Say 'update my salary to [amount]' to change it."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "salary_readback",
+            "message": msg,
+            "salary_expectation_aed": salary,
+        }
 
     # ── Salary expectation setting ──────────────────────────────────────────────
 
