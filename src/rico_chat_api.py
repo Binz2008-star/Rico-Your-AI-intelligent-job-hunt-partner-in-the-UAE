@@ -1602,6 +1602,8 @@ class RicoChatAPI:
 
         # Provider diagnostics are only logged internally, not exposed to users
         # Admin diagnostics available at /health/ai-provider endpoint
+        from src.rico_env import get_ai_provider as _get_active_provider
+        _active = _get_active_provider()
         return {
             **response,
             "response_source": response.get("response_source", source),
@@ -1610,6 +1612,8 @@ class RicoChatAPI:
             "hf_available": self._bool_attr(agent, "hf_available"),
             "provider_available": self._bool_attr(agent, "provider_available", fallback="available"),
             "openai_model": str(getattr(agent, "model", "") or ""),
+            # active_provider = what RICO_AI_PROVIDER selects; provider = what actually responded
+            "active_provider": _active,
             "profile_context_present": profile is not None,
             # Always a string — null would fail frontend Zod schema validation.
             "jotform_form_id": jotform_form_id or "",
