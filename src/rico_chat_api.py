@@ -918,6 +918,44 @@ _APPLY_FROM_ABROAD_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Employment gap explanation — "how do I explain a career gap?",
+# "I have a gap in my CV", "took time off work", "was out of work for X months".
+_EMPLOYMENT_GAP_RE = re.compile(
+    r"\b(?:how\s+(?:do\s+I|to|should\s+I)\s+(?:explain|address|handle|deal\s+with|justify)\s+(?:a\s+)?(?:career\s+gap|gap\s+in\s+(?:my\s+)?(?:CV|resume|employment|work\s+history)|employment\s+gap|work\s+gap))\b"
+    r"|\b(?:(?:I\s+have|there\s+is)\s+(?:a\s+)?(?:gap|career\s+gap|employment\s+gap)\s+in\s+(?:my\s+)?(?:CV|resume|work\s+history|employment))\b"
+    r"|\b(?:(?:career|employment|work)\s+gap\s+(?:explanation|on\s+(?:my\s+)?(?:CV|resume)|advice|tips?|in\s+interview))\b"
+    r"|\b(?:I\s+(?:took|was\s+(?:out\s+of\s+work|unemployed|on\s+a\s+break|between\s+jobs?))\s+(?:for\s+)?(?:(?:a|an|several|many|few|\d+)\s+)?(?:months?|years?|time))\b"
+    r"|\b(?:between\s+jobs?\s+(?:for|gap)|gap\s+(?:year|years?|months?)\s+(?:in\s+work|between\s+jobs?))\b"
+    r"|\b(?:فجوة\s+(?:في\s+)?(?:السيرة\s+الذاتية|مسيرتي\s+المهنية)|كيف\s+أشرح\s+(?:فترة\s+)?الانقطاع\s+عن\s+العمل)\b",
+    re.IGNORECASE,
+)
+
+# Company research before interview — "how do I research a company?",
+# "what should I know about a company before an interview?".
+_COMPANY_RESEARCH_RE = re.compile(
+    r"\b(?:how\s+(?:do\s+I|to|should\s+I)\s+(?:research|find\s+out\s+about|learn\s+about|investigate)\s+(?:a\s+|the\s+)?company(?:\s+before\s+(?:an?\s+)?interview)?)\b"
+    r"|\b(?:what\s+(?:should\s+I|to)\s+(?:know|find\s+out|research|look\s+up|check)\s+about\s+(?:a\s+|the\s+)?company\s+before\s+(?:(?:a|an|the|my)\s+)?interview)\b"
+    r"|\b(?:how\s+(?:do\s+I|to)\s+(?:prepare|research)\s+(?:for|about)\s+(?:a\s+|the\s+)?company(?:\s+interview)?)\b"
+    r"|\b(?:company\s+research\s+(?:before|for|tips?|guide|checklist))\b"
+    r"|\b(?:what\s+(?:should\s+I|to)\s+(?:know|look\s+up|research)\s+about\s+(?:them|the\s+company|my\s+interviewer)\s+before\s+(?:(?:a|an|the|my)\s+)?interview)\b"
+    r"|\b(?:كيف\s+أبحث\s+عن\s+(?:الشركة|معلومات\s+الشركة)|البحث\s+عن\s+الشركة\s+قبل\s+المقابلة)\b",
+    re.IGNORECASE,
+)
+
+# Freelance permit in UAE — "can I freelance in UAE?", "how to get a freelance visa",
+# "freelance permit UAE", "self-employed in UAE".
+_FREELANCE_UAE_RE = re.compile(
+    r"\b(?:can\s+I\s+(?:work\s+as\s+a?\s+)?freelan(?:ce|cer)\s+in\s+(?:UAE|Dubai|Abu\s+Dhabi|the\s+UAE))\b"
+    r"|\b(?:how\s+(?:to|do\s+I)\s+(?:get|apply\s+for|obtain)\s+(?:a\s+)?(?:freelance\s+(?:permit|visa|licence|license)|UAE\s+freelance))\b"
+    r"|\b(?:freelance\s+(?:permit|visa|licence|license)\s+(?:UAE|Dubai|Abu\s+Dhabi|in\s+UAE))\b"
+    r"|\b(?:(?:UAE|Dubai)\s+freelance\s+(?:permit|visa|licence|license|visa|rules?|options?))\b"
+    r"|\b(?:self[- ]?employed?\s+in\s+(?:UAE|Dubai|the\s+UAE))\b"
+    r"|\b(?:can\s+I\s+be\s+(?:self[- ]?employed?|freelan(?:ce|cer))\s+in\s+(?:UAE|Dubai|the\s+UAE))\b"
+    r"|\b(?:independent\s+contractor\s+(?:in|UAE|Dubai))\b"
+    r"|\b(?:تصريح\s+(?:العمل\s+الحر|المستقل)|العمل\s+الحر\s+في\s+الإمارات)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -5063,6 +5101,33 @@ class RicoChatAPI:
         if _APPLY_FROM_ABROAD_RE.search(message):
             return self._finalize(
                 self._handle_apply_from_abroad(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Employment gap ───────────────────────────────────────────────────
+        # "how do I explain a gap in my CV?", "I have a career gap".
+        if _EMPLOYMENT_GAP_RE.search(message):
+            return self._finalize(
+                self._handle_employment_gap(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Company research ─────────────────────────────────────────────────
+        # "how do I research a company before an interview?".
+        if _COMPANY_RESEARCH_RE.search(message):
+            return self._finalize(
+                self._handle_company_research(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Freelance / self-employment in UAE ───────────────────────────────
+        # "can I freelance in UAE?", "how do I get a freelance permit?".
+        if _FREELANCE_UAE_RE.search(message):
+            return self._finalize(
+                self._handle_freelance_uae(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -11896,6 +11961,153 @@ class RicoChatAPI:
             )
         self._append_chat(user_id, "assistant", msg)
         return {"type": "apply_from_abroad", "message": msg}
+
+    # ── Employment gap ───────────────────────────────────────────────────────────
+
+    def _handle_employment_gap(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## كيف تشرح الفجوة في مسيرتك المهنية\n\n"
+                "**الفجوات في السيرة الذاتية أمر طبيعي — ما يهم هو كيف تُقدّمها.**\n\n"
+                "**أسباب مقبولة شائعة:**\n"
+                "- رعاية أحد أفراد الأسرة أو إجازة أمومة/أبوة\n"
+                "- التطوير الذاتي أو الدراسة أو الشهادات\n"
+                "- الانتقال بين الدول أو ظروف شخصية\n"
+                "- مشاريع حرّة أو عمل تطوعي\n"
+                "- إعادة تقييم المسار المهني بشكل مقصود\n\n"
+                "**كيف تشرحها في المقابلة:**\n"
+                "كن صريحاً وموجزاً — جملة أو جملتان تكفيان:\n"
+                "*«أخذتُ [X أشهر] لـ [السبب]. خلال تلك الفترة [أضف شيئاً إيجابياً "
+                "إن أمكن: دراسة، شهادة، عمل حر]. الآن أنا مستعد تماماً للانطلاق.»*\n\n"
+                "**نصائح للسيرة الذاتية:**\n"
+                "- إذا تجاوزت الفجوة ستة أشهر، أضف سطراً يشرحها\n"
+                "- استخدم تنسيق السيرة الوظيفي (بالمهارات) بدلاً من الزمني إن ساعد ذلك\n"
+                "- أبرز ما اكتسبته خلال الفترة: مهارات، شهادات، مشاريع"
+            )
+        else:
+            msg = (
+                "## How to Explain a Gap in Your CV\n\n"
+                "**Gaps are common — what matters is how you frame them.**\n\n"
+                "**Common, accepted reasons:**\n"
+                "- Family caregiving, parental leave, or personal health\n"
+                "- Studying, upskilling, or gaining certifications\n"
+                "- Relocation or international move\n"
+                "- Freelance, consulting, or voluntary work\n"
+                "- A deliberate career pivot or sabbatical\n\n"
+                "**How to address it in an interview (1-2 sentences):**\n"
+                "*\"I took [X months] to [brief reason]. During that time I [positive activity "
+                "if applicable: studied, freelanced, cared for family]. I'm now fully ready "
+                "to return and contribute.\"*\n\n"
+                "**On your CV:**\n"
+                "- If the gap is over 6 months, add a brief line explaining it\n"
+                "- For UAE roles, framing around family, relocation, or upskilling is "
+                "well understood\n"
+                "- A skills-based (functional) CV format can help de-emphasise timeline gaps\n\n"
+                "**In UAE context:** Employers here are accustomed to gaps caused by visa "
+                "transitions, family obligations, and international moves — be matter-of-fact "
+                "and move on quickly to what you offer now."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "employment_gap", "message": msg}
+
+    # ── Company research ─────────────────────────────────────────────────────────
+
+    def _handle_company_research(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## كيف تبحث عن شركة قبل المقابلة\n\n"
+                "**ما يجب أن تعرفه قبل دخول المقابلة:**\n\n"
+                "**1. أساسيات الشركة**\n"
+                "- ما الذي تفعله الشركة ومن هم عملاؤها الرئيسيون؟\n"
+                "- من هم المنافسون؟ وما موقع الشركة في السوق؟\n"
+                "- حجم الشركة وعدد الموظفين والنطاق الجغرافي\n\n"
+                "**2. مصادر البحث**\n"
+                "- الموقع الرسمي للشركة (خاصةً صفحتَي 'من نحن' والأخبار)\n"
+                "- LinkedIn: الملف التعريفي، الموظفون، آخر المنشورات\n"
+                "- Glassdoor: آراء الموظفين وتقييمات المقابلات\n"
+                "- Google News: أحدث الأخبار والتطورات\n\n"
+                "**3. ما تستخدمه في المقابلة**\n"
+                "- اطرح سؤالاً يظهر معرفتك: «رأيتُ أنكم تتوسّعون في... كيف يؤثر ذلك على هذا الدور؟»\n"
+                "- اربط مهاراتك بأهداف الشركة المُعلنة\n"
+                "- اعرف اسم المدير المباشر إن أمكن (عبر LinkedIn)"
+            )
+        else:
+            msg = (
+                "## How to Research a Company Before an Interview\n\n"
+                "**What to know before you walk in:**\n\n"
+                "**1. Company basics**\n"
+                "- What does the company do and who are their main customers?\n"
+                "- Who are their competitors and where do they sit in the market?\n"
+                "- Size, headcount, presence in UAE/GCC\n\n"
+                "**2. Where to research**\n"
+                "- Company website — especially 'About', 'News', and recent press releases\n"
+                "- LinkedIn company page: growth trends, recent posts, employee count\n"
+                "- Glassdoor: employee reviews and interview experiences\n"
+                "- Google News: any recent coverage, deals, expansions, or problems\n"
+                "- For UAE firms: Gulf Business, Zawya, Arabian Business\n\n"
+                "**3. How to use it in the interview**\n"
+                "- Ask a specific question: *\"I saw you're expanding into Saudi — how does "
+                "that affect this role?\"*\n"
+                "- Link your skills to their stated goals or recent initiatives\n"
+                "- Know your interviewer's name and role (LinkedIn before you go in)\n\n"
+                "**Target: 30 minutes of research minimum.** Knowing the company well sets "
+                "you apart from candidates who didn't bother."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "company_research", "message": msg}
+
+    # ── Freelance / self-employment in UAE ───────────────────────────────────────
+
+    def _handle_freelance_uae(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## العمل الحر في الإمارات\n\n"
+                "**نعم، يمكنك العمل حراً في الإمارات — إليك كيفية البدء:**\n\n"
+                "**الخيار 1: تصريح العمل الحر**\n"
+                "- متاح من مناطق حرة: دبي للإعلام، twofour54 (أبوظبي)، IFZA، مناطق أخرى\n"
+                "- يتيح لك العمل مع عدة عملاء دون كفيل\n"
+                "- التكلفة: تبدأ من ~7,500 درهم سنوياً (تتفاوت حسب المنطقة)\n\n"
+                "**الخيار 2: الترخيص التجاري**\n"
+                "- مناسب إذا كنت ستؤسس نشاطاً تجارياً رسمياً\n"
+                "- يمكن تأسيسه في البر الرئيسي (DED) أو في منطقة حرة\n\n"
+                "**الخيار 3: العقود عبر شركة محلية**\n"
+                "- بعض الشركات توظّف مستقلين بعقود محددة المدة دون الحاجة لترخيصك\n\n"
+                "**ما تحتاجه للتقديم:**\n"
+                "- جواز سفر ساري المفعول\n"
+                "- صورة شخصية\n"
+                "- نموذج الطلب + الرسوم\n"
+                "- بعض المناطق تطلب خطة أعمال أو عينة من محفظتك\n\n"
+                "**نصيحة:** قارن بين المناطق الحرة قبل الاختيار — تتفاوت التكاليف والقطاعات المسموح بها."
+            )
+        else:
+            msg = (
+                "## Freelancing in the UAE\n\n"
+                "**Yes, you can freelance legally in the UAE.** Here's how:\n\n"
+                "**Option 1: Freelance Permit (most popular)**\n"
+                "- Issued by free zones: Dubai Media City, twofour54 (Abu Dhabi), "
+                "IFZA, Meydan, others\n"
+                "- Lets you work with multiple clients without a local sponsor\n"
+                "- Cost: from ~AED 7,500/year (varies by free zone)\n"
+                "- Best for: media, tech, consulting, education, creative sectors\n\n"
+                "**Option 2: Free Zone Trade Licence**\n"
+                "- For setting up a formal business entity\n"
+                "- More flexibility on business activities\n"
+                "- Higher cost but more credibility with corporate clients\n\n"
+                "**Option 3: Contract via a local company**\n"
+                "- Some UAE firms hire contractors directly on short-term contracts "
+                "without requiring your own licence\n\n"
+                "**What you typically need to apply:**\n"
+                "- Valid passport + photo\n"
+                "- Application form + fee payment\n"
+                "- Some free zones require a portfolio or business plan\n\n"
+                "**Tip:** Compare free zones before committing — costs, permitted activities, "
+                "and visa eligibility differ. Meydan and IFZA are often most affordable."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "freelance_uae", "message": msg}
 
     # ── Context-aware help ──────────────────────────────────────────────────────
 
