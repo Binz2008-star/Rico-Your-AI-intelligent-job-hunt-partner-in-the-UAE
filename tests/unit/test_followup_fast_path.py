@@ -1531,3 +1531,216 @@ class TestFollowupTiming:
     def test_followup_template_phrase(self, monkeypatch):
         _, result = _run(monkeypatch, "follow up email template", _CVProfile())
         assert result["type"] == "followup_timing"
+
+
+# ── Industry-based job search ──────────────────────────────────────────────────
+
+class TestIndustrySearch:
+    """Verify _handle_industry_search routing and response types."""
+
+    @pytest.mark.parametrize("phrase", [
+        "find jobs in oil and gas",
+        "find me jobs in construction",
+        "healthcare sector jobs in Abu Dhabi",
+        "finance industry positions",
+        "show me jobs in real estate",
+        "logistics jobs in Dubai",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _INDUSTRY_SEARCH_RE
+        assert _INDUSTRY_SEARCH_RE.search(phrase), (
+            f"_INDUSTRY_SEARCH_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        # Role-based searches — should NOT fire
+        "find HSE jobs",
+        "show me QHSE roles",
+        # Company search
+        "find jobs at ADNOC",
+        # Location without industry
+        "find jobs in Dubai",
+        # Generic
+        "show my applications",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _INDUSTRY_SEARCH_RE
+        assert not _INDUSTRY_SEARCH_RE.search(phrase), (
+            f"_INDUSTRY_SEARCH_RE should NOT match: {phrase!r}"
+        )
+
+    def test_no_results_returns_no_results(self, monkeypatch):
+        import src.rico_chat_api as mod
+        from src.rico_chat_api import RicoChatAPI
+        from src.jsearch_client import FetchResult
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr(mod, "get_profile", lambda uid: _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock(
+            tool_name=None, entities={}, tool_args={}, confirmation_prompt=None, source="keyword"
+        ))
+        monkeypatch.setattr(mod, "upsert_profile", lambda uid, u: _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._store_recent_context = MagicMock()
+        monkeypatch.setattr(api, "_search_jsearch_meta", lambda q, loc="": FetchResult(items=[]))
+
+        result = api._handle_active_user("u1", "find jobs in oil and gas")
+        assert result["type"] == "no_results"
+
+    def test_with_results_returns_job_matches(self, monkeypatch):
+        import src.rico_chat_api as mod
+        from src.rico_chat_api import RicoChatAPI
+        from src.jsearch_client import FetchResult
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr(mod, "get_profile", lambda uid: _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock(
+            tool_name=None, entities={}, tool_args={}, confirmation_prompt=None, source="keyword"
+        ))
+        monkeypatch.setattr(mod, "upsert_profile", lambda uid, u: _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._store_recent_context = MagicMock()
+        monkeypatch.setattr(api, "_search_jsearch_meta", lambda q, loc="": FetchResult(items=[
+            {"title": "HSE Engineer", "company": "ADNOC", "location": "Abu Dhabi", "apply_url": ""},
+        ]))
+
+        result = api._handle_active_user("u1", "find jobs in oil and gas")
+        assert result["type"] == "job_matches"
+        assert result["industry"] == "oil and gas"
+
+
+# ── Job comparison ─────────────────────────────────────────────────────────────
+
+class TestJobComparison:
+    """Verify _handle_job_comparison routing and response types."""
+
+    @pytest.mark.parametrize("phrase", [
+        "compare job 1 and job 2",
+        "compare the first and second job",
+        "which is better job 1 or job 3?",
+        "job 1 vs job 2",
+        "difference between job 1 and 3",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _JOB_COMPARE_RE
+        assert _JOB_COMPARE_RE.search(phrase), (
+            f"_JOB_COMPARE_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        # Ordinal job selection — different gate
+        "tell me more about the second job",
+        "job number 2",
+        # Industry search
+        "find jobs in oil and gas",
+        # Generic
+        "show my applications",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _JOB_COMPARE_RE
+        assert not _JOB_COMPARE_RE.search(phrase), (
+            f"_JOB_COMPARE_RE should NOT match: {phrase!r}"
+        )
+
+    def test_no_cached_results_returns_clarification(self, monkeypatch):
+        _, result = _run(monkeypatch, "compare job 1 and job 2", _CVProfile())
+        assert result["type"] == "clarification"
+
+    def test_with_cached_results_returns_comparison(self, monkeypatch):
+        import src.rico_chat_api as mod
+        from src.rico_chat_api import RicoChatAPI
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr(mod, "get_profile", lambda uid: _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock(
+            tool_name=None, entities={}, tool_args={}, confirmation_prompt=None, source="keyword"
+        ))
+        monkeypatch.setattr(mod, "upsert_profile", lambda uid, u: _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {
+            "recent_search_matches": [
+                {"title": "HSE Manager", "company": "ADNOC", "location": "Abu Dhabi",
+                 "salary_string": "AED 25,000"},
+                {"title": "Safety Engineer", "company": "Petrofac", "location": "Dubai",
+                 "salary_string": "AED 18,000"},
+            ]
+        }
+        api._append_chat = MagicMock()
+
+        result = api._handle_active_user("u1", "compare job 1 and job 2")
+        assert result["type"] == "job_comparison"
+        assert result["job_a_index"] == 0
+        assert result["job_b_index"] == 1
+        assert "ADNOC" in result["message"]
+        assert "Petrofac" in result["message"]
+
+
+# ── Search result count ────────────────────────────────────────────────────────
+
+class TestResultCount:
+    """Verify _handle_result_count routing and response types."""
+
+    @pytest.mark.parametrize("phrase", [
+        "how many jobs did you find?",
+        "how many results were there?",
+        "how many matches did you get?",
+        "total number of jobs",
+        "how many vacancies are there?",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _RESULT_COUNT_RE
+        assert _RESULT_COUNT_RE.search(phrase), (
+            f"_RESULT_COUNT_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        # Application count — different gate
+        "how many applications do I have?",
+        # Generic
+        "show my applications",
+        "find me jobs",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _RESULT_COUNT_RE
+        assert not _RESULT_COUNT_RE.search(phrase), (
+            f"_RESULT_COUNT_RE should NOT match: {phrase!r}"
+        )
+
+    def test_no_cache_returns_result_count(self, monkeypatch):
+        _, result = _run(monkeypatch, "how many jobs did you find?", _CVProfile())
+        assert result["type"] == "result_count"
+        assert result["count"] == 0
+
+    def test_with_cached_results_returns_correct_count(self, monkeypatch):
+        import src.rico_chat_api as mod
+        from src.rico_chat_api import RicoChatAPI
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr(mod, "get_profile", lambda uid: _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock(
+            tool_name=None, entities={}, tool_args={}, confirmation_prompt=None, source="keyword"
+        ))
+        monkeypatch.setattr(mod, "upsert_profile", lambda uid, u: _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {
+            "recent_search_matches": [
+                {"title": f"Role {i}"} for i in range(7)
+            ],
+            "recent_search_role": "HSE Manager",
+        }
+        api._append_chat = MagicMock()
+
+        result = api._handle_active_user("u1", "how many jobs did you find?")
+        assert result["type"] == "result_count"
+        assert result["count"] == 7
+        assert "HSE Manager" in result["message"]
