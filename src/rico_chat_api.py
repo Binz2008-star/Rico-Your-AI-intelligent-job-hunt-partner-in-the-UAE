@@ -5744,12 +5744,31 @@ class RicoChatAPI:
                 prof_dict = profile_to_dict(ctx.profile) if ctx.profile else {}
             except Exception:
                 prof_dict = profile_to_dict(profile) if profile else {}
+
+            # CV-specific request ("my cv", "show my cv", "my resume") must
+            # mention CV/upload status — not look like a generic profile dump.
+            _msg_lower = (message or "").strip().lower()
+            _is_cv_request = bool(re.search(r"\bcv\b|\bresume\b", _msg_lower))
+            if _is_cv_request:
+                if has_cv:
+                    _summary_msg = (
+                        "Your CV is on file. Here is what Rico has on your profile — "
+                        "skills, experience, and target roles extracted from your upload."
+                    )
+                else:
+                    _summary_msg = (
+                        "No CV uploaded yet. Use the **Upload CV** button on this page "
+                        "and Rico will parse it automatically. Here is your profile so far."
+                    )
+            else:
+                _summary_msg = "Here is your current profile."
+
             response = {
                 "type": "profile_summary",
-                "message": "Here is your current profile.",
+                "message": _summary_msg,
                 "profile": prof_dict,
             }
-            self._append_chat(user_id, "assistant", response["message"])
+            self._append_chat(user_id, "assistant", _summary_msg)
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # Profile role suggestions - deterministic fast path based on CV skills/certifications
