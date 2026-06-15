@@ -2429,7 +2429,8 @@ class TestLinkedInNetworking:
         assert result.get("is_profile_optimize") is True
 
     def test_general_networking_no_flags(self, monkeypatch):
-        _, result = _run(monkeypatch, "networking tips in UAE", _CVProfile())
+        # "networking tips in UAE" now routes to the dedicated UAE networking handler
+        _, result = _run(monkeypatch, "how to use LinkedIn for job search", _CVProfile())
         assert result["type"] == "linkedin_networking"
         assert result.get("is_message_recruiter") is False
         assert result.get("is_cold_outreach") is False
@@ -2440,7 +2441,7 @@ class TestLinkedInNetworking:
         assert len(result["message"]) > 50
 
     def test_empty_profile_still_works(self, monkeypatch):
-        _, result = _run(monkeypatch, "networking tips in UAE", _EmptyProfile())
+        _, result = _run(monkeypatch, "LinkedIn profile tips", _EmptyProfile())
         assert result["type"] == "linkedin_networking"
 
 
@@ -6500,3 +6501,284 @@ class TestJobScam:
     def test_empty_profile_still_works(self, monkeypatch):
         result = self._run(monkeypatch, "fake job offer UAE", profile=_EmptyProfile())
         assert result["type"] == "job_scam"
+
+
+# ── Salary Certificate / Employment Letter ────────────────────────────────────────
+
+
+class TestSalaryCertificate:
+    """Tests for _SALARY_CERTIFICATE_RE and _handle_salary_certificate."""
+
+    _REGEX_CASES_MATCH = [
+        "how do I get a salary certificate?",
+        "how do I obtain a salary certificate?",
+        "how can I request an employment letter?",
+        "how do I ask for a NOC letter?",
+        "how do I get a no objection certificate?",
+        "salary certificate UAE",
+        "salary certificate from employer",
+        "employment letter UAE",
+        "NOC letter UAE",
+        "no objection certificate UAE",
+        "salary letter for bank UAE",
+        "salary certificate for visa",
+        "my bank needs a salary certificate",
+        "my bank requires an employment letter",
+        "my embassy asked for a salary certificate",
+        "my landlord needs proof of employment",
+        "how to get a NOC from my employer?",
+        "can I get a NOC to change jobs?",
+        "what is a NOC letter in UAE?",
+        "what is a salary certificate?",
+        "شهادة الراتب",
+        "خطاب العمل الإمارات",
+        "خطاب عدم الممانعة",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "how do I negotiate my salary?",
+        "annual leave entitlement UAE",
+        "show me jobs in Dubai",
+        "what is end of service gratuity?",
+        "how do I ask for a promotion?",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _SALARY_CERTIFICATE_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _SALARY_CERTIFICATE_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _SALARY_CERTIFICATE_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _SALARY_CERTIFICATE_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_salary_cert_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I get a salary certificate?")
+        assert result["type"] == "salary_certificate"
+
+    def test_employment_letter_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "my bank needs an employment letter")
+        assert result["type"] == "salary_certificate"
+
+    def test_noc_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I get a NOC letter?")
+        assert result["type"] == "salary_certificate"
+
+    def test_message_mentions_hr(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I get a salary certificate?")
+        msg = result["message"].lower()
+        assert "hr" in msg or "human resources" in msg or "موارد" in msg
+
+    def test_message_mentions_letterhead(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I get an employment letter?")
+        msg = result["message"].lower()
+        assert "letterhead" in msg or "signed" in msg or "رسمية" in msg or "معتمد" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "salary certificate UAE")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "salary certificate UAE", profile=_EmptyProfile())
+        assert result["type"] == "salary_certificate"
+
+
+# ── Networking in UAE ─────────────────────────────────────────────────────────────
+
+
+class TestNetworkingUAE:
+    """Tests for _NETWORKING_UAE_RE and _handle_networking_uae."""
+
+    _REGEX_CASES_MATCH = [
+        "how do I network in Dubai?",
+        "how do I network in UAE?",
+        "how can I network in Abu Dhabi?",
+        "how do I build my network in UAE?",
+        "how do I meet professionals in UAE?",
+        "networking in UAE",
+        "networking in Dubai",
+        "networking events UAE",
+        "networking events Dubai",
+        "networking tips UAE",
+        "networking advice Dubai",
+        "UAE networking events",
+        "Dubai networking opportunities",
+        "how do I find jobs through my connections?",
+        "how do I find jobs through referrals?",
+        "how do I find jobs via my network?",
+        "how important is networking in UAE?",
+        "how useful are connections for UAE jobs?",
+        "التواصل المهني في الإمارات",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "show me jobs in Dubai",
+        "what is end of service gratuity?",
+        "how do I ask for a promotion?",
+        "sick leave policy UAE",
+        "how do I get a salary certificate?",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _NETWORKING_UAE_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _NETWORKING_UAE_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _NETWORKING_UAE_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _NETWORKING_UAE_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_network_dubai_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I network in Dubai?")
+        assert result["type"] == "networking_uae"
+
+    def test_networking_events_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "networking events UAE")
+        assert result["type"] == "networking_uae"
+
+    def test_referrals_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I find jobs through referrals?")
+        assert result["type"] == "networking_uae"
+
+    def test_message_mentions_linkedin(self, monkeypatch):
+        result = self._run(monkeypatch, "networking in UAE")
+        msg = result["message"].lower()
+        assert "linkedin" in msg
+
+    def test_message_mentions_events(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I network in Dubai?")
+        msg = result["message"].lower()
+        assert "event" in msg or "فعالية" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "networking in UAE")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "networking tips UAE", profile=_EmptyProfile())
+        assert result["type"] == "networking_uae"
+
+
+# ── Asking for a Promotion ────────────────────────────────────────────────────────
+
+
+class TestPromotionUAE:
+    """Tests for _PROMOTION_UAE_RE and _handle_promotion_uae."""
+
+    _REGEX_CASES_MATCH = [
+        "how do I ask for a promotion?",
+        "how should I ask for a promotion?",
+        "how can I get a promotion?",
+        "how do I request a promotion?",
+        "how do I earn a promotion?",
+        "when should I ask for a promotion?",
+        "when is the right time to ask for a promotion?",
+        "promotion tips UAE",
+        "promotion advice UAE",
+        "promotion strategy UAE",
+        "promotion how to ask",
+        "how do I get promoted?",
+        "how should I get promoted?",
+        "how do I advance in my career?",
+        "how do I move up at work?",
+        "I want a promotion",
+        "I deserve a promotion",
+        "do I deserve a promotion?",
+        "what does it take to get promoted?",
+        "what do I need to do to get promoted?",
+        "كيف أطلب ترقية",
+        "نصائح للحصول على الترقية",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "show me jobs in Dubai",
+        "how do I negotiate my salary?",
+        "sick leave policy UAE",
+        "annual leave entitlement UAE",
+        "how do I network in UAE?",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _PROMOTION_UAE_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _PROMOTION_UAE_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _PROMOTION_UAE_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _PROMOTION_UAE_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_ask_promotion_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I ask for a promotion?")
+        assert result["type"] == "promotion_uae"
+
+    def test_get_promoted_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I get promoted?")
+        assert result["type"] == "promotion_uae"
+
+    def test_want_promotion_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "I want a promotion")
+        assert result["type"] == "promotion_uae"
+
+    def test_timing_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "when should I ask for a promotion?")
+        assert result["type"] == "promotion_uae"
+
+    def test_message_mentions_achievements(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I ask for a promotion?")
+        msg = result["message"].lower()
+        assert "achiev" in msg or "result" in msg or "إنجاز" in msg
+
+    def test_message_mentions_performance_review(self, monkeypatch):
+        result = self._run(monkeypatch, "when is the right time to ask for a promotion?")
+        msg = result["message"].lower()
+        assert "review" in msg or "performance" in msg or "تقييم" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "promotion tips UAE")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I get promoted?", profile=_EmptyProfile())
+        assert result["type"] == "promotion_uae"

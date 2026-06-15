@@ -1241,6 +1241,44 @@ _JOB_SCAM_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Salary certificate / employment letter in UAE — "how do I get a salary certificate?",
+# "my bank needs an employment letter", "what is a NOC letter?".
+_SALARY_CERTIFICATE_RE = re.compile(
+    r"\b(?:how\s+(?:do\s+I|to|can\s+I)\s+(?:get|obtain|request|ask\s+for)\s+(?:a\s+|an\s+)?(?:salary\s+certificate|employment\s+(?:letter|certificate)|NOC\s+letter|no\s+objection\s+certificate|salary\s+letter))\b"
+    r"|\b(?:(?:salary\s+certificate|employment\s+letter|NOC\s+letter|no\s+objection\s+certificate|salary\s+letter)\s+(?:UAE|Dubai|from\s+employer|request|for\s+(?:bank|visa|loan|mortgage)))\b"
+    r"|\b(?:(?:my\s+)?(?:bank|embassy|landlord)\s+(?:needs?|requires?|asked?\s+for|is\s+asking\s+for)\s+(?:a\s+|an\s+)?(?:salary\s+certificate|employment\s+letter|NOC|proof\s+of\s+employment|salary\s+proof))\b"
+    r"|\b(?:(?:how\s+to|can\s+I)\s+(?:get|request|ask\s+for)\s+(?:a\s+|an\s+)?(?:NOC|no\s+objection\s+certificate)\s+(?:from\s+my\s+employer|UAE|to\s+(?:change\s+jobs?|leave\s+the\s+company)))\b"
+    r"|\b(?:what\s+is\s+(?:a\s+|an\s+)?(?:NOC\s+letter|no\s+objection\s+certificate|salary\s+certificate|employment\s+letter)(?:\s+in\s+(?:UAE|Dubai))?)\b"
+    r"|\b(?:شهادة\s+الراتب|خطاب\s+(?:العمل|الراتب|عدم\s+الممانعة|التوظيف)(?:\s+(?:الإمارات|من\s+صاحب\s+العمل))?)\b",
+    re.IGNORECASE,
+)
+
+# Networking in UAE — "how do I network in Dubai?", "how do I find jobs through connections?",
+# "are there networking events in UAE?".
+_NETWORKING_UAE_RE = re.compile(
+    r"\b(?:how\s+(?:do\s+I|to|can\s+I)\s+(?:network|build\s+(?:my\s+)?(?:network|connections?)|meet\s+(?:professionals?|people))\s+(?:in\s+(?:UAE|Dubai|Abu\s+Dhabi)|for\s+(?:UAE|Dubai)\s+jobs?))\b"
+    r"|\b(?:networking\s+(?:in\s+(?:UAE|Dubai)|UAE|Dubai|events?|tips?|advice|how\s+to|opportunities?))\b"
+    r"|\b(?:(?:UAE|Dubai)\s+networking\s+(?:events?|tips?|advice|how\s+to|opportunities?|groups?|communities?))\b"
+    r"|\b(?:how\s+(?:do\s+I|to|can\s+I)\s+find\s+jobs?\s+(?:through|via|using)\s+(?:my\s+)?(?:connections?|network|referrals?|contacts?))\b"
+    r"|\b(?:(?:professional\s+)?networking\s+events?\s+(?:in\s+(?:UAE|Dubai)|UAE|Dubai))\b"
+    r"|\b(?:how\s+(?:important|useful|effective)\s+(?:is|are)\s+(?:networking|referrals?|connections?)\s+(?:in|for)\s+(?:UAE|Dubai)(?:\s+jobs?)?)\b"
+    r"|\b(?:التواصل\s+المهني\s+(?:في\s+الإمارات|الإمارات)|كيف\s+أبني\s+شبكة\s+علاقات\s+(?:في\s+الإمارات)?)\b",
+    re.IGNORECASE,
+)
+
+# Asking for a promotion in UAE — "how do I ask for a promotion?",
+# "when is the right time to ask for a raise?", "promotion advice UAE".
+_PROMOTION_UAE_RE = re.compile(
+    r"\b(?:how\s+(?:do\s+I|to|should\s+I|can\s+I)\s+(?:ask\s+for|request|get|earn|go\s+for)\s+(?:a\s+)?promotion)\b"
+    r"|\b(?:when\s+(?:should\s+I|is\s+(?:the\s+)?(?:right\s+)?time\s+to)\s+ask\s+for\s+(?:a\s+)?promotion)\b"
+    r"|\b(?:promotion\s+(?:tips?|advice|strategy|UAE|Dubai|how\s+to\s+(?:get|ask|earn)|timing|request))\b"
+    r"|\b(?:how\s+(?:do\s+I|to|should\s+I)\s+(?:get\s+(?:promoted|a\s+promotion)|advance\s+(?:in|at)\s+(?:work|my\s+career|my\s+job)|move\s+up\s+(?:in|at)\s+(?:work|my\s+career)))\b"
+    r"|\b(?:(?:I\s+(?:want|deserve)|do\s+I\s+(?:deserve|qualify\s+for))\s+(?:a\s+)?promotion)\b"
+    r"|\b(?:what\s+(?:do\s+I\s+need\s+to\s+do|does\s+it\s+take)\s+to\s+(?:get\s+promoted|earn\s+(?:a\s+)?promotion))\b"
+    r"|\b(?:كيف\s+(?:أطلب|أحصل\s+على)\s+(?:ترقية|ترقيتي)|نصائح\s+(?:للحصول\s+على\s+)?الترقية)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -5218,7 +5256,7 @@ class RicoChatAPI:
 
         # ── LinkedIn / networking advice ──────────────────────────────────────
         # "how to use LinkedIn?", "should I message the recruiter?".
-        if _LINKEDIN_NETWORKING_RE.search(message):
+        if _LINKEDIN_NETWORKING_RE.search(message) and not _NETWORKING_UAE_RE.search(message):
             return self._finalize(
                 self._handle_linkedin_networking(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5602,6 +5640,33 @@ class RicoChatAPI:
         if _JOB_SCAM_RE.search(message):
             return self._finalize(
                 self._handle_job_scam(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Salary certificate / employment letter ────────────────────────────
+        # "how do I get a salary certificate?", "my bank needs an employment letter".
+        if _SALARY_CERTIFICATE_RE.search(message):
+            return self._finalize(
+                self._handle_salary_certificate(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Networking in UAE ─────────────────────────────────────────────────
+        # "how do I network in Dubai?", "networking events UAE".
+        if _NETWORKING_UAE_RE.search(message):
+            return self._finalize(
+                self._handle_networking_uae(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Asking for a promotion ────────────────────────────────────────────
+        # "how do I ask for a promotion?", "when should I ask for a raise?".
+        if _PROMOTION_UAE_RE.search(message):
+            return self._finalize(
+                self._handle_promotion_uae(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -13539,6 +13604,147 @@ class RicoChatAPI:
             )
         self._append_chat(user_id, "assistant", msg)
         return {"type": "job_scam", "message": msg}
+
+    # ── Salary certificate / employment letter ────────────────────────────────────
+
+    def _handle_salary_certificate(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## شهادة الراتب وخطاب العمل في الإمارات\n\n"
+                "**ما هي شهادة الراتب؟**\n"
+                "- وثيقة رسمية تُصدرها الشركة تُثبت مسمّاك الوظيفي وراتبك ووضعك الوظيفي\n"
+                "- مطلوبة للبنوك (فتح حساب، قرض، بطاقة ائتمان)، السفارات، الملاك\n\n"
+                "**كيف تطلبها؟**\n"
+                "1. تواصل مع قسم الموارد البشرية أو المحاسبة\n"
+                "2. وضّح الغرض (بنك، سفارة...) لأن الصياغة قد تختلف\n"
+                "3. يستغرق الإصدار عادةً 1–3 أيام عمل\n\n"
+                "**ما هو خطاب عدم الممانعة (NOC)؟**\n"
+                "- وثيقة تُفيد بأن صاحب العمل لا يعترض على نشاط معين (زيارة، دراسة، عمل آخر)\n"
+                "- مطلوبة أحياناً لتغيير الكفيل أو الحصول على تصاريح معينة\n\n"
+                "**نصيحة:** بعض الشركات تطلب فترة عمل أدنى (3–6 أشهر) قبل إصدار خطاب الراتب — تحقق من سياستهم."
+            )
+        else:
+            msg = (
+                "## Salary Certificate & Employment Letter in UAE\n\n"
+                "**What is a salary certificate?**\n"
+                "- An official letter from your employer confirming your job title, "
+                "salary, and employment status\n"
+                "- Required by banks (account opening, loans, credit cards), embassies, "
+                "and landlords\n\n"
+                "**How to request one:**\n"
+                "1. Contact your HR or accounts department\n"
+                "2. State the purpose (bank, embassy, etc.) — the wording may differ\n"
+                "3. Allow **1–3 working days** for processing\n"
+                "4. Ensure it's printed on company letterhead and signed by an authorised person\n\n"
+                "**What is a NOC (No Objection Certificate)?**\n"
+                "- A letter from your employer stating they have no objection to "
+                "a specific activity (travel, study, second employment, sponsorship transfer)\n"
+                "- Sometimes required when switching sponsors or obtaining certain permits\n\n"
+                "**What is an employment letter?**\n"
+                "- Similar to a salary certificate but may not state the exact salary amount\n"
+                "- Used for visa applications, residency, or embassy submissions\n\n"
+                "**Tip:** Some companies have a minimum tenure policy (e.g., 3–6 months) "
+                "before they issue salary letters — check with HR."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "salary_certificate", "message": msg}
+
+    # ── Networking in UAE ─────────────────────────────────────────────────────────
+
+    def _handle_networking_uae(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## كيف تبني شبكة علاقاتك المهنية في الإمارات؟\n\n"
+                "**لماذا التواصل مهم جداً في الإمارات؟**\n"
+                "- تُشير الدراسات إلى أن 60–70% من الوظائف تُملأ عبر العلاقات الشخصية في الإمارات\n"
+                "- الثقة الشخصية تتقدم على الكفاءة في كثير من بيئات العمل الخليجية\n\n"
+                "**كيف تبدأ؟**\n"
+                "1. **LinkedIn:** حافظ على حضور قوي وتفاعل مع منشورات محترفين في مجالك\n"
+                "2. **فعاليات التواصل:** ابحث عن Meetup، Eventbrite، Networking events في دبي/أبوظبي\n"
+                "3. **غرف التجارة:** Dubai Chamber، Abu Dhabi Chamber تستضيف فعاليات للأعضاء\n"
+                "4. **المجموعات المهنية:** مجموعات LinkedIn وWhatsApp المتخصصة في قطاعك\n"
+                "5. **مقابلات الاستكشاف (Coffee chats):** اطلب محادثة قصيرة مع محترفين تحترمهم\n\n"
+                "**نصيحة:** في الإمارات، القطاع صغير والسمعة تنتشر بسرعة — كن محترفاً ومتابعاً دائماً."
+            )
+        else:
+            msg = (
+                "## Networking in UAE: How to Build Your Professional Circle\n\n"
+                "**Why networking matters more in UAE:**\n"
+                "- Studies suggest 60–70% of UAE jobs are filled through connections\n"
+                "- Personal trust and referrals carry significant weight in Gulf hiring culture\n\n"
+                "**How to network effectively:**\n"
+                "1. **LinkedIn** — optimise your profile, post content, connect with "
+                "professionals in your sector, comment thoughtfully\n"
+                "2. **In-person events** — search Meetup.com, Eventbrite, and LinkedIn "
+                "Events for Dubai/Abu Dhabi networking events in your field\n"
+                "3. **Industry associations** — Dubai Chamber of Commerce, "
+                "industry councils, and professional bodies host regular events\n"
+                "4. **WhatsApp and LinkedIn groups** — many UAE industry communities "
+                "share jobs and insights in private groups\n"
+                "5. **Coffee chats** — message someone you respect and ask for a 20-minute chat; "
+                "most professionals in UAE are open to it\n"
+                "6. **Alumni networks** — universities and business schools have active UAE alumni chapters\n\n"
+                "**UAE-specific tips:**\n"
+                "- Business cards are still widely exchanged — have one ready\n"
+                "- Follow up within 24 hours after meeting someone\n"
+                "- UAE is a small professional world — reputation travels fast\n\n"
+                "**Tip:** Ramadan networking events are surprisingly common and valuable — "
+                "iftars are a key social occasion for professionals in the UAE."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "networking_uae", "message": msg}
+
+    # ── Asking for a promotion ────────────────────────────────────────────────────
+
+    def _handle_promotion_uae(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## كيف تطلب الترقية في عملك بالإمارات؟\n\n"
+                "**متى يكون التوقيت مناسباً؟**\n"
+                "- بعد إنجاز مشروع ناجح أو تحقيق نتيجة ملموسة\n"
+                "- قبل أو أثناء تقييم الأداء السنوي\n"
+                "- بعد توليك مهام أو مسؤوليات إضافية بشكل غير رسمي\n\n"
+                "**كيف تحضّر لطلب الترقية؟**\n"
+                "1. **وثّق إنجازاتك:** أرقام، مشاريع، توفير للتكاليف، تأثير على الفريق\n"
+                "2. **ابحث في السوق:** ما هو الراتب المعتاد لمنصب أعلى في قطاعك وشركتك؟\n"
+                "3. **اطلب اجتماعاً خاصاً:** لا تطلب الترقية في اجتماع عام\n"
+                "4. **ركّز على القيمة التي ستضيفها** في المنصب الأعلى، لا على احتياجاتك الشخصية\n\n"
+                "**ماذا تقول؟**\n"
+                "«أودّ مناقشة مساري الوظيفي. خلال الـ 12 شهراً الماضية حققت [X]، وأرى أنني مستعد "
+                "لتحمّل مسؤولية [Y]. أودّ معرفة رأيك في إمكانية الترقية.»\n\n"
+                "**نصيحة:** إذا رُفض طلبك، اسأل عن الخطوات المحددة لتحقيق الترقية مستقبلاً."
+            )
+        else:
+            msg = (
+                "## How to Ask for a Promotion in UAE\n\n"
+                "**When is the right time?**\n"
+                "- After delivering a significant project or measurable result\n"
+                "- During or ahead of your annual performance review\n"
+                "- After you've been informally doing work above your current level\n\n"
+                "**How to prepare:**\n"
+                "1. **Document your achievements** — numbers, projects delivered, "
+                "cost savings, revenue generated, team impact\n"
+                "2. **Research the market** — know what the next level pays in your "
+                "sector so you can frame a salary expectation if asked\n"
+                "3. **Request a private meeting** — never ask during a group meeting or casually\n"
+                "4. **Frame it around value, not personal need** — 'I believe I'm ready "
+                "to contribute more as [title]' beats 'I need more money'\n\n"
+                "**What to say:**\n"
+                "> *'I'd like to discuss my career progression. Over the past year I've "
+                "[achievements]. I'd love to understand what a path to [next role] "
+                "looks like, and whether you see me as ready.'*\n\n"
+                "**If the answer is no:**\n"
+                "- Ask: 'What specific milestones would make me ready?' "
+                "— this turns a rejection into a roadmap\n"
+                "- Set a follow-up date (3–6 months)\n\n"
+                "**UAE context:** Promotions in UAE often happen at year-end or during "
+                "budget cycles (typically Q4 or Q1). Build the case early."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "promotion_uae", "message": msg}
 
     # ── Context-aware help ──────────────────────────────────────────────────────
 
