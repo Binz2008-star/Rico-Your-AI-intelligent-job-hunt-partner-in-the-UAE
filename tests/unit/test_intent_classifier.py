@@ -172,6 +172,11 @@ def test_pipeline_phrases_route_to_tracking(phrase):
     "menu",
     "options",
     "what can you do",
+    "what can you do for me",
+    "what can you help me with",
+    "how can you help",
+    "how can you help me",
+    "what do you do",
     "commands",
     "start",
 ])

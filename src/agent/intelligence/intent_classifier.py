@@ -328,6 +328,10 @@ _HELP_PHRASES = frozenset([
     "help", "menu", "options", "what can you do", "commands",
     "start", "get started", "what's next", "whats next", "what next",
     "what now", "show options", "show menu", "next steps",
+    # Natural variants asking Rico to describe its capabilities
+    "what can you do for me", "what can you help me with",
+    "what do you do", "how can you help", "how can you help me",
+    "what can rico do", "what can rico do for me",
     # Arabic "what now / what's the solution"
     "مالحل", "ما الحل", "مالحل الان", "مالحل الآن",
 ])
