@@ -4884,3 +4884,259 @@ class TestWorkVisaProcess:
     def test_empty_profile_still_works(self, monkeypatch):
         result = self._run(monkeypatch, "UAE work visa requirements", profile=_EmptyProfile())
         assert result["type"] == "work_visa_process"
+
+
+# ── Arabic Language Requirement ─────────────────────────────────────────────────
+
+
+class TestArabicRequirement:
+    """Tests for _ARABIC_REQUIREMENT_RE and _handle_arabic_requirement."""
+
+    _REGEX_CASES_MATCH = [
+        "do I need to speak Arabic?",
+        "do I have to speak Arabic to work in UAE?",
+        "will not speaking Arabic hurt my chances?",
+        "does speaking Arabic matter in UAE?",
+        "how important is Arabic in UAE jobs?",
+        "how much Arabic do I need?",
+        "are Arabic skills required in UAE?",
+        "is Arabic language necessary for jobs in Dubai?",
+        "can I work in UAE without Arabic?",
+        "can I get a job in Dubai if I don't speak Arabic?",
+        "Arabic speaking required UAE",
+        "هل أحتاج إلى تعلم العربية",
+        "هل اللغة العربية ضرورية",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "show me Arabic companies in UAE",
+        "how do I write a cover letter?",
+        "find HSE jobs in Dubai",
+        "how do I negotiate salary?",
+        "what is gratuity?",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _ARABIC_REQUIREMENT_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _ARABIC_REQUIREMENT_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _ARABIC_REQUIREMENT_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _ARABIC_REQUIREMENT_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_arabic_requirement(self, monkeypatch):
+        result = self._run(monkeypatch, "do I need to speak Arabic?")
+        assert result["type"] == "arabic_requirement"
+
+    def test_without_arabic_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "can I work in UAE without Arabic?")
+        assert result["type"] == "arabic_requirement"
+
+    def test_importance_question_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how important is Arabic in UAE jobs?")
+        assert result["type"] == "arabic_requirement"
+
+    def test_message_mentions_english(self, monkeypatch):
+        result = self._run(monkeypatch, "do I need to speak Arabic?")
+        msg = result["message"].lower()
+        assert "english" in msg or "إنجليزية" in msg
+
+    def test_message_reassures_not_required(self, monkeypatch):
+        result = self._run(monkeypatch, "do I need to speak Arabic?")
+        msg = result["message"].lower()
+        assert "no" in msg or "not" in msg or "لا" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "do I need to speak Arabic?")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "are Arabic skills required in UAE?", profile=_EmptyProfile())
+        assert result["type"] == "arabic_requirement"
+
+
+# ── Background Check ────────────────────────────────────────────────────────────
+
+
+class TestBackgroundCheck:
+    """Tests for _BACKGROUND_CHECK_RE and _handle_background_check."""
+
+    _REGEX_CASES_MATCH = [
+        "will they do a background check?",
+        "do employers run a background check in UAE?",
+        "will the company conduct background screening?",
+        "background check UAE",
+        "background verification process",
+        "do I need a police clearance?",
+        "do I need a police clearance certificate for a job in UAE?",
+        "police clearance UAE",
+        "police good conduct certificate for job",
+        "what do they check in a background check?",
+        "what do they verify in employment screening?",
+        "شهادة حسن السيرة",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "how do I explain a gap in my CV?",
+        "show me jobs in Dubai",
+        "how do I prepare for an interview?",
+        "I need a police escort",       # no match
+        "background music for presentations",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _BACKGROUND_CHECK_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _BACKGROUND_CHECK_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _BACKGROUND_CHECK_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _BACKGROUND_CHECK_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_background_check(self, monkeypatch):
+        result = self._run(monkeypatch, "will they do a background check?")
+        assert result["type"] == "background_check"
+
+    def test_police_clearance_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "do I need a police clearance?")
+        assert result["type"] == "background_check"
+
+    def test_background_uae_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "background check UAE")
+        assert result["type"] == "background_check"
+
+    def test_message_mentions_cv_or_verification(self, monkeypatch):
+        result = self._run(monkeypatch, "will they do a background check?")
+        msg = result["message"].lower()
+        assert "cv" in msg or "verif" in msg or "reference" in msg or "السيرة" in msg
+
+    def test_message_mentions_police_or_clearance(self, monkeypatch):
+        result = self._run(monkeypatch, "will they do a background check?")
+        msg = result["message"].lower()
+        assert "police" in msg or "clearance" in msg or "conduct" in msg or "شهادة" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "will they do a background check?")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "background verification process", profile=_EmptyProfile())
+        assert result["type"] == "background_check"
+
+
+# ── Free Zone vs Mainland ───────────────────────────────────────────────────────
+
+
+class TestFreeZoneMainland:
+    """Tests for _FREE_ZONE_MAINLAND_RE and _handle_free_zone_mainland."""
+
+    _REGEX_CASES_MATCH = [
+        "what is the difference between free zone and mainland?",
+        "what's the difference between mainland and a free zone?",
+        "should I work in a free zone or mainland?",
+        "is it better to work in a free zone or mainland?",
+        "free zone vs mainland job",
+        "free zone vs mainland employment",
+        "free zone benefits UAE",
+        "free zone advantages",
+        "mainland UAE employment rules",
+        "is a free zone job different?",
+        "are free zone companies different?",
+        "can I work outside a free zone?",
+        "الفرق بين المنطقة الحرة والبر الرئيسي",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "can I freelance in UAE?",       # freelance handler
+        "how do I get a UAE work visa?",
+        "find jobs in DIFC",
+        "how do I negotiate salary?",
+        "what is end of service gratuity?",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _FREE_ZONE_MAINLAND_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _FREE_ZONE_MAINLAND_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _FREE_ZONE_MAINLAND_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _FREE_ZONE_MAINLAND_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_free_zone_mainland(self, monkeypatch):
+        result = self._run(monkeypatch, "what is the difference between free zone and mainland?")
+        assert result["type"] == "free_zone_mainland"
+
+    def test_vs_question_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "free zone vs mainland job")
+        assert result["type"] == "free_zone_mainland"
+
+    def test_should_i_work_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "should I work in a free zone or mainland?")
+        assert result["type"] == "free_zone_mainland"
+
+    def test_message_mentions_free_zone(self, monkeypatch):
+        result = self._run(monkeypatch, "what is the difference between free zone and mainland?")
+        msg = result["message"].lower()
+        assert "free zone" in msg or "منطقة حرة" in msg
+
+    def test_message_mentions_mainland(self, monkeypatch):
+        result = self._run(monkeypatch, "what is the difference between free zone and mainland?")
+        msg = result["message"].lower()
+        assert "mainland" in msg or "البر الرئيسي" in msg
+
+    def test_message_mentions_visa_or_sponsor(self, monkeypatch):
+        result = self._run(monkeypatch, "what is the difference between free zone and mainland?")
+        msg = result["message"].lower()
+        assert "visa" in msg or "sponsor" in msg or "تأشيرة" in msg or "كفالة" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "what is the difference between free zone and mainland?")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "free zone vs mainland employment", profile=_EmptyProfile())
+        assert result["type"] == "free_zone_mainland"

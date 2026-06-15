@@ -999,6 +999,46 @@ _WORK_VISA_PROCESS_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Arabic language requirement for UAE jobs — "do I need to speak Arabic?",
+# "will not speaking Arabic hurt my chances?", "how much Arabic do I need?".
+_ARABIC_REQUIREMENT_RE = re.compile(
+    r"\b(?:do\s+I\s+(?:need|have)\s+to\s+speak\s+Arabic)\b"
+    r"|\b(?:(?:will|does)\s+(?:not\s+)?speaking\s+Arabic\s+(?:matter|help|hurt|affect|impact))\b"
+    r"|\b(?:how\s+(?:much|important)\s+(?:is\s+)?Arabic\s+(?:do\s+I\s+need|is\s+(?:needed|required|important|useful)))\b"
+    r"|\b(?:how\s+(?:important|useful|necessary|essential)\s+is\s+Arabic)\b"
+    r"|\b(?:(?:is|are)\s+Arabic\s+(?:skills?|language)?\s+(?:required|necessary|needed|important|essential)\s+(?:for|in|to)\s+(?:UAE|Dubai|Abu\s+Dhabi|work|jobs?))\b"
+    r"|\b(?:can\s+I\s+(?:work|get\s+a\s+job|find\s+(?:a\s+)?work)\s+in\s+(?:UAE|Dubai)\s+(?:without|if\s+I\s+don't\s+speak)\s+Arabic)\b"
+    r"|\b(?:Arabic\s+(?:speaking|language|skills?)\s+(?:required|needed|necessary|job|jobs?|requirement|UAE|Dubai))\b"
+    r"|\b(?:هل\s+أحتاج\s+(?:إلى\s+)?تعلم\s+العربية|هل\s+اللغة\s+العربية\s+ضرورية)\b",
+    re.IGNORECASE,
+)
+
+# Background check / police clearance — "will they do a background check?",
+# "do I need a police clearance certificate?", "what is checked in background screening?".
+_BACKGROUND_CHECK_RE = re.compile(
+    r"\b(?:(?:will|do)\s+(?:they|employers?|the\s+company)\s+(?:do|run|conduct|check)\s+(?:a\s+)?background\s+(?:check|screening|verification))\b"
+    r"|\b(?:background\s+(?:check|screening|verification)\s+(?:UAE|Dubai|process|how|what|required|needed))\b"
+    r"|\b(?:do\s+I\s+need\s+(?:a\s+)?(?:police\s+clearance|good\s+conduct\s+certificate|criminal\s+background\s+check))\b"
+    r"|\b(?:police\s+(?:clearance|clearance\s+certificate|good\s+conduct|certificate)\s+(?:UAE|Dubai|for\s+(?:a\s+)?job|required|needed))\b"
+    r"|\b(?:police\s+good\s+conduct\s+certificate(?:\s+for\s+(?:a\s+)?(?:job|UAE|work))?)\b"
+    r"|\b(?:what\s+(?:do\s+they\s+|is\s+)?(?:check|verify|look\s+at)\s+in\s+(?:a\s+)?(?:background|employment)\s+(?:check|screening|verification))\b"
+    r"|\b(?:شهادة\s+حسن\s+السيرة|تفتيش\s+الخلفية|فحص\s+السوابق\s+الجنائية)\b",
+    re.IGNORECASE,
+)
+
+# Free zone vs mainland employment in UAE — "what is the difference between free zone and mainland?",
+# "should I work in a free zone or mainland?", "is a free zone job different?".
+_FREE_ZONE_MAINLAND_RE = re.compile(
+    r"\b(?:(?:what\s+is|what's)\s+the\s+difference\s+between\s+(?:(?:a\s+)?free\s+zone\s+and\s+mainland|mainland\s+and\s+(?:a\s+)?free\s+zone))\b"
+    r"|\b(?:(?:should\s+I|is\s+it\s+better\s+to)\s+(?:work|take\s+a\s+job)\s+in\s+(?:a\s+)?free\s+zone\s+(?:or|vs\.?|versus)\s+mainland)\b"
+    r"|\b(?:free\s+zone\s+(?:vs\.?\s+mainland|job|employment|company|benefits?|advantages?|disadvantages?|rules?|restrictions?))\b"
+    r"|\b(?:mainland\s+(?:vs\.?\s+free\s+zone|UAE|Dubai)\s+(?:job|employment|company|rules?|restrictions?))\b"
+    r"|\b(?:(?:is|are)\s+(?:free\s+zone|mainland)\s+(?:jobs?|employment|companies?)\s+(?:different|better|worse|limited|restricted))\b"
+    r"|\b(?:can\s+(?:I|a\s+free\s+zone\s+employee)\s+(?:work|be\s+employed?|be\s+hired?)\s+(?:outside|in)\s+(?:a\s+)?(?:free\s+zone|mainland))\b"
+    r"|\b(?:المنطقة\s+الحرة\s+(?:مقابل|و)\s+البر\s+الرئيسي|الفرق\s+بين\s+المنطقة\s+الحرة\s+والبر\s+الرئيسي)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -5198,6 +5238,33 @@ class RicoChatAPI:
         if _WORK_VISA_PROCESS_RE.search(message):
             return self._finalize(
                 self._handle_work_visa_process(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Arabic language requirement ───────────────────────────────────────
+        # "do I need to speak Arabic?", "will not speaking Arabic hurt my chances?".
+        if _ARABIC_REQUIREMENT_RE.search(message):
+            return self._finalize(
+                self._handle_arabic_requirement(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Background check / police clearance ──────────────────────────────
+        # "will they do a background check?", "do I need a police clearance?".
+        if _BACKGROUND_CHECK_RE.search(message):
+            return self._finalize(
+                self._handle_background_check(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Free zone vs mainland ─────────────────────────────────────────────
+        # "what is the difference between free zone and mainland?".
+        if _FREE_ZONE_MAINLAND_RE.search(message):
+            return self._finalize(
+                self._handle_free_zone_mainland(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -12318,6 +12385,149 @@ class RicoChatAPI:
             )
         self._append_chat(user_id, "assistant", msg)
         return {"type": "work_visa_process", "message": msg}
+
+    # ── Arabic language requirement ──────────────────────────────────────────────
+
+    def _handle_arabic_requirement(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## هل تحتاج إلى تعلم العربية للعمل في الإمارات؟\n\n"
+                "**الإجابة القصيرة: لا، في معظم القطاعات.**\n\n"
+                "الإمارات بيئة عمل متعددة اللغات. الإنجليزية هي لغة العمل الرئيسية في:\n"
+                "- الشركات الدولية والمتعددة الجنسيات\n"
+                "- قطاعي التكنولوجيا والمال والبنوك\n"
+                "- الضيافة والسياحة\n"
+                "- الرعاية الصحية والهندسة والبناء\n\n"
+                "**متى تُفيد العربية؟**\n"
+                "- الجهات الحكومية والشبه الحكومية\n"
+                "- التسويق الموجّه للسوق المحلي والخليجي\n"
+                "- بعض أدوار خدمة العملاء\n"
+                "- الأدوار القانونية التي تتعامل مع وثائق محلية\n\n"
+                "**الخلاصة:** إجادة الإنجليزية كافية في معظم الأحيان. "
+                "إضافة العربية ولو على مستوى تحادثي تمنحك ميزة تنافسية في بعض القطاعات، "
+                "لكنها نادراً ما تكون شرطاً أساسياً لوظائف متخصصة."
+            )
+        else:
+            msg = (
+                "## Do You Need to Speak Arabic to Work in UAE?\n\n"
+                "**Short answer: No — not for most roles.**\n\n"
+                "The UAE is a multilingual work environment. English is the dominant "
+                "business language across:\n"
+                "- Multinational and international companies\n"
+                "- Finance, banking, and tech sectors\n"
+                "- Hospitality, tourism, and retail\n"
+                "- Healthcare, engineering, and construction\n\n"
+                "**When Arabic genuinely helps:**\n"
+                "- Government and semi-government entities (ADNOC, RTA, etc.)\n"
+                "- Marketing roles targeting local/GCC audiences\n"
+                "- Some customer-facing positions in retail and services\n"
+                "- Legal roles involving Arabic-language contracts or court filings\n\n"
+                "**The bottom line:**\n"
+                "Fluent English is sufficient for the vast majority of professional roles. "
+                "Adding conversational Arabic (even basic greetings) is a plus that shows "
+                "cultural respect — but for most specialist positions, your skills and "
+                "experience matter far more than language."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "arabic_requirement", "message": msg}
+
+    # ── Background check / police clearance ─────────────────────────────────────
+
+    def _handle_background_check(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## فحص الخلفية وشهادة حسن السيرة في الإمارات\n\n"
+                "**ما الذي يتحقق منه أصحاب العمل؟**\n"
+                "- **التحقق من السيرة الذاتية:** التحقق من المسمى الوظيفي والتواريخ ومكان العمل\n"
+                "- **التحقق من المؤهلات:** التحقق من الشهادات والشهادات المهنية\n"
+                "- **المراجع المهنية:** التواصل مع أصحاب العمل السابقين\n\n"
+                "**شهادة حسن السيرة والسلوك:**\n"
+                "مطلوبة في بعض القطاعات (الحكومي، الصحة، التعليم، المال).\n"
+                "- يمكن الحصول عليها من بلدك الأصلي (مختومة ومصدّقة)\n"
+                "- أو من الشرطة الإماراتية إذا كنت مقيماً في الدولة\n\n"
+                "**نصائح مهمة:**\n"
+                "- تأكد من أن ما في سيرتك الذاتية متطابق تماماً مع الحقيقة\n"
+                "- كن صادقاً مع صاحب العمل إذا كان هناك تاريخ مهني يحتاج توضيحاً\n"
+                "- فحص الخلفية عادةً يُجرى بعد تقديم العرض وقبيل التعيين الرسمي"
+            )
+        else:
+            msg = (
+                "## Background Checks & Police Clearance in UAE\n\n"
+                "**What employers typically check:**\n"
+                "- **CV verification:** Job titles, dates, and employer names\n"
+                "- **Qualification verification:** Degree and certification authenticity\n"
+                "- **Reference checks:** Calls or emails to previous employers\n"
+                "- **Criminal record:** Varies by role and sector\n\n"
+                "**Police clearance / Good Conduct Certificate:**\n"
+                "Required in certain sectors — government, healthcare, education, finance, "
+                "and roles involving security clearance.\n\n"
+                "- **If you're overseas:** Obtain from your home country's police authority "
+                "(must be apostilled/attested)\n"
+                "- **If you're in UAE already:** Apply via the UAE Police or ICP portal\n\n"
+                "**Practical tips:**\n"
+                "- Ensure your CV is 100% accurate — discrepancies are a red flag\n"
+                "- Background checks typically happen *after* the offer is made, "
+                "before your official start date\n"
+                "- Inform your employer proactively if there's anything they might find — "
+                "honesty is far better than a surprise during screening\n"
+                "- For senior or regulated roles, expect a more thorough process "
+                "(financial checks, LinkedIn verification, etc.)"
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "background_check", "message": msg}
+
+    # ── Free zone vs mainland ────────────────────────────────────────────────────
+
+    def _handle_free_zone_mainland(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## الفرق بين العمل في المنطقة الحرة والبر الرئيسي في الإمارات\n\n"
+                "**المنطقة الحرة (Free Zone)**\n"
+                "- شركات تعمل داخل مناطق اقتصادية خاصة (DIFC، دبي للإعلام، ADGM...)\n"
+                "- التأشيرة والكفالة تصدر عبر سلطة المنطقة الحرة\n"
+                "- القوانين قد تختلف قليلاً (خاصةً في DIFC وADGM)\n"
+                "- عادةً لا يُسمح للموظف بالعمل خارج حدود المنطقة إلا بتصاريح\n"
+                "- أجور تنافسية وبيئة عمل دولية\n\n"
+                "**البر الرئيسي (Mainland)**\n"
+                "- شركات مسجّلة في دائرة التنمية الاقتصادية (DED)\n"
+                "- الكفالة عبر وزارة الموارد البشرية (MOHRE)\n"
+                "- قانون العمل الإماراتي يُطبَّق بالكامل\n"
+                "- حرية العمل في أي مكان في الدولة\n"
+                "- بعض القطاعات (الحكومي، البنية التحتية) تتطلب تسجيل البر الرئيسي\n\n"
+                "**كموظف، ماذا يعني ذلك لك؟**\n"
+                "- حقوقك العمالية (المكافأة، الإجازة، الإشعار) محمية في الحالتين\n"
+                "- الفرق الجوهري: جهة إصدار التأشيرة والكفالة\n"
+                "- إذا أردت تغيير وظيفتك، تأكد من أن نقل الكفالة ممكن"
+            )
+        else:
+            msg = (
+                "## Free Zone vs Mainland Employment in UAE\n\n"
+                "| | **Free Zone** | **Mainland** |\n"
+                "|---|---|---|\n"
+                "| **Registered with** | Free zone authority (e.g. DIFC, DMCC, IFZA) | DED / MOHRE |\n"
+                "| **Visa sponsor** | Free zone authority | Employer via MOHRE |\n"
+                "| **Labour law** | Mostly same; DIFC/ADGM have own courts | UAE Labour Law |\n"
+                "| **Work location** | Typically within free zone only | Anywhere in UAE |\n"
+                "| **Client contracts** | May need agent to work with mainland firms | No restriction |\n\n"
+                "**What this means for you as an employee:**\n"
+                "- Your core rights (gratuity, annual leave, notice period) are protected "
+                "under UAE Labour Law in both cases\n"
+                "- Free zone jobs are often in tech, media, finance, logistics — sectors "
+                "that cluster in specific zones\n"
+                "- DIFC and ADGM have their own courts and employment regulations — "
+                "read your contract carefully if joining these\n\n"
+                "**Key practical points:**\n"
+                "- If you want to switch jobs, check whether your visa transfer is "
+                "straightforward (free zone → mainland transfers are common)\n"
+                "- For freelancers: free zone permits are the primary route (see freelance permit)\n"
+                "- Most multinationals and banks operate on mainland; most startups and "
+                "media companies are in free zones"
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "free_zone_mainland", "message": msg}
 
     # ── Context-aware help ──────────────────────────────────────────────────────
 
