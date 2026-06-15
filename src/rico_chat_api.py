@@ -750,6 +750,47 @@ _BEST_EMPLOYERS_RE = re.compile(
     re.IGNORECASE,
 )
 
+# UAE job search tips / strategy — "how do I find a job in UAE?", "best job boards in Dubai",
+# "tips for job hunting", "how long does it take to find a job?", "should I use a recruiter?".
+_JOB_SEARCH_TIPS_RE = re.compile(
+    r"\bhow\s+(?:do\s+I|can\s+I|to)\s+(?:find|get|search\s+for|land)\s+a\s+job\s+(?:in\s+(?:UAE|Dubai|Abu\s+Dhabi)|here|fast)?\b"
+    r"|\b(?:best\s+)?(?:job\s+)?(?:boards?|sites?|platforms?|portals?)\s+(?:in\s+(?:UAE|Dubai|Abu\s+Dhabi)|to\s+(?:find|use)|for\s+(?:UAE|Dubai))\b"
+    r"|\b(?:tips?|advice|strategy|guide)\s+(?:for\s+)?(?:job\s+(?:hunting|search(?:ing)?)|finding\s+a\s+job)\b"
+    r"|\b(?:job\s+(?:hunting|search(?:ing)?)|finding\s+(?:a\s+)?job)\s+(?:tips?|advice|strategy|guide|resources?)\b"
+    r"|\bhow\s+(?:long|much\s+time)\s+(?:does\s+it|will\s+it)\s+take\s+to\s+find\s+a\s+job\b"
+    r"|\b(?:should\s+I|is\s+it\s+worth|do\s+I\s+need)\s+(?:(?:to\s+)?(?:use|using)\s+(?:a\s+)?)?(?:recruitment\s+agenc(?:y|ies)|headhunter|recruiter)\b"
+    r"|\bwhere\s+(?:should\s+I|can\s+I|to)\s+(?:find|look\s+for|search\s+for)\s+(?:jobs?|work)\b"
+    r"|\b(?:نصائح|دليل)\s+(?:البحث\s+عن\s+وظيفة|سوق\s+العمل)\b",
+    re.IGNORECASE,
+)
+
+# UAE benefits / package query — "what benefits should I expect?", "is housing allowance standard?",
+# "what's a typical UAE package?", "medical insurance in UAE".
+_BENEFITS_QUERY_RE = re.compile(
+    r"\b(?:benefits?|package|allowances?|perks?)\s+(?:should\s+I\s+(?:expect|ask\s+for|negotiate)|are\s+(?:typical|standard|common|included)|does\s+(?:the\s+)?(?:package|offer)\s+include)\b"
+    r"|\b(?:housing|accommodation)\s+allowance\b"
+    r"|\b(?:what(?:'s|\s+is)\s+(?:a\s+)?(?:good|typical|standard|normal|fair)\s+(?:UAE\s+)?(?:package|salary\s+package|benefits?\s+package|offer))\b"
+    r"|\b(?:is|are)\s+.{0,30}?\b(?:allowance|benefit|medical\s+insurance|gratuity)\s+(?:standard|common|typical|included|normal|mandatory)\b"
+    r"|\b(?:end\s+of\s+service|end[- ]of[- ]service|gratuity)\s+(?:in\s+UAE|calculation|rights?|entitlement)\b"
+    r"|\bhow\s+many\s+(?:annual\s+leave|leave|vacation)\s+days?\b"
+    r"|\b(?:annual\s+leave|paid\s+leave)\s+(?:days?\s+)?(?:in\s+UAE|entitlement|rights?)\b"
+    r"|\b(?:مزايا|راتب\s+شامل|بدل\s+(?:سكن|مواصلات|طبي)|مكافأة\s+نهاية\s+الخدمة)\b",
+    re.IGNORECASE,
+)
+
+# Offer evaluation — "should I accept this offer?", "how to evaluate a job offer",
+# "is this offer good?", "offer pros and cons".
+_OFFER_EVAL_RE = re.compile(
+    r"\bshould\s+I\s+(?:accept|take|reject|decline|consider)\s+(?:this\s+)?(?:offer|job\s+offer|position)\b"
+    r"|\bhow\s+(?:to|do\s+I)\s+(?:evaluate|assess|weigh|compare)\s+(?:a\s+|this\s+)?(?:job\s+)?offer\b"
+    r"|\bis\s+(?:this|the)\s+offer\s+(?:good|fair|worth|competitive|reasonable|right)\b"
+    r"|\b(?:job\s+)?offer\s+(?:evaluation|comparison|pros\s+and\s+cons|checklist|worth\s+it)\b"
+    r"|\bwhat\s+(?:should\s+I\s+(?:look\s+for|consider|check)|to\s+(?:look\s+for|consider|check))\s+in\s+(?:a\s+)?(?:job\s+)?offer\b"
+    r"|\bhow\s+(?:do\s+I|to)\s+(?:decide|know)\s+(?:if|whether)\s+(?:to\s+accept|an\s+offer\s+is)\b"
+    r"|\b(?:قبول|رفض)\s+(?:العرض|عرض\s+العمل)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -4794,6 +4835,33 @@ class RicoChatAPI:
         if _BEST_EMPLOYERS_RE.search(message):
             return self._finalize(
                 self._handle_best_employers(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── UAE job search tips / strategy ────────────────────────────────────
+        # "how do I find a job in UAE?", "best job boards", "tips for job hunting".
+        if _JOB_SEARCH_TIPS_RE.search(message):
+            return self._finalize(
+                self._handle_job_search_tips(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── UAE benefits / package query ──────────────────────────────────────
+        # "what benefits should I expect?", "is housing allowance standard?".
+        if _BENEFITS_QUERY_RE.search(message):
+            return self._finalize(
+                self._handle_benefits_package(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Offer evaluation ──────────────────────────────────────────────────
+        # "should I accept this offer?", "how to evaluate a job offer".
+        if _OFFER_EVAL_RE.search(message):
+            return self._finalize(
+                self._handle_offer_evaluation(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -10741,6 +10809,267 @@ class RicoChatAPI:
             "role": role or None,
             "location": location_hint,
             "employers": top_employers,
+            "message": msg,
+        }
+
+    # ── UAE job search tips / strategy ───────────────────────────────────────────
+
+    def _handle_job_search_tips(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        """Return UAE job search strategy and portal guide."""
+        arabic = self._is_arabic_text(message)
+        msg_lower = message.lower()
+
+        has_cv = bool(self._profile_value(profile, "cv_status"))
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        role = target_roles[0] if target_roles else ""
+
+        asks_about_recruiters = bool(re.search(r"\b(?:recruit(?:er|ment)|headhunter|agenc(?:y|ies))\b", message, re.IGNORECASE))
+        asks_about_timeline = bool(re.search(r"\bhow\s+long|how\s+much\s+time|take\s+to\s+find\b", message, re.IGNORECASE))
+
+        if arabic:
+            lines = [
+                "**دليل البحث عن وظيفة في الإمارات** 🇦🇪",
+                "",
+                "**أفضل منصات التوظيف:**",
+                "• **Bayt.com** — الأكبر في الشرق الأوسط، ضروري",
+                "• **Naukrigulf.com** — قوي جداً للوظائف التقنية والإدارية",
+                "• **GulfTalent.com** — للمستويات المتوسطة والعليا",
+                "• **LinkedIn** — لا غنى عنه للتواصل المهني",
+                "• **Indeed.ae** — كميات كبيرة من الإعلانات",
+                "",
+                "**نصائح أساسية:**",
+                "1. تقدم لـ 10-15 وظيفة يومياً في بداية بحثك",
+                "2. فعّل 'Open to Work' على LinkedIn",
+                "3. راسل مجنّدين مباشرة برسائل مخصصة",
+                "4. سجّل في 3-5 منصات على الأقل",
+                "5. تتبع طلباتك بجدول منظم",
+            ]
+            if asks_about_timeline:
+                lines += ["", "**المدة المتوقعة:** 2-6 أشهر للمرشحين المؤهلين في الإمارات. الفترة الأولى تحتاج صبراً."]
+            if asks_about_recruiters:
+                lines += [
+                    "", "**شركات التوظيف:** نعم، يستحق التسجيل في شركات مثل Michael Page وRobert Half وNSG Group. لكن لا تعتمد عليها فقط.",
+                ]
+            if not has_cv:
+                lines += ["", "💡 ارفع سيرتك الذاتية أولاً حتى أتمكن من إيجاد أفضل الفرص لك!"]
+        else:
+            lines = [
+                "**UAE Job Search Strategy Guide** 🇦🇪",
+                "",
+                "**Top job portals:**",
+                "• **Bayt.com** — largest in the Middle East, essential",
+                "• **Naukrigulf.com** — strong for tech and professional roles",
+                "• **GulfTalent.com** — mid-to-senior level focus",
+                "• **LinkedIn** — non-negotiable for networking and direct outreach",
+                "• **Indeed.ae** — high volume, good for filtering by recent posts",
+                "",
+                "**Key tactics:**",
+                "1. Apply to 10–15 roles per day in your active phase",
+                "2. Enable 'Open to Work' on LinkedIn (visible to recruiters)",
+                "3. Message recruiters directly with a personalised 2-line intro",
+                "4. Register on 3–5 platforms minimum",
+                "5. Track all applications — recall which roles responded",
+            ]
+            if asks_about_timeline:
+                lines += [
+                    "",
+                    "**Realistic timeline:** 2–6 months for qualified candidates in UAE.",
+                    "Senior roles (Director+) can take 4–9 months. Entry-level can be faster.",
+                ]
+            if asks_about_recruiters:
+                lines += [
+                    "",
+                    "**Recruitment agencies:** Worth registering with 2–3 (Michael Page, Robert Half, NSG Group).",
+                    "But don't rely on them alone — direct applications convert faster in UAE.",
+                ]
+            if role:
+                lines += ["", f"Want me to search for open {role} roles right now?"]
+            elif not has_cv:
+                lines += ["", "💡 Upload your CV first so I can personalise job recommendations for you!"]
+
+        msg = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "job_search_tips",
+            "message": msg,
+        }
+
+    # ── UAE benefits / package guide ─────────────────────────────────────────────
+
+    def _handle_benefits_package(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        """Return UAE employment benefits and package guide."""
+        arabic = self._is_arabic_text(message)
+        msg_lower = message.lower()
+
+        years_exp = 0
+        try:
+            years_exp = int(self._profile_value(profile, "years_experience") or 0)
+        except (ValueError, TypeError):
+            pass
+
+        asks_gratuity = bool(re.search(r"\b(?:gratuity|end.of.service)\b", message, re.IGNORECASE))
+        asks_leave = bool(re.search(r"\b(?:annual\s+leave|vacation|leave\s+days?|paid\s+leave)\b", message, re.IGNORECASE))
+        asks_housing = bool(re.search(r"\b(?:housing|accommodation)\s+allowance\b", message, re.IGNORECASE))
+
+        if arabic:
+            lines = [
+                "**مكوّنات راتب الإمارات النموذجي** 🇦🇪",
+                "",
+                "**الراتب الإجمالي عادةً يشمل:**",
+                "• الراتب الأساسي (40-60% من المجموع)",
+                "• بدل السكن (20-30% من المجموع) — أو سكن مجاني من الشركة",
+                "• بدل المواصلات (1,500–3,000 درهم شهرياً)",
+                "• بدل الهاتف / الاتصالات (300–800 درهم)",
+                "• التأمين الطبي (إلزامي قانوناً)",
+                "• تأشيرة الإقامة (تتحملها الشركة)",
+                "",
+                "**الإجازات:**",
+                "• 30 يوم إجازة سنوية (بعد سنة)",
+                "• تذاكر عودة للوطن سنوياً (شركات كثيرة توفرها)",
+                "",
+                "**مكافأة نهاية الخدمة (الجرايتي):**",
+                "• 21 يوم راتب أساسي لكل سنة (1-5 سنوات)",
+                "• 30 يوم راتب أساسي لكل سنة (5+ سنوات)",
+                "",
+                "**نصيحة:** الراتب المُعلن قد يكون 'شامل' أو 'أساسي' — اسأل دائماً عن المجموع الإجمالي.",
+            ]
+        else:
+            lines = [
+                "**UAE Employment Package Guide** 🇦🇪",
+                "",
+                "**A typical UAE package includes:**",
+                "• **Basic salary** (40–60% of total)",
+                "• **Housing allowance** (20–30% of total) or company-provided accommodation",
+                "• **Transport allowance** (AED 1,500–3,000/month)",
+                "• **Phone / comms allowance** (AED 300–800/month)",
+                "• **Medical insurance** (mandatory by law)",
+                "• **Residence visa sponsorship** (employer's responsibility)",
+                "",
+            ]
+
+            if years_exp >= 8:
+                lines += [
+                    "**At senior level, also negotiate:**",
+                    "• School fees allowance (AED 10,000–30,000/year)",
+                    "• Annual flight tickets home for family",
+                    "• Company car or car allowance",
+                    "",
+                ]
+
+            lines += [
+                "**Annual leave:** 30 calendar days (after 1 year of service)",
+                "**Public holidays:** ~14 days/year",
+                "",
+            ]
+
+            if asks_gratuity:
+                lines += [
+                    "**End-of-service gratuity (UAE law):**",
+                    "• 21 days basic salary per year for years 1–5",
+                    "• 30 days basic salary per year for years 5+",
+                    "• Paid when you leave (unless terminated for cause)",
+                    "",
+                ]
+
+            lines += [
+                "**Red flags to watch for:**",
+                "• 'Package inclusive of all allowances' — demand the breakdown",
+                "• Gratuity calculated on 'basic' not total (legal, but know what you're signing)",
+                "• Medical insurance that doesn't cover dependants",
+                "",
+                "**Key question to always ask:** 'Is the quoted figure basic salary or total compensation?'",
+            ]
+
+        msg = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "benefits_guide",
+            "message": msg,
+        }
+
+    # ── Offer evaluation ─────────────────────────────────────────────────────────
+
+    def _handle_offer_evaluation(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        """Return a structured job offer evaluation framework."""
+        arabic = self._is_arabic_text(message)
+
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        salary_expectation = self._profile_value(profile, "salary_expectation_aed") or None
+
+        if arabic:
+            lines = [
+                "**إطار تقييم عرض العمل** ✅",
+                "",
+                "**راجع هذه النقاط قبل القرار:**",
+                "",
+                "**💰 التعويض:**",
+                "□ هل الراتب الأساسي يتوافق مع السوق؟",
+                "□ هل شرحوا جميع مكوّنات الراتب؟",
+                "□ هل هناك بدل سكن / مواصلات / طبي؟",
+                "□ هل هناك مكافأة أداء سنوية؟",
+                "",
+                "**📋 الشروط:**",
+                "□ مدة العقد (دائم / محدد المدة / تجريبي)",
+                "□ فترة التجربة وشروط الإنهاء",
+                "□ فترة الإشعار عند الاستقالة",
+                "□ تغطية التأمين الطبي (لك وللعائلة؟)",
+                "",
+                "**🏢 الشركة:**",
+                "□ هل الشركة مستقرة ومرخصة؟",
+                "□ هل سمعتها جيدة؟ (راجع Glassdoor وLinkedIn)",
+                "□ فرص التطور الوظيفي",
+                "",
+                "**علامات تحذيرية:**",
+                "• يطالبونك بالقرار خلال 24 ساعة",
+                "• يرفضون إعطاءك نسخة من العقد",
+                "• الوعود الشفهية غير موثقة",
+            ]
+        else:
+            lines = [
+                "**Job Offer Evaluation Checklist** ✅",
+                "",
+                "**Before you decide, verify:**",
+                "",
+                "**💰 Compensation:**",
+                "□ Is the basic salary aligned with market rate?",
+                "□ Does the total package include housing + transport + medical?",
+                "□ Is there a performance bonus structure?",
+                "□ When is the next salary review?",
+                "",
+            ]
+            if salary_expectation:
+                try:
+                    exp_val = float(str(salary_expectation).replace(",", "").replace("k", "000"))
+                    lines.append(f"Based on your target salary (AED {int(exp_val):,}/month), make sure total comp aligns.")
+                    lines.append("")
+                except (ValueError, TypeError):
+                    pass
+
+            lines += [
+                "**📋 Contract terms:**",
+                "□ Contract type: unlimited vs. limited-term (unlimited is better for you)",
+                "□ Probation period: usually 3–6 months (termination easier for both sides)",
+                "□ Notice period: 30–90 days typical",
+                "□ Non-compete clause: check scope and duration",
+                "",
+                "**🏢 Company health:**",
+                "□ Check Glassdoor reviews and LinkedIn employee count trends",
+                "□ Ask about team stability — how long has the hiring manager been there?",
+                "□ Understand reporting structure and career path",
+                "",
+                "**🚩 Red flags:**",
+                "• Pressure to decide within 24 hours",
+                "• Refusing to provide the written contract before you join",
+                "• Verbal promises not reflected in the offer letter",
+                "• Medical insurance not starting on day 1",
+                "",
+                "**Negotiation window:** You have ~3–5 days to counter in UAE market. Counter once, clearly.",
+            ]
+
+        msg = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "offer_evaluation",
             "message": msg,
         }
 

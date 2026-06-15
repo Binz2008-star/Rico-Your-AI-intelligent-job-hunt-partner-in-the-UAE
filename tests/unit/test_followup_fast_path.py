@@ -3257,3 +3257,283 @@ class TestBestEmployers:
     def test_empty_profile_still_works(self, monkeypatch):
         result = self._run_with_jsearch(monkeypatch, "top employers in UAE", profile=_EmptyProfile())
         assert result["type"] == "best_employers"
+
+
+# ── UAE Job Search Tips ───────────────────────────────────────────────────────
+
+class TestJobSearchTips:
+    """Tests for _JOB_SEARCH_TIPS_RE and _handle_job_search_tips."""
+
+    _REGEX_CASES_MATCH = [
+        "how do I find a job in UAE?",
+        "how can I find a job in Dubai?",
+        "best job boards in UAE",
+        "best job sites in Dubai",
+        "tips for job hunting in UAE",
+        "job hunting strategy",
+        "job search advice for UAE",
+        "how long does it take to find a job in UAE?",
+        "how much time will it take to find a job?",
+        "should I use a recruitment agency?",
+        "is it worth using a recruiter in UAE?",
+        "where should I look for jobs?",
+        "where can I find jobs in Dubai?",
+        "نصائح البحث عن وظيفة",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "I need a job urgently",          # urgency search
+        "find remote jobs in UAE",         # employment type search
+        "show my applications",
+        "how do I negotiate my salary?",
+        "career change tips for UAE",      # career change
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _JOB_SEARCH_TIPS_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _JOB_SEARCH_TIPS_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _JOB_SEARCH_TIPS_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _JOB_SEARCH_TIPS_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_job_search_tips(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I find a job in UAE?")
+        assert result["type"] == "job_search_tips"
+
+    def test_job_boards_query_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "best job boards in UAE")
+        assert result["type"] == "job_search_tips"
+
+    def test_message_mentions_bayt(self, monkeypatch):
+        result = self._run(monkeypatch, "best job boards in UAE")
+        assert "Bayt" in result["message"]
+
+    def test_message_mentions_linkedin(self, monkeypatch):
+        result = self._run(monkeypatch, "tips for job hunting in UAE")
+        assert "LinkedIn" in result["message"]
+
+    def test_timeline_advice_when_asked(self, monkeypatch):
+        result = self._run(monkeypatch, "how long does it take to find a job in UAE?")
+        msg = result["message"]
+        assert "month" in msg.lower() or "شهر" in msg
+
+    def test_recruiter_advice_when_asked(self, monkeypatch):
+        result = self._run(monkeypatch, "should I use a recruitment agency?")
+        msg = result["message"]
+        assert "recruit" in msg.lower() or "مجنّد" in msg or "توظيف" in msg
+
+    def test_message_has_tips(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I find a job in Dubai?")
+        msg = result["message"]
+        assert len(msg) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I find a job in UAE?", profile=_EmptyProfile())
+        assert result["type"] == "job_search_tips"
+
+
+# ── UAE Benefits / Package Guide ──────────────────────────────────────────────
+
+class TestBenefitsPackage:
+    """Tests for _BENEFITS_QUERY_RE and _handle_benefits_package."""
+
+    _REGEX_CASES_MATCH = [
+        "what benefits should I expect in UAE?",
+        "what benefits are typical in UAE?",
+        "what benefits does the package include?",
+        "housing allowance in UAE",
+        "what's a good UAE package?",
+        "what is a typical salary package in Dubai?",
+        "is housing allowance standard in UAE?",
+        "is medical insurance included in UAE jobs?",
+        "is gratuity mandatory in UAE?",
+        "end of service gratuity in UAE",
+        "how many annual leave days in UAE?",
+        "مزايا الوظيفة في الإمارات",
+        "بدل سكن في الإمارات",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "my expected salary is 20000",     # salary set
+        "find jobs paying above 15000",    # salary search
+        "I need a job urgently",
+        "how do I negotiate my salary?",   # salary negotiation (separate)
+        "show my applications",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _BENEFITS_QUERY_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _BENEFITS_QUERY_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _BENEFITS_QUERY_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _BENEFITS_QUERY_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_benefits_guide(self, monkeypatch):
+        result = self._run(monkeypatch, "what benefits should I expect in UAE?")
+        assert result["type"] == "benefits_guide"
+
+    def test_housing_allowance_query_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "housing allowance in UAE")
+        assert result["type"] == "benefits_guide"
+
+    def test_message_mentions_housing(self, monkeypatch):
+        result = self._run(monkeypatch, "what benefits should I expect in UAE?")
+        assert "housing" in result["message"].lower() or "سكن" in result["message"]
+
+    def test_message_mentions_medical(self, monkeypatch):
+        result = self._run(monkeypatch, "what's a typical UAE package?")
+        assert "medical" in result["message"].lower() or "طبي" in result["message"]
+
+    def test_gratuity_advice_when_asked(self, monkeypatch):
+        result = self._run(monkeypatch, "end of service gratuity in UAE")
+        assert "gratuity" in result["message"].lower() or "مكافأة" in result["message"]
+
+    def test_senior_profile_gets_extra_advice(self, monkeypatch):
+        result = self._run(monkeypatch, "what benefits should I expect?", profile=_CVProfile())
+        msg = result["message"]
+        assert len(msg) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "what benefits should I expect?", profile=_EmptyProfile())
+        assert result["type"] == "benefits_guide"
+
+    def test_message_has_red_flags_section(self, monkeypatch):
+        result = self._run(monkeypatch, "what's a typical UAE package?")
+        assert "red flag" in result["message"].lower() or "Red flag" in result["message"] or "تحذير" in result["message"]
+
+
+# ── Offer Evaluation ─────────────────────────────────────────────────────────
+
+class TestOfferEvaluation:
+    """Tests for _OFFER_EVAL_RE and _handle_offer_evaluation."""
+
+    _REGEX_CASES_MATCH = [
+        "should I accept this offer?",
+        "should I take this job offer?",
+        "should I reject this offer?",
+        "how to evaluate a job offer",
+        "how do I evaluate a job offer?",
+        "is this offer good?",
+        "is the offer fair?",
+        "job offer pros and cons",
+        "offer evaluation checklist",
+        "is this offer worth it?",
+        "what should I look for in a job offer?",
+        "what to consider in a job offer",
+        "how do I decide whether to accept an offer",
+        "قبول عرض العمل",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "how do I negotiate my salary?",    # salary negotiation
+        "I got a job offer",                # no evaluation question
+        "show my applications",
+        "I need a job urgently",
+        "should I use a recruitment agency?",   # job search tips
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _OFFER_EVAL_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _OFFER_EVAL_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _OFFER_EVAL_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _OFFER_EVAL_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_offer_evaluation(self, monkeypatch):
+        result = self._run(monkeypatch, "should I accept this offer?")
+        assert result["type"] == "offer_evaluation"
+
+    def test_how_to_evaluate_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how to evaluate a job offer")
+        assert result["type"] == "offer_evaluation"
+
+    def test_offer_checklist_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "offer evaluation checklist")
+        assert result["type"] == "offer_evaluation"
+
+    def test_message_has_checklist(self, monkeypatch):
+        result = self._run(monkeypatch, "should I accept this offer?")
+        msg = result["message"]
+        assert "□" in msg or "checklist" in msg.lower() or "راجع" in msg
+
+    def test_message_mentions_red_flags(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I evaluate a job offer?")
+        msg = result["message"]
+        assert "flag" in msg.lower() or "تحذير" in msg or "🚩" in msg
+
+    def test_message_mentions_contract(self, monkeypatch):
+        result = self._run(monkeypatch, "what should I look for in a job offer?")
+        msg = result["message"]
+        assert "contract" in msg.lower() or "عقد" in msg
+
+    def test_salary_expectation_personalized(self, monkeypatch):
+        from dataclasses import dataclass, field
+        from typing import List, Optional
+        @dataclass
+        class _ProfileWithSalary:
+            skills: List[str] = field(default_factory=list)
+            certifications: List[str] = field(default_factory=list)
+            years_experience: float = 8.0
+            target_roles: List[str] = field(default_factory=lambda: ["HSE Manager"])
+            industries: List[str] = field(default_factory=list)
+            cv_status: str = "parsed"
+            cv_filename: str = "cv.pdf"
+            salary_expectation_aed: int = 25000
+        result = self._run(monkeypatch, "should I accept this offer?", profile=_ProfileWithSalary())
+        assert result["type"] == "offer_evaluation"
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "should I accept this offer?", profile=_EmptyProfile())
+        assert result["type"] == "offer_evaluation"
+
+    def test_arabic_offer_query(self, monkeypatch):
+        result = self._run(monkeypatch, "قبول عرض العمل")
+        assert result["type"] == "offer_evaluation"
