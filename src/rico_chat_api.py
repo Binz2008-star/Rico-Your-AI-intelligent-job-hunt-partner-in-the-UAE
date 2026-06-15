@@ -635,8 +635,45 @@ _LINKEDIN_NETWORKING_RE = re.compile(
     re.IGNORECASE,
 )
 
+# CV / resume format advice — "how should I format my CV for UAE?",
+# "is my CV too long?", "what format should a UAE CV be in?", "ATS CV tips".
+_CV_FORMAT_RE = re.compile(
+    r"\bhow\s+(?:should\s+I\s+|to\s+)?(?:format|write|structure|layout|present)\s+(?:my\s+)?(?:CV|resume)\b"
+    r"|\b(?:CV|resume)\s+(?:format|template|structure|layout|length|tips?|advice|help|style)\b"
+    r"|\b(?:is\s+my\s+CV|my\s+CV\s+is)\s+(?:too\s+long|too\s+short|good|ok|fine|ready)\b"
+    r"|\b(?:ATS|applicant\s+tracking)[- ](?:CV|resume|friendly|tips?)\b"
+    r"|\bATS\s+(?:CV|resume|friendly|tips?)\b"
+    r"|\bwhat\s+(?:should\s+(?:a|my)|does\s+a)\s+(?:UAE\s+)?(?:CV|resume)\s+(?:look\s+like|include|have|contain)\b"
+    r"|\b(?:CV|resume)\s+(?:for\s+UAE|in\s+(?:the\s+)?UAE|UAE\s+standard)\b"
+    r"|\b(?:نصائح|تنسيق|كيف\s+أكتب)\s+(?:السيرة\s+الذاتية|CV)\b",
+    re.IGNORECASE,
+)
+
+# Cover letter tips — "how do I write a cover letter?", "do I need a cover letter?",
+# "cover letter for HSE job", "UAE cover letter format".
+_COVER_LETTER_TIPS_RE = re.compile(
+    r"\bhow\s+(?:do\s+I|to)\s+write\s+(?:a\s+)?cover\s+letter\b"
+    r"|\bcover\s+letter\s+(?:tips?|advice|help|format|template|example|guide|UAE)\b"
+    r"|\bdo\s+I\s+need\s+a\s+cover\s+letter\b"
+    r"|\bwhat\s+(?:should\s+(?:a|my)|to\s+put\s+in\s+(?:a|my))\s+cover\s+letter\b"
+    r"|\b(?:خطاب|رسالة)\s+(?:التغطية|تقديم|التقديم)\b",
+    re.IGNORECASE,
+)
+
+# Application pipeline summary — "how many applications have I sent?",
+# "show me my application summary", "what's my application success rate?".
+_APP_PIPELINE_SUMMARY_RE = re.compile(
+    r"\bhow\s+many\s+(?:applications?|jobs?)\s+(?:have\s+I\s+(?:sent|applied|submitted)|did\s+I\s+(?:send|apply|submit))\b"
+    r"|\b(?:application|job)\s+(?:search\s+)?(?:summary|overview|stats?|statistics|pipeline|status\s+summary|breakdown)\b"
+    r"|\bmy\s+application\s+(?:record|tracker|progress|summary|stats?)\b"
+    r"|\bwhat(?:'s|\s+is)\s+my\s+(?:application\s+)?success\s+rate\b"
+    r"|\bhow\s+(?:am\s+I\s+doing|is\s+my\s+search\s+going|is\s+my\s+job\s+search)\b"
+    r"|\b(?:إحصائيات|ملخص)\s+(?:طلباتي|التقديمات)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
-    """Generate a unique error reference ID for tracking and support lookup."""
+    """Generate a unique error reference ID for tracking and success lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
 
 ONBOARDING_FIELD_LABELS = {
@@ -4412,6 +4449,16 @@ class RicoChatAPI:
             )
 
         # ── Application list query ────────────────────────────────────────────
+        # ── Application pipeline summary ──────────────────────────────────────
+        # Must come before _APPLICATIONS_LIST_RE: "how many applications have I
+        # sent?" matches both, but pipeline summary gives stats, not a list.
+        if _APP_PIPELINE_SUMMARY_RE.search(message):
+            return self._finalize(
+                self._handle_app_pipeline_summary(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
         # "what jobs did I apply to?", "how many applications do I have?",
         # "show my applied jobs", "application history" — patterns NOT covered
         # by the earlier _SHOW_MY_APPLICATIONS_RE guard (which handles the
@@ -4597,6 +4644,24 @@ class RicoChatAPI:
         if _LINKEDIN_NETWORKING_RE.search(message):
             return self._finalize(
                 self._handle_linkedin_networking(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── CV format advice ──────────────────────────────────────────────────
+        # "how should I format my CV for UAE?", "ATS-friendly CV tips".
+        if _CV_FORMAT_RE.search(message):
+            return self._finalize(
+                self._handle_cv_format_advice(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Cover letter tips ─────────────────────────────────────────────────
+        # "how do I write a cover letter?", "do I need a cover letter?".
+        if _COVER_LETTER_TIPS_RE.search(message):
+            return self._finalize(
+                self._handle_cover_letter_tips(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -9796,6 +9861,250 @@ class RicoChatAPI:
             "is_cold_outreach": is_cold_outreach,
             "is_profile_optimize": is_profile_optimize,
             "message": advice,
+        }
+
+    def _handle_cv_format_advice(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Return UAE-context CV formatting advice, ATS tips, and length guidance.
+
+        Detects: "how should I format my CV for UAE?", "is my CV too long?",
+        "ATS-friendly CV tips", "what should a UAE CV include?".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        is_ats = bool(_re.search(r"\bATS\b|applicant\s+tracking", message, _re.IGNORECASE))
+        is_length = bool(_re.search(r"\btoo\s+(?:long|short)\b|\blength\b", message, _re.IGNORECASE))
+
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        role = target_roles[0] if target_roles else ""
+        years = self._profile_value(profile, "years_experience") or 0
+
+        if is_ats:
+            advice = (
+                "**ATS-Friendly CV Tips for UAE Job Search:**\n\n"
+                "1. **Standard headings** — use exact headings: 'Work Experience', 'Education', "
+                "'Certifications', 'Skills'. ATS systems in the UAE often fail on creative labels.\n"
+                "2. **Plain formatting** — avoid tables, columns, text boxes, and graphics. "
+                "Single-column PDF or Word (.docx) is safest.\n"
+                "3. **Match keywords** — copy key phrases from the job description verbatim "
+                "(e.g. 'ISO 45001', 'NEBOSH IGC'). ATS scores keyword density.\n"
+                "4. **File format** — .docx for ATS portals; PDF for email applications. "
+                "Many UAE portals (Bayt, Naukrigulf) recommend .docx.\n"
+                "5. **No headers/footers** — some ATS systems cannot parse text in page headers.\n"
+                "6. **Spell out acronyms once** — write 'Health, Safety & Environment (HSE)' "
+                "on first use to cover both keyword variants.\n\n"
+                "Say **'review my CV'** if you'd like me to check your uploaded CV against a role."
+            )
+        elif is_length:
+            if years and float(years) <= 3:
+                length_advice = "1 page is ideal for early-career candidates in the UAE."
+            elif years and float(years) >= 15:
+                length_advice = "2-3 pages is acceptable for senior UAE professionals with extensive project history."
+            else:
+                length_advice = "2 pages is the UAE standard for mid-career professionals."
+            advice = (
+                f"**CV Length Guidance:**\n\n"
+                f"{length_advice}\n\n"
+                "**What to cut if too long:**\n"
+                "• Roles older than 15 years (keep only job title, company, dates)\n"
+                "• Generic responsibilities that don't show impact\n"
+                "• Outdated skills and expired certifications\n"
+                "• Personal details beyond name, email, phone, LinkedIn, and UAE location\n\n"
+                "**What to expand if too short:**\n"
+                "• Add quantified achievements: 'Reduced incident rate by 40% over 2 years'\n"
+                "• Expand certifications section with issue dates\n"
+                "• Include a 3-line professional summary at the top"
+            )
+        else:
+            photo_note = (
+                "• **Photo** — a professional headshot is standard and expected in the UAE "
+                "(unlike UK/US where it's avoided)."
+            )
+            advice = (
+                f"**UAE CV Format Guide{' for ' + role if role else ''}:**\n\n"
+                "**Structure (top to bottom):**\n"
+                "1. Name + contact (UAE phone, email, LinkedIn, location in UAE)\n"
+                "2. Professional summary (3-4 lines: who you are, experience level, key value)\n"
+                "3. Work experience (reverse chronological, 3-5 bullet points per role with impact)\n"
+                "4. Education\n"
+                "5. Certifications (critical in UAE — list with issue dates)\n"
+                "6. Skills (technical + soft, tailored to the role)\n\n"
+                "**UAE-specific requirements:**\n"
+                f"{photo_note}\n"
+                "• **Nationality** — commonly included on UAE CVs (not required but expected).\n"
+                "• **Visa status** — state 'Employment Visa', 'Spouse Visa', or 'Available for Sponsorship'.\n"
+                "• **Notice period** — include at the bottom: e.g. 'Notice period: 30 days'.\n"
+                "• **Length** — 2 pages for most; 1 page for entry-level; up to 3 for senior roles.\n\n"
+                "**Font & layout:** Arial or Calibri 10-11pt, clean single-column, no graphics.\n\n"
+                "Say **'ATS CV tips'** for applicant tracking system optimisation."
+            )
+
+        if arabic:
+            advice = (
+                "**نصائح تنسيق السيرة الذاتية في الإمارات:**\n\n"
+                "• الهيكل: معلومات التواصل، ملخص مهني، خبرات العمل (عكسي)، التعليم، الشهادات، المهارات.\n"
+                "• الصورة الشخصية مطلوبة في معظم الوظائف الإماراتية.\n"
+                "• أضف الجنسية وحالة الإقامة وفترة الإشعار.\n"
+                "• الطول المثالي: صفحتان لمعظم المهنيين.\n"
+                "• تنسيق نظيف بدون جداول معقدة أو رسومات للتوافق مع أنظمة ATS."
+            )
+
+        self._append_chat(user_id, "assistant", advice)
+        return {
+            "type": "cv_format_advice",
+            "is_ats_query": is_ats,
+            "is_length_query": is_length,
+            "role": role or None,
+            "message": advice,
+        }
+
+    def _handle_cover_letter_tips(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Return UAE-context cover letter guidance.
+
+        Detects: "how do I write a cover letter?", "do I need a cover letter?",
+        "cover letter format for UAE", "cover letter tips".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        is_needed_question = bool(_re.search(
+            r"\bdo\s+I\s+need\s+a\s+cover\s+letter\b", message, _re.IGNORECASE
+        ))
+
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        role = target_roles[0] if target_roles else ""
+        name = self._profile_value(profile, "name") or ""
+
+        if is_needed_question:
+            advice = (
+                "**Do You Need a Cover Letter in the UAE?**\n\n"
+                "**Short answer: usually yes**, but it depends:\n\n"
+                "• **Always include one** when applying by email or to senior roles (Manager+). "
+                "It sets you apart from the 80% who don't bother.\n"
+                "• **Optional** on Bayt, LinkedIn Easy Apply, or Naukrigulf portals where no field exists.\n"
+                "• **Required** for government roles, multinational corporates, and most oil & gas companies.\n\n"
+                "In UAE hiring culture, a well-written cover letter signals professionalism and seriousness. "
+                "A generic one is worse than none — always personalise.\n\n"
+                "Say **'write a cover letter'** and I'll draft one using your CV profile."
+            )
+        else:
+            role_line = f" for **{role}**" if role else ""
+            name_line = f"Dear Hiring Manager" if not name else f"Dear [Hiring Manager's Name]"
+            advice = (
+                f"**UAE Cover Letter Guide{role_line}:**\n\n"
+                "**Structure (keep it to one page, 3-4 short paragraphs):**\n\n"
+                f"_{name_line},_\n\n"
+                "_Opening:_ State the role, where you found it, and one sentence on why you're a strong fit.\n\n"
+                "_Body 1:_ Your most relevant experience + one quantified achievement (e.g. 'Reduced LTI rate by 35% at [Company]').\n\n"
+                "_Body 2:_ Why this company specifically — reference their UAE projects, values, or recent news.\n\n"
+                "_Closing:_ Express enthusiasm, mention your notice period, and invite them to contact you.\n\n"
+                "**UAE-specific tips:**\n"
+                "• Keep it formal but not stiff — use 'I am' not 'I'm'.\n"
+                "• Mention your visa status if you're already work-authorised — reduces recruiter uncertainty.\n"
+                "• Name the hiring manager if you can find them on LinkedIn — 'Dear Mr Al-Rashidi' beats 'Dear Sir/Madam'.\n"
+                "• Max 350 words — UAE hiring managers read dozens per day.\n\n"
+                + (f"Say **'write a cover letter for {role}'** and I'll draft one from your CV profile." if role
+                   else "Say **'write me a cover letter'** and I'll draft one from your CV profile.")
+            )
+
+        if arabic:
+            advice = (
+                "**نصائح كتابة خطاب التقديم في الإمارات:**\n\n"
+                "• الهيكل: فقرة افتتاحية، فقرة خبرات مع إنجاز قابل للقياس، سبب اهتمامك بالشركة، خاتمة.\n"
+                "• اذكر حالة إقامتك إذا كنت مرخصاً للعمل — يقلل تردد المجنّد.\n"
+                "• سمّ المسؤول إن أمكن بدلاً من 'عزيزي مدير التوظيف'.\n"
+                "• لا تتجاوز صفحة واحدة و350 كلمة.\n"
+                "• قل 'اكتب لي خطاب تقديم' وسأكتب لك واحداً من ملفك الشخصي."
+            )
+
+        self._append_chat(user_id, "assistant", advice)
+        return {
+            "type": "cover_letter_tips",
+            "is_needed_question": is_needed_question,
+            "role": role or None,
+            "message": advice,
+        }
+
+    def _handle_app_pipeline_summary(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Return an application pipeline summary from the user's DB records.
+
+        Detects: "how many applications have I sent?", "my application stats",
+        "what's my application success rate?", "how am I doing?".
+        """
+        arabic = self._is_arabic_text(message)
+
+        # Fetch application records
+        try:
+            from src.repositories import applications_repo as _apps_repo
+            apps = _apps_repo.get_all(user_id) or []
+        except Exception:
+            apps = []
+
+        total = len(apps)
+
+        # Status breakdown
+        status_counts: dict[str, int] = {}
+        for app in apps:
+            status = (
+                getattr(app, "status", None)
+                or (app.get("status") if isinstance(app, dict) else None)
+                or "applied"
+            )
+            status_counts[status] = status_counts.get(status, 0) + 1
+
+        applied    = status_counts.get("applied", 0)
+        saved      = status_counts.get("saved", 0)
+        interview  = status_counts.get("interview", 0) + status_counts.get("interviewing", 0)
+        offered    = status_counts.get("offered", 0) + status_counts.get("offer", 0)
+        rejected   = status_counts.get("rejected", 0) + status_counts.get("declined", 0)
+        skipped    = status_counts.get("skipped", 0)
+
+        # Response rate (interviews + offers out of applied)
+        response_rate = f"{round(interview / applied * 100)}%" if applied > 0 else "N/A"
+
+        if total == 0:
+            msg = (
+                "لم تسجّل أي طلبات توظيف بعد. ابدأ بالبحث عن وظائف وسأتابع تقدمك."
+                if arabic else
+                "You haven't logged any applications yet. Start searching and I'll track your progress."
+            )
+        else:
+            lines = [
+                f"**Your Application Pipeline ({total} total):**\n",
+                f"• Applied: **{applied}**",
+            ]
+            if saved:      lines.append(f"• Saved / to apply: **{saved}**")
+            if interview:  lines.append(f"• Interview stage: **{interview}**")
+            if offered:    lines.append(f"• Offer received: **{offered}**")
+            if rejected:   lines.append(f"• Rejected / declined: **{rejected}**")
+            if skipped:    lines.append(f"• Skipped: **{skipped}**")
+            lines.append(f"\n📊 **Interview response rate:** {response_rate}")
+
+            if interview == 0 and applied >= 5:
+                lines.append("\n💡 Low response rate — consider reviewing your CV keywords or broadening your search.")
+            elif offered > 0:
+                lines.append(f"\n🎉 You have {'an offer' if offered == 1 else f'{offered} offers'} — congratulations!")
+
+            msg = "\n".join(lines)
+
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "app_pipeline_summary",
+            "total": total,
+            "applied": applied,
+            "interview": interview,
+            "offered": offered,
+            "rejected": rejected,
+            "response_rate": response_rate,
+            "message": msg,
         }
 
     # ── Context-aware help ──────────────────────────────────────────────────────

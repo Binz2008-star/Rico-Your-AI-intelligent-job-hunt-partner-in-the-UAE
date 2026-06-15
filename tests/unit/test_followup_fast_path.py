@@ -2442,3 +2442,262 @@ class TestLinkedInNetworking:
     def test_empty_profile_still_works(self, monkeypatch):
         _, result = _run(monkeypatch, "networking tips in UAE", _EmptyProfile())
         assert result["type"] == "linkedin_networking"
+
+
+# ── _CV_FORMAT_RE ─────────────────────────────────────────────────────────────
+
+class TestCVFormatAdvice:
+    """Regex gate and handler for CV/resume format advice."""
+
+    @pytest.mark.parametrize("phrase", [
+        "how should I format my CV for UAE?",
+        "how to format my resume",
+        "CV format tips",
+        "CV format advice",
+        "resume format help",
+        "CV template",
+        "CV structure",
+        "is my CV too long?",
+        "my CV is too long",
+        "ATS CV tips",
+        "ATS-friendly resume",
+        "what should a UAE CV include?",
+        "what should my CV look like?",
+        "CV for UAE",
+        "resume for UAE",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _CV_FORMAT_RE
+        assert _CV_FORMAT_RE.search(phrase), (
+            f"_CV_FORMAT_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        "find HSE jobs in Dubai",
+        "my notice period is 30 days",
+        "how do I negotiate my salary?",
+        "I got rejected",
+        "LinkedIn profile tips",
+        "write a cover letter for HSE Manager",
+        "draft a cover letter for DP World",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _CV_FORMAT_RE
+        assert not _CV_FORMAT_RE.search(phrase), (
+            f"_CV_FORMAT_RE should NOT match: {phrase!r}"
+        )
+
+    def test_routes_to_cv_format_advice(self, monkeypatch):
+        _, result = _run(monkeypatch, "CV format tips", _CVProfile())
+        assert result["type"] == "cv_format_advice"
+
+    def test_ats_query_flagged(self, monkeypatch):
+        _, result = _run(monkeypatch, "ATS CV tips", _CVProfile())
+        assert result["type"] == "cv_format_advice"
+        assert result.get("is_ats_query") is True
+
+    def test_length_query_flagged(self, monkeypatch):
+        _, result = _run(monkeypatch, "is my CV too long?", _CVProfile())
+        assert result["type"] == "cv_format_advice"
+        assert result.get("is_length_query") is True
+
+    def test_general_not_flagged_as_ats_or_length(self, monkeypatch):
+        _, result = _run(monkeypatch, "CV format tips", _CVProfile())
+        assert result.get("is_ats_query") is False
+        assert result.get("is_length_query") is False
+
+    def test_role_from_profile_included(self, monkeypatch):
+        _, result = _run(monkeypatch, "CV format tips", _CVProfile())
+        assert result.get("role") == "Senior HSE Manager"
+
+    def test_message_field_present(self, monkeypatch):
+        _, result = _run(monkeypatch, "CV format tips", _CVProfile())
+        assert isinstance(result.get("message"), str)
+        assert len(result["message"]) > 50
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        _, result = _run(monkeypatch, "CV format tips", _EmptyProfile())
+        assert result["type"] == "cv_format_advice"
+
+
+# ── _COVER_LETTER_TIPS_RE ─────────────────────────────────────────────────────
+
+class TestCoverLetterTips:
+    """Regex gate and handler for cover letter tips (not generation)."""
+
+    @pytest.mark.parametrize("phrase", [
+        "how do I write a cover letter?",
+        "how to write a cover letter",
+        "cover letter tips",
+        "cover letter advice",
+        "cover letter format",
+        "cover letter template",
+        "cover letter guide",
+        "do I need a cover letter?",
+        "what should my cover letter include?",
+        "what to put in a cover letter",
+        "cover letter UAE",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _COVER_LETTER_TIPS_RE
+        assert _COVER_LETTER_TIPS_RE.search(phrase), (
+            f"_COVER_LETTER_TIPS_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        "find HSE jobs in Dubai",
+        "my notice period is 30 days",
+        "how do I negotiate my salary?",
+        "draft a cover letter for DP World",
+        "write a cover letter for Senior HSE Manager at ADNOC",
+        "CV format tips",
+        "LinkedIn advice",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _COVER_LETTER_TIPS_RE
+        assert not _COVER_LETTER_TIPS_RE.search(phrase), (
+            f"_COVER_LETTER_TIPS_RE should NOT match: {phrase!r}"
+        )
+
+    def test_routes_to_cover_letter_tips(self, monkeypatch):
+        _, result = _run(monkeypatch, "cover letter tips", _CVProfile())
+        assert result["type"] == "cover_letter_tips"
+
+    def test_needed_question_flagged(self, monkeypatch):
+        # "do I need a cover letter?" may also be handled by the existing
+        # cover_letter_prompt gate; test the flag via the handler directly
+        from src.rico_chat_api import RicoChatAPI
+        api = RicoChatAPI()
+
+        class P:
+            skills = ["hse"]; certifications = []; years_experience = 8.0
+            target_roles = ["Senior HSE Manager"]; industries = ["Oil & Gas"]
+            cv_status = "parsed"; cv_filename = "cv.pdf"
+
+        from unittest.mock import MagicMock
+        api._append_chat = MagicMock()
+        result = api._handle_cover_letter_tips("u1", P(), "do I need a cover letter?")
+        assert result["type"] == "cover_letter_tips"
+        assert result.get("is_needed_question") is True
+
+    def test_general_tips_not_flagged_as_needed_question(self, monkeypatch):
+        _, result = _run(monkeypatch, "cover letter tips", _CVProfile())
+        assert result.get("is_needed_question") is False
+
+    def test_role_from_profile_included(self, monkeypatch):
+        _, result = _run(monkeypatch, "cover letter tips", _CVProfile())
+        assert result.get("role") == "Senior HSE Manager"
+
+    def test_message_field_present(self, monkeypatch):
+        _, result = _run(monkeypatch, "cover letter tips", _CVProfile())
+        assert isinstance(result.get("message"), str)
+        assert len(result["message"]) > 50
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        _, result = _run(monkeypatch, "cover letter advice", _EmptyProfile())
+        assert result["type"] == "cover_letter_tips"
+
+
+# ── _APP_PIPELINE_SUMMARY_RE ──────────────────────────────────────────────────
+
+class TestAppPipelineSummary:
+    """Regex gate and handler for application pipeline summary."""
+
+    @pytest.mark.parametrize("phrase", [
+        "how many applications have I sent?",
+        "how many jobs did I apply to?",
+        "application summary",
+        "my application stats",
+        "my application statistics",
+        "my application pipeline",
+        "what's my application success rate?",
+        "how am I doing with my job search?",
+        "job search stats",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _APP_PIPELINE_SUMMARY_RE
+        assert _APP_PIPELINE_SUMMARY_RE.search(phrase), (
+            f"_APP_PIPELINE_SUMMARY_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        "find HSE jobs in Dubai",
+        "how many jobs did you find?",
+        "how many jobs are there?",
+        "interview tips",
+        "my notice period is 30 days",
+        "CV format tips",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _APP_PIPELINE_SUMMARY_RE
+        assert not _APP_PIPELINE_SUMMARY_RE.search(phrase), (
+            f"_APP_PIPELINE_SUMMARY_RE should NOT match: {phrase!r}"
+        )
+
+    def _run_with_apps(self, monkeypatch, message, profile, apps=None):
+        """Run _handle_app_pipeline_summary with mocked app repo."""
+        from src.rico_chat_api import RicoChatAPI
+        from unittest.mock import MagicMock, patch
+        import src.rico_chat_api as mod
+
+        _apps = apps if apps is not None else []
+
+        mock_route = MagicMock()
+        mock_route.tool_name = None; mock_route.entities = {}
+        mock_route.tool_args = {}; mock_route.confirmation_prompt = None
+        mock_route.source = "keyword"
+
+        monkeypatch.setattr(mod, "get_profile",    lambda uid: profile)
+        monkeypatch.setattr(mod, "_route",         lambda *a, **kw: mock_route)
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile)
+        monkeypatch.setattr(mod, "hf_ok",          lambda: False)
+
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+
+        with patch("src.repositories.applications_repo.get_all", return_value=_apps):
+            return api._handle_active_user("test-user", message)
+
+    def test_routes_to_app_pipeline_summary(self, monkeypatch):
+        result = self._run_with_apps(monkeypatch, "application summary", _CVProfile())
+        assert result["type"] == "app_pipeline_summary"
+
+    def test_zero_apps_returns_empty_message(self, monkeypatch):
+        result = self._run_with_apps(
+            monkeypatch, "how many applications have I sent?", _CVProfile()
+        )
+        assert result["type"] == "app_pipeline_summary"
+        assert result["total"] == 0
+
+    def test_with_applications_shows_counts(self, monkeypatch):
+        apps = [
+            {"status": "applied"},
+            {"status": "applied"},
+            {"status": "interview"},
+            {"status": "rejected"},
+        ]
+        result = self._run_with_apps(monkeypatch, "application summary", _CVProfile(), apps=apps)
+        assert result["total"] == 4
+        assert result["applied"] == 2
+        assert result["interview"] == 1
+        assert result["rejected"] == 1
+
+    def test_response_rate_calculated(self, monkeypatch):
+        apps = [
+            {"status": "applied"},
+            {"status": "applied"},
+            {"status": "applied"},
+            {"status": "applied"},
+            {"status": "interview"},
+        ]
+        result = self._run_with_apps(
+            monkeypatch, "what's my application success rate?", _CVProfile(), apps=apps
+        )
+        assert result["response_rate"] == "25%"
+
+    def test_message_field_present(self, monkeypatch):
+        apps = [{"status": "applied"}, {"status": "applied"}]
+        result = self._run_with_apps(monkeypatch, "application summary", _CVProfile(), apps=apps)
+        assert isinstance(result.get("message"), str)
+        assert len(result["message"]) > 10
