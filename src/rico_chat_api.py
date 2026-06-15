@@ -832,6 +832,55 @@ _SKILL_GAP_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Interview preparation — "how do I prepare for an interview?", "what questions to expect",
+# "tell me about yourself", "common interview questions", "behavioral interview".
+_INTERVIEW_PREP_RE = re.compile(
+    r"\bhow\s+(?:do\s+I|to|can\s+I)\s+(?:prepare\s+for|ace|pass|nail|crush|handle)\s+(?:(?:a|an|the|my)\s+)?interview\b"
+    r"|\bhow\s+(?:to\s+)?(?:ace|pass|nail|impress)\s+(?:a|an|the|my)?\s*interview\b"
+    r"|\b(?:interview\s+(?:tips?|advice|prep(?:aration)?|guide|questions?|help|practice|coaching))\b"
+    r"|\b(?:common|typical|likely|hard|tough|tricky)\s+(?:interview\s+)?questions?\b"
+    r"|\bwhat\s+questions?\s+(?:should\s+I\s+)?(?:expect|can\s+I\s+expect).{0,20}?\binterview\b"
+    r"|\bwhat\s+(?:to|should\s+I)\s+(?:say|wear|bring|expect)\s+(?:in|at|to|for)\s+.{0,15}?\binterview\b"
+    r"|\b(?:tell\s+me\s+about\s+yourself|STAR\s+method|situational\s+interview|behavioral\s+interview)\b"
+    r"|\bwhat\s+(?:should\s+I|do\s+I)\s+(?:say|answer|reply)\s+when\s+(?:asked|they\s+ask)\b"
+    r"|\bhow\s+(?:do\s+I|to)\s+(?:answer|respond\s+to)\s+(?:interview|the)\s+question\b"
+    r"|\b(?:preparing|practice)\s+for\s+(?:a|an|the|my)?\s*interview\b"
+    r"|\b(?:أسئلة\s+المقابلة|كيف\s+أتحضر\s+للمقابلة|التحضير\s+للمقابلة)\b"
+    r"|\b(?:تحضير|نصائح)\s+(?:المقابلة|الوظيفية|المقابلات)\b",
+    re.IGNORECASE,
+)
+
+# Salary negotiation — "how do I negotiate my salary?", "should I counter-offer",
+# "how to ask for a raise", "negotiation tips".
+_SALARY_NEGOTIATION_RE = re.compile(
+    r"\bhow\s+(?:do\s+I|to|should\s+I|can\s+I)\s+negotiate\s+(?:my\s+)?salary\b"
+    r"|\bhow\s+(?:do\s+I|to|can\s+I)\s+(?:negotiate|ask\s+for|request)\s+(?:a\s+)?(?:(?:higher\s+|better\s+)?salary|pay\s+rise|raise|pay\s+increase|counter[- ]?offer)\b"
+    r"|\bshould\s+I\s+(?:counter|negotiate|accept|reject)\s+(?:the\s+)?offer\b"
+    r"|\b(?:the\s+)?offer\s+(?:is|seems?)\s+(?:too\s+low|below\s+market|not\s+enough|low)\b"
+    r"|\bhow\s+(?:to|do\s+I)\s+ask\s+for\s+(?:a\s+)?(?:raise|higher\s+salary|better\s+offer|salary\s+increase)\b"
+    r"|\b(?:salary\s+)?negotiation\s+(?:tips?|advice|strategy|help|tactics?)\b"
+    r"|\bwhat\s+(?:should\s+I|can\s+I)\s+(?:ask\s+for|counter(?:\s+offer)?|negotiate)\b"
+    r"|\b(?:counter[\s-]offer|counteroffer)\b"
+    r"|\b(?:salary|pay|offer)\s+(?:negotiation|negotiating|counter[- ]?offer|counter)\b"
+    r"|\b(?:should\s+I|can\s+I)\s+(?:negotiate|counter|ask\s+for\s+more)\s+(?:the\s+)?(?:salary|offer|pay)\b"
+    r"|\b(?:ask\s+for\s+a\s+raise|request\s+a\s+(?:salary\s+)?increase|negotiate\s+(?:my\s+)?package)\b"
+    r"|\b(?:when\s+(?:should\s+I|to)\s+(?:discuss|bring\s+up|mention|negotiate)\s+salary)\b"
+    r"|\b(?:نصائح\s+(?:تفاوض|الراتب)|كيف\s+أتفاوض|مفاوضة\s+الراتب|كيف\s+أطلب\s+زيادة|التفاوض\s+على\s+الراتب)\b",
+    re.IGNORECASE,
+)
+
+# LinkedIn profile optimisation — "how do I improve my LinkedIn?", "LinkedIn tips",
+# "should I use LinkedIn for jobs in UAE?", "LinkedIn headline/summary".
+_LINKEDIN_TIPS_RE = re.compile(
+    r"\b(?:how\s+(?:do\s+I|to|can\s+I)\s+(?:improve|optimise?|optimize|update|set\s+up|use|grow|boost)\s+(?:my\s+)?LinkedIn)\b"
+    r"|\bLinkedIn\s+(?:tips?|advice|profile\s+tips?|headline|summary|bio|optimis(?:e|ation)|optim(?:ize|ization)|for\s+(?:UAE|Dubai|jobs?|job\s+search))\b"
+    r"|\b(?:should\s+I\s+(?:use|be\s+on|have\s+a?\s+|join)\s+LinkedIn)\b"
+    r"|\b(?:is\s+LinkedIn\s+(?:useful|important|worth\s+it|effective|good)\s+(?:in\s+UAE|for\s+(?:UAE|Dubai)|for\s+(?:finding\s+)?jobs?))\b"
+    r"|\b(?:LinkedIn\s+(?:connections?|network|profile|presence|page|account)\s+(?:tips?|advice|for\s+(?:UAE|jobs?)))\b"
+    r"|\b(?:نصائح\s+LinkedIn|تحسين\s+(?:ملف|حساب)\s+LinkedIn)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -4934,6 +4983,17 @@ class RicoChatAPI:
         if _SKILL_GAP_RE.search(message):
             return self._finalize(
                 self._handle_skill_gap(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── LinkedIn profile optimisation ─────────────────────────────────────
+        # Unique patterns not covered by _LINKEDIN_NETWORKING_RE:
+        # "how do I improve my LinkedIn?", "should I use LinkedIn?",
+        # "is LinkedIn useful in UAE?", "LinkedIn headline tips".
+        if _LINKEDIN_TIPS_RE.search(message):
+            return self._finalize(
+                self._handle_linkedin_tips(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -11448,6 +11508,179 @@ class RicoChatAPI:
             "target_role": target_role,
             "strengths": strengths,
             "gaps": gaps,
+            "message": msg,
+        }
+
+    # ── Interview preparation ────────────────────────────────────────────────────
+
+    def _handle_interview_prep(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        target_role = ""
+        if profile:
+            roles = getattr(profile, "target_roles", None) or []
+            if roles:
+                target_role = roles[0]
+            if not target_role:
+                target_role = getattr(profile, "current_role", "") or ""
+
+        role_line = f" for **{target_role}**" if target_role else ""
+
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                f"## التحضير للمقابلة{role_line}\n\n"
+                "**قبل المقابلة:**\n"
+                "- ابحث عن الشركة: أهدافها، ثقافتها، آخر أخبارها\n"
+                "- راجع متطلبات الوظيفة وحضّر أمثلة من تجربتك تتوافق معها\n"
+                "- جهّز أسئلة ذكية لطرحها على المحاور\n\n"
+                "**أسئلة شائعة يجب التحضير لها:**\n"
+                "1. حدثنا عن نفسك — ملخص مهني موجز (2 دقيقتين)\n"
+                "2. ما أبرز إنجازاتك؟ — استخدم مقاييس واضحة\n"
+                "3. لماذا تريد العمل معنا؟ — اربطه بأهداف الشركة\n"
+                "4. ما نقاط قوتك وضعفك؟ — كن صادقاً مع تحسّن واضح\n"
+                "5. أين ترى نفسك بعد 5 سنوات؟ — اربطه بمسار الوظيفة\n\n"
+                "**أسلوب STAR للأسئلة السلوكية:**\n"
+                "**S**ituation → **T**ask → **A**ction → **R**esult\n\n"
+                "**في يوم المقابلة:**\n"
+                "- احضر قبل 10 دقائق على الأقل\n"
+                "- ابدأ بمصافحة واثقة وتواصل بالعيون\n"
+                "- في نهاية المقابلة اسأل: «ما الخطوة القادمة في عملية التوظيف؟»"
+            )
+        else:
+            msg = (
+                f"## Interview Preparation Guide{role_line}\n\n"
+                "**Before the interview:**\n"
+                "- Research the company: mission, culture, recent news, key projects\n"
+                "- Map the job requirements to your experience with concrete examples\n"
+                "- Prepare 3–5 smart questions to ask the interviewer\n\n"
+                "**Common questions to prepare for:**\n"
+                "1. **Tell me about yourself** — 2-minute career summary ending with why this role\n"
+                "2. **Greatest achievement?** — Use numbers: \"increased X by Y%\", \"saved AED Z\"\n"
+                "3. **Why this company?** — Tie it to their goals or products\n"
+                "4. **Strengths and weaknesses?** — Be honest; pair weaknesses with active improvement\n"
+                "5. **Where do you see yourself in 5 years?** — Align with the role's growth path\n\n"
+                "**STAR method for behavioural questions:**\n"
+                "**S**ituation → **T**ask → **A**ction → **R**esult\n\n"
+                "*Example:* \"Tell me about a time you handled a difficult stakeholder.\"\n"
+                "→ Situation, your Task, Action you took, measurable Result.\n\n"
+                "**On the day:**\n"
+                "- Arrive or join the call 10 minutes early\n"
+                "- Firm handshake, eye contact, confident posture\n"
+                "- Close by asking: \"What is the next step in your hiring process?\""
+            )
+
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "interview_prep",
+            "target_role": target_role,
+            "message": msg,
+        }
+
+    # ── Salary negotiation ───────────────────────────────────────────────────────
+
+    def _handle_salary_negotiation(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## كيف تتفاوض على راتبك في الإمارات\n\n"
+                "**التوقيت المثالي:**\n"
+                "- انتظر حتى تحصل على عرض رسمي قبل التفاوض\n"
+                "- لا تذكر توقعاتك أولاً — دع صاحب العمل يبدأ\n\n"
+                "**الخطوات:**\n"
+                "1. **ابحث عن متوسط الراتب** للدور والخبرة في الإمارات\n"
+                "2. **حدد نطاقاً** — الحد الأدنى المقبول والهدف المثالي\n"
+                "3. **برر طلبك** بإنجازاتك ومهاراتك، وليس باحتياجاتك الشخصية\n"
+                "4. **لا تقبل أو ترفض فوراً** — اطلب يومين للتفكير\n"
+                "5. **تفاوض على الباقة كاملة**: بدل السكن، التأمين، الإجازة، المسمى الوظيفي\n\n"
+                "**عبارات مفيدة:**\n"
+                "- «بناءً على خبرتي وبحثي في السوق، كنت أتوقع نطاقاً بين X وY درهم»\n"
+                "- «هل هناك مرونة في العرض؟»\n"
+                "- «أقدّر العرض — هل يمكنني أخذ يومين للنظر فيه؟»\n\n"
+                "**ملاحظة:** التفاوض أمر طبيعي ومتوقع في سوق الإمارات — 70٪ من أصحاب العمل يتوقعونه."
+            )
+        else:
+            msg = (
+                "## Salary Negotiation in the UAE\n\n"
+                "**Timing:**\n"
+                "- Wait until you have a formal offer before negotiating\n"
+                "- Avoid naming your number first — let the employer anchor\n\n"
+                "**Step-by-step:**\n"
+                "1. **Research market rates** for the role, level, and industry in the UAE\n"
+                "2. **Set your range** — know your walk-away floor and your ideal target\n"
+                "3. **Justify with value**, not personal need: cite achievements, certifications, market data\n"
+                "4. **Don't accept or decline on the spot** — ask for 48 hours to consider\n"
+                "5. **Negotiate the full package**: housing allowance, medical, annual leave, title, start date\n\n"
+                "**Phrases that work:**\n"
+                "- *\"Based on my experience and market benchmarks, I was expecting a range of AED X–Y.\"*\n"
+                "- *\"Is there flexibility in the offer?\"*\n"
+                "- *\"I appreciate the offer — could I have 48 hours to review it?\"*\n\n"
+                "**UAE tip:** Negotiation is expected here — roughly 70% of employers build room into the first offer. "
+                "Counter-offers are rarely rescinded for politely negotiating."
+            )
+
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "salary_negotiation",
+            "message": msg,
+        }
+
+    # ── LinkedIn optimisation ────────────────────────────────────────────────────
+
+    def _handle_linkedin_tips(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        target_role = ""
+        if profile:
+            roles = getattr(profile, "target_roles", None) or []
+            if roles:
+                target_role = roles[0]
+
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## تحسين ملفك على LinkedIn للبحث الوظيفي في الإمارات\n\n"
+                "**الصورة الشخصية والغلاف:**\n"
+                "- صورة احترافية بخلفية محايدة — تزيد من فرص الظهور بنسبة 14×\n"
+                "- صورة غلاف تعكس مجالك أو الشركات التي عملت فيها\n\n"
+                "**العنوان (Headline):**\n"
+                "- لا تكتف بالمسمى الوظيفي — أضف قيمتك الأساسية\n"
+                f"- مثال: «{target_role} | HSE Leadership | UAE & GCC Operations» \n\n"
+                "**ملخص About:**\n"
+                "- 3-5 أسطر تبدأ بجملة جذابة عن ما تفعله وما تتميز به\n"
+                "- أضف كلمات مفتاحية يبحث عنها المسؤولون في التوظيف\n\n"
+                "**الخبرات:**\n"
+                "- استخدم نقاط تحتوي على أرقام ونتائج ملموسة\n"
+                "- أضف الوسائط (شهادات، مشاريع، مقالات) لكل منصب\n\n"
+                "**نشاط LinkedIn:**\n"
+                "- تفاعل مع منشورات في مجالك أسبوعياً\n"
+                "- اطلب توصيات من زملاء ومديرين سابقين\n"
+                "- اتبع شركاتك المستهدفة في الإمارات\n\n"
+                "**الخصوصية:** فعّل وضع Open to Work بشكل خاص (مرئي للـ recruiters فقط)."
+            )
+        else:
+            role_line = f" (targeting: **{target_role}**)" if target_role else ""
+            msg = (
+                f"## LinkedIn Optimisation for UAE Job Search{role_line}\n\n"
+                "**Photo & banner:**\n"
+                "- Professional headshot on a neutral background — profiles with photos get 14× more views\n"
+                "- Banner image that reflects your industry or target companies\n\n"
+                "**Headline:**\n"
+                "- Go beyond job title — add your core value proposition\n"
+                f"- Example: *\"{target_role or 'Operations Manager'} | Process Optimisation | UAE & GCC\"*\n\n"
+                "**About section:**\n"
+                "- 3–5 lines opening with a hook about what you do and what sets you apart\n"
+                "- Embed keywords recruiters search for in your target role\n\n"
+                "**Experience entries:**\n"
+                "- Lead with impact bullets: numbers, percentages, AED values\n"
+                "- Add media (certificates, project links, articles) to each role\n\n"
+                "**Active presence:**\n"
+                "- Engage with 2–3 posts weekly in your niche to surface in feeds\n"
+                "- Request recommendations from ex-managers and close colleagues\n"
+                "- Follow your target UAE companies to spot openings early\n\n"
+                "**Open to Work:** Enable it privately (visible to recruiters only) to avoid alerting your current employer."
+            )
+
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "linkedin_tips",
+            "target_role": target_role,
             "message": msg,
         }
 

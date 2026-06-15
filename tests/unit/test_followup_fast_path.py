@@ -3810,3 +3810,279 @@ class TestSkillGap:
         result = self._run(monkeypatch, "am I ready for a senior role?", profile=_CVProfile())
         msg = result["message"]
         assert isinstance(msg, str) and len(msg) > 50
+
+
+# ── Interview Preparation ──────────────────────────────────────────────────────
+
+class TestInterviewPrep:
+    """Tests for _INTERVIEW_PREP_RE and _handle_interview_prep."""
+
+    _REGEX_CASES_MATCH = [
+        "how do I prepare for an interview?",
+        "how to ace an interview",
+        "how can I pass an interview?",
+        "interview tips",
+        "interview preparation guide",
+        "interview questions to expect",
+        "common interview questions",
+        "what questions should I expect at an interview?",
+        "tell me about yourself",
+        "STAR method",
+        "behavioral interview",
+        "how do I answer interview questions?",
+        "أسئلة المقابلة",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "should I send a thank you email after the interview?",  # post-interview email
+        "what skills am I missing?",  # skill gap
+        "I need a job urgently",
+        "show my applications",
+        "how do I negotiate my salary?",  # salary negotiation
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _INTERVIEW_PREP_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _INTERVIEW_PREP_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _INTERVIEW_PREP_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _INTERVIEW_PREP_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_interview_prep(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I prepare for an interview?")
+        assert result["type"] == "interview_prep"
+
+    def test_ace_interview_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how to ace an interview")
+        assert result["type"] == "interview_prep"
+
+    def test_common_questions_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "common interview questions")
+        assert result["type"] == "interview_prep"
+
+    def test_star_method_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "STAR method for interviews")
+        assert result["type"] == "interview_prep"
+
+    def test_message_has_star_method(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I prepare for an interview?")
+        assert "STAR" in result["message"]
+
+    def test_message_has_tell_me_about_yourself(self, monkeypatch):
+        result = self._run(monkeypatch, "interview tips")
+        msg = result["message"].lower()
+        assert "tell me about yourself" in msg or "tell me about" in msg
+
+    def test_target_role_from_profile(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I prepare for an interview?", profile=_CVProfile())
+        assert result.get("target_role") == "Senior HSE Manager"
+
+    def test_message_contains_role(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I prepare for an interview?", profile=_CVProfile())
+        assert "Senior HSE Manager" in result["message"]
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "interview tips")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "interview prep guide", profile=_EmptyProfile())
+        assert result["type"] == "interview_prep"
+
+
+# ── Salary Negotiation ────────────────────────────────────────────────────────
+
+class TestSalaryNegotiation:
+    """Tests for _SALARY_NEGOTIATION_RE and _handle_salary_negotiation."""
+
+    _REGEX_CASES_MATCH = [
+        "how do I negotiate my salary?",
+        "how to negotiate a higher salary",
+        "can I negotiate the offer?",
+        "should I counter the salary offer?",
+        "salary negotiation tips",
+        "salary counter-offer advice",
+        "how to ask for a raise",
+        "request a salary increase",
+        "when should I discuss salary?",
+        "negotiate my package",
+        "مفاوضة الراتب",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "what is the salary for HSE Manager?",  # salary benchmark
+        "what are the benefits in UAE?",         # benefits guide
+        "how do I prepare for an interview?",    # interview prep
+        "I need a job urgently",
+        "show my applications",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _SALARY_NEGOTIATION_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _SALARY_NEGOTIATION_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _SALARY_NEGOTIATION_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _SALARY_NEGOTIATION_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_salary_negotiation(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I negotiate my salary?")
+        assert result["type"] == "salary_negotiation"
+
+    def test_counter_offer_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "should I counter the salary offer?")
+        assert result["type"] == "salary_negotiation"
+
+    def test_raise_request_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how to ask for a raise")
+        assert result["type"] == "salary_negotiation"
+
+    def test_negotiate_package_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "negotiate my package")
+        assert result["type"] == "salary_negotiation"
+
+    def test_message_mentions_full_package(self, monkeypatch):
+        result = self._run(monkeypatch, "salary negotiation tips")
+        msg = result["message"].lower()
+        assert "allowance" in msg or "package" in msg or "benefit" in msg
+
+    def test_message_has_timing_advice(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I negotiate my salary?")
+        msg = result["message"].lower()
+        assert "offer" in msg and ("wait" in msg or "formal" in msg or "timing" in msg or "48" in msg)
+
+    def test_message_has_example_phrase(self, monkeypatch):
+        result = self._run(monkeypatch, "salary negotiation tips")
+        msg = result["message"]
+        assert "AED" in msg or "X" in msg or "range" in msg.lower()
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "salary negotiation tips")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I negotiate my salary?", profile=_EmptyProfile())
+        assert result["type"] == "salary_negotiation"
+
+
+# ── LinkedIn Optimisation ─────────────────────────────────────────────────────
+
+class TestLinkedInTips:
+    """Tests for _LINKEDIN_TIPS_RE and _handle_linkedin_tips."""
+
+    _REGEX_CASES_MATCH = [
+        "how do I improve my LinkedIn?",
+        "how to optimise my LinkedIn profile",
+        "how to optimize my LinkedIn",
+        "LinkedIn tips",
+        "LinkedIn profile tips",
+        "LinkedIn advice for UAE",
+        "LinkedIn for jobs in Dubai",
+        "should I use LinkedIn?",
+        "is LinkedIn useful in UAE?",
+        "is LinkedIn worth it for job search?",
+        "LinkedIn headline tips",
+        "LinkedIn summary advice",
+        "LinkedIn connections tips",
+        "نصائح LinkedIn",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "how do I prepare for an interview?",  # interview prep
+        "how do I negotiate my salary?",       # salary negotiation
+        "I need a job urgently",
+        "show my applications",
+        "how do I improve my CV?",             # profile improve RE
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _LINKEDIN_TIPS_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _LINKEDIN_TIPS_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _LINKEDIN_TIPS_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _LINKEDIN_TIPS_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_linkedin_tips(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I improve my LinkedIn?")
+        assert result["type"] == "linkedin_tips"
+
+    def test_improve_linkedin_routes(self, monkeypatch):
+        # "how do I improve" is not in _LINKEDIN_NETWORKING_RE — reaches our gate
+        result = self._run(monkeypatch, "how do I improve my LinkedIn?")
+        assert result["type"] == "linkedin_tips"
+
+    def test_should_use_linkedin_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "should I use LinkedIn?")
+        assert result["type"] == "linkedin_tips"
+
+    def test_is_linkedin_useful_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "is LinkedIn useful in UAE?")
+        assert result["type"] == "linkedin_tips"
+
+    def test_target_role_from_profile(self, monkeypatch):
+        # "LinkedIn headline tips" is not caught by _LINKEDIN_NETWORKING_RE
+        result = self._run(monkeypatch, "LinkedIn headline tips", profile=_CVProfile())
+        assert result.get("target_role") == "Senior HSE Manager"
+
+    def test_message_mentions_headline(self, monkeypatch):
+        result = self._run(monkeypatch, "LinkedIn headline tips")
+        assert "Headline" in result["message"] or "headline" in result["message"]
+
+    def test_message_mentions_open_to_work(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I improve my LinkedIn?")
+        assert "Open to Work" in result["message"] or "open to work" in result["message"].lower()
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I improve my LinkedIn?")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "is LinkedIn useful in UAE?", profile=_EmptyProfile())
+        assert result["type"] == "linkedin_tips"
