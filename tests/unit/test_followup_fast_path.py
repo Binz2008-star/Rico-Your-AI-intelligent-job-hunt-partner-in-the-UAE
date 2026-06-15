@@ -7301,3 +7301,251 @@ class TestContractTypesUAE:
     def test_empty_profile_still_works(self, monkeypatch):
         result = self._run(monkeypatch, "limited term contract UAE", profile=_EmptyProfile())
         assert result["type"] == "contract_types_uae"
+
+# ── _MULTIPLE_OFFERS_RE ───────────────────────────────────────────────────────
+
+class TestMultipleOffers:
+    """Regex gate and handler for choosing between multiple job offers."""
+
+    _REGEX_CASES_MATCH = [
+        "I have two job offers",
+        "I got multiple job offers",
+        "I received two job offers and don't know which to pick",
+        "how do I choose between two job offers?",
+        "how should I decide between job offers?",
+        "which job offer should I choose?",
+        "which offer should I accept?",
+        "comparing two job offers",
+        "offer comparison advice",
+        "لدي عرضان وظيفيان",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "how do I negotiate my salary?",
+        "I got a job offer",
+        "interview tips UAE",
+        "how do I find a job?",
+        "annual leave entitlement UAE",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _MULTIPLE_OFFERS_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _MULTIPLE_OFFERS_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _MULTIPLE_OFFERS_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _MULTIPLE_OFFERS_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_two_offers_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "I have two job offers")
+        assert result["type"] == "multiple_offers"
+
+    def test_choose_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I choose between two job offers?")
+        assert result["type"] == "multiple_offers"
+
+    def test_which_offer_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "which job offer should I choose?")
+        assert result["type"] == "multiple_offers"
+
+    def test_message_mentions_compensation(self, monkeypatch):
+        result = self._run(monkeypatch, "I have two job offers")
+        msg = result["message"].lower()
+        assert "salary" in msg or "compensation" in msg or "راتب" in msg
+
+    def test_message_mentions_culture(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I choose between two job offers?")
+        msg = result["message"].lower()
+        assert "culture" in msg or "growth" in msg or "stability" in msg or "ثقافة" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "I received two job offers")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "I have two job offers", profile=_EmptyProfile())
+        assert result["type"] == "multiple_offers"
+
+
+# ── _WORKPLACE_HARASSMENT_RE ──────────────────────────────────────────────────
+
+class TestWorkplaceHarassment:
+    """Regex gate and handler for workplace harassment and discrimination in UAE."""
+
+    _REGEX_CASES_MATCH = [
+        "I'm being harassed at work",
+        "I am being harassed at work",
+        "I'm being bullied at work",
+        "workplace harassment UAE",
+        "workplace discrimination UAE",
+        "my manager is harassing me",
+        "how do I report workplace harassment?",
+        "how do I deal with workplace bullying?",
+        "sexual harassment at work",
+        "تحرش في العمل",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "how many annual leave days?",
+        "salary negotiation tips",
+        "interview tips",
+        "how do I resign?",
+        "visa cancellation UAE",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _WORKPLACE_HARASSMENT_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _WORKPLACE_HARASSMENT_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _WORKPLACE_HARASSMENT_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _WORKPLACE_HARASSMENT_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_harassed_at_work_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "I'm being harassed at work")
+        assert result["type"] == "workplace_harassment"
+
+    def test_bullied_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "I'm being bullied at work")
+        assert result["type"] == "workplace_harassment"
+
+    def test_workplace_harassment_uae_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "workplace harassment UAE")
+        assert result["type"] == "workplace_harassment"
+
+    def test_message_mentions_mohre(self, monkeypatch):
+        result = self._run(monkeypatch, "workplace harassment UAE")
+        msg = result["message"].lower()
+        assert "mohre" in msg or "وزارة" in msg or "800" in msg
+
+    def test_message_mentions_law(self, monkeypatch):
+        result = self._run(monkeypatch, "I'm being harassed at work")
+        msg = result["message"].lower()
+        assert "law" in msg or "legal" in msg or "قانون" in msg or "illegal" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "workplace harassment UAE")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "workplace harassment UAE", profile=_EmptyProfile())
+        assert result["type"] == "workplace_harassment"
+
+
+# ── _REDUNDANCY_UAE_RE ────────────────────────────────────────────────────────
+
+class TestRedundancyUAE:
+    """Regex gate and handler for redundancy / layoff in UAE."""
+
+    _REGEX_CASES_MATCH = [
+        "I was made redundant",
+        "I got laid off",
+        "I have been laid off",
+        "my company is laying me off",
+        "my company is making staff redundant",
+        "what are my rights if I am laid off?",
+        "redundancy rights UAE",
+        "layoff rights UAE",
+        "redundancy payment UAE",
+        "company is downsizing",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "I got rejected",
+        "how many annual leave days?",
+        "salary negotiation tips",
+        "interview tips",
+        "how do I resign?",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _REDUNDANCY_UAE_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _REDUNDANCY_UAE_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _REDUNDANCY_UAE_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _REDUNDANCY_UAE_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_made_redundant_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "I was made redundant")
+        assert result["type"] == "redundancy_uae"
+
+    def test_laid_off_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "I got laid off")
+        assert result["type"] == "redundancy_uae"
+
+    def test_company_laying_off_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "my company is laying me off")
+        assert result["type"] == "redundancy_uae"
+
+    def test_redundancy_rights_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "redundancy rights UAE")
+        assert result["type"] == "redundancy_uae"
+
+    def test_message_mentions_eosb(self, monkeypatch):
+        result = self._run(monkeypatch, "I was made redundant")
+        msg = result["message"].lower()
+        assert "eosb" in msg or "gratuity" in msg or "مكافأة" in msg
+
+    def test_message_mentions_notice_period(self, monkeypatch):
+        result = self._run(monkeypatch, "redundancy rights UAE")
+        msg = result["message"].lower()
+        assert "notice" in msg or "إشعار" in msg
+
+    def test_message_mentions_mohre(self, monkeypatch):
+        result = self._run(monkeypatch, "I was made redundant")
+        msg = result["message"].lower()
+        assert "mohre" in msg or "وزارة" in msg or "800" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "layoff rights UAE")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "I was made redundant", profile=_EmptyProfile())
+        assert result["type"] == "redundancy_uae"

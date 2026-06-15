@@ -1359,6 +1359,45 @@ _CONTRACT_TYPES_UAE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# ── Multiple job offers ────────────────────────────────────────────────────────
+# "I have two job offers", "how do I choose between job offers?".
+_MULTIPLE_OFFERS_RE = re.compile(
+    r"\b(?:I\s+(?:have|got|received)\s+(?:two|2|multiple|more\s+than\s+one|several)\s+job\s+offers?)\b"
+    r"|\b(?:how\s+(?:do\s+I|to|should\s+I|can\s+I)\s+(?:choose|decide|pick|compare|evaluate|select)\s+between\s+(?:two|2|multiple|job)?\s*(?:job\s+)?offers?)\b"
+    r"|\b(?:comparing\s+(?:two|2|multiple|job)\s+(?:job\s+)?offers?)\b"
+    r"|\b(?:which\s+(?:job\s+)?offer\s+should\s+I\s+(?:choose|accept|take|pick|go\s+with))\b"
+    r"|\b(?:I\s+(?:need|want)\s+to\s+(?:choose|decide|pick)\s+between\s+(?:two|2|multiple)\s+(?:job\s+)?offers?)\b"
+    r"|\b(?:offer\s+comparison\s+(?:advice|tips?|how\s+to|UAE|Dubai))\b"
+    r"|\b(?:لدي\s+(?:عرضان|عروض\s+متعددة|عرضين)\s+(?:وظيفيان?|للعمل)|كيف\s+أختار\s+بين\s+(?:عرضين|عرضان)\s+وظيفيين?)\b",
+    re.IGNORECASE,
+)
+
+# ── Workplace harassment / discrimination UAE ──────────────────────────────────
+# "I'm being harassed at work", "my employer is discriminating against me".
+_WORKPLACE_HARASSMENT_RE = re.compile(
+    r"\b(?:I(?:'m|\s+am)\s+being\s+(?:harassed|bullied|discriminated\s+against|sexually\s+harassed|victimised?|victimized?)\s+(?:at\s+work|by\s+my\s+(?:manager|boss|employer|colleague|coworker)))\b"
+    r"|\b(?:(?:workplace|work|office|job|employment)\s+(?:harassment|bullying|discrimination|hostile\s+environment|sexual\s+harassment)(?:\s+(?:UAE|Dubai|complaint|how\s+to\s+report|rights?))?)\b"
+    r"|\b(?:sexual\s+harassment\s+(?:at\s+work|in\s+the\s+workplace|UAE|Dubai|complaint|reporting|rights?))\b"
+    r"|\b(?:how\s+(?:do\s+I|to|can\s+I|should\s+I)\s+(?:report|deal\s+with|handle|stop|file\s+a\s+complaint\s+about)\s+(?:workplace\s+)?(?:harassment|bullying|discrimination|sexual\s+harassment))\b"
+    r"|\b(?:my\s+(?:manager|boss|employer|colleague)\s+is\s+(?:harassing|bullying|discriminating\s+against|sexually\s+harassing)\s+me)\b"
+    r"|\b(?:what\s+(?:are\s+my\s+rights|can\s+I\s+do|should\s+I\s+do)\s+(?:if|when)\s+(?:I\s+(?:am|'m)\s+being|I\s+(?:face|experience))\s+(?:harassed|bullied|discriminated\s+against|harassment|discrimination))\b"
+    r"|\b(?:تحرش\s+(?:في\s+العمل|مكان\s+العمل|جنسي)|تمييز\s+(?:في\s+العمل|ضدي)|مضايقة\s+في\s+العمل)\b",
+    re.IGNORECASE,
+)
+
+# ── Redundancy / layoff UAE ────────────────────────────────────────────────────
+# "I was made redundant", "my company is laying me off", "what are my rights?".
+_REDUNDANCY_UAE_RE = re.compile(
+    r"\b(?:(?:I\s+(?:was|got|have\s+been))\s+(?:made\s+redundant|laid\s+off|let\s+go|downsized|retrenched))\b"
+    r"|\b(?:(?:my\s+)?(?:company|employer|organization)\s+is\s+(?:laying|making)\s+(?:me|people|staff|employees)\s+(?:off|redundant))\b"
+    r"|\b(?:redundanc(?:y|ies)\s+(?:UAE|Dubai|rights?|compensation|payment|law|rules?|EOSB|gratuity|process))\b"
+    r"|\b(?:what\s+(?:are\s+(?:my\s+)?rights?|happens?|(?:do\s+I|am\s+I)\s+(?:get|entitled\s+to))\s+(?:if\s+I\s+(?:am|get|was)\s+)?(?:laid\s+off|made\s+redundant|retrenched|downsized))\b"
+    r"|\b(?:(?:layoff|lay[- ]off|retrenchment|downsizing)\s+(?:UAE|Dubai|rights?|compensation|payment|law|rules?|process|notice))\b"
+    r"|\b(?:company\s+(?:is\s+)?(?:downsizing|restructuring|cutting\s+(?:jobs?|staff|roles?))(?:\s+(?:and\s+I|UAE|Dubai))?)\b"
+    r"|\b(?:فصل\s+(?:جماعي|تعسفي)|تقليص\s+العمالة|ما\s+حقوقي\s+(?:عند|إذا)\s+(?:الاستغناء\s+عن\s+خدماتي|فُصِلت\s+من\s+العمل))\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -5445,7 +5484,7 @@ class RicoChatAPI:
 
         # ── UAE labor law / probation info ────────────────────────────────────
         # "what is the probation period?", "UAE labor law", "termination rights".
-        if _UAE_LABOR_LAW_RE.search(message) and not _PROBATION_RULES_RE.search(message) and not _CONTRACT_TYPES_UAE_RE.search(message) and not _OVERTIME_PAY_UAE_RE.search(message):
+        if _UAE_LABOR_LAW_RE.search(message) and not _PROBATION_RULES_RE.search(message) and not _CONTRACT_TYPES_UAE_RE.search(message) and not _OVERTIME_PAY_UAE_RE.search(message) and not _REDUNDANCY_UAE_RE.search(message) and not _WORKPLACE_HARASSMENT_RE.search(message):
             return self._finalize(
                 self._handle_uae_labor_law(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5801,6 +5840,33 @@ class RicoChatAPI:
         if _CONTRACT_TYPES_UAE_RE.search(message):
             return self._finalize(
                 self._handle_contract_types_uae(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Multiple job offers ───────────────────────────────────────────────
+        # "I have two job offers", "how do I choose between offers?".
+        if _MULTIPLE_OFFERS_RE.search(message):
+            return self._finalize(
+                self._handle_multiple_offers(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Workplace harassment UAE ──────────────────────────────────────────
+        # "I'm being harassed at work", "how do I report discrimination?".
+        if _WORKPLACE_HARASSMENT_RE.search(message):
+            return self._finalize(
+                self._handle_workplace_harassment(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Redundancy / layoff UAE ───────────────────────────────────────────
+        # "I was made redundant", "company is laying me off", "redundancy rights UAE".
+        if _REDUNDANCY_UAE_RE.search(message):
+            return self._finalize(
+                self._handle_redundancy_uae(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -14141,6 +14207,119 @@ class RicoChatAPI:
             )
         self._append_chat(user_id, "assistant", msg)
         return {"type": "contract_types_uae", "message": msg}
+
+    # ── Multiple job offers ───────────────────────────────────────────────────────
+
+    def _handle_multiple_offers(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "⚖️ **كيف تختار بين عرضين وظيفيين؟**\n\n"
+                "**اقارن هذه العوامل الستة:**\n\n"
+                "1. **الراتب الإجمالي** — لا تقارن الأساسي فقط؛ احسب بدل الإسكان والمواصلات والمكافآت\n"
+                "2. **مسار النمو الوظيفي** — أيهما يفتح أمامك آفاقاً أوسع بعد 3 سنوات؟\n"
+                "3. **الاستقرار الوظيفي** — ما أوضاع الشركتين ماليًا؟ هل هناك أخبار عن تسريح؟\n"
+                "4. **ثقافة العمل** — من قابلت أثناء المقابلة؟ هل شعرت بالانتماء؟\n"
+                "5. **المرونة وبيئة العمل** — عن بُعد / هجين / مكتب؟ ساعات عمل؟\n"
+                "6. **الحزمة الكاملة** — تأمين صحي، إجازات، فرص تدريب، بدل تأشيرة\n\n"
+                "**نصيحة عملية:** إذا كنت تميل لعرض بمرتب أقل، تفاوض مع الطرف الأعلى أجراً على مزايا غير مالية — وبالعكس.\n\n"
+                "⏰ إذا كنت بحاجة إلى وقت إضافي للتفكير، اطلب من الشركة مهلة لا تتجاوز 3–5 أيام عمل."
+            )
+        else:
+            msg = (
+                "⚖️ **How to Choose Between Two Job Offers**\n\n"
+                "**Compare these 6 factors side by side:**\n\n"
+                "1. **Total compensation** — Don't just compare base salary; add housing/transport allowances, bonuses, and equity\n"
+                "2. **Career growth** — Which role puts you in a better position in 3 years?\n"
+                "3. **Company stability** — Research both companies' financials, recent news, and growth trajectory\n"
+                "4. **Culture fit** — Who did you meet during interviews? Did the team feel right?\n"
+                "5. **Flexibility & environment** — Remote / hybrid / in-office? Working hours? Commute?\n"
+                "6. **Full benefits package** — Health insurance, leave days, visa sponsorship, training budget\n\n"
+                "**Practical tip:** If you prefer the lower-paying offer, use the higher-paying one as leverage to negotiate better terms. "
+                "If you prefer the higher-paying one, ask the other company if they can match it.\n\n"
+                "⏰ If you need more time, it's perfectly professional to ask for a 3–5 business day extension — "
+                "most UAE employers expect this. Don't feel pressured to decide on the spot."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "multiple_offers", "message": msg}
+
+    # ── Workplace harassment UAE ──────────────────────────────────────────────────
+
+    def _handle_workplace_harassment(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "🛡️ **التحرش والتمييز في بيئة العمل — حقوقك في الإمارات**\n\n"
+                "**هل يحمي القانون الإماراتي من التحرش؟**\n"
+                "نعم. تُجرِّم المادة (14) من قانون العمل الاتحادي رقم 33 لسنة 2021 والمرسوم الوزاري 43 لسنة 2022 "
+                "التحرش والتنمر والتمييز في بيئة العمل وتُلزم صاحب العمل بتوفير بيئة عمل آمنة.\n\n"
+                "**خطوات الإبلاغ:**\n"
+                "1. **وثّق كل شيء** — احتفظ بالرسائل والبريد الإلكتروني والملاحظات المُتاريخة\n"
+                "2. **أبلغ قسم الموارد البشرية** كتابياً واحتفظ بنسخة من البلاغ\n"
+                "3. **إذا لم يُتخذ إجراء** — قدّم شكوى إلى وزارة الموارد البشرية والتوطين (MOHRE):\n"
+                "   • الخط الساخن: 800-60\n"
+                "   • الموقع: mohre.gov.ae\n"
+                "   • تطبيق MOHRE للهاتف المحمول\n"
+                "4. **للتحرش الجنسي** — يمكنك التقدم مباشرة إلى الشرطة أو النيابة العامة\n\n"
+                "⚠️ لا يجوز لصاحب العمل فصلك بسبب تقديم شكوى — يُعدّ ذلك فصلاً تعسفياً ويُعطيك الحق في تعويض."
+            )
+        else:
+            msg = (
+                "🛡️ **Workplace Harassment & Discrimination in UAE**\n\n"
+                "**Is workplace harassment illegal in UAE?**\n"
+                "Yes. Article 14 of the UAE Labour Law (Federal Decree No. 33 of 2021) and Ministerial Resolution No. 43 of 2022 "
+                "explicitly prohibit harassment, bullying, and discrimination in the workplace. Employers are required to provide a safe working environment.\n\n"
+                "**Steps to take:**\n"
+                "1. **Document everything** — keep dated records of messages, emails, and incidents\n"
+                "2. **Report to HR in writing** — email is best; keep a copy\n"
+                "3. **If no action is taken** — file a complaint with MOHRE (Ministry of Human Resources & Emiratisation):\n"
+                "   • Hotline: 800-60\n"
+                "   • Website: mohre.gov.ae\n"
+                "   • MOHRE mobile app\n"
+                "4. **For sexual harassment** — you can report directly to the police or public prosecution\n\n"
+                "⚠️ Your employer cannot legally terminate you for making a complaint — that would constitute wrongful dismissal and entitle you to additional compensation. "
+                "You may also be able to terminate your own contract without notice and still claim full EOSB if harassment is proven."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "workplace_harassment", "message": msg}
+
+    # ── Redundancy / layoff UAE ───────────────────────────────────────────────────
+
+    def _handle_redundancy_uae(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "📋 **حقوقك عند الاستغناء عن خدماتك أو الفصل الجماعي في الإمارات**\n\n"
+                "**ما الذي تستحقه قانوناً عند الاستغناء عن خدماتك؟**\n"
+                "• **مكافأة نهاية الخدمة (EOSB)** — 21 يوماً عن كل سنة خلال الخمس سنوات الأولى، ثم 30 يوماً عن كل سنة بعد ذلك\n"
+                "• **مدة الإشعار** — 30 إلى 90 يوماً حسب العقد (أو التعويض المالي بدلاً منها)\n"
+                "• **الراتب المتأخر والعلاوات والأيام الإضافية** — كافة المستحقات المتبقية\n"
+                "• **تذكرة العودة إلى الوطن** — في حال كانت مشمولة في عقدك\n"
+                "• **فترة السماح بعد إلغاء التأشيرة** — 30 يوماً للبحث عن عمل جديد\n\n"
+                "**هل يمكن لصاحب العمل الاستغناء عنك دون إشعار؟**\n"
+                "لا، إلا في حالات التقصير الجسيم الموثّقة. الاستغناء الاقتصادي يستلزم دفع التعويض المقابل لمدة الإشعار.\n\n"
+                "**إذا رفض صاحب العمل دفع مستحقاتك:**\n"
+                "تواصل مع MOHRE على 800-60 أو قدّم شكوى عبر mohre.gov.ae"
+            )
+        else:
+            msg = (
+                "📋 **Your Rights if Made Redundant / Laid Off in UAE**\n\n"
+                "**What you're legally entitled to:**\n"
+                "• **End-of-service gratuity (EOSB)** — 21 days' pay per year for the first 5 years, then 30 days/year thereafter\n"
+                "• **Notice period** — 30–90 days per your contract (or equivalent pay in lieu of notice)\n"
+                "• **All outstanding salary, bonuses, and accrued leave days**\n"
+                "• **Return flight ticket home** — if stipulated in your contract\n"
+                "• **30-day visa grace period** — after visa cancellation to find new employment\n\n"
+                "**Can your employer make you redundant without notice?**\n"
+                "No, unless for documented gross misconduct. Economic redundancy requires either working the notice period or paying in lieu.\n\n"
+                "**What counts as unfair dismissal?**\n"
+                "Termination without valid reason, without notice, or in retaliation for asserting your rights. "
+                "You can claim compensation of up to 3 months' salary in addition to your full EOSB.\n\n"
+                "**If your employer refuses to pay:**\n"
+                "File a complaint with MOHRE — 800-60 | mohre.gov.ae | MOHRE mobile app."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "redundancy_uae", "message": msg}
 
     # ── Context-aware help ──────────────────────────────────────────────────────
 
