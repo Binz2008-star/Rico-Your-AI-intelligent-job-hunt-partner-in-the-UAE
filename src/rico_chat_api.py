@@ -1199,6 +1199,48 @@ _EMPLOYER_HEALTH_INSURANCE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Visa cancellation grace period — "how long do I have after my visa is cancelled?",
+# "grace period after resignation UAE", "how long can I stay after losing my job UAE".
+_VISA_CANCELLATION_RE = re.compile(
+    r"\b(?:how\s+long\s+(?:do\s+I\s+have|can\s+I\s+stay)\s+(?:after|once)\s+(?:my\s+)?visa\s+(?:is\s+)?(?:cancelled|canceled|terminated|expired|ends?))\b"
+    r"|\b(?:how\s+long\s+(?:do\s+I\s+have|can\s+I\s+stay)\s+(?:in\s+(?:UAE|Dubai)\s+)?after\s+(?:losing|leaving|quitting|resigning\s+from|being\s+fired\s+from|termination\s+of)\s+(?:my\s+)?job)\b"
+    r"|\b(?:visa\s+cancellation\s+(?:grace\s+period|UAE|Dubai|process|time\s+(?:to\s+leave|limit)|how\s+long))\b"
+    r"|\b(?:grace\s+period\s+after\s+(?:visa\s+cancellation|job\s+loss|resignation|termination)(?:\s+(?:UAE|Dubai))?)\b"
+    r"|\b(?:(?:what\s+happens?\s+to\s+(?:my\s+)?visa|what\s+(?:is|are)\s+(?:my\s+)?visa\s+(?:options?|status))\s+(?:after|when|once|if)\s+(?:I\s+(?:resign|quit|lose\s+(?:my\s+)?job)|(?:my\s+)?(?:job|contract)\s+(?:ends?|is\s+terminated)))\b"
+    r"|\b(?:how\s+(?:soon|quickly)\s+(?:do\s+I\s+have\s+to|must\s+I)\s+(?:leave|exit|depart)\s+(?:UAE|Dubai|the\s+country)\s+after\s+(?:losing|leaving)\s+(?:my\s+)?job)\b"
+    r"|\b(?:(?:can\s+I|am\s+I\s+allowed\s+to)\s+stay\s+in\s+(?:UAE|Dubai)\s+after\s+(?:my\s+)?(?:visa\s+(?:is\s+)?(?:cancelled|canceled)|job\s+ends?))\b"
+    r"|\b(?:تأشيرة\s+بعد\s+(?:فقدان|ترك)\s+العمل|فترة\s+السماح\s+بعد\s+إلغاء\s+التأشيرة|مدة\s+البقاء\s+بعد\s+إلغاء\s+التأشيرة)\b",
+    re.IGNORECASE,
+)
+
+# Emiratisation / Nafis impact on expat hiring — "does Emiratisation affect my chances?",
+# "what is Nafis?", "can expats still get jobs with Emiratisation?".
+_EMIRATISATION_RE = re.compile(
+    r"\b(?:what\s+is\s+(?:Emiratisation|Nafis|Emirati\s+workforce\s+(?:quota|target)))\b"
+    r"|\b(?:how\s+(?:does|do)\s+(?:Emiratisation|Nafis)\s+(?:affect|impact|work|apply|influence))\b"
+    r"|\b(?:(?:does|will)\s+Emiratisation\s+(?:affect|impact|hurt|reduce|limit)\s+(?:my\s+)?(?:chances?|job\s+chances?|job\s+prospects?|applications?|opportunities?))\b"
+    r"|\b(?:(?:can|do)\s+expats?\s+(?:still|even)\s+(?:get|find|apply\s+for)\s+jobs?\s+(?:in\s+(?:UAE|Dubai)\s+)?(?:with|despite|under)\s+Emiratisation)\b"
+    r"|\b(?:Emiratisation\s+(?:quota|target|rules?|laws?|requirements?|UAE|Dubai|policy|percentage))\b"
+    r"|\b(?:Nafis\s+(?:UAE|Dubai|programme|program|scheme|subsidy|benefit|quota|policy))\b"
+    r"|\b(?:(?:UAE|Dubai)\s+Emiratisation\s+(?:quota|target|percentage|rules?|impact|policy))\b"
+    r"|\b(?:التوطين\s+(?:في\s+الإمارات|الإمارات|النسب|السياسة)|برنامج\s+نافس|نسبة\s+التوطين)\b",
+    re.IGNORECASE,
+)
+
+# Job scam detection in UAE — "how do I know if a UAE job offer is a scam?",
+# "is this job offer real?", "red flags in UAE job offers".
+_JOB_SCAM_RE = re.compile(
+    r"\b(?:how\s+(?:do\s+I|to|can\s+I)\s+(?:know|tell|spot|identify|detect|avoid|check)\s+(?:if\s+(?:a\s+|the\s+|this\s+)?)?(?:UAE\s+)?(?:job\s+offer|job|opportunity|recruiter)\s+is\s+(?:a\s+)?(?:scam|fake|fraud|legitimate|legit|real))\b"
+    r"|\b(?:is\s+(?:this|that|the)\s+(?:job\s+offer|job|opportunity|recruiter|company)\s+(?:a\s+)?(?:scam|fake|fraud|legit|legitimate|real))\b"
+    r"|\b(?:(?:job|recruitment|employment)\s+(?:scam|fraud|fake\s+offer)\s+(?:UAE|Dubai|signs?|red\s+flags?|warning\s+signs?|how\s+to\s+(?:spot|avoid)))\b"
+    r"|\b(?:red\s+flags?\s+(?:in|for|of)\s+(?:(?:UAE|Dubai)\s+)?(?:job\s+offers?|job\s+listings?|recruiters?|job\s+ads?))\b"
+    r"|\b(?:(?:how\s+to|can\s+I)\s+(?:verify|check|confirm)\s+(?:a\s+|the\s+|if\s+(?:a\s+|the\s+)?)?(?:job\s+offer|company|recruiter)\s+is\s+(?:legitimate|legit|real|genuine))\b"
+    r"|\b(?:(?:I\s+think|is\s+it\s+possible\s+that|could)\s+this\s+(?:job\s+offer|job|opportunity)\s+(?:is|be)\s+(?:a\s+)?(?:scam|fake|too\s+good\s+to\s+be\s+true))\b"
+    r"|\b(?:fake\s+(?:job|work)\s+(?:offer|listing|ad|opportunity)(?:\s+(?:UAE|Dubai))?)\b"
+    r"|\b(?:احتيال\s+وظيفي\s+(?:في\s+الإمارات|الإمارات)|عروض\s+عمل\s+وهمية|كيف\s+أعرف\s+(?:إذا|إن)\s+(?:كان\s+)?العرض\s+حقيقي)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -5140,7 +5182,7 @@ class RicoChatAPI:
 
         # ── Visa / work permit status ─────────────────────────────────────────
         # "I'm on a spouse visa", "do I need a work permit?".
-        if _VISA_STATUS_RE.search(message) and not _GOLDEN_VISA_RE.search(message) and not _WORK_VISA_PROCESS_RE.search(message):
+        if _VISA_STATUS_RE.search(message) and not _GOLDEN_VISA_RE.search(message) and not _WORK_VISA_PROCESS_RE.search(message) and not _VISA_CANCELLATION_RE.search(message):
             return self._finalize(
                 self._handle_visa_status(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5533,6 +5575,33 @@ class RicoChatAPI:
         if _EMPLOYER_HEALTH_INSURANCE_RE.search(message):
             return self._finalize(
                 self._handle_employer_health_insurance(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Visa cancellation grace period ────────────────────────────────────
+        # "how long do I have after my visa is cancelled?", "grace period after resignation UAE".
+        if _VISA_CANCELLATION_RE.search(message):
+            return self._finalize(
+                self._handle_visa_cancellation(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Emiratisation / Nafis impact ──────────────────────────────────────
+        # "what is Emiratisation?", "does Nafis affect expat hiring?".
+        if _EMIRATISATION_RE.search(message):
+            return self._finalize(
+                self._handle_emiratisation(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Job scam detection ────────────────────────────────────────────────
+        # "how do I know if a job offer is a scam?", "red flags in UAE job offers".
+        if _JOB_SCAM_RE.search(message):
+            return self._finalize(
+                self._handle_job_scam(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -13338,6 +13407,138 @@ class RicoChatAPI:
             )
         self._append_chat(user_id, "assistant", msg)
         return {"type": "employer_health_insurance", "message": msg}
+
+    # ── Visa cancellation grace period ────────────────────────────────────────────
+
+    def _handle_visa_cancellation(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## ماذا يحدث للتأشيرة بعد ترك العمل؟\n\n"
+                "**عند إلغاء التأشيرة أو إنهاء العقد:**\n"
+                "- تُمنح فترة سماح مدتها **30 يوماً** بعد إلغاء تأشيرة الإقامة للخروج أو تسوية الوضع\n"
+                "- خلال هذه الفترة، يمكنك البقاء في الإمارات للبحث عن وظيفة أخرى أو تعديل إقامتك\n\n"
+                "**خياراتك خلال فترة السماح:**\n"
+                "1. **العثور على صاحب عمل جديد:** يُحوّل التأشيرة عبر الكفالة إلى جهة عمل جديدة\n"
+                "2. **الانتقال إلى تأشيرة زيارة:** للبقاء والبحث عن عمل بشكل قانوني\n"
+                "3. **تأشيرة بحث العمل (Job Seeker Visa):** تتيح البقاء لمدة 60–180 يوماً لأصحاب المؤهلات العالية\n"
+                "4. **المغادرة وإعادة الدخول:** أبسط خيار إذا كان لديك عرض وظيفي قادم\n\n"
+                "**تحذير:** البقاء بعد انتهاء فترة السماح يُفضي إلى غرامة يومية — تحقق من تاريخ انتهاء الإقامة دائماً."
+            )
+        else:
+            msg = (
+                "## What Happens to Your Visa After Leaving a Job in UAE?\n\n"
+                "**When your visa is cancelled / employment ends:**\n"
+                "- You are granted a **30-day grace period** from the date of visa "
+                "cancellation to either leave the UAE or change your visa status\n"
+                "- During this window you can legally remain in the UAE\n\n"
+                "**Your options during the grace period:**\n"
+                "1. **Find a new employer** — they can transfer your visa sponsorship\n"
+                "2. **Switch to a visit visa** — allows you to stay and job-search legally\n"
+                "3. **Job Seeker Visa** — 60 to 180 days for highly qualified professionals "
+                "(bachelor's degree+ and relevant experience)\n"
+                "4. **Leave and re-enter** — simplest if a new offer is imminent\n\n"
+                "**End-of-service process:**\n"
+                "- Your employer must cancel your visa and labour card after the last day\n"
+                "- Overstaying the grace period incurs a daily fine — always confirm "
+                "your visa expiry date\n\n"
+                "**Tip:** Save a copy of your visa cancellation document — you'll need "
+                "it to prove your status to a new employer."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "visa_cancellation", "message": msg}
+
+    # ── Emiratisation / Nafis impact on expat hiring ──────────────────────────────
+
+    def _handle_emiratisation(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## التوطين ونافس: هل يؤثر على فرص العمل للوافدين؟\n\n"
+                "**ما هو التوطين؟**\n"
+                "- سياسة حكومية تُلزم الشركات الخاصة بتوظيف نسبة محددة من المواطنين الإماراتيين\n"
+                "- الشركات ذات 50+ موظف مُلزمة بتحقيق حصص توطين متصاعدة (2% سنوياً حتى 2026)\n\n"
+                "**برنامج نافس:**\n"
+                "- مبادرة حكومية تُقدم دعماً مالياً للمواطنين العاملين في القطاع الخاص\n"
+                "- يُحفّز أصحاب العمل على توظيف المواطنين بدعم جزئي للرواتب\n\n"
+                "**هل يؤثر على فرصك كوافد؟**\n"
+                "- في معظم القطاعات: لا، الوافدون لا يزالون يشكلون الغالبية العظمى من القوى العاملة\n"
+                "- القطاعات الأكثر تأثراً: التمويل والمصارف والتأمين والتجزئة وقطاع الموارد البشرية\n"
+                "- الوظائف التقنية والمتخصصة: أقل تأثراً نظراً لندرة المواطنين المؤهلين في بعض المجالات\n\n"
+                "**نصيحة:** ركز على المهارات المتخصصة والخبرة الدولية — هذه لا يزال الطلب عليها مرتفعاً."
+            )
+        else:
+            msg = (
+                "## Emiratisation & Nafis: Does It Affect Expat Job Seekers?\n\n"
+                "**What is Emiratisation?**\n"
+                "- A UAE government policy requiring private-sector companies to hire "
+                "a set percentage of Emirati nationals\n"
+                "- Companies with 50+ employees must increase Emirati headcount by "
+                "2% per year, targeting specific sectors (finance, insurance, retail, HR)\n\n"
+                "**What is Nafis?**\n"
+                "- A federal programme that subsidises Emirati salaries to make hiring "
+                "nationals more affordable for private companies\n"
+                "- Named after the Arabic word for 'compete', it aims to place Emiratis "
+                "in quality private-sector roles\n\n"
+                "**Does it affect expat hiring?**\n"
+                "- **For most roles: No** — expats still make up 85–90% of the UAE workforce\n"
+                "- **Most affected sectors:** banking, finance, insurance, HR, retail\n"
+                "- **Less affected:** technology, engineering, healthcare, hospitality, "
+                "construction (where Emirati supply is low)\n"
+                "- Companies cannot fill Emiratisation quotas with expats, so the "
+                "competition is typically within different talent pools\n\n"
+                "**Tip:** If you're applying to a heavily regulated UAE bank or "
+                "insurer, be aware that some entry-level roles may be reserved for "
+                "nationals. Mid and senior-level specialist roles remain open."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "emiratisation", "message": msg}
+
+    # ── Job scam detection ────────────────────────────────────────────────────────
+
+    def _handle_job_scam(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## كيف تكتشف عروض العمل المزيفة في الإمارات؟\n\n"
+                "**علامات تحذيرية شائعة:**\n"
+                "- يُطلب منك دفع رسوم: للتأشيرة، المعالجة، التدريب، أو الزي الرسمي — **العمل الحقيقي لا يطلب منك المال**\n"
+                "- الراتب مرتفع جداً مقارنة بالسوق دون متطلبات واضحة\n"
+                "- يتواصل معك المُعيِّن عبر واتساب أو برنامج شخصي فقط دون بريد عمل رسمي\n"
+                "- لا يوجد عقد رسمي أو مقابلة حقيقية قبل الموافقة على التوظيف\n"
+                "- الشركة غير مسجلة أو لا يمكن التحقق منها\n\n"
+                "**كيف تتحقق من صحة العرض؟**\n"
+                "1. ابحث عن الشركة في موقع وزارة الموارد البشرية (MOHRE) أو السجل التجاري\n"
+                "2. تحقق من وجود الشركة على LinkedIn وموقعها الرسمي\n"
+                "3. اطلب إجراء المقابلة عبر تطبيق Zoom أو حضورياً\n"
+                "4. لا تدفع أي رسوم قبل التوقيع على عقد رسمي\n\n"
+                "**إذا تعرضت للاحتيال:** تواصل مع شرطة الإمارات (999) أو قدم شكوى عبر موقع وزارة الداخلية."
+            )
+        else:
+            msg = (
+                "## How to Spot UAE Job Scams\n\n"
+                "**Common red flags:**\n"
+                "- **They ask you to pay money** — for visa fees, processing, training, "
+                "uniform, or medical tests. Legitimate employers never charge candidates.\n"
+                "- Salary is unrealistically high with no clear skill requirements\n"
+                "- Recruiter contacts you only on WhatsApp or personal email, "
+                "never a company address\n"
+                "- You receive a 'job offer' without a real interview\n"
+                "- Company name is hard to verify or doesn't appear in official directories\n"
+                "- Pressure to respond quickly or 'secure your spot' before you can verify\n\n"
+                "**How to verify a job offer:**\n"
+                "1. Search the company on **mohre.gov.ae** or the UAE trade register\n"
+                "2. Check the company on **LinkedIn** and their official website\n"
+                "3. Request a **video interview** via Zoom or Google Meet\n"
+                "4. Never pay any fees before signing an official contract\n"
+                "5. Verify the recruiter's identity on LinkedIn\n\n"
+                "**Legitimate job boards in UAE:**\n"
+                "- Bayt.com, LinkedIn, GulfTalent, Naukrigulf, Indeed UAE\n\n"
+                "**If you've been scammed:** Report to UAE Police (999) or "
+                "online via the Ministry of Interior's e-crimes portal."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "job_scam", "message": msg}
 
     # ── Context-aware help ──────────────────────────────────────────────────────
 

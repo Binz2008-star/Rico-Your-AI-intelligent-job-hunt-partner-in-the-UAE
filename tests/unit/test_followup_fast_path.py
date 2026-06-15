@@ -6216,3 +6216,287 @@ class TestEmployerHealthInsurance:
     def test_does_not_route_to_benefits(self, monkeypatch):
         result = self._run(monkeypatch, "is medical insurance mandatory in UAE?")
         assert result["type"] != "benefits_guide"
+
+
+# ── Visa Cancellation Grace Period ───────────────────────────────────────────────
+
+
+class TestVisaCancellation:
+    """Tests for _VISA_CANCELLATION_RE and _handle_visa_cancellation."""
+
+    _REGEX_CASES_MATCH = [
+        "how long do I have after my visa is cancelled?",
+        "how long can I stay after my visa is cancelled?",
+        "how long do I have after my visa is terminated?",
+        "how long can I stay in UAE after losing my job?",
+        "how long do I have after leaving my job?",
+        "visa cancellation grace period UAE",
+        "visa cancellation UAE",
+        "visa cancellation process UAE",
+        "grace period after visa cancellation",
+        "grace period after resignation UAE",
+        "grace period after job loss UAE",
+        "what happens to my visa after I resign?",
+        "what happens to my visa when my contract ends?",
+        "can I stay in UAE after my visa is cancelled?",
+        "am I allowed to stay in Dubai after my job ends?",
+        "فترة السماح بعد إلغاء التأشيرة",
+        "مدة البقاء بعد إلغاء التأشيرة",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "how do I get a UAE work visa?",
+        "what is the golden visa?",
+        "I'm on a spouse visa",
+        "annual leave entitlement UAE",
+        "sick leave policy UAE",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _VISA_CANCELLATION_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _VISA_CANCELLATION_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _VISA_CANCELLATION_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _VISA_CANCELLATION_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_cancelled_visa_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how long do I have after my visa is cancelled?")
+        assert result["type"] == "visa_cancellation"
+
+    def test_grace_period_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "grace period after visa cancellation")
+        assert result["type"] == "visa_cancellation"
+
+    def test_losing_job_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how long can I stay in UAE after losing my job?")
+        assert result["type"] == "visa_cancellation"
+
+    def test_message_mentions_30_days(self, monkeypatch):
+        result = self._run(monkeypatch, "how long do I have after my visa is cancelled?")
+        assert "30" in result["message"]
+
+    def test_message_mentions_job_seeker_visa(self, monkeypatch):
+        result = self._run(monkeypatch, "what happens to my visa after I resign?")
+        msg = result["message"].lower()
+        assert "job seeker" in msg or "visit" in msg or "بحث" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "visa cancellation grace period UAE")
+        assert len(result["message"]) > 100
+
+    def test_does_not_route_to_visa_status(self, monkeypatch):
+        result = self._run(monkeypatch, "how long do I have after my visa is cancelled?")
+        assert result["type"] != "visa_status_update"
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "visa cancellation UAE", profile=_EmptyProfile())
+        assert result["type"] == "visa_cancellation"
+
+
+# ── Emiratisation ─────────────────────────────────────────────────────────────────
+
+
+class TestEmiratisation:
+    """Tests for _EMIRATISATION_RE and _handle_emiratisation."""
+
+    _REGEX_CASES_MATCH = [
+        "what is Emiratisation?",
+        "what is Nafis?",
+        "how does Emiratisation affect me?",
+        "how does Nafis work?",
+        "does Emiratisation affect my job chances?",
+        "does Emiratisation impact my applications?",
+        "will Emiratisation hurt my job prospects?",
+        "can expats still get jobs with Emiratisation?",
+        "do expats even get jobs under Emiratisation?",
+        "Emiratisation quota UAE",
+        "Emiratisation target UAE",
+        "Emiratisation rules UAE",
+        "Emiratisation policy UAE",
+        "Emiratisation percentage UAE",
+        "Nafis UAE",
+        "Nafis programme UAE",
+        "UAE Emiratisation quota",
+        "UAE Emiratisation target",
+        "التوطين في الإمارات",
+        "برنامج نافس",
+        "نسبة التوطين",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "how do I get a UAE work visa?",
+        "annual leave entitlement UAE",
+        "sick leave policy UAE",
+        "show me jobs in Dubai",
+        "is this job offer a scam?",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _EMIRATISATION_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _EMIRATISATION_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _EMIRATISATION_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _EMIRATISATION_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_emiratisation_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "what is Emiratisation?")
+        assert result["type"] == "emiratisation"
+
+    def test_nafis_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "what is Nafis?")
+        assert result["type"] == "emiratisation"
+
+    def test_impact_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "does Emiratisation affect my job chances?")
+        assert result["type"] == "emiratisation"
+
+    def test_quota_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "Emiratisation quota UAE")
+        assert result["type"] == "emiratisation"
+
+    def test_message_mentions_nafis(self, monkeypatch):
+        result = self._run(monkeypatch, "what is Emiratisation?")
+        msg = result["message"].lower()
+        assert "nafis" in msg or "نافس" in msg
+
+    def test_message_mentions_expats(self, monkeypatch):
+        result = self._run(monkeypatch, "does Emiratisation affect my job chances?")
+        msg = result["message"].lower()
+        assert "expat" in msg or "وافد" in msg or "85" in msg or "90" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "what is Emiratisation?")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "Emiratisation UAE", profile=_EmptyProfile())
+        assert result["type"] == "emiratisation"
+
+
+# ── Job Scam Detection ───────────────────────────────────────────────────────────
+
+
+class TestJobScam:
+    """Tests for _JOB_SCAM_RE and _handle_job_scam."""
+
+    _REGEX_CASES_MATCH = [
+        "how do I know if a job offer is a scam?",
+        "how do I know if this UAE job offer is a scam?",
+        "how can I tell if a recruiter is fake?",
+        "how to spot a job scam UAE",
+        "how to avoid job fraud UAE",
+        "is this job offer a scam?",
+        "is this job a scam?",
+        "is that opportunity fake?",
+        "is this recruiter legit?",
+        "is this job offer legitimate?",
+        "job scam UAE",
+        "job fraud UAE",
+        "fake job offer UAE",
+        "recruitment scam UAE",
+        "employment scam Dubai",
+        "red flags in job offers UAE",
+        "red flags for UAE job listings",
+        "how to verify a job offer is legitimate?",
+        "how to check if a company is legitimate?",
+        "I think this job offer is a scam",
+        "احتيال وظيفي في الإمارات",
+        "عروض عمل وهمية",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "how do I get a UAE work visa?",
+        "annual leave entitlement UAE",
+        "show me jobs in Dubai",
+        "what is Emiratisation?",
+        "how do I negotiate my salary?",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _JOB_SCAM_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _JOB_SCAM_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _JOB_SCAM_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _JOB_SCAM_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_scam_query_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I know if a job offer is a scam?")
+        assert result["type"] == "job_scam"
+
+    def test_is_scam_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "is this job offer a scam?")
+        assert result["type"] == "job_scam"
+
+    def test_red_flags_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "red flags in job offers UAE")
+        assert result["type"] == "job_scam"
+
+    def test_verify_legit_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how to verify a job offer is legitimate?")
+        assert result["type"] == "job_scam"
+
+    def test_message_mentions_pay_to_work(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I know if a job offer is a scam?")
+        msg = result["message"].lower()
+        assert "pay" in msg or "fee" in msg or "رسوم" in msg or "دفع" in msg
+
+    def test_message_mentions_mohre_or_linkedin(self, monkeypatch):
+        result = self._run(monkeypatch, "how to spot a job scam UAE")
+        msg = result["message"].lower()
+        assert "linkedin" in msg or "mohre" in msg or "موارد" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "job scam UAE")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "fake job offer UAE", profile=_EmptyProfile())
+        assert result["type"] == "job_scam"
