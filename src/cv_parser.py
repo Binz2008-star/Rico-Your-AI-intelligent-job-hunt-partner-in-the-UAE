@@ -30,6 +30,7 @@ class ParsedCV:
     extracted_chars: int = 0
     name: Optional[str] = None
     current_role: Optional[str] = None
+    document_type: str = "unknown"
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -89,8 +90,33 @@ class CVParser:
         "i managed",
     ]
 
+    # Unambiguous cover-letter openers / closings that cannot appear in CVs.
+    COVER_LETTER_STRONG_SIGNALS = [
+        "dear hiring manager",
+        "dear recruiter",
+        "i am writing to apply",
+        "i am applying for",
+        "i would like to apply for",
+        "please consider my application",
+    ]
+
+    # Supporting cover-letter phrases — require 2+ alongside a strong signal,
+    # or 3+ on their own, to avoid false positives from formal CV summaries.
+    COVER_LETTER_SUPPORTING_SIGNALS = [
+        "dear sir",
+        "dear madam",
+        "to whom it may concern",
+        "sincerely",
+        "yours faithfully",
+        "yours sincerely",
+        "application for",
+        "please find attached",
+        "enclosed please find",
+        "for the position of",
+    ]
+
     def detect_document_type(self, text: str) -> str:
-        """Detect if document is a CV, company profile, or unknown type."""
+        """Detect whether text is a CV, cover letter, company profile, or unknown."""
         lower = text.lower()
 
         # Personal markers are a strong veto against company_profile.
@@ -111,6 +137,12 @@ class CVParser:
         if not has_personal_marker and has_strong_company and company_score >= 2:
             return "company_profile"
 
+        # Cover letter: distinct salutation/closing patterns that don't appear in CVs.
+        cl_strong = sum(1 for s in self.COVER_LETTER_STRONG_SIGNALS if s in lower)
+        cl_support = sum(1 for s in self.COVER_LETTER_SUPPORTING_SIGNALS if s in lower)
+        if cl_strong >= 2 or (cl_strong >= 1 and cl_support >= 1) or cl_support >= 3:
+            return "cover_letter"
+
         if cv_score >= 2:
             return "cv"
         # Personal markers alone are not sufficient — require at least one CV-section
@@ -130,7 +162,9 @@ class CVParser:
             text = self._parse_docx(data)
         else:
             text = data.decode("utf-8", errors="ignore")
-        return self.parse_text(text)
+        result = self.parse_text(text)
+        result.document_type = self.detect_document_type(text)
+        return result
 
     def parse_bytes(self, data: bytes, filename: str = "cv.txt") -> ParsedCV:
         suffix = Path(filename).suffix.lower()
@@ -140,7 +174,9 @@ class CVParser:
             text = self._parse_docx(data)
         else:
             text = data.decode("utf-8", errors="ignore")
-        return self.parse_text(text)
+        result = self.parse_text(text)
+        result.document_type = self.detect_document_type(text)
+        return result
 
     def parse_text(self, text: str) -> ParsedCV:
         cleaned = re.sub(r"\s+", " ", text or "").strip()
