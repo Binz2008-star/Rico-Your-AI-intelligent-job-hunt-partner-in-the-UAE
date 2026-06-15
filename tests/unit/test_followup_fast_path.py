@@ -4086,3 +4086,277 @@ class TestLinkedInTips:
     def test_empty_profile_still_works(self, monkeypatch):
         result = self._run(monkeypatch, "is LinkedIn useful in UAE?", profile=_EmptyProfile())
         assert result["type"] == "linkedin_tips"
+
+
+# ── Resignation Letter ────────────────────────────────────────────────────────
+
+class TestResignationLetter:
+    """Tests for _RESIGNATION_LETTER_RE and _handle_resignation_letter."""
+
+    _REGEX_CASES_MATCH = [
+        "how do I write a resignation letter?",
+        "how to write a resignation email",
+        "how should I draft a resignation letter?",
+        "resignation letter template",
+        "resignation letter guide",
+        "how do I resign professionally?",
+        "how to resign properly",
+        "how do I hand in my notice?",
+        "how to submit my resignation?",
+        "what should I say in a resignation letter?",
+        "خطاب استقالة",
+        "كيف أستقيل",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "should I accept this offer?",     # offer eval
+        "how do I negotiate my salary?",   # salary negotiation
+        "how do I prepare for an interview?",
+        "I need a job urgently",
+        "show my applications",
+        "UAE labor law",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _RESIGNATION_LETTER_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _RESIGNATION_LETTER_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _RESIGNATION_LETTER_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _RESIGNATION_LETTER_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_resignation_letter(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I write a resignation letter?")
+        assert result["type"] == "resignation_letter"
+
+    def test_resign_professionally_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how to resign professionally")
+        assert result["type"] == "resignation_letter"
+
+    def test_hand_in_notice_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I hand in my notice?")
+        assert result["type"] == "resignation_letter"
+
+    def test_template_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "resignation letter template")
+        assert result["type"] == "resignation_letter"
+
+    def test_message_has_subject_line(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I write a resignation letter?")
+        msg = result["message"]
+        assert "Subject" in msg or "الموضوع" in msg
+
+    def test_message_has_notice_period(self, monkeypatch):
+        result = self._run(monkeypatch, "resignation letter template")
+        msg = result["message"].lower()
+        assert "notice" in msg or "إشعار" in msg
+
+    def test_message_has_sincerely(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I write a resignation letter?")
+        msg = result["message"]
+        assert "Sincerely" in msg or "sincerely" in msg or "التقدير" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I write a resignation letter?")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "resignation letter guide", profile=_EmptyProfile())
+        assert result["type"] == "resignation_letter"
+
+
+# ── Relocation to UAE ─────────────────────────────────────────────────────────
+
+class TestRelocationUAE:
+    """Tests for _RELOCATION_UAE_RE and _handle_relocation_uae."""
+
+    _REGEX_CASES_MATCH = [
+        "how do I move to Dubai for work?",
+        "how to relocate to UAE?",
+        "how can I move to Abu Dhabi?",
+        "relocating to UAE",
+        "moving to Dubai for a job",
+        "tips for relocating to UAE",
+        "advice for moving to Dubai",
+        "what do I need to move to UAE?",
+        "what should I do to relocate to Dubai?",
+        "cost of living in Dubai",
+        "cost of living in UAE",
+        "الانتقال إلى دبي",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "can I apply from abroad?",         # apply from abroad
+        "how do I write a resignation?",    # resignation
+        "find remote HSE jobs",             # employment type search
+        "I need a job urgently",
+        "show my applications",
+        "UAE labor law",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _RELOCATION_UAE_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _RELOCATION_UAE_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _RELOCATION_UAE_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _RELOCATION_UAE_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_relocation_uae(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I move to Dubai for work?")
+        assert result["type"] == "relocation_uae"
+
+    def test_relocating_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "relocating to UAE")
+        assert result["type"] == "relocation_uae"
+
+    def test_cost_of_living_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "cost of living in Dubai")
+        assert result["type"] == "relocation_uae"
+
+    def test_tips_for_relocating_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "tips for relocating to UAE")
+        assert result["type"] == "relocation_uae"
+
+    def test_message_has_visa_info(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I move to Dubai for work?")
+        msg = result["message"].lower()
+        assert "visa" in msg or "تأشيرة" in msg
+
+    def test_message_has_cost_benchmarks(self, monkeypatch):
+        result = self._run(monkeypatch, "relocating to UAE")
+        msg = result["message"]
+        assert "AED" in msg or "درهم" in msg
+
+    def test_message_has_dubai(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I move to Dubai for work?")
+        assert "Dubai" in result["message"] or "دبي" in result["message"]
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "relocating to UAE")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "tips for relocating to UAE", profile=_EmptyProfile())
+        assert result["type"] == "relocation_uae"
+
+
+# ── Applying from Abroad ──────────────────────────────────────────────────────
+
+class TestApplyFromAbroad:
+    """Tests for _APPLY_FROM_ABROAD_RE and _handle_apply_from_abroad."""
+
+    _REGEX_CASES_MATCH = [
+        "can I apply for UAE jobs from abroad?",
+        "can I apply for jobs from outside UAE?",
+        "do I need to be in UAE to apply?",
+        "do I have to be in Dubai to look for jobs?",
+        "should I relocate before applying?",
+        "should I be in UAE before job hunting?",
+        "applying for UAE jobs from overseas",
+        "applying for jobs from outside Dubai",
+        "job hunting from abroad",
+        "job hunting while overseas",
+        "is it possible to apply from abroad?",
+        "is it okay to job hunt from outside UAE?",
+        "التقديم على وظائف الإمارات من الخارج",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "how do I relocate to UAE?",         # relocation handler
+        "how do I write a resignation?",     # resignation
+        "find remote HSE jobs",              # employment type search
+        "I need a job urgently",
+        "show my applications",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _APPLY_FROM_ABROAD_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _APPLY_FROM_ABROAD_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _APPLY_FROM_ABROAD_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _APPLY_FROM_ABROAD_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_apply_from_abroad(self, monkeypatch):
+        result = self._run(monkeypatch, "can I apply for UAE jobs from abroad?")
+        assert result["type"] == "apply_from_abroad"
+
+    def test_do_i_need_to_be_in_uae_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "do I need to be in UAE to apply?")
+        assert result["type"] == "apply_from_abroad"
+
+    def test_should_relocate_first_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "should I relocate before applying?")
+        assert result["type"] == "apply_from_abroad"
+
+    def test_job_hunting_from_abroad_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "job hunting from abroad")
+        assert result["type"] == "apply_from_abroad"
+
+    def test_message_says_yes_can_apply(self, monkeypatch):
+        result = self._run(monkeypatch, "can I apply for UAE jobs from abroad?")
+        msg = result["message"].lower()
+        assert "yes" in msg or "can apply" in msg or "نعم" in msg
+
+    def test_message_mentions_cover_letter(self, monkeypatch):
+        result = self._run(monkeypatch, "can I apply for UAE jobs from abroad?")
+        msg = result["message"].lower()
+        assert "cover letter" in msg or "cv" in msg or "relocat" in msg
+
+    def test_message_mentions_relocation(self, monkeypatch):
+        result = self._run(monkeypatch, "can I apply for UAE jobs from abroad?")
+        assert "reloc" in result["message"].lower() or "move" in result["message"].lower()
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "can I apply for UAE jobs from abroad?")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "is it okay to job hunt from outside UAE?", profile=_EmptyProfile())
+        assert result["type"] == "apply_from_abroad"
