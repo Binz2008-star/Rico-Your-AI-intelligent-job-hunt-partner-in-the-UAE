@@ -1398,6 +1398,45 @@ _REDUNDANCY_UAE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# ── Job hopping UAE ────────────────────────────────────────────────────────────
+# "will job hopping hurt my career?", "I've changed jobs 3 times in 2 years".
+_JOB_HOPPING_RE = re.compile(
+    r"\b(?:(?:will|does|can|is)\s+(?:frequent|too\s+many|changing)\s+job[s\s]+(?:hop+ing|change[s]?|switching|moves?)\s+(?:hurt|harm|affect|damage|ruin|impact)\s+(?:my\s+)?(?:career|job\s+prospects?|chances?))\b"
+    r"|\b(?:job[- ]hop+ing\s+(?:hurt|harm|affect|damage|UAE|Dubai|career|bad|good|concern|impact|resume|CV))\b"
+    r"|\b(?:I(?:'ve|\s+have|)\s+changed\s+jobs?\s+(?:too\s+many\s+times?|(?:three|four|five|\d+)\s+times?\s+in\s+(?:two|\d+)\s+years?|multiple\s+times?))\b"
+    r"|\b(?:I\s+changed\s+jobs?\s+(?:\d+|two|three|four|five)\s+times?\s+in\s+(?:\d+|two|three)\s+years?)\b"
+    r"|\b(?:how\s+(?:bad|harmful|damaging)\s+is\s+(?:frequent\s+job\s+changes?|job[- ]hop+ing))\b"
+    r"|\b(?:too\s+many\s+job\s+(?:changes?|switches?|moves?)\s+(?:on\s+my\s+CV|on\s+my\s+resume|in\s+UAE|hurts?))\b"
+    r"|\b(?:التنقل\s+الوظيفي\s+(?:السريع|الإمارات|يؤثر|سيرتي)|كثرة\s+تغيير\s+الوظائف)\b",
+    re.IGNORECASE,
+)
+
+# ── First day / new job tips UAE ──────────────────────────────────────────────
+# "what should I do on my first day?", "tips for starting a new job in UAE".
+_FIRST_DAY_NEW_JOB_RE = re.compile(
+    r"\b(?:(?:tips?|advice|what\s+(?:should|to)\s+(?:I\s+)?do)\s+(?:for|on|at)\s+(?:my\s+)?(?:first\s+day|first\s+week)\s+(?:at|of|in)\s+(?:(?:a|my|the)\s+)?(?:new\s+)?(?:job|work|role))\b"
+    r"|\b(?:starting\s+(?:a|my)\s+new\s+job\s+(?:tips?|advice|next\s+week|next\s+month|soon|in\s+UAE|in\s+Dubai))\b"
+    r"|\b(?:how\s+(?:do\s+I|to|should\s+I)\s+(?:impress|make\s+a\s+good\s+(?:impression|start)|start\s+(?:well|strong|right))\s+(?:at|in)\s+(?:a|my)\s+new\s+job)\b"
+    r"|\b(?:what\s+(?:should\s+I|to)\s+(?:do|expect|know|prepare)\s+(?:on|for)\s+(?:my\s+)?first\s+day\s+(?:at|of)\s+(?:(?:a|my)\s+)?(?:new\s+)?(?:work|job))\b"
+    r"|\b(?:(?:I\s+(?:am|'m)\s+)?starting\s+(?:a|my)\s+new\s+job\s+(?:soon|next\s+(?:week|month)|on\s+(?:Monday|Sunday|tomorrow)))\b"
+    r"|\b(?:(?:new\s+job|new\s+role|new\s+position)\s+(?:tips?|advice|how\s+to\s+(?:start|begin|impress)))\b"
+    r"|\b(?:أول\s+يوم\s+(?:في|بالعمل|بالشركة)|نصائح\s+لبدء\s+وظيفة\s+جديدة|بدأت\s+وظيفة\s+جديدة)\b",
+    re.IGNORECASE,
+)
+
+# ── Upskilling / certifications UAE ───────────────────────────────────────────
+# "how can I upskill?", "what certifications should I get in UAE?".
+_UPSKILLING_UAE_RE = re.compile(
+    r"\b(?:how\s+(?:do\s+I|to|can\s+I|should\s+I)\s+(?:upskill|reskill|improve\s+my\s+skills?|develop\s+my\s+skills?|grow\s+professionally)(?:\s+(?:in\s+(?:UAE|Dubai)|for\s+(?:UAE|Dubai)\s+jobs?))?)\b"
+    r"|\b(?:what\s+(?:certifications?|courses?|skills?|qualifications?)\s+should\s+I\s+(?:get|take|do|earn|study|focus\s+on)(?:\s+(?:in\s+(?:UAE|Dubai)|for\s+(?:UAE|Dubai)\s+jobs?|to\s+advance))?)\b"
+    r"|\b(?:(?:professional\s+)?(?:development|upskilling|reskilling)\s+(?:UAE|Dubai|courses?|certifications?|programs?))\b"
+    r"|\b(?:best\s+(?:certifications?|courses?|qualifications?)\s+(?:for|in)\s+(?:UAE|Dubai)(?:\s+(?:jobs?|market|career))?)\b"
+    r"|\b(?:(?:how\s+to|ways?\s+to)\s+(?:advance|accelerate|boost|grow)\s+(?:my\s+)?(?:career|skills?|professional\s+growth)\s+(?:in\s+(?:UAE|Dubai))?)\b"
+    r"|\b(?:(?:should\s+I|how\s+do\s+I)\s+get\s+(?:a\s+)?(?:PMP|ACCA|CFA|CPA|CIMA|SHRM|PMI|AWS|Google\s+Cloud|Azure)\s+(?:certification|cert|credential))\b"
+    r"|\b(?:تطوير\s+مهني\s+(?:الإمارات|دورات)|ما\s+الشهادات\s+المطلوبة\s+في\s+الإمارات|كيف\s+أطور\s+مهاراتي\s+(?:في\s+الإمارات)?)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -5404,7 +5443,7 @@ class RicoChatAPI:
         # ── Certification / qualification advice ──────────────────────────────
         # Must come before industry search: "required qualifications for finance"
         # overlaps with industry keywords but is advice, not a job search request.
-        if _CERTIFICATION_ADVICE_RE.search(message):
+        if _CERTIFICATION_ADVICE_RE.search(message) and not _UPSKILLING_UAE_RE.search(message):
             return self._finalize(
                 self._handle_certification_advice(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5995,6 +6034,33 @@ class RicoChatAPI:
         if _REDUNDANCY_UAE_RE.search(message):
             return self._finalize(
                 self._handle_redundancy_uae(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Job hopping ───────────────────────────────────────────────────────
+        # "will job hopping hurt my career?", "I've changed jobs too many times".
+        if _JOB_HOPPING_RE.search(message):
+            return self._finalize(
+                self._handle_job_hopping(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── First day / new job tips ──────────────────────────────────────────
+        # "what should I do on my first day?", "starting a new job tips UAE".
+        if _FIRST_DAY_NEW_JOB_RE.search(message):
+            return self._finalize(
+                self._handle_first_day_new_job(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Upskilling / certifications UAE ───────────────────────────────────
+        # "how can I upskill?", "what certifications should I get in UAE?".
+        if _UPSKILLING_UAE_RE.search(message):
+            return self._finalize(
+                self._handle_upskilling_uae(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -14467,6 +14533,137 @@ class RicoChatAPI:
             )
         self._append_chat(user_id, "assistant", msg)
         return {"type": "redundancy_uae", "message": msg}
+
+    # ── Job hopping ───────────────────────────────────────────────────────────────
+
+    def _handle_job_hopping(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "💼 **التنقل الوظيفي السريع — هل يضر بمسيرتك؟**\n\n"
+                "**الحقيقة:** يختلف الأمر بحسب الظروف.\n\n"
+                "**متى يكون التنقل الوظيفي مقبولاً:**\n"
+                "• إذا كان كل انتقال مدفوعاً بنمو واضح في المسمى أو الراتب أو المسؤوليات\n"
+                "• المراحل المبكرة من المسيرة (أقل من 5 سنوات خبرة)\n"
+                "• تغيير قطاع كامل أو خضوع لإعادة هيكلة في الشركة\n"
+                "• الانتقال من عقود مؤقتة إلى توظيف دائم\n\n"
+                "**متى يثير قلق أصحاب العمل:**\n"
+                "• البقاء أقل من 12 شهراً في كل وظيفة دون مبرر واضح\n"
+                "• نمط متكرر عبر أكثر من 3 وظائف متتالية\n"
+                "• الانتقال إلى مستوى وظيفي أدنى أو لنفس المستوى\n\n"
+                "**كيف تؤطّر تنقلاتك في السيرة الذاتية:**\n"
+                "• ابرز ما أنجزته في كل دور، لا مدة البقاء فحسب\n"
+                "• اذكر أسباب الانتقال الإيجابية (نمو، مشروع جديد، إعادة هيكلة)\n"
+                "• ادمج العقود والمشاريع المتعددة تحت مؤسسة واحدة إن أمكن"
+            )
+        else:
+            msg = (
+                "💼 **Job Hopping — Does It Hurt Your Career?**\n\n"
+                "**The honest answer:** It depends on the context.\n\n"
+                "**When frequent moves are fine:**\n"
+                "• Each move came with a clear step up in title, salary, or responsibility\n"
+                "• Early career (under 5 years' experience) — exploration is expected\n"
+                "• Company restructuring, redundancy, or sector change\n"
+                "• Moving from contract/temporary roles to permanent employment\n\n"
+                "**When it raises red flags:**\n"
+                "• Staying under 12 months in consecutive roles without a strong reason\n"
+                "• A pattern across 3+ jobs in a row at the same level\n"
+                "• Lateral moves with no clear growth narrative\n\n"
+                "**How to frame it on your CV:**\n"
+                "• Lead with achievements in each role, not just tenure\n"
+                "• Be ready with a crisp, positive explanation for each move in interviews\n"
+                "• Group overlapping contracts or consulting gigs under a single heading\n\n"
+                "💡 In the UAE market, 2+ years per role is generally seen as stable. "
+                "If your total UAE experience spans several short stints, a strong functional summary at the top of your CV helps focus recruiters on skills rather than timelines."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "job_hopping", "message": msg}
+
+    # ── First day / new job tips UAE ──────────────────────────────────────────────
+
+    def _handle_first_day_new_job(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "🌟 **نصائح ليوم العمل الأول وبداية وظيفتك الجديدة**\n\n"
+                "**قبل بدء العمل:**\n"
+                "• أكمل كافة أوراق التوظيف والتأشيرة في أقرب وقت ممكن\n"
+                "• ابحث عن ثقافة الشركة وآخر أخبارها\n"
+                "• تواصل مع مديرك المباشر لتأكيد التفاصيل العملية (وقت البدء، اللباس، الموقع)\n\n"
+                "**في الأسبوع الأول:**\n"
+                "• استمع أكثر مما تتكلم — افهم الديناميكيات قبل أن تقترح تغييرات\n"
+                "• تعرّف على الفريق وابنِ علاقات إيجابية من البداية\n"
+                "• وضّح توقعات دورك مع مديرك المباشر\n"
+                "• دوّن ملاحظاتك — فترة الثلاثين يوماً الأولى لن تتكرر\n\n"
+                "**في الشهر الأول:**\n"
+                "• حدّد أصحاب المصلحة الرئيسيين وتعلّم كيف تعمل الأمور فعلياً\n"
+                "• اطلب اجتماعاً مبكراً لمناقشة الأهداف وتعريف النجاح في دورك\n"
+                "• لا تتردد في طرح الأسئلة — هذا هو الوقت المناسب لها"
+            )
+        else:
+            msg = (
+                "🌟 **Tips for Your First Day & Week at a New Job**\n\n"
+                "**Before you start:**\n"
+                "• Complete all onboarding paperwork and visa requirements promptly\n"
+                "• Research the company's culture, recent news, and key people\n"
+                "• Confirm practical details with your manager (start time, dress code, parking, access card)\n\n"
+                "**Week 1:**\n"
+                "• Listen more than you speak — understand the dynamics before proposing changes\n"
+                "• Introduce yourself proactively to colleagues and build goodwill early\n"
+                "• Clarify role expectations and 30/60/90-day goals with your manager\n"
+                "• Take notes — your fresh perspective won't last long and it's valuable\n\n"
+                "**First month:**\n"
+                "• Map the key stakeholders and understand how decisions actually get made\n"
+                "• Schedule 1-to-1s with key colleagues — relationships built early compound over time\n"
+                "• Ask questions freely — this is the one time it's fully expected\n\n"
+                "💡 In UAE workplace culture, punctuality and showing respect to senior colleagues matters a lot in the first impression you make. "
+                "Most UAE offices are formal early-on, even if they become relaxed over time."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "first_day_new_job", "message": msg}
+
+    # ── Upskilling / certifications UAE ──────────────────────────────────────────
+
+    def _handle_upskilling_uae(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "📚 **كيف تطور مهاراتك للنجاح في سوق العمل الإماراتي؟**\n\n"
+                "**شهادات مطلوبة بشدة في الإمارات (2025):**\n"
+                "• **المالية:** CFA، ACCA، CPA، CIMA\n"
+                "• **إدارة المشاريع:** PMP (PMI)، PRINCE2، Agile/Scrum\n"
+                "• **الموارد البشرية:** SHRM-CP، CIPD\n"
+                "• **التقنية:** AWS، Azure، Google Cloud، Cybersecurity (CISSP، CEH)\n"
+                "• **السلسلة اللوجستية:** CIPS، CSCMP، Six Sigma\n"
+                "• **التسويق الرقمي:** Google Ads، HubSpot، Meta Blueprint\n\n"
+                "**مصادر التعلم المجاني أو المخفّض التكلفة:**\n"
+                "• Coursera، edX، LinkedIn Learning، Udemy\n"
+                "• برامج حكومة الإمارات والمراكز التدريبية الحكومية\n"
+                "• وزارة الموارد البشرية (MOHRE) وبرامج نافس للمواطنين\n\n"
+                "**نصيحة:** ركّز على شهادة واحدة تُعزّز دورك الحالي أو الدور التالي المستهدف — ولا تجمع شهادات بلا هدف."
+            )
+        else:
+            msg = (
+                "📚 **Upskilling for the UAE Job Market**\n\n"
+                "**High-demand certifications in UAE (2025):**\n"
+                "• **Finance:** CFA, ACCA, CPA, CIMA\n"
+                "• **Project management:** PMP (PMI), PRINCE2, Agile/Scrum Master\n"
+                "• **HR:** SHRM-CP/SCP, CIPD Level 3/5/7\n"
+                "• **Tech:** AWS, Azure, Google Cloud, CISSP, CEH, CompTIA Security+\n"
+                "• **Supply chain:** CIPS, CSCMP, Six Sigma (Green/Black Belt)\n"
+                "• **Digital marketing:** Google Ads, HubSpot, Meta Blueprint\n\n"
+                "**Where to study (free/low cost):**\n"
+                "• Coursera, edX, LinkedIn Learning, Udemy\n"
+                "• UAE government training portals and free zones' learning centres\n"
+                "• Many UAE employers sponsor certifications — ask your HR team first\n\n"
+                "**Strategy:**\n"
+                "• Pick one certification that directly supports your next role or a salary step-up\n"
+                "• Add the in-progress certification to your CV and LinkedIn with an expected completion date\n"
+                "• UAE recruiters value PMP, ACCA, and cloud certs very highly — these reliably open doors\n\n"
+                "💡 If you're job-hunting now, prioritise updating your LinkedIn profile with existing skills over starting a new course."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "upskilling_uae", "message": msg}
 
     # ── Context-aware help ──────────────────────────────────────────────────────
 
