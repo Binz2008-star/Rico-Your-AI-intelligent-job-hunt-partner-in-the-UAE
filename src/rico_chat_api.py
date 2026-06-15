@@ -1157,6 +1157,48 @@ _PROBATION_RULES_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Termination notice period in UAE — "how much notice do I need to give?",
+# "notice period UAE", "can my employer fire me without notice?".
+_NOTICE_PERIOD_RE = re.compile(
+    r"\b(?:how\s+(?:much|long\s+(?:a?\s+)?is\s+(?:the\s+)?|many\s+days\s+(?:is\s+)?)\s*notice\s+(?:do\s+I\s+(?:need\s+to\s+give|have\s+to\s+give|need)|period|must\s+I\s+give))\b"
+    r"|\b(?:what\s+(?:is|are|'s)\s+(?:the\s+)?(?:my\s+)?notice\s+period(?:\s+(?:in\s+(?:UAE|Dubai)|UAE|Dubai|rules?|law|requirement|for\s+resignation|for\s+termination))?)\b"
+    r"|\b(?:notice\s+period\s+(?:in\s+(?:UAE|Dubai)|UAE|Dubai|rules?|law|requirement|for\s+resignation|for\s+termination))\b"
+    r"|\b(?:can\s+(?:my\s+)?(?:employer|company|they)\s+(?:fire|dismiss|terminate|let\s+me\s+go)\s+(?:me\s+)?(?:without|with\s+no)\s+notice)\b"
+    r"|\b(?:how\s+(?:much|many)\s+notice\s+(?:do\s+I\s+(?:need\s+to\s+give|have\s+to\s+give)|must\s+I\s+give)\s+(?:when\s+)?(?:resigning|quitting|leaving|if\s+I\s+resign|if\s+I\s+quit))\b"
+    r"|\b(?:(?:resignation|termination|dismissal)\s+notice\s+(?:period|UAE|Dubai|rules?|law|requirement))\b"
+    r"|\b(?:what\s+(?:is|are)\s+(?:the\s+)?(?:notice|resignation|termination)\s+(?:period\s+)?(?:rules?|requirements?|laws?)\s+(?:in\s+(?:UAE|Dubai))?)\b"
+    r"|\b(?:مدة\s+الإخطار|فترة\s+الإشعار\s+(?:في\s+الإمارات|عند\s+الاستقالة)|الإخطار\s+بإنهاء\s+العقد)\b",
+    re.IGNORECASE,
+)
+
+# UAE Wage Protection System (WPS) — "what is WPS?", "my salary is late",
+# "employer not paying salary on time UAE".
+_WPS_SALARY_PROTECTION_RE = re.compile(
+    r"\b(?:what\s+is\s+(?:the\s+)?(?:UAE\s+)?(?:WPS|wage\s+protection\s+system))\b"
+    r"|\b(?:WPS\s+(?:UAE|Dubai|law|rules?|fine|salary|payment|system))\b"
+    r"|\b(?:my\s+(?:salary|wage|pay)\s+(?:is|was|has\s+been)\s+(?:late|delayed|not\s+paid|overdue|unpaid|withheld))\b"
+    r"|\b(?:(?:employer|company|they)\s+(?:is|has|hasn't|have\s+not|has\s+not)\s+(?:not\s+)?(?:paid|paying)\s+(?:my\s+)?(?:salary|wages?|pay)(?:\s+(?:on\s+time|late|yet))?)\b"
+    r"|\b(?:(?:salary|wage)\s+(?:protection|late\s+payment|not\s+paid|delay|delayed|overdue|withheld)\s+(?:UAE|Dubai|law|rules?|complaint|fine)?)\b"
+    r"|\b(?:how\s+(?:do\s+I|to|can\s+I)\s+(?:report|complain\s+about|file\s+a\s+complaint\s+(?:about|for))\s+(?:(?:a\s+)?(?:late|unpaid|withheld)\s+)?(?:salary|wage|pay))\b"
+    r"|\b(?:late\s+(?:salary|wage|pay|payment)\s+(?:UAE|Dubai)?)\b"
+    r"|\b(?:nakheel\s+(?:salary|complaint)|mohre\s+(?:salary|complaint|WPS))\b"
+    r"|\b(?:نظام\s+حماية\s+الأجور|تأخر\s+(?:صرف\s+)?الراتب\s+(?:في\s+الإمارات)?|الراتب\s+(?:متأخر|لم\s+يُصرف))\b",
+    re.IGNORECASE,
+)
+
+# Employer-provided health insurance in UAE — "do I get health insurance from my employer?",
+# "is medical insurance mandatory UAE?", "what does company health insurance cover?".
+_EMPLOYER_HEALTH_INSURANCE_RE = re.compile(
+    r"\b(?:(?:do|does|will|is)\s+(?:my\s+)?(?:employer|company|they)\s+(?:provide|give|cover|offer|include)\s+(?:me\s+)?(?:health|medical)\s+insurance)\b"
+    r"|\b(?:is\s+(?:health|medical)\s+insurance\s+(?:mandatory|required|provided|included|compulsory|a\s+benefit)\s+(?:in\s+(?:UAE|Dubai))?)\b"
+    r"|\b(?:(?:health|medical)\s+insurance\s+(?:UAE|Dubai|provided\s+by\s+employer|from\s+employer|mandatory|compulsory|benefit|coverage|law))\b"
+    r"|\b(?:what\s+(?:does|do|is)\s+(?:(?:(?:the|my|a)\s+)?(?:company|employer|work)\s+)?(?:health|medical)\s+insurance\s+(?:cover|include|provide))\b"
+    r"|\b(?:(?:company|employer|work)\s+(?:health|medical)\s+insurance\s+(?:UAE|Dubai|coverage|plan|policy|benefit))\b"
+    r"|\b(?:do\s+I\s+(?:get|have|need)\s+(?:to\s+buy|my\s+own\s+)?(?:health|medical)\s+insurance\s+(?:in\s+(?:UAE|Dubai))?)\b"
+    r"|\b(?:تأمين\s+صحي\s+(?:من\s+صاحب\s+العمل|الإمارات|إلزامي|مقدم))\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -5225,7 +5267,7 @@ class RicoChatAPI:
 
         # ── UAE benefits / package query ──────────────────────────────────────
         # "what benefits should I expect?", "is housing allowance standard?".
-        if _BENEFITS_QUERY_RE.search(message) and not _EOSB_RE.search(message) and not _ANNUAL_LEAVE_RE.search(message):
+        if _BENEFITS_QUERY_RE.search(message) and not _EOSB_RE.search(message) and not _ANNUAL_LEAVE_RE.search(message) and not _EMPLOYER_HEALTH_INSURANCE_RE.search(message):
             return self._finalize(
                 self._handle_benefits_package(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5464,6 +5506,33 @@ class RicoChatAPI:
         if _PROBATION_RULES_RE.search(message):
             return self._finalize(
                 self._handle_probation_rules(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Termination notice period ─────────────────────────────────────────
+        # "how much notice do I need to give?", "notice period UAE".
+        if _NOTICE_PERIOD_RE.search(message):
+            return self._finalize(
+                self._handle_notice_period(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Wage Protection System / late salary ──────────────────────────────
+        # "what is WPS?", "my salary is late", "how to report late salary UAE".
+        if _WPS_SALARY_PROTECTION_RE.search(message):
+            return self._finalize(
+                self._handle_wps_salary_protection(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Employer health insurance ─────────────────────────────────────────
+        # "do I get health insurance from my employer?", "is medical insurance mandatory UAE?".
+        if _EMPLOYER_HEALTH_INSURANCE_RE.search(message):
+            return self._finalize(
+                self._handle_employer_health_insurance(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -13133,6 +13202,142 @@ class RicoChatAPI:
             )
         self._append_chat(user_id, "assistant", msg)
         return {"type": "probation_rules", "message": msg}
+
+    # ── Termination notice period ─────────────────────────────────────────────────
+
+    def _handle_notice_period(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## مدة الإخطار (Notice Period) في الإمارات\n\n"
+                "**قانون العمل الاتحادي (مرسوم بقانون رقم 33 لعام 2021):**\n"
+                "- الحد الأدنى لمدة الإخطار: **30 يوم تقويمي**\n"
+                "- يمكن الاتفاق على مدة أطول في العقد (شائع في المناصب العليا: 60–90 يوماً)\n\n"
+                "**هل يمكن لصاحب العمل إنهاء عقدك دون إخطار؟**\n"
+                "- لا، إلا في حالات الفصل التأديبي (مخالفة جسيمة) المنصوص عليها في المادة 44\n"
+                "- في حالات الفصل التأديبي: يُنهى العقد فوراً دون مكافأة نهاية خدمة\n\n"
+                "**هل يمكنك الاستقالة دون إخطار؟**\n"
+                "- لا، الاستقالة دون إخطار قد تُعرضك لخصم من الأجر أو الملاحقة القانونية\n"
+                "- في فترة التجربة: الإخطار 14 يوماً (إذا انتقلت لعمل آخر داخل الإمارات: 30 يوماً)\n\n"
+                "**نصيحة:** تحقق من بند الإخطار في عقدك — فبعض العقود تنص على 60 أو 90 يوماً، "
+                "وهذا ملزم قانونياً."
+            )
+        else:
+            msg = (
+                "## Notice Period in UAE\n\n"
+                "**UAE Federal Labour Law (Decree No. 33 of 2021):**\n"
+                "- Minimum notice period: **30 calendar days**\n"
+                "- Contracts can specify longer notice (common for senior roles: 60–90 days)\n\n"
+                "**Can your employer fire you without notice?**\n"
+                "- No, except in disciplinary termination cases under Article 44 "
+                "(e.g., serious misconduct, fraud)\n"
+                "- In disciplinary termination: the employer can dismiss immediately "
+                "without notice but must still pay any unpaid salary owed\n\n"
+                "**Can you resign without notice?**\n"
+                "- No — resigning without notice can mean a salary deduction equal to "
+                "the notice period pay, or legal liability\n"
+                "- **During probation:** 14 days' notice (or 30 days if moving to another "
+                "UAE employer)\n\n"
+                "**Garden leave:** Some employers ask you to stop working but remain "
+                "paid and on the books during your notice period — this is legal in UAE.\n\n"
+                "**Tip:** Always check your contract. If it says 60 or 90 days' notice, "
+                "that is the legally binding term — not the 30-day minimum."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "notice_period", "message": msg}
+
+    # ── Wage Protection System / late salary ──────────────────────────────────────
+
+    def _handle_wps_salary_protection(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## نظام حماية الأجور (WPS) في الإمارات\n\n"
+                "**ما هو نظام حماية الأجور؟**\n"
+                "- نظام إلكتروني تُشرف عليه وزارة الموارد البشرية (MOHRE)\n"
+                "- يُلزم أصحاب العمل بصرف الرواتب عبر قنوات موافق عليها خلال 10 أيام من موعدها\n\n"
+                "**ماذا تفعل إذا تأخر راتبك؟**\n"
+                "1. انتظر 10 أيام عمل إضافية بعد موعد الراتب قبل تقديم شكوى رسمية\n"
+                "2. أبلغ مشرفك أو قسم الموارد البشرية أولاً\n"
+                "3. تقديم شكوى عبر:\n"
+                "   - تطبيق / موقع MOHRE الإلكتروني\n"
+                "   - الاتصال على رقم 800-MOHRE (800-60473)\n"
+                "   - زيارة مراكز العمل (تسهيل)\n\n"
+                "**العقوبات على صاحب العمل:**\n"
+                "- غرامات وتجميد تصاريح العمل الجديدة إذا تأخر صرف الراتب أكثر من 10 أيام\n\n"
+                "**ملاحظة:** يغطي نظام WPS القطاع الخاص فقط — لا يشمل موظفي الحكومة."
+            )
+        else:
+            msg = (
+                "## Wage Protection System (WPS) in UAE\n\n"
+                "**What is WPS?**\n"
+                "- An electronic salary transfer system overseen by MOHRE "
+                "(Ministry of Human Resources & Emiratisation)\n"
+                "- Requires private-sector employers to pay salaries through "
+                "approved channels within **10 days** of the due date\n\n"
+                "**What to do if your salary is late:**\n"
+                "1. Wait up to **10 working days** after your pay date before filing a formal complaint\n"
+                "2. Raise it with your HR / line manager first (paper trail helps)\n"
+                "3. File a complaint through:\n"
+                "   - **MOHRE app or website** (mohre.gov.ae)\n"
+                "   - **Call 800-MOHRE (800-60473)**\n"
+                "   - Visit a **Tasheel / MOHRE service centre**\n\n"
+                "**Consequences for employers:**\n"
+                "- Fines and a freeze on new work permit applications if salaries are "
+                "unpaid for more than 10 days\n"
+                "- Persistent non-payment can result in licence suspension\n\n"
+                "**Important:** WPS covers **private sector only** — government employees "
+                "fall under separate regulations.\n\n"
+                "**Tip:** Keep digital copies of your pay slips and bank statements "
+                "as evidence if you need to escalate a complaint."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "wps_salary_protection", "message": msg}
+
+    # ── Employer health insurance ─────────────────────────────────────────────────
+
+    def _handle_employer_health_insurance(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## التأمين الصحي من صاحب العمل في الإمارات\n\n"
+                "**هل التأمين الصحي إلزامي؟**\n"
+                "- **نعم، في دبي وأبوظبي:** التأمين الصحي للموظفين إلزامي بموجب القانون\n"
+                "- في دبي: يُلزم قانون التأمين الصحي الإلزامي (2014) أصحاب العمل بتوفيره للموظفين والمعالين\n"
+                "- في أبوظبي: إلزامي بموجب قانون الصحة الأساسية\n\n"
+                "**ماذا يغطي التأمين المُقدَّم من صاحب العمل عادةً؟**\n"
+                "- زيارات الطوارئ والعيادات الخارجية\n"
+                "- الاستشارات الطبية والأدوية\n"
+                "- بعض خطط التأمين تشمل طب الأسنان والبصريات\n"
+                "- المعالون (الزوجة والأطفال) قد يُشملون أو يُستثنون حسب الشركة\n\n"
+                "**نصيحة:** اطلب تفاصيل بطاقة التأمين وشبكة المستشفيات المعتمدة قبل توقيع العقد."
+            )
+        else:
+            msg = (
+                "## Employer Health Insurance in UAE\n\n"
+                "**Is health insurance mandatory?**\n"
+                "- **Yes, in Dubai and Abu Dhabi:** Employers are legally required to "
+                "provide health insurance to employees\n"
+                "- **Dubai:** Mandatory Health Insurance Law (2014) — employers must cover "
+                "all employees AND their dependants\n"
+                "- **Abu Dhabi:** Mandatory since 2005 under the Basic Health Programme\n"
+                "- **Other emirates:** No blanket federal mandate, but most reputable "
+                "employers still provide it\n\n"
+                "**What does employer health insurance typically cover?**\n"
+                "- GP visits and outpatient consultations\n"
+                "- Emergency treatment\n"
+                "- Prescription medications\n"
+                "- Some plans include dental and optical\n"
+                "- Maternity coverage varies — check the policy\n\n"
+                "**Dependants:**\n"
+                "- In Dubai, employers must cover spouse and up to 3 children\n"
+                "- In Abu Dhabi, dependants must be sponsored separately by the employee\n\n"
+                "**Tip:** Always ask for the insurance card, policy number, and the "
+                "list of approved hospitals (network providers) before you start. "
+                "Using out-of-network providers can mean paying out of pocket."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "employer_health_insurance", "message": msg}
 
     # ── Context-aware help ──────────────────────────────────────────────────────
 
