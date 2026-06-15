@@ -445,6 +445,42 @@ _COMPANY_SEARCH_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Salary-filtered job search: "find HSE jobs paying above 20k AED",
+# "QHSE roles with salary above 25000", "jobs paying more than 30k".
+_SALARY_SEARCH_RE = re.compile(
+    r"\b(?:find|show|search|look\s+for)\b.{0,50}\b(?:pay(?:ing)?|salary)\s+(?:above|over|more\s+than|at\s+least|minimum\s+of?)\s+\d"
+    r"|\b(?:jobs?|roles?|positions?)\b.{0,30}\b(?:pay(?:ing)?|salary)\s+(?:above|over|more\s+than|at\s+least)\s+\d"
+    r"|\bminimum\s+salary\s+(?:of\s+)?\d"
+    r"|\bsalary\s+(?:above|over|more\s+than|at\s+least)\s+\d{4}"
+    r"|\b\d+k\s+(?:AED\s+)?(?:and\s+above|minimum|or\s+more|plus)\b"
+    r"|\براتب\s+(?:أعلى\s+من|فوق|لا\s+يقل\s+عن)\s+\d",
+    re.IGNORECASE,
+)
+
+# Employment type filter: "find remote HSE jobs", "contract QHSE roles in Abu Dhabi",
+# "show remote safety manager roles", "part-time positions in Dubai".
+# Uses non-greedy .{0,30}? to allow a role name between the type and the job noun.
+_EMPLOYMENT_TYPE_RE = re.compile(
+    r"\b(?:find|search|show|look\s+for)\s+(?:me\s+)?(?:remote|hybrid|part[- ]?time|full[- ]?time|contract|freelance|temporary)\s+.{0,30}?\b(?:jobs?|roles?|positions?|work|vacancies)\b"
+    r"|\b(?:remote|hybrid|part[- ]?time|full[- ]?time|contract|freelance|temporary)\s+.{0,25}?\b(?:jobs?|roles?|positions?|work|opportunities?)\s+(?:in|at|for|near)\b"
+    r"|\b(?:only|just)\s+(?:remote|hybrid|part[- ]?time|full[- ]?time|contract|freelance)\b.{0,25}?\b(?:jobs?|roles?|positions?)\b"
+    r"|\b(?:دوام\s+جزئي|دوام\s+كامل|عقد|عمل\s+عن\s+بُعد)\s+(?:وظائف|فرص)\b",
+    re.IGNORECASE,
+)
+
+# Follow-up timing advice: "when should I follow up?", "how many days before following up?",
+# "should I follow up with Emirates now?", "is it too early to follow up?".
+_FOLLOWUP_TIMING_RE = re.compile(
+    r"\bwhen\s+(?:should\s+I|to)\s+(?:follow\s+up|send\s+a\s+follow[- ]?up)\b"
+    r"|\bhow\s+(?:long|many\s+days?)\s+(?:before|to\s+wait\s+before)\s+follow(?:ing)?\s+up\b"
+    r"|\b(?:should\s+I|can\s+I)\s+follow\s+up\s+(?:now|yet|with|on)\b"
+    r"|\bfollow[- ]?up\s+(?:timing|email|message|letter|template|after\s+applying)\b"
+    r"|\b(?:is\s+it\s+(?:too\s+)?(?:early|late|soon|ok|okay|appropriate))\s+to\s+follow\s+up\b"
+    r"|\bhow\s+(?:do\s+I|should\s+I)\s+follow\s+up\b"
+    r"|\b(?:متى|كيف)\b.{0,20}\b(?:أتابع|المتابعة)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -4271,6 +4307,35 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        # ── Salary-filtered job search ────────────────────────────────────────
+        # "find HSE jobs paying above 20k AED", "roles with salary minimum 25000".
+        # Fires BEFORE generic intent so the salary constraint is honoured.
+        if _SALARY_SEARCH_RE.search(message):
+            return self._finalize(
+                self._handle_salary_filtered_search(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Employment-type filter ────────────────────────────────────────────
+        # "find remote HSE jobs", "contract QHSE roles", "part-time positions".
+        if _EMPLOYMENT_TYPE_RE.search(message):
+            return self._finalize(
+                self._handle_employment_type_search(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Follow-up timing advice ───────────────────────────────────────────
+        # "when should I follow up?", "is it too early to follow up?",
+        # "how many days before following up?".
+        if _FOLLOWUP_TIMING_RE.search(message):
+            return self._finalize(
+                self._handle_followup_timing(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
         # ── Step 1: Unified intent classification ────────────────────────────
         if has_cv and self._looks_like_career_execution_request(message):
             return self._finalize(
@@ -8070,6 +8135,331 @@ class RicoChatAPI:
             "company": company,
             "jobs": top,
             "total_found": len(matches),
+            "message": msg,
+        }
+
+    # ── Salary-filtered job search ──────────────────────────────────────────────
+
+    def _handle_salary_filtered_search(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Search jobs and filter by a minimum salary threshold.
+
+        Parses messages like "find HSE jobs paying above 20k AED" or
+        "QHSE roles with minimum salary 25000".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        # Extract salary threshold (AED amount, supports "20k" / "20,000" / "20000")
+        _sal_m = _re.search(
+            r"(?:above|over|more\s+than|at\s+least|minimum(?:\s+of)?|لا\s+يقل\s+عن|أعلى\s+من)\s+"
+            r"([\d,]+(?:\.\d+)?)\s*([kK]?)\s*(?:AED|aed|درهم)?",
+            message, _re.IGNORECASE,
+        )
+        # Fallback: "25k AED and above"
+        if not _sal_m:
+            _sal_m = _re.search(r"([\d,]+(?:\.\d+)?)\s*([kK])\s+(?:AED\s+)?(?:and\s+above|or\s+more|minimum|plus)", message, _re.IGNORECASE)
+
+        min_salary: int = 0
+        if _sal_m:
+            raw_num = _sal_m.group(1).replace(",", "")
+            suffix  = (_sal_m.group(2) or "").lower()
+            try:
+                val = float(raw_num)
+                min_salary = int(val * 1000 if suffix == "k" else val)
+            except ValueError:
+                pass
+
+        # Extract role name — everything before the salary clause
+        role = ""
+        _role_m = _re.search(
+            r"\b(?:find|show|search|look\s+for)\s+(?:me\s+)?(.{3,40}?)\s+(?:jobs?|roles?|positions?)",
+            message, _re.IGNORECASE,
+        )
+        if _role_m:
+            role = _role_m.group(1).strip().strip(", ")
+        if not role:
+            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            role = target_roles[0] if target_roles else ""
+
+        if not role:
+            msg = (
+                "أخبرني بالمسمى الوظيفي الذي تبحث عنه مع الحد الأدنى للراتب."
+                if arabic else
+                "Please tell me the role you're looking for along with the minimum salary. "
+                "For example: 'find HSE jobs paying above 20k AED'."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "message": msg}
+
+        fetch = self._search_jsearch_meta(role)
+        all_matches = fetch.items or []
+
+        # Post-fetch salary filter when we have a threshold
+        filtered = all_matches
+        if min_salary > 0:
+            def _extract_salary_num(job: dict) -> int:
+                sal_str = str(job.get("salary_string") or job.get("salary") or "")
+                nums = _re.findall(r"[\d,]+", sal_str.replace(",", ""))
+                return max((int(n) for n in nums if int(n) > 1000), default=0)
+
+            salary_filtered = [j for j in all_matches if _extract_salary_num(j) >= min_salary]
+            filtered = salary_filtered if salary_filtered else all_matches
+
+        self._store_search_matches_context(user_id, filtered[:10])
+        top = filtered[:5]
+
+        if not top:
+            threshold_str = f"AED {min_salary:,}/month" if min_salary else ""
+            msg = (
+                f"لم أجد وظائف {role} في الإمارات{' بهذا الراتب' if min_salary else ''}."
+                if arabic else
+                f"No {role} jobs found in the UAE"
+                + (f" paying above {threshold_str}" if min_salary else "") + "."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "no_results", "message": msg}
+
+        threshold_label = f"AED {min_salary:,}/month" if min_salary else ""
+        header = (
+            f"وجدت **{len(top)}** وظيفة لـ **{role}**"
+            + (f" براتب فوق {threshold_label}" if threshold_label else "") + ":"
+            if arabic else
+            f"Found **{len(top)} {role} role{'s' if len(top) != 1 else ''}**"
+            + (f" paying above {threshold_label}" if threshold_label else "") + ":"
+        )
+        lines = [header, ""]
+        for i, job in enumerate(top, 1):
+            title   = job.get("title") or job.get("job_title") or "Role"
+            company = job.get("company") or job.get("employer_name") or ""
+            loc     = job.get("location") or job.get("job_city") or "UAE"
+            sal     = job.get("salary_string") or ""
+            url     = job.get("apply_url") or job.get("job_apply_link") or ""
+            line = f"{i}. **{title}**" + (f" at {company}" if company else "") + f" — {loc}"
+            if sal:
+                line += f" | {sal}"
+            if url:
+                line += f" ([Apply]({url}))"
+            lines.append(line)
+
+        if min_salary and len(salary_filtered) < len(all_matches):
+            lines.append(
+                f"\n_Salary data isn't always available — showing {len(top)} of {len(all_matches)} "
+                f"results (some may not display salary). All {len(all_matches)} are shown if none "
+                f"listed exact salary above {threshold_label}._"
+            )
+
+        msg = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "job_matches",
+            "role": role,
+            "min_salary_aed": min_salary,
+            "jobs": top,
+            "total_found": len(filtered),
+            "message": msg,
+        }
+
+    # ── Employment-type filter search ───────────────────────────────────────────
+
+    def _handle_employment_type_search(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Search jobs filtered by employment type (remote, hybrid, contract, part-time).
+
+        Parses messages like "find remote HSE jobs" or "contract QHSE roles in Dubai".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        # Detect employment type
+        _type_map = {
+            "remote":      "remote",
+            "hybrid":      "hybrid",
+            "part-time":   "part-time",
+            "part time":   "part-time",
+            "parttime":    "part-time",
+            "full-time":   "full-time",
+            "full time":   "full-time",
+            "fulltime":    "full-time",
+            "contract":    "contract",
+            "freelance":   "freelance",
+            "temporary":   "temporary",
+            "temp":        "temporary",
+            "دوام جزئي":  "part-time",
+            "دوام كامل":  "full-time",
+            "عقد":         "contract",
+            "عن بُعد":    "remote",
+        }
+        emp_type = ""
+        lower_msg = message.lower()
+        for kw, label in _type_map.items():
+            if kw in lower_msg:
+                emp_type = label
+                break
+
+        # Extract role — after the employment type keyword, before "jobs/roles/in"
+        role = ""
+        _role_m = _re.search(
+            r"(?:remote|hybrid|part[- ]?time|full[- ]?time|contract|freelance|temporary)\s+(.{2,30}?)\s+(?:jobs?|roles?|positions?|work)\b",
+            message, _re.IGNORECASE,
+        )
+        if _role_m:
+            role = _role_m.group(1).strip()
+        if not role:
+            _role_m2 = _re.search(
+                r"\b(?:find|show|search\s+for)\s+(?:me\s+)?(?:remote|hybrid|part[- ]?time|full[- ]?time|contract|freelance|temporary)\s+(.{3,30}?)\s+(?:jobs?|roles?|in\b|$)",
+                message, _re.IGNORECASE,
+            )
+            if _role_m2:
+                role = _role_m2.group(1).strip()
+        if not role:
+            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            role = target_roles[0] if target_roles else ""
+
+        # Extract location hint
+        _loc_m = _re.search(r"\bin\s+(Dubai|Abu\s+Dhabi|Sharjah|Ajman|Fujairah|Al\s+Ain|UAE)\b", message, _re.IGNORECASE)
+        location = _loc_m.group(1).strip() if _loc_m else ""
+
+        # Build search query with employment type modifier
+        if role:
+            query = f"{emp_type} {role}" if emp_type else role
+        else:
+            query = f"{emp_type} jobs" if emp_type else "jobs"
+        query = query.strip()
+
+        fetch = self._search_jsearch_meta(query, location)
+        matches = fetch.items or []
+
+        # Post-filter: prefer items where employment_type matches
+        if emp_type and matches:
+            pref = [
+                j for j in matches
+                if emp_type.lower() in (j.get("employment_type") or j.get("job_employment_type") or "").lower()
+            ]
+            if pref:
+                matches = pref + [j for j in matches if j not in pref]
+
+        self._store_search_matches_context(user_id, matches[:10])
+        top = matches[:5]
+
+        if not top:
+            msg = (
+                f"لم أجد وظائف {emp_type} لـ {role or 'الوظائف'} في الإمارات."
+                if arabic else
+                f"No {emp_type} {role} jobs found in the UAE right now."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "no_results", "message": msg}
+
+        header = (
+            f"وجدت **{len(top)}** وظيفة {emp_type}{(' لـ ' + role) if role else ''} في الإمارات:"
+            if arabic else
+            f"Found **{len(top)} {emp_type} {role} {'role' if role else 'job'}{'s' if len(top) != 1 else ''}** in the UAE:"
+        )
+        lines = [header, ""]
+        for i, job in enumerate(top, 1):
+            title   = job.get("title") or job.get("job_title") or "Role"
+            company = job.get("company") or job.get("employer_name") or ""
+            loc     = job.get("location") or job.get("job_city") or "UAE"
+            etype   = job.get("employment_type") or job.get("job_employment_type") or ""
+            url     = job.get("apply_url") or job.get("job_apply_link") or ""
+            line = f"{i}. **{title}**" + (f" at {company}" if company else "") + f" — {loc}"
+            if etype and etype.lower() != emp_type.lower():
+                line += f" ({etype})"
+            if url:
+                line += f" ([Apply]({url}))"
+            lines.append(line)
+
+        msg = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "job_matches",
+            "employment_type": emp_type,
+            "role": role,
+            "jobs": top,
+            "total_found": len(matches),
+            "message": msg,
+        }
+
+    # ── Follow-up timing advice ─────────────────────────────────────────────────
+
+    def _handle_followup_timing(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Return deterministic UAE-context follow-up timing advice.
+
+        Covers: "when should I follow up?", "is it too early to follow up?",
+        "how many days before following up?", "how do I follow up?".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        # Check if a specific company is mentioned — look for an application record
+        _co_m = _re.search(
+            r"\bfollow\s+up\s+(?:with|on|at|to)\s+([A-Za-z][^\s?!,.]{0,30}(?:\s+[A-Z][^\s?!,.]{0,20})*)",
+            message, _re.IGNORECASE,
+        )
+        company_name = _co_m.group(1).strip() if _co_m else ""
+        applied_date = ""
+
+        if company_name:
+            try:
+                from src.repositories import applications_repo
+                apps = applications_repo.get_all(user_id=user_id)
+                match = next(
+                    (a for a in apps
+                     if isinstance(a, dict)
+                     and company_name.lower() in (a.get("company") or "").lower()),
+                    None,
+                )
+                if match:
+                    applied_date = str(match.get("applied_at") or match.get("created_at") or "")[:10]
+            except Exception:
+                pass
+
+        if arabic:
+            lines = [
+                "**متى تتابع بعد تقديم طلبك؟**\n",
+                "- **بعد تقديم طلب إلكتروني:** انتظر **أسبوع إلى أسبوعين** قبل المتابعة.",
+                "- **بعد مقابلة:** تابع خلال **3-5 أيام عمل**.",
+                "- **بعد رسالة متابعة أولى:** انتظر **أسبوعاً آخر** قبل المتابعة مجدداً.",
+                "\n**نصائح للإمارات:**",
+                "- تواصل عبر **LinkedIn** أو **البريد الإلكتروني المهني** — الاتصال الهاتفي غير مناسب عادةً.",
+                "- ابدأ رسالتك بـ «أرجو المعذرة على إزعاجكم» واذكر اسم الوظيفة التي تقدمت إليها.",
+                "- حافظ على نبرة مهذبة ومحترمة.",
+            ]
+            if company_name and applied_date:
+                lines.insert(1, f"تقدمت إلى **{company_name}** بتاريخ **{applied_date}**. "
+                                "إذا مر أسبوع أو أكثر، يمكنك المتابعة الآن.\n")
+        else:
+            lines = [
+                "**When to follow up after applying in the UAE:**\n",
+                "- **After an online application:** wait **1–2 weeks** before following up.",
+                "- **After an interview:** follow up within **3–5 business days**.",
+                "- **After a first follow-up with no reply:** wait **another week** before reaching out again.",
+                "\n**UAE-specific tips:**",
+                "- Reach out via **LinkedIn** or a **professional email** — cold calling HR is generally unwelcome.",
+                "- Keep it brief: reference the role title, the date you applied, and express continued interest.",
+                "- Close with: _\"I remain very interested in this opportunity and would welcome the chance to discuss further.\"_",
+                "- Avoid following up more than **twice** — beyond that, assume they're not moving forward.",
+            ]
+            if company_name and applied_date:
+                lines.insert(1, f"You applied to **{company_name}** on **{applied_date}**. "
+                                "If it's been 1+ week, now's a good time to follow up.\n")
+            elif company_name:
+                lines.insert(1, f"For **{company_name}** — if you applied online, wait 1–2 weeks before reaching out.\n")
+
+        msg = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "followup_timing",
+            "company": company_name,
+            "applied_date": applied_date,
             "message": msg,
         }
 

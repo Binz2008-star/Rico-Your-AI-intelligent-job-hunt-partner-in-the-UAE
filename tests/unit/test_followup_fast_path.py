@@ -1330,3 +1330,204 @@ class TestCompanySearch:
         assert result["type"] == "job_matches"
         assert result["company"] == "ADNOC"
         assert len(result["jobs"]) >= 1
+
+
+# ── Salary-filtered job search ──────────────────────────────────────────────────
+
+class TestSalaryFilteredSearch:
+    """Verify _handle_salary_filtered_search routing and response types."""
+
+    @pytest.mark.parametrize("phrase", [
+        "find HSE jobs paying above 20k AED",
+        "show me QHSE roles with salary above 25000",
+        "jobs paying more than 30000 AED",
+        "minimum salary 20000 AED jobs",
+        "salary above 15000 positions",
+        "find safety manager roles paying at least 25k",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _SALARY_SEARCH_RE
+        assert _SALARY_SEARCH_RE.search(phrase), (
+            f"_SALARY_SEARCH_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        # Generic searches without salary — should not fire
+        "find HSE jobs",
+        "show me QHSE jobs",
+        # Salary readback — different gate
+        "what is my salary",
+        "what salary did I set",
+        # Company search
+        "find jobs at ADNOC",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _SALARY_SEARCH_RE
+        assert not _SALARY_SEARCH_RE.search(phrase), (
+            f"_SALARY_SEARCH_RE should NOT match: {phrase!r}"
+        )
+
+    def test_no_results_returns_no_results(self, monkeypatch):
+        import src.rico_chat_api as mod
+        from src.rico_chat_api import RicoChatAPI
+        from src.jsearch_client import FetchResult
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr(mod, "get_profile", lambda uid: _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock(
+            tool_name=None, entities={}, tool_args={}, confirmation_prompt=None, source="keyword"
+        ))
+        monkeypatch.setattr(mod, "upsert_profile", lambda uid, u: _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._store_recent_context = MagicMock()
+        monkeypatch.setattr(api, "_search_jsearch_meta", lambda q, loc="": FetchResult(items=[]))
+
+        result = api._handle_active_user("u1", "find HSE jobs paying above 20k AED")
+        assert result["type"] == "no_results"
+
+    def test_with_results_returns_job_matches(self, monkeypatch):
+        import src.rico_chat_api as mod
+        from src.rico_chat_api import RicoChatAPI
+        from src.jsearch_client import FetchResult
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr(mod, "get_profile", lambda uid: _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock(
+            tool_name=None, entities={}, tool_args={}, confirmation_prompt=None, source="keyword"
+        ))
+        monkeypatch.setattr(mod, "upsert_profile", lambda uid, u: _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._store_recent_context = MagicMock()
+        monkeypatch.setattr(api, "_search_jsearch_meta", lambda q, loc="": FetchResult(items=[
+            {"title": "HSE Manager", "company": "ADNOC", "location": "Abu Dhabi",
+             "salary_string": "AED 25,000/month", "apply_url": ""},
+        ]))
+
+        result = api._handle_active_user("u1", "find HSE jobs paying above 20k AED")
+        assert result["type"] == "job_matches"
+        assert result["min_salary_aed"] == 20000
+        assert len(result["jobs"]) >= 1
+
+
+# ── Employment-type filter search ──────────────────────────────────────────────
+
+class TestEmploymentTypeSearch:
+    """Verify _handle_employment_type_search routing and response types."""
+
+    @pytest.mark.parametrize("phrase", [
+        "find remote HSE jobs",
+        "find me hybrid positions in Dubai",
+        "contract QHSE roles in Abu Dhabi",
+        "show me part-time jobs",
+        "find freelance safety positions",
+        "show remote safety manager roles",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _EMPLOYMENT_TYPE_RE
+        assert _EMPLOYMENT_TYPE_RE.search(phrase), (
+            f"_EMPLOYMENT_TYPE_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        # Generic searches without employment type
+        "find HSE jobs",
+        "show me QHSE roles",
+        # Company search
+        "find jobs at ADNOC",
+        # Salary search
+        "find HSE jobs paying above 20k",
+        # Unrelated
+        "show my applications",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _EMPLOYMENT_TYPE_RE
+        assert not _EMPLOYMENT_TYPE_RE.search(phrase), (
+            f"_EMPLOYMENT_TYPE_RE should NOT match: {phrase!r}"
+        )
+
+    def test_remote_search_returns_job_matches(self, monkeypatch):
+        import src.rico_chat_api as mod
+        from src.rico_chat_api import RicoChatAPI
+        from src.jsearch_client import FetchResult
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr(mod, "get_profile", lambda uid: _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock(
+            tool_name=None, entities={}, tool_args={}, confirmation_prompt=None, source="keyword"
+        ))
+        monkeypatch.setattr(mod, "upsert_profile", lambda uid, u: _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._store_recent_context = MagicMock()
+        monkeypatch.setattr(api, "_search_jsearch_meta", lambda q, loc="": FetchResult(items=[
+            {"title": "Remote HSE Manager", "company": "TechCorp", "location": "Remote",
+             "employment_type": "remote", "apply_url": ""},
+        ]))
+
+        result = api._handle_active_user("u1", "find remote HSE jobs")
+        assert result["type"] == "job_matches"
+        assert result["employment_type"] == "remote"
+
+
+# ── Follow-up timing advice ────────────────────────────────────────────────────
+
+class TestFollowupTiming:
+    """Verify _handle_followup_timing routing and response type."""
+
+    @pytest.mark.parametrize("phrase", [
+        "when should I follow up?",
+        "how many days before following up?",
+        "should I follow up now?",
+        "follow-up timing advice",
+        "is it too early to follow up?",
+        "how do I follow up?",
+        "follow up email template",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _FOLLOWUP_TIMING_RE
+        assert _FOLLOWUP_TIMING_RE.search(phrase), (
+            f"_FOLLOWUP_TIMING_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        # Unrelated follow-up phrases
+        "follow me on LinkedIn",
+        "following up on my order",
+        # Application queries
+        "show my applications",
+        "did I apply to Emirates",
+        # Generic
+        "when will I hear back?",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _FOLLOWUP_TIMING_RE
+        assert not _FOLLOWUP_TIMING_RE.search(phrase), (
+            f"_FOLLOWUP_TIMING_RE should NOT match: {phrase!r}"
+        )
+
+    def test_returns_followup_timing_type(self, monkeypatch):
+        _, result = _run(monkeypatch, "when should I follow up?", _CVProfile())
+        assert result["type"] == "followup_timing"
+        assert result["message"]
+
+    def test_advice_mentions_weeks(self, monkeypatch):
+        _, result = _run(monkeypatch, "how many days before following up?", _CVProfile())
+        assert result["type"] == "followup_timing"
+        assert "week" in result["message"].lower() or "days" in result["message"].lower()
+
+    def test_company_specific_followup(self, monkeypatch):
+        _, result = _run(monkeypatch, "should I follow up with Emirates now?", _CVProfile())
+        assert result["type"] == "followup_timing"
+        assert "Emirates" in result["message"]
+
+    def test_followup_template_phrase(self, monkeypatch):
+        _, result = _run(monkeypatch, "follow up email template", _CVProfile())
+        assert result["type"] == "followup_timing"
