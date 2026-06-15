@@ -22,6 +22,7 @@ Routes:
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -1483,7 +1484,21 @@ async def rico_telegram_webhook(request: Request) -> dict[str, Any]:
         update = await request.json()
     except Exception:
         return {"ok": True}  # Bad JSON - always ACK
-    return chat_service.handle_telegram_update(update)
+
+    result = chat_service.handle_telegram_update(update)
+
+    # process_telegram_update() returns {"chat_id": ..., "reply": ...} but does
+    # not call the Telegram Bot API — we must push the reply here.
+    chat_id = result.get("chat_id")
+    reply = result.get("reply")
+    if chat_id and reply:
+        reply_text = reply if isinstance(reply, str) else reply.get("message", "")
+        if reply_text:
+            from src.telegram_bot import send_telegram_to_user
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, send_telegram_to_user, str(chat_id), reply_text)
+
+    return {"ok": True}
 
 
 @router.post("/webhooks/jotform")
