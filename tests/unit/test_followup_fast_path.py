@@ -2237,3 +2237,208 @@ class TestSalaryNegotiation:
         _, result = _run(monkeypatch, "how do I negotiate my salary?", _CVProfile())
         assert isinstance(result.get("message"), str)
         assert len(result["message"]) > 50
+
+
+# ── _INTERVIEW_PREP_RE ────────────────────────────────────────────────────────
+
+class TestInterviewPrep:
+    """Regex gate and handler for interview preparation advice."""
+
+    @pytest.mark.parametrize("phrase", [
+        "how do I prepare for an interview?",
+        "how to prepare for an interview",
+        "interview tips",
+        "interview advice",
+        "interview preparation",
+        "common interview questions",
+        "what should I wear to an interview?",
+        "what to wear to a UAE interview?",
+        "how to ace an interview",
+        "how to nail my interview",
+        "preparing for my interview",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _INTERVIEW_PREP_RE
+        assert _INTERVIEW_PREP_RE.search(phrase), (
+            f"_INTERVIEW_PREP_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        "find HSE jobs in Dubai",
+        "my notice period is 30 days",
+        "how do I negotiate my salary?",
+        "I got rejected",
+        "LinkedIn profile tips",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _INTERVIEW_PREP_RE
+        assert not _INTERVIEW_PREP_RE.search(phrase), (
+            f"_INTERVIEW_PREP_RE should NOT match: {phrase!r}"
+        )
+
+    def test_routes_to_interview_prep(self, monkeypatch):
+        _, result = _run(monkeypatch, "how do I prepare for an interview?", _CVProfile())
+        assert result["type"] == "interview_prep"
+
+    def test_attire_query_flagged(self, monkeypatch):
+        _, result = _run(monkeypatch, "what should I wear to an interview?", _CVProfile())
+        assert result["type"] == "interview_prep"
+        assert result.get("is_attire_query") is True
+
+    def test_questions_query_flagged(self, monkeypatch):
+        _, result = _run(monkeypatch, "common interview questions", _CVProfile())
+        assert result["type"] == "interview_prep"
+        assert result.get("is_questions_query") is True
+
+    def test_general_prep_not_flagged_as_attire(self, monkeypatch):
+        _, result = _run(monkeypatch, "interview tips", _CVProfile())
+        assert result["type"] == "interview_prep"
+        assert result.get("is_attire_query") is False
+
+    def test_role_from_profile_included(self, monkeypatch):
+        _, result = _run(monkeypatch, "interview tips", _CVProfile())
+        assert result.get("role") == "Senior HSE Manager"
+
+    def test_message_field_present(self, monkeypatch):
+        _, result = _run(monkeypatch, "interview tips", _CVProfile())
+        assert isinstance(result.get("message"), str)
+        assert len(result["message"]) > 50
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        _, result = _run(monkeypatch, "how do I prepare for an interview?", _EmptyProfile())
+        assert result["type"] == "interview_prep"
+
+
+# ── _REJECTION_HANDLING_RE ────────────────────────────────────────────────────
+
+class TestRejectionHandling:
+    """Regex gate and handler for rejection and no-response scenarios."""
+
+    @pytest.mark.parametrize("phrase", [
+        "I got rejected",
+        "I was rejected for the role",
+        "no response from the company",
+        "no reply after interview",
+        "I haven't heard back",
+        "what to do after rejection?",
+        "what should I do when rejected?",
+        "I've been ghosted",
+        "being ghosted by employer",
+        "job rejection advice",
+        "failed the interview",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _REJECTION_HANDLING_RE
+        assert _REJECTION_HANDLING_RE.search(phrase), (
+            f"_REJECTION_HANDLING_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        "find HSE jobs in Dubai",
+        "how do I negotiate my salary?",
+        "interview tips",
+        "LinkedIn profile tips",
+        "my notice period is 30 days",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _REJECTION_HANDLING_RE
+        assert not _REJECTION_HANDLING_RE.search(phrase), (
+            f"_REJECTION_HANDLING_RE should NOT match: {phrase!r}"
+        )
+
+    def test_routes_to_rejection_advice(self, monkeypatch):
+        _, result = _run(monkeypatch, "I got rejected", _CVProfile())
+        assert result["type"] == "rejection_advice"
+
+    def test_no_response_flagged(self, monkeypatch):
+        _, result = _run(monkeypatch, "I haven't heard back from the company", _CVProfile())
+        assert result["type"] == "rejection_advice"
+        assert result.get("is_no_response") is True
+
+    def test_post_interview_flagged(self, monkeypatch):
+        _, result = _run(monkeypatch, "what to do after failing the interview?", _CVProfile())
+        assert result["type"] == "rejection_advice"
+        assert result.get("is_post_interview") is True
+
+    def test_general_rejection_not_flagged_as_no_response(self, monkeypatch):
+        _, result = _run(monkeypatch, "I got rejected", _CVProfile())
+        assert result["type"] == "rejection_advice"
+        assert result.get("is_no_response") is False
+
+    def test_message_field_present(self, monkeypatch):
+        _, result = _run(monkeypatch, "I got rejected", _CVProfile())
+        assert isinstance(result.get("message"), str)
+        assert len(result["message"]) > 50
+
+
+# ── _LINKEDIN_NETWORKING_RE ───────────────────────────────────────────────────
+
+class TestLinkedInNetworking:
+    """Regex gate and handler for LinkedIn and networking advice."""
+
+    @pytest.mark.parametrize("phrase", [
+        "LinkedIn profile tips",
+        "LinkedIn advice",
+        "how to use LinkedIn for job search",
+        "how to optimize my LinkedIn",
+        "how to message a recruiter",
+        "how to message a hiring manager",
+        "should I connect with the recruiter?",
+        "should I message the company?",
+        "networking tips in UAE",
+        "how to reach out to a recruiter",
+        "cold message a hiring manager",
+        "cold outreach tips",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _LINKEDIN_NETWORKING_RE
+        assert _LINKEDIN_NETWORKING_RE.search(phrase), (
+            f"_LINKEDIN_NETWORKING_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        "find HSE jobs in Dubai",
+        "how do I negotiate my salary?",
+        "I got rejected",
+        "interview tips",
+        "my notice period is 30 days",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _LINKEDIN_NETWORKING_RE
+        assert not _LINKEDIN_NETWORKING_RE.search(phrase), (
+            f"_LINKEDIN_NETWORKING_RE should NOT match: {phrase!r}"
+        )
+
+    def test_routes_to_linkedin_networking(self, monkeypatch):
+        _, result = _run(monkeypatch, "LinkedIn tips", _CVProfile())
+        assert result["type"] == "linkedin_networking"
+
+    def test_recruiter_message_flagged(self, monkeypatch):
+        _, result = _run(monkeypatch, "how to message a recruiter on LinkedIn", _CVProfile())
+        assert result["type"] == "linkedin_networking"
+        assert result.get("is_message_recruiter") is True
+
+    def test_cold_outreach_flagged(self, monkeypatch):
+        _, result = _run(monkeypatch, "cold message tips", _CVProfile())
+        assert result["type"] == "linkedin_networking"
+        assert result.get("is_cold_outreach") is True
+
+    def test_profile_optimize_flagged(self, monkeypatch):
+        _, result = _run(monkeypatch, "how to optimize my LinkedIn profile", _CVProfile())
+        assert result["type"] == "linkedin_networking"
+        assert result.get("is_profile_optimize") is True
+
+    def test_general_networking_no_flags(self, monkeypatch):
+        _, result = _run(monkeypatch, "networking tips in UAE", _CVProfile())
+        assert result["type"] == "linkedin_networking"
+        assert result.get("is_message_recruiter") is False
+        assert result.get("is_cold_outreach") is False
+
+    def test_message_field_present(self, monkeypatch):
+        _, result = _run(monkeypatch, "LinkedIn advice", _CVProfile())
+        assert isinstance(result.get("message"), str)
+        assert len(result["message"]) > 50
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        _, result = _run(monkeypatch, "networking tips in UAE", _EmptyProfile())
+        assert result["type"] == "linkedin_networking"

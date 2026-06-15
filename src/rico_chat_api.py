@@ -595,6 +595,46 @@ _SALARY_NEGOTIATION_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Interview preparation advice — "how do I prepare for an interview?",
+# "common interview questions for HSE", "what to wear to a UAE interview?".
+_INTERVIEW_PREP_RE = re.compile(
+    r"\bhow\s+(?:do\s+I|to)\s+prepare\s+(?:for\s+(?:a|an|the|my)\s+)?interview\b"
+    r"|\b(?:interview\s+(?:tips?|advice|prep(?:aration)?|questions?|help|practice))\b"
+    r"|\bcommon\s+interview\s+questions?\b"
+    r"|\bwhat\s+(?:to|should\s+I)\s+(?:say|wear|bring|expect)\s+(?:in|at|to|for)\s+.{0,15}?\binterview\b"
+    r"|\bhow\s+(?:to\s+)?(?:ace|pass|nail|impress)\s+(?:a|an|the|my)?\s*interview\b"
+    r"|\b(?:preparing|practice)\s+for\s+(?:a|an|the|my)?\s*interview\b"
+    r"|\b(?:تحضير|أسئلة|نصائح)\s+(?:المقابلة|الوظيفية|المقابلات)\b",
+    re.IGNORECASE,
+)
+
+# Job rejection / no response handling — "I got rejected", "haven't heard back",
+# "no response after interview", "what to do after rejection?".
+_REJECTION_HANDLING_RE = re.compile(
+    r"\b(?:I\s+(?:got|was|have\s+been)\s+)?rejected\b"
+    r"|\bno\s+(?:response|reply|answer|feedback)\s+(?:from|after|yet)\b"
+    r"|\bhaven(?:'t|\s+not)\s+heard\s+back\b"
+    r"|\bwhat\s+(?:to\s+do|should\s+I\s+do)\s+(?:after|when)\s+(?:(?:a\s+)?rejection|I\s+(?:get|got)\s+rejected|rejected)\b"
+    r"|\b(?:ghosted|being\s+ghosted)\b"
+    r"|\b(?:job\s+)?rejection\s+(?:tips?|advice|strategy|letter|response)\b"
+    r"|\bfail(?:ed|ing)\s+(?:the\s+)?interview\b"
+    r"|\b(?:رفض|لم\s+يردوا|لا\s+رد)\s+(?:الطلب|على\s+طلبي|من\s+الشركة)?\b",
+    re.IGNORECASE,
+)
+
+# LinkedIn / networking advice — "how to use LinkedIn for job search?",
+# "should I connect with the recruiter?", "how to message a hiring manager on LinkedIn?".
+_LINKEDIN_NETWORKING_RE = re.compile(
+    r"\b(?:LinkedIn|لينكد\s+إن)\s+(?:profile|tips?|advice|help|strategy|message|connection|post|network)\b"
+    r"|\bhow\s+(?:to\s+)?(?:use\s+LinkedIn|optimize\s+(?:my\s+)?LinkedIn|message\s+(?:a\s+)?(?:recruiter|hiring\s+manager|HR)|grow\s+(?:my\s+)?network)\b"
+    r"|\bshould\s+I\s+(?:connect|message|follow\s+up)\s+(?:with\s+)?(?:the\s+)?(?:recruiter|hiring\s+manager|company|employer)\b"
+    r"|\b(?:networking|network)\s+(?:tips?|advice|strategy|in\s+(?:UAE|Dubai|Abu\s+Dhabi))\b"
+    r"|\bhow\s+to\s+(?:reach\s+out(?:\s+to)?|approach|contact)\s+(?:a\s+)?(?:recruiter|hiring\s+manager|company)\b"
+    r"|\b(?:cold\s+message|cold\s+email|cold\s+outreach)\b"
+    r"|\b(?:التواصل|نتورك)\s+(?:المهني|في\s+الإمارات|مع\s+المسؤولين)?\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -4530,6 +4570,33 @@ class RicoChatAPI:
         if _SALARY_NEGOTIATION_RE.search(message):
             return self._finalize(
                 self._handle_salary_negotiation(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Interview preparation advice ──────────────────────────────────────
+        # "how do I prepare for an interview?", "common HSE interview questions".
+        if _INTERVIEW_PREP_RE.search(message):
+            return self._finalize(
+                self._handle_interview_prep(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Job rejection / no-response handling ──────────────────────────────
+        # "I got rejected", "haven't heard back", "what to do after rejection?".
+        if _REJECTION_HANDLING_RE.search(message):
+            return self._finalize(
+                self._handle_rejection(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── LinkedIn / networking advice ──────────────────────────────────────
+        # "how to use LinkedIn?", "should I message the recruiter?".
+        if _LINKEDIN_NETWORKING_RE.search(message):
+            return self._finalize(
+                self._handle_linkedin_networking(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -9446,6 +9513,289 @@ class RicoChatAPI:
             "is_counter_scenario": is_counter,
             "salary_on_file": salary_str or None,
             "message": counter_advice,
+        }
+
+    def _handle_interview_prep(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Return UAE-context interview preparation advice, personalised by role.
+
+        Detects: "how do I prepare for an interview?", "common interview questions",
+        "interview tips for HSE", "what to wear to a UAE interview?".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        role = target_roles[0] if target_roles else ""
+
+        # Try to extract a role from the message itself
+        _role_m = _re.search(
+            r"interview\s+(?:tips?|questions?|prep(?:aration)?|advice|help)\s+for\s+([A-Za-z][A-Za-z\s]{2,30}?)(?:\s+(?:role|job|position|in\b)|\??$)",
+            message, _re.IGNORECASE,
+        )
+        if _role_m:
+            role = _role_m.group(1).strip()
+
+        role_line = f" for **{role}** roles" if role else ""
+
+        is_attire = bool(_re.search(r"\bwear|attire|dress\s+code|what\s+to\s+bring\b", message, _re.IGNORECASE))
+        is_questions = bool(_re.search(r"\bquestions?\b", message, _re.IGNORECASE))
+
+        if is_attire:
+            advice = (
+                "**UAE Interview Dress Code:**\n\n"
+                "• **Business formal** is the default for first interviews in UAE corporates and government.\n"
+                "• Men: suit and tie (dark colours preferred) or smart blazer + trousers.\n"
+                "• Women: modest professional attire — covered shoulders, knee-length or longer. "
+                "This is especially important in government, banking, and oil & gas sectors.\n"
+                "• Tech startups and creative agencies accept smart-casual, but it's always safer to overdress.\n"
+                "• Bring: printed CV copies (2-3), certifications folder, notebook, pen.\n"
+                "• Arrive 10–15 minutes early — UAE traffic is unpredictable and punctuality signals respect."
+            )
+        elif is_questions:
+            questions_block = (
+                f"\n\n**Common{role_line} Interview Questions in UAE:**\n\n"
+                "1. Tell me about yourself. *(Keep it professional, 2-3 minutes, UAE-relevant)*\n"
+                "2. Why do you want to work in the UAE / with this company?\n"
+                "3. What is your current / expected salary? *(Research market rates first)*\n"
+                "4. What is your notice period?\n"
+                "5. Describe a challenge you overcame at work.\n"
+                "6. Where do you see yourself in 5 years?\n"
+                "7. Why are you leaving your current job?\n"
+                + (f"8. Walk me through a specific {role} project or achievement.\n" if role else "")
+                + "\n💡 **Tip:** In the UAE, interviewers often ask about visa status and notice period upfront — have both answers ready."
+            )
+            advice = (
+                f"**Interview Preparation Guide{role_line}:**\n\n"
+                "• Research the company's projects, clients, and recent news — especially in UAE context.\n"
+                "• Prepare 2-3 STAR-format examples (Situation, Task, Action, Result).\n"
+                "• Know your numbers: salary expectation, years of experience, and notice period."
+                + questions_block
+            )
+        else:
+            advice = (
+                f"**Interview Preparation Tips{role_line} — UAE Context:**\n\n"
+                "**Before the interview:**\n"
+                "• Research the company's UAE projects and presence — LinkedIn, their website, news.\n"
+                "• Prepare 2-3 strong STAR stories (Situation → Task → Action → Result).\n"
+                "• Know your salary expectation and be ready to state it confidently.\n"
+                "• Confirm the interview format: in-person, Teams/Zoom, or panel.\n\n"
+                "**During the interview:**\n"
+                "• Greet formally — handshakes are standard in professional UAE settings.\n"
+                "• Let the interviewer set the pace; don't rush.\n"
+                "• Be ready for 'Why UAE?' — interviewers want to know you're committed to staying.\n"
+                "• Avoid bad-mouthing previous employers — UAE is a small professional community.\n\n"
+                "**After the interview:**\n"
+                "• Send a thank-you email within 24 hours — not expected everywhere, but always noticed.\n"
+                "• Follow up after 5–7 business days if you haven't heard.\n\n"
+                + (f"Say **'common {role} interview questions'** for role-specific questions." if role
+                   else "Say **'common interview questions'** for the most asked questions.")
+            )
+
+        if arabic:
+            advice = (
+                f"**نصائح المقابلة الوظيفية{' لـ ' + role if role else ''} في الإمارات:**\n\n"
+                "• ابحث عن الشركة ومشاريعها في الإمارات قبل المقابلة.\n"
+                "• جهّز 2-3 أمثلة بأسلوب STAR (الموقف، المهمة، الإجراء، النتيجة).\n"
+                "• اعرف توقعاتك الراتبية وفترة إشعارك.\n"
+                "• الزي الرسمي هو المعيار في معظم بيئات العمل الإماراتية.\n"
+                "• أرسل رسالة شكر بعد 24 ساعة من المقابلة."
+            )
+
+        self._append_chat(user_id, "assistant", advice)
+        return {
+            "type": "interview_prep",
+            "role": role or None,
+            "is_attire_query": is_attire,
+            "is_questions_query": is_questions,
+            "message": advice,
+        }
+
+    def _handle_rejection(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Return UAE-context advice on handling job rejection or no response.
+
+        Detects: "I got rejected", "haven't heard back", "no response after interview",
+        "what to do after rejection?", "ghosted by employer".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        is_no_response = bool(_re.search(
+            r"\b(?:no\s+(?:response|reply)|haven(?:'t|\s+not)\s+heard\s+back|ghosted)\b",
+            message, _re.IGNORECASE,
+        ))
+        is_post_interview = bool(_re.search(
+            r"\bafter\s+(?:the\s+)?interview\b|\bfail(?:ed|ing)\s+(?:the\s+)?interview\b",
+            message, _re.IGNORECASE,
+        ))
+
+        if is_no_response:
+            advice = (
+                "**No Response? Here's What to Do:**\n\n"
+                "**When to follow up:**\n"
+                "• After applying: wait 5–7 business days, then follow up once.\n"
+                "• After an interview: wait 3–5 business days, then send a polite follow-up.\n"
+                "• UAE companies, especially government-linked ones, can take 2–4 weeks to respond.\n\n"
+                "**How to follow up:**\n"
+                "Send a short, professional email:\n"
+                "_'Dear [Name], I wanted to follow up on my application / interview for [Role] on [Date]. "
+                "I remain very interested in the position and would welcome any update. "
+                "Thank you for your time.'_\n\n"
+                "**If still no response after 2 follow-ups:**\n"
+                "• Mark the role as 'inactive' in your tracker and move on.\n"
+                "• In the UAE, silence often means the role is filled or on hold — it's rarely personal.\n"
+                "• Keep your pipeline active — one company's silence shouldn't pause your search.\n\n"
+                "Say **'find more jobs'** to continue your search."
+            )
+        elif is_post_interview:
+            advice = (
+                "**Rejected After an Interview — Next Steps:**\n\n"
+                "1. **Request feedback** — email the interviewer: 'Could you share any feedback that might help me improve?' "
+                "Not all UAE companies respond, but many will if asked politely.\n"
+                "2. **Debrief yourself** — write down what went well and what you'd change. "
+                "Common UAE interview pitfalls: vague salary answers, unclear notice period, weak 'Why UAE?' response.\n"
+                "3. **Don't burn the bridge** — reply to the rejection graciously. UAE is a small market; "
+                "the same hiring manager may have a different role in 6 months.\n"
+                "4. **Look for patterns** — if you're failing multiple interviews at the same stage, "
+                "consider a mock interview or revisiting your STAR stories.\n"
+                "5. **Keep going** — the UAE job market is active; setbacks are part of the process.\n\n"
+                "Say **'find more jobs'** or **'interview tips'** to keep moving."
+            )
+        else:
+            advice = (
+                "**Handling Job Rejection in the UAE:**\n\n"
+                "**Immediate response:**\n"
+                "• Reply professionally to the rejection email — thank them and express interest in future roles. "
+                "UAE is a tight-knit professional market.\n"
+                "• Ask for feedback within 24-48 hours of rejection.\n\n"
+                "**Reflection:**\n"
+                "• Was it a CV issue, interview performance, or just a stronger candidate?\n"
+                "• If CV: make sure your skills and certifications match the role's requirements.\n"
+                "• If interview: practice STAR answers and research UAE-specific expectations.\n\n"
+                "**Action:**\n"
+                "• Don't pause your search — apply to 3 more roles this week.\n"
+                "• Rejection is feedback about fit, not about your worth.\n\n"
+                "Say **'find more jobs'** to continue your search or **'interview tips'** for prep advice."
+            )
+
+        if arabic:
+            advice = (
+                "**كيف تتعامل مع رفض طلب التوظيف في الإمارات:**\n\n"
+                "• رد بشكل مهني على بريد الرفض — الإمارات سوق صغير والعلاقات مهمة.\n"
+                "• اطلب ملاحظات تطويرية خلال 24-48 ساعة.\n"
+                "• لا توقف بحثك — تقدم لوظائف أخرى هذا الأسبوع.\n"
+                "• إذا لم يكن هناك رد: انتظر 5-7 أيام ثم أرسل متابعة مهنية واحدة.\n"
+                "• الرفض لا يعني نقصاً فيك — إنه مجرد عدم توافق في هذه اللحظة."
+            )
+
+        self._append_chat(user_id, "assistant", advice)
+        return {
+            "type": "rejection_advice",
+            "is_no_response": is_no_response,
+            "is_post_interview": is_post_interview,
+            "message": advice,
+        }
+
+    def _handle_linkedin_networking(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Return UAE-context LinkedIn and professional networking advice.
+
+        Detects: "how to use LinkedIn?", "should I connect with the recruiter?",
+        "networking tips in UAE", "how to message a hiring manager?".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        is_message_recruiter = bool(_re.search(
+            r"\b(?:message|contact|reach\s+out\s+to|approach)\s+(?:a\s+)?(?:recruiter|hiring\s+manager|HR|employer)\b"
+            r"|\bshould\s+I\s+(?:connect|message|follow\s+up)\s+with\b",
+            message, _re.IGNORECASE,
+        ))
+        is_cold_outreach = bool(_re.search(
+            r"\bcold\s+(?:message|email|outreach)\b", message, _re.IGNORECASE
+        ))
+        is_profile_optimize = bool(_re.search(
+            r"\b(?:optimize|improve|update|fix)\s+(?:my\s+)?(?:LinkedIn\s+)?profile\b",
+            message, _re.IGNORECASE,
+        ))
+
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        role = target_roles[0] if target_roles else ""
+
+        if is_message_recruiter or is_cold_outreach:
+            advice = (
+                "**How to Message a Recruiter or Hiring Manager in the UAE:**\n\n"
+                "**What works in UAE LinkedIn outreach:**\n"
+                "• Keep it short — 3-4 sentences max.\n"
+                "• Mention the specific role or company.\n"
+                "• Lead with what you bring, not what you want.\n\n"
+                "**Template:**\n"
+                "_'Hi [Name], I came across [Company]'s opening for [Role] and wanted to reach out directly. "
+                "I have [X years] of experience in [relevant skill], including [brief achievement]. "
+                "I'd welcome the chance to connect — would you be open to a brief call?'_\n\n"
+                "**UAE-specific tips:**\n"
+                "• Dubai and Abu Dhabi recruiters are highly active on LinkedIn — direct messages work.\n"
+                "• Always personalise — copy-paste messages are immediately spotted and ignored.\n"
+                "• If they don't respond in 7 days, one polite follow-up is acceptable.\n"
+                "• Arabic greetings (السلام عليكم / مرحباً) can build rapport with UAE national recruiters."
+            )
+        elif is_profile_optimize:
+            advice = (
+                "**LinkedIn Profile Optimisation for UAE Job Search:**\n\n"
+                "1. **Headline** — include your role, seniority, and UAE focus: "
+                f"e.g. _'{'Senior ' + role if role else 'HSE Manager'} | UAE | NEBOSH IGC | ISO 45001'_\n"
+                "2. **About section** — 3-5 sentences: who you are, what you do, and your UAE value.\n"
+                "3. **Open to Work** — turn it on; UAE recruiters filter by this daily.\n"
+                "4. **Location** — set to UAE or your target emirate (Dubai / Abu Dhabi).\n"
+                "5. **Certifications** — list every UAE-relevant certification prominently.\n"
+                "6. **Connections** — connect with UAE industry groups and recruiters in your sector.\n"
+                "7. **Activity** — comment on industry posts; UAE recruiters do look at profile activity.\n\n"
+                "Say **'what certifications do I need?'** to get sector-specific cert recommendations."
+            )
+        else:
+            advice = (
+                "**LinkedIn & Networking Tips for UAE Job Search:**\n\n"
+                "**LinkedIn quick wins:**\n"
+                "• Enable 'Open to Work' (visible to recruiters only, not your employer if needed).\n"
+                "• Set your location to UAE or a specific emirate.\n"
+                "• Connect with UAE-based recruiters in your industry — they're very active.\n"
+                "• Post or engage with industry content weekly — visibility matters in the UAE market.\n\n"
+                "**In-person networking:**\n"
+                "• Attend UAE industry events: ADIPEC (oil & gas), GITEX (tech), Big 5 (construction).\n"
+                "• Join professional bodies: IOSH UAE Chapter, PMI UAE, CIPS MENA.\n"
+                "• Many UAE roles are filled through referrals — your network is your pipeline.\n\n"
+                "**Cold outreach:**\n"
+                "• Personalised LinkedIn messages to recruiters and hiring managers work well in the UAE.\n"
+                "• Keep messages short, specific, and value-focused.\n\n"
+                + (f"Say **'how to message a recruiter'** for a ready-to-use {role} outreach template." if role
+                   else "Say **'how to message a recruiter'** for a ready-to-use outreach template.")
+            )
+
+        if arabic:
+            advice = (
+                "**نصائح LinkedIn والتواصل المهني في الإمارات:**\n\n"
+                "• فعّل خاصية 'Open to Work' — المجنّدون في الإمارات يبحثون عنها يومياً.\n"
+                "• اكتب عنواناً واضحاً: المسمى + الخبرة + الشهادات.\n"
+                "• تواصل مع مجنّدين إماراتيين في مجالك بشكل مباشر.\n"
+                "• رسائل LinkedIn القصيرة والمخصصة تعمل بشكل جيد في الإمارات.\n"
+                "• احضر فعاليات مثل ADIPEC وGITEX وBig 5 للتواصل المباشر.\n"
+                "• كثير من الوظائف في الإمارات تُملأ بالتوصيات — شبكتك هي خط أنابيبك."
+            )
+
+        self._append_chat(user_id, "assistant", advice)
+        return {
+            "type": "linkedin_networking",
+            "is_message_recruiter": is_message_recruiter,
+            "is_cold_outreach": is_cold_outreach,
+            "is_profile_optimize": is_profile_optimize,
+            "message": advice,
         }
 
     # ── Context-aware help ──────────────────────────────────────────────────────
