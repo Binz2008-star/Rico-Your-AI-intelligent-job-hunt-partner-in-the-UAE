@@ -2347,7 +2347,7 @@ class TestRejectionHandling:
         )
 
     def test_routes_to_rejection_advice(self, monkeypatch):
-        _, result = _run(monkeypatch, "I got rejected", _CVProfile())
+        _, result = _run(monkeypatch, "what to do after rejection?", _CVProfile())
         assert result["type"] == "rejection_advice"
 
     def test_no_response_flagged(self, monkeypatch):
@@ -2361,7 +2361,7 @@ class TestRejectionHandling:
         assert result.get("is_post_interview") is True
 
     def test_general_rejection_not_flagged_as_no_response(self, monkeypatch):
-        _, result = _run(monkeypatch, "I got rejected", _CVProfile())
+        _, result = _run(monkeypatch, "what to do after rejection?", _CVProfile())
         assert result["type"] == "rejection_advice"
         assert result.get("is_no_response") is False
 
@@ -6782,3 +6782,266 @@ class TestPromotionUAE:
     def test_empty_profile_still_works(self, monkeypatch):
         result = self._run(monkeypatch, "how do I get promoted?", profile=_EmptyProfile())
         assert result["type"] == "promotion_uae"
+
+
+# ── Job Rejection Handling ────────────────────────────────────────────────────────
+
+
+class TestJobRejection:
+    """Tests for _JOB_REJECTION_RE and _handle_job_rejection."""
+
+    _REGEX_CASES_MATCH = [
+        "I got a rejection email",
+        "I received a rejection letter",
+        "I was given a rejection email from the company",
+        "I was rejected by the employer",
+        "I got rejected",
+        "should I ask for feedback after a rejection?",
+        "how do I ask for feedback after being rejected?",
+        "how do I handle a job rejection?",
+        "how should I deal with rejection?",
+        "how can I bounce back from rejection?",
+        "how do I respond to a rejection?",
+        "job rejection tips",
+        "job rejection advice",
+        "job rejection how to handle",
+        "I didn't get the job",
+        "I did not get the job",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "how do I ask for a promotion?",
+        "salary negotiation tips",
+        "show me jobs in Dubai",
+        "annual leave entitlement UAE",
+        "how do I resign?",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _JOB_REJECTION_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _JOB_REJECTION_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _JOB_REJECTION_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _JOB_REJECTION_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_rejection_email_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "I got a rejection email")
+        assert result["type"] == "job_rejection"
+
+    def test_got_rejected_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "I got rejected")
+        assert result["type"] == "job_rejection"
+
+    def test_ask_feedback_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "should I ask for feedback after a rejection?")
+        assert result["type"] == "job_rejection"
+
+    def test_handle_rejection_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I handle a job rejection?")
+        assert result["type"] == "job_rejection"
+
+    def test_didnt_get_job_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "I didn't get the job")
+        assert result["type"] == "job_rejection"
+
+    def test_message_mentions_feedback(self, monkeypatch):
+        result = self._run(monkeypatch, "I got rejected")
+        msg = result["message"].lower()
+        assert "feedback" in msg or "تغذية راجعة" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "I got rejected")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "job rejection tips", profile=_EmptyProfile())
+        assert result["type"] == "job_rejection"
+
+
+# ── Counter-Offer ─────────────────────────────────────────────────────────────────
+
+
+class TestCounterOffer:
+    """Tests for _COUNTER_OFFER_RE and _handle_counter_offer."""
+
+    _REGEX_CASES_MATCH = [
+        "my employer made me a counter-offer",
+        "my company gave me a counter offer",
+        "my boss offered me a counter-offer",
+        "should I accept a counter-offer?",
+        "should I take a counter offer?",
+        "should I consider a counter-offer?",
+        "should I reject a counter-offer?",
+        "my boss offered me a raise to stay",
+        "my employer is offering me a salary increase to not leave",
+        "counter-offer advice",
+        "counter offer tips",
+        "counter-offer UAE",
+        "is it worth accepting a counter-offer?",
+        "is it safe to accept a counter offer?",
+        "هل أقبل العرض المضاد",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "how do I negotiate my salary?",
+        "should I accept the job offer?",
+        "annual leave entitlement UAE",
+        "how do I ask for a promotion?",
+        "show me jobs in Dubai",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _COUNTER_OFFER_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _COUNTER_OFFER_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _COUNTER_OFFER_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _COUNTER_OFFER_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_employer_counter_offer_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "my employer made me a counter-offer")
+        assert result["type"] == "counter_offer"
+
+    def test_should_accept_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "should I accept a counter-offer?")
+        assert result["type"] == "counter_offer"
+
+    def test_raise_to_stay_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "my boss offered me a raise to stay")
+        assert result["type"] == "counter_offer"
+
+    def test_does_not_route_to_salary_neg(self, monkeypatch):
+        result = self._run(monkeypatch, "should I accept a counter-offer?")
+        assert result["type"] != "salary_negotiation"
+
+    def test_message_mentions_statistics(self, monkeypatch):
+        result = self._run(monkeypatch, "should I accept a counter-offer?")
+        msg = result["message"].lower()
+        assert "80" in msg or "6" in msg or "12" in msg or "statistics" in msg or "إحصاء" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "counter-offer advice")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "counter-offer UAE", profile=_EmptyProfile())
+        assert result["type"] == "counter_offer"
+
+
+# ── Relocation Package ────────────────────────────────────────────────────────────
+
+
+class TestRelocationPackage:
+    """Tests for _RELOCATION_PACKAGE_RE and _handle_relocation_package."""
+
+    _REGEX_CASES_MATCH = [
+        "what should a UAE relocation package include?",
+        "what does a relocation package include?",
+        "UAE relocation package include",
+        "UAE relocation package benefits",
+        "Dubai relocation package standard",
+        "relocation allowance UAE",
+        "relocation package UAE",
+        "relocation costs UAE",
+        "relocation expenses UAE",
+        "should I negotiate my relocation package?",
+        "should I ask for a relocation package?",
+        "housing allowance UAE negotiate",
+        "housing allowance UAE typical",
+        "flight allowance UAE employer",
+        "what is a relocation package UAE?",
+        "بدل الانتقال الإمارات",
+        "حزمة الانتقال إلى الإمارات",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "how do I relocate to UAE?",
+        "how do I move to Dubai for work?",
+        "show me jobs in Dubai",
+        "annual leave entitlement UAE",
+        "how do I resign?",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _RELOCATION_PACKAGE_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _RELOCATION_PACKAGE_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _RELOCATION_PACKAGE_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _RELOCATION_PACKAGE_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_relocation_package_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "what should a UAE relocation package include?")
+        assert result["type"] == "relocation_package"
+
+    def test_allowance_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "relocation allowance UAE")
+        assert result["type"] == "relocation_package"
+
+    def test_negotiate_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "should I negotiate my relocation package?")
+        assert result["type"] == "relocation_package"
+
+    def test_message_mentions_flight(self, monkeypatch):
+        result = self._run(monkeypatch, "what should a UAE relocation package include?")
+        msg = result["message"].lower()
+        assert "flight" in msg or "ticket" in msg or "تذاكر" in msg
+
+    def test_message_mentions_housing(self, monkeypatch):
+        result = self._run(monkeypatch, "relocation package UAE")
+        msg = result["message"].lower()
+        assert "housing" in msg or "accommodation" in msg or "سكن" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "relocation package UAE")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "relocation allowance UAE", profile=_EmptyProfile())
+        assert result["type"] == "relocation_package"

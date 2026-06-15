@@ -1279,6 +1279,45 @@ _PROMOTION_UAE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Handling job rejection / asking for feedback — "I got rejected, what should I do?",
+# "should I ask for feedback after rejection?", "how to bounce back from rejection".
+_JOB_REJECTION_RE = re.compile(
+    r"\b(?:(?:I\s+(?:got|received|was\s+(?:sent|given)))\s+(?:a\s+)?(?:rejection|rejected)\s+(?:email|letter|message|from\s+(?:the\s+)?(?:company|employer|recruiter))?)\b"
+    r"|\b(?:I\s+(?:was|got)\s+rejected(?:\s+(?:by|from)\s+(?:the\s+)?(?:company|employer|recruiter|job))?)\b"
+    r"|\b(?:should\s+I\s+(?:ask\s+for|request)\s+feedback\s+after\s+(?:a\s+)?rejection)\b"
+    r"|\b(?:how\s+(?:do\s+I|to|should\s+I|can\s+I)\s+(?:ask\s+for|request)\s+(?:feedback|reasons?)\s+after\s+(?:a\s+|being\s+)?rejected)\b"
+    r"|\b(?:how\s+(?:do\s+I|to|should\s+I|can\s+I)\s+(?:handle|deal\s+with|bounce\s+back\s+from|recover\s+from|respond\s+to)\s+(?:a\s+)?(?:job\s+)?rejection)\b"
+    r"|\b(?:(?:job\s+)?rejection\s+(?:tips?|advice|how\s+to\s+(?:handle|deal|respond)|feedback|after\s+rejection|recovery))\b"
+    r"|\b(?:I\s+(?:didn't|did\s+not)\s+get\s+(?:the\s+)?job)\b"
+    r"|\b(?:رُفِض\s+طلبي|رفضت\s+شركة|كيف\s+أتعامل\s+مع\s+رفض\s+الوظيفة|هل\s+أطلب\s+تغذية\s+راجعة\s+بعد\s+الرفض)\b",
+    re.IGNORECASE,
+)
+
+# Counter-offer from current employer — "my employer made me a counter-offer",
+# "should I accept a counter-offer?", "my boss offered me a raise to stay".
+_COUNTER_OFFER_RE = re.compile(
+    r"\b(?:(?:my\s+)?(?:employer|company|boss|manager)\s+(?:made|gave|offered)\s+(?:me\s+)?(?:a\s+)?counter[- ]?offer)\b"
+    r"|\b(?:should\s+I\s+(?:accept|take|consider|reject|turn\s+down)\s+(?:a\s+|the\s+)?counter[- ]?offer)\b"
+    r"|\b(?:my\s+(?:employer|company|boss)\s+(?:offered|is\s+offering|wants\s+to)\s+(?:me\s+)?(?:a\s+)?(?:raise|salary\s+increase|promotion)\s+(?:to\s+)?(?:stay|keep\s+me|not\s+leave))\b"
+    r"|\b(?:counter[- ]?offer\s+(?:advice|tips?|should\s+I\s+(?:accept|take|consider)|dangers?|risks?|UAE|dilemma))\b"
+    r"|\b(?:is\s+it\s+(?:worth|safe|wise|good\s+idea)\s+(?:to\s+)?accept(?:ing)?\s+(?:a\s+)?counter[- ]?offer)\b"
+    r"|\b(?:عرض\s+مضاد\s+(?:من\s+صاحب\s+العمل|الشركة|الإمارات)|هل\s+أقبل\s+العرض\s+المضاد)\b",
+    re.IGNORECASE,
+)
+
+# Relocation package for UAE — "what should a UAE relocation package include?",
+# "should I negotiate my relocation package?", "typical UAE relocation benefits".
+_RELOCATION_PACKAGE_RE = re.compile(
+    r"\b(?:what\s+(?:should|does|is|is\s+in)\s+(?:a\s+|the\s+)?(?:UAE\s+)?relocation\s+package\s+(?:include|cover|contain|typical|look\s+like))\b"
+    r"|\b(?:(?:UAE|Dubai)\s+relocation\s+package\s+(?:include|cover|benefits?|typical|what|negotiate|standard))\b"
+    r"|\b(?:relocation\s+(?:allowance|package|benefit|costs?|expenses?)\s+(?:UAE|Dubai|for\s+(?:UAE|Dubai)|typical|negotiate|standard|include))\b"
+    r"|\b(?:should\s+I\s+(?:negotiate|ask\s+for|request)\s+(?:(?:a|my)\s+)?relocation\s+(?:package|allowance|benefit|costs?))\b"
+    r"|\b(?:(?:housing|accommodation|flight|moving)\s+allowance\s+(?:UAE|Dubai|from\s+employer|typical|negotiate))\b"
+    r"|\b(?:(?:what|how)\s+(?:is|does)\s+(?:a\s+)?(?:UAE\s+)?relocation\s+(?:package|allowance)\s+(?:typically\s+)?(?:include|cover|work|mean))\b"
+    r"|\b(?:بدل\s+(?:الانتقال|السكن|التنقل)\s+(?:الإمارات|الوظيفي)|حزمة\s+الانتقال\s+(?:إلى\s+الإمارات|الإمارات))\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -5229,7 +5268,7 @@ class RicoChatAPI:
 
         # ── Salary negotiation advice ─────────────────────────────────────────
         # "how do I negotiate my salary?", "should I counter the offer?".
-        if _SALARY_NEGOTIATION_RE.search(message):
+        if _SALARY_NEGOTIATION_RE.search(message) and not _COUNTER_OFFER_RE.search(message):
             return self._finalize(
                 self._handle_salary_negotiation(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5247,7 +5286,7 @@ class RicoChatAPI:
 
         # ── Job rejection / no-response handling ──────────────────────────────
         # "I got rejected", "haven't heard back", "what to do after rejection?".
-        if _REJECTION_HANDLING_RE.search(message):
+        if _REJECTION_HANDLING_RE.search(message) and not _JOB_REJECTION_RE.search(message):
             return self._finalize(
                 self._handle_rejection(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5667,6 +5706,33 @@ class RicoChatAPI:
         if _PROMOTION_UAE_RE.search(message):
             return self._finalize(
                 self._handle_promotion_uae(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Handling job rejection ────────────────────────────────────────────
+        # "I got rejected, what should I do?", "should I ask for feedback?".
+        if _JOB_REJECTION_RE.search(message):
+            return self._finalize(
+                self._handle_job_rejection(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Counter-offer from current employer ───────────────────────────────
+        # "my employer made me a counter-offer, should I accept?".
+        if _COUNTER_OFFER_RE.search(message):
+            return self._finalize(
+                self._handle_counter_offer(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Relocation package ────────────────────────────────────────────────
+        # "what should a UAE relocation package include?", "typical relocation allowance UAE".
+        if _RELOCATION_PACKAGE_RE.search(message):
+            return self._finalize(
+                self._handle_relocation_package(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -13745,6 +13811,148 @@ class RicoChatAPI:
             )
         self._append_chat(user_id, "assistant", msg)
         return {"type": "promotion_uae", "message": msg}
+
+    # ── Handling job rejection ────────────────────────────────────────────────────
+
+    def _handle_job_rejection(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## كيف تتعامل مع رفض طلب التوظيف؟\n\n"
+                "**أولاً: لا بأس — الرفض جزء طبيعي من البحث عن عمل**\n"
+                "- غالبية المتقدمين الناجحين تعرضوا لرفض عشرات المرات قبل الحصول على وظيفتهم\n"
+                "- الرفض لا يعني أنك لست مؤهلاً، بل أحياناً يعني أنك لم تتوافق مع هذه الفرصة تحديداً\n\n"
+                "**هل تطلب تغذية راجعة (Feedback)?**\n"
+                "- نعم، يمكنك أن تطلب بأدب: «شكراً لإخباري. هل بإمكانك مشاركتي أي تغذية راجعة "
+                "قد تساعدني في الفرص القادمة؟»\n"
+                "- ليس كل مُعيِّن سيرد، لكن حين يردون فالمعلومة ثمينة\n\n"
+                "**ماذا تفعل بعد الرفض؟**\n"
+                "1. راجع سيرتك الذاتية وخطاب التقديم\n"
+                "2. فكّر في أدائك في المقابلة — ما الذي يمكن تحسينه؟\n"
+                "3. احتفظ بعلاقة إيجابية مع المُعيِّن (قد تنشأ فرص مستقبلية)\n"
+                "4. لا تنسحب عاطفياً — تابع باقي طلباتك فوراً\n\n"
+                "**نصيحة:** أفضل رد على الرفض هو التقدم لوظيفة أخرى في اليوم التالي."
+            )
+        else:
+            msg = (
+                "## How to Handle a Job Rejection\n\n"
+                "**First: it's normal — rejection is part of the process**\n"
+                "- Most successful professionals received dozens of rejections before landing their role\n"
+                "- A rejection often means the role wasn't the right fit, not that you're unqualified\n\n"
+                "**Should you ask for feedback?**\n"
+                "- Yes — send a polite reply: *'Thank you for letting me know. Would you be able "
+                "to share any feedback that might help me for future opportunities?'*\n"
+                "- Not everyone responds, but when they do, the insight is valuable\n\n"
+                "**What to do after a rejection:**\n"
+                "1. **Review** your CV, cover letter, and interview performance\n"
+                "2. **Stay professional** — the recruiter may think of you for another role\n"
+                "3. **Keep applying** — don't pause your search while waiting on any single role\n"
+                "4. **Track patterns** — if you're consistently reaching interviews but not "
+                "offers, focus on interview prep; if you're not getting callbacks, revise your CV\n\n"
+                "**UAE context:** The UAE hiring market moves fast. Following up within "
+                "24 hours of rejection — gracefully — often leaves a strong impression.\n\n"
+                "**Tip:** The best response to rejection is applying for the next role "
+                "the same day."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "job_rejection", "message": msg}
+
+    # ── Counter-offer from current employer ───────────────────────────────────────
+
+    def _handle_counter_offer(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## العرض المضاد من صاحب العمل: هل تقبله؟\n\n"
+                "**ما هو العرض المضاد؟**\n"
+                "- هو عرض يقدمه صاحب العمل الحالي (زيادة راتب، ترقية، مزايا) لمنعك من الرحيل\n\n"
+                "**الإحصاءات المهمة:**\n"
+                "- تشير الدراسات إلى أن 80% ممن يقبلون عرضاً مضاداً يغادرون الشركة خلال 6–12 شهراً\n"
+                "- لأن الأسباب الحقيقية للمغادرة (البيئة، النمو، القيادة) غالباً لم تتغير\n\n"
+                "**قبل اتخاذ قرارك، اسأل نفسك:**\n"
+                "1. ما الذي يجعلني أريد المغادرة أصلاً؟ هل يعالج هذا العرض المشكلة الحقيقية؟\n"
+                "2. هل يتغير دوري أم فقط الراتب؟\n"
+                "3. ما مدى ثقتي بهذا الوعد مستقبلاً؟\n"
+                "4. هل الشركة الجديدة تقدم نمواً مهنياً لا يوفره مكاني الحالي؟\n\n"
+                "**نصيحة:** إذا كان السبب الوحيد للمغادرة هو الراتب، فالعرض المضاد قد يستحق النظر. "
+                "أما إذا كانت المشكلة في الثقافة أو القيادة أو الفرص، فالعرض المضاد حل مؤقت."
+            )
+        else:
+            msg = (
+                "## Counter-Offer from Your Employer: Should You Accept?\n\n"
+                "**What is a counter-offer?**\n"
+                "- A pay rise, promotion, or benefit your current employer offers to stop "
+                "you from leaving after you've received an outside job offer\n\n"
+                "**The statistics:**\n"
+                "- ~80% of people who accept counter-offers leave within 6–12 months anyway\n"
+                "- The root reasons for wanting to leave (culture, growth, leadership) "
+                "typically haven't changed\n\n"
+                "**Before deciding, ask yourself:**\n"
+                "1. Why did I want to leave in the first place — and does this counter-offer "
+                "actually fix that?\n"
+                "2. Will my role, responsibilities, or growth prospects genuinely change?\n"
+                "3. Was I only being valued when I threatened to leave — what does that say?\n"
+                "4. Does the new company offer something (learning, culture, career trajectory) "
+                "that money alone can't replicate?\n\n"
+                "**When a counter-offer might make sense:**\n"
+                "- You were primarily motivated by salary, and the counter-offer matches or "
+                "beats the new offer\n"
+                "- The employer also addresses the non-financial issue (role expansion, title, team)\n\n"
+                "**When to decline:**\n"
+                "- The only thing changing is your salary\n"
+                "- The trust dynamic is already broken\n"
+                "- You've been considering the move for a long time for reasons beyond pay"
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "counter_offer", "message": msg}
+
+    # ── Relocation package ────────────────────────────────────────────────────────
+
+    def _handle_relocation_package(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## حزمة الانتقال إلى الإمارات: ماذا تتوقع وما الذي تطلبه؟\n\n"
+                "**ما الذي تشمله حزمة الانتقال عادةً في الإمارات؟**\n"
+                "- تذاكر طيران للانتقال (للموظف وأسرته في بعض الأحيان)\n"
+                "- بدل سكن مؤقت (1–3 أشهر فندق أو شقة فندقية)\n"
+                "- بدل شحن الأغراض الشخصية (المتعلقات)\n"
+                "- مساعدة في استخراج التأشيرة والإقامة\n"
+                "- بدل سفر للعودة إلى الوطن مرة واحدة سنوياً (خاصة في القطاعات الكبيرة)\n\n"
+                "**عناصر أقل شيوعاً لكن يمكن التفاوض عليها:**\n"
+                "- بدل الإسكان الشهري (Housing Allowance) بدلاً من المساعدة الأولية فقط\n"
+                "- بدل التعليم للأطفال\n"
+                "- بدل السيارة\n"
+                "- إجازة الاستكشاف قبل الانضمام\n\n"
+                "**نصيحة:** تفاوض على حزمة الانتقال كجزء من مفاوضات العرض — وليس بعد القبول. "
+                "وثّق كل ما تم الاتفاق عليه كتابياً في عقد العمل."
+            )
+        else:
+            msg = (
+                "## UAE Relocation Package: What to Expect and What to Ask For\n\n"
+                "**Typical relocation package components in UAE:**\n"
+                "- **Flight tickets** to UAE (for employee + family in senior roles)\n"
+                "- **Temporary accommodation** — 1–3 months in a serviced apartment or hotel\n"
+                "- **Shipping allowance** for personal belongings\n"
+                "- **Visa processing fees** covered by employer\n"
+                "- **Annual flight ticket home** (very common in UAE, especially in large companies)\n\n"
+                "**Less common but negotiable:**\n"
+                "- **Housing allowance** — monthly contribution to rent (often AED 30,000–80,000+ "
+                "per year for mid-to-senior roles)\n"
+                "- **School fees** for children\n"
+                "- **Car allowance** or company car\n"
+                "- **'Look-see' trip** — a visit to UAE before accepting to find accommodation\n"
+                "- **Settling-in allowance** — lump sum for initial setup\n\n"
+                "**Negotiation tips:**\n"
+                "- Raise the relocation package during offer negotiation, not after accepting\n"
+                "- Get every commitment in writing in the offer letter or employment contract\n"
+                "- Compare: a higher base salary is sometimes better than an allowance "
+                "(allowances may not count for gratuity calculations)\n\n"
+                "**Tip:** If the employer won't provide a package, ask them to cover "
+                "just the visa fees and flight — it's a reasonable minimum ask."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "relocation_package", "message": msg}
 
     # ── Context-aware help ──────────────────────────────────────────────────────
 
