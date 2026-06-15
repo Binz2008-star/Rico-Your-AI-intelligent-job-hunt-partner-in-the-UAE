@@ -976,6 +976,7 @@ export interface UploadCVResponse {
 export interface ConfirmCVProfileRequest {
   preview: ProfilePreview;
   filename: string;
+  doc_type?: string;
 }
 
 export interface ConfirmCVProfileResponse {
