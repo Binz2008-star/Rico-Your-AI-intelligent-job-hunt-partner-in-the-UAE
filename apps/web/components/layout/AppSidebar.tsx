@@ -151,8 +151,8 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                                 >
                                     <div className="flex items-baseline justify-between">
                                         <span className="text-xs font-medium text-text-secondary">{t("navModuleInPipeline")}</span>
-                                        <span className="text-sm font-semibold text-text-primary">
-                                            {status.pipeline.total}
+                                        <span className="text-[10px] text-text-tertiary">
+                                            {status.pipeline.total} {status.pipeline.total === 1 ? "job" : "jobs"}
                                         </span>
                                     </div>
                                     <div className="mt-2 grid grid-cols-3 gap-1 text-center">

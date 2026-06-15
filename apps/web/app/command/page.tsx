@@ -157,19 +157,50 @@ function isStaleSearchQuery(query?: string): boolean {
 function parseHistoryContent(content: string, id: number): Partial<Message> {
     try {
         const parsed = JSON.parse(content) as Record<string, unknown>;
-        if (parsed && typeof parsed === "object" && parsed.type === "job_matches") {
-            const query = parsed.search_query as string | undefined;
-            return {
-                id,
-                role: "rico",
-                type: "job_matches",
-                text: (parsed.message ?? parsed.reply ?? parsed.response ?? "") as string,
-                matches: (parsed.matches as JobMatch[] | undefined) ?? [],
-                search_query: query,
-                result_count: parsed.result_count as number | undefined,
-                broadened: parsed.broadened as boolean | undefined,
-                stale: isStaleSearchQuery(query),
-            };
+        if (parsed && typeof parsed === "object") {
+            if (parsed.type === "job_matches") {
+                const query = parsed.search_query as string | undefined;
+                return {
+                    id,
+                    role: "rico",
+                    type: "job_matches",
+                    text: (parsed.message ?? parsed.reply ?? parsed.response ?? "") as string,
+                    matches: (parsed.matches as JobMatch[] | undefined) ?? [],
+                    search_query: query,
+                    result_count: parsed.result_count as number | undefined,
+                    broadened: parsed.broadened as boolean | undefined,
+                    stale: isStaleSearchQuery(query),
+                };
+            }
+            if (parsed.type === "options" || parsed.type === "help") {
+                return {
+                    id,
+                    role: "rico",
+                    type: parsed.type as string,
+                    text: (parsed.message ?? "") as string,
+                    options: (parsed.options as RicoOption[] | undefined) ?? [],
+                };
+            }
+            if (parsed.type === "application_status") {
+                return {
+                    id,
+                    role: "rico",
+                    type: "application_status",
+                    text: (parsed.message ?? "") as string,
+                    applications: parsed.applications as ApplicationEntry[] | undefined,
+                    follow_up_needed: parsed.follow_up_needed as ApplicationEntry[] | undefined,
+                };
+            }
+            // Generic structured response: extract message text and any options
+            const text = (parsed.message ?? parsed.reply ?? parsed.response ?? "") as string;
+            if (text) {
+                return {
+                    id,
+                    role: "rico",
+                    text,
+                    options: parsed.options as RicoOption[] | undefined,
+                };
+            }
         }
     } catch {
         // Fall through to plain text
