@@ -265,6 +265,22 @@ _APPLICATION_TRACKING_PHRASES = frozenset([
     "yeah check",
     "ya please check",
     "yes please check",
+    # ── User-ownership commands ───────────────────────────────────────────────
+    # These phrases use ownership language ("my") and must always route to
+    # application tracking, never to job-role extraction or search.
+    "show my job applications",
+    "show my job applications and their status",
+    "list my job applications",
+    "my job applications",
+    "my jobs",
+    "show my jobs",
+    "list my jobs",
+    "my pipeline",
+    "show my pipeline",
+    "application pipeline",
+    "how many applied jobs do i have",
+    "how many applications do i have",
+    "applications this month",
 ])
 
 _LIFECYCLE_SAVED_PHRASES = frozenset([
@@ -341,6 +357,9 @@ _SMALLTALK_PHRASES = frozenset([
 _PROFILE_SUMMARY_PHRASES = frozenset([
     "show my profile", "my profile", "profile summary",
     "what do you know about me", "my details",
+    # CV / resume show commands — "my cv" means "show me my uploaded CV / profile"
+    "my cv", "show my cv", "view my cv", "see my cv",
+    "my resume", "show my resume", "view my resume",
     # Arabic profile identity
     "ما هو اسمي", "ما اسمي", "اسمي", "من انا", "ما هو ملفي",
 ])
@@ -627,6 +646,19 @@ _DELEGATED_DECISION_RE = re.compile(
 
 _APPLICATION_TRACKING_RE = re.compile(
     r"\b(tracked?|applied|application|applications|interviews?|offers?|rejected|status)\b",
+    re.IGNORECASE,
+)
+
+# Guard: ownership phrases that must never fall through to job-role search.
+# Catches "show my job applications and their status", "my jobs", "show my pipeline"
+# before _JOB_SEARCH_EXPLICIT_RE can treat "show" + "job" as role extraction.
+# Applied against the normalised lowercase form of the input.
+_MY_OWNERSHIP_CMD_RE = re.compile(
+    r"\bmy\s+job\s+applications?\b"
+    r"|\bhow\s+many\s+(?:applied\s+)?jobs?\s+(?:do\s+)?i\s+have\b"
+    r"|\bmy\s+jobs?\s*$"
+    r"|\b(?:show|view|list|check|display|see)\s+my\s+jobs?\s*$"
+    r"|\bmy\s+(?:application\s+)?pipeline\b",
     re.IGNORECASE,
 )
 
@@ -1287,6 +1319,17 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
                 "search_refine", 0.85, "regex", action="filter_constraints",
                 entities=_refine_entities if _refine_entities else None,
             )
+
+    # Guard: ownership phrases must never route to job-role search.
+    # "show my job applications and their status", "my jobs", "show my pipeline"
+    # all contain job nouns that _JOB_SEARCH_EXPLICIT_RE would otherwise capture.
+    # Use the normalised lowercase form to benefit from punctuation stripping.
+    if _MY_OWNERSHIP_CMD_RE.search(lower):
+        return IntentResult(
+            "application_tracking", 0.95, "regex",
+            action="show",
+            target_route="/applications",
+        )
 
     # Check explicit job search FIRST (has job/role/position keyword)
     if _JOB_SEARCH_EXPLICIT_RE.search(text):

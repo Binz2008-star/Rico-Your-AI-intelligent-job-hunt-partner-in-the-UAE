@@ -1827,17 +1827,26 @@ class RicoChatAPI:
         re.IGNORECASE,
     )
 
-    # Matches explicit requests to view submitted applications — must route to
-    # application_tracking regardless of prior turn context.
+    # Matches explicit user-ownership requests — must route to application_tracking
+    # regardless of prior turn context.
     # "show applications" / "list applications" (no "my") are intentionally excluded:
     # those bare forms stay in _LIST_FOLLOWUP_PHRASES so they replay lifecycle context
     # when a prior application turn exists, which is the correct contextual behavior.
-    # English: "show my applications", "my applications", etc.
+    # English: "show my applications", "my applications", "show my job applications",
+    #          "show my job applications and their status", "my jobs", "show my pipeline".
     # Arabic:  "طلباتي", "اعرض طلباتي", etc.
     _SHOW_MY_APPLICATIONS_RE = re.compile(
         r"^(?:"
-        r"(?:show|list|view|see|display|check|track)\s+my\s+applications?|"
-        r"my\s+applications?"
+        # "show/list/... my [job] applications [and their status / status]"
+        r"(?:show|list|view|see|display|check|track)\s+my\s+(?:job\s+)?applications?\s*(?:(?:and\s+their\s+)?status)?"
+        r"|my\s+(?:job\s+)?applications?"
+        # "show my jobs" / "list my jobs" / "my jobs"
+        r"|(?:show|list|view|see|display|check|track)\s+my\s+jobs?"
+        r"|my\s+jobs?"
+        # "show my pipeline" / "my pipeline" / "show my application pipeline"
+        r"|(?:show|display|view|open)\s+my\s+(?:application\s+)?pipeline"
+        r"|my\s+(?:application\s+)?pipeline"
+        # Arabic
         r"|(?:اعرض|أعرض|عرض|اظهر|أظهر|ارني|أريني)\s+طلباتي"
         r"|طلباتي"
         r")$",
