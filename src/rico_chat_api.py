@@ -1318,6 +1318,47 @@ _RELOCATION_PACKAGE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# ── Public holidays UAE ────────────────────────────────────────────────────────
+# "what are UAE public holidays?", "Eid holiday UAE", "UAE national day".
+_PUBLIC_HOLIDAYS_UAE_RE = re.compile(
+    r"\b(?:(?:what\s+are\s+(?:the\s+)?)?(?:UAE|Dubai)\s+(?:public|national|official)\s+holidays?)\b"
+    r"|\b(?:(?:public|national|official)\s+holidays?\s+(?:in\s+(?:UAE|Dubai)|UAE|Dubai))\b"
+    r"|\b(?:how\s+(?:many|much)\s+(?:public|national|official)\s+holidays?\s+(?:in|does|do|are|get)(?:\s+(?:UAE|Dubai|we|I))?)\b"
+    r"|\b(?:(?:Eid|UAE\s+national\s+day|Prophet['']s\s+birthday|Islamic\s+new\s+year)\s+(?:holiday|off|public\s+holiday|day\s+off))\b"
+    r"|\b(?:when\s+is\s+(?:(?:UAE|Dubai)\s+)?national\s+day|when\s+is\s+Eid\s+(?:al[- ]fitr|al[- ]adha|ul[- ]fitr|ul[- ]adha))\b"
+    r"|\b(?:(?:UAE|Dubai)\s+(?:national\s+day|Eid)\s+(?:holiday|off|date|when))\b"
+    r"|\b(?:(?:list\s+of|what\s+are)\s+(?:the\s+)?(?:UAE|Dubai)\s+(?:public\s+)?holidays?)\b"
+    r"|\b(?:عطلة\s+(?:وطنية|رسمية|عيد)\s+(?:الإمارات|في\s+الإمارات)|الإجازات\s+الرسمية\s+(?:في\s+الإمارات)?)\b",
+    re.IGNORECASE,
+)
+
+# ── Overtime pay UAE ───────────────────────────────────────────────────────────
+# "am I entitled to overtime?", "overtime rate UAE", "how is overtime calculated?".
+_OVERTIME_PAY_UAE_RE = re.compile(
+    r"\b(?:am\s+I\s+(?:entitled\s+to|eligible\s+for|supposed\s+to\s+get|owed)\s+(?:paid\s+)?overtime)\b"
+    r"|\b(?:how\s+(?:is|are|do\s+I\s+calculate)\s+overtime\s+(?:calculated|paid|work|hours?))\b"
+    r"|\b(?:overtime\s+(?:pay|rate|hours?|calculation|entitlement|rules?|law|UAE|Dubai|rights?|policy))\b"
+    r"|\b(?:(?:UAE|Dubai)\s+overtime\s+(?:pay|rate|law|rules?|entitlement|calculation))\b"
+    r"|\b(?:(?:do|does|will|is)\s+(?:my\s+)?(?:employer|company|they)\s+(?:pay|owe\s+me|have\s+to\s+pay)\s+(?:for\s+)?overtime)\b"
+    r"|\b(?:(?:my\s+)?(?:employer|company)\s+(?:is|are|was|won't|refuses?\s+to)\s+(?:not\s+)?(?:pay(?:ing)?|paid)\s+(?:me\s+)?(?:for\s+)?overtime)\b"
+    r"|\b(?:what\s+(?:is|are)\s+(?:the\s+)?overtime\s+(?:rate|rules?|entitlement|pay)\s+(?:in\s+(?:UAE|Dubai))?)\b"
+    r"|\b(?:how\s+much\s+(?:extra\s+)?(?:do\s+I\s+(?:get|earn)|am\s+I\s+(?:paid|owed))\s+for\s+(?:working\s+)?overtime)\b"
+    r"|\b(?:أجر\s+(?:العمل\s+الإضافي|الوقت\s+الإضافي)|ساعات\s+إضافية\s+(?:الإمارات|مدفوعة))\b",
+    re.IGNORECASE,
+)
+
+# ── Contract types UAE (limited vs unlimited) ─────────────────────────────────
+# "limited vs unlimited contract", "what happens when contract expires?".
+_CONTRACT_TYPES_UAE_RE = re.compile(
+    r"\b(?:(?:what\s+is\s+(?:the\s+)?difference\s+between|difference\s+between)\s+(?:a\s+)?limited\s+and\s+unlimited\s+(?:term\s+)?contract)\b"
+    r"|\b(?:limited\s+(?:term\s+)?(?:vs\.?\s+|or\s+|versus\s+)?unlimited\s+(?:term\s+)?contract(?:\s+(?:UAE|Dubai))?)\b"
+    r"|\b(?:(?:what\s+(?:is|are)\s+(?:a|the)\s+)?(?:limited|unlimited)\s+(?:term\s+)?contract\s+(?:UAE|Dubai|rules?|rights?|difference|type))\b"
+    r"|\b(?:(?:what\s+happens?\s+(?:when|if|after))\s+(?:my\s+)?(?:limited\s+(?:term\s+)?)?contract\s+(?:expires?|ends?|is\s+not\s+renewed))\b"
+    r"|\b(?:contract\s+(?:type|types?|renewal|non[- ]renewal|expiry|expired)\s+(?:UAE|Dubai|rules?|rights?|law))\b"
+    r"|\b(?:عقد\s+(?:محدد|غير\s+محدد)\s+(?:المدة|الإمارات)|ما\s+الفرق\s+بين\s+عقد\s+محدد\s+وغير\s+محدد)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -5404,7 +5445,7 @@ class RicoChatAPI:
 
         # ── UAE labor law / probation info ────────────────────────────────────
         # "what is the probation period?", "UAE labor law", "termination rights".
-        if _UAE_LABOR_LAW_RE.search(message) and not _PROBATION_RULES_RE.search(message):
+        if _UAE_LABOR_LAW_RE.search(message) and not _PROBATION_RULES_RE.search(message) and not _CONTRACT_TYPES_UAE_RE.search(message) and not _OVERTIME_PAY_UAE_RE.search(message):
             return self._finalize(
                 self._handle_uae_labor_law(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5550,7 +5591,7 @@ class RicoChatAPI:
 
         # ── Working hours / overtime ──────────────────────────────────────────
         # "what are the working hours in UAE?", "is overtime paid?".
-        if _WORKING_HOURS_RE.search(message):
+        if _WORKING_HOURS_RE.search(message) and not _OVERTIME_PAY_UAE_RE.search(message):
             return self._finalize(
                 self._handle_working_hours(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5595,7 +5636,7 @@ class RicoChatAPI:
 
         # ── Annual leave entitlement ──────────────────────────────────────────
         # "how many days annual leave in UAE?", "public holidays UAE".
-        if _ANNUAL_LEAVE_RE.search(message):
+        if _ANNUAL_LEAVE_RE.search(message) and not _PUBLIC_HOLIDAYS_UAE_RE.search(message):
             return self._finalize(
                 self._handle_annual_leave(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5733,6 +5774,33 @@ class RicoChatAPI:
         if _RELOCATION_PACKAGE_RE.search(message):
             return self._finalize(
                 self._handle_relocation_package(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── UAE public holidays ───────────────────────────────────────────────
+        # "what are UAE public holidays?", "when is Eid in UAE?".
+        if _PUBLIC_HOLIDAYS_UAE_RE.search(message):
+            return self._finalize(
+                self._handle_public_holidays_uae(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Overtime pay UAE ──────────────────────────────────────────────────
+        # "am I entitled to overtime?", "overtime rate UAE".
+        if _OVERTIME_PAY_UAE_RE.search(message):
+            return self._finalize(
+                self._handle_overtime_pay_uae(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Contract types UAE ────────────────────────────────────────────────
+        # "limited vs unlimited contract UAE", "what happens when contract expires?".
+        if _CONTRACT_TYPES_UAE_RE.search(message):
+            return self._finalize(
+                self._handle_contract_types_uae(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -13953,6 +14021,126 @@ class RicoChatAPI:
             )
         self._append_chat(user_id, "assistant", msg)
         return {"type": "relocation_package", "message": msg}
+
+    # ── UAE public holidays ───────────────────────────────────────────────────────
+
+    def _handle_public_holidays_uae(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "🗓️ **الإجازات الرسمية في الإمارات**\n\n"
+                "**إجازات ثابتة:**\n"
+                "• رأس السنة الميلادية — 1 يناير\n"
+                "• يوم الشهيد (الوطني للشهداء) — 30 نوفمبر\n"
+                "• اليوم الوطني الإماراتي — 2-3 ديسمبر\n\n"
+                "**إجازات إسلامية (تتغير كل عام بحسب الرؤية الشرعية):**\n"
+                "• اليوم الأول من رمضان\n"
+                "• عيد الفطر — 3 أيام\n"
+                "• يوم عرفة + عيد الأضحى — 3 أيام\n"
+                "• رأس السنة الهجرية\n"
+                "• المولد النبوي الشريف\n"
+                "• الإسراء والمعراج\n\n"
+                "يُحدد المجلس الوزاري مواعيد الإجازات الإسلامية رسمياً قُبيل موعدها. "
+                "خلال رمضان تُقلَّص ساعات العمل بمقدار ساعتين يومياً بموجب قانون العمل."
+            )
+        else:
+            msg = (
+                "🗓️ **UAE Public Holidays**\n\n"
+                "**Fixed holidays:**\n"
+                "• New Year's Day — 1 January\n"
+                "• Commemoration Day (Martyr's Day) — 30 November\n"
+                "• UAE National Day — 2–3 December\n\n"
+                "**Islamic holidays (shift each year with the lunar calendar):**\n"
+                "• First day of Ramadan\n"
+                "• Eid Al Fitr — 3 days\n"
+                "• Arafat Day + Eid Al Adha — 3 days\n"
+                "• Islamic New Year\n"
+                "• Prophet's Birthday\n"
+                "• Lailat Al Mi'raj (Ascension)\n\n"
+                "The UAE Cabinet officially announces Islamic holiday dates a few weeks before they occur. "
+                "Private-sector employees are entitled to all public holidays at full pay. "
+                "During Ramadan, working hours are legally reduced by 2 hours per day. "
+                "If a public holiday falls on a weekend, most employers grant a compensatory day off."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "public_holidays_uae", "message": msg}
+
+    # ── Overtime pay UAE ───────────────────────────────────────────────────────────
+
+    def _handle_overtime_pay_uae(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "⏰ **الوقت الإضافي في الإمارات (قانون العمل الاتحادي)**\n\n"
+                "**ساعات العمل القياسية:**\n"
+                "• 8 ساعات يومياً أو 48 ساعة أسبوعياً\n"
+                "• خلال رمضان: 6 ساعات يومياً فقط\n\n"
+                "**معدلات الوقت الإضافي (المواد 65-68):**\n"
+                "• وقت إضافي نهاري: الراتب العادي + **25%**\n"
+                "• وقت إضافي ليلي (9 مساءً – 4 صباحاً): الراتب العادي + **50%**\n"
+                "• العمل في يوم الراحة: راتب يوم كامل + **50% إضافي**\n\n"
+                "**الحد الأقصى:** ساعتان إضافيتان في اليوم إلا في حالات استثنائية.\n\n"
+                "⚠️ قد تُستثنى المناصب الإدارية العليا من هذه الأحكام. "
+                "في حال رفض صاحب العمل صرف الوقت الإضافي، يمكنك تقديم شكوى عبر وزارة الموارد البشرية (MOHRE) على الرقم 800-60."
+            )
+        else:
+            msg = (
+                "⏰ **Overtime Pay in UAE (Federal Labour Law)**\n\n"
+                "**Standard working hours:**\n"
+                "• Max 8 hours/day or 48 hours/week\n"
+                "• Reduced to 6 hours/day during Ramadan\n\n"
+                "**Overtime rates (Articles 65–68):**\n"
+                "• Daytime overtime: normal hourly rate + **25%**\n"
+                "• Night-time overtime (9 pm – 4 am): normal hourly rate + **50%**\n"
+                "• Work on official day off: full basic day's pay + **50% premium**\n\n"
+                "**Maximum overtime:** 2 hours per day unless exceptional circumstances apply.\n\n"
+                "⚠️ Senior managers and supervisors may be exempt from overtime entitlement depending on contract terms. "
+                "If your employer refuses to pay overtime owed, file a complaint with MOHRE at mohre.gov.ae or call 800-60."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "overtime_pay_uae", "message": msg}
+
+    # ── Contract types UAE ────────────────────────────────────────────────────────
+
+    def _handle_contract_types_uae(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "📄 **أنواع عقود العمل في الإمارات**\n\n"
+                "**تحديث مهم (2022):** ألغى قانون العمل الجديد (المرسوم الاتحادي رقم 33 لسنة 2021) "
+                "التمييز التقليدي بين العقود المحددة وغير المحددة المدة. "
+                "جميع العقود الجديدة محددة المدة (لا تتجاوز 3 سنوات، قابلة للتجديد).\n\n"
+                "**أنواع العقود الحالية:**\n"
+                "• **عقد بدوام كامل** — الأكثر شيوعاً، قابل للتجديد\n"
+                "• **عقد بدوام جزئي** — أقل من 8 ساعات يومياً، يُتيح العمل لدى أكثر من جهة\n"
+                "• **عقد مشروع** — ينتهي عند اكتمال المشروع\n"
+                "• **عقد مرن** — ساعات متغيرة بالاتفاق\n"
+                "• **عقد موسمي** — لنشاطات ومواسم محددة\n\n"
+                "**ماذا يحدث عند انتهاء العقد؟**\n"
+                "• إذا استمررت في العمل دون تجديد رسمي، يُعدّ العقد مجدَّداً ضمنياً بنفس الشروط\n"
+                "• يجب على صاحب العمل إخطارك بعدم التجديد قبل 30 يوماً على الأقل\n"
+                "• تستحق مكافأة نهاية الخدمة بناءً على إجمالي سنوات الخدمة بغض النظر عن نوع الإنهاء\n\n"
+                "💡 احرص على توقيع عقدك باللغتين العربية والإنجليزية. النسخة العربية هي المعتمدة قانونياً."
+            )
+        else:
+            msg = (
+                "📄 **Employment Contract Types in UAE**\n\n"
+                "**Key update (2022):** The new UAE Labour Law (Federal Decree No. 33 of 2021) eliminated the old limited/unlimited contract distinction. "
+                "All new contracts must now be **fixed-term** (maximum 3 years, renewable).\n\n"
+                "**Current contract types:**\n"
+                "• **Full-time** — renewable fixed-term, most common\n"
+                "• **Part-time** — fewer than 8 hours/day; working for multiple employers is permitted\n"
+                "• **Project-based** — ends when the specific project completes\n"
+                "• **Flexible** — hours vary by mutual agreement\n"
+                "• **Seasonal** — tied to a specific season or activity\n\n"
+                "**What happens when a fixed-term contract expires?**\n"
+                "• If you keep working without a new signed contract, it's treated as implicitly renewed on the same terms\n"
+                "• Your employer must give at least **30 days' notice** of non-renewal\n"
+                "• You're entitled to end-of-service gratuity based on total years served regardless of how the contract ends\n\n"
+                "💡 Always insist on a written contract in both Arabic and English. The Arabic version is legally binding in UAE courts."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "contract_types_uae", "message": msg}
 
     # ── Context-aware help ──────────────────────────────────────────────────────
 
