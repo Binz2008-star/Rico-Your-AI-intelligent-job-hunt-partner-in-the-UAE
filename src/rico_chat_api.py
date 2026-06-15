@@ -956,6 +956,49 @@ _FREELANCE_UAE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# End of service gratuity / EOSB — "what is end of service gratuity?",
+# "how much gratuity am I owed?", "how is gratuity calculated in UAE?".
+_EOSB_RE = re.compile(
+    r"\b(?:what\s+is\s+(?:end\s+of\s+service|gratuity|EOSB))\b"
+    r"|\b(?:how\s+(?:is|do\s+I\s+calculate|to\s+calculate)\s+(?:my\s+)?(?:end\s+of\s+service|gratuity))\b"
+    r"|\b(?:how\s+much\s+(?:gratuity|end\s+of\s+service)\s+(?:am\s+I\s+(?:owed|entitled\s+to)|will\s+I\s+(?:get|receive)))\b"
+    r"|\b(?:gratuity\s+(?:calculation|calculator|formula|in\s+UAE|UAE|entitlement|payment|amount|rights?))\b"
+    r"|\b(?:end\s+of\s+service\s+(?:gratuity|benefit|payment|calculation|calculator|entitlement|in\s+UAE))\b"
+    r"|\b(?:EOSB\s+(?:calculation|UAE|entitlement|amount))\b"
+    r"|\b(?:am\s+I\s+(?:entitled|eligible)\s+(?:to|for)\s+(?:end\s+of\s+service|gratuity))\b"
+    r"|\b(?:مكافأة\s+نهاية\s+الخدمة|كيف\s+(?:تُحسب|أحسب)\s+مكافأة\s+نهاية\s+الخدمة|حساب\s+مكافأة\s+نهاية\s+الخدمة)\b",
+    re.IGNORECASE,
+)
+
+# Non-compete clause in UAE — "does my non-compete apply in UAE?",
+# "can my employer enforce a non-compete?", "what is a non-compete clause?".
+_NON_COMPETE_RE = re.compile(
+    r"\b(?:what\s+is\s+(?:a\s+|an\s+|the\s+)?non[- ]compete(?:\s+(?:clause|agreement|restriction))?)\b"
+    r"|\b(?:does\s+my\s+non[- ]compete\s+(?:apply|work|matter)?)\b"
+    r"|\b(?:how\s+does\s+(?:a\s+)?non[- ]compete\s+(?:work|apply))\b"
+    r"|\b(?:non[- ]compete\s+(?:clause|agreement|restriction|clause)\s+(?:in\s+UAE|UAE|Dubai|enforceable|enforced|valid|apply))\b"
+    r"|\b(?:can\s+(?:my\s+)?(?:employer|company)\s+(?:enforce|stop\s+me\s+with|use)\s+(?:a\s+)?non[- ]compete)\b"
+    r"|\b(?:is\s+(?:my\s+|a\s+)?non[- ]compete\s+(?:enforceable|valid|legal|binding)(?:\s+(?:in\s+UAE|in\s+Dubai))?)\b"
+    r"|\b(?:non[- ]compete\s+(?:UAE|Dubai|period|duration|restriction|terms?))\b"
+    r"|\b(?:شرط\s+عدم\s+المنافسة|بند\s+عدم\s+المنافسة|اتفاقية\s+عدم\s+المنافسة)\b",
+    re.IGNORECASE,
+)
+
+# UAE work visa / sponsorship process — "how do I get a UAE work visa?",
+# "how does visa sponsorship work?", "what documents do I need for a work visa?".
+# Distinct from _VISA_STATUS_RE (which handles profile declarations).
+_WORK_VISA_PROCESS_RE = re.compile(
+    r"\b(?:how\s+(?:do\s+I|to|can\s+I)\s+(?:get|apply\s+for|obtain)\s+(?:a\s+)?(?:UAE\s+)?work\s+(?:visa|permit))\b"
+    r"|\b(?:how\s+(?:does|do)\s+(?:UAE\s+)?(?:work\s+)?visa\s+(?:sponsorship|process|application)\s+work)\b"
+    r"|\b(?:what\s+(?:documents?|papers?)\s+(?:do\s+I\s+)?(?:need|require)\s+for\s+(?:a\s+)?(?:UAE\s+)?work\s+(?:visa|permit))\b"
+    r"|\b(?:(?:UAE|Dubai)\s+work\s+(?:visa|permit)\s+(?:process|requirements?|application|guide|steps?|how\s+to\s+get|cost))\b"
+    r"|\b(?:how\s+(?:long|much)\s+(?:does|do)\s+(?:it\s+take|I\s+need)\s+(?:to\s+get|for)\s+(?:a\s+)?(?:UAE\s+)?work\s+visa)\b"
+    r"|\b(?:will\s+(?:the\s+)?(?:company|employer|they)\s+(?:sponsor|provide|arrange)\s+(?:my\s+)?visa)\b"
+    r"|\b(?:what\s+is\s+(?:the\s+)?visa\s+sponsorship\s+(?:process|cost|timeline))\b"
+    r"|\b(?:تأشيرة\s+العمل\s+(?:في\s+الإمارات|الإمارات)|كيف\s+أحصل\s+على\s+تأشيرة\s+عمل|إجراءات\s+تأشيرة\s+العمل)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -5024,7 +5067,7 @@ class RicoChatAPI:
 
         # ── UAE benefits / package query ──────────────────────────────────────
         # "what benefits should I expect?", "is housing allowance standard?".
-        if _BENEFITS_QUERY_RE.search(message):
+        if _BENEFITS_QUERY_RE.search(message) and not _EOSB_RE.search(message):
             return self._finalize(
                 self._handle_benefits_package(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5128,6 +5171,33 @@ class RicoChatAPI:
         if _FREELANCE_UAE_RE.search(message):
             return self._finalize(
                 self._handle_freelance_uae(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── End of service gratuity ──────────────────────────────────────────
+        # "what is end of service gratuity?", "how is gratuity calculated?".
+        if _EOSB_RE.search(message):
+            return self._finalize(
+                self._handle_eosb(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Non-compete clause ───────────────────────────────────────────────
+        # "does my non-compete apply in UAE?", "is a non-compete enforceable?".
+        if _NON_COMPETE_RE.search(message):
+            return self._finalize(
+                self._handle_non_compete(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Work visa / sponsorship process ─────────────────────────────────
+        # "how do I get a UAE work visa?", "will the company sponsor my visa?".
+        if _WORK_VISA_PROCESS_RE.search(message):
+            return self._finalize(
+                self._handle_work_visa_process(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -12108,6 +12178,146 @@ class RicoChatAPI:
             )
         self._append_chat(user_id, "assistant", msg)
         return {"type": "freelance_uae", "message": msg}
+
+    # ── End of service gratuity ─────────────────────────────────────────────────
+
+    def _handle_eosb(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## مكافأة نهاية الخدمة في الإمارات\n\n"
+                "**من له الحق في مكافأة نهاية الخدمة؟**\n"
+                "كل موظف أتمّ سنة كاملة في الخدمة، سواء أُنهيت خدمته أو استقال.\n\n"
+                "**طريقة الحساب (القطاع الخاص — قانون العمل الإماراتي):**\n"
+                "- السنوات الخمس الأولى: **21 يوماً** من الراتب الأساسي عن كل سنة\n"
+                "- ما بعد خمس سنوات: **30 يوماً** من الراتب الأساسي عن كل سنة إضافية\n"
+                "- الحد الأقصى للمكافأة الإجمالية: راتب سنتين كاملتين\n\n"
+                "**مثال:**\n"
+                "راتب أساسي 10,000 درهم × 4 سنوات = 21 × 4 ÷ 30 × 10,000 = **28,000 درهم**\n\n"
+                "**ملاحظات مهمة:**\n"
+                "- تُحسب على أساس الراتب الأساسي، لا الإجمالي (لا تشمل البدلات)\n"
+                "- إذا استقلت قبل اكتمال سنة، لا توجد مكافأة\n"
+                "- موظفو الحكومة يخضعون لنظام مختلف (صندوق التقاعد)\n"
+                "- بعض الشركات توفّر صناديق ادخار واستثمار بديلة (DEWS/GPSSA)"
+            )
+        else:
+            msg = (
+                "## End of Service Gratuity (EOSB) in UAE\n\n"
+                "**Who is entitled?** Any employee who has completed at least one full year "
+                "of service — whether terminated or resigned.\n\n"
+                "**How it's calculated (private sector — UAE Labour Law):**\n"
+                "- First 5 years: **21 days** basic salary per year of service\n"
+                "- Beyond 5 years: **30 days** basic salary per additional year\n"
+                "- Maximum: 2 years' total basic salary\n\n"
+                "**Example:**\n"
+                "Basic salary AED 10,000 × 4 years = (21 × 4 ÷ 30) × 10,000 = **AED 28,000**\n\n"
+                "**Important notes:**\n"
+                "- Calculated on **basic salary only** — housing, transport, and other allowances "
+                "are excluded\n"
+                "- If you resign before completing 1 year, no gratuity is owed\n"
+                "- Government employees fall under a separate pension/retirement scheme\n"
+                "- Some companies offer savings or investment schemes (DEWS, GPSSA) in lieu of "
+                "the statutory gratuity — check your contract\n\n"
+                "**Tip:** Your employer must pay gratuity within 14 days of your last working day. "
+                "If they don't, you can file a complaint with MOHRE (Ministry of Human Resources)."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "eosb", "message": msg}
+
+    # ── Non-compete clause ───────────────────────────────────────────────────────
+
+    def _handle_non_compete(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## شرط عدم المنافسة في الإمارات\n\n"
+                "**هل يُطبَّق شرط عدم المنافسة في الإمارات؟**\n"
+                "نعم، لكن بقيود واضحة. وفقاً لقانون العمل الإماراتي (المادة 10)، "
+                "يمكن للشركات إدراج شروط عدم منافسة في العقود، شريطة أن تكون:\n\n"
+                "**شروط الصحة:**\n"
+                "- **محدودة زمنياً** — لا تتجاوز عامين في الغالب\n"
+                "- **محدودة جغرافياً** — منطقة أو دولة بعينها، لا العالم أجمع\n"
+                "- **محدودة بنوع النشاط** — نفس الصناعة أو الدور الوظيفي تحديداً\n\n"
+                "**ماذا يعني هذا عملياً؟**\n"
+                "- لا يستطيع صاحب العمل منعك من العمل تماماً\n"
+                "- تُطبّق المحاكم فقط الشروط المعقولة والمتناسبة\n"
+                "- غالباً ما تكون شروط عامة جداً (مثل 'أي منافس في العالم') غير قابلة للتطبيق\n\n"
+                "**نصيحة:**\n"
+                "راجع العقد بعناية. إذا كانت الشركة الجديدة في قطاع مختلف أو دور مختلف، "
+                "فالشرط على الأرجح لن يسري. استشر محامياً قبل القبول إذا كان الشرط قاسياً."
+            )
+        else:
+            msg = (
+                "## Non-Compete Clauses in UAE\n\n"
+                "**Are non-competes enforceable in UAE?** Yes — but with clear limits. "
+                "Under UAE Labour Law (Article 10), employers can include non-compete "
+                "clauses, provided they are:\n\n"
+                "**For a clause to be enforceable it must be:**\n"
+                "- **Time-limited** — typically no more than 2 years\n"
+                "- **Geographically limited** — a specific region or country, not the entire world\n"
+                "- **Activity-specific** — same industry or role, not 'any work whatsoever'\n\n"
+                "**In practice:**\n"
+                "- Courts will only enforce clauses that are reasonable and proportionate\n"
+                "- Overly broad clauses (e.g., 'any competitor globally for 5 years') are "
+                "routinely struck down\n"
+                "- If your new role is in a different sector or function, the clause "
+                "likely won't apply\n\n"
+                "**Practical steps:**\n"
+                "1. Read your contract carefully — what sector, role, geography, and timeframe?\n"
+                "2. If the new job is clearly different, the risk is low\n"
+                "3. If there's overlap, seek legal advice before accepting — UAE employment "
+                "lawyers often offer a short consultation for a fixed fee\n"
+                "4. Negotiating a waiver from your old employer is also an option"
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "non_compete", "message": msg}
+
+    # ── Work visa / sponsorship process ─────────────────────────────────────────
+
+    def _handle_work_visa_process(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## كيف تحصل على تأشيرة عمل في الإمارات\n\n"
+                "**في معظم الحالات، الشركة هي من تُكفّلك.** إليك كيف يسير الأمر:\n\n"
+                "**الخطوات الأساسية (كفالة صاحب العمل):**\n"
+                "1. **عرض العمل والعقد** — تُصدر الشركة عرضاً رسمياً وتبدأ إجراءات التأشيرة\n"
+                "2. **الإشعار المبدئي** — يتيح لك دخول الإمارات (فترة محدودة) لإتمام الإجراءات\n"
+                "3. **الفحص الطبي** — فحص إلزامي عبر مراكز معتمدة من MOHRE\n"
+                "4. **إصدار الإقامة** — تأشيرة إقامة تصدر بعد الفحص واستيفاء المتطلبات\n"
+                "5. **بطاقة الهوية** — تُصدر من دائرة الهجرة وشؤون الأجانب (ICA)\n\n"
+                "**المدة المعتادة:** 3–6 أسابيع من تاريخ القبول\n\n"
+                "**ما يتحمّله صاحب العمل عادةً:**\n"
+                "- رسوم التأشيرة والكفالة\n"
+                "- تكاليف الفحص الطبي\n"
+                "- نفقات السفر الأولى (حسب العقد)\n\n"
+                "**ملاحظة:** تحقّق دائماً من أن العقد يتضمن نص الكفالة والتأمين الطبي."
+            )
+        else:
+            msg = (
+                "## How UAE Work Visa Sponsorship Works\n\n"
+                "**In most cases, your employer sponsors your visa.** Here's the typical process:\n\n"
+                "**Step-by-step (employer-sponsored):**\n"
+                "1. **Job offer accepted** — employer initiates the visa application with MOHRE\n"
+                "2. **Entry permit** — allows you to enter the UAE to complete the process "
+                "(usually 60 days)\n"
+                "3. **Medical test** — mandatory health check at an approved UAE center\n"
+                "4. **Residence visa stamped** — issued in your passport after medical clearance\n"
+                "5. **Emirates ID** — applied for through ICA; required for banking, phone, etc.\n\n"
+                "**Typical timeline:** 3–6 weeks from offer acceptance to residence visa\n\n"
+                "**What the employer normally covers:**\n"
+                "- Visa and sponsorship fees\n"
+                "- Medical test costs\n"
+                "- Initial flight (check your offer letter)\n\n"
+                "**What to confirm in your offer:**\n"
+                "- Visa sponsorship explicitly stated\n"
+                "- Health insurance included (mandatory in Dubai and Abu Dhabi)\n"
+                "- Who pays for your family's visas if you're relocating with dependants\n\n"
+                "**Note:** Free zone employees get their visa through the free zone authority, "
+                "not MOHRE — the process is similar but faster in many cases."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "work_visa_process", "message": msg}
 
     # ── Context-aware help ──────────────────────────────────────────────────────
 
