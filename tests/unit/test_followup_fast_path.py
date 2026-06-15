@@ -2009,3 +2009,231 @@ class TestMarketPulse:
         assert result.get("type") == "market_pulse"
         assert isinstance(result.get("message"), str)
         assert len(result["message"]) > 20
+
+
+# ── _NOTICE_PERIOD_RE ─────────────────────────────────────────────────────────
+
+class TestNoticePeriod:
+    """Regex gate and handler for notice period declarations and queries."""
+
+    @pytest.mark.parametrize("phrase", [
+        "my notice period is 30 days",
+        "my notice period is 1 month",
+        "I'm available immediately",
+        "I am available immediately",
+        "I can join in 2 weeks",
+        "I can start immediately",
+        "update my notice period to 60 days",
+        "set my availability to immediate",
+        "what is my notice period?",
+        "immediate joiner",
+        "immediate availability",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _NOTICE_PERIOD_RE
+        assert _NOTICE_PERIOD_RE.search(phrase), (
+            f"_NOTICE_PERIOD_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        "find HSE jobs in Dubai",
+        "what salary did I set?",
+        "compare job 1 and job 2",
+        "how many applications did I send?",
+        "certifications for finance",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _NOTICE_PERIOD_RE
+        assert not _NOTICE_PERIOD_RE.search(phrase), (
+            f"_NOTICE_PERIOD_RE should NOT match: {phrase!r}"
+        )
+
+    def test_declaration_routes_to_notice_period_update(self, monkeypatch):
+        _, result = _run(monkeypatch, "my notice period is 30 days", _CVProfile())
+        assert result["type"] == "notice_period_update"
+
+    def test_immediate_declaration(self, monkeypatch):
+        _, result = _run(monkeypatch, "I'm available immediately", _CVProfile())
+        assert result["type"] == "notice_period_update"
+        assert result.get("notice_period") == "Immediate"
+
+    def test_query_routes_to_notice_period_readback(self, monkeypatch):
+        _, result = _run(monkeypatch, "what is my notice period?", _CVProfile())
+        assert result["type"] == "notice_period_readback"
+
+    def test_upsert_called_on_declaration(self, monkeypatch):
+        import src.rico_chat_api as mod
+        calls = []
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: calls.append(updates or {}) or _CVProfile())
+        monkeypatch.setattr(mod, "get_profile", lambda uid: _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        from src.rico_chat_api import RicoChatAPI
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._handle_active_user("u1", "my notice period is 1 month")
+        assert any("notice_period" in c for c in calls)
+
+    def test_message_field_present(self, monkeypatch):
+        _, result = _run(monkeypatch, "my notice period is 30 days", _CVProfile())
+        assert isinstance(result.get("message"), str)
+        assert len(result["message"]) > 10
+
+
+# ── _VISA_STATUS_RE ───────────────────────────────────────────────────────────
+
+class TestVisaStatus:
+    """Regex gate and handler for visa/work permit status."""
+
+    @pytest.mark.parametrize("phrase", [
+        "I'm on a spouse visa",
+        "I am on a dependent visa",
+        "I have a valid work permit",
+        "I have an employment visa",
+        "I have a golden visa",
+        "update my visa status to employment visa",
+        "what is my visa status?",
+        "my visa is expiring soon",
+        "do I need a visa to work in UAE?",
+        "I need visa sponsorship",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _VISA_STATUS_RE
+        assert _VISA_STATUS_RE.search(phrase), (
+            f"_VISA_STATUS_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        "find HSE jobs in Dubai",
+        "my notice period is 30 days",
+        "what certifications do I need?",
+        "compare job 1 and job 2",
+        "how many applications did I send?",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _VISA_STATUS_RE
+        assert not _VISA_STATUS_RE.search(phrase), (
+            f"_VISA_STATUS_RE should NOT match: {phrase!r}"
+        )
+
+    def test_spouse_visa_declaration(self, monkeypatch):
+        _, result = _run(monkeypatch, "I'm on a spouse visa", _CVProfile())
+        assert result["type"] == "visa_status_update"
+        assert result.get("visa_status") == "Spouse/Dependent Visa"
+
+    def test_employment_visa_declaration(self, monkeypatch):
+        _, result = _run(monkeypatch, "I have an employment visa", _CVProfile())
+        assert result["type"] == "visa_status_update"
+        assert result.get("visa_status") == "Employment Visa"
+
+    def test_golden_visa_declaration(self, monkeypatch):
+        _, result = _run(monkeypatch, "I have a golden visa", _CVProfile())
+        assert result["type"] == "visa_status_update"
+        assert result.get("visa_status") == "Golden Visa"
+
+    def test_info_request_returns_visa_info(self, monkeypatch):
+        _, result = _run(monkeypatch, "do I need a visa to work in UAE?", _CVProfile())
+        assert result["type"] == "visa_info"
+
+    def test_query_returns_visa_readback(self, monkeypatch):
+        _, result = _run(monkeypatch, "what is my visa status?", _CVProfile())
+        assert result["type"] == "visa_readback"
+
+    def test_message_field_present(self, monkeypatch):
+        _, result = _run(monkeypatch, "I'm on a spouse visa", _CVProfile())
+        assert isinstance(result.get("message"), str)
+        assert len(result["message"]) > 10
+
+    def test_upsert_called_on_declaration(self, monkeypatch):
+        import src.rico_chat_api as mod
+        calls = []
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: calls.append(updates or {}) or _CVProfile())
+        monkeypatch.setattr(mod, "get_profile", lambda uid: _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        from src.rico_chat_api import RicoChatAPI
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._handle_active_user("u1", "I'm on a spouse visa")
+        assert any("visa_status" in c for c in calls)
+
+
+# ── _SALARY_NEGOTIATION_RE ────────────────────────────────────────────────────
+
+class TestSalaryNegotiation:
+    """Regex gate and handler for salary negotiation advice."""
+
+    @pytest.mark.parametrize("phrase", [
+        "how do I negotiate my salary?",
+        "how to negotiate salary",
+        "should I counter the offer?",
+        "should I accept the offer?",
+        "the offer is too low",
+        "the offer seems too low",
+        "how do I ask for a raise?",
+        "salary negotiation tips",
+        "salary negotiation advice",
+        "counter offer",
+        "counteroffer",
+        "what should I counter?",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _SALARY_NEGOTIATION_RE
+        assert _SALARY_NEGOTIATION_RE.search(phrase), (
+            f"_SALARY_NEGOTIATION_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        "find HSE jobs in Dubai",
+        "what is my salary expectation?",
+        "set my salary to 25000 AED",
+        "my notice period is 30 days",
+        "I'm on a spouse visa",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _SALARY_NEGOTIATION_RE
+        assert not _SALARY_NEGOTIATION_RE.search(phrase), (
+            f"_SALARY_NEGOTIATION_RE should NOT match: {phrase!r}"
+        )
+
+    def test_routes_to_negotiation_advice(self, monkeypatch):
+        _, result = _run(monkeypatch, "how do I negotiate my salary?", _CVProfile())
+        assert result["type"] == "negotiation_advice"
+
+    def test_counter_scenario_flagged(self, monkeypatch):
+        _, result = _run(monkeypatch, "should I counter the offer?", _CVProfile())
+        assert result["type"] == "negotiation_advice"
+        assert result.get("is_counter_scenario") is True
+
+    def test_general_advice_not_counter_flagged(self, monkeypatch):
+        _, result = _run(monkeypatch, "salary negotiation tips", _CVProfile())
+        assert result["type"] == "negotiation_advice"
+        assert result.get("is_counter_scenario") is False
+
+    def test_salary_on_file_included(self, monkeypatch):
+        import src.rico_chat_api as mod
+        from src.rico_chat_api import RicoChatAPI
+        from unittest.mock import MagicMock
+
+        class _ProfileWithSalary:
+            skills = ["hse"]
+            certifications = []
+            years_experience = 8.0
+            target_roles = ["HSE Manager"]
+            industries = ["Oil & Gas"]
+            cv_status = "parsed"
+            cv_filename = "cv.pdf"
+            salary_expectation_aed = 25000
+
+        monkeypatch.setattr(mod, "get_profile", lambda uid: _ProfileWithSalary())
+        monkeypatch.setattr(mod, "upsert_profile", lambda uid, u: _ProfileWithSalary())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        result = api._handle_active_user("u1", "should I counter the offer?")
+        assert result["type"] == "negotiation_advice"
+        assert result.get("salary_on_file") is not None
+
+    def test_message_field_present(self, monkeypatch):
+        _, result = _run(monkeypatch, "how do I negotiate my salary?", _CVProfile())
+        assert isinstance(result.get("message"), str)
+        assert len(result["message"]) > 50

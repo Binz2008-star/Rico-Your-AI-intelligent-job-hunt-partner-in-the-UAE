@@ -552,6 +552,49 @@ _MARKET_PULSE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Notice period / availability declaration or query.
+# "my notice period is 30 days", "I'm available immediately", "I can join in 2 weeks",
+# "what is my notice period?", "update my availability to 1 month".
+_NOTICE_PERIOD_RE = re.compile(
+    r"\b(?:my\s+)?notice\s+period\s+(?:is|was|will\s+be|=)\s*.{1,30}"
+    r"|\bI(?:'m|\s+am)\s+available\s+(?:immediately|now|from|in\s+\d)"
+    r"|\bI\s+can\s+(?:join|start)\s+(?:in|within|immediately|next)\b"
+    r"|\b(?:update|set|change)\s+(?:my\s+)?(?:notice\s+period|availability)\b"
+    r"|\bwhat(?:'s|\s+is)\s+my\s+notice\s+period\b"
+    r"|\b(?:available\s+immediately|immediate\s+joiner|immediate\s+availability)\b"
+    r"|\b(?:فترة\s+الإشعار|الإتاحة)\s*(?:هي|لدي|الخاصة\s+بي)?\b",
+    re.IGNORECASE,
+)
+
+# Visa / work permit status declaration or query.
+# "I'm on a spouse visa", "I have a valid work permit", "do I need a visa?",
+# "update my visa status to employment visa", "my visa is expiring soon".
+_VISA_STATUS_RE = re.compile(
+    r"\b(?:I(?:'m|\s+am)\s+on\s+a?\s*)(?:spouse|visit|tourist|employment|golden|investor|freelance|dependent)\s+visa\b"
+    r"|\b(?:I\s+have\s+(?:a\s+)?(?:valid\s+)?)?(?:UAE\s+)?(?:work\s+permit|residence\s+visa|employment\s+visa|golden\s+visa)\b"
+    r"|\b(?:update|set|change)\s+(?:my\s+)?visa\s+(?:status|type|details?)\b"
+    r"|\bwhat(?:'s|\s+is)\s+my\s+visa\s+(?:status|type)\b"
+    r"|\bmy\s+visa\s+(?:is\s+)?(?:expir(?:ing|ed)|valid|active|cancelled)\b"
+    r"|\bdo\s+I\s+need\s+a\s+(?:work\s+)?visa\b"
+    r"|\b(?:need|require)\s+(?:visa\s+)?sponsorship\b"
+    r"|\b(?:تأشيرة|تصريح\s+عمل|إقامة)\s+(?:عمل|الزوج|الزوجة|سارية)?\b",
+    re.IGNORECASE,
+)
+
+# Salary negotiation advice — "how do I negotiate my salary?", "should I counter the offer?",
+# "is the offer too low?", "how to ask for a raise?", "tips for negotiating in UAE".
+_SALARY_NEGOTIATION_RE = re.compile(
+    r"\bhow\s+(?:do\s+I|to|should\s+I)\s+negotiate\s+(?:my\s+)?salary\b"
+    r"|\bshould\s+I\s+(?:counter|negotiate|accept|reject)\s+(?:the\s+)?offer\b"
+    r"|\b(?:the\s+)?offer\s+(?:is|seems?)\s+(?:too\s+low|below\s+market|not\s+enough|low)\b"
+    r"|\bhow\s+(?:to|do\s+I)\s+ask\s+for\s+(?:a\s+)?(?:raise|higher\s+salary|better\s+offer|salary\s+increase)\b"
+    r"|\b(?:salary\s+)?negotiation\s+(?:tips?|advice|strategy|help|tactics?)\b"
+    r"|\bwhat\s+(?:should\s+I|can\s+I)\s+(?:ask\s+for|counter(?:\s+offer)?|negotiate)\b"
+    r"|\b(?:counter[\s-]offer|counteroffer)\b"
+    r"|\b(?:نصائح\s+(?:تفاوض|الراتب)|كيف\s+أتفاوض)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -4460,6 +4503,33 @@ class RicoChatAPI:
         if _MARKET_PULSE_RE.search(message):
             return self._finalize(
                 self._handle_market_pulse(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Notice period / availability ──────────────────────────────────────
+        # "my notice period is 30 days", "I'm available immediately".
+        if _NOTICE_PERIOD_RE.search(message):
+            return self._finalize(
+                self._handle_notice_period(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Visa / work permit status ─────────────────────────────────────────
+        # "I'm on a spouse visa", "do I need a work permit?".
+        if _VISA_STATUS_RE.search(message):
+            return self._finalize(
+                self._handle_visa_status(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Salary negotiation advice ─────────────────────────────────────────
+        # "how do I negotiate my salary?", "should I counter the offer?".
+        if _SALARY_NEGOTIATION_RE.search(message):
+            return self._finalize(
+                self._handle_salary_negotiation(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -9146,6 +9216,236 @@ class RicoChatAPI:
             "active_count": count,
             "sentiment": sentiment,
             "message": msg,
+        }
+
+    def _handle_notice_period(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Handle notice period declarations and queries.
+
+        Detects: "my notice period is 30 days", "I'm available immediately",
+        "what is my notice period?", "update my notice period to 1 month".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        # Is this a query (read) or a declaration (write)?
+        is_query = bool(_re.search(
+            r"\bwhat(?:'s|\s+is)\s+my\s+notice\s+period\b", message, _re.IGNORECASE
+        ))
+
+        if is_query:
+            current = self._profile_value(profile, "notice_period") or ""
+            if current:
+                msg = (
+                    f"فترة الإشعار المسجلة لديك هي: **{current}**."
+                    if arabic else
+                    f"Your notice period is set to: **{current}**."
+                )
+            else:
+                msg = (
+                    "لم تُحدّد فترة إشعار بعد. أخبرني بها، مثلاً: 'فترة إشعاري شهر واحد'."
+                    if arabic else
+                    "You haven't set a notice period yet. Tell me — e.g. 'my notice period is 30 days'."
+                )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "notice_period_readback", "notice_period": current, "message": msg}
+
+        # Parse the declared value
+        _IMMEDIATELY = _re.search(
+            r"\b(?:immediately|now|right\s+away|متاح\s+الآن|فوراً)\b", message, _re.IGNORECASE
+        )
+        if _IMMEDIATELY or _re.search(r"\bavailable\s+immediately\b|\bimmediate\s+joiner\b", message, _re.IGNORECASE):
+            value = "Immediate"
+        else:
+            _val_m = _re.search(
+                r"(?:notice\s+period\s+(?:is|was|=)|join\s+in|start\s+in|available\s+(?:in|from|within))\s*"
+                r"(\d+\s*(?:day|week|month|year)s?|immediately|one|two|three|four)\b",
+                message, _re.IGNORECASE,
+            )
+            value = _val_m.group(1).strip().title() if _val_m else ""
+
+        if value:
+            upsert_profile(user_id=user_id, updates={"notice_period": value})
+            msg = (
+                f"تم تحديث فترة الإشعار إلى: **{value}**. سيظهر ذلك في طلباتك القادمة."
+                if arabic else
+                f"Notice period updated to **{value}**. This will be included in your applications."
+            )
+        else:
+            msg = (
+                "أخبرني بفترة الإشعار، مثلاً: '30 يوماً' أو 'شهر واحد' أو 'متاح فوراً'."
+                if arabic else
+                "What's your notice period? E.g. '30 days', '1 month', or 'immediately available'."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "notice_period_update", "notice_period": value or None, "message": msg}
+
+    def _handle_visa_status(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Handle visa/work permit status declarations and queries.
+
+        Detects: "I'm on a spouse visa", "I have a work permit",
+        "do I need a visa?", "update my visa status".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        # General "do I need a visa?" info request
+        is_info_request = bool(_re.search(
+            r"\bdo\s+I\s+need\s+a\s+(?:work\s+)?visa\b", message, _re.IGNORECASE
+        ))
+        is_query = bool(_re.search(
+            r"\bwhat(?:'s|\s+is)\s+my\s+visa\s+(?:status|type)\b", message, _re.IGNORECASE
+        ))
+
+        if is_info_request:
+            msg = (
+                "**UAE Work Visa Information:**\n\n"
+                "To work in the UAE you typically need one of:\n"
+                "• **Employment Visa** — sponsored by your employer (most common)\n"
+                "• **Freelance Permit** — from TECOM, twofour54, or emirate-level free zones\n"
+                "• **Golden Visa** — 5 or 10-year self-sponsored for skilled professionals\n"
+                "• **Spouse/Dependent Visa** — allows work with a separate employment NOC\n\n"
+                "Most UAE employers sponsor the employment visa after a job offer is accepted. "
+                "Tell me your current visa status so I can tailor your job search — "
+                "e.g. 'I'm on a spouse visa' or 'I need visa sponsorship'."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "visa_info", "message": msg}
+
+        if is_query:
+            current = self._profile_value(profile, "visa_status") or ""
+            if current:
+                msg = (
+                    f"حالة تأشيرتك المسجلة: **{current}**."
+                    if arabic else
+                    f"Your visa status on file: **{current}**."
+                )
+            else:
+                msg = (
+                    "لم تُحدّد حالة تأشيرتك بعد. أخبرني بها، مثلاً: 'لديّ تأشيرة زوج/زوجة'."
+                    if arabic else
+                    "You haven't set your visa status yet. Tell me — e.g. 'I'm on a spouse visa' or 'I need sponsorship'."
+                )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "visa_readback", "visa_status": current, "message": msg}
+
+        # Parse declared visa type from message
+        _VISA_MAP = [
+            (r"golden\s+visa",               "Golden Visa"),
+            (r"investor\s+visa",             "Investor Visa"),
+            (r"freelance\s+(?:visa|permit)", "Freelance Permit"),
+            (r"employment\s+visa|work\s+permit|work\s+visa", "Employment Visa"),
+            (r"spouse\s+visa|dependent\s+visa", "Spouse/Dependent Visa"),
+            (r"visit\s+visa|tourist\s+visa", "Visit Visa"),
+            (r"residence\s+visa",            "Residence Visa"),
+            (r"need\s+(?:visa\s+)?sponsorship|require\s+sponsorship", "Requires Sponsorship"),
+        ]
+        visa_value = ""
+        for pattern, label in _VISA_MAP:
+            if _re.search(pattern, message, _re.IGNORECASE):
+                visa_value = label
+                break
+
+        if visa_value:
+            upsert_profile(user_id=user_id, updates={"visa_status": visa_value})
+            extra = ""
+            if visa_value == "Spouse/Dependent Visa":
+                extra = " Note: most UAE employers can issue a work permit alongside your dependent visa — I'll filter for roles that offer sponsorship."
+            elif visa_value == "Visit Visa":
+                extra = " Visit visas don't permit employment — you'll need an employer to sponsor an employment visa before starting work."
+            elif visa_value == "Employment Visa":
+                extra = " Great — you're already work-authorised, which expands your options significantly."
+            msg = (
+                f"تم تسجيل حالة التأشيرة: **{visa_value}**.{extra}"
+                if arabic else
+                f"Visa status saved as **{visa_value}**.{extra}"
+            )
+        else:
+            msg = (
+                "أخبرني بحالة تأشيرتك، مثلاً: 'تأشيرة زوج/زوجة'، 'تأشيرة عمل'، أو 'أحتاج كفالة'."
+                if arabic else
+                "What's your visa status? E.g. 'I'm on a spouse visa', 'employment visa', "
+                "or 'I need sponsorship'."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "visa_status_update", "visa_status": visa_value or None, "message": msg}
+
+    def _handle_salary_negotiation(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Return UAE-context salary negotiation advice.
+
+        Detects: "how do I negotiate my salary?", "should I counter the offer?",
+        "the offer is too low", "tips for salary negotiation in UAE".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        # Is this about countering a specific offer?
+        is_counter = bool(_re.search(
+            r"\bcounter(?:[- ]offer)?|should\s+I\s+(?:accept|reject|counter)\s+(?:the\s+)?offer\b"
+            r"|\bthe\s+offer\s+(?:is|seems?)\s+(?:too\s+low|low|below|not\s+enough)\b",
+            message, _re.IGNORECASE,
+        ))
+
+        salary_on_file = self._profile_value(profile, "salary_expectation_aed")
+        salary_str = f"AED {salary_on_file:,}" if isinstance(salary_on_file, (int, float)) and salary_on_file else str(salary_on_file) if salary_on_file else ""
+
+        if is_counter and salary_str:
+            counter_advice = (
+                f"Based on your target salary of **{salary_str}/month**, here's my advice:\n\n"
+                "**Countering a UAE job offer:**\n\n"
+                "1. **Benchmark first** — confirm the offer is genuinely below market using HRMS UAE, "
+                "Bayt Salary Insights, or GulfTalent before countering.\n"
+                "2. **Counter in writing** — email is standard in UAE; keeps a record for both sides.\n"
+                "3. **Anchor high but realistic** — counter 10–15% above the offer, not more. "
+                "UAE employers expect some negotiation, especially at mid-senior levels.\n"
+                "4. **Package over base** — if they won't move on salary, negotiate housing allowance, "
+                "transport, medical, or annual ticket (common UAE components).\n"
+                "5. **One counter is the norm** — UAE hiring culture is less multi-round than Western markets. "
+                "Make your counter count the first time.\n\n"
+                "Say **'what's my target salary?'** to review your saved expectation."
+            )
+        else:
+            counter_advice = (
+                "**UAE Salary Negotiation Tips:**\n\n"
+                "1. **Know the market** — research on Bayt, GulfTalent, and HRMS UAE before any conversation. "
+                "UAE salaries vary significantly by nationality, company type, and emirate.\n"
+                "2. **Don't reveal your current salary first** — UAE interviews often ask; it's legally "
+                "permissible to say 'I'd prefer to discuss based on the role's budget'.\n"
+                "3. **Total package thinking** — UAE offers include housing, transport, medical, and annual "
+                "tickets. A lower base with strong allowances can exceed a high-base offer.\n"
+                "4. **Timing** — raise salary only after a verbal offer. Bringing it up earlier signals "
+                "you're money-first, which can put off UAE hiring managers.\n"
+                "5. **Be direct but respectful** — UAE business culture values politeness. "
+                "Frame it as 'Based on my research and experience, I was expecting closer to X' "
+                "rather than 'your offer is too low'.\n"
+                + (f"\n💡 Your saved salary expectation is **{salary_str}/month**." if salary_str else
+                   "\n💡 Set your salary expectation by saying 'my salary expectation is X AED'.")
+            )
+
+        if arabic:
+            counter_advice = (
+                "**نصائح التفاوض على الراتب في الإمارات:**\n\n"
+                "• ابحث عن رواتب السوق في Bayt وGulfTalent قبل أي نقاش.\n"
+                "• لا تذكر راتبك الحالي أولاً — يمكنك القول 'أفضل النقاش بناءً على ميزانية الوظيفة'.\n"
+                "• فكر بمجموع الحزمة: الأساسي + السكن + المواصلات + التأمين + التذكرة السنوية.\n"
+                "• اطرح مقابلك كتابياً عبر البريد الإلكتروني، وبطريقة مهنية ومحترمة.\n"
+                "• في الإمارات عادةً جولة تفاوض واحدة — اجعلها قوية."
+            )
+
+        self._append_chat(user_id, "assistant", counter_advice)
+        return {
+            "type": "negotiation_advice",
+            "is_counter_scenario": is_counter,
+            "salary_on_file": salary_str or None,
+            "message": counter_advice,
         }
 
     # ── Context-aware help ──────────────────────────────────────────────────────
