@@ -1079,6 +1079,46 @@ _JOB_REFERENCES_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Interview / office dress code in UAE — "what should I wear to an interview?",
+# "what is the dress code in UAE offices?", "is smart casual ok?".
+_DRESS_CODE_RE = re.compile(
+    r"\b(?:what\s+(?:should\s+I|to)\s+(?:wear|dress)\s+(?:to|for)\s+(?:(?:a|an|the)\s+)?(?:job\s+)?interview)\b"
+    r"|\b(?:how\s+(?:should\s+I|do\s+I)\s+(?:dress|look)\s+(?:for|at|to)\s+(?:(?:a|an|the|my)\s+)?(?:job\s+)?interview)\b"
+    r"|\b(?:(?:office|workplace|interview|professional)\s+dress\s+(?:code|standard)\s+(?:UAE|Dubai|in\s+UAE|in\s+Dubai)?)\b"
+    r"|\b(?:dress\s+code\s+(?:UAE|Dubai|for\s+(?:a\s+)?(?:job\s+)?interview|in\s+(?:UAE|Dubai)))\b"
+    r"|\b(?:(?:is|are)\s+(?:smart\s+casual|business\s+casual|formal\s+dress|suit)\s+(?:ok|required|appropriate|expected)\s+(?:in|for)\s+(?:UAE|Dubai|an?\s+interview)?)\b"
+    r"|\b(?:what\s+(?:to|should\s+I)\s+(?:wear|dress)\s+(?:in|to)\s+(?:a\s+)?(?:UAE|Dubai)\s+(?:office|interview))\b"
+    r"|\b(?:كيف\s+أرتدي|ماذا\s+أرتدي)\s+(?:في\s+المقابلة|للمقابلة|في\s+العمل)\b",
+    re.IGNORECASE,
+)
+
+# Working remotely for a foreign company from UAE — "can I work remotely from UAE?",
+# "do I need a visa to work remote for a UK company?", "remote work tax UAE".
+_REMOTE_WORK_UAE_RE = re.compile(
+    r"\b(?:can\s+I\s+work\s+remotely\s+(?:from|in)\s+(?:UAE|Dubai|the\s+UAE|Abu\s+Dhabi))\b"
+    r"|\b(?:can\s+I\s+work\s+for\s+(?:a\s+)?(?:foreign|international|overseas|UK|US|European?)\s+company\s+(?:from|in|while\s+(?:in|living\s+in))\s+(?:UAE|Dubai|the\s+UAE))\b"
+    r"|\b(?:do\s+I\s+need\s+(?:a\s+)?visa\s+to\s+work\s+remotely\s+(?:from|in)\s+(?:UAE|Dubai|the\s+UAE))\b"
+    r"|\b(?:remote\s+work\s+(?:from|in)\s+(?:UAE|Dubai|the\s+UAE)\s+(?:visa|permit|rules?|allowed|legal|tax|regulations?))\b"
+    r"|\b(?:(?:UAE|Dubai)\s+remote\s+work\s+(?:visa|permit|rules?|allowed|legal|tax|policy))\b"
+    r"|\b(?:digital\s+nomad\s+(?:visa\s+UAE|UAE|Dubai|in\s+(?:UAE|Dubai)))\b"
+    r"|\b(?:tax\s+(?:implications?|on\s+remote\s+work|on\s+income)\s+(?:UAE|Dubai|working\s+remotely\s+in\s+UAE))\b"
+    r"|\b(?:العمل\s+عن\s+بُعد\s+(?:من|في)\s+الإمارات|تأشيرة\s+العمل\s+عن\s+بُعد\s+الإمارات)\b",
+    re.IGNORECASE,
+)
+
+# Annual leave entitlement in UAE — "how many days annual leave in UAE?",
+# "what is the leave entitlement?", "public holidays UAE".
+_ANNUAL_LEAVE_RE = re.compile(
+    r"\b(?:how\s+many\s+(?:days?\s+)?(?:annual\s+leave|vacation\s+days?|leave\s+days?|paid\s+leave)\s+(?:do\s+I\s+(?:get|have)|am\s+I\s+(?:entitled|owed)|in\s+(?:UAE|Dubai)))\b"
+    r"|\b(?:(?:annual\s+leave|paid\s+leave|vacation)\s+(?:days?|entitlement|rights?|policy|in\s+UAE|UAE|allowance))\b"
+    r"|\b(?:how\s+(?:much|many)\s+(?:annual\s+)?leave\s+(?:do\s+I\s+(?:get|have)|am\s+I\s+entitled\s+to)\s+(?:in\s+UAE)?)\b"
+    r"|\b(?:(?:UAE|Dubai)\s+(?:annual\s+)?leave\s+(?:entitlement|days?|policy|rules?|law))\b"
+    r"|\b(?:public\s+holidays?\s+(?:in\s+(?:UAE|Dubai)|UAE|Dubai|list|how\s+many))\b"
+    r"|\b(?:(?:how\s+many|what\s+are\s+the)\s+public\s+holidays?\s+in\s+(?:UAE|Dubai))\b"
+    r"|\b(?:إجازة\s+سنوية\s+(?:في\s+الإمارات|الإمارات)|أيام\s+الإجازة\s+السنوية)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -5038,7 +5078,7 @@ class RicoChatAPI:
 
         # ── Interview preparation advice ──────────────────────────────────────
         # "how do I prepare for an interview?", "common HSE interview questions".
-        if _INTERVIEW_PREP_RE.search(message):
+        if _INTERVIEW_PREP_RE.search(message) and not _DRESS_CODE_RE.search(message):
             return self._finalize(
                 self._handle_interview_prep(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5147,7 +5187,7 @@ class RicoChatAPI:
 
         # ── UAE benefits / package query ──────────────────────────────────────
         # "what benefits should I expect?", "is housing allowance standard?".
-        if _BENEFITS_QUERY_RE.search(message) and not _EOSB_RE.search(message):
+        if _BENEFITS_QUERY_RE.search(message) and not _EOSB_RE.search(message) and not _ANNUAL_LEAVE_RE.search(message):
             return self._finalize(
                 self._handle_benefits_package(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5332,6 +5372,33 @@ class RicoChatAPI:
         if _JOB_REFERENCES_RE.search(message):
             return self._finalize(
                 self._handle_job_references(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Interview / office dress code ────────────────────────────────────
+        # "what should I wear to an interview?", "what is the dress code in UAE?".
+        if _DRESS_CODE_RE.search(message):
+            return self._finalize(
+                self._handle_dress_code(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Remote work from UAE ──────────────────────────────────────────────
+        # "can I work remotely from UAE?", "do I need a visa to work remote?".
+        if _REMOTE_WORK_UAE_RE.search(message):
+            return self._finalize(
+                self._handle_remote_work_uae(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Annual leave entitlement ──────────────────────────────────────────
+        # "how many days annual leave in UAE?", "public holidays UAE".
+        if _ANNUAL_LEAVE_RE.search(message):
+            return self._finalize(
+                self._handle_annual_leave(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -12740,6 +12807,141 @@ class RicoChatAPI:
             )
         self._append_chat(user_id, "assistant", msg)
         return {"type": "job_references", "message": msg}
+
+    # ── Interview / office dress code ───────────────────────────────────────────
+
+    def _handle_dress_code(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## ماذا ترتدي في المقابلة الوظيفية بالإمارات\n\n"
+                "**القاعدة الأساسية: الأناقة المهنية دائماً.**\n\n"
+                "**للرجال:**\n"
+                "- بدلة رسمية (بيضاء أو رمادية أو كحلية) مع ربطة عنق: مناسبة للبنوك والقانون والشركات الحكومية\n"
+                "- قميص أنيق مع بنطال وحذاء جلدي: مقبول في معظم الشركات الدولية والتقنية\n"
+                "- تجنب: الجينز والملابس غير الرسمية حتى لو كان هناك نظام 'casual Friday'\n\n"
+                "**للنساء:**\n"
+                "- ملابس مهنية محتشمة: بنطال أو تنورة طويلة مع بلوزة أنيقة أو بدلة رسمية\n"
+                "- الأكمام الطويلة أو المتوسطة مناسبة ثقافياً\n"
+                "- الألوان الهادئة أو الكلاسيكية (كحلي، رمادي، أبيض، بيج)\n\n"
+                "**نصيحة مهمة:** إذا كانت الشركة كاجوال، فما زال يُفضَّل الحضور بمظهر أكثر رسمية "
+                "في المقابلة. الانطباع الأول يُحدث فرقاً."
+            )
+        else:
+            msg = (
+                "## What to Wear to a UAE Job Interview\n\n"
+                "**Rule of thumb: always dress one level smarter than the company culture.**\n\n"
+                "**Men:**\n"
+                "- Full suit (navy, charcoal, or grey) + tie: appropriate for finance, "
+                "law, government, and senior roles\n"
+                "- Smart trousers + collared shirt + dress shoes: acceptable for most "
+                "tech, media, and international firms\n"
+                "- Avoid: jeans, trainers, and casualwear even if the office has a "
+                "relaxed dress code day-to-day\n\n"
+                "**Women:**\n"
+                "- Professional, modest attire: tailored trousers or a knee-length (or "
+                "longer) skirt with a smart blouse, or a business suit\n"
+                "- Covered shoulders and modest neckline are culturally appropriate "
+                "and always safe in UAE\n"
+                "- Classic colours (navy, grey, white, beige) work well\n\n"
+                "**UAE-specific note:**\n"
+                "Workplaces in UAE are diverse and international — you won't be expected "
+                "to wear traditional dress. However, conservative professional attire "
+                "shows respect for local culture and makes a strong first impression.\n\n"
+                "**When in doubt:** slightly overdressed is always better than underdressed "
+                "in a UAE interview context."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "dress_code", "message": msg}
+
+    # ── Remote work from UAE ─────────────────────────────────────────────────────
+
+    def _handle_remote_work_uae(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## العمل عن بُعد من الإمارات\n\n"
+                "**هل يمكنك العمل لصالح شركة أجنبية وأنت في الإمارات؟**\n"
+                "نعم — لكن يجب أن يكون لديك الوضع القانوني المناسب.\n\n"
+                "**الخيارات المتاحة:**\n"
+                "- **تأشيرة العمل عن بُعد (Virtual Work Residence):** تُتيح لك العمل لصالح صاحب عمل "
+                "خارج الإمارات بشكل قانوني، وتُصدر لمدة سنة قابلة للتجديد.\n"
+                "- **تصريح العمل الحر:** إذا كنت مستقلاً تعمل مع عملاء دوليين.\n"
+                "- **إقامة بكفالة صاحب العمل:** إذا كانت الشركة الأجنبية لديها فرع في الإمارات.\n\n"
+                "**الضرائب:**\n"
+                "الإمارات لا تفرض ضريبة دخل شخصية — ميزة كبيرة للعمل عن بُعد. "
+                "لكن قد تظل ملزماً بالإفصاح الضريبي في بلدك الأصلي حسب قوانينه."
+            )
+        else:
+            msg = (
+                "## Working Remotely from UAE\n\n"
+                "**Can you work for a foreign company while living in UAE?** "
+                "Yes — but you need the right legal status.\n\n"
+                "**Your main options:**\n"
+                "- **Virtual Work Residence Visa:** UAE-issued 1-year (renewable) visa "
+                "specifically for remote workers employed by companies outside the UAE. "
+                "Requires proof of employment + salary AED 15,000+/month equivalent\n"
+                "- **Freelance permit:** If you're self-employed or work with multiple "
+                "international clients (issued by a free zone authority)\n"
+                "- **Employer-sponsored residence:** If your foreign employer has a UAE "
+                "branch or subsidiary and can sponsor you directly\n\n"
+                "**Tax position:**\n"
+                "- UAE has no personal income tax — a major advantage for remote workers\n"
+                "- However, you may still have tax reporting obligations in your home "
+                "country (check your country's rules on worldwide income)\n"
+                "- UK, US, and Australian citizens typically need to declare income "
+                "regardless of where they work\n\n"
+                "**Practical tip:** Ensure you have valid UAE residency (not just a "
+                "tourist or visit visa) — working on a tourist visa is not permitted."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "remote_work_uae", "message": msg}
+
+    # ── Annual leave entitlement ─────────────────────────────────────────────────
+
+    def _handle_annual_leave(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## الإجازة السنوية وأيام العطل الرسمية في الإمارات\n\n"
+                "**الإجازة السنوية (قانون العمل الإماراتي):**\n"
+                "- **السنة الأولى إلى الخامسة:** 30 يوم تقويمي سنوياً\n"
+                "- **بعد 5 سنوات خدمة:** 30 يوماً (قد تمنح بعض الشركات أكثر)\n"
+                "- إذا انتهت الخدمة قبل اكتمال السنة، يُحتسب الأجر عن أيام الإجازة المتبقية\n\n"
+                "**العطلات الرسمية (الإمارات 2024/2025):**\n"
+                "- اليوم الوطني (2–3 ديسمبر): يومان\n"
+                "- يوم الشهيد (30 نوفمبر): يوم واحد\n"
+                "- رأس السنة الميلادية (1 يناير): يوم واحد\n"
+                "- اليوم الوطني السعودي والأعياد الإسلامية (رمضان، العيدان، الهجرة، المولد)\n"
+                "- الأعياد الإسلامية تتغير سنوياً وفق الهلال\n\n"
+                "**ملاحظة:** الإجازة القانونية أيام تقويمية (تشمل الجمعة والسبت)، "
+                "وليس أياماً عمل فقط."
+            )
+        else:
+            msg = (
+                "## Annual Leave & Public Holidays in UAE\n\n"
+                "**Annual leave entitlement (UAE Labour Law):**\n"
+                "- **First 6 months:** Accruing but no leave taken (probation)\n"
+                "- **After 6 months, within first year:** 2 days/month accrual\n"
+                "- **After 1 year of service:** 30 calendar days per year\n"
+                "- Unused leave carried over or paid out depends on your contract\n\n"
+                "**Important note:** UAE counts annual leave in **calendar days**, "
+                "not working days — so weekends and days off within your leave count.\n\n"
+                "**UAE Public Holidays (approx. per year):**\n"
+                "- New Year's Day (1 Jan)\n"
+                "- Eid Al Fitr (3 days — date varies)\n"
+                "- Eid Al Adha (3 days — date varies)\n"
+                "- Islamic New Year (1 day — date varies)\n"
+                "- Prophet's Birthday (1 day — date varies)\n"
+                "- Commemoration Day / Martyrs' Day (30 Nov)\n"
+                "- UAE National Day (2–3 Dec)\n\n"
+                "**Total: ~13–15 public holidays per year.** Islamic holiday dates "
+                "shift annually based on the lunar calendar.\n\n"
+                "**Tip:** Many UAE companies also offer additional leave for weddings, "
+                "bereavement, or maternity/paternity — check your contract."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "annual_leave", "message": msg}
 
     # ── Context-aware help ──────────────────────────────────────────────────────
 
