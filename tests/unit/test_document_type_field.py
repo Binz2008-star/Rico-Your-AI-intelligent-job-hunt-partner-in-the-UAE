@@ -155,3 +155,97 @@ class TestCoverLetterDetection:
             "Why Clients choose us: proven track record.\n"
         )
         assert parser.detect_document_type(text) == "company_profile"
+
+
+# ---------------------------------------------------------------------------
+# Identity document detection
+# ---------------------------------------------------------------------------
+
+class TestIdentityDocumentDetection:
+    def test_passport_number_classifies_as_identity(self, parser):
+        text = (
+            "PASSPORT\n"
+            "Passport Number: A12345678\n"
+            "Date of Birth: 01/01/1990\n"
+            "Nationality: United Arab Emirates\n"
+            "Expiry Date: 31/12/2029\n"
+        )
+        assert parser.detect_document_type(text) == "identity_document"
+
+    def test_emirates_id_classifies_as_identity(self, parser):
+        text = (
+            "Emirates ID\n"
+            "Emirates ID: 784-1990-1234567-8\n"
+            "Date of Birth: 01/01/1990\n"
+            "Nationality: Indian\n"
+        )
+        assert parser.detect_document_type(text) == "identity_document"
+
+    def test_eid_number_classifies_as_identity(self, parser):
+        text = (
+            "EID Number: 784-1985-7654321-1\n"
+            "Name: Ahmed Al-Rashid\n"
+            "Date of Birth: 15/03/1985\n"
+        )
+        assert parser.detect_document_type(text) == "identity_document"
+
+    def test_national_id_number_classifies_as_identity(self, parser):
+        text = (
+            "National ID Number: 784-1990-1234567-8\n"
+            "Name: Maria Santos\n"
+            "Date of Birth: 05/05/1990\n"
+            "Nationality: Filipino\n"
+        )
+        assert parser.detect_document_type(text) == "identity_document"
+
+    def test_cv_with_emirates_id_field_not_reclassified(self, parser):
+        """UAE-format CV with Emirates ID in personal details stays as 'cv'."""
+        text = (
+            "AHMED AL-RASHID\n"
+            "Work Experience\n"
+            "Senior HSE Manager at ABC Corp — 2019 to present\n"
+            "Skills: safety, iso 45001, audit\n"
+            "Education: BSc Environmental Science\n"
+            "Emirates ID: 784-1985-1234567-1\n"
+            "Nationality: UAE\n"
+        )
+        result = parser.detect_document_type(text)
+        assert result == "cv", (
+            f"CV with Emirates ID personal field must not be misclassified: got {result!r}"
+        )
+
+    def test_cv_with_passport_field_not_reclassified(self, parser):
+        """CV that includes passport number in personal details stays as 'cv'."""
+        text = (
+            "John Smith\n"
+            "Work Experience\nSafety Manager 2018-2023\n"
+            "Skills: HSE, audit, iso 45001\n"
+            "Education: MSc Safety Engineering\n"
+            "Passport No: A123456\n"
+            "Nationality: British\n"
+        )
+        result = parser.detect_document_type(text)
+        assert result == "cv", (
+            f"CV with passport field must not be misclassified: got {result!r}"
+        )
+
+    def test_identity_doc_never_classified_as_cv(self, parser):
+        """A pure passport scan must never be classified as 'cv'."""
+        text = (
+            "Passport Number: A12345678\n"
+            "Date of Birth: 01/01/1990\n"
+            "Nationality: India\n"
+            "Expiry Date: 31/12/2029\n"
+        )
+        result = parser.detect_document_type(text)
+        assert result != "cv"
+        assert result == "identity_document"
+
+    def test_parse_bytes_sets_identity_document_type(self, parser):
+        text = (
+            "Emirates ID: 784-1990-1234567-8\n"
+            "Name: Fatima Al-Nasser\n"
+            "Date of Birth: 10/10/1990\n"
+        )
+        result = parser.parse_bytes(text.encode(), "id.txt")
+        assert result.document_type == "identity_document"

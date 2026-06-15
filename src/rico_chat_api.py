@@ -1369,8 +1369,18 @@ class RicoChatAPI:
     )
 
     _DOC_TYPE_LABELS = {
-        "en": {"cv": "CV", "cover_letter": "Cover letter", "other": "Other document"},
-        "ar": {"cv": "سيرة ذاتية", "cover_letter": "رسالة تقديم", "other": "مستند آخر"},
+        "en": {
+            "cv": "CV",
+            "cover_letter": "Cover letter",
+            "other": "Other document",
+            "identity_document": "Identity document",
+        },
+        "ar": {
+            "cv": "سيرة ذاتية",
+            "cover_letter": "رسالة تقديم",
+            "other": "مستند آخر",
+            "identity_document": "مستند هوية",
+        },
     }
 
     def _collect_uploaded_documents(self, user_id: str, profile: Any) -> list[dict[str, Any]]:
@@ -1454,10 +1464,17 @@ class RicoChatAPI:
             )
         else:
             lines = []
+            has_cv_doc = False
+            has_identity_doc = False
             for d in docs:
-                type_label = type_labels.get(d.get("doc_type"), type_labels["other"])
+                dt = d.get("doc_type", "")
+                if dt == "cv":
+                    has_cv_doc = True
+                if dt == "identity_document":
+                    has_identity_doc = True
+                type_label = type_labels.get(dt, type_labels["other"])
                 badges = []
-                if d.get("is_primary") and d.get("doc_type") == "cv":
+                if d.get("is_primary") and dt == "cv":
                     badges.append("⭐ " + ("السيرة الذاتية النشطة" if arabic else "active CV"))
                 if d.get("is_legacy"):
                     badges.append("من الملف الشخصي" if arabic else "from your profile")
@@ -1473,6 +1490,16 @@ class RicoChatAPI:
             )
             header = "ملفاتك المرفوعة:" if arabic else "Your uploaded files:"
             msg = header + "\n" + "\n".join(lines) + "\n\n" + note
+            # If user has identity documents but no CV, add an explicit notice.
+            if has_identity_doc and not has_cv_doc:
+                no_cv_note = (
+                    "\n⚠️ لديك مستندات هوية مرفوعة ولكن لم يُعثر على سيرة ذاتية أو ملف مهني. "
+                    "استخدم زر **رفع السيرة الذاتية** لرفع سيرتك."
+                    if arabic else
+                    "\n⚠️ You have identity documents on file but no CV or resume was found. "
+                    "Use the **Upload CV** button to upload your professional CV."
+                )
+                msg = msg + no_cv_note
 
         self._append_chat(user_id, "assistant", msg)
         return {
@@ -1481,6 +1508,88 @@ class RicoChatAPI:
             "files": docs,
             "next_action": "manage_files",
         }
+
+    def _cv_upload_guidance_with_db_check(
+        self,
+        user_id: str,
+        message: str,
+        profile: Any = None,
+    ) -> Optional[dict[str, Any]]:
+        """Check user_documents before offering CV upload guidance.
+
+        Returns a finalized response when the user already has a CV on file
+        or has only identity documents. Returns None to let normal upload
+        guidance proceed when no documents are found.
+        """
+        try:
+            from src.services.document_resolver import (
+                has_only_identity_documents,
+                resolve_user_cv,
+            )
+            arabic = self._is_arabic_text(message)
+
+            existing_cv = resolve_user_cv(user_id, profile)
+            if existing_cv:
+                filename = existing_cv.get("filename") or ""
+                is_primary = bool(existing_cv.get("is_primary"))
+                if arabic:
+                    label = f"**{filename}**" + (" (النشطة)" if is_primary else "")
+                    msg = (
+                        f"لديك سيرة ذاتية محفوظة بالفعل: {label}. "
+                        "يمكنني استخدامها للبحث عن وظائف مناسبة الآن. "
+                        "لاستبدالها، استخدم زر **رفع السيرة الذاتية**."
+                    )
+                else:
+                    label = f"**{filename}**" + (" (active CV)" if is_primary else "")
+                    msg = (
+                        f"You already have {label} on file. "
+                        "I can use it to match jobs right now. "
+                        "To replace it, use the **Upload CV** button."
+                    )
+                self._append_chat(user_id, "assistant", msg)
+                return self._finalize(
+                    {
+                        "type": "cv_already_exists",
+                        "message": msg,
+                        "cv_filename": filename,
+                        "next_action": "job_search",
+                    },
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
+
+            if has_only_identity_documents(user_id):
+                if arabic:
+                    msg = (
+                        "لديك مستندات مرفوعة (مستندات هوية) ولكن لم يُعثر على سيرة ذاتية. "
+                        "استخدم زر **رفع السيرة الذاتية** لرفع سيرتك المهنية."
+                    )
+                else:
+                    msg = (
+                        "You have uploaded documents, but no CV or resume was found. "
+                        "Use the **Upload CV** button to upload your professional CV."
+                    )
+                self._append_chat(user_id, "assistant", msg)
+                return self._finalize(
+                    {
+                        "type": "cv_upload_guidance",
+                        "message": msg,
+                        "next_action": "upload_cv",
+                        "options": [
+                            {
+                                "action": "upload_cv",
+                                "label": "رفع السيرة الذاتية" if arabic else "Upload CV",
+                                "message": "upload cv",
+                            }
+                        ],
+                    },
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
+        except Exception:
+            logger.warning("_cv_upload_guidance_with_db_check failed user=%s", user_id)
+
+        return None
 
     def _build_openai_context(self, profile: Any, user_id: str | None = None) -> dict[str, Any]:
         """Build context for OpenAI agent from profile and recent conversation history."""
@@ -4224,6 +4333,11 @@ class RicoChatAPI:
             return self._handle_active_user(user_id, message)
 
         if self._looks_like_cv_upload(message) and not self._is_job_request_mentioning_cv(message):
+            # Check user_documents before showing upload guidance — user may already
+            # have a CV on file, or may have uploaded only identity documents.
+            _db_check = self._cv_upload_guidance_with_db_check(user_id, message)
+            if _db_check is not None:
+                return _db_check
             # If the user has announced they have a CV but hasn't attached a file,
             # direct them to the Upload CV button instead of faking a filename.
             if self._looks_like_cv_intent_no_file(message):
@@ -4441,6 +4555,11 @@ class RicoChatAPI:
         # This guard runs before any AI call so the user always gets a clear,
         # deterministic direction instead of a questionnaire or false refusal.
         if self._looks_like_cv_intent_no_file(message):
+            # Check user_documents first — if a CV already exists, confirm it
+            # rather than asking for an upload.
+            _db_check = self._cv_upload_guidance_with_db_check(user_id, message, profile=profile)
+            if _db_check is not None:
+                return _db_check
             arabic = self._is_arabic_text(message)
             if arabic:
                 cv_guidance = (

@@ -47,6 +47,26 @@ class CVParser:
     CERT_HINTS = ["nebosh", "iosh", "iso", "pmp", "six sigma", "osha", "first aid"]
     LANGUAGE_HINTS = ["english", "arabic", "hindi", "urdu", "french", "tagalog"]
 
+    # Unambiguous identity-document markers: passport number, Emirates ID, etc.
+    # A single hit classifies the document as identity_document ONLY when no CV-section
+    # signals are also present — this prevents misclassifying UAE-format CVs that
+    # include an "Emirates ID:" or "Passport:" personal-details field.
+    IDENTITY_SIGNALS = [
+        "passport number",
+        "passport no",
+        "emirates id",
+        "eid no",
+        "eid number",
+        "national id number",
+        "national id no",
+        "identity card number",
+        "national identity number",
+        "machine readable zone",
+        "رقم جواز السفر",       # passport number (Arabic)
+        "الهوية الإماراتية",    # Emirates identity (Arabic)
+        "رقم بطاقة الهوية",     # ID card number (Arabic)
+    ]
+
     # Strong signals that only appear in company-profile documents, not personal CVs.
     # Deliberately excludes "llc", "our services", "our mission", "our vision", "about us"
     # because those appear routinely in employer names and job descriptions inside CVs.
@@ -116,7 +136,7 @@ class CVParser:
     ]
 
     def detect_document_type(self, text: str) -> str:
-        """Detect whether text is a CV, cover letter, company profile, or unknown."""
+        """Detect whether text is a CV, cover letter, company profile, identity document, or unknown."""
         lower = text.lower()
 
         # Personal markers are a strong veto against company_profile.
@@ -124,6 +144,14 @@ class CVParser:
 
         company_score = sum(1 for s in self.COMPANY_SIGNALS if s in lower)
         cv_score = sum(1 for s in self.CV_SIGNALS if s in lower)
+
+        # Identity documents (passport, Emirates ID, national ID): one strong signal is
+        # sufficient when no CV-section headers are present. The cv_score == 0 guard
+        # prevents misclassifying UAE-format CVs that include an "Emirates ID:" field
+        # alongside work-experience and skills sections.
+        has_identity = any(s in lower for s in self.IDENTITY_SIGNALS)
+        if has_identity and cv_score == 0:
+            return "identity_document"
 
         # Require ≥3 strong company signals AND no personal first-person language
         # to avoid false-positives on CVs that quote employer mission statements.
