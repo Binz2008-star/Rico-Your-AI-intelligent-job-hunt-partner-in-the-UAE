@@ -184,6 +184,7 @@ class ConfirmCVProfileRequest(BaseModel):
     """Request to confirm and save CV profile preview."""
     preview: dict[str, Any] = Field(..., description="Profile preview data to confirm")
     filename: str = Field(..., description="Original CV filename")
+    doc_type: str = Field(default="cv", description="Detected document type from upload step")
 
 
 
@@ -1427,7 +1428,7 @@ async def confirm_cv_profile(
                         user_id=resolved_user_id,
                         filename=payload.filename,
                         original_filename=payload.filename,
-                        doc_type="cv",
+                        doc_type=payload.doc_type if payload.doc_type in ("cv", "cover_letter", "other") else "cv",
                         file_size=0,
                         skills_count=len(skills),
                         skills_json=list(skills),
