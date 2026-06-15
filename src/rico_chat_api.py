@@ -709,6 +709,47 @@ _URGENCY_SEARCH_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Salary benchmark — "what does an HSE Manager earn in Dubai?", "how much do project managers make?",
+# "what's the salary range for operations managers?", "market rate for senior engineers UAE".
+# Distinct from _SALARY_SEARCH_RE (filter by minimum) and _SALARY_READBACK_RE (read stored expectation).
+_SALARY_BENCHMARK_RE = re.compile(
+    r"\bwhat\s+(?:is|does|are|would)\s+(?:the\s+)?(?:typical|average|standard|market|normal|usual|expected)?\s*"
+    r"(?:salary|pay|compensation|package|earning)\s+(?:be\s+)?(?:for|of|in)\b"
+    r"|\bwhat\s+(?:does|do)\s+.{1,50}?\b(?:earn|make|get\s+paid)\b"
+    r"|\bhow\s+much\s+(?:does|do|can|should|would)\s+.{0,50}?\b(?:earn|make|get\s+paid|be\s+paid)\b"
+    r"|\bwhat(?:'s|\s+is)\s+(?:the\s+)?(?:salary|pay|compensation)\s+(?:range\s+for|for)\b"
+    r"|\bmarket\s+(?:rate|salary|pay|compensation)\s+for\b"
+    r"|\bwhat\s+can\s+I\s+(?:earn|make)\s+(?:as|working\s+as)\b"
+    r"|\b(?:salary|pay)\s+(?:benchmark|expectations?)\s+(?:for|in)\b"
+    r"|\b(?:كم\s+(?:الراتب|يكسب|يتقاضى)|متوسط\s+الراتب)\b",
+    re.IGNORECASE,
+)
+
+# Career change / transition advice — "I want to switch careers", "how do I transition to PM?",
+# "can I move from engineering to consulting?", "career change tips UAE".
+_CAREER_CHANGE_RE = re.compile(
+    r"\bI\s+(?:want|need|am\s+looking)\s+to\s+(?:change|switch|transition|pivot|move)\s+(?:my\s+)?(?:careers?|fields?|industries?|sector|roles?|jobs?)\b"
+    r"|\bhow\s+(?:do\s+I|can\s+I|to)\s+(?:transition|switch|change|pivot|move)\s+(?:to|from|into|careers?|fields?|industries?|sector)\b"
+    r"|\b(?:career\s+(?:change|switch|pivot|transition|shift|changer))\b"
+    r"|\bcan\s+I\s+(?:move|switch|transition|change)\s+(?:from|to|into)\b"
+    r"|\bI(?:'m|\s+am)\s+(?:looking\s+to\s+|wanting\s+to\s+|thinking\s+(?:of|about)\s+)?(?:pivot|transition|(?:switch|switching)\s+careers?)\b"
+    r"|\b(?:تغيير\s+المسار\s+المهني|تحويل\s+المهنة|التحول\s+الوظيفي)\b",
+    re.IGNORECASE,
+)
+
+# Best employers / top companies — "which companies hire HSE managers?", "best employers in Dubai",
+# "who are the top employers for project managers in UAE?", "top companies to work for".
+_BEST_EMPLOYERS_RE = re.compile(
+    r"\b(?:which|what)\s+(?:companies|employers|organisations?|firms?)\s+(?:hire|hiring|recruit|employ|look\s+for)\b"
+    r"|\bwho\s+(?:are\s+(?:the\s+)?(?:best|top|leading|major)?\s*)?(?:hires?|employs?|recruits?|the\s+(?:best|top|leading)\s+(?:employers?|companies))\b"
+    r"|\b(?:best|top|leading|major|biggest)\s+(?:companies|employers|organisations?|firms?)\s+"
+    r"(?:to\s+work\s+for|in\s+(?:UAE|Dubai|Abu\s+Dhabi|Sharjah)|(?:hiring|that\s+hire)|for\s+\w)\b"
+    r"|\b(?:best|top|leading|major|biggest)\s+(?:companies|employers|organisations?|firms?)\s+for\b"
+    r"|\b(?:top|best|leading|major)\s+(?:UAE|Dubai|Abu\s+Dhabi|Sharjah)\s+(?:employers?|companies|organisations?)\b"
+    r"|\b(?:أفضل\s+(?:شركات|أصحاب\s+عمل)|من\s+يوظف)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -4726,6 +4767,33 @@ class RicoChatAPI:
         if _URGENCY_SEARCH_RE.search(message):
             return self._finalize(
                 self._handle_urgency_search(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Salary benchmark ──────────────────────────────────────────────────
+        # "what does an HSE Manager earn?", "how much do PMs make in Dubai?".
+        if _SALARY_BENCHMARK_RE.search(message):
+            return self._finalize(
+                self._handle_salary_benchmark(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Career change / transition advice ────────────────────────────────
+        # "I want to switch careers", "how do I transition to project management?".
+        if _CAREER_CHANGE_RE.search(message):
+            return self._finalize(
+                self._handle_career_change(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Best employers / top companies query ─────────────────────────────
+        # "which companies hire HSE managers?", "best employers in Dubai".
+        if _BEST_EMPLOYERS_RE.search(message):
+            return self._finalize(
+                self._handle_best_employers(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -10351,6 +10419,328 @@ class RicoChatAPI:
             "timeline": timeline or None,
             "role": role or None,
             "live_jobs": top,
+            "message": msg,
+        }
+
+    # ── Salary benchmark ─────────────────────────────────────────────────────────
+
+    def _handle_salary_benchmark(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        """Return UAE salary benchmark for the queried role."""
+        arabic = self._is_arabic_text(message)
+        msg_lower = message.lower()
+
+        if "abu dhabi" in msg_lower:
+            location = "Abu Dhabi"
+        elif "sharjah" in msg_lower:
+            location = "Sharjah"
+        else:
+            location = "Dubai / UAE"
+
+        # Extract role from message
+        role_hint = ""
+        _role_m = re.search(
+            r"\b(?:as\s+(?:a\s+|an\s+)|for\s+(?:a\s+|an\s+)|of\s+(?:a\s+|an\s+)|does\s+(?:a\s+|an\s+)|do\s+)([A-Z][a-zA-Z &/\-]{3,60})\b",
+            message,
+            re.IGNORECASE,
+        )
+        if _role_m:
+            role_hint = _role_m.group(1).strip()
+        if not role_hint:
+            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            role_hint = target_roles[0] if target_roles else ""
+
+        years_exp = 0
+        try:
+            years_exp = int(self._profile_value(profile, "years_experience") or 0)
+        except (ValueError, TypeError):
+            pass
+
+        if years_exp < 3:
+            tier = "entry"
+        elif years_exp < 8:
+            tier = "mid"
+        else:
+            tier = "senior"
+
+        role_lower = role_hint.lower()
+        if any(x in role_lower for x in ["hse", "safety", "health & safety", "ehs", "environment"]):
+            ranges = {"entry": "8,000–14,000", "mid": "14,000–22,000", "senior": "22,000–38,000"}
+            sector = "HSE / EHS"
+        elif any(x in role_lower for x in ["project manager", "project management"]):
+            ranges = {"entry": "10,000–16,000", "mid": "16,000–28,000", "senior": "28,000–50,000"}
+            sector = "Project Management"
+        elif any(x in role_lower for x in ["engineer", "engineering"]):
+            ranges = {"entry": "7,000–13,000", "mid": "13,000–22,000", "senior": "22,000–40,000"}
+            sector = "Engineering"
+        elif any(x in role_lower for x in ["finance", "financial", "accountant", "accounting", "cfo"]):
+            ranges = {"entry": "6,000–12,000", "mid": "12,000–22,000", "senior": "22,000–45,000"}
+            sector = "Finance / Accounting"
+        elif any(x in role_lower for x in ["software", "developer", "tech", "data", "cloud", "devops", "it manager"]):
+            ranges = {"entry": "8,000–15,000", "mid": "15,000–28,000", "senior": "28,000–55,000"}
+            sector = "Technology / IT"
+        elif any(x in role_lower for x in ["operation", "coo"]):
+            ranges = {"entry": "8,000–14,000", "mid": "14,000–25,000", "senior": "25,000–45,000"}
+            sector = "Operations Management"
+        elif any(x in role_lower for x in ["hr ", "human resource", "talent", "recruitment", "recruiter"]):
+            ranges = {"entry": "6,000–11,000", "mid": "11,000–20,000", "senior": "20,000–38,000"}
+            sector = "Human Resources"
+        elif any(x in role_lower for x in ["marketing", "digital marketing", "brand manager"]):
+            ranges = {"entry": "6,000–11,000", "mid": "11,000–20,000", "senior": "20,000–38,000"}
+            sector = "Marketing"
+        elif any(x in role_lower for x in ["sales", "business development", "account manager"]):
+            ranges = {"entry": "5,000–10,000", "mid": "10,000–20,000", "senior": "20,000–40,000"}
+            sector = "Sales / Business Development"
+        elif any(x in role_lower for x in ["legal", "lawyer", "counsel", "compliance"]):
+            ranges = {"entry": "8,000–15,000", "mid": "15,000–28,000", "senior": "28,000–55,000"}
+            sector = "Legal / Compliance"
+        elif any(x in role_lower for x in ["supply chain", "logistics", "procurement", "warehouse"]):
+            ranges = {"entry": "6,000–11,000", "mid": "11,000–20,000", "senior": "20,000–38,000"}
+            sector = "Supply Chain / Logistics"
+        elif any(x in role_lower for x in ["construction", "site manager", "civil", "architect"]):
+            ranges = {"entry": "7,000–12,000", "mid": "12,000–22,000", "senior": "22,000–40,000"}
+            sector = "Construction"
+        else:
+            ranges = {"entry": "7,000–14,000", "mid": "14,000–25,000", "senior": "25,000–45,000"}
+            sector = "General Professional"
+
+        my_range = ranges[tier]
+        role_display = role_hint or "your target role"
+
+        if arabic:
+            lines = [
+                f"**معدلات رواتب {role_display} في {location} (درهم إماراتي / شهر، معفاة من الضريبة):**",
+                "",
+                f"• مستوى مبتدئ (0–3 سنوات): {ranges['entry']} درهم",
+                f"• مستوى متوسط (3–8 سنوات): {ranges['mid']} درهم",
+                f"• مستوى متقدم (8+ سنوات): {ranges['senior']} درهم",
+                "",
+                f"بناءً على خبرتك ({years_exp} سنوات): **{my_range} درهم / شهر**.",
+                "",
+                "**عوامل تُحرّك الراتب للأعلى:**",
+                "• الجهات الحكومية وشبه الحكومية تدفع أعلى بـ 15–25%",
+                "• السكن والسيارة يضيفان ما يعادل 5,000–8,000 درهم",
+                "• الخبرة المكتسبة في الإمارات تُضيف 10–15%",
+            ]
+        else:
+            lines = [
+                f"**{role_display} salary benchmark in {location} (AED/month, tax-free):**",
+                "",
+                f"• Entry level (0–3 yrs):  AED {ranges['entry']}",
+                f"• Mid level   (3–8 yrs):  AED {ranges['mid']}",
+                f"• Senior level (8+ yrs):  AED {ranges['senior']}",
+                "",
+                f"Based on your {years_exp} years of experience, target: **AED {my_range}/month**.",
+                "",
+                "**What moves salaries higher:**",
+                "• Government / semi-gov roles pay 15–25% above market",
+                "• Housing + car allowance = AED 5,000–8,000 extra monthly value",
+                "• UAE-based experience commands a 10–15% premium",
+                "• ADNOC, DP World, Emirates Group, and Big 4 firms sit at the top of ranges",
+                "",
+                f"Want me to find {role_display} jobs above your target salary?",
+            ]
+
+        msg = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "salary_benchmark",
+            "role": role_hint or None,
+            "sector": sector,
+            "location": location,
+            "tier": tier,
+            "range_aed": my_range,
+            "message": msg,
+        }
+
+    # ── Career change / transition advice ────────────────────────────────────────
+
+    def _handle_career_change(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        """Return career transition advice tailored to UAE job market."""
+        arabic = self._is_arabic_text(message)
+        years_exp = 0
+        try:
+            years_exp = int(self._profile_value(profile, "years_experience") or 0)
+        except (ValueError, TypeError):
+            pass
+
+        current_role = (self._profile_value(profile, "current_role") or "").strip()
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+
+        _to_m = re.search(
+            r"\b(?:to|into|towards?|as\s+(?:a|an))\s+([A-Z][a-zA-Z &/\-]{3,50})\b",
+            message,
+            re.IGNORECASE,
+        )
+        target_from_msg = _to_m.group(1).strip() if _to_m else ""
+        target_role = target_from_msg or (target_roles[0] if target_roles else "")
+
+        _from_m = re.search(
+            r"\b(?:from|out\s+of)\s+([A-Z][a-zA-Z &/\-]{3,50})\b",
+            message,
+            re.IGNORECASE,
+        )
+        source_role = _from_m.group(1).strip() if _from_m else current_role
+
+        if arabic:
+            header = "**نصائح تغيير المسار المهني في الإمارات**"
+            if source_role and target_role:
+                intro = f"الانتقال من **{source_role}** إلى **{target_role}**:"
+            elif target_role:
+                intro = f"الدخول في مجال **{target_role}** في الإمارات:"
+            else:
+                intro = "التحول المهني في الإمارات:"
+
+            if years_exp < 3:
+                timeline_line = "• مع خبرتك الحالية، توقع 3–5 أشهر للتحول."
+            elif years_exp < 8:
+                timeline_line = "• على مستواك، يستغرق التحول المنظم 4–8 أشهر."
+            else:
+                timeline_line = "• على المستوى المتقدم، التحول الكامل يأخذ 6–12 شهراً."
+
+            lines = [
+                header, "", intro, "",
+                "**الخطوات الموصى بها:**",
+                "1. **تحليل الفجوة المهارية** — قارن مهاراتك الحالية بمتطلبات الدور المستهدف",
+                "2. **احصل على شهادات** — المؤهلات المعترف بها دولياً تُسرّع التحول",
+                "3. **ابنِ شبكة علاقات** — 70% من وظائف الإمارات تُملأ عبر التواصل",
+                "4. **حدّث سيرتك** — ركّز على المهارات القابلة للنقل وليس المسمى الوظيفي",
+                "5. **دور جسر** — ابحث عن أدوار تجمع تخصصك الحالي والهدف معاً",
+                "",
+                "**الجدول الزمني:**",
+                timeline_line,
+                "",
+                "**نصائح خاصة بالإمارات:**",
+                "• القطاع الحكومي يتطلب مطابقة دقيقة للمسمى — الانتقال إليه أصعب",
+                "• الشركات الناشئة والاستشارات الأكثر انفتاحاً على المتحولين",
+                "",
+                f"هل تريد البحث عن وظائف في {target_role or 'مجالك الجديد'}؟",
+            ]
+        else:
+            header = "**Career Transition Advice for UAE**"
+            if source_role and target_role:
+                intro = f"Moving from **{source_role}** → **{target_role}** in the UAE:"
+            elif target_role:
+                intro = f"Breaking into **{target_role}** in the UAE:"
+            elif source_role:
+                intro = f"Transitioning out of **{source_role}** in the UAE:"
+            else:
+                intro = "Career change in the UAE:"
+
+            if years_exp < 3:
+                timeline_line = "• At your experience level, expect 3–5 months for an active career change."
+            elif years_exp < 8:
+                timeline_line = "• At your seniority, a structured transition typically takes 4–8 months."
+            else:
+                timeline_line = "• At senior level, a full pivot takes 6–12 months — bridge roles help."
+
+            lines = [
+                header, "", intro, "",
+                "**Recommended steps:**",
+                "1. **Skills gap analysis** — compare current skills to the target role's requirements",
+                "2. **Get certified** — UAE employers respond strongly to internationally recognised credentials",
+                "3. **Network first** — 70% of UAE roles are filled through connections, not portals",
+                "4. **Update your profile** — lead with transferable skills, not job titles",
+                "5. **Bridge role** — find roles that blend your current field with the target",
+                "",
+                "**Realistic timeline:**",
+                timeline_line,
+                "",
+                "**UAE-specific tips:**",
+                "• Government / semi-gov roles require exact title matching — harder to pivot into",
+                "• Startups and consultancies are most open to career changers",
+                "• Emirates-based experience always helps — consider a bridge role first",
+                "",
+                f"Want me to search for {target_role or 'your new target role'} jobs that welcome career changers?",
+            ]
+
+        msg = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "career_change_advice",
+            "source_role": source_role or None,
+            "target_role": target_role or None,
+            "message": msg,
+        }
+
+    # ── Best employers / top companies ───────────────────────────────────────────
+
+    def _handle_best_employers(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        """Return top employers for the queried role/sector in UAE via live JSearch."""
+        arabic = self._is_arabic_text(message)
+        msg_lower = message.lower()
+
+        if "abu dhabi" in msg_lower:
+            location_hint = "Abu Dhabi"
+        elif "sharjah" in msg_lower:
+            location_hint = "Sharjah"
+        else:
+            location_hint = "Dubai"
+
+        # Extract role from message
+        role = ""
+        _role_m = re.search(
+            r"\b(?:hire|hiring|employ|recruit|for)\s+(.{3,50}?)\s*(?:in\s+(?:UAE|Dubai|Abu\s+Dhabi)|$|\?)",
+            message,
+            re.IGNORECASE,
+        )
+        if _role_m:
+            role = _role_m.group(1).strip()
+        if not role:
+            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            role = target_roles[0] if target_roles else ""
+
+        query = f"{role} jobs" if role else "professional jobs"
+        results: dict = {}
+        try:
+            results = self._search_jsearch_meta(query, location=location_hint)
+        except Exception:
+            pass
+
+        items = results.get("data", []) if isinstance(results, dict) else []
+        from collections import Counter as _Counter
+        employer_counts: _Counter = _Counter()
+        for item in items[:30]:
+            emp = (item.get("employer_name") or "").strip()
+            if emp:
+                employer_counts[emp] += 1
+        top_employers = [emp for emp, _ in employer_counts.most_common(8)]
+
+        if arabic:
+            if top_employers:
+                emp_list = "\n".join(f"• {e}" for e in top_employers)
+                msg = (
+                    f"**أبرز الشركات التي توظف {role or 'في مجالك'} في {location_hint} الآن:**\n\n"
+                    f"{emp_list}\n\n"
+                    "تابع صفحات هذه الشركات على LinkedIn وBayt لتكون أول من يتقدم."
+                )
+            else:
+                msg = (
+                    f"لم أجد بيانات كافية الآن. جرّب البحث على Bayt وNaukrigulf وGulfTalent "
+                    "للحصول على قائمة شاملة بأبرز أصحاب العمل في الإمارات."
+                )
+        else:
+            if top_employers:
+                emp_list = "\n".join(f"• {e}" for e in top_employers)
+                msg = (
+                    f"**Top employers hiring {role or 'in your field'} in {location_hint} right now:**\n\n"
+                    f"{emp_list}\n\n"
+                    "Follow these companies on LinkedIn and Bayt to be first to apply when new roles open. "
+                    "Want me to search for open positions at any of these employers?"
+                )
+            else:
+                msg = (
+                    f"I couldn't pull live employer data for {location_hint} right now. "
+                    "Top UAE employers generally include ADNOC, DP World, Emirates Group, Emaar, "
+                    "ALDAR, Mubadala, and major Big 4 consultancies. "
+                    "Want me to search for specific roles?"
+                )
+
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "best_employers",
+            "role": role or None,
+            "location": location_hint,
+            "employers": top_employers,
             "message": msg,
         }
 

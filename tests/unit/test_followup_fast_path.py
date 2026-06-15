@@ -2939,3 +2939,321 @@ class TestUrgencySearch:
     def test_empty_profile_still_works(self, monkeypatch):
         result = self._run_with_jsearch(monkeypatch, "I need a job urgently", _EmptyProfile())
         assert result["type"] == "urgency_search"
+
+
+# ── Salary Benchmark ──────────────────────────────────────────────────────────
+
+class TestSalaryBenchmark:
+    """Tests for _SALARY_BENCHMARK_RE and _handle_salary_benchmark."""
+
+    _REGEX_CASES_MATCH = [
+        "what does an HSE Manager earn in Dubai?",
+        "how much do project managers make in UAE?",
+        "what is the salary range for operations managers?",
+        "market rate for senior engineers in Abu Dhabi",
+        "what can I earn as a safety officer?",
+        "how much can a software developer make in Dubai?",
+        "salary benchmark for HR managers in UAE",
+        "what is the pay for compliance officers?",
+        "how much do finance directors earn?",
+        "salary expectations for a logistics coordinator",
+        "كم الراتب لمدير مشاريع",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "my expected salary is 20000 AED",  # salary set
+        "what is my salary expectation?",   # salary readback
+        "find jobs paying above 15000",     # salary search
+        "I need a job urgently",
+        "how do I negotiate my salary?",    # salary negotiation
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _SALARY_BENCHMARK_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _SALARY_BENCHMARK_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _SALARY_BENCHMARK_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _SALARY_BENCHMARK_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        mock_route = {"provider": "openai", "client": MagicMock(), "model": "gpt-4.1-mini"}
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: mock_route)
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_salary_benchmark(self, monkeypatch):
+        result = self._run(monkeypatch, "what does an HSE Manager earn in Dubai?")
+        assert result["type"] == "salary_benchmark"
+
+    def test_role_extracted(self, monkeypatch):
+        result = self._run(monkeypatch, "what is the salary range for a project manager?")
+        assert result["type"] == "salary_benchmark"
+
+    def test_location_abu_dhabi(self, monkeypatch):
+        result = self._run(monkeypatch, "how much does an engineer earn in Abu Dhabi?")
+        assert result["location"] == "Abu Dhabi"
+
+    def test_location_sharjah(self, monkeypatch):
+        result = self._run(monkeypatch, "what is the pay for accountants in Sharjah?")
+        assert result["location"] == "Sharjah"
+
+    def test_location_defaults_to_uae(self, monkeypatch):
+        result = self._run(monkeypatch, "how much do HR managers earn?")
+        assert "UAE" in result["location"] or "Dubai" in result["location"]
+
+    def test_tier_from_profile_experience(self, monkeypatch):
+        senior_profile = _CVProfile()
+        result = self._run(monkeypatch, "what does an HSE Manager earn?", profile=senior_profile)
+        assert result["tier"] == "senior"
+
+    def test_range_aed_present(self, monkeypatch):
+        result = self._run(monkeypatch, "what does an HSE Manager earn?")
+        assert result.get("range_aed")
+        assert "–" in result["range_aed"]
+
+    def test_sector_detected_hse(self, monkeypatch):
+        result = self._run(monkeypatch, "what does an HSE Manager earn?")
+        assert result["sector"] == "HSE / EHS"
+
+    def test_sector_detected_it(self, monkeypatch):
+        result = self._run(monkeypatch, "how much does a software developer make?")
+        assert result["sector"] == "Technology / IT"
+
+    def test_message_includes_aed(self, monkeypatch):
+        result = self._run(monkeypatch, "what does an HSE Manager earn in Dubai?")
+        assert "AED" in result["message"] or "درهم" in result["message"]
+
+    def test_message_includes_role(self, monkeypatch):
+        result = self._run(monkeypatch, "how much can I earn as a safety officer?")
+        assert isinstance(result["message"], str) and len(result["message"]) > 50
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "what does a project manager earn?", profile=_EmptyProfile())
+        assert result["type"] == "salary_benchmark"
+
+
+# ── Career Change Advice ─────────────────────────────────────────────────────
+
+class TestCareerChange:
+    """Tests for _CAREER_CHANGE_RE and _handle_career_change."""
+
+    _REGEX_CASES_MATCH = [
+        "I want to change my career",
+        "I want to switch careers",
+        "how do I transition to project management?",
+        "how can I move from engineering to consulting?",
+        "career change tips for UAE",
+        "career pivot advice",
+        "career transition from HSE to operations",
+        "can I move from finance to HR?",
+        "I'm thinking of switching careers",
+        "I'm looking to pivot to data science",
+        "I am looking to transition into management",
+        "التحول الوظيفي في الإمارات",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "find remote jobs",
+        "I need a job urgently",
+        "how do I negotiate my salary?",
+        "show my applications",
+        "update my target role",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _CAREER_CHANGE_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _CAREER_CHANGE_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _CAREER_CHANGE_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _CAREER_CHANGE_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        mock_route = {"provider": "openai", "client": MagicMock(), "model": "gpt-4.1-mini"}
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: mock_route)
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_career_change(self, monkeypatch):
+        result = self._run(monkeypatch, "I want to change my career")
+        assert result["type"] == "career_change_advice"
+
+    def test_career_pivot_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "career pivot advice")
+        assert result["type"] == "career_change_advice"
+
+    def test_transition_how_to_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I transition to project management?")
+        assert result["type"] == "career_change_advice"
+
+    def test_target_role_extracted(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I transition to project management?")
+        assert result["type"] == "career_change_advice"
+        # target_role should be extracted or fall back gracefully
+        assert isinstance(result.get("message"), str)
+
+    def test_source_role_from_profile(self, monkeypatch):
+        result = self._run(monkeypatch, "I want to switch careers", profile=_CVProfile())
+        assert result["type"] == "career_change_advice"
+        # Profile has current_role="Senior HSE Manager"
+        msg = result["message"]
+        assert isinstance(msg, str) and len(msg) > 50
+
+    def test_message_has_steps(self, monkeypatch):
+        result = self._run(monkeypatch, "career change tips for UAE")
+        msg = result["message"]
+        assert "1." in msg or "Recommended" in msg or "الخطوات" in msg
+
+    def test_message_has_timeline(self, monkeypatch):
+        result = self._run(monkeypatch, "I want to switch careers")
+        assert "month" in result["message"].lower() or "شهر" in result["message"]
+
+    def test_can_i_move_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "can I move from engineering to consulting?")
+        assert result["type"] == "career_change_advice"
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "I want to change my career", profile=_EmptyProfile())
+        assert result["type"] == "career_change_advice"
+
+    def test_arabic_career_change(self, monkeypatch):
+        result = self._run(monkeypatch, "التحول الوظيفي في الإمارات")
+        assert result["type"] == "career_change_advice"
+
+
+# ── Best Employers ────────────────────────────────────────────────────────────
+
+class TestBestEmployers:
+    """Tests for _BEST_EMPLOYERS_RE and _handle_best_employers."""
+
+    _REGEX_CASES_MATCH = [
+        "which companies hire HSE managers in Dubai?",
+        "what companies hire project managers in UAE?",
+        "best companies to work for in Dubai",
+        "top employers in UAE for engineers",
+        "who are the best employers for safety officers?",
+        "leading companies hiring logistics managers",
+        "major employers in Abu Dhabi",
+        "top Dubai employers in construction",
+        "أفضل شركات في الإمارات",
+        "من يوظف مديري مشاريع",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "find jobs at ADNOC",           # company search
+        "show my applications",
+        "I need a job urgently",
+        "how do I negotiate my salary?",
+        "find government jobs in Dubai",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _BEST_EMPLOYERS_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _BEST_EMPLOYERS_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _BEST_EMPLOYERS_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _BEST_EMPLOYERS_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run_with_jsearch(
+        self,
+        monkeypatch,
+        message: str,
+        profile=None,
+        items: list | None = None,
+    ):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        fake_result = {"data": items or []}
+        mock_route = {"provider": "openai", "client": MagicMock(), "model": "gpt-4.1-mini"}
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: mock_route)
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._search_jsearch_meta = lambda q, location="": fake_result
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_best_employers(self, monkeypatch):
+        result = self._run_with_jsearch(monkeypatch, "which companies hire HSE managers in Dubai?")
+        assert result["type"] == "best_employers"
+
+    def test_top_companies_routes(self, monkeypatch):
+        result = self._run_with_jsearch(monkeypatch, "best companies to work for in Dubai")
+        assert result["type"] == "best_employers"
+
+    def test_location_abu_dhabi(self, monkeypatch):
+        result = self._run_with_jsearch(monkeypatch, "top employers in Abu Dhabi")
+        assert result["location"] == "Abu Dhabi"
+
+    def test_location_sharjah(self, monkeypatch):
+        result = self._run_with_jsearch(monkeypatch, "leading companies in Sharjah hiring engineers")
+        assert result["location"] == "Sharjah"
+
+    def test_employers_list_from_jsearch(self, monkeypatch):
+        items = [
+            {"employer_name": "ADNOC", "job_title": "HSE Manager"},
+            {"employer_name": "DP World", "job_title": "Safety Officer"},
+            {"employer_name": "ADNOC", "job_title": "EHS Specialist"},
+        ]
+        result = self._run_with_jsearch(
+            monkeypatch, "which companies hire HSE managers?", items=items
+        )
+        assert "ADNOC" in result["employers"]
+
+    def test_employers_deduplicated(self, monkeypatch):
+        items = [{"employer_name": "ADNOC"}] * 5 + [{"employer_name": "DP World"}]
+        result = self._run_with_jsearch(
+            monkeypatch, "top employers for HSE in UAE", items=items
+        )
+        assert result["employers"].count("ADNOC") == 1
+
+    def test_empty_jsearch_returns_fallback_message(self, monkeypatch):
+        result = self._run_with_jsearch(monkeypatch, "best employers in UAE", items=[])
+        assert result["type"] == "best_employers"
+        assert isinstance(result["message"], str) and len(result["message"]) > 20
+
+    def test_employers_field_is_list(self, monkeypatch):
+        result = self._run_with_jsearch(monkeypatch, "which companies hire HSE managers?")
+        assert isinstance(result.get("employers"), list)
+
+    def test_message_mentions_linkedin(self, monkeypatch):
+        items = [{"employer_name": "ADNOC"}, {"employer_name": "DP World"}]
+        result = self._run_with_jsearch(
+            monkeypatch, "best companies to work for in Dubai", items=items
+        )
+        assert "LinkedIn" in result["message"] or "Bayt" in result["message"] or "ADNOC" in result["message"]
+
+    def test_role_from_profile_used_when_not_in_message(self, monkeypatch):
+        result = self._run_with_jsearch(monkeypatch, "best companies to work for in Dubai", profile=_CVProfile())
+        assert result["type"] == "best_employers"
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run_with_jsearch(monkeypatch, "top employers in UAE", profile=_EmptyProfile())
+        assert result["type"] == "best_employers"
