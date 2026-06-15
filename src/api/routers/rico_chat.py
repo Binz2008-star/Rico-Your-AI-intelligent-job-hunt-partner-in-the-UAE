@@ -1218,46 +1218,11 @@ async def rico_upload_cv(
                 ),
             }
 
-        # Log CV upload details for debugging
+        # document_type is set by CVParser.parse_bytes; default to "unknown" defensively.
+        doc_type = parsed.get("document_type", "unknown")
+
         logger.info(
             "cv_upload user=%s filename=%s doc_type=%s quality=%s chars=%d skills=%d request_ref=%s",
-            resolved_user_id,
-            safe_name,
-            "unknown",  # Will be updated after detection
-            parsed.get("extraction_quality", "unknown"),
-            parsed.get("extracted_chars", 0),
-            len(parsed.get("skills", [])),
-            request_ref,
-        )
-
-        # Detect document type to prevent company profiles from being treated as CVs
-        from src.cv_parser import CVParser
-        try:
-            parser = CVParser()
-            if hasattr(parser, "detect_document_type"):
-                doc_type = parser.detect_document_type(parsed.get("text", ""))
-            else:
-                # Fallback if detect_document_type doesn't exist in production
-                logger.warning(
-                    "cv_upload_detect_method_missing ref=%s user=%s filename=%s",
-                    request_ref,
-                    resolved_user_id,
-                    safe_name,
-                )
-                doc_type = "cv"  # Default to CV if method doesn't exist
-        except Exception as exc:
-            logger.exception(
-                "cv_upload_detect_error ref=%s user=%s filename=%s error=%s",
-                request_ref,
-                resolved_user_id,
-                safe_name,
-                str(exc),
-            )
-            doc_type = "cv"  # Default to CV on detection error
-
-        # Update log with detected document type
-        logger.info(
-            "cv_upload_detected user=%s filename=%s doc_type=%s quality=%s chars=%d skills=%d request_ref=%s",
             resolved_user_id,
             safe_name,
             doc_type,
@@ -1266,6 +1231,29 @@ async def rico_upload_cv(
             len(parsed.get("skills", [])),
             request_ref,
         )
+
+        # Reject identity documents (passport, Emirates ID, national ID).
+        # Do NOT include parsed content in the response — sensitive identity data
+        # must never be echoed back through the API.
+        if doc_type == "identity_document":
+            _metrics.record_request((time.time() - start_time) * 1000)
+            logger.warning(
+                "cv_upload_rejected user=%s filename=%s doc_type=%s reason=identity_doc request_ref=%s",
+                resolved_user_id,
+                safe_name,
+                doc_type,
+                request_ref,
+            )
+            return {
+                "ok": False,
+                "status": "rejected",
+                "document_type": doc_type,
+                "message": (
+                    "This document appears to be a passport or identity document. "
+                    "For your security, it was not saved and your profile was not changed. "
+                    "Please upload a CV or resume instead."
+                ),
+            }
 
         # Only reject confirmed company profiles — "unknown" passes through so
         # sparse-but-valid CVs (few section headers) are not incorrectly rejected.
