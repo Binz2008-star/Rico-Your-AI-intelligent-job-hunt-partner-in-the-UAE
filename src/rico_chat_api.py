@@ -1119,6 +1119,285 @@ _ANNUAL_LEAVE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Sick / medical leave in UAE — "how many sick days do I get?",
+# "sick leave rules UAE", "what is the sick leave policy?".
+_SICK_LEAVE_RE = re.compile(
+    r"\b(?:how\s+(?:many|much)\s+sick\s+(?:days?|leave)\s+(?:do\s+I\s+(?:get|have)|am\s+I\s+entitled\s+to|in\s+UAE))\b"
+    r"|\b(?:sick\s+(?:leave|day|days?)\s+(?:policy|rules?|UAE|Dubai|entitlement|rights?|law))\b"
+    r"|\b(?:(?:UAE|Dubai)\s+sick\s+(?:leave|day|days?)\s+(?:policy|rules?|entitlement|rights?|law))\b"
+    r"|\b(?:medical\s+leave\s+(?:UAE|Dubai|entitlement|rights?|policy|rules?))\b"
+    r"|\b(?:what\s+(?:is|are)\s+(?:the\s+)?sick\s+(?:leave\s+)?(?:policy|rules?|entitlement)\s+(?:in\s+(?:UAE|Dubai))?)\b"
+    r"|\b(?:how\s+long\s+can\s+I\s+(?:take|be\s+on)\s+sick\s+leave)\b"
+    r"|\b(?:إجازة\s+مرضية\s+(?:في\s+الإمارات|الإمارات)|أيام\s+الإجازة\s+المرضية)\b",
+    re.IGNORECASE,
+)
+
+# Maternity / paternity leave in UAE — "how much maternity leave in UAE?",
+# "paternity leave UAE", "parental leave rights UAE".
+_PARENTAL_LEAVE_RE = re.compile(
+    r"\b(?:how\s+(?:much|many\s+(?:weeks?|days?))\s+(?:maternity|paternity|parental)\s+leave\s+(?:do\s+I\s+get|in\s+UAE|am\s+I\s+entitled\s+to))\b"
+    r"|\b(?:(?:maternity|paternity|parental)\s+leave\s+(?:UAE|Dubai|entitlement|rights?|policy|rules?|law|paid|weeks?|months?))\b"
+    r"|\b(?:(?:UAE|Dubai)\s+(?:maternity|paternity|parental)\s+leave\s+(?:policy|rules?|entitlement|rights?|law))\b"
+    r"|\b(?:am\s+I\s+(?:entitled|eligible)\s+(?:to|for)\s+(?:maternity|paternity|parental)\s+leave)\b"
+    r"|\b(?:is\s+(?:maternity|paternity|parental)\s+leave\s+(?:paid|mandatory|legal|required)\s+(?:in\s+(?:UAE|Dubai))?)\b"
+    r"|\b(?:إجازة\s+(?:الأمومة|الأبوة|الوضع)\s+(?:في\s+الإمارات|الإمارات|المدفوعة))\b",
+    re.IGNORECASE,
+)
+
+# Probation period rules — "what happens during probation?", "can I be fired during probation?",
+# "how long is probation?". Distinct from UAE labor law general handler.
+_PROBATION_RULES_RE = re.compile(
+    r"\b(?:what\s+(?:happens?|can\s+(?:they|my\s+employer)\s+do)\s+during\s+(?:my\s+)?probation(?:ary)?(?:\s+period)?)\b"
+    r"|\b(?:can\s+(?:I\s+be|my\s+employer)\s+(?:fired?|dismiss(?:ed)?|terminat(?:ed?|e))\s+during\s+(?:my\s+)?probation(?:ary)?(?:\s+period)?)\b"
+    r"|\b(?:can\s+I\s+(?:resign|quit|leave)\s+during\s+(?:my\s+)?probation(?:ary)?(?:\s+period)?)\b"
+    r"|\b(?:how\s+long\s+is\s+(?:the\s+)?probation(?:ary)?(?:\s+period)?)\b"
+    r"|\b(?:probation(?:ary)?\s+period\s+(?:rules?|rights?|notice|termination|dismissal|resignation|notice\s+period|UAE|Dubai))\b"
+    r"|\b(?:what\s+(?:are\s+(?:(?:my|the)\s+)?)?(?:rights?|rules?)\s+during\s+(?:my\s+)?probation(?:ary)?(?:\s+period)?)\b"
+    r"|\b(?:فترة\s+(?:التجربة|الاختبار)\s+(?:في\s+الإمارات|أحكام|حقوق|إنهاء))\b",
+    re.IGNORECASE,
+)
+
+# Termination notice period in UAE — "how much notice do I need to give?",
+# "notice period UAE", "can my employer fire me without notice?".
+_NOTICE_PERIOD_RE = re.compile(
+    r"\b(?:how\s+(?:much|long\s+(?:a?\s+)?is\s+(?:the\s+)?|many\s+days\s+(?:is\s+)?)\s*notice\s+(?:do\s+I\s+(?:need\s+to\s+give|have\s+to\s+give|need)|period|must\s+I\s+give))\b"
+    r"|\b(?:what\s+(?:is|are|'s)\s+(?:the\s+)?(?:my\s+)?notice\s+period(?:\s+(?:in\s+(?:UAE|Dubai)|UAE|Dubai|rules?|law|requirement|for\s+resignation|for\s+termination))?)\b"
+    r"|\b(?:notice\s+period\s+(?:in\s+(?:UAE|Dubai)|UAE|Dubai|rules?|law|requirement|for\s+resignation|for\s+termination))\b"
+    r"|\b(?:can\s+(?:my\s+)?(?:employer|company|they)\s+(?:fire|dismiss|terminate|let\s+me\s+go)\s+(?:me\s+)?(?:without|with\s+no)\s+notice)\b"
+    r"|\b(?:how\s+(?:much|many)\s+notice\s+(?:do\s+I\s+(?:need\s+to\s+give|have\s+to\s+give)|must\s+I\s+give)\s+(?:when\s+)?(?:resigning|quitting|leaving|if\s+I\s+resign|if\s+I\s+quit))\b"
+    r"|\b(?:(?:resignation|termination|dismissal)\s+notice\s+(?:period|UAE|Dubai|rules?|law|requirement))\b"
+    r"|\b(?:what\s+(?:is|are)\s+(?:the\s+)?(?:notice|resignation|termination)\s+(?:period\s+)?(?:rules?|requirements?|laws?)\s+(?:in\s+(?:UAE|Dubai))?)\b"
+    r"|\b(?:مدة\s+الإخطار|فترة\s+الإشعار\s+(?:في\s+الإمارات|عند\s+الاستقالة)|الإخطار\s+بإنهاء\s+العقد)\b",
+    re.IGNORECASE,
+)
+
+# UAE Wage Protection System (WPS) — "what is WPS?", "my salary is late",
+# "employer not paying salary on time UAE".
+_WPS_SALARY_PROTECTION_RE = re.compile(
+    r"\b(?:what\s+is\s+(?:the\s+)?(?:UAE\s+)?(?:WPS|wage\s+protection\s+system))\b"
+    r"|\b(?:WPS\s+(?:UAE|Dubai|law|rules?|fine|salary|payment|system))\b"
+    r"|\b(?:my\s+(?:salary|wage|pay)\s+(?:is|was|has\s+been)\s+(?:late|delayed|not\s+paid|overdue|unpaid|withheld))\b"
+    r"|\b(?:(?:employer|company|they)\s+(?:is|has|hasn't|have\s+not|has\s+not)\s+(?:not\s+)?(?:paid|paying)\s+(?:my\s+)?(?:salary|wages?|pay)(?:\s+(?:on\s+time|late|yet))?)\b"
+    r"|\b(?:(?:salary|wage)\s+(?:protection|late\s+payment|not\s+paid|delay|delayed|overdue|withheld)\s+(?:UAE|Dubai|law|rules?|complaint|fine)?)\b"
+    r"|\b(?:how\s+(?:do\s+I|to|can\s+I)\s+(?:report|complain\s+about|file\s+a\s+complaint\s+(?:about|for))\s+(?:(?:a\s+)?(?:late|unpaid|withheld)\s+)?(?:salary|wage|pay))\b"
+    r"|\b(?:late\s+(?:salary|wage|pay|payment)\s+(?:UAE|Dubai)?)\b"
+    r"|\b(?:nakheel\s+(?:salary|complaint)|mohre\s+(?:salary|complaint|WPS))\b"
+    r"|\b(?:نظام\s+حماية\s+الأجور|تأخر\s+(?:صرف\s+)?الراتب\s+(?:في\s+الإمارات)?|الراتب\s+(?:متأخر|لم\s+يُصرف))\b",
+    re.IGNORECASE,
+)
+
+# Employer-provided health insurance in UAE — "do I get health insurance from my employer?",
+# "is medical insurance mandatory UAE?", "what does company health insurance cover?".
+_EMPLOYER_HEALTH_INSURANCE_RE = re.compile(
+    r"\b(?:(?:do|does|will|is)\s+(?:my\s+)?(?:employer|company|they)\s+(?:provide|give|cover|offer|include)\s+(?:me\s+)?(?:health|medical)\s+insurance)\b"
+    r"|\b(?:is\s+(?:health|medical)\s+insurance\s+(?:mandatory|required|provided|included|compulsory|a\s+benefit)\s+(?:in\s+(?:UAE|Dubai))?)\b"
+    r"|\b(?:(?:health|medical)\s+insurance\s+(?:UAE|Dubai|provided\s+by\s+employer|from\s+employer|mandatory|compulsory|benefit|coverage|law))\b"
+    r"|\b(?:what\s+(?:does|do|is)\s+(?:(?:(?:the|my|a)\s+)?(?:company|employer|work)\s+)?(?:health|medical)\s+insurance\s+(?:cover|include|provide))\b"
+    r"|\b(?:(?:company|employer|work)\s+(?:health|medical)\s+insurance\s+(?:UAE|Dubai|coverage|plan|policy|benefit))\b"
+    r"|\b(?:do\s+I\s+(?:get|have|need)\s+(?:to\s+buy|my\s+own\s+)?(?:health|medical)\s+insurance\s+(?:in\s+(?:UAE|Dubai))?)\b"
+    r"|\b(?:تأمين\s+صحي\s+(?:من\s+صاحب\s+العمل|الإمارات|إلزامي|مقدم))\b",
+    re.IGNORECASE,
+)
+
+# Visa cancellation grace period — "how long do I have after my visa is cancelled?",
+# "grace period after resignation UAE", "how long can I stay after losing my job UAE".
+_VISA_CANCELLATION_RE = re.compile(
+    r"\b(?:how\s+long\s+(?:do\s+I\s+have|can\s+I\s+stay)\s+(?:after|once)\s+(?:my\s+)?visa\s+(?:is\s+)?(?:cancelled|canceled|terminated|expired|ends?))\b"
+    r"|\b(?:how\s+long\s+(?:do\s+I\s+have|can\s+I\s+stay)\s+(?:in\s+(?:UAE|Dubai)\s+)?after\s+(?:losing|leaving|quitting|resigning\s+from|being\s+fired\s+from|termination\s+of)\s+(?:my\s+)?job)\b"
+    r"|\b(?:visa\s+cancellation\s+(?:grace\s+period|UAE|Dubai|process|time\s+(?:to\s+leave|limit)|how\s+long))\b"
+    r"|\b(?:grace\s+period\s+after\s+(?:visa\s+cancellation|job\s+loss|resignation|termination)(?:\s+(?:UAE|Dubai))?)\b"
+    r"|\b(?:(?:what\s+happens?\s+to\s+(?:my\s+)?visa|what\s+(?:is|are)\s+(?:my\s+)?visa\s+(?:options?|status))\s+(?:after|when|once|if)\s+(?:I\s+(?:resign|quit|lose\s+(?:my\s+)?job)|(?:my\s+)?(?:job|contract)\s+(?:ends?|is\s+terminated)))\b"
+    r"|\b(?:how\s+(?:soon|quickly)\s+(?:do\s+I\s+have\s+to|must\s+I)\s+(?:leave|exit|depart)\s+(?:UAE|Dubai|the\s+country)\s+after\s+(?:losing|leaving)\s+(?:my\s+)?job)\b"
+    r"|\b(?:(?:can\s+I|am\s+I\s+allowed\s+to)\s+stay\s+in\s+(?:UAE|Dubai)\s+after\s+(?:my\s+)?(?:visa\s+(?:is\s+)?(?:cancelled|canceled)|job\s+ends?))\b"
+    r"|\b(?:تأشيرة\s+بعد\s+(?:فقدان|ترك)\s+العمل|فترة\s+السماح\s+بعد\s+إلغاء\s+التأشيرة|مدة\s+البقاء\s+بعد\s+إلغاء\s+التأشيرة)\b",
+    re.IGNORECASE,
+)
+
+# Emiratisation / Nafis impact on expat hiring — "does Emiratisation affect my chances?",
+# "what is Nafis?", "can expats still get jobs with Emiratisation?".
+_EMIRATISATION_RE = re.compile(
+    r"\b(?:what\s+is\s+(?:Emiratisation|Nafis|Emirati\s+workforce\s+(?:quota|target)))\b"
+    r"|\b(?:how\s+(?:does|do)\s+(?:Emiratisation|Nafis)\s+(?:affect|impact|work|apply|influence))\b"
+    r"|\b(?:(?:does|will)\s+Emiratisation\s+(?:affect|impact|hurt|reduce|limit)\s+(?:my\s+)?(?:chances?|job\s+chances?|job\s+prospects?|applications?|opportunities?))\b"
+    r"|\b(?:(?:can|do)\s+expats?\s+(?:still|even)\s+(?:get|find|apply\s+for)\s+jobs?\s+(?:in\s+(?:UAE|Dubai)\s+)?(?:with|despite|under)\s+Emiratisation)\b"
+    r"|\b(?:Emiratisation\s+(?:quota|target|rules?|laws?|requirements?|UAE|Dubai|policy|percentage))\b"
+    r"|\b(?:Nafis\s+(?:UAE|Dubai|programme|program|scheme|subsidy|benefit|quota|policy))\b"
+    r"|\b(?:(?:UAE|Dubai)\s+Emiratisation\s+(?:quota|target|percentage|rules?|impact|policy))\b"
+    r"|\b(?:التوطين\s+(?:في\s+الإمارات|الإمارات|النسب|السياسة)|برنامج\s+نافس|نسبة\s+التوطين)\b",
+    re.IGNORECASE,
+)
+
+# Job scam detection in UAE — "how do I know if a UAE job offer is a scam?",
+# "is this job offer real?", "red flags in UAE job offers".
+_JOB_SCAM_RE = re.compile(
+    r"\b(?:how\s+(?:do\s+I|to|can\s+I)\s+(?:know|tell|spot|identify|detect|avoid|check)\s+(?:if\s+(?:a\s+|the\s+|this\s+)?)?(?:UAE\s+)?(?:job\s+offer|job|opportunity|recruiter)\s+is\s+(?:a\s+)?(?:scam|fake|fraud|legitimate|legit|real))\b"
+    r"|\b(?:is\s+(?:this|that|the)\s+(?:job\s+offer|job|opportunity|recruiter|company)\s+(?:a\s+)?(?:scam|fake|fraud|legit|legitimate|real))\b"
+    r"|\b(?:(?:job|recruitment|employment)\s+(?:scam|fraud|fake\s+offer)\s+(?:UAE|Dubai|signs?|red\s+flags?|warning\s+signs?|how\s+to\s+(?:spot|avoid)))\b"
+    r"|\b(?:red\s+flags?\s+(?:in|for|of)\s+(?:(?:UAE|Dubai)\s+)?(?:job\s+offers?|job\s+listings?|recruiters?|job\s+ads?))\b"
+    r"|\b(?:(?:how\s+to|can\s+I)\s+(?:verify|check|confirm)\s+(?:a\s+|the\s+|if\s+(?:a\s+|the\s+)?)?(?:job\s+offer|company|recruiter)\s+is\s+(?:legitimate|legit|real|genuine))\b"
+    r"|\b(?:(?:I\s+think|is\s+it\s+possible\s+that|could)\s+this\s+(?:job\s+offer|job|opportunity)\s+(?:is|be)\s+(?:a\s+)?(?:scam|fake|too\s+good\s+to\s+be\s+true))\b"
+    r"|\b(?:fake\s+(?:job|work)\s+(?:offer|listing|ad|opportunity)(?:\s+(?:UAE|Dubai))?)\b"
+    r"|\b(?:احتيال\s+وظيفي\s+(?:في\s+الإمارات|الإمارات)|عروض\s+عمل\s+وهمية|كيف\s+أعرف\s+(?:إذا|إن)\s+(?:كان\s+)?العرض\s+حقيقي)\b",
+    re.IGNORECASE,
+)
+
+# Salary certificate / employment letter in UAE — "how do I get a salary certificate?",
+# "my bank needs an employment letter", "what is a NOC letter?".
+_SALARY_CERTIFICATE_RE = re.compile(
+    r"\b(?:how\s+(?:do\s+I|to|can\s+I)\s+(?:get|obtain|request|ask\s+for)\s+(?:a\s+|an\s+)?(?:salary\s+certificate|employment\s+(?:letter|certificate)|NOC\s+letter|no\s+objection\s+certificate|salary\s+letter))\b"
+    r"|\b(?:(?:salary\s+certificate|employment\s+letter|NOC\s+letter|no\s+objection\s+certificate|salary\s+letter)\s+(?:UAE|Dubai|from\s+employer|request|for\s+(?:bank|visa|loan|mortgage)))\b"
+    r"|\b(?:(?:my\s+)?(?:bank|embassy|landlord)\s+(?:needs?|requires?|asked?\s+for|is\s+asking\s+for)\s+(?:a\s+|an\s+)?(?:salary\s+certificate|employment\s+letter|NOC|proof\s+of\s+employment|salary\s+proof))\b"
+    r"|\b(?:(?:how\s+to|can\s+I)\s+(?:get|request|ask\s+for)\s+(?:a\s+|an\s+)?(?:NOC|no\s+objection\s+certificate)\s+(?:from\s+my\s+employer|UAE|to\s+(?:change\s+jobs?|leave\s+the\s+company)))\b"
+    r"|\b(?:what\s+is\s+(?:a\s+|an\s+)?(?:NOC\s+letter|no\s+objection\s+certificate|salary\s+certificate|employment\s+letter)(?:\s+in\s+(?:UAE|Dubai))?)\b"
+    r"|\b(?:شهادة\s+الراتب|خطاب\s+(?:العمل|الراتب|عدم\s+الممانعة|التوظيف)(?:\s+(?:الإمارات|من\s+صاحب\s+العمل))?)\b",
+    re.IGNORECASE,
+)
+
+# Networking in UAE — "how do I network in Dubai?", "how do I find jobs through connections?",
+# "are there networking events in UAE?".
+_NETWORKING_UAE_RE = re.compile(
+    r"\b(?:how\s+(?:do\s+I|to|can\s+I)\s+(?:network|build\s+(?:my\s+)?(?:network|connections?)|meet\s+(?:professionals?|people))\s+(?:in\s+(?:UAE|Dubai|Abu\s+Dhabi)|for\s+(?:UAE|Dubai)\s+jobs?))\b"
+    r"|\b(?:networking\s+(?:in\s+(?:UAE|Dubai)|UAE|Dubai|events?|tips?|advice|how\s+to|opportunities?))\b"
+    r"|\b(?:(?:UAE|Dubai)\s+networking\s+(?:events?|tips?|advice|how\s+to|opportunities?|groups?|communities?))\b"
+    r"|\b(?:how\s+(?:do\s+I|to|can\s+I)\s+find\s+jobs?\s+(?:through|via|using)\s+(?:my\s+)?(?:connections?|network|referrals?|contacts?))\b"
+    r"|\b(?:(?:professional\s+)?networking\s+events?\s+(?:in\s+(?:UAE|Dubai)|UAE|Dubai))\b"
+    r"|\b(?:how\s+(?:important|useful|effective)\s+(?:is|are)\s+(?:networking|referrals?|connections?)\s+(?:in|for)\s+(?:UAE|Dubai)(?:\s+jobs?)?)\b"
+    r"|\b(?:التواصل\s+المهني\s+(?:في\s+الإمارات|الإمارات)|كيف\s+أبني\s+شبكة\s+علاقات\s+(?:في\s+الإمارات)?)\b",
+    re.IGNORECASE,
+)
+
+# Asking for a promotion in UAE — "how do I ask for a promotion?",
+# "when is the right time to ask for a raise?", "promotion advice UAE".
+_PROMOTION_UAE_RE = re.compile(
+    r"\b(?:how\s+(?:do\s+I|to|should\s+I|can\s+I)\s+(?:ask\s+for|request|get|earn|go\s+for)\s+(?:a\s+)?promotion)\b"
+    r"|\b(?:when\s+(?:should\s+I|is\s+(?:the\s+)?(?:right\s+)?time\s+to)\s+ask\s+for\s+(?:a\s+)?promotion)\b"
+    r"|\b(?:promotion\s+(?:tips?|advice|strategy|UAE|Dubai|how\s+to\s+(?:get|ask|earn)|timing|request))\b"
+    r"|\b(?:how\s+(?:do\s+I|to|should\s+I)\s+(?:get\s+(?:promoted|a\s+promotion)|advance\s+(?:in|at)\s+(?:work|my\s+career|my\s+job)|move\s+up\s+(?:in|at)\s+(?:work|my\s+career)))\b"
+    r"|\b(?:(?:I\s+(?:want|deserve)|do\s+I\s+(?:deserve|qualify\s+for))\s+(?:a\s+)?promotion)\b"
+    r"|\b(?:what\s+(?:do\s+I\s+need\s+to\s+do|does\s+it\s+take)\s+to\s+(?:get\s+promoted|earn\s+(?:a\s+)?promotion))\b"
+    r"|\b(?:كيف\s+(?:أطلب|أحصل\s+على)\s+(?:ترقية|ترقيتي)|نصائح\s+(?:للحصول\s+على\s+)?الترقية)\b",
+    re.IGNORECASE,
+)
+
+# Handling job rejection / asking for feedback — "I got rejected, what should I do?",
+# "should I ask for feedback after rejection?", "how to bounce back from rejection".
+_JOB_REJECTION_RE = re.compile(
+    r"\b(?:(?:I\s+(?:got|received|was\s+(?:sent|given)))\s+(?:a\s+)?(?:rejection|rejected)\s+(?:email|letter|message|from\s+(?:the\s+)?(?:company|employer|recruiter))?)\b"
+    r"|\b(?:I\s+(?:was|got)\s+rejected(?:\s+(?:by|from)\s+(?:the\s+)?(?:company|employer|recruiter|job))?)\b"
+    r"|\b(?:should\s+I\s+(?:ask\s+for|request)\s+feedback\s+after\s+(?:a\s+)?rejection)\b"
+    r"|\b(?:how\s+(?:do\s+I|to|should\s+I|can\s+I)\s+(?:ask\s+for|request)\s+(?:feedback|reasons?)\s+after\s+(?:a\s+|being\s+)?rejected)\b"
+    r"|\b(?:how\s+(?:do\s+I|to|should\s+I|can\s+I)\s+(?:handle|deal\s+with|bounce\s+back\s+from|recover\s+from|respond\s+to)\s+(?:a\s+)?(?:job\s+)?rejection)\b"
+    r"|\b(?:(?:job\s+)?rejection\s+(?:tips?|advice|how\s+to\s+(?:handle|deal|respond)|feedback|after\s+rejection|recovery))\b"
+    r"|\b(?:I\s+(?:didn't|did\s+not)\s+get\s+(?:the\s+)?job)\b"
+    r"|\b(?:رُفِض\s+طلبي|رفضت\s+شركة|كيف\s+أتعامل\s+مع\s+رفض\s+الوظيفة|هل\s+أطلب\s+تغذية\s+راجعة\s+بعد\s+الرفض)\b",
+    re.IGNORECASE,
+)
+
+# Counter-offer from current employer — "my employer made me a counter-offer",
+# "should I accept a counter-offer?", "my boss offered me a raise to stay".
+_COUNTER_OFFER_RE = re.compile(
+    r"\b(?:(?:my\s+)?(?:employer|company|boss|manager)\s+(?:made|gave|offered)\s+(?:me\s+)?(?:a\s+)?counter[- ]?offer)\b"
+    r"|\b(?:should\s+I\s+(?:accept|take|consider|reject|turn\s+down)\s+(?:a\s+|the\s+)?counter[- ]?offer)\b"
+    r"|\b(?:my\s+(?:employer|company|boss)\s+(?:offered|is\s+offering|wants\s+to)\s+(?:me\s+)?(?:a\s+)?(?:raise|salary\s+increase|promotion)\s+(?:to\s+)?(?:stay|keep\s+me|not\s+leave))\b"
+    r"|\b(?:counter[- ]?offer\s+(?:advice|tips?|should\s+I\s+(?:accept|take|consider)|dangers?|risks?|UAE|dilemma))\b"
+    r"|\b(?:is\s+it\s+(?:worth|safe|wise|good\s+idea)\s+(?:to\s+)?accept(?:ing)?\s+(?:a\s+)?counter[- ]?offer)\b"
+    r"|\b(?:عرض\s+مضاد\s+(?:من\s+صاحب\s+العمل|الشركة|الإمارات)|هل\s+أقبل\s+العرض\s+المضاد)\b",
+    re.IGNORECASE,
+)
+
+# Relocation package for UAE — "what should a UAE relocation package include?",
+# "should I negotiate my relocation package?", "typical UAE relocation benefits".
+_RELOCATION_PACKAGE_RE = re.compile(
+    r"\b(?:what\s+(?:should|does|is|is\s+in)\s+(?:a\s+|the\s+)?(?:UAE\s+)?relocation\s+package\s+(?:include|cover|contain|typical|look\s+like))\b"
+    r"|\b(?:(?:UAE|Dubai)\s+relocation\s+package\s+(?:include|cover|benefits?|typical|what|negotiate|standard))\b"
+    r"|\b(?:relocation\s+(?:allowance|package|benefit|costs?|expenses?)\s+(?:UAE|Dubai|for\s+(?:UAE|Dubai)|typical|negotiate|standard|include))\b"
+    r"|\b(?:should\s+I\s+(?:negotiate|ask\s+for|request)\s+(?:(?:a|my)\s+)?relocation\s+(?:package|allowance|benefit|costs?))\b"
+    r"|\b(?:(?:housing|accommodation|flight|moving)\s+allowance\s+(?:UAE|Dubai|from\s+employer|typical|negotiate))\b"
+    r"|\b(?:(?:what|how)\s+(?:is|does)\s+(?:a\s+)?(?:UAE\s+)?relocation\s+(?:package|allowance)\s+(?:typically\s+)?(?:include|cover|work|mean))\b"
+    r"|\b(?:بدل\s+(?:الانتقال|السكن|التنقل)\s+(?:الإمارات|الوظيفي)|حزمة\s+الانتقال\s+(?:إلى\s+الإمارات|الإمارات))\b",
+    re.IGNORECASE,
+)
+
+# ── Public holidays UAE ────────────────────────────────────────────────────────
+# "what are UAE public holidays?", "Eid holiday UAE", "UAE national day".
+_PUBLIC_HOLIDAYS_UAE_RE = re.compile(
+    r"\b(?:(?:what\s+are\s+(?:the\s+)?)?(?:UAE|Dubai)\s+(?:public|national|official)\s+holidays?)\b"
+    r"|\b(?:(?:public|national|official)\s+holidays?\s+(?:in\s+(?:UAE|Dubai)|UAE|Dubai))\b"
+    r"|\b(?:how\s+(?:many|much)\s+(?:public|national|official)\s+holidays?\s+(?:in|does|do|are|get)(?:\s+(?:UAE|Dubai|we|I))?)\b"
+    r"|\b(?:(?:Eid|UAE\s+national\s+day|Prophet['']s\s+birthday|Islamic\s+new\s+year)\s+(?:holiday|off|public\s+holiday|day\s+off))\b"
+    r"|\b(?:when\s+is\s+(?:(?:UAE|Dubai)\s+)?national\s+day|when\s+is\s+Eid\s+(?:al[- ]fitr|al[- ]adha|ul[- ]fitr|ul[- ]adha))\b"
+    r"|\b(?:(?:UAE|Dubai)\s+(?:national\s+day|Eid)\s+(?:holiday|off|date|when))\b"
+    r"|\b(?:(?:list\s+of|what\s+are)\s+(?:the\s+)?(?:UAE|Dubai)\s+(?:public\s+)?holidays?)\b"
+    r"|\b(?:عطلة\s+(?:وطنية|رسمية|عيد)\s+(?:الإمارات|في\s+الإمارات)|الإجازات\s+الرسمية\s+(?:في\s+الإمارات)?)\b",
+    re.IGNORECASE,
+)
+
+# ── Overtime pay UAE ───────────────────────────────────────────────────────────
+# "am I entitled to overtime?", "overtime rate UAE", "how is overtime calculated?".
+_OVERTIME_PAY_UAE_RE = re.compile(
+    r"\b(?:am\s+I\s+(?:entitled\s+to|eligible\s+for|supposed\s+to\s+get|owed)\s+(?:paid\s+)?overtime)\b"
+    r"|\b(?:how\s+(?:is|are|do\s+I\s+calculate)\s+overtime\s+(?:calculated|paid|work|hours?))\b"
+    r"|\b(?:overtime\s+(?:pay|rate|hours?|calculation|entitlement|rules?|law|UAE|Dubai|rights?|policy))\b"
+    r"|\b(?:(?:UAE|Dubai)\s+overtime\s+(?:pay|rate|law|rules?|entitlement|calculation))\b"
+    r"|\b(?:(?:do|does|will|is)\s+(?:my\s+)?(?:employer|company|they)\s+(?:pay|owe\s+me|have\s+to\s+pay)\s+(?:for\s+)?overtime)\b"
+    r"|\b(?:(?:my\s+)?(?:employer|company)\s+(?:is|are|was|won't|refuses?\s+to)\s+(?:not\s+)?(?:pay(?:ing)?|paid)\s+(?:me\s+)?(?:for\s+)?overtime)\b"
+    r"|\b(?:what\s+(?:is|are)\s+(?:the\s+)?overtime\s+(?:rate|rules?|entitlement|pay)\s+(?:in\s+(?:UAE|Dubai))?)\b"
+    r"|\b(?:how\s+much\s+(?:extra\s+)?(?:do\s+I\s+(?:get|earn)|am\s+I\s+(?:paid|owed))\s+for\s+(?:working\s+)?overtime)\b"
+    r"|\b(?:أجر\s+(?:العمل\s+الإضافي|الوقت\s+الإضافي)|ساعات\s+إضافية\s+(?:الإمارات|مدفوعة))\b",
+    re.IGNORECASE,
+)
+
+# ── Contract types UAE (limited vs unlimited) ─────────────────────────────────
+# "limited vs unlimited contract", "what happens when contract expires?".
+_CONTRACT_TYPES_UAE_RE = re.compile(
+    r"\b(?:(?:what\s+is\s+(?:the\s+)?difference\s+between|difference\s+between)\s+(?:a\s+)?limited\s+and\s+unlimited\s+(?:term\s+)?contract)\b"
+    r"|\b(?:limited\s+(?:term\s+)?(?:vs\.?\s+|or\s+|versus\s+)?unlimited\s+(?:term\s+)?contract(?:\s+(?:UAE|Dubai))?)\b"
+    r"|\b(?:(?:what\s+(?:is|are)\s+(?:a|the)\s+)?(?:limited|unlimited)\s+(?:term\s+)?contract\s+(?:UAE|Dubai|rules?|rights?|difference|type))\b"
+    r"|\b(?:(?:what\s+happens?\s+(?:when|if|after))\s+(?:my\s+)?(?:limited\s+(?:term\s+)?)?contract\s+(?:expires?|ends?|is\s+not\s+renewed))\b"
+    r"|\b(?:contract\s+(?:type|types?|renewal|non[- ]renewal|expiry|expired)\s+(?:UAE|Dubai|rules?|rights?|law))\b"
+    r"|\b(?:عقد\s+(?:محدد|غير\s+محدد)\s+(?:المدة|الإمارات)|ما\s+الفرق\s+بين\s+عقد\s+محدد\s+وغير\s+محدد)\b",
+    re.IGNORECASE,
+)
+
+# ── Multiple job offers ────────────────────────────────────────────────────────
+# "I have two job offers", "how do I choose between job offers?".
+_MULTIPLE_OFFERS_RE = re.compile(
+    r"\b(?:I\s+(?:have|got|received)\s+(?:two|2|multiple|more\s+than\s+one|several)\s+job\s+offers?)\b"
+    r"|\b(?:how\s+(?:do\s+I|to|should\s+I|can\s+I)\s+(?:choose|decide|pick|compare|evaluate|select)\s+between\s+(?:two|2|multiple|job)?\s*(?:job\s+)?offers?)\b"
+    r"|\b(?:comparing\s+(?:two|2|multiple|job)\s+(?:job\s+)?offers?)\b"
+    r"|\b(?:which\s+(?:job\s+)?offer\s+should\s+I\s+(?:choose|accept|take|pick|go\s+with))\b"
+    r"|\b(?:I\s+(?:need|want)\s+to\s+(?:choose|decide|pick)\s+between\s+(?:two|2|multiple)\s+(?:job\s+)?offers?)\b"
+    r"|\b(?:offer\s+comparison\s+(?:advice|tips?|how\s+to|UAE|Dubai))\b"
+    r"|\b(?:لدي\s+(?:عرضان|عروض\s+متعددة|عرضين)\s+(?:وظيفيان?|للعمل)|كيف\s+أختار\s+بين\s+(?:عرضين|عرضان)\s+وظيفيين?)\b",
+    re.IGNORECASE,
+)
+
+# ── Workplace harassment / discrimination UAE ──────────────────────────────────
+# "I'm being harassed at work", "my employer is discriminating against me".
+_WORKPLACE_HARASSMENT_RE = re.compile(
+    r"\b(?:I(?:'m|\s+am)\s+being\s+(?:harassed|bullied|discriminated\s+against|sexually\s+harassed|victimised?|victimized?)\s+(?:at\s+work|by\s+my\s+(?:manager|boss|employer|colleague|coworker)))\b"
+    r"|\b(?:(?:workplace|work|office|job|employment)\s+(?:harassment|bullying|discrimination|hostile\s+environment|sexual\s+harassment)(?:\s+(?:UAE|Dubai|complaint|how\s+to\s+report|rights?))?)\b"
+    r"|\b(?:sexual\s+harassment\s+(?:at\s+work|in\s+the\s+workplace|UAE|Dubai|complaint|reporting|rights?))\b"
+    r"|\b(?:how\s+(?:do\s+I|to|can\s+I|should\s+I)\s+(?:report|deal\s+with|handle|stop|file\s+a\s+complaint\s+about)\s+(?:workplace\s+)?(?:harassment|bullying|discrimination|sexual\s+harassment))\b"
+    r"|\b(?:my\s+(?:manager|boss|employer|colleague)\s+is\s+(?:harassing|bullying|discriminating\s+against|sexually\s+harassing)\s+me)\b"
+    r"|\b(?:what\s+(?:are\s+my\s+rights|can\s+I\s+do|should\s+I\s+do)\s+(?:if|when)\s+(?:I\s+(?:am|'m)\s+being|I\s+(?:face|experience))\s+(?:harassed|bullied|discriminated\s+against|harassment|discrimination))\b"
+    r"|\b(?:تحرش\s+(?:في\s+العمل|مكان\s+العمل|جنسي)|تمييز\s+(?:في\s+العمل|ضدي)|مضايقة\s+في\s+العمل)\b",
+    re.IGNORECASE,
+)
+
+# ── Redundancy / layoff UAE ────────────────────────────────────────────────────
+# "I was made redundant", "my company is laying me off", "what are my rights?".
+_REDUNDANCY_UAE_RE = re.compile(
+    r"\b(?:(?:I\s+(?:was|got|have\s+been))\s+(?:made\s+redundant|laid\s+off|let\s+go|downsized|retrenched))\b"
+    r"|\b(?:(?:my\s+)?(?:company|employer|organization)\s+is\s+(?:laying|making)\s+(?:me|people|staff|employees)\s+(?:off|redundant))\b"
+    r"|\b(?:redundanc(?:y|ies)\s+(?:UAE|Dubai|rights?|compensation|payment|law|rules?|EOSB|gratuity|process))\b"
+    r"|\b(?:what\s+(?:are\s+(?:my\s+)?rights?|happens?|(?:do\s+I|am\s+I)\s+(?:get|entitled\s+to))\s+(?:if\s+I\s+(?:am|get|was)\s+)?(?:laid\s+off|made\s+redundant|retrenched|downsized))\b"
+    r"|\b(?:(?:layoff|lay[- ]off|retrenchment|downsizing)\s+(?:UAE|Dubai|rights?|compensation|payment|law|rules?|process|notice))\b"
+    r"|\b(?:company\s+(?:is\s+)?(?:downsizing|restructuring|cutting\s+(?:jobs?|staff|roles?))(?:\s+(?:and\s+I|UAE|Dubai))?)\b"
+    r"|\b(?:فصل\s+(?:جماعي|تعسفي)|تقليص\s+العمالة|ما\s+حقوقي\s+(?:عند|إذا)\s+(?:الاستغناء\s+عن\s+خدماتي|فُصِلت\s+من\s+العمل))\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -5188,7 +5467,7 @@ class RicoChatAPI:
 
         # ── Visa / work permit status ─────────────────────────────────────────
         # "I'm on a spouse visa", "do I need a work permit?".
-        if _VISA_STATUS_RE.search(message) and not _GOLDEN_VISA_RE.search(message) and not _WORK_VISA_PROCESS_RE.search(message):
+        if _VISA_STATUS_RE.search(message) and not _GOLDEN_VISA_RE.search(message) and not _WORK_VISA_PROCESS_RE.search(message) and not _VISA_CANCELLATION_RE.search(message):
             return self._finalize(
                 self._handle_visa_status(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5197,7 +5476,7 @@ class RicoChatAPI:
 
         # ── Salary negotiation advice ─────────────────────────────────────────
         # "how do I negotiate my salary?", "should I counter the offer?".
-        if _SALARY_NEGOTIATION_RE.search(message):
+        if _SALARY_NEGOTIATION_RE.search(message) and not _COUNTER_OFFER_RE.search(message):
             return self._finalize(
                 self._handle_salary_negotiation(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5215,7 +5494,7 @@ class RicoChatAPI:
 
         # ── Job rejection / no-response handling ──────────────────────────────
         # "I got rejected", "haven't heard back", "what to do after rejection?".
-        if _REJECTION_HANDLING_RE.search(message):
+        if _REJECTION_HANDLING_RE.search(message) and not _JOB_REJECTION_RE.search(message):
             return self._finalize(
                 self._handle_rejection(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5224,7 +5503,7 @@ class RicoChatAPI:
 
         # ── LinkedIn / networking advice ──────────────────────────────────────
         # "how to use LinkedIn?", "should I message the recruiter?".
-        if _LINKEDIN_NETWORKING_RE.search(message):
+        if _LINKEDIN_NETWORKING_RE.search(message) and not _NETWORKING_UAE_RE.search(message):
             return self._finalize(
                 self._handle_linkedin_networking(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5315,7 +5594,7 @@ class RicoChatAPI:
 
         # ── UAE benefits / package query ──────────────────────────────────────
         # "what benefits should I expect?", "is housing allowance standard?".
-        if _BENEFITS_QUERY_RE.search(message) and not _EOSB_RE.search(message) and not _ANNUAL_LEAVE_RE.search(message):
+        if _BENEFITS_QUERY_RE.search(message) and not _EOSB_RE.search(message) and not _ANNUAL_LEAVE_RE.search(message) and not _EMPLOYER_HEALTH_INSURANCE_RE.search(message):
             return self._finalize(
                 self._handle_benefits_package(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5333,7 +5612,7 @@ class RicoChatAPI:
 
         # ── UAE labor law / probation info ────────────────────────────────────
         # "what is the probation period?", "UAE labor law", "termination rights".
-        if _UAE_LABOR_LAW_RE.search(message):
+        if _UAE_LABOR_LAW_RE.search(message) and not _PROBATION_RULES_RE.search(message) and not _CONTRACT_TYPES_UAE_RE.search(message) and not _OVERTIME_PAY_UAE_RE.search(message) and not _REDUNDANCY_UAE_RE.search(message) and not _WORKPLACE_HARASSMENT_RE.search(message):
             return self._finalize(
                 self._handle_uae_labor_law(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5479,7 +5758,7 @@ class RicoChatAPI:
 
         # ── Working hours / overtime ──────────────────────────────────────────
         # "what are the working hours in UAE?", "is overtime paid?".
-        if _WORKING_HOURS_RE.search(message):
+        if _WORKING_HOURS_RE.search(message) and not _OVERTIME_PAY_UAE_RE.search(message):
             return self._finalize(
                 self._handle_working_hours(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5524,9 +5803,198 @@ class RicoChatAPI:
 
         # ── Annual leave entitlement ──────────────────────────────────────────
         # "how many days annual leave in UAE?", "public holidays UAE".
-        if _ANNUAL_LEAVE_RE.search(message):
+        if _ANNUAL_LEAVE_RE.search(message) and not _PUBLIC_HOLIDAYS_UAE_RE.search(message):
             return self._finalize(
                 self._handle_annual_leave(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Sick leave ────────────────────────────────────────────────────────
+        # "how many sick days do I get?", "sick leave policy UAE".
+        if _SICK_LEAVE_RE.search(message):
+            return self._finalize(
+                self._handle_sick_leave(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Maternity / paternity leave ───────────────────────────────────────
+        # "how much maternity leave in UAE?", "paternity leave paid?".
+        if _PARENTAL_LEAVE_RE.search(message):
+            return self._finalize(
+                self._handle_parental_leave(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Probation period rules ────────────────────────────────────────────
+        # "what happens during probation?", "can I be fired during probation?".
+        if _PROBATION_RULES_RE.search(message):
+            return self._finalize(
+                self._handle_probation_rules(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Termination notice period ─────────────────────────────────────────
+        # "how much notice do I need to give?", "notice period UAE".
+        if _NOTICE_PERIOD_RE.search(message):
+            return self._finalize(
+                self._handle_notice_period(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Wage Protection System / late salary ──────────────────────────────
+        # "what is WPS?", "my salary is late", "how to report late salary UAE".
+        if _WPS_SALARY_PROTECTION_RE.search(message):
+            return self._finalize(
+                self._handle_wps_salary_protection(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Employer health insurance ─────────────────────────────────────────
+        # "do I get health insurance from my employer?", "is medical insurance mandatory UAE?".
+        if _EMPLOYER_HEALTH_INSURANCE_RE.search(message):
+            return self._finalize(
+                self._handle_employer_health_insurance(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Visa cancellation grace period ────────────────────────────────────
+        # "how long do I have after my visa is cancelled?", "grace period after resignation UAE".
+        if _VISA_CANCELLATION_RE.search(message):
+            return self._finalize(
+                self._handle_visa_cancellation(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Emiratisation / Nafis impact ──────────────────────────────────────
+        # "what is Emiratisation?", "does Nafis affect expat hiring?".
+        if _EMIRATISATION_RE.search(message):
+            return self._finalize(
+                self._handle_emiratisation(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Job scam detection ────────────────────────────────────────────────
+        # "how do I know if a job offer is a scam?", "red flags in UAE job offers".
+        if _JOB_SCAM_RE.search(message):
+            return self._finalize(
+                self._handle_job_scam(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Salary certificate / employment letter ────────────────────────────
+        # "how do I get a salary certificate?", "my bank needs an employment letter".
+        if _SALARY_CERTIFICATE_RE.search(message):
+            return self._finalize(
+                self._handle_salary_certificate(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Networking in UAE ─────────────────────────────────────────────────
+        # "how do I network in Dubai?", "networking events UAE".
+        if _NETWORKING_UAE_RE.search(message):
+            return self._finalize(
+                self._handle_networking_uae(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Asking for a promotion ────────────────────────────────────────────
+        # "how do I ask for a promotion?", "when should I ask for a raise?".
+        if _PROMOTION_UAE_RE.search(message):
+            return self._finalize(
+                self._handle_promotion_uae(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Handling job rejection ────────────────────────────────────────────
+        # "I got rejected, what should I do?", "should I ask for feedback?".
+        if _JOB_REJECTION_RE.search(message):
+            return self._finalize(
+                self._handle_job_rejection(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Counter-offer from current employer ───────────────────────────────
+        # "my employer made me a counter-offer, should I accept?".
+        if _COUNTER_OFFER_RE.search(message):
+            return self._finalize(
+                self._handle_counter_offer(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Relocation package ────────────────────────────────────────────────
+        # "what should a UAE relocation package include?", "typical relocation allowance UAE".
+        if _RELOCATION_PACKAGE_RE.search(message):
+            return self._finalize(
+                self._handle_relocation_package(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── UAE public holidays ───────────────────────────────────────────────
+        # "what are UAE public holidays?", "when is Eid in UAE?".
+        if _PUBLIC_HOLIDAYS_UAE_RE.search(message):
+            return self._finalize(
+                self._handle_public_holidays_uae(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Overtime pay UAE ──────────────────────────────────────────────────
+        # "am I entitled to overtime?", "overtime rate UAE".
+        if _OVERTIME_PAY_UAE_RE.search(message):
+            return self._finalize(
+                self._handle_overtime_pay_uae(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Contract types UAE ────────────────────────────────────────────────
+        # "limited vs unlimited contract UAE", "what happens when contract expires?".
+        if _CONTRACT_TYPES_UAE_RE.search(message):
+            return self._finalize(
+                self._handle_contract_types_uae(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Multiple job offers ───────────────────────────────────────────────
+        # "I have two job offers", "how do I choose between offers?".
+        if _MULTIPLE_OFFERS_RE.search(message):
+            return self._finalize(
+                self._handle_multiple_offers(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Workplace harassment UAE ──────────────────────────────────────────
+        # "I'm being harassed at work", "how do I report discrimination?".
+        if _WORKPLACE_HARASSMENT_RE.search(message):
+            return self._finalize(
+                self._handle_workplace_harassment(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Redundancy / layoff UAE ───────────────────────────────────────────
+        # "I was made redundant", "company is laying me off", "redundancy rights UAE".
+        if _REDUNDANCY_UAE_RE.search(message):
+            return self._finalize(
+                self._handle_redundancy_uae(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -13089,6 +13557,916 @@ class RicoChatAPI:
             )
         self._append_chat(user_id, "assistant", msg)
         return {"type": "annual_leave", "message": msg}
+
+    # ── Sick leave ────────────────────────────────────────────────────────────────
+
+    def _handle_sick_leave(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## الإجازة المرضية في الإمارات\n\n"
+                "**استحقاق الإجازة المرضية (قانون العمل الاتحادي):**\n"
+                "- يجب إتمام فترة التجربة أولاً لاستحقاق الإجازة المرضية\n"
+                "- **أول 15 يوم:** بأجر كامل\n"
+                "- **15 يوماً تالية:** بنصف الأجر\n"
+                "- **بعد ذلك (حتى إجمالي 90 يوماً):** بدون أجر\n\n"
+                "**ما تحتاجه:**\n"
+                "- شهادة طبية معتمدة من مستشفى أو عيادة مرخصة\n"
+                "- إخطار صاحب العمل في أقرب وقت ممكن\n\n"
+                "**ملاحظة:** الإجازة المرضية المدفوعة لا تُحتسب من إجازتك السنوية. "
+                "يحق لصاحب العمل إنهاء العقد إذا تجاوزت 90 يوماً غياباً بسبب المرض خلال سنة."
+            )
+        else:
+            msg = (
+                "## Sick Leave in UAE\n\n"
+                "**Sick leave entitlement (UAE Federal Labour Law):**\n"
+                "- Sick leave kicks in **after your probation period** is complete\n"
+                "- **First 15 days:** Full pay\n"
+                "- **Next 30 days:** Half pay\n"
+                "- **Remaining days (up to 90 total):** Unpaid\n\n"
+                "**Requirements:**\n"
+                "- A medical certificate from a licensed hospital or clinic\n"
+                "- Notify your employer as soon as possible\n\n"
+                "**Key points:**\n"
+                "- Sick leave does **not** count against your annual leave balance\n"
+                "- Your employer cannot terminate you solely for being sick during the "
+                "first 90 days\n"
+                "- After 90 days of sick leave in one year, the employer may end the "
+                "contract (with full end-of-service gratuity)\n\n"
+                "**Tip:** Many companies have private health insurance that covers "
+                "GP visits — check your employee benefits package."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "sick_leave", "message": msg}
+
+    # ── Maternity / paternity leave ───────────────────────────────────────────────
+
+    def _handle_parental_leave(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## إجازة الأمومة والأبوة في الإمارات\n\n"
+                "**إجازة الأمومة (للمرأة العاملة في القطاع الخاص):**\n"
+                "- **60 يوماً** إجازة أمومة: 45 يوماً بأجر كامل + 15 يوماً بنصف أجر\n"
+                "- تستحق بعد خدمة عام واحد مع صاحب العمل ذاته\n"
+                "- إذا كانت مدة الخدمة أقل من عام، تُمنح الإجازة بنصف الأجر\n\n"
+                "**إجازة الأبوة (للرجل في القطاع الخاص):**\n"
+                "- **5 أيام عمل** بأجر كامل خلال 6 أشهر من الولادة\n\n"
+                "**القطاع الحكومي الاتحادي:**\n"
+                "- إجازة أمومة: 90 يوماً بأجر كامل\n"
+                "- إجازة أبوة: 5 أيام عمل\n\n"
+                "**نصيحة:** تحقق دائماً من سياسة شركتك، فبعض أصحاب العمل يوفرون شروطاً أفضل من الحد الأدنى القانوني."
+            )
+        else:
+            msg = (
+                "## Maternity & Paternity Leave in UAE\n\n"
+                "**Maternity leave (private sector):**\n"
+                "- **60 days total:** 45 days at full pay + 15 days at half pay\n"
+                "- Entitled after completing **1 year** with the same employer\n"
+                "- Less than 1 year of service → leave granted at half pay\n"
+                "- Additional unpaid leave of up to 45 days may be taken (for "
+                "illness related to pregnancy/delivery, with a medical certificate)\n\n"
+                "**Paternity leave (private sector):**\n"
+                "- **5 working days** at full pay, to be taken within 6 months of birth\n\n"
+                "**Federal government employees:**\n"
+                "- Maternity: 90 calendar days at full pay\n"
+                "- Paternity: 5 working days\n\n"
+                "**Important:** These are the legal minimums. Many UAE employers — "
+                "especially multinationals — offer more generous policies. Always "
+                "review your employment contract and HR handbook.\n\n"
+                "**Tip:** Maternity leave is separate from annual leave and does not "
+                "reduce your leave balance."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "parental_leave", "message": msg}
+
+    # ── Probation period rules ────────────────────────────────────────────────────
+
+    def _handle_probation_rules(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## فترة التجربة في الإمارات\n\n"
+                "**الأحكام الأساسية (قانون العمل الاتحادي):**\n"
+                "- الحد الأقصى لفترة التجربة: **6 أشهر**\n"
+                "- لا يمكن تمديدها أو تكرارها مع نفس صاحب العمل\n\n"
+                "**هل يمكن فسخ العقد أثناء فترة التجربة؟**\n"
+                "- نعم، يحق لصاحب العمل إنهاء العقد بإشعار **14 يوماً** (أو أقل وفق العقد)\n"
+                "- لا يستحق الموظف مكافأة نهاية الخدمة (EOSB) إذا أُنهي عقده خلال التجربة\n\n"
+                "**هل يمكنك الاستقالة أثناء فترة التجربة؟**\n"
+                "- نعم، ولكن بإشعار **30 يوماً** إذا كنت تنتقل إلى وظيفة أخرى داخل الإمارات\n"
+                "- إذا غادرت البلاد أو كانت الشركة هي من أنهت العقد، قد لا يُطبق هذا الشرط\n\n"
+                "**ملاحظة:** لا تستحق الإجازة السنوية والمرضية المدفوعة إلا بعد انتهاء فترة التجربة."
+            )
+        else:
+            msg = (
+                "## Probation Period Rules in UAE\n\n"
+                "**Key rules (UAE Federal Labour Law):**\n"
+                "- Maximum probation period: **6 months**\n"
+                "- Cannot be extended or repeated with the same employer\n\n"
+                "**Can you be dismissed during probation?**\n"
+                "- Yes — your employer can terminate with as little as **14 days' notice** "
+                "(or per your contract terms)\n"
+                "- No end-of-service gratuity (EOSB) is owed if terminated during probation\n"
+                "- However, termination for discriminatory reasons is still unlawful\n\n"
+                "**Can you resign during probation?**\n"
+                "- Yes, but you must give **30 days' notice** if you're moving to another "
+                "UAE employer (to avoid a potential 1-year work ban)\n"
+                "- If you're leaving the UAE or the employer terminates first, "
+                "the ban typically does not apply\n\n"
+                "**What benefits are withheld during probation?**\n"
+                "- Paid sick leave: not available until probation ends\n"
+                "- Annual leave accrues from day 1 but typically cannot be taken "
+                "during probation (employer discretion)\n\n"
+                "**Tip:** Always read your contract — some employers offer longer notice "
+                "periods or waive the 30-day resignation notice."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "probation_rules", "message": msg}
+
+    # ── Termination notice period ─────────────────────────────────────────────────
+
+    def _handle_notice_period(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## مدة الإخطار (Notice Period) في الإمارات\n\n"
+                "**قانون العمل الاتحادي (مرسوم بقانون رقم 33 لعام 2021):**\n"
+                "- الحد الأدنى لمدة الإخطار: **30 يوم تقويمي**\n"
+                "- يمكن الاتفاق على مدة أطول في العقد (شائع في المناصب العليا: 60–90 يوماً)\n\n"
+                "**هل يمكن لصاحب العمل إنهاء عقدك دون إخطار؟**\n"
+                "- لا، إلا في حالات الفصل التأديبي (مخالفة جسيمة) المنصوص عليها في المادة 44\n"
+                "- في حالات الفصل التأديبي: يُنهى العقد فوراً دون مكافأة نهاية خدمة\n\n"
+                "**هل يمكنك الاستقالة دون إخطار؟**\n"
+                "- لا، الاستقالة دون إخطار قد تُعرضك لخصم من الأجر أو الملاحقة القانونية\n"
+                "- في فترة التجربة: الإخطار 14 يوماً (إذا انتقلت لعمل آخر داخل الإمارات: 30 يوماً)\n\n"
+                "**نصيحة:** تحقق من بند الإخطار في عقدك — فبعض العقود تنص على 60 أو 90 يوماً، "
+                "وهذا ملزم قانونياً."
+            )
+        else:
+            msg = (
+                "## Notice Period in UAE\n\n"
+                "**UAE Federal Labour Law (Decree No. 33 of 2021):**\n"
+                "- Minimum notice period: **30 calendar days**\n"
+                "- Contracts can specify longer notice (common for senior roles: 60–90 days)\n\n"
+                "**Can your employer fire you without notice?**\n"
+                "- No, except in disciplinary termination cases under Article 44 "
+                "(e.g., serious misconduct, fraud)\n"
+                "- In disciplinary termination: the employer can dismiss immediately "
+                "without notice but must still pay any unpaid salary owed\n\n"
+                "**Can you resign without notice?**\n"
+                "- No — resigning without notice can mean a salary deduction equal to "
+                "the notice period pay, or legal liability\n"
+                "- **During probation:** 14 days' notice (or 30 days if moving to another "
+                "UAE employer)\n\n"
+                "**Garden leave:** Some employers ask you to stop working but remain "
+                "paid and on the books during your notice period — this is legal in UAE.\n\n"
+                "**Tip:** Always check your contract. If it says 60 or 90 days' notice, "
+                "that is the legally binding term — not the 30-day minimum."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "notice_period", "message": msg}
+
+    # ── Wage Protection System / late salary ──────────────────────────────────────
+
+    def _handle_wps_salary_protection(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## نظام حماية الأجور (WPS) في الإمارات\n\n"
+                "**ما هو نظام حماية الأجور؟**\n"
+                "- نظام إلكتروني تُشرف عليه وزارة الموارد البشرية (MOHRE)\n"
+                "- يُلزم أصحاب العمل بصرف الرواتب عبر قنوات موافق عليها خلال 10 أيام من موعدها\n\n"
+                "**ماذا تفعل إذا تأخر راتبك؟**\n"
+                "1. انتظر 10 أيام عمل إضافية بعد موعد الراتب قبل تقديم شكوى رسمية\n"
+                "2. أبلغ مشرفك أو قسم الموارد البشرية أولاً\n"
+                "3. تقديم شكوى عبر:\n"
+                "   - تطبيق / موقع MOHRE الإلكتروني\n"
+                "   - الاتصال على رقم 800-MOHRE (800-60473)\n"
+                "   - زيارة مراكز العمل (تسهيل)\n\n"
+                "**العقوبات على صاحب العمل:**\n"
+                "- غرامات وتجميد تصاريح العمل الجديدة إذا تأخر صرف الراتب أكثر من 10 أيام\n\n"
+                "**ملاحظة:** يغطي نظام WPS القطاع الخاص فقط — لا يشمل موظفي الحكومة."
+            )
+        else:
+            msg = (
+                "## Wage Protection System (WPS) in UAE\n\n"
+                "**What is WPS?**\n"
+                "- An electronic salary transfer system overseen by MOHRE "
+                "(Ministry of Human Resources & Emiratisation)\n"
+                "- Requires private-sector employers to pay salaries through "
+                "approved channels within **10 days** of the due date\n\n"
+                "**What to do if your salary is late:**\n"
+                "1. Wait up to **10 working days** after your pay date before filing a formal complaint\n"
+                "2. Raise it with your HR / line manager first (paper trail helps)\n"
+                "3. File a complaint through:\n"
+                "   - **MOHRE app or website** (mohre.gov.ae)\n"
+                "   - **Call 800-MOHRE (800-60473)**\n"
+                "   - Visit a **Tasheel / MOHRE service centre**\n\n"
+                "**Consequences for employers:**\n"
+                "- Fines and a freeze on new work permit applications if salaries are "
+                "unpaid for more than 10 days\n"
+                "- Persistent non-payment can result in licence suspension\n\n"
+                "**Important:** WPS covers **private sector only** — government employees "
+                "fall under separate regulations.\n\n"
+                "**Tip:** Keep digital copies of your pay slips and bank statements "
+                "as evidence if you need to escalate a complaint."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "wps_salary_protection", "message": msg}
+
+    # ── Employer health insurance ─────────────────────────────────────────────────
+
+    def _handle_employer_health_insurance(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## التأمين الصحي من صاحب العمل في الإمارات\n\n"
+                "**هل التأمين الصحي إلزامي؟**\n"
+                "- **نعم، في دبي وأبوظبي:** التأمين الصحي للموظفين إلزامي بموجب القانون\n"
+                "- في دبي: يُلزم قانون التأمين الصحي الإلزامي (2014) أصحاب العمل بتوفيره للموظفين والمعالين\n"
+                "- في أبوظبي: إلزامي بموجب قانون الصحة الأساسية\n\n"
+                "**ماذا يغطي التأمين المُقدَّم من صاحب العمل عادةً؟**\n"
+                "- زيارات الطوارئ والعيادات الخارجية\n"
+                "- الاستشارات الطبية والأدوية\n"
+                "- بعض خطط التأمين تشمل طب الأسنان والبصريات\n"
+                "- المعالون (الزوجة والأطفال) قد يُشملون أو يُستثنون حسب الشركة\n\n"
+                "**نصيحة:** اطلب تفاصيل بطاقة التأمين وشبكة المستشفيات المعتمدة قبل توقيع العقد."
+            )
+        else:
+            msg = (
+                "## Employer Health Insurance in UAE\n\n"
+                "**Is health insurance mandatory?**\n"
+                "- **Yes, in Dubai and Abu Dhabi:** Employers are legally required to "
+                "provide health insurance to employees\n"
+                "- **Dubai:** Mandatory Health Insurance Law (2014) — employers must cover "
+                "all employees AND their dependants\n"
+                "- **Abu Dhabi:** Mandatory since 2005 under the Basic Health Programme\n"
+                "- **Other emirates:** No blanket federal mandate, but most reputable "
+                "employers still provide it\n\n"
+                "**What does employer health insurance typically cover?**\n"
+                "- GP visits and outpatient consultations\n"
+                "- Emergency treatment\n"
+                "- Prescription medications\n"
+                "- Some plans include dental and optical\n"
+                "- Maternity coverage varies — check the policy\n\n"
+                "**Dependants:**\n"
+                "- In Dubai, employers must cover spouse and up to 3 children\n"
+                "- In Abu Dhabi, dependants must be sponsored separately by the employee\n\n"
+                "**Tip:** Always ask for the insurance card, policy number, and the "
+                "list of approved hospitals (network providers) before you start. "
+                "Using out-of-network providers can mean paying out of pocket."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "employer_health_insurance", "message": msg}
+
+    # ── Visa cancellation grace period ────────────────────────────────────────────
+
+    def _handle_visa_cancellation(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## ماذا يحدث للتأشيرة بعد ترك العمل؟\n\n"
+                "**عند إلغاء التأشيرة أو إنهاء العقد:**\n"
+                "- تُمنح فترة سماح مدتها **30 يوماً** بعد إلغاء تأشيرة الإقامة للخروج أو تسوية الوضع\n"
+                "- خلال هذه الفترة، يمكنك البقاء في الإمارات للبحث عن وظيفة أخرى أو تعديل إقامتك\n\n"
+                "**خياراتك خلال فترة السماح:**\n"
+                "1. **العثور على صاحب عمل جديد:** يُحوّل التأشيرة عبر الكفالة إلى جهة عمل جديدة\n"
+                "2. **الانتقال إلى تأشيرة زيارة:** للبقاء والبحث عن عمل بشكل قانوني\n"
+                "3. **تأشيرة بحث العمل (Job Seeker Visa):** تتيح البقاء لمدة 60–180 يوماً لأصحاب المؤهلات العالية\n"
+                "4. **المغادرة وإعادة الدخول:** أبسط خيار إذا كان لديك عرض وظيفي قادم\n\n"
+                "**تحذير:** البقاء بعد انتهاء فترة السماح يُفضي إلى غرامة يومية — تحقق من تاريخ انتهاء الإقامة دائماً."
+            )
+        else:
+            msg = (
+                "## What Happens to Your Visa After Leaving a Job in UAE?\n\n"
+                "**When your visa is cancelled / employment ends:**\n"
+                "- You are granted a **30-day grace period** from the date of visa "
+                "cancellation to either leave the UAE or change your visa status\n"
+                "- During this window you can legally remain in the UAE\n\n"
+                "**Your options during the grace period:**\n"
+                "1. **Find a new employer** — they can transfer your visa sponsorship\n"
+                "2. **Switch to a visit visa** — allows you to stay and job-search legally\n"
+                "3. **Job Seeker Visa** — 60 to 180 days for highly qualified professionals "
+                "(bachelor's degree+ and relevant experience)\n"
+                "4. **Leave and re-enter** — simplest if a new offer is imminent\n\n"
+                "**End-of-service process:**\n"
+                "- Your employer must cancel your visa and labour card after the last day\n"
+                "- Overstaying the grace period incurs a daily fine — always confirm "
+                "your visa expiry date\n\n"
+                "**Tip:** Save a copy of your visa cancellation document — you'll need "
+                "it to prove your status to a new employer."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "visa_cancellation", "message": msg}
+
+    # ── Emiratisation / Nafis impact on expat hiring ──────────────────────────────
+
+    def _handle_emiratisation(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## التوطين ونافس: هل يؤثر على فرص العمل للوافدين؟\n\n"
+                "**ما هو التوطين؟**\n"
+                "- سياسة حكومية تُلزم الشركات الخاصة بتوظيف نسبة محددة من المواطنين الإماراتيين\n"
+                "- الشركات ذات 50+ موظف مُلزمة بتحقيق حصص توطين متصاعدة (2% سنوياً حتى 2026)\n\n"
+                "**برنامج نافس:**\n"
+                "- مبادرة حكومية تُقدم دعماً مالياً للمواطنين العاملين في القطاع الخاص\n"
+                "- يُحفّز أصحاب العمل على توظيف المواطنين بدعم جزئي للرواتب\n\n"
+                "**هل يؤثر على فرصك كوافد؟**\n"
+                "- في معظم القطاعات: لا، الوافدون لا يزالون يشكلون الغالبية العظمى من القوى العاملة\n"
+                "- القطاعات الأكثر تأثراً: التمويل والمصارف والتأمين والتجزئة وقطاع الموارد البشرية\n"
+                "- الوظائف التقنية والمتخصصة: أقل تأثراً نظراً لندرة المواطنين المؤهلين في بعض المجالات\n\n"
+                "**نصيحة:** ركز على المهارات المتخصصة والخبرة الدولية — هذه لا يزال الطلب عليها مرتفعاً."
+            )
+        else:
+            msg = (
+                "## Emiratisation & Nafis: Does It Affect Expat Job Seekers?\n\n"
+                "**What is Emiratisation?**\n"
+                "- A UAE government policy requiring private-sector companies to hire "
+                "a set percentage of Emirati nationals\n"
+                "- Companies with 50+ employees must increase Emirati headcount by "
+                "2% per year, targeting specific sectors (finance, insurance, retail, HR)\n\n"
+                "**What is Nafis?**\n"
+                "- A federal programme that subsidises Emirati salaries to make hiring "
+                "nationals more affordable for private companies\n"
+                "- Named after the Arabic word for 'compete', it aims to place Emiratis "
+                "in quality private-sector roles\n\n"
+                "**Does it affect expat hiring?**\n"
+                "- **For most roles: No** — expats still make up 85–90% of the UAE workforce\n"
+                "- **Most affected sectors:** banking, finance, insurance, HR, retail\n"
+                "- **Less affected:** technology, engineering, healthcare, hospitality, "
+                "construction (where Emirati supply is low)\n"
+                "- Companies cannot fill Emiratisation quotas with expats, so the "
+                "competition is typically within different talent pools\n\n"
+                "**Tip:** If you're applying to a heavily regulated UAE bank or "
+                "insurer, be aware that some entry-level roles may be reserved for "
+                "nationals. Mid and senior-level specialist roles remain open."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "emiratisation", "message": msg}
+
+    # ── Job scam detection ────────────────────────────────────────────────────────
+
+    def _handle_job_scam(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## كيف تكتشف عروض العمل المزيفة في الإمارات؟\n\n"
+                "**علامات تحذيرية شائعة:**\n"
+                "- يُطلب منك دفع رسوم: للتأشيرة، المعالجة، التدريب، أو الزي الرسمي — **العمل الحقيقي لا يطلب منك المال**\n"
+                "- الراتب مرتفع جداً مقارنة بالسوق دون متطلبات واضحة\n"
+                "- يتواصل معك المُعيِّن عبر واتساب أو برنامج شخصي فقط دون بريد عمل رسمي\n"
+                "- لا يوجد عقد رسمي أو مقابلة حقيقية قبل الموافقة على التوظيف\n"
+                "- الشركة غير مسجلة أو لا يمكن التحقق منها\n\n"
+                "**كيف تتحقق من صحة العرض؟**\n"
+                "1. ابحث عن الشركة في موقع وزارة الموارد البشرية (MOHRE) أو السجل التجاري\n"
+                "2. تحقق من وجود الشركة على LinkedIn وموقعها الرسمي\n"
+                "3. اطلب إجراء المقابلة عبر تطبيق Zoom أو حضورياً\n"
+                "4. لا تدفع أي رسوم قبل التوقيع على عقد رسمي\n\n"
+                "**إذا تعرضت للاحتيال:** تواصل مع شرطة الإمارات (999) أو قدم شكوى عبر موقع وزارة الداخلية."
+            )
+        else:
+            msg = (
+                "## How to Spot UAE Job Scams\n\n"
+                "**Common red flags:**\n"
+                "- **They ask you to pay money** — for visa fees, processing, training, "
+                "uniform, or medical tests. Legitimate employers never charge candidates.\n"
+                "- Salary is unrealistically high with no clear skill requirements\n"
+                "- Recruiter contacts you only on WhatsApp or personal email, "
+                "never a company address\n"
+                "- You receive a 'job offer' without a real interview\n"
+                "- Company name is hard to verify or doesn't appear in official directories\n"
+                "- Pressure to respond quickly or 'secure your spot' before you can verify\n\n"
+                "**How to verify a job offer:**\n"
+                "1. Search the company on **mohre.gov.ae** or the UAE trade register\n"
+                "2. Check the company on **LinkedIn** and their official website\n"
+                "3. Request a **video interview** via Zoom or Google Meet\n"
+                "4. Never pay any fees before signing an official contract\n"
+                "5. Verify the recruiter's identity on LinkedIn\n\n"
+                "**Legitimate job boards in UAE:**\n"
+                "- Bayt.com, LinkedIn, GulfTalent, Naukrigulf, Indeed UAE\n\n"
+                "**If you've been scammed:** Report to UAE Police (999) or "
+                "online via the Ministry of Interior's e-crimes portal."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "job_scam", "message": msg}
+
+    # ── Salary certificate / employment letter ────────────────────────────────────
+
+    def _handle_salary_certificate(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## شهادة الراتب وخطاب العمل في الإمارات\n\n"
+                "**ما هي شهادة الراتب؟**\n"
+                "- وثيقة رسمية تُصدرها الشركة تُثبت مسمّاك الوظيفي وراتبك ووضعك الوظيفي\n"
+                "- مطلوبة للبنوك (فتح حساب، قرض، بطاقة ائتمان)، السفارات، الملاك\n\n"
+                "**كيف تطلبها؟**\n"
+                "1. تواصل مع قسم الموارد البشرية أو المحاسبة\n"
+                "2. وضّح الغرض (بنك، سفارة...) لأن الصياغة قد تختلف\n"
+                "3. يستغرق الإصدار عادةً 1–3 أيام عمل\n\n"
+                "**ما هو خطاب عدم الممانعة (NOC)؟**\n"
+                "- وثيقة تُفيد بأن صاحب العمل لا يعترض على نشاط معين (زيارة، دراسة، عمل آخر)\n"
+                "- مطلوبة أحياناً لتغيير الكفيل أو الحصول على تصاريح معينة\n\n"
+                "**نصيحة:** بعض الشركات تطلب فترة عمل أدنى (3–6 أشهر) قبل إصدار خطاب الراتب — تحقق من سياستهم."
+            )
+        else:
+            msg = (
+                "## Salary Certificate & Employment Letter in UAE\n\n"
+                "**What is a salary certificate?**\n"
+                "- An official letter from your employer confirming your job title, "
+                "salary, and employment status\n"
+                "- Required by banks (account opening, loans, credit cards), embassies, "
+                "and landlords\n\n"
+                "**How to request one:**\n"
+                "1. Contact your HR or accounts department\n"
+                "2. State the purpose (bank, embassy, etc.) — the wording may differ\n"
+                "3. Allow **1–3 working days** for processing\n"
+                "4. Ensure it's printed on company letterhead and signed by an authorised person\n\n"
+                "**What is a NOC (No Objection Certificate)?**\n"
+                "- A letter from your employer stating they have no objection to "
+                "a specific activity (travel, study, second employment, sponsorship transfer)\n"
+                "- Sometimes required when switching sponsors or obtaining certain permits\n\n"
+                "**What is an employment letter?**\n"
+                "- Similar to a salary certificate but may not state the exact salary amount\n"
+                "- Used for visa applications, residency, or embassy submissions\n\n"
+                "**Tip:** Some companies have a minimum tenure policy (e.g., 3–6 months) "
+                "before they issue salary letters — check with HR."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "salary_certificate", "message": msg}
+
+    # ── Networking in UAE ─────────────────────────────────────────────────────────
+
+    def _handle_networking_uae(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## كيف تبني شبكة علاقاتك المهنية في الإمارات؟\n\n"
+                "**لماذا التواصل مهم جداً في الإمارات؟**\n"
+                "- تُشير الدراسات إلى أن 60–70% من الوظائف تُملأ عبر العلاقات الشخصية في الإمارات\n"
+                "- الثقة الشخصية تتقدم على الكفاءة في كثير من بيئات العمل الخليجية\n\n"
+                "**كيف تبدأ؟**\n"
+                "1. **LinkedIn:** حافظ على حضور قوي وتفاعل مع منشورات محترفين في مجالك\n"
+                "2. **فعاليات التواصل:** ابحث عن Meetup، Eventbrite، Networking events في دبي/أبوظبي\n"
+                "3. **غرف التجارة:** Dubai Chamber، Abu Dhabi Chamber تستضيف فعاليات للأعضاء\n"
+                "4. **المجموعات المهنية:** مجموعات LinkedIn وWhatsApp المتخصصة في قطاعك\n"
+                "5. **مقابلات الاستكشاف (Coffee chats):** اطلب محادثة قصيرة مع محترفين تحترمهم\n\n"
+                "**نصيحة:** في الإمارات، القطاع صغير والسمعة تنتشر بسرعة — كن محترفاً ومتابعاً دائماً."
+            )
+        else:
+            msg = (
+                "## Networking in UAE: How to Build Your Professional Circle\n\n"
+                "**Why networking matters more in UAE:**\n"
+                "- Studies suggest 60–70% of UAE jobs are filled through connections\n"
+                "- Personal trust and referrals carry significant weight in Gulf hiring culture\n\n"
+                "**How to network effectively:**\n"
+                "1. **LinkedIn** — optimise your profile, post content, connect with "
+                "professionals in your sector, comment thoughtfully\n"
+                "2. **In-person events** — search Meetup.com, Eventbrite, and LinkedIn "
+                "Events for Dubai/Abu Dhabi networking events in your field\n"
+                "3. **Industry associations** — Dubai Chamber of Commerce, "
+                "industry councils, and professional bodies host regular events\n"
+                "4. **WhatsApp and LinkedIn groups** — many UAE industry communities "
+                "share jobs and insights in private groups\n"
+                "5. **Coffee chats** — message someone you respect and ask for a 20-minute chat; "
+                "most professionals in UAE are open to it\n"
+                "6. **Alumni networks** — universities and business schools have active UAE alumni chapters\n\n"
+                "**UAE-specific tips:**\n"
+                "- Business cards are still widely exchanged — have one ready\n"
+                "- Follow up within 24 hours after meeting someone\n"
+                "- UAE is a small professional world — reputation travels fast\n\n"
+                "**Tip:** Ramadan networking events are surprisingly common and valuable — "
+                "iftars are a key social occasion for professionals in the UAE."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "networking_uae", "message": msg}
+
+    # ── Asking for a promotion ────────────────────────────────────────────────────
+
+    def _handle_promotion_uae(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## كيف تطلب الترقية في عملك بالإمارات؟\n\n"
+                "**متى يكون التوقيت مناسباً؟**\n"
+                "- بعد إنجاز مشروع ناجح أو تحقيق نتيجة ملموسة\n"
+                "- قبل أو أثناء تقييم الأداء السنوي\n"
+                "- بعد توليك مهام أو مسؤوليات إضافية بشكل غير رسمي\n\n"
+                "**كيف تحضّر لطلب الترقية؟**\n"
+                "1. **وثّق إنجازاتك:** أرقام، مشاريع، توفير للتكاليف، تأثير على الفريق\n"
+                "2. **ابحث في السوق:** ما هو الراتب المعتاد لمنصب أعلى في قطاعك وشركتك؟\n"
+                "3. **اطلب اجتماعاً خاصاً:** لا تطلب الترقية في اجتماع عام\n"
+                "4. **ركّز على القيمة التي ستضيفها** في المنصب الأعلى، لا على احتياجاتك الشخصية\n\n"
+                "**ماذا تقول؟**\n"
+                "«أودّ مناقشة مساري الوظيفي. خلال الـ 12 شهراً الماضية حققت [X]، وأرى أنني مستعد "
+                "لتحمّل مسؤولية [Y]. أودّ معرفة رأيك في إمكانية الترقية.»\n\n"
+                "**نصيحة:** إذا رُفض طلبك، اسأل عن الخطوات المحددة لتحقيق الترقية مستقبلاً."
+            )
+        else:
+            msg = (
+                "## How to Ask for a Promotion in UAE\n\n"
+                "**When is the right time?**\n"
+                "- After delivering a significant project or measurable result\n"
+                "- During or ahead of your annual performance review\n"
+                "- After you've been informally doing work above your current level\n\n"
+                "**How to prepare:**\n"
+                "1. **Document your achievements** — numbers, projects delivered, "
+                "cost savings, revenue generated, team impact\n"
+                "2. **Research the market** — know what the next level pays in your "
+                "sector so you can frame a salary expectation if asked\n"
+                "3. **Request a private meeting** — never ask during a group meeting or casually\n"
+                "4. **Frame it around value, not personal need** — 'I believe I'm ready "
+                "to contribute more as [title]' beats 'I need more money'\n\n"
+                "**What to say:**\n"
+                "> *'I'd like to discuss my career progression. Over the past year I've "
+                "[achievements]. I'd love to understand what a path to [next role] "
+                "looks like, and whether you see me as ready.'*\n\n"
+                "**If the answer is no:**\n"
+                "- Ask: 'What specific milestones would make me ready?' "
+                "— this turns a rejection into a roadmap\n"
+                "- Set a follow-up date (3–6 months)\n\n"
+                "**UAE context:** Promotions in UAE often happen at year-end or during "
+                "budget cycles (typically Q4 or Q1). Build the case early."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "promotion_uae", "message": msg}
+
+    # ── Handling job rejection ────────────────────────────────────────────────────
+
+    def _handle_job_rejection(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## كيف تتعامل مع رفض طلب التوظيف؟\n\n"
+                "**أولاً: لا بأس — الرفض جزء طبيعي من البحث عن عمل**\n"
+                "- غالبية المتقدمين الناجحين تعرضوا لرفض عشرات المرات قبل الحصول على وظيفتهم\n"
+                "- الرفض لا يعني أنك لست مؤهلاً، بل أحياناً يعني أنك لم تتوافق مع هذه الفرصة تحديداً\n\n"
+                "**هل تطلب تغذية راجعة (Feedback)?**\n"
+                "- نعم، يمكنك أن تطلب بأدب: «شكراً لإخباري. هل بإمكانك مشاركتي أي تغذية راجعة "
+                "قد تساعدني في الفرص القادمة؟»\n"
+                "- ليس كل مُعيِّن سيرد، لكن حين يردون فالمعلومة ثمينة\n\n"
+                "**ماذا تفعل بعد الرفض؟**\n"
+                "1. راجع سيرتك الذاتية وخطاب التقديم\n"
+                "2. فكّر في أدائك في المقابلة — ما الذي يمكن تحسينه؟\n"
+                "3. احتفظ بعلاقة إيجابية مع المُعيِّن (قد تنشأ فرص مستقبلية)\n"
+                "4. لا تنسحب عاطفياً — تابع باقي طلباتك فوراً\n\n"
+                "**نصيحة:** أفضل رد على الرفض هو التقدم لوظيفة أخرى في اليوم التالي."
+            )
+        else:
+            msg = (
+                "## How to Handle a Job Rejection\n\n"
+                "**First: it's normal — rejection is part of the process**\n"
+                "- Most successful professionals received dozens of rejections before landing their role\n"
+                "- A rejection often means the role wasn't the right fit, not that you're unqualified\n\n"
+                "**Should you ask for feedback?**\n"
+                "- Yes — send a polite reply: *'Thank you for letting me know. Would you be able "
+                "to share any feedback that might help me for future opportunities?'*\n"
+                "- Not everyone responds, but when they do, the insight is valuable\n\n"
+                "**What to do after a rejection:**\n"
+                "1. **Review** your CV, cover letter, and interview performance\n"
+                "2. **Stay professional** — the recruiter may think of you for another role\n"
+                "3. **Keep applying** — don't pause your search while waiting on any single role\n"
+                "4. **Track patterns** — if you're consistently reaching interviews but not "
+                "offers, focus on interview prep; if you're not getting callbacks, revise your CV\n\n"
+                "**UAE context:** The UAE hiring market moves fast. Following up within "
+                "24 hours of rejection — gracefully — often leaves a strong impression.\n\n"
+                "**Tip:** The best response to rejection is applying for the next role "
+                "the same day."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "job_rejection", "message": msg}
+
+    # ── Counter-offer from current employer ───────────────────────────────────────
+
+    def _handle_counter_offer(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## العرض المضاد من صاحب العمل: هل تقبله؟\n\n"
+                "**ما هو العرض المضاد؟**\n"
+                "- هو عرض يقدمه صاحب العمل الحالي (زيادة راتب، ترقية، مزايا) لمنعك من الرحيل\n\n"
+                "**الإحصاءات المهمة:**\n"
+                "- تشير الدراسات إلى أن 80% ممن يقبلون عرضاً مضاداً يغادرون الشركة خلال 6–12 شهراً\n"
+                "- لأن الأسباب الحقيقية للمغادرة (البيئة، النمو، القيادة) غالباً لم تتغير\n\n"
+                "**قبل اتخاذ قرارك، اسأل نفسك:**\n"
+                "1. ما الذي يجعلني أريد المغادرة أصلاً؟ هل يعالج هذا العرض المشكلة الحقيقية؟\n"
+                "2. هل يتغير دوري أم فقط الراتب؟\n"
+                "3. ما مدى ثقتي بهذا الوعد مستقبلاً؟\n"
+                "4. هل الشركة الجديدة تقدم نمواً مهنياً لا يوفره مكاني الحالي؟\n\n"
+                "**نصيحة:** إذا كان السبب الوحيد للمغادرة هو الراتب، فالعرض المضاد قد يستحق النظر. "
+                "أما إذا كانت المشكلة في الثقافة أو القيادة أو الفرص، فالعرض المضاد حل مؤقت."
+            )
+        else:
+            msg = (
+                "## Counter-Offer from Your Employer: Should You Accept?\n\n"
+                "**What is a counter-offer?**\n"
+                "- A pay rise, promotion, or benefit your current employer offers to stop "
+                "you from leaving after you've received an outside job offer\n\n"
+                "**The statistics:**\n"
+                "- ~80% of people who accept counter-offers leave within 6–12 months anyway\n"
+                "- The root reasons for wanting to leave (culture, growth, leadership) "
+                "typically haven't changed\n\n"
+                "**Before deciding, ask yourself:**\n"
+                "1. Why did I want to leave in the first place — and does this counter-offer "
+                "actually fix that?\n"
+                "2. Will my role, responsibilities, or growth prospects genuinely change?\n"
+                "3. Was I only being valued when I threatened to leave — what does that say?\n"
+                "4. Does the new company offer something (learning, culture, career trajectory) "
+                "that money alone can't replicate?\n\n"
+                "**When a counter-offer might make sense:**\n"
+                "- You were primarily motivated by salary, and the counter-offer matches or "
+                "beats the new offer\n"
+                "- The employer also addresses the non-financial issue (role expansion, title, team)\n\n"
+                "**When to decline:**\n"
+                "- The only thing changing is your salary\n"
+                "- The trust dynamic is already broken\n"
+                "- You've been considering the move for a long time for reasons beyond pay"
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "counter_offer", "message": msg}
+
+    # ── Relocation package ────────────────────────────────────────────────────────
+
+    def _handle_relocation_package(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## حزمة الانتقال إلى الإمارات: ماذا تتوقع وما الذي تطلبه؟\n\n"
+                "**ما الذي تشمله حزمة الانتقال عادةً في الإمارات؟**\n"
+                "- تذاكر طيران للانتقال (للموظف وأسرته في بعض الأحيان)\n"
+                "- بدل سكن مؤقت (1–3 أشهر فندق أو شقة فندقية)\n"
+                "- بدل شحن الأغراض الشخصية (المتعلقات)\n"
+                "- مساعدة في استخراج التأشيرة والإقامة\n"
+                "- بدل سفر للعودة إلى الوطن مرة واحدة سنوياً (خاصة في القطاعات الكبيرة)\n\n"
+                "**عناصر أقل شيوعاً لكن يمكن التفاوض عليها:**\n"
+                "- بدل الإسكان الشهري (Housing Allowance) بدلاً من المساعدة الأولية فقط\n"
+                "- بدل التعليم للأطفال\n"
+                "- بدل السيارة\n"
+                "- إجازة الاستكشاف قبل الانضمام\n\n"
+                "**نصيحة:** تفاوض على حزمة الانتقال كجزء من مفاوضات العرض — وليس بعد القبول. "
+                "وثّق كل ما تم الاتفاق عليه كتابياً في عقد العمل."
+            )
+        else:
+            msg = (
+                "## UAE Relocation Package: What to Expect and What to Ask For\n\n"
+                "**Typical relocation package components in UAE:**\n"
+                "- **Flight tickets** to UAE (for employee + family in senior roles)\n"
+                "- **Temporary accommodation** — 1–3 months in a serviced apartment or hotel\n"
+                "- **Shipping allowance** for personal belongings\n"
+                "- **Visa processing fees** covered by employer\n"
+                "- **Annual flight ticket home** (very common in UAE, especially in large companies)\n\n"
+                "**Less common but negotiable:**\n"
+                "- **Housing allowance** — monthly contribution to rent (often AED 30,000–80,000+ "
+                "per year for mid-to-senior roles)\n"
+                "- **School fees** for children\n"
+                "- **Car allowance** or company car\n"
+                "- **'Look-see' trip** — a visit to UAE before accepting to find accommodation\n"
+                "- **Settling-in allowance** — lump sum for initial setup\n\n"
+                "**Negotiation tips:**\n"
+                "- Raise the relocation package during offer negotiation, not after accepting\n"
+                "- Get every commitment in writing in the offer letter or employment contract\n"
+                "- Compare: a higher base salary is sometimes better than an allowance "
+                "(allowances may not count for gratuity calculations)\n\n"
+                "**Tip:** If the employer won't provide a package, ask them to cover "
+                "just the visa fees and flight — it's a reasonable minimum ask."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "relocation_package", "message": msg}
+
+    # ── UAE public holidays ───────────────────────────────────────────────────────
+
+    def _handle_public_holidays_uae(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "🗓️ **الإجازات الرسمية في الإمارات**\n\n"
+                "**إجازات ثابتة:**\n"
+                "• رأس السنة الميلادية — 1 يناير\n"
+                "• يوم الشهيد (الوطني للشهداء) — 30 نوفمبر\n"
+                "• اليوم الوطني الإماراتي — 2-3 ديسمبر\n\n"
+                "**إجازات إسلامية (تتغير كل عام بحسب الرؤية الشرعية):**\n"
+                "• اليوم الأول من رمضان\n"
+                "• عيد الفطر — 3 أيام\n"
+                "• يوم عرفة + عيد الأضحى — 3 أيام\n"
+                "• رأس السنة الهجرية\n"
+                "• المولد النبوي الشريف\n"
+                "• الإسراء والمعراج\n\n"
+                "يُحدد المجلس الوزاري مواعيد الإجازات الإسلامية رسمياً قُبيل موعدها. "
+                "خلال رمضان تُقلَّص ساعات العمل بمقدار ساعتين يومياً بموجب قانون العمل."
+            )
+        else:
+            msg = (
+                "🗓️ **UAE Public Holidays**\n\n"
+                "**Fixed holidays:**\n"
+                "• New Year's Day — 1 January\n"
+                "• Commemoration Day (Martyr's Day) — 30 November\n"
+                "• UAE National Day — 2–3 December\n\n"
+                "**Islamic holidays (shift each year with the lunar calendar):**\n"
+                "• First day of Ramadan\n"
+                "• Eid Al Fitr — 3 days\n"
+                "• Arafat Day + Eid Al Adha — 3 days\n"
+                "• Islamic New Year\n"
+                "• Prophet's Birthday\n"
+                "• Lailat Al Mi'raj (Ascension)\n\n"
+                "The UAE Cabinet officially announces Islamic holiday dates a few weeks before they occur. "
+                "Private-sector employees are entitled to all public holidays at full pay. "
+                "During Ramadan, working hours are legally reduced by 2 hours per day. "
+                "If a public holiday falls on a weekend, most employers grant a compensatory day off."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "public_holidays_uae", "message": msg}
+
+    # ── Overtime pay UAE ───────────────────────────────────────────────────────────
+
+    def _handle_overtime_pay_uae(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "⏰ **الوقت الإضافي في الإمارات (قانون العمل الاتحادي)**\n\n"
+                "**ساعات العمل القياسية:**\n"
+                "• 8 ساعات يومياً أو 48 ساعة أسبوعياً\n"
+                "• خلال رمضان: 6 ساعات يومياً فقط\n\n"
+                "**معدلات الوقت الإضافي (المواد 65-68):**\n"
+                "• وقت إضافي نهاري: الراتب العادي + **25%**\n"
+                "• وقت إضافي ليلي (9 مساءً – 4 صباحاً): الراتب العادي + **50%**\n"
+                "• العمل في يوم الراحة: راتب يوم كامل + **50% إضافي**\n\n"
+                "**الحد الأقصى:** ساعتان إضافيتان في اليوم إلا في حالات استثنائية.\n\n"
+                "⚠️ قد تُستثنى المناصب الإدارية العليا من هذه الأحكام. "
+                "في حال رفض صاحب العمل صرف الوقت الإضافي، يمكنك تقديم شكوى عبر وزارة الموارد البشرية (MOHRE) على الرقم 800-60."
+            )
+        else:
+            msg = (
+                "⏰ **Overtime Pay in UAE (Federal Labour Law)**\n\n"
+                "**Standard working hours:**\n"
+                "• Max 8 hours/day or 48 hours/week\n"
+                "• Reduced to 6 hours/day during Ramadan\n\n"
+                "**Overtime rates (Articles 65–68):**\n"
+                "• Daytime overtime: normal hourly rate + **25%**\n"
+                "• Night-time overtime (9 pm – 4 am): normal hourly rate + **50%**\n"
+                "• Work on official day off: full basic day's pay + **50% premium**\n\n"
+                "**Maximum overtime:** 2 hours per day unless exceptional circumstances apply.\n\n"
+                "⚠️ Senior managers and supervisors may be exempt from overtime entitlement depending on contract terms. "
+                "If your employer refuses to pay overtime owed, file a complaint with MOHRE at mohre.gov.ae or call 800-60."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "overtime_pay_uae", "message": msg}
+
+    # ── Contract types UAE ────────────────────────────────────────────────────────
+
+    def _handle_contract_types_uae(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "📄 **أنواع عقود العمل في الإمارات**\n\n"
+                "**تحديث مهم (2022):** ألغى قانون العمل الجديد (المرسوم الاتحادي رقم 33 لسنة 2021) "
+                "التمييز التقليدي بين العقود المحددة وغير المحددة المدة. "
+                "جميع العقود الجديدة محددة المدة (لا تتجاوز 3 سنوات، قابلة للتجديد).\n\n"
+                "**أنواع العقود الحالية:**\n"
+                "• **عقد بدوام كامل** — الأكثر شيوعاً، قابل للتجديد\n"
+                "• **عقد بدوام جزئي** — أقل من 8 ساعات يومياً، يُتيح العمل لدى أكثر من جهة\n"
+                "• **عقد مشروع** — ينتهي عند اكتمال المشروع\n"
+                "• **عقد مرن** — ساعات متغيرة بالاتفاق\n"
+                "• **عقد موسمي** — لنشاطات ومواسم محددة\n\n"
+                "**ماذا يحدث عند انتهاء العقد؟**\n"
+                "• إذا استمررت في العمل دون تجديد رسمي، يُعدّ العقد مجدَّداً ضمنياً بنفس الشروط\n"
+                "• يجب على صاحب العمل إخطارك بعدم التجديد قبل 30 يوماً على الأقل\n"
+                "• تستحق مكافأة نهاية الخدمة بناءً على إجمالي سنوات الخدمة بغض النظر عن نوع الإنهاء\n\n"
+                "💡 احرص على توقيع عقدك باللغتين العربية والإنجليزية. النسخة العربية هي المعتمدة قانونياً."
+            )
+        else:
+            msg = (
+                "📄 **Employment Contract Types in UAE**\n\n"
+                "**Key update (2022):** The new UAE Labour Law (Federal Decree No. 33 of 2021) eliminated the old limited/unlimited contract distinction. "
+                "All new contracts must now be **fixed-term** (maximum 3 years, renewable).\n\n"
+                "**Current contract types:**\n"
+                "• **Full-time** — renewable fixed-term, most common\n"
+                "• **Part-time** — fewer than 8 hours/day; working for multiple employers is permitted\n"
+                "• **Project-based** — ends when the specific project completes\n"
+                "• **Flexible** — hours vary by mutual agreement\n"
+                "• **Seasonal** — tied to a specific season or activity\n\n"
+                "**What happens when a fixed-term contract expires?**\n"
+                "• If you keep working without a new signed contract, it's treated as implicitly renewed on the same terms\n"
+                "• Your employer must give at least **30 days' notice** of non-renewal\n"
+                "• You're entitled to end-of-service gratuity based on total years served regardless of how the contract ends\n\n"
+                "💡 Always insist on a written contract in both Arabic and English. The Arabic version is legally binding in UAE courts."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "contract_types_uae", "message": msg}
+
+    # ── Multiple job offers ───────────────────────────────────────────────────────
+
+    def _handle_multiple_offers(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "⚖️ **كيف تختار بين عرضين وظيفيين؟**\n\n"
+                "**اقارن هذه العوامل الستة:**\n\n"
+                "1. **الراتب الإجمالي** — لا تقارن الأساسي فقط؛ احسب بدل الإسكان والمواصلات والمكافآت\n"
+                "2. **مسار النمو الوظيفي** — أيهما يفتح أمامك آفاقاً أوسع بعد 3 سنوات؟\n"
+                "3. **الاستقرار الوظيفي** — ما أوضاع الشركتين ماليًا؟ هل هناك أخبار عن تسريح؟\n"
+                "4. **ثقافة العمل** — من قابلت أثناء المقابلة؟ هل شعرت بالانتماء؟\n"
+                "5. **المرونة وبيئة العمل** — عن بُعد / هجين / مكتب؟ ساعات عمل؟\n"
+                "6. **الحزمة الكاملة** — تأمين صحي، إجازات، فرص تدريب، بدل تأشيرة\n\n"
+                "**نصيحة عملية:** إذا كنت تميل لعرض بمرتب أقل، تفاوض مع الطرف الأعلى أجراً على مزايا غير مالية — وبالعكس.\n\n"
+                "⏰ إذا كنت بحاجة إلى وقت إضافي للتفكير، اطلب من الشركة مهلة لا تتجاوز 3–5 أيام عمل."
+            )
+        else:
+            msg = (
+                "⚖️ **How to Choose Between Two Job Offers**\n\n"
+                "**Compare these 6 factors side by side:**\n\n"
+                "1. **Total compensation** — Don't just compare base salary; add housing/transport allowances, bonuses, and equity\n"
+                "2. **Career growth** — Which role puts you in a better position in 3 years?\n"
+                "3. **Company stability** — Research both companies' financials, recent news, and growth trajectory\n"
+                "4. **Culture fit** — Who did you meet during interviews? Did the team feel right?\n"
+                "5. **Flexibility & environment** — Remote / hybrid / in-office? Working hours? Commute?\n"
+                "6. **Full benefits package** — Health insurance, leave days, visa sponsorship, training budget\n\n"
+                "**Practical tip:** If you prefer the lower-paying offer, use the higher-paying one as leverage to negotiate better terms. "
+                "If you prefer the higher-paying one, ask the other company if they can match it.\n\n"
+                "⏰ If you need more time, it's perfectly professional to ask for a 3–5 business day extension — "
+                "most UAE employers expect this. Don't feel pressured to decide on the spot."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "multiple_offers", "message": msg}
+
+    # ── Workplace harassment UAE ──────────────────────────────────────────────────
+
+    def _handle_workplace_harassment(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "🛡️ **التحرش والتمييز في بيئة العمل — حقوقك في الإمارات**\n\n"
+                "**هل يحمي القانون الإماراتي من التحرش؟**\n"
+                "نعم. تُجرِّم المادة (14) من قانون العمل الاتحادي رقم 33 لسنة 2021 والمرسوم الوزاري 43 لسنة 2022 "
+                "التحرش والتنمر والتمييز في بيئة العمل وتُلزم صاحب العمل بتوفير بيئة عمل آمنة.\n\n"
+                "**خطوات الإبلاغ:**\n"
+                "1. **وثّق كل شيء** — احتفظ بالرسائل والبريد الإلكتروني والملاحظات المُتاريخة\n"
+                "2. **أبلغ قسم الموارد البشرية** كتابياً واحتفظ بنسخة من البلاغ\n"
+                "3. **إذا لم يُتخذ إجراء** — قدّم شكوى إلى وزارة الموارد البشرية والتوطين (MOHRE):\n"
+                "   • الخط الساخن: 800-60\n"
+                "   • الموقع: mohre.gov.ae\n"
+                "   • تطبيق MOHRE للهاتف المحمول\n"
+                "4. **للتحرش الجنسي** — يمكنك التقدم مباشرة إلى الشرطة أو النيابة العامة\n\n"
+                "⚠️ لا يجوز لصاحب العمل فصلك بسبب تقديم شكوى — يُعدّ ذلك فصلاً تعسفياً ويُعطيك الحق في تعويض."
+            )
+        else:
+            msg = (
+                "🛡️ **Workplace Harassment & Discrimination in UAE**\n\n"
+                "**Is workplace harassment illegal in UAE?**\n"
+                "Yes. Article 14 of the UAE Labour Law (Federal Decree No. 33 of 2021) and Ministerial Resolution No. 43 of 2022 "
+                "explicitly prohibit harassment, bullying, and discrimination in the workplace. Employers are required to provide a safe working environment.\n\n"
+                "**Steps to take:**\n"
+                "1. **Document everything** — keep dated records of messages, emails, and incidents\n"
+                "2. **Report to HR in writing** — email is best; keep a copy\n"
+                "3. **If no action is taken** — file a complaint with MOHRE (Ministry of Human Resources & Emiratisation):\n"
+                "   • Hotline: 800-60\n"
+                "   • Website: mohre.gov.ae\n"
+                "   • MOHRE mobile app\n"
+                "4. **For sexual harassment** — you can report directly to the police or public prosecution\n\n"
+                "⚠️ Your employer cannot legally terminate you for making a complaint — that would constitute wrongful dismissal and entitle you to additional compensation. "
+                "You may also be able to terminate your own contract without notice and still claim full EOSB if harassment is proven."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "workplace_harassment", "message": msg}
+
+    # ── Redundancy / layoff UAE ───────────────────────────────────────────────────
+
+    def _handle_redundancy_uae(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "📋 **حقوقك عند الاستغناء عن خدماتك أو الفصل الجماعي في الإمارات**\n\n"
+                "**ما الذي تستحقه قانوناً عند الاستغناء عن خدماتك؟**\n"
+                "• **مكافأة نهاية الخدمة (EOSB)** — 21 يوماً عن كل سنة خلال الخمس سنوات الأولى، ثم 30 يوماً عن كل سنة بعد ذلك\n"
+                "• **مدة الإشعار** — 30 إلى 90 يوماً حسب العقد (أو التعويض المالي بدلاً منها)\n"
+                "• **الراتب المتأخر والعلاوات والأيام الإضافية** — كافة المستحقات المتبقية\n"
+                "• **تذكرة العودة إلى الوطن** — في حال كانت مشمولة في عقدك\n"
+                "• **فترة السماح بعد إلغاء التأشيرة** — 30 يوماً للبحث عن عمل جديد\n\n"
+                "**هل يمكن لصاحب العمل الاستغناء عنك دون إشعار؟**\n"
+                "لا، إلا في حالات التقصير الجسيم الموثّقة. الاستغناء الاقتصادي يستلزم دفع التعويض المقابل لمدة الإشعار.\n\n"
+                "**إذا رفض صاحب العمل دفع مستحقاتك:**\n"
+                "تواصل مع MOHRE على 800-60 أو قدّم شكوى عبر mohre.gov.ae"
+            )
+        else:
+            msg = (
+                "📋 **Your Rights if Made Redundant / Laid Off in UAE**\n\n"
+                "**What you're legally entitled to:**\n"
+                "• **End-of-service gratuity (EOSB)** — 21 days' pay per year for the first 5 years, then 30 days/year thereafter\n"
+                "• **Notice period** — 30–90 days per your contract (or equivalent pay in lieu of notice)\n"
+                "• **All outstanding salary, bonuses, and accrued leave days**\n"
+                "• **Return flight ticket home** — if stipulated in your contract\n"
+                "• **30-day visa grace period** — after visa cancellation to find new employment\n\n"
+                "**Can your employer make you redundant without notice?**\n"
+                "No, unless for documented gross misconduct. Economic redundancy requires either working the notice period or paying in lieu.\n\n"
+                "**What counts as unfair dismissal?**\n"
+                "Termination without valid reason, without notice, or in retaliation for asserting your rights. "
+                "You can claim compensation of up to 3 months' salary in addition to your full EOSB.\n\n"
+                "**If your employer refuses to pay:**\n"
+                "File a complaint with MOHRE — 800-60 | mohre.gov.ae | MOHRE mobile app."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "redundancy_uae", "message": msg}
 
     # ── Context-aware help ──────────────────────────────────────────────────────
 
