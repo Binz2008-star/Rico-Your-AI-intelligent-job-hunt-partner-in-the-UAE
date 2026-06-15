@@ -1827,17 +1827,26 @@ class RicoChatAPI:
         re.IGNORECASE,
     )
 
-    # Matches explicit requests to view submitted applications — must route to
-    # application_tracking regardless of prior turn context.
+    # Matches explicit user-ownership requests — must route to application_tracking
+    # regardless of prior turn context.
     # "show applications" / "list applications" (no "my") are intentionally excluded:
     # those bare forms stay in _LIST_FOLLOWUP_PHRASES so they replay lifecycle context
     # when a prior application turn exists, which is the correct contextual behavior.
-    # English: "show my applications", "my applications", etc.
+    # English: "show my applications", "my applications", "show my job applications",
+    #          "show my job applications and their status", "my jobs", "show my pipeline".
     # Arabic:  "طلباتي", "اعرض طلباتي", etc.
     _SHOW_MY_APPLICATIONS_RE = re.compile(
         r"^(?:"
-        r"(?:show|list|view|see|display|check|track)\s+my\s+applications?|"
-        r"my\s+applications?"
+        # "show/list/... my [job] applications [and their status / status]"
+        r"(?:show|list|view|see|display|check|track)\s+my\s+(?:job\s+)?applications?\s*(?:(?:and\s+their\s+)?status)?"
+        r"|my\s+(?:job\s+)?applications?"
+        # "show my jobs" / "list my jobs" / "my jobs"
+        r"|(?:show|list|view|see|display|check|track)\s+my\s+jobs?"
+        r"|my\s+jobs?"
+        # "show my pipeline" / "my pipeline" / "show my application pipeline"
+        r"|(?:show|display|view|open)\s+my\s+(?:application\s+)?pipeline"
+        r"|my\s+(?:application\s+)?pipeline"
+        # Arabic
         r"|(?:اعرض|أعرض|عرض|اظهر|أظهر|ارني|أريني)\s+طلباتي"
         r"|طلباتي"
         r")$",
@@ -5735,12 +5744,31 @@ class RicoChatAPI:
                 prof_dict = profile_to_dict(ctx.profile) if ctx.profile else {}
             except Exception:
                 prof_dict = profile_to_dict(profile) if profile else {}
+
+            # CV-specific request ("my cv", "show my cv", "my resume") must
+            # mention CV/upload status — not look like a generic profile dump.
+            _msg_lower = (message or "").strip().lower()
+            _is_cv_request = bool(re.search(r"\bcv\b|\bresume\b", _msg_lower))
+            if _is_cv_request:
+                if has_cv:
+                    _summary_msg = (
+                        "Your CV is on file. Here is what Rico has on your profile — "
+                        "skills, experience, and target roles extracted from your upload."
+                    )
+                else:
+                    _summary_msg = (
+                        "No CV uploaded yet. Use the **Upload CV** button on this page "
+                        "and Rico will parse it automatically. Here is your profile so far."
+                    )
+            else:
+                _summary_msg = "Here is your current profile."
+
             response = {
                 "type": "profile_summary",
-                "message": "Here is your current profile.",
+                "message": _summary_msg,
                 "profile": prof_dict,
             }
-            self._append_chat(user_id, "assistant", response["message"])
+            self._append_chat(user_id, "assistant", _summary_msg)
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
         # Profile role suggestions - deterministic fast path based on CV skills/certifications
