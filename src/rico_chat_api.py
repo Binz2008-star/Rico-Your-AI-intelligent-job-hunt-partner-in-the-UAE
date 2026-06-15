@@ -481,6 +481,43 @@ _FOLLOWUP_TIMING_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Industry-based job search: "find jobs in oil and gas", "construction sector jobs in Dubai",
+# "finance industry positions", "IT sector vacancies in Abu Dhabi".
+# Distinguished from role search by the presence of a sector/industry keyword.
+_INDUSTRY_SEARCH_RE = re.compile(
+    r"\b(?:find|show|search\s+for|look\s+for)\s+(?:me\s+)?(?:jobs?|roles?|positions?|vacancies|work)\s+in\s+(?:the\s+)?"
+    r"(?:oil\s+(?:and|&)\s+gas|construction|finance|banking|IT|information\s+technology|tech(?:nology)?|"
+    r"healthcare|medical|real\s+estate|retail|hospitality|tourism|logistics|supply\s+chain|"
+    r"manufacturing|education|government|public\s+sector|telecom(?:munications?)?|"
+    r"energy|aviation|maritime|legal|accounting|insurance|media|advertising)\b"
+    r"|\b(?:oil\s+(?:and|&)\s+gas|construction|finance|banking|healthcare|medical|real\s+estate|"
+    r"hospitality|logistics|manufacturing|education|telecom(?:munications?)?|energy|aviation|maritime)\s+"
+    r"(?:sector\s+|industry\s+)?(?:jobs?|roles?|positions?|vacancies|careers?|opportunities?)\b"
+    r"|\b(?:وظائف|فرص)\s+(?:في\s+)?(?:قطاع|صناعة)\s+\w",
+    re.IGNORECASE,
+)
+
+# Job comparison: "compare job 1 and job 2", "compare the first and third job",
+# "which is better job 1 or job 3?", "job 1 vs job 2".
+_JOB_COMPARE_RE = re.compile(
+    r"\b(?:compare|comparing|difference\s+between|which\s+(?:is\s+)?better)\b.{0,50}"
+    r"(?:job|option|result|position|number|#)?\s*(?P<a>[1-5]|first|second|third|fourth|fifth)"
+    r".{0,25}\b(?:and|or|vs\.?|versus)\b.{0,25}"
+    r"(?:job|option|result|position|number|#)?\s*(?P<b>[1-5]|first|second|third|fourth|fifth)\b"
+    r"|\b(?:job|option)\s*(?P<c>[1-5])\s+(?:vs\.?|versus|or)\s+(?:job|option)?\s*(?P<d>[1-5])\b",
+    re.IGNORECASE,
+)
+
+# Search result count: "how many jobs did you find?", "how many results were there?",
+# "total number of matches?", "how many vacancies?".
+_RESULT_COUNT_RE = re.compile(
+    r"\bhow\s+many\s+(?:jobs?|roles?|results?|matches?|vacancies|positions?|openings?)\s+"
+    r"(?:did\s+you\s+(?:find|get|return|show|come\s+up\s+with)|were\s+there|are\s+there|do\s+you\s+have)\b"
+    r"|\btotal\s+(?:number\s+of\s+)?(?:jobs?|results?|matches?|vacancies)\b"
+    r"|\b(?:كم\s+(?:وظيفة|نتيجة|عدد))\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -4228,9 +4265,11 @@ class RicoChatAPI:
         # → Nth cached match. Ordinal extraction runs inside this gate so that
         # "tell me more about the second job" is not blocked by _JOB_DETAIL_RE
         # returning match[0] before the ordinal gate fires.
+        # Comparison queries ("compare job 1 and job 2") also trigger _ORDINAL_JOB_RE
+        # via "job 1" — skip here so _JOB_COMPARE_RE can handle them downstream.
         _jd_detail_match = _JOB_DETAIL_RE.search(message)
         _jd_ordinal_match = _ORDINAL_JOB_RE.search(message)
-        if _jd_detail_match or _jd_ordinal_match:
+        if (_jd_detail_match or _jd_ordinal_match) and not _JOB_COMPARE_RE.search(message):
             _ord_hint = ""
             if _jd_ordinal_match:
                 _ord_hint = (
@@ -4332,6 +4371,33 @@ class RicoChatAPI:
         if _FOLLOWUP_TIMING_RE.search(message):
             return self._finalize(
                 self._handle_followup_timing(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Industry-based job search ─────────────────────────────────────────
+        # "find jobs in oil and gas", "construction sector jobs in Dubai".
+        if _INDUSTRY_SEARCH_RE.search(message):
+            return self._finalize(
+                self._handle_industry_search(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Job comparison ────────────────────────────────────────────────────
+        # "compare job 1 and job 2", "which is better, job 1 or 3?".
+        if _JOB_COMPARE_RE.search(message):
+            return self._finalize(
+                self._handle_job_comparison(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Search result count ───────────────────────────────────────────────
+        # "how many jobs did you find?", "total number of results".
+        if _RESULT_COUNT_RE.search(message):
+            return self._finalize(
+                self._handle_result_count(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -8460,6 +8526,249 @@ class RicoChatAPI:
             "type": "followup_timing",
             "company": company_name,
             "applied_date": applied_date,
+            "message": msg,
+        }
+
+    # ── Industry-based job search ───────────────────────────────────────────────
+
+    def _handle_industry_search(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Search for jobs filtered by industry/sector.
+
+        Detects phrases like "find jobs in oil and gas", "construction sector
+        jobs in Dubai", "healthcare vacancies in Abu Dhabi".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        # Known industry keywords → normalised label for the search query
+        _INDUSTRY_MAP = [
+            (r"oil\s+(?:and|&)\s+gas|petroleum", "oil and gas"),
+            (r"construction|building", "construction"),
+            (r"finance|banking|financial", "finance"),
+            (r"information\s+technology|IT\b|software|tech(?:nology)?", "technology"),
+            (r"health(?:care)?|medical|pharmaceutical", "healthcare"),
+            (r"real\s+estate|property", "real estate"),
+            (r"hospitality|hotel|tourism", "hospitality"),
+            (r"logistics|supply\s+chain|transport(?:ation)?", "logistics"),
+            (r"manufacturing|industrial", "manufacturing"),
+            (r"education|academic", "education"),
+            (r"telecom(?:munications?)?", "telecommunications"),
+            (r"energy|renewable|utilities", "energy"),
+            (r"aviation|aerospace|airline", "aviation"),
+            (r"maritime|shipping|ports?", "maritime"),
+            (r"legal|law", "legal"),
+            (r"accounting|audit", "accounting"),
+            (r"insurance", "insurance"),
+            (r"retail|e-?commerce", "retail"),
+            (r"media|advertising|marketing", "media"),
+            (r"government|public\s+sector", "government"),
+        ]
+
+        industry = ""
+        for pattern, label in _INDUSTRY_MAP:
+            if _re.search(pattern, message, _re.IGNORECASE):
+                industry = label
+                break
+
+        if not industry:
+            # Extract the word(s) after "in the" / "in" as a fallback
+            _ind_m = _re.search(r"\bjobs?\s+in\s+(?:the\s+)?([a-z][a-z\s]{2,25})\b", message, _re.IGNORECASE)
+            industry = _ind_m.group(1).strip() if _ind_m else ""
+
+        # Optional location hint
+        _loc_m = _re.search(r"\bin\s+(Dubai|Abu\s+Dhabi|Sharjah|Ajman|Fujairah|Al\s+Ain|UAE)\b", message, _re.IGNORECASE)
+        location = _loc_m.group(1).strip() if _loc_m else ""
+
+        if not industry:
+            msg = (
+                "أخبرني بالقطاع الذي تريد البحث فيه، مثل: 'وظائف في قطاع النفط والغاز'."
+                if arabic else
+                "Which industry are you looking for? E.g. 'find jobs in oil and gas' or 'healthcare sector roles'."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "message": msg}
+
+        # Optional role hint from profile or message
+        role = ""
+        _role_m = _re.search(r"\b(?:as\s+(?:an?\s+)|for\s+(?:an?\s+))([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b", message)
+        if _role_m:
+            role = _role_m.group(1).strip()
+        if not role:
+            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            role = target_roles[0] if target_roles else ""
+
+        search_query = f"{role} {industry}" if role else f"jobs {industry}"
+        search_query = search_query.strip()
+
+        fetch = self._search_jsearch_meta(search_query, location)
+        matches = fetch.items or []
+
+        self._store_search_matches_context(user_id, matches[:10])
+        top = matches[:5]
+
+        if not top:
+            msg = (
+                f"لم أجد وظائف في قطاع **{industry}** في الإمارات حالياً."
+                if arabic else
+                f"No **{industry}** jobs found in the UAE right now. Try a broader search or check back later."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "no_results", "industry": industry, "message": msg}
+
+        loc_label = f" in {location}" if location else " in the UAE"
+        header = (
+            f"وجدت **{len(top)}** وظيفة في قطاع **{industry}**{' في ' + location if location else ' في الإمارات'}:"
+            if arabic else
+            f"Found **{len(top)} {industry} role{'s' if len(top) != 1 else ''}**{loc_label}:"
+        )
+        lines = [header, ""]
+        for i, job in enumerate(top, 1):
+            title   = job.get("title") or job.get("job_title") or "Role"
+            company = job.get("company") or job.get("employer_name") or ""
+            loc     = job.get("location") or job.get("job_city") or "UAE"
+            url     = job.get("apply_url") or job.get("job_apply_link") or ""
+            line = f"{i}. **{title}**" + (f" at {company}" if company else "") + f" — {loc}"
+            if url:
+                line += f" ([Apply]({url}))"
+            lines.append(line)
+
+        msg = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "job_matches",
+            "industry": industry,
+            "jobs": top,
+            "total_found": len(matches),
+            "message": msg,
+        }
+
+    # ── Job comparison ──────────────────────────────────────────────────────────
+
+    def _handle_job_comparison(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Compare two cached search results side-by-side.
+
+        Detects: "compare job 1 and job 2", "which is better, job 1 or 3?",
+        "job 1 vs job 3".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        # Extract ordinal/numeric identifiers for the two jobs
+        _ORD_MAP = {"first": 0, "second": 1, "third": 2, "fourth": 3, "fifth": 4,
+                    "1": 0, "2": 1, "3": 2, "4": 3, "5": 4}
+
+        nums = _re.findall(r"\b(?:[1-5]|first|second|third|fourth|fifth)\b", message, _re.IGNORECASE)
+        idx_a = _ORD_MAP.get(nums[0].lower(), 0) if len(nums) >= 1 else 0
+        idx_b = _ORD_MAP.get(nums[1].lower(), 1) if len(nums) >= 2 else 1
+
+        ctx = self._get_recent_context(user_id)
+        matches: list[dict[str, Any]] = ctx.get("recent_search_matches") or []
+
+        if not matches:
+            msg = (
+                "لا توجد نتائج بحث حديثة للمقارنة. ابحث عن وظائف أولاً ثم اطلب المقارنة."
+                if arabic else
+                "No recent search results to compare. Search for jobs first, then ask me to compare them."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "message": msg}
+
+        # Clamp indices to available list
+        idx_a = min(idx_a, len(matches) - 1)
+        idx_b = min(idx_b, len(matches) - 1)
+        if idx_a == idx_b:
+            idx_b = min(idx_a + 1, len(matches) - 1)
+
+        job_a = matches[idx_a]
+        job_b = matches[idx_b]
+
+        def _fmt_job(job: dict, label: str) -> list[str]:
+            title   = job.get("title") or job.get("job_title") or "Unknown role"
+            company = job.get("company") or job.get("employer_name") or "Unknown company"
+            loc     = job.get("location") or job.get("job_city") or "UAE"
+            sal     = job.get("salary_string") or "Not listed"
+            etype   = job.get("employment_type") or job.get("job_employment_type") or "Not specified"
+            url     = job.get("apply_url") or job.get("job_apply_link") or ""
+            lines   = [f"**{label}:** {title} at {company}"]
+            lines.append(f"  - 📍 {loc}")
+            lines.append(f"  - 💰 {sal}")
+            lines.append(f"  - 🕐 {etype}")
+            if url:
+                lines.append(f"  - [Apply here]({url})")
+            return lines
+
+        n_a = idx_a + 1
+        n_b = idx_b + 1
+        header = f"**Comparing Job {n_a} vs Job {n_b}:**\n"
+        lines = [header] + _fmt_job(job_a, f"Job {n_a}") + [""] + _fmt_job(job_b, f"Job {n_b}")
+
+        # Simple highlights
+        sal_a = job_a.get("salary_string") or ""
+        sal_b = job_b.get("salary_string") or ""
+        if sal_a or sal_b:
+            lines.append(f"\n**Salary:** Job {n_a}: {sal_a or 'N/A'} | Job {n_b}: {sal_b or 'N/A'}")
+
+        lines.append(
+            f"\nSay **'tell me more about job {n_a}'** or **'tell me more about job {n_b}'** "
+            "for full details, or **'apply to job X'** to track an application."
+        )
+
+        msg = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "job_comparison",
+            "job_a_index": idx_a,
+            "job_b_index": idx_b,
+            "job_a": job_a,
+            "job_b": job_b,
+            "message": msg,
+        }
+
+    # ── Search result count ─────────────────────────────────────────────────────
+
+    def _handle_result_count(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Return the count from the most recent cached job search.
+
+        Detects: "how many jobs did you find?", "total number of results",
+        "how many matches were there?".
+        """
+        arabic = self._is_arabic_text(message)
+
+        ctx    = self._get_recent_context(user_id)
+        jobs   = ctx.get("recent_search_matches") or []
+        role   = ctx.get("recent_search_role") or ""
+        count  = len(jobs)
+
+        if count == 0:
+            msg = (
+                "لا توجد نتائج بحث حديثة. ابدأ بالبحث عن وظيفة أولاً."
+                if arabic else
+                "I don't have any recent search results. Start a job search first and then ask."
+            )
+        elif arabic:
+            msg = (
+                f"وجدت **{count}** وظيفة{(' لـ ' + role) if role else ''} في آخر بحث."
+            )
+        else:
+            msg = (
+                f"My last search returned **{count} result{'s' if count != 1 else ''}**"
+                + (f" for **{role}**" if role else "") + "."
+                + (" Say 'show more' to see more results." if count > 5 else "")
+            )
+
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "result_count",
+            "count": count,
+            "role": role,
             "message": msg,
         }
 
