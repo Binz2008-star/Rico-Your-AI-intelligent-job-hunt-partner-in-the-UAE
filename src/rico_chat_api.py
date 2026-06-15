@@ -1474,6 +1474,50 @@ _OFFER_RESCINDED_RE = re.compile(
     re.IGNORECASE,
 )
 
+# ── Performance Improvement Plan (PIP) UAE ────────────────────────────────────
+# "I've been put on a PIP", "what is a performance improvement plan?",
+# "can they fire me after a PIP in UAE?".
+_PIP_UAE_RE = re.compile(
+    r"\b(?:I(?:'ve|\s+have|\s+was|\s+am)\s+(?:been\s+)?(?:put\s+on|placed\s+on|given\s+a?|given|received\s+a?)\s+(?:a\s+)?(?:PIP|performance\s+improvement\s+plan))\b"
+    r"|\b(?:(?:PIP|performance\s+improvement\s+plan)\s+(?:UAE|Dubai|rights?|process|law|rules?|fired|termination|next\s+steps?|what\s+(?:is|are|does|can|should)))\b"
+    r"|\b(?:what\s+is\s+(?:a\s+)?(?:PIP|performance\s+improvement\s+plan))\b"
+    r"|\b(?:how\s+(?:to|do\s+I|should\s+I|can\s+I)\s+(?:respond\s+to|handle|deal\s+with|survive|get\s+off|challenge|fight)\s+(?:a\s+)?(?:PIP|performance\s+improvement\s+plan))\b"
+    r"|\b(?:can\s+(?:my\s+employer|they|the\s+company)\s+(?:fire|dismiss|terminate)\s+me\s+(?:after|following|for\s+failing)\s+(?:a\s+)?(?:PIP|performance\s+improvement\s+plan))\b"
+    r"|\b(?:my\s+(?:manager|boss|employer|company)\s+(?:gave|put|placed)\s+me\s+(?:on\s+)?(?:a\s+)?(?:PIP|performance\s+improvement\s+plan))\b"
+    r"|\b(?:خطة\s+تحسين\s+الأداء\s+(?:الإمارات|حقوقي|ماذا\s+أفعل|ما\s+هي))\b",
+    re.IGNORECASE,
+)
+
+# ── Second job / moonlighting UAE ─────────────────────────────────────────────
+# "can I work two jobs in UAE?", "is moonlighting allowed?",
+# "do I need a NOC to freelance while employed?".
+_SECOND_JOB_UAE_RE = re.compile(
+    r"\b(?:can\s+I\s+(?:work|have|take|get)\s+(?:a\s+)?(?:second\s+job|two\s+jobs?|another\s+job|side\s+job|part[- ]time\s+job)(?:\s+(?:in\s+(?:UAE|Dubai)))?)\b"
+    r"|\b(?:is\s+(?:moonlighting|working\s+two\s+jobs?|having\s+a\s+second\s+job|dual\s+employment)\s+(?:allowed|legal|permitted|OK|okay)(?:\s+(?:in\s+(?:UAE|Dubai)))?)\b"
+    r"|\b(?:(?:moonlighting|dual\s+employment|side\s+job)\s+(?:UAE|Dubai|allowed|legal|rules?|law|permitted|policy|OK))\b"
+    r"|\b(?:second\s+job\s+(?:UAE|Dubai|allowed|legal|rules?|law|permitted|while\s+(?:employed|on\s+a\s+visa)))\b"
+    r"|\b(?:can\s+I\s+(?:freelance|work\s+freelance|do\s+freelancing)\s+(?:on\s+the\s+side\s+)?(?:while|when)\s+(?:I(?:'m|\s+am)\s+)?(?:employed|working\s+full[- ]time|on\s+a\s+work\s+visa))\b"
+    r"|\b(?:do\s+I\s+(?:need|require)\s+(?:permission|approval|a\s+NOC|an\s+NOC)\s+(?:to\s+work|for\s+a\s+second\s+job|to\s+freelance)(?:\s+(?:in\s+(?:UAE|Dubai)))?)\b"
+    r"|\b(?:working\s+for\s+(?:two|2|multiple)\s+(?:companies|employers)\s+(?:at\s+once|simultaneously|at\s+the\s+same\s+time)(?:\s+(?:UAE|Dubai|legal|allowed|permitted))?)\b"
+    r"|\b(?:العمل\s+في\s+(?:شركتين|وظيفتين|عملين)\s+(?:في\s+الإمارات|بنفس\s+الوقت)|هل\s+يجوز\s+العمل\s+لدى\s+جهتين)\b",
+    re.IGNORECASE,
+)
+
+# ── Wrongful / unfair termination UAE ────────────────────────────────────────
+# "I was wrongfully fired", "can they dismiss me without reason in UAE?",
+# "what are my rights if fired unfairly?".
+_WRONGFUL_TERMINATION_UAE_RE = re.compile(
+    r"\b(?:I\s+(?:was|got|have\s+been)\s+(?:wrongfully|unfairly|unjustly|illegally|unlawfully)\s+(?:fired|dismissed|terminated|let\s+go))\b"
+    r"|\b(?:(?:wrongful|unfair|unjust|illegal|unlawful)\s+(?:dismissal|termination|firing)(?:\s+(?:UAE|Dubai|rights?|law|compensation|claim|case|MOHRE))?)\b"
+    r"|\b(?:(?:my\s+)?(?:employer|company|boss|manager)\s+(?:fired|dismissed|terminated)\s+me\s+(?:unfairly|wrongfully|without\s+(?:reason|cause|notice|warning|justification)))\b"
+    r"|\b(?:(?:I\s+was|they)\s+(?:fired|dismissed|terminated)\s+me?\s+without\s+(?:any\s+)?(?:reason|cause|notice|warning|justification|valid\s+reason))\b"
+    r"|\b(?:what\s+(?:are\s+my\s+rights?|can\s+I\s+do)\s+(?:if|when)\s+(?:I(?:'ve|\s+have|\s+was|\s+am)?\s+(?:been\s+)?)?(?:wrongfully|unfairly|unjustly)\s+(?:fired|dismissed|terminated))\b"
+    r"|\b(?:what\s+(?:are\s+my\s+)?rights?\s+(?:if|when)\s+(?:I(?:'m|\s+am|\s+was|\s+have\s+been)\s+)?(?:fired|dismissed|terminated|let\s+go)\s+(?:unfairly|wrongfully|unjustly|without\s+reason|without\s+cause))\b"
+    r"|\b(?:can\s+(?:my\s+employer|they|the\s+company)\s+(?:fire|dismiss|terminate)\s+me\s+without\s+(?:(?:a\s+)?reason|cause|notice|warning|justification))\b"
+    r"|\b(?:(?:فصل|فُصِلت)\s+(?:تعسفي|ظالم|بلا\s+سبب|دون\s+سبب)(?:\s+(?:الإمارات|ما\s+حقوقي))?|ما\s+حقوقي\s+إذا\s+فُصِلت\s+(?:تعسفياً|ظلماً))\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -5361,7 +5405,7 @@ class RicoChatAPI:
         # via "job 1" — skip here so _JOB_COMPARE_RE can handle them downstream.
         _jd_detail_match = _JOB_DETAIL_RE.search(message)
         _jd_ordinal_match = _ORDINAL_JOB_RE.search(message)
-        if (_jd_detail_match or _jd_ordinal_match) and not _JOB_COMPARE_RE.search(message):
+        if (_jd_detail_match or _jd_ordinal_match) and not _JOB_COMPARE_RE.search(message) and not _SECOND_JOB_UAE_RE.search(message):
             _ord_hint = ""
             if _jd_ordinal_match:
                 _ord_hint = (
@@ -5688,7 +5732,7 @@ class RicoChatAPI:
 
         # ── UAE labor law / probation info ────────────────────────────────────
         # "what is the probation period?", "UAE labor law", "termination rights".
-        if _UAE_LABOR_LAW_RE.search(message) and not _PROBATION_RULES_RE.search(message) and not _CONTRACT_TYPES_UAE_RE.search(message) and not _OVERTIME_PAY_UAE_RE.search(message) and not _REDUNDANCY_UAE_RE.search(message) and not _WORKPLACE_HARASSMENT_RE.search(message):
+        if _UAE_LABOR_LAW_RE.search(message) and not _PROBATION_RULES_RE.search(message) and not _CONTRACT_TYPES_UAE_RE.search(message) and not _OVERTIME_PAY_UAE_RE.search(message) and not _REDUNDANCY_UAE_RE.search(message) and not _WORKPLACE_HARASSMENT_RE.search(message) and not _WRONGFUL_TERMINATION_UAE_RE.search(message):
             return self._finalize(
                 self._handle_uae_labor_law(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -6068,7 +6112,7 @@ class RicoChatAPI:
 
         # ── Redundancy / layoff UAE ───────────────────────────────────────────
         # "I was made redundant", "company is laying me off", "redundancy rights UAE".
-        if _REDUNDANCY_UAE_RE.search(message):
+        if _REDUNDANCY_UAE_RE.search(message) and not _WRONGFUL_TERMINATION_UAE_RE.search(message):
             return self._finalize(
                 self._handle_redundancy_uae(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -6125,6 +6169,33 @@ class RicoChatAPI:
         if _OFFER_RESCINDED_RE.search(message):
             return self._finalize(
                 self._handle_offer_rescinded(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Performance Improvement Plan (PIP) ───────────────────────────────
+        # "I've been put on a PIP", "can they fire me after a PIP in UAE?".
+        if _PIP_UAE_RE.search(message):
+            return self._finalize(
+                self._handle_pip_uae(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Second job / moonlighting UAE ────────────────────────────────────
+        # "can I work two jobs in UAE?", "is moonlighting legal?".
+        if _SECOND_JOB_UAE_RE.search(message):
+            return self._finalize(
+                self._handle_second_job_uae(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Wrongful / unfair termination UAE ────────────────────────────────
+        # "I was wrongfully fired", "can they dismiss me without reason?".
+        if _WRONGFUL_TERMINATION_UAE_RE.search(message):
+            return self._finalize(
+                self._handle_wrongful_termination_uae(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -14853,6 +14924,139 @@ class RicoChatAPI:
             )
         self._append_chat(user_id, "assistant", msg)
         return {"type": "offer_rescinded", "message": msg}
+
+    def _handle_pip_uae(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "⚠️ **خطة تحسين الأداء (PIP) — حقوقك في الإمارات**\n\n"
+                "**ما هي خطة تحسين الأداء؟**\n"
+                "خطة تحسين الأداء (PIP) هي وثيقة رسمية يضعها صاحب العمل تحدد أهدافاً محددة يجب تحقيقها "
+                "خلال فترة زمنية محددة — عادةً 30 إلى 90 يوماً.\n\n"
+                "**هل يمكنهم فصلك بعد الـ PIP في الإمارات؟**\n"
+                "• **نعم، لكن بشروط:** يجب أن يكون الفصل مسبوقاً بإجراء تأديبي موثق\n"
+                "• قانون العمل الإماراتي يشترط إشعاراً مسبقاً — عادةً 30 يوماً للعقود غير محددة المدة\n"
+                "• الفصل دون إجراء عادل قد يُعدّ فصلاً تعسفياً\n\n"
+                "**خطواتك العملية:**\n"
+                "1. اقرأ الـ PIP بعناية — لا توقّع إن لم تفهم البنود\n"
+                "2. اطلب توضيحاً كتابياً لأي هدف غير واضح\n"
+                "3. وثّق إنجازاتك يومياً طوال فترة الـ PIP\n"
+                "4. استشر محامياً في قانون العمل إذا شعرت أن الـ PIP غير عادل أو تمييزي\n"
+                "5. تواصل مع MOHRE (800-60) إذا انتهى الأمر بفصل تعسفي"
+            )
+        else:
+            msg = (
+                "⚠️ **Performance Improvement Plan (PIP) — Your Rights in UAE**\n\n"
+                "**What is a PIP?**\n"
+                "A Performance Improvement Plan is a formal document outlining specific targets you must meet "
+                "within a set period — typically 30–90 days. It's often a precursor to termination, "
+                "but not always.\n\n"
+                "**Can they fire you after a PIP in UAE?**\n"
+                "• **Yes, but with conditions:** Termination must follow documented disciplinary process\n"
+                "• UAE Labour Law (Federal Decree-Law No. 33/2021) requires notice — usually 30 days for unlimited contracts\n"
+                "• Termination without fair process may constitute arbitrary dismissal, entitling you to compensation\n\n"
+                "**Your practical steps:**\n"
+                "1. Read the PIP carefully — do not sign without understanding every target\n"
+                "2. Request written clarification on any vague objectives\n"
+                "3. Document your achievements daily throughout the PIP period\n"
+                "4. Respond in writing with your perspective, especially if targets feel unrealistic\n"
+                "5. Consult a UAE employment lawyer if the PIP feels discriminatory or designed to force you out\n"
+                "6. Contact MOHRE (800-60 | mohre.gov.ae) if it ends in what you believe is unfair dismissal\n\n"
+                "💡 In UAE, a PIP that sets impossible targets or is applied selectively (e.g., only to employees "
+                "of a certain nationality) can be challenged as arbitrary termination."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "pip_uae", "message": msg}
+
+    def _handle_second_job_uae(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "🔄 **العمل في وظيفتين / العمل الجانبي في الإمارات**\n\n"
+                "**هل هو قانوني؟**\n"
+                "بشكل عام، العمل لدى جهتين في نفس الوقت **غير مسموح به** في الإمارات دون موافقة صاحب العمل الرئيسي، "
+                "لأن تأشيرة العمل مرتبطة بكفيل واحد.\n\n"
+                "**الاستثناءات الرئيسية:**\n"
+                "• **تصريح العمل الجانبي:** قانون العمل الجديد (2021) أتاح للموظف العمل خارج ساعات العمل الرسمية "
+                "بشرط الحصول على موافقة صاحب العمل\n"
+                "• **المناطق الحرة:** بعض المناطق الحرة تسمح بالعمل الحر إلى جانب الوظيفة الرئيسية\n"
+                "• **رخصة فريلانسر:** الحصول على رخصة عمل حر منفصلة يحل المسألة قانونياً\n\n"
+                "**ما يجب فعله:**\n"
+                "1. تحقق من عقد عملك — قد يوجد بند صريح يحظر العمل لدى الغير\n"
+                "2. اطلب إذناً كتابياً من صاحب العمل إذا أردت العمل الجانبي\n"
+                "3. استكشف خيار رخصة الفريلانسر في الإمارة التي تعيش فيها"
+            )
+        else:
+            msg = (
+                "🔄 **Working Two Jobs / Moonlighting in UAE**\n\n"
+                "**Is it legal?**\n"
+                "Generally, working for two employers simultaneously is **not permitted** in UAE without your "
+                "primary employer's consent — your work visa is tied to a single sponsor.\n\n"
+                "**Key exceptions and options:**\n"
+                "• **Part-time/side work permit:** UAE Labour Law (Federal Decree-Law 33/2021, Article 9) "
+                "permits working outside official hours **with your employer's written approval**\n"
+                "• **Free zone employees:** Some free zones allow freelancing alongside a full-time role\n"
+                "• **Freelance licence:** Obtaining a separate freelance licence (available in most Emirates) "
+                "resolves the legal issue\n"
+                "• **Golden Visa / investor visa holders:** Generally not tied to a single sponsor\n\n"
+                "**Your practical steps:**\n"
+                "1. Check your employment contract — there may be an explicit exclusivity clause\n"
+                "2. Get written approval from your employer if you want to take on side work\n"
+                "3. Explore a freelance licence in your Emirate (Dubai, Abu Dhabi, Sharjah all offer them)\n"
+                "4. Avoid undisclosed dual employment — it can be grounds for termination without EOSB\n\n"
+                "💡 Many UAE employers allow freelancing in unrelated fields. A simple written request is "
+                "often enough — most will agree as long as it doesn't conflict with your current role."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "second_job_uae", "message": msg}
+
+    def _handle_wrongful_termination_uae(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "⚖️ **الفصل التعسفي / غير المبرر في الإمارات**\n\n"
+                "**ما هو الفصل التعسفي؟**\n"
+                "وفق قانون العمل الإماراتي (المرسوم بقانون رقم 33 لسنة 2021)، يُعدّ الفصل تعسفياً إذا كان "
+                "لأسباب غير مشروعة أو بدون سبب مقنع.\n\n"
+                "**أسباب الفصل غير القانوني تشمل:**\n"
+                "• الفصل بسبب تقديم شكوى لـ MOHRE أو المطالبة بحقوق\n"
+                "• الفصل على أساس الجنسية أو الجنس أو الدين\n"
+                "• الفصل خلال إجازة مرضية مثبتة طبياً\n"
+                "• الفصل دون إشعار مسبق (عادةً 30 يوماً)\n\n"
+                "**حقوقك عند الفصل التعسفي:**\n"
+                "• تعويض يعادل 3 أشهر من الراتب (على الأقل) بالإضافة إلى مكافأة نهاية الخدمة\n"
+                "• كامل الراتب عن فترة الإشعار\n\n"
+                "**خطواتك العملية:**\n"
+                "1. اجمع الوثائق: عقد العمل، خطاب الإنهاء، المراسلات\n"
+                "2. تقدّم بشكوى إلى MOHRE (800-60 | mohre.gov.ae) أو عبر تطبيق MOHRE\n"
+                "3. استشر محامياً متخصصاً في قانون العمل الإماراتي"
+            )
+        else:
+            msg = (
+                "⚖️ **Wrongful / Unfair Termination in UAE**\n\n"
+                "**What counts as wrongful termination in UAE?**\n"
+                "Under Federal Decree-Law No. 33/2021, termination is considered arbitrary (wrongful) if it "
+                "lacks a valid reason or violates the employee's statutory rights.\n\n"
+                "**Grounds that make dismissal unlawful:**\n"
+                "• Filing a complaint with MOHRE or asserting your legal rights\n"
+                "• Discrimination based on nationality, gender, religion, or disability\n"
+                "• Termination during a medically certified sick leave\n"
+                "• No valid reason given and no proper notice period (usually 30 days)\n"
+                "• Termination during the protected periods (e.g., maternity leave)\n\n"
+                "**Your rights if wrongfully terminated:**\n"
+                "• Compensation: a minimum of **3 months' gross salary** on top of EOSB\n"
+                "• Full salary for the notice period not served\n"
+                "• End of service gratuity (calculated on full service period)\n\n"
+                "**Practical steps:**\n"
+                "1. Gather all documentation: contract, termination letter, emails, payslips\n"
+                "2. File a complaint with MOHRE — call 800-60 or use the MOHRE app within 1 year of termination\n"
+                "3. MOHRE will attempt mediation; if unresolved, the case goes to the Labour Court\n"
+                "4. Consult a UAE employment lawyer — many offer a free first consultation\n\n"
+                "💡 UAE employers must provide a written reason for termination upon request. "
+                "If they cannot justify it, you have a strong case for the 3-month compensation award."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "wrongful_termination_uae", "message": msg}
 
     # ── Context-aware help ──────────────────────────────────────────────────────
 
