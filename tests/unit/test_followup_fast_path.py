@@ -3600,7 +3600,7 @@ class TestUAELaborLaw:
         assert result["type"] == "uae_labor_law"
 
     def test_sub_topic_probation(self, monkeypatch):
-        result = self._run(monkeypatch, "can I leave during probation?")
+        result = self._run(monkeypatch, "what is the probation period in UAE?")
         assert result["sub_topic"] == "probation"
 
     def test_sub_topic_termination(self, monkeypatch):
@@ -5655,3 +5655,291 @@ class TestAnnualLeave:
     def test_empty_profile_still_works(self, monkeypatch):
         result = self._run(monkeypatch, "UAE leave entitlement", profile=_EmptyProfile())
         assert result["type"] == "annual_leave"
+
+
+# ── Sick Leave ──────────────────────────────────────────────────────────────────
+
+
+class TestSickLeave:
+    """Tests for _SICK_LEAVE_RE and _handle_sick_leave."""
+
+    _REGEX_CASES_MATCH = [
+        "how many sick days do I get?",
+        "how much sick leave am I entitled to in UAE?",
+        "sick leave policy UAE",
+        "sick leave rules UAE",
+        "sick leave entitlement UAE",
+        "sick day rules Dubai",
+        "UAE sick leave law",
+        "medical leave UAE",
+        "medical leave policy UAE",
+        "what is the sick leave policy in UAE?",
+        "what are the sick leave rules?",
+        "how long can I be on sick leave?",
+        "how long can I take sick leave?",
+        "إجازة مرضية في الإمارات",
+        "أيام الإجازة المرضية",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "how many days annual leave in UAE?",
+        "maternity leave UAE",
+        "how do I resign?",
+        "show me jobs in Dubai",
+        "what is end of service gratuity?",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _SICK_LEAVE_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _SICK_LEAVE_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _SICK_LEAVE_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _SICK_LEAVE_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_sick_leave(self, monkeypatch):
+        result = self._run(monkeypatch, "how many sick days do I get?")
+        assert result["type"] == "sick_leave"
+
+    def test_policy_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "sick leave policy UAE")
+        assert result["type"] == "sick_leave"
+
+    def test_medical_leave_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "medical leave UAE")
+        assert result["type"] == "sick_leave"
+
+    def test_message_mentions_15_days(self, monkeypatch):
+        result = self._run(monkeypatch, "how many sick days do I get?")
+        assert "15" in result["message"]
+
+    def test_message_mentions_full_pay(self, monkeypatch):
+        result = self._run(monkeypatch, "sick leave policy UAE")
+        msg = result["message"].lower()
+        assert "full pay" in msg or "بأجر كامل" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "sick leave policy UAE")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "sick leave rules UAE", profile=_EmptyProfile())
+        assert result["type"] == "sick_leave"
+
+    def test_does_not_route_to_annual_leave(self, monkeypatch):
+        result = self._run(monkeypatch, "sick leave entitlement UAE")
+        assert result["type"] != "annual_leave"
+
+
+# ── Parental Leave ───────────────────────────────────────────────────────────────
+
+
+class TestParentalLeave:
+    """Tests for _PARENTAL_LEAVE_RE and _handle_parental_leave."""
+
+    _REGEX_CASES_MATCH = [
+        "how much maternity leave do I get?",
+        "how much maternity leave in UAE?",
+        "how many weeks maternity leave am I entitled to?",
+        "maternity leave UAE",
+        "maternity leave Dubai",
+        "maternity leave entitlement UAE",
+        "maternity leave rights UAE",
+        "maternity leave policy UAE",
+        "paternity leave UAE",
+        "paternity leave Dubai",
+        "paternity leave paid?",
+        "parental leave UAE",
+        "parental leave rights UAE",
+        "UAE maternity leave law",
+        "Dubai paternity leave rules",
+        "am I entitled to maternity leave?",
+        "am I eligible for parental leave?",
+        "is maternity leave paid in UAE?",
+        "is paternity leave mandatory in UAE?",
+        "إجازة الأمومة في الإمارات",
+        "إجازة الأبوة الإمارات",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "how many sick days do I get?",
+        "annual leave entitlement UAE",
+        "how do I resign?",
+        "show me jobs in Dubai",
+        "what is end of service gratuity?",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _PARENTAL_LEAVE_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _PARENTAL_LEAVE_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _PARENTAL_LEAVE_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _PARENTAL_LEAVE_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_maternity_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how much maternity leave in UAE?")
+        assert result["type"] == "parental_leave"
+
+    def test_paternity_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "paternity leave UAE")
+        assert result["type"] == "parental_leave"
+
+    def test_parental_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "parental leave rights UAE")
+        assert result["type"] == "parental_leave"
+
+    def test_message_mentions_45_days(self, monkeypatch):
+        result = self._run(monkeypatch, "how much maternity leave in UAE?")
+        assert "45" in result["message"]
+
+    def test_message_mentions_5_days_paternity(self, monkeypatch):
+        result = self._run(monkeypatch, "paternity leave UAE")
+        assert "5" in result["message"]
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "maternity leave UAE")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "maternity leave entitlement UAE", profile=_EmptyProfile())
+        assert result["type"] == "parental_leave"
+
+    def test_does_not_route_to_sick_leave(self, monkeypatch):
+        result = self._run(monkeypatch, "maternity leave UAE")
+        assert result["type"] != "sick_leave"
+
+
+# ── Probation Rules ─────────────────────────────────────────────────────────────
+
+
+class TestProbationRules:
+    """Tests for _PROBATION_RULES_RE and _handle_probation_rules."""
+
+    _REGEX_CASES_MATCH = [
+        "what happens during my probation period?",
+        "what happens during probation?",
+        "what can my employer do during probation period?",
+        "can I be fired during my probationary period?",
+        "can I be dismissed during probation period?",
+        "can I be terminated during probation period?",
+        "can I resign during my probation period?",
+        "can I quit during probation period?",
+        "can I leave during probation period?",
+        "how long is the probation period?",
+        "how long is probation?",
+        "probationary period rules UAE",
+        "probation period rights UAE",
+        "probation period termination Dubai",
+        "probation period notice period UAE",
+        "probation period resignation",
+        "what are my rights during probation period?",
+        "what are the rules during my probation period?",
+        "فترة التجربة في الإمارات",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "how many sick days do I get?",
+        "annual leave entitlement UAE",
+        "maternity leave UAE",
+        "show me jobs in Dubai",
+        "what is end of service gratuity?",
+        "can I resign from my job?",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _PROBATION_RULES_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _PROBATION_RULES_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _PROBATION_RULES_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _PROBATION_RULES_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_during_probation_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "what happens during my probation period?")
+        assert result["type"] == "probation_rules"
+
+    def test_fired_during_probation_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "can I be fired during my probationary period?")
+        assert result["type"] == "probation_rules"
+
+    def test_resign_during_probation_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "can I resign during my probation period?")
+        assert result["type"] == "probation_rules"
+
+    def test_how_long_is_probation_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how long is the probation period?")
+        assert result["type"] == "probation_rules"
+
+    def test_period_rules_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "probationary period rules UAE")
+        assert result["type"] == "probation_rules"
+
+    def test_message_mentions_6_months(self, monkeypatch):
+        result = self._run(monkeypatch, "how long is the probation period?")
+        assert "6" in result["message"]
+
+    def test_message_mentions_14_days(self, monkeypatch):
+        result = self._run(monkeypatch, "can I be fired during probation period?")
+        assert "14" in result["message"]
+
+    def test_message_mentions_30_days_notice(self, monkeypatch):
+        result = self._run(monkeypatch, "can I resign during my probation period?")
+        assert "30" in result["message"]
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "what happens during probation?")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "probation period rules UAE", profile=_EmptyProfile())
+        assert result["type"] == "probation_rules"
+
+    def test_does_not_route_to_sick_leave(self, monkeypatch):
+        result = self._run(monkeypatch, "what happens during my probation period?")
+        assert result["type"] != "sick_leave"

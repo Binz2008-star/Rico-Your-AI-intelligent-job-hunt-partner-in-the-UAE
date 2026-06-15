@@ -1119,6 +1119,44 @@ _ANNUAL_LEAVE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Sick / medical leave in UAE — "how many sick days do I get?",
+# "sick leave rules UAE", "what is the sick leave policy?".
+_SICK_LEAVE_RE = re.compile(
+    r"\b(?:how\s+(?:many|much)\s+sick\s+(?:days?|leave)\s+(?:do\s+I\s+(?:get|have)|am\s+I\s+entitled\s+to|in\s+UAE))\b"
+    r"|\b(?:sick\s+(?:leave|day|days?)\s+(?:policy|rules?|UAE|Dubai|entitlement|rights?|law))\b"
+    r"|\b(?:(?:UAE|Dubai)\s+sick\s+(?:leave|day|days?)\s+(?:policy|rules?|entitlement|rights?|law))\b"
+    r"|\b(?:medical\s+leave\s+(?:UAE|Dubai|entitlement|rights?|policy|rules?))\b"
+    r"|\b(?:what\s+(?:is|are)\s+(?:the\s+)?sick\s+(?:leave\s+)?(?:policy|rules?|entitlement)\s+(?:in\s+(?:UAE|Dubai))?)\b"
+    r"|\b(?:how\s+long\s+can\s+I\s+(?:take|be\s+on)\s+sick\s+leave)\b"
+    r"|\b(?:إجازة\s+مرضية\s+(?:في\s+الإمارات|الإمارات)|أيام\s+الإجازة\s+المرضية)\b",
+    re.IGNORECASE,
+)
+
+# Maternity / paternity leave in UAE — "how much maternity leave in UAE?",
+# "paternity leave UAE", "parental leave rights UAE".
+_PARENTAL_LEAVE_RE = re.compile(
+    r"\b(?:how\s+(?:much|many\s+(?:weeks?|days?))\s+(?:maternity|paternity|parental)\s+leave\s+(?:do\s+I\s+get|in\s+UAE|am\s+I\s+entitled\s+to))\b"
+    r"|\b(?:(?:maternity|paternity|parental)\s+leave\s+(?:UAE|Dubai|entitlement|rights?|policy|rules?|law|paid|weeks?|months?))\b"
+    r"|\b(?:(?:UAE|Dubai)\s+(?:maternity|paternity|parental)\s+leave\s+(?:policy|rules?|entitlement|rights?|law))\b"
+    r"|\b(?:am\s+I\s+(?:entitled|eligible)\s+(?:to|for)\s+(?:maternity|paternity|parental)\s+leave)\b"
+    r"|\b(?:is\s+(?:maternity|paternity|parental)\s+leave\s+(?:paid|mandatory|legal|required)\s+(?:in\s+(?:UAE|Dubai))?)\b"
+    r"|\b(?:إجازة\s+(?:الأمومة|الأبوة|الوضع)\s+(?:في\s+الإمارات|الإمارات|المدفوعة))\b",
+    re.IGNORECASE,
+)
+
+# Probation period rules — "what happens during probation?", "can I be fired during probation?",
+# "how long is probation?". Distinct from UAE labor law general handler.
+_PROBATION_RULES_RE = re.compile(
+    r"\b(?:what\s+(?:happens?|can\s+(?:they|my\s+employer)\s+do)\s+during\s+(?:my\s+)?probation(?:ary)?(?:\s+period)?)\b"
+    r"|\b(?:can\s+(?:I\s+be|my\s+employer)\s+(?:fired?|dismiss(?:ed)?|terminat(?:ed?|e))\s+during\s+(?:my\s+)?probation(?:ary)?(?:\s+period)?)\b"
+    r"|\b(?:can\s+I\s+(?:resign|quit|leave)\s+during\s+(?:my\s+)?probation(?:ary)?(?:\s+period)?)\b"
+    r"|\b(?:how\s+long\s+is\s+(?:the\s+)?probation(?:ary)?(?:\s+period)?)\b"
+    r"|\b(?:probation(?:ary)?\s+period\s+(?:rules?|rights?|notice|termination|dismissal|resignation|notice\s+period|UAE|Dubai))\b"
+    r"|\b(?:what\s+(?:are\s+(?:(?:my|the)\s+)?)?(?:rights?|rules?)\s+during\s+(?:my\s+)?probation(?:ary)?(?:\s+period)?)\b"
+    r"|\b(?:فترة\s+(?:التجربة|الاختبار)\s+(?:في\s+الإمارات|أحكام|حقوق|إنهاء))\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -5205,7 +5243,7 @@ class RicoChatAPI:
 
         # ── UAE labor law / probation info ────────────────────────────────────
         # "what is the probation period?", "UAE labor law", "termination rights".
-        if _UAE_LABOR_LAW_RE.search(message):
+        if _UAE_LABOR_LAW_RE.search(message) and not _PROBATION_RULES_RE.search(message):
             return self._finalize(
                 self._handle_uae_labor_law(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5399,6 +5437,33 @@ class RicoChatAPI:
         if _ANNUAL_LEAVE_RE.search(message):
             return self._finalize(
                 self._handle_annual_leave(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Sick leave ────────────────────────────────────────────────────────
+        # "how many sick days do I get?", "sick leave policy UAE".
+        if _SICK_LEAVE_RE.search(message):
+            return self._finalize(
+                self._handle_sick_leave(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Maternity / paternity leave ───────────────────────────────────────
+        # "how much maternity leave in UAE?", "paternity leave paid?".
+        if _PARENTAL_LEAVE_RE.search(message):
+            return self._finalize(
+                self._handle_parental_leave(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Probation period rules ────────────────────────────────────────────
+        # "what happens during probation?", "can I be fired during probation?".
+        if _PROBATION_RULES_RE.search(message):
+            return self._finalize(
+                self._handle_probation_rules(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -12942,6 +13007,132 @@ class RicoChatAPI:
             )
         self._append_chat(user_id, "assistant", msg)
         return {"type": "annual_leave", "message": msg}
+
+    # ── Sick leave ────────────────────────────────────────────────────────────────
+
+    def _handle_sick_leave(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## الإجازة المرضية في الإمارات\n\n"
+                "**استحقاق الإجازة المرضية (قانون العمل الاتحادي):**\n"
+                "- يجب إتمام فترة التجربة أولاً لاستحقاق الإجازة المرضية\n"
+                "- **أول 15 يوم:** بأجر كامل\n"
+                "- **15 يوماً تالية:** بنصف الأجر\n"
+                "- **بعد ذلك (حتى إجمالي 90 يوماً):** بدون أجر\n\n"
+                "**ما تحتاجه:**\n"
+                "- شهادة طبية معتمدة من مستشفى أو عيادة مرخصة\n"
+                "- إخطار صاحب العمل في أقرب وقت ممكن\n\n"
+                "**ملاحظة:** الإجازة المرضية المدفوعة لا تُحتسب من إجازتك السنوية. "
+                "يحق لصاحب العمل إنهاء العقد إذا تجاوزت 90 يوماً غياباً بسبب المرض خلال سنة."
+            )
+        else:
+            msg = (
+                "## Sick Leave in UAE\n\n"
+                "**Sick leave entitlement (UAE Federal Labour Law):**\n"
+                "- Sick leave kicks in **after your probation period** is complete\n"
+                "- **First 15 days:** Full pay\n"
+                "- **Next 30 days:** Half pay\n"
+                "- **Remaining days (up to 90 total):** Unpaid\n\n"
+                "**Requirements:**\n"
+                "- A medical certificate from a licensed hospital or clinic\n"
+                "- Notify your employer as soon as possible\n\n"
+                "**Key points:**\n"
+                "- Sick leave does **not** count against your annual leave balance\n"
+                "- Your employer cannot terminate you solely for being sick during the "
+                "first 90 days\n"
+                "- After 90 days of sick leave in one year, the employer may end the "
+                "contract (with full end-of-service gratuity)\n\n"
+                "**Tip:** Many companies have private health insurance that covers "
+                "GP visits — check your employee benefits package."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "sick_leave", "message": msg}
+
+    # ── Maternity / paternity leave ───────────────────────────────────────────────
+
+    def _handle_parental_leave(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## إجازة الأمومة والأبوة في الإمارات\n\n"
+                "**إجازة الأمومة (للمرأة العاملة في القطاع الخاص):**\n"
+                "- **60 يوماً** إجازة أمومة: 45 يوماً بأجر كامل + 15 يوماً بنصف أجر\n"
+                "- تستحق بعد خدمة عام واحد مع صاحب العمل ذاته\n"
+                "- إذا كانت مدة الخدمة أقل من عام، تُمنح الإجازة بنصف الأجر\n\n"
+                "**إجازة الأبوة (للرجل في القطاع الخاص):**\n"
+                "- **5 أيام عمل** بأجر كامل خلال 6 أشهر من الولادة\n\n"
+                "**القطاع الحكومي الاتحادي:**\n"
+                "- إجازة أمومة: 90 يوماً بأجر كامل\n"
+                "- إجازة أبوة: 5 أيام عمل\n\n"
+                "**نصيحة:** تحقق دائماً من سياسة شركتك، فبعض أصحاب العمل يوفرون شروطاً أفضل من الحد الأدنى القانوني."
+            )
+        else:
+            msg = (
+                "## Maternity & Paternity Leave in UAE\n\n"
+                "**Maternity leave (private sector):**\n"
+                "- **60 days total:** 45 days at full pay + 15 days at half pay\n"
+                "- Entitled after completing **1 year** with the same employer\n"
+                "- Less than 1 year of service → leave granted at half pay\n"
+                "- Additional unpaid leave of up to 45 days may be taken (for "
+                "illness related to pregnancy/delivery, with a medical certificate)\n\n"
+                "**Paternity leave (private sector):**\n"
+                "- **5 working days** at full pay, to be taken within 6 months of birth\n\n"
+                "**Federal government employees:**\n"
+                "- Maternity: 90 calendar days at full pay\n"
+                "- Paternity: 5 working days\n\n"
+                "**Important:** These are the legal minimums. Many UAE employers — "
+                "especially multinationals — offer more generous policies. Always "
+                "review your employment contract and HR handbook.\n\n"
+                "**Tip:** Maternity leave is separate from annual leave and does not "
+                "reduce your leave balance."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "parental_leave", "message": msg}
+
+    # ── Probation period rules ────────────────────────────────────────────────────
+
+    def _handle_probation_rules(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## فترة التجربة في الإمارات\n\n"
+                "**الأحكام الأساسية (قانون العمل الاتحادي):**\n"
+                "- الحد الأقصى لفترة التجربة: **6 أشهر**\n"
+                "- لا يمكن تمديدها أو تكرارها مع نفس صاحب العمل\n\n"
+                "**هل يمكن فسخ العقد أثناء فترة التجربة؟**\n"
+                "- نعم، يحق لصاحب العمل إنهاء العقد بإشعار **14 يوماً** (أو أقل وفق العقد)\n"
+                "- لا يستحق الموظف مكافأة نهاية الخدمة (EOSB) إذا أُنهي عقده خلال التجربة\n\n"
+                "**هل يمكنك الاستقالة أثناء فترة التجربة؟**\n"
+                "- نعم، ولكن بإشعار **30 يوماً** إذا كنت تنتقل إلى وظيفة أخرى داخل الإمارات\n"
+                "- إذا غادرت البلاد أو كانت الشركة هي من أنهت العقد، قد لا يُطبق هذا الشرط\n\n"
+                "**ملاحظة:** لا تستحق الإجازة السنوية والمرضية المدفوعة إلا بعد انتهاء فترة التجربة."
+            )
+        else:
+            msg = (
+                "## Probation Period Rules in UAE\n\n"
+                "**Key rules (UAE Federal Labour Law):**\n"
+                "- Maximum probation period: **6 months**\n"
+                "- Cannot be extended or repeated with the same employer\n\n"
+                "**Can you be dismissed during probation?**\n"
+                "- Yes — your employer can terminate with as little as **14 days' notice** "
+                "(or per your contract terms)\n"
+                "- No end-of-service gratuity (EOSB) is owed if terminated during probation\n"
+                "- However, termination for discriminatory reasons is still unlawful\n\n"
+                "**Can you resign during probation?**\n"
+                "- Yes, but you must give **30 days' notice** if you're moving to another "
+                "UAE employer (to avoid a potential 1-year work ban)\n"
+                "- If you're leaving the UAE or the employer terminates first, "
+                "the ban typically does not apply\n\n"
+                "**What benefits are withheld during probation?**\n"
+                "- Paid sick leave: not available until probation ends\n"
+                "- Annual leave accrues from day 1 but typically cannot be taken "
+                "during probation (employer discretion)\n\n"
+                "**Tip:** Always read your contract — some employers offer longer notice "
+                "periods or waive the 30-day resignation notice."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "probation_rules", "message": msg}
 
     # ── Context-aware help ──────────────────────────────────────────────────────
 
