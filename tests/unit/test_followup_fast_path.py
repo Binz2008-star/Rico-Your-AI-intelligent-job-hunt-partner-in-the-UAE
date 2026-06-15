@@ -7785,3 +7785,239 @@ class TestUpskillingUAE:
     def test_empty_profile_still_works(self, monkeypatch):
         result = self._run(monkeypatch, "how can I upskill in UAE?", profile=_EmptyProfile())
         assert result["type"] == "upskilling_uae"
+
+# ── _RAMADAN_WORK_RE ──────────────────────────────────────────────────────────
+
+class TestRamadanWork:
+    """Regex gate and handler for Ramadan working hours and conduct."""
+
+    _REGEX_CASES_MATCH = [
+        "working hours during Ramadan",
+        "Ramadan working hours",
+        "Ramadan work rules UAE",
+        "how does Ramadan affect working hours?",
+        "Ramadan work schedule",
+        "can I eat at work during Ramadan?",
+        "eating in the office during Ramadan",
+        "ساعات العمل في رمضان",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "what are the standard working hours in UAE?",
+        "overtime pay UAE",
+        "annual leave UAE",
+        "salary negotiation tips",
+        "interview tips",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _RAMADAN_WORK_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _RAMADAN_WORK_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _RAMADAN_WORK_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _RAMADAN_WORK_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_ramadan_hours_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "working hours during Ramadan")
+        assert result["type"] == "ramadan_work"
+
+    def test_ramadan_rules_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "Ramadan work rules UAE")
+        assert result["type"] == "ramadan_work"
+
+    def test_message_mentions_2_hours(self, monkeypatch):
+        result = self._run(monkeypatch, "working hours during Ramadan")
+        msg = result["message"].lower()
+        assert "2 hours" in msg or "two hours" in msg or "ساعتين" in msg
+
+    def test_message_mentions_iftar(self, monkeypatch):
+        result = self._run(monkeypatch, "Ramadan working hours")
+        msg = result["message"].lower()
+        assert "iftar" in msg or "إفطار" in msg or "fast" in msg or "صيام" in msg
+
+    def test_working_hours_not_rerouted(self, monkeypatch):
+        """Standard working hours query must not be rerouted by the Ramadan gate."""
+        result = self._run(monkeypatch, "what are the standard working hours in UAE?")
+        assert result["type"] == "working_hours"
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "Ramadan working hours UAE")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "working hours during Ramadan", profile=_EmptyProfile())
+        assert result["type"] == "ramadan_work"
+
+
+# ── _WORK_BURNOUT_RE ──────────────────────────────────────────────────────────
+
+class TestWorkBurnout:
+    """Regex gate and handler for workplace burnout and stress in UAE."""
+
+    _REGEX_CASES_MATCH = [
+        "I'm burned out at work",
+        "I am burned out",
+        "work burnout UAE",
+        "workplace stress UAE",
+        "how do I deal with work stress?",
+        "I feel overwhelmed at work",
+        "too much work pressure",
+        "job stress UAE",
+        "إرهاق العمل",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "how many annual leave days?",
+        "salary negotiation tips",
+        "interview tips",
+        "how do I find a job in UAE?",
+        "notice period UAE",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _WORK_BURNOUT_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _WORK_BURNOUT_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _WORK_BURNOUT_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _WORK_BURNOUT_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_burned_out_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "I'm burned out at work")
+        assert result["type"] == "work_burnout"
+
+    def test_workplace_stress_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "workplace stress UAE")
+        assert result["type"] == "work_burnout"
+
+    def test_overwhelmed_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "I feel overwhelmed at work")
+        assert result["type"] == "work_burnout"
+
+    def test_message_mentions_leave(self, monkeypatch):
+        result = self._run(monkeypatch, "I'm burned out at work")
+        msg = result["message"].lower()
+        assert "leave" in msg or "إجازة" in msg
+
+    def test_message_mentions_boundaries(self, monkeypatch):
+        result = self._run(monkeypatch, "workplace stress UAE")
+        msg = result["message"].lower()
+        assert "bound" in msg or "limit" in msg or "حدود" in msg or "doctor" in msg or "support" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "work burnout UAE")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "I'm burned out at work", profile=_EmptyProfile())
+        assert result["type"] == "work_burnout"
+
+
+# ── _OFFER_RESCINDED_RE ───────────────────────────────────────────────────────
+
+class TestOfferRescinded:
+    """Regex gate and handler for rescinded / withdrawn job offers in UAE."""
+
+    _REGEX_CASES_MATCH = [
+        "my job offer was rescinded",
+        "my offer was withdrawn",
+        "company rescinded my job offer",
+        "they withdrew my offer",
+        "job offer rescinded UAE",
+        "offer withdrawal rights",
+        "what can I do if my offer is rescinded?",
+        "the company retracted my offer",
+        "سُحِب عرض العمل",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "I have two job offers",
+        "how do I evaluate a job offer?",
+        "salary negotiation tips",
+        "how do I find a job?",
+        "interview tips UAE",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _OFFER_RESCINDED_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _OFFER_RESCINDED_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _OFFER_RESCINDED_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _OFFER_RESCINDED_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_rescinded_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "my job offer was rescinded")
+        assert result["type"] == "offer_rescinded"
+
+    def test_withdrawn_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "my offer was withdrawn")
+        assert result["type"] == "offer_rescinded"
+
+    def test_company_rescinded_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "company rescinded my job offer")
+        assert result["type"] == "offer_rescinded"
+
+    def test_message_mentions_mohre(self, monkeypatch):
+        result = self._run(monkeypatch, "my job offer was rescinded")
+        msg = result["message"].lower()
+        assert "mohre" in msg or "وزارة" in msg or "800" in msg or "contract" in msg
+
+    def test_message_mentions_contract(self, monkeypatch):
+        result = self._run(monkeypatch, "job offer rescinded UAE")
+        msg = result["message"].lower()
+        assert "contract" in msg or "sign" in msg or "عقد" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "my job offer was rescinded")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "my offer was withdrawn", profile=_EmptyProfile())
+        assert result["type"] == "offer_rescinded"

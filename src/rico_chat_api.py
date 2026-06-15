@@ -1437,6 +1437,43 @@ _UPSKILLING_UAE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# ── Ramadan work schedule ──────────────────────────────────────────────────────
+# "working hours during Ramadan", "Ramadan work rules UAE", "Ramadan hours".
+_RAMADAN_WORK_RE = re.compile(
+    r"\b(?:(?:working|work|office|business)\s+hours?\s+(?:during|in|at|for)\s+Ramadan)\b"
+    r"|\b(?:Ramadan\s+(?:working|work|office|business)\s+hours?)\b"
+    r"|\b(?:how\s+(?:does|do|will)\s+Ramadan\s+(?:affect|change|impact)\s+(?:working|work|office|business)?\s*hours?)\b"
+    r"|\b(?:Ramadan\s+(?:work|office|business|labor|labour)\s+(?:rules?|laws?|schedule|hours?|time|policy))\b"
+    r"|\b(?:(?:can|do|may|should)\s+(?:I|employees?|workers?|staff)\s+(?:(?:have\s+to|must|need\s+to)\s+)?(?:work|eat|drink|fast)\s+(?:(?:at\s+work|in\s+the\s+office)\s+)?(?:during|in)\s+Ramadan)\b"
+    r"|\b(?:eating\s+(?:or\s+drinking\s+)?(?:at\s+work\s+during|in\s+the\s+office\s+during)\s+Ramadan)\b"
+    r"|\b(?:ساعات\s+العمل\s+(?:في|خلال)\s+رمضان|أحكام\s+العمل\s+في\s+رمضان)\b",
+    re.IGNORECASE,
+)
+
+# ── Work burnout / stress UAE ─────────────────────────────────────────────────
+# "I'm burned out at work", "work stress UAE", "how to deal with work pressure".
+_WORK_BURNOUT_RE = re.compile(
+    r"\b(?:I(?:'m|\s+am)\s+(?:burned|burnt)\s+out(?:\s+(?:at|from)\s+(?:work|my\s+job))?)\b"
+    r"|\b(?:(?:work(?:place)?|job|office)\s+(?:burnout|burn[- ]out|stress|exhaustion|pressure|mental\s+health)(?:\s+(?:UAE|Dubai|how\s+to\s+(?:deal|cope|handle|manage)|tips?))?)\b"
+    r"|\b(?:how\s+(?:do\s+I|to|can\s+I|should\s+I)\s+(?:deal\s+with|manage|handle|cope\s+with|reduce)\s+(?:work(?:place)?\s+)?(?:stress|burnout|pressure|exhaustion))\b"
+    r"|\b(?:I\s+(?:feel|am\s+feeling)\s+(?:overwhelmed|exhausted|burned\s+out|stressed)\s+(?:at|from|by)\s+(?:work|my\s+job))\b"
+    r"|\b(?:(?:too\s+much|excessive)\s+(?:work|overtime|pressure|stress)\s+(?:UAE|Dubai|at\s+work|is\s+(?:affecting|hurting|impacting)))\b"
+    r"|\b(?:إرهاق\s+(?:العمل|من\s+العمل|مهني)|ضغط\s+العمل\s+(?:الإمارات|كيف\s+أتعامل))\b",
+    re.IGNORECASE,
+)
+
+# ── Job offer rescinded / withdrawn ───────────────────────────────────────────
+# "my job offer was rescinded", "company withdrew my job offer".
+_OFFER_RESCINDED_RE = re.compile(
+    r"\b(?:(?:my\s+)?(?:job\s+)?offer\s+was\s+(?:rescinded|withdrawn|cancelled|canceled|revoked|pulled|taken\s+back))\b"
+    r"|\b(?:(?:company|employer|they)\s+(?:rescinded|withdrew|cancelled|canceled|revoked|pulled|took\s+back)\s+(?:my\s+)?(?:job\s+)?offer)\b"
+    r"|\b(?:(?:job\s+)?offer\s+(?:rescind(?:ed)?|withdrawal|withdrawn|revocation|revoked|cancelled|canceled)(?:\s+(?:UAE|Dubai|rights?|compensation|what\s+(?:can|should)\s+I\s+do))?)\b"
+    r"|\b(?:what\s+(?:can|should)\s+I\s+do\s+(?:if|when)\s+(?:a|my)\s+(?:job\s+)?offer\s+is\s+(?:rescinded|withdrawn|cancelled|canceled|revoked))\b"
+    r"|\b(?:(?:the\s+)?company\s+(?:retracted|took\s+back|reversed)\s+(?:the|my)\s+(?:job\s+)?offer)\b"
+    r"|\b(?:سُحِب\s+عرض\s+العمل|الشركة\s+ألغت\s+(?:عرض|العرض)\s+(?:العمل|الوظيفة)|ما\s+حقوقي\s+إذا\s+سُحِب\s+عرض\s+العمل)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -5797,7 +5834,7 @@ class RicoChatAPI:
 
         # ── Working hours / overtime ──────────────────────────────────────────
         # "what are the working hours in UAE?", "is overtime paid?".
-        if _WORKING_HOURS_RE.search(message) and not _OVERTIME_PAY_UAE_RE.search(message):
+        if _WORKING_HOURS_RE.search(message) and not _OVERTIME_PAY_UAE_RE.search(message) and not _RAMADAN_WORK_RE.search(message):
             return self._finalize(
                 self._handle_working_hours(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -6061,6 +6098,33 @@ class RicoChatAPI:
         if _UPSKILLING_UAE_RE.search(message):
             return self._finalize(
                 self._handle_upskilling_uae(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Ramadan work schedule ─────────────────────────────────────────────
+        # "working hours during Ramadan", "Ramadan work rules UAE".
+        if _RAMADAN_WORK_RE.search(message):
+            return self._finalize(
+                self._handle_ramadan_work(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Work burnout / stress UAE ─────────────────────────────────────────
+        # "I'm burned out at work", "how to deal with work stress UAE".
+        if _WORK_BURNOUT_RE.search(message):
+            return self._finalize(
+                self._handle_work_burnout(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Job offer rescinded ───────────────────────────────────────────────
+        # "my job offer was rescinded", "company withdrew my offer".
+        if _OFFER_RESCINDED_RE.search(message):
+            return self._finalize(
+                self._handle_offer_rescinded(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -14664,6 +14728,131 @@ class RicoChatAPI:
             )
         self._append_chat(user_id, "assistant", msg)
         return {"type": "upskilling_uae", "message": msg}
+
+    # ── Ramadan work schedule ─────────────────────────────────────────────────────
+
+    def _handle_ramadan_work(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "🌙 **أحكام العمل خلال شهر رمضان في الإمارات**\n\n"
+                "**تقليص ساعات العمل (إلزامي بموجب القانون):**\n"
+                "• تُخفَّض ساعات العمل بمقدار **ساعتين يومياً** لجميع الموظفين خلال رمضان\n"
+                "• المعيار المعتاد: 8 ساعات يومياً → 6 ساعات يومياً في رمضان\n"
+                "• ينطبق الحكم على المسلمين وغير المسلمين على حدٍّ سواء\n\n"
+                "**السلوك المحترم في مكان العمل:**\n"
+                "• تجنّب الأكل والشرب والتدخين في الأماكن العامة والمكاتب المفتوحة أمام الصائمين\n"
+                "• يُستحسن استخدام غرفة مخصصة أو الاستراحة الخاصة لتناول الطعام\n"
+                "• تجنّب العروض أو الاجتماعات التي تتضمن طعاماً في ساعات الصيام قدر الإمكان\n\n"
+                "**جدول العمل والإنتاجية:**\n"
+                "• بعض الشركات تُعدِّل مواعيد العمل (تبدأ متأخرة وتنتهي مبكراً)\n"
+                "• الإنتاجية قد تنخفض قرب نهاية يوم الصيام — خطّط للمهام الأهم في الصباح\n"
+                "• رمضان فرصة لبناء علاقات العمل من خلال حضور مناسبات الإفطار"
+            )
+        else:
+            msg = (
+                "🌙 **Working During Ramadan in UAE**\n\n"
+                "**Mandatory hours reduction (UAE Labour Law):**\n"
+                "• Working hours are legally reduced by **2 hours per day** for all employees during Ramadan\n"
+                "• Standard: 8 hrs/day → 6 hrs/day; applies to Muslims and non-Muslims equally\n"
+                "• Overtime during Ramadan still applies the standard 25–50% premium\n\n"
+                "**Respectful workplace conduct:**\n"
+                "• Avoid eating, drinking, or smoking in public areas or open offices during fasting hours\n"
+                "• Use a designated break room or private space for meals\n"
+                "• Schedule food-involved meetings or lunches thoughtfully — many colleagues will be fasting\n\n"
+                "**Productivity & schedule:**\n"
+                "• Many UAE offices shift hours (starting later, ending earlier)\n"
+                "• Energy levels typically dip in the late afternoon — front-load important work to the morning\n"
+                "• Iftar (fast-breaking at sunset) is a major social occasion; team iftars are common bonding events\n\n"
+                "💡 Ramadan is also one of the slower periods for hiring — fewer interview slots get scheduled, "
+                "and decision-making slows. If you're job searching, use the month for preparation and applications rather than expecting fast responses."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "ramadan_work", "message": msg}
+
+    # ── Work burnout / stress UAE ─────────────────────────────────────────────────
+
+    def _handle_work_burnout(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "🧠 **الإرهاق المهني وضغط العمل — كيف تتعامل معهما؟**\n\n"
+                "**هل ما تشعر به إرهاقاً مهنياً (Burnout)؟**\n"
+                "الإرهاق يختلف عن الضغط المؤقت — علاماته: فقدان الدافعية، العزلة العاطفية، والشعور بأن جهودك عديمة الجدوى.\n\n"
+                "**خطوات فورية:**\n"
+                "• خذ إجازتك المستحقة — هذا حقك القانوني وليس رفاهية\n"
+                "• تحدّث مع مديرك عن عبء العمل إذا كان ذلك آمناً\n"
+                "• حدّد حدوداً واضحة: أوقات استجابة للرسائل، ساعات العمل الفعلية\n\n"
+                "**على المدى المتوسط:**\n"
+                "• قيّم: هل المشكلة في الوظيفة، الشركة، أم المجال برمته؟\n"
+                "• اطلب الدعم النفسي — الدوبي والإمارات لديها خدمات صحة نفسية للمغتربين\n"
+                "• إذا كان البيئة سامة وغير قابلة للإصلاح، خطّط للخروج — الإرهاق يزداد سوءاً مع الوقت\n\n"
+                "💡 وفق قانون العمل الإماراتي، إذا طالت الفترة يمكنك أخذ إجازة مرضية مدفوعة."
+            )
+        else:
+            msg = (
+                "🧠 **Work Burnout & Stress in UAE**\n\n"
+                "**Is what you're feeling burnout vs. temporary stress?**\n"
+                "Burnout is different from regular pressure — signs include: loss of motivation, emotional detachment, "
+                "feeling like nothing you do matters, and chronic exhaustion that doesn't improve with rest.\n\n"
+                "**Immediate steps:**\n"
+                "• Take your entitled leave — 30 days/year is your legal right, not a luxury\n"
+                "• Have an honest conversation with your manager about workload if it's safe to do so\n"
+                "• Set boundaries: defined response hours, end-of-day cutoffs, no-work weekends\n\n"
+                "**Medium-term:**\n"
+                "• Diagnose the root: is it the role, the company culture, or the industry?\n"
+                "• Seek professional support — Dubai and Abu Dhabi have mental health services for expats\n"
+                "• If the environment is genuinely toxic and unfixable, plan your exit — burnout compounds\n\n"
+                "**If burnout is affecting your health:**\n"
+                "UAE labour law entitles you to paid sick leave (15 days full pay, 30 days half pay). "
+                "A doctor's note is required but burnout and stress-related conditions qualify.\n\n"
+                "💡 In the UAE job market, looking for a new role while burned out is tough — "
+                "try to stabilise first, then job search from a position of clarity."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "work_burnout", "message": msg}
+
+    # ── Job offer rescinded ───────────────────────────────────────────────────────
+
+    def _handle_offer_rescinded(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "😔 **سُحِب عرض العمل — ما حقوقك في الإمارات؟**\n\n"
+                "**هل هذا قانوني؟**\n"
+                "إذا كنت لا تزال في مرحلة ما قبل توقيع العقد، فإن للشركة عموماً حق سحب العرض. "
+                "لكن إذا وقّعت عقد العمل رسمياً فالوضع مختلف تماماً.\n\n"
+                "**السيناريوهات المختلفة:**\n"
+                "• **قبل توقيع العقد:** العرض غير ملزم قانونياً في الغالب — تحقّق مما إذا كان خطاب العرض يتضمن بنود تعويض\n"
+                "• **بعد توقيع العقد:** يُعدّ ذلك إخلالاً بالعقد وقد يعطيك الحق في التعويض\n"
+                "• **بعد استقالتك من وظيفتك السابقة:** قد تكون لديك مطالبة بالتعويض عن الضرر الناجم\n\n"
+                "**خطواتك العملية:**\n"
+                "1. اطلب الأسباب كتابياً وبأسرع وقت ممكن\n"
+                "2. احتفظ بجميع المراسلات (رسائل البريد الإلكتروني، خطاب العرض، العقد)\n"
+                "3. استشر محامياً متخصصاً في قانون العمل إذا ترتّبت عليك خسائر مالية حقيقية\n"
+                "4. أبلغ MOHRE إذا كانت الشركة مسجّلة لديهم وكان سحب العرض بعد توقيع العقد"
+            )
+        else:
+            msg = (
+                "😔 **Job Offer Rescinded — What Are Your Rights in UAE?**\n\n"
+                "**Is it legal?**\n"
+                "This depends on how far along the process was. Before a signed contract, "
+                "most offer letters are not legally binding in UAE — but there may be exceptions.\n\n"
+                "**Different scenarios:**\n"
+                "• **Before signing a contract:** Usually legally permissible for the employer, "
+                "unless the offer letter explicitly includes binding commitments or compensation terms\n"
+                "• **After signing a contract:** Constitutes breach of contract — you likely have grounds for compensation\n"
+                "• **After you resigned from a previous job:** You may have a claim for damages caused by your reliance on the offer\n\n"
+                "**Practical steps:**\n"
+                "1. Request a written explanation from the employer immediately\n"
+                "2. Keep all documentation — the offer letter, signed contract (if any), email trail\n"
+                "3. Consult a UAE employment lawyer if you suffered real financial loss (especially if you resigned)\n"
+                "4. File a complaint with MOHRE (800-60 | mohre.gov.ae) if a signed contract was involved\n\n"
+                "💡 If the rescission happened with no prior warning and you've already resigned your current role, "
+                "this is your strongest case for compensation. The legal principle of detrimental reliance applies."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "offer_rescinded", "message": msg}
 
     # ── Context-aware help ──────────────────────────────────────────────────────
 
