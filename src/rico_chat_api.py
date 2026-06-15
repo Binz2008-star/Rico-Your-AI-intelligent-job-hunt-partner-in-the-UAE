@@ -395,6 +395,56 @@ _SALARY_READBACK_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Granular profile field update: "add Python to my skills", "remove OSHA from my skills",
+# "update my experience to 8 years", "I'm now based in Abu Dhabi",
+# "change my target role to HSE Manager", "add oil and gas to my industries".
+_PROFILE_FIELD_UPDATE_RE = re.compile(
+    # Add/remove from list fields
+    r"\badd\b.{1,40}\bto\s+my\s+(?:skills?|certifications?|industries|target\s+roles?|preferred\s+(?:cities|locations?))\b"
+    r"|\bremove\b.{1,40}\bfrom\s+my\s+(?:skills?|certifications?|industries|target\s+roles?)\b"
+    # Set numeric experience
+    r"|\b(?:update|set|change)\s+my\s+(?:years?\s+(?:of\s+)?)?experience\s+to\s+\d"
+    r"|\bI\s+(?:now\s+)?have\s+\d+\s+years?\s+(?:of\s+)?experience\b"
+    r"|\bmy\s+experience\s+is\s+(?:now\s+)?\d+\s+years?\b"
+    # Set location/city
+    r"|\bI(?:'m|\s+am)\s+(?:now\s+)?(?:based|located?|living|working)\s+in\s+(?:Abu\s+Dhabi|Dubai|Sharjah|Ajman|Fujairah|Ras\s+al|Al\s+Ain|Umm\s+al)\b"
+    r"|\bmy\s+(?:location|city|base)\s+(?:is|has\s+changed\s+to|changed\s+to)\s+\w"
+    r"|\b(?:update|change|set)\s+my\s+(?:preferred\s+)?(?:location|city)\s+to\b"
+    # Set target role
+    r"|\b(?:change|update|set)\s+my\s+(?:target\s+)?role\s+(?:to|as)\b"
+    r"|\b(?:update|change|set)\s+my\s+(?:job\s+)?target\s+to\b"
+    # Arabic
+    r"|\b(?:أضف|اضف)\b.{1,30}\b(?:إلى|ل)\s*(?:مهاراتي|صناعاتي|أدواري)\b"
+    r"|\b(?:غير|حدث|تحديث)\s+(?:مهاراتي|خبرتي|موقعي|دوري)\b",
+    re.IGNORECASE,
+)
+
+# Application-specific lookup: "did I apply to Emirates?", "status of my ADNOC application",
+# "status of my Carrefour application", "when did I apply to Carrefour?", "have I applied to Google?".
+_APP_SPECIFIC_LOOKUP_RE = re.compile(
+    r"\b(?:did\s+I|have\s+I|did\s+I\s+already)\s+appl(?:y|ied)\s+(?:to|at|for)\s+\w"
+    r"|\b(?:status|update)\s+(?:of|on|for)\s+(?:my\s+)?(?:application|candidacy)\s+(?:at|to|with|for)\s+\w"
+    r"|\b(?:status|update)\s+(?:of|on|for)\s+my\s+[A-Z]\w.{0,25}application\b"
+    r"|\bmy\s+application\s+(?:at|to|with|for)\s+\w"
+    r"|\b(?:what\s+happened|any\s+(?:news|update))\s+(?:with|on|about)\s+my\s+(?:application\s+(?:at|to|with)|candidacy\s+at)\s+\w"
+    r"|\bwhen\s+did\s+I\s+appl(?:y|ied)\s+(?:to|at|for)\s+\w"
+    r"|\b(?:am\s+I\s+(?:applying|being\s+considered)|is\s+my\s+application\s+(?:in|submitted))\s+(?:to|at|for)\s+\w"
+    r"|\b(?:هل\s+تقدمت|هل\s+قدمت)\s+(?:إلى|ل|في)\s+\w",
+    re.IGNORECASE,
+)
+
+# Company-targeted job search: "find jobs at ADNOC", "jobs at Emirates NBD",
+# "any openings at Carrefour?", "vacancies at DEWA".
+# Only fires on "at [company]" patterns to avoid colliding with location-based
+# searches ("jobs in Dubai") and generic job searches.
+_COMPANY_SEARCH_RE = re.compile(
+    r"\b(?:find|search\s+for|show\s+me|look\s+for|get)\s+(?:me\s+)?(?:jobs?|roles?|positions?|vacancies|openings?)\s+at\s+[A-Z\w]"
+    r"|\b(?:jobs?|roles?|vacancies|openings?|positions?)\s+at\s+[A-Z][A-Za-z]"
+    r"|\bany\s+(?:openings?|vacancies|positions?|jobs?)\s+at\s+[A-Z\w]"
+    r"|\b(?:وظائف|فرص\s+عمل)\s+(?:في|لدى|عند)\s+\w",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -4191,6 +4241,36 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        # ── Profile field update ──────────────────────────────────────────────
+        # "add Python to my skills", "remove OSHA from my skills",
+        # "update my experience to 8 years", "I'm now based in Abu Dhabi",
+        # "change my target role to HSE Manager".
+        if _PROFILE_FIELD_UPDATE_RE.search(message):
+            return self._finalize(
+                self._handle_profile_field_update(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Application-specific lookup ───────────────────────────────────────
+        # "did I apply to Emirates?", "status of my ADNOC application",
+        # "when did I apply to Carrefour?".
+        if _APP_SPECIFIC_LOOKUP_RE.search(message):
+            return self._finalize(
+                self._handle_app_specific_lookup(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Company-targeted job search ───────────────────────────────────────
+        # "find jobs at ADNOC", "jobs at Emirates NBD", "any openings at DEWA".
+        if _COMPANY_SEARCH_RE.search(message):
+            return self._finalize(
+                self._handle_company_search(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
         # ── Step 1: Unified intent classification ────────────────────────────
         if has_cv and self._looks_like_career_execution_request(message):
             return self._finalize(
@@ -7607,6 +7687,391 @@ class RicoChatAPI:
         msg = "\n".join(lines)
         self._append_chat(user_id, "assistant", msg)
         return {"type": "profile_summary", "message": msg}
+
+    # ── Granular profile field update ───────────────────────────────────────────
+
+    def _handle_profile_field_update(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Parse a natural-language profile-field update and persist it.
+
+        Supports:
+        - "add Python to my skills" → append to skills list
+        - "remove OSHA from my skills" → remove from skills list
+        - "update my experience to 8 years" / "I have 10 years of experience"
+        - "I'm now based in Abu Dhabi" / "change my location to Sharjah"
+        - "change my target role to HSE Manager"
+        - "add oil and gas to my industries"
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+        lower  = message.lower()
+
+        # ── Detect field + operation ─────────────────────────────────────────
+        field: str = ""
+        op: str    = "set"          # "add" | "remove" | "set"
+        raw_value: str = ""
+
+        # Skills / certifications
+        _add_skills_m = _re.search(
+            r"\badd\b(.{1,40}?)\bto\s+my\s+(skills?|certifications?)\b", message, _re.IGNORECASE
+        )
+        _rem_skills_m = _re.search(
+            r"\bremove\b(.{1,40}?)\bfrom\s+my\s+(skills?|certifications?)\b", message, _re.IGNORECASE
+        )
+        # Years of experience
+        _exp_m = _re.search(
+            r"(?:update|set|change)\s+my\s+(?:years?\s+(?:of\s+)?)?experience\s+to\s+(\d+(?:\.\d+)?)"
+            r"|I\s+(?:now\s+)?have\s+(\d+(?:\.\d+)?)\s+years?\s+(?:of\s+)?experience"
+            r"|my\s+experience\s+is\s+(?:now\s+)?(\d+(?:\.\d+)?)\s+years?",
+            message, _re.IGNORECASE,
+        )
+        # Location / preferred cities
+        _loc_m = _re.search(
+            r"(?:I(?:'m|\s+am)\s+(?:now\s+)?(?:based|located?|living|working)\s+in\s+|"
+            r"my\s+(?:location|city|base)\s+(?:is|has\s+changed\s+to|changed\s+to)\s+|"
+            r"(?:update|change|set)\s+my\s+(?:preferred\s+)?(?:location|city)\s+to\s+)"
+            r"([A-Za-z][A-Za-z\s]{1,30})",
+            message, _re.IGNORECASE,
+        )
+        # Target role
+        _role_m = _re.search(
+            r"(?:change|update|set)\s+my\s+(?:target\s+)?role\s+(?:to|as)\s+(.{3,40})"
+            r"|(?:change|update|set)\s+my\s+(?:job\s+)?target\s+to\s+(.{3,40})",
+            message, _re.IGNORECASE,
+        )
+        # Industries
+        _ind_add_m = _re.search(
+            r"\badd\b(.{1,40}?)\bto\s+my\s+industries\b", message, _re.IGNORECASE
+        )
+        _ind_rem_m = _re.search(
+            r"\bremove\b(.{1,40}?)\bfrom\s+my\s+industries\b", message, _re.IGNORECASE
+        )
+
+        if _add_skills_m:
+            field     = "skills"
+            op        = "add"
+            raw_value = _add_skills_m.group(1).strip().strip(":,. ")
+        elif _rem_skills_m:
+            field     = "skills"
+            op        = "remove"
+            raw_value = _rem_skills_m.group(1).strip().strip(":,. ")
+        elif _exp_m:
+            field     = "years_experience"
+            op        = "set"
+            raw_value = next(g for g in _exp_m.groups() if g is not None)
+        elif _loc_m:
+            field     = "preferred_cities"
+            op        = "set"
+            raw_value = _loc_m.group(1).strip().strip(".,! ")
+        elif _role_m:
+            field     = "target_roles"
+            op        = "set"
+            raw_value = (
+                (_role_m.group(1) or _role_m.group(2) or "").strip().strip(".,! ")
+            )
+        elif _ind_add_m:
+            field     = "industries"
+            op        = "add"
+            raw_value = _ind_add_m.group(1).strip().strip(":,. ")
+        elif _ind_rem_m:
+            field     = "industries"
+            op        = "remove"
+            raw_value = _ind_rem_m.group(1).strip().strip(":,. ")
+        else:
+            # Regex fired but we can't parse a specific field — ask AI
+            return self._answer_with_ai_fallback(
+                user_id=user_id, message=message, profile=profile, save_user_message=False
+            )
+
+        if not raw_value:
+            msg = (
+                "لم أتمكن من استخراج القيمة. يرجى المحاولة مجدداً."
+                if arabic else
+                "I couldn't extract the value from your message. Could you rephrase?"
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "message": msg}
+
+        # ── Build update dict ────────────────────────────────────────────────
+        updates: dict[str, Any] = {}
+        old_value: Any = None
+        new_value: Any = None
+
+        if field == "years_experience":
+            try:
+                yrs = float(raw_value)
+                old_value = self._profile_value(profile, "years_experience")
+                new_value = int(yrs) if yrs == int(yrs) else yrs
+                updates   = {"years_experience": yrs}
+            except ValueError:
+                msg = (
+                    "لم أتمكن من قراءة عدد السنوات. حاول: 'خبرتي 8 سنوات'."
+                    if arabic else
+                    "Couldn't parse that as a number. Try: 'update my experience to 8 years'."
+                )
+                self._append_chat(user_id, "assistant", msg)
+                return {"type": "clarification", "message": msg}
+
+        elif field in ("skills", "certifications", "industries"):
+            current_list = list(self._as_list(self._profile_value(profile, field)))
+            old_value    = list(current_list)
+            # Parse comma-separated values
+            items = [v.strip() for v in _re.split(r"[,،]", raw_value) if v.strip()]
+            if op == "add":
+                existing_lower = {s.lower() for s in current_list}
+                for item in items:
+                    if item.lower() not in existing_lower:
+                        current_list.append(item)
+                        existing_lower.add(item.lower())
+            else:  # remove
+                remove_lower = {s.lower() for s in items}
+                current_list = [s for s in current_list if s.lower() not in remove_lower]
+            new_value = current_list
+            updates   = {field: current_list}
+
+        elif field == "preferred_cities":
+            old_value   = list(self._as_list(self._profile_value(profile, "preferred_cities")))
+            new_value   = [raw_value.title()]
+            updates     = {"preferred_cities": new_value}
+
+        elif field == "target_roles":
+            old_value = list(self._as_list(self._profile_value(profile, "target_roles")))
+            new_value = [raw_value.strip()]
+            updates   = {"target_roles": new_value}
+
+        # ── Persist ──────────────────────────────────────────────────────────
+        try:
+            upsert_profile(user_id=user_id, updates=updates)
+        except Exception:
+            logger.exception("_handle_profile_field_update: upsert failed user=%s", user_id)
+            err_msg = (
+                "حدث خطأ أثناء حفظ التحديث."
+                if arabic else
+                "There was an error saving the update. Please try again."
+            )
+            self._append_chat(user_id, "assistant", err_msg)
+            return {"type": "error", "message": err_msg}
+
+        # ── Build response ───────────────────────────────────────────────────
+        _FIELD_LABELS: dict[str, str] = {
+            "skills": "skills",
+            "certifications": "certifications",
+            "industries": "industries",
+            "preferred_cities": "preferred city",
+            "target_roles": "target role",
+            "years_experience": "years of experience",
+        }
+        label = _FIELD_LABELS.get(field, field)
+
+        if field == "years_experience":
+            msg = f"Got it — I've updated your experience to **{new_value} years**."
+        elif op == "add":
+            added = ", ".join(v.strip() for v in _re.split(r"[,،]", raw_value) if v.strip())
+            msg = f"Done! Added **{added}** to your {label}."
+        elif op == "remove":
+            removed = ", ".join(v.strip() for v in _re.split(r"[,،]", raw_value) if v.strip())
+            msg = f"Removed **{removed}** from your {label}."
+        else:
+            msg = f"Updated your {label} to **{raw_value.strip()}**."
+
+        if arabic:
+            if field == "years_experience":
+                msg = f"تم! تحديث خبرتك إلى **{new_value} سنوات**."
+            elif op == "add":
+                msg = f"تم إضافة **{raw_value.strip()}** إلى {label}."
+            elif op == "remove":
+                msg = f"تم حذف **{raw_value.strip()}** من {label}."
+            else:
+                msg = f"تم تحديث {label} إلى **{raw_value.strip()}**."
+
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "profile_update",
+            "field": field,
+            "operation": op,
+            "old_value": old_value,
+            "new_value": new_value,
+            "message": msg,
+        }
+
+    # ── Application-specific lookup ─────────────────────────────────────────────
+
+    def _handle_app_specific_lookup(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Search cached/DB applications for a specific company or role name.
+
+        Detects: "did I apply to Emirates?", "status of my ADNOC application",
+        "when did I apply to Carrefour?".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        # Extract the company/entity name from the message.
+        _co_m = _re.search(
+            r"\b(?:appl(?:y|ied)\s+(?:to|at|for)|application\s+(?:at|to|with|for)|"
+            r"apply\s+(?:to|at|for)|happened\s+with\s+my\s+application\s+(?:at|to)|"
+            r"appl(?:y|ied)\s+(?:to|at|for)|did\s+I\s+appl[yi]\s+(?:to|at|for)|"
+            r"candidacy\s+at|تقدمت\s+(?:إلى|ل|في))\s+([A-Za-z][^\s?!,.]{0,40}(?:\s+[A-Z][^\s?!,.]{0,20})*)",
+            message, _re.IGNORECASE,
+        )
+        company_query = _co_m.group(1).strip() if _co_m else ""
+
+        if not company_query:
+            msg = (
+                "أخبرني باسم الشركة للبحث عن طلبك."
+                if arabic else
+                "Which company are you asking about? Please include the company name."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "message": msg}
+
+        # Load application list (use cache if warm)
+        apps: list[dict[str, Any]] = []
+        try:
+            from src.repositories import applications_repo
+            apps = applications_repo.get_all(user_id=user_id)
+        except Exception:
+            logger.exception("_handle_app_specific_lookup: get_all failed user=%s", user_id)
+
+        # Case-insensitive partial match on company field
+        q_lower = company_query.lower()
+        matches = [
+            a for a in apps
+            if isinstance(a, dict) and q_lower in (a.get("company") or a.get("employer_name") or "").lower()
+        ]
+
+        if not matches:
+            msg = (
+                f"لا يوجد أي طلب مسجل لدي يتعلق بـ **{company_query}**. "
+                "ربما لم تتقدم بعد أو أن الاسم مختلف قليلاً."
+                if arabic else
+                f"I don't have any recorded application to **{company_query}**. "
+                "You may not have applied yet, or the company name might be slightly different."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "application_detail",
+                "found": False,
+                "company_query": company_query,
+                "message": msg,
+            }
+
+        app = matches[0]
+        title   = app.get("title") or app.get("job_title") or "Unknown role"
+        company = app.get("company") or app.get("employer_name") or company_query
+        status  = (app.get("status") or "applied").replace("_", " ").title()
+        applied = app.get("applied_at") or app.get("created_at") or ""
+        date_str = str(applied)[:10] if applied else ""
+
+        lines = [f"✅ **Yes — you've applied to {company}**\n"]
+        lines.append(f"- **Role:** {title}")
+        lines.append(f"- **Status:** {status}")
+        if date_str:
+            lines.append(f"- **Applied on:** {date_str}")
+        if len(matches) > 1:
+            lines.append(f"\n_{len(matches)} applications found for {company_query}. Showing the most recent._")
+
+        msg = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "application_detail",
+            "found": True,
+            "company_query": company_query,
+            "application": app,
+            "message": msg,
+        }
+
+    # ── Company-targeted job search ─────────────────────────────────────────────
+
+    def _handle_company_search(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Search for live jobs at a specific company via JSearch.
+
+        Detects: "find jobs at ADNOC", "any openings at Emirates NBD",
+        "is Carrefour hiring?".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        # Extract company name — everything after "at" or "في/لدى/عند"
+        _co_m = _re.search(
+            r"\bat\s+([A-Za-z][^\s?!,.]{0,25}(?:\s+[A-Za-z][^\s?!,.]{0,20})*)"
+            r"|\b(?:في|لدى|عند)\s+([^\s?!,.]{2,30})",
+            message, _re.IGNORECASE,
+        )
+        # Fallback: "ADNOC is hiring" / "Is ADNOC hiring"
+        if not _co_m:
+            _co_m = _re.search(
+                r"\b([A-Z][A-Za-z\s]{1,25})\s+(?:is\s+)?(?:hiring|recruiting|looking\s+for)\b",
+                message,
+            )
+
+        company = (_co_m.group(1) or (_co_m.group(2) if _co_m.lastindex and _co_m.lastindex >= 2 else "")).strip() if _co_m else ""
+
+        if not company:
+            msg = (
+                "أخبرني باسم الشركة التي تريد البحث عن وظائفها."
+                if arabic else
+                "Which company would you like to search jobs at? Please include the company name."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "message": msg}
+
+        # Build search query: "[company] jobs UAE"
+        search_query = f"{company} jobs UAE"
+        fetch = self._search_jsearch_meta(search_query)
+        matches = fetch.items or []
+
+        logger.info(
+            "company_search: company=%r query=%r results=%d rate_limited=%s",
+            company, search_query, len(matches), fetch.rate_limited,
+        )
+
+        if not matches:
+            msg = (
+                f"لم أجد وظائف حالية لدى **{company}** في الإمارات. "
+                "قد تكون النتائج متأخرة — حاول لاحقاً أو ابحث على موقعهم مباشرة."
+                if arabic else
+                f"I couldn't find current openings at **{company}** in the UAE. "
+                "Results may be delayed — try again later or check their careers page directly."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "no_results", "company": company, "message": msg}
+
+        # Store in recent context so follow-up job-detail queries work
+        self._store_search_matches_context(user_id, matches[:10])
+
+        top = matches[:5]
+        header = (
+            f"وجدت **{len(top)}** وظيفة لدى **{company}** في الإمارات:"
+            if arabic else
+            f"Found **{len(top)} opening{'s' if len(top) != 1 else ''}** at **{company}** in the UAE:"
+        )
+        lines = [header, ""]
+        for i, job in enumerate(top, 1):
+            title   = job.get("title") or job.get("job_title") or "Role"
+            loc     = job.get("location") or job.get("job_city") or "UAE"
+            url     = job.get("apply_url") or job.get("job_apply_link") or ""
+            lines.append(f"{i}. **{title}** — {loc}" + (f" ([Apply]({url}))" if url else ""))
+
+        if len(matches) > 5:
+            lines.append(f"\n_…and {len(matches) - 5} more. Say 'show me more' to see them._")
+
+        msg = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "job_matches",
+            "company": company,
+            "jobs": top,
+            "total_found": len(matches),
+            "message": msg,
+        }
 
     # ── Context-aware help ──────────────────────────────────────────────────────
 

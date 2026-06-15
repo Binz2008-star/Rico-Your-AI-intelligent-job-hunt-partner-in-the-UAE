@@ -1093,3 +1093,240 @@ class TestSalaryReadback:
     def test_my_salary_expectation(self, monkeypatch):
         _, result = _run(monkeypatch, "my salary expectation", _CVProfile())
         assert result["type"] == "salary_readback"
+
+
+# ── Granular profile field update ──────────────────────────────────────────────
+
+class TestProfileFieldUpdate:
+    """Verify _handle_profile_field_update routes and returns profile_update type."""
+
+    @pytest.mark.parametrize("phrase", [
+        "add Python to my skills",
+        "add NEBOSH to my certifications",
+        "remove OSHA from my skills",
+        "update my experience to 8 years",
+        "I have 10 years of experience",
+        "I'm now based in Abu Dhabi",
+        "change my target role to HSE Manager",
+        "add oil and gas to my industries",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _PROFILE_FIELD_UPDATE_RE
+        assert _PROFILE_FIELD_UPDATE_RE.search(phrase), (
+            f"_PROFILE_FIELD_UPDATE_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        # Generic profile questions — should NOT fire
+        "show my profile",
+        "what do you know about me",
+        "what is my salary",
+        # Bare experience mention without explicit update
+        "I have experience in construction",
+        # Job searches
+        "find me jobs in construction",
+        "show me HSE jobs",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _PROFILE_FIELD_UPDATE_RE
+        assert not _PROFILE_FIELD_UPDATE_RE.search(phrase), (
+            f"_PROFILE_FIELD_UPDATE_RE should NOT match: {phrase!r}"
+        )
+
+    def test_add_skill_returns_profile_update(self, monkeypatch):
+        _, result = _run(monkeypatch, "add Python to my skills", _CVProfile())
+        assert result["type"] == "profile_update"
+        assert result["field"] == "skills"
+        assert result["operation"] == "add"
+        assert "Python" in result["message"]
+
+    def test_remove_skill_returns_profile_update(self, monkeypatch):
+        _, result = _run(monkeypatch, "remove OSHA from my skills", _CVProfile())
+        assert result["type"] == "profile_update"
+        assert result["field"] == "skills"
+        assert result["operation"] == "remove"
+
+    def test_update_experience_returns_profile_update(self, monkeypatch):
+        _, result = _run(monkeypatch, "update my experience to 8 years", _CVProfile())
+        assert result["type"] == "profile_update"
+        assert result["field"] == "years_experience"
+        assert "8" in result["message"]
+
+    def test_i_have_n_years_experience(self, monkeypatch):
+        _, result = _run(monkeypatch, "I have 10 years of experience", _CVProfile())
+        assert result["type"] == "profile_update"
+        assert result["field"] == "years_experience"
+        assert "10" in result["message"]
+
+    def test_change_target_role(self, monkeypatch):
+        _, result = _run(monkeypatch, "change my target role to Safety Manager", _CVProfile())
+        assert result["type"] == "profile_update"
+        assert result["field"] == "target_roles"
+        assert "Safety Manager" in result["message"]
+
+    def test_add_industry(self, monkeypatch):
+        _, result = _run(monkeypatch, "add oil and gas to my industries", _CVProfile())
+        assert result["type"] == "profile_update"
+        assert result["field"] == "industries"
+        assert result["operation"] == "add"
+
+
+# ── Application-specific lookup ────────────────────────────────────────────────
+
+class TestAppSpecificLookup:
+    """Verify _handle_app_specific_lookup routing and response types."""
+
+    @pytest.mark.parametrize("phrase", [
+        "did I apply to Emirates?",
+        "have I applied to ADNOC?",
+        "status of my Carrefour application",
+        "my application at DEWA",
+        "when did I apply to Google?",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _APP_SPECIFIC_LOOKUP_RE
+        assert _APP_SPECIFIC_LOOKUP_RE.search(phrase), (
+            f"_APP_SPECIFIC_LOOKUP_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        # Generic list queries — already covered by _APPLICATIONS_LIST_RE
+        "show my applications",
+        "list my applications",
+        # Job search — not application lookup
+        "find jobs at ADNOC",
+        # Salary
+        "what salary did I set",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _APP_SPECIFIC_LOOKUP_RE
+        assert not _APP_SPECIFIC_LOOKUP_RE.search(phrase), (
+            f"_APP_SPECIFIC_LOOKUP_RE should NOT match: {phrase!r}"
+        )
+
+    def test_not_found_returns_application_detail(self, monkeypatch):
+        import src.rico_chat_api as mod
+        from src.rico_chat_api import RicoChatAPI
+        from unittest.mock import MagicMock
+        import src.repositories.applications_repo as apps_repo
+
+        monkeypatch.setattr(mod, "get_profile", lambda uid: _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock(
+            tool_name=None, entities={}, tool_args={}, confirmation_prompt=None, source="keyword"
+        ))
+        monkeypatch.setattr(mod, "upsert_profile", lambda uid, u: _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        monkeypatch.setattr(apps_repo, "get_all", lambda user_id: [])
+
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        result = api._handle_active_user("u1", "did I apply to Emirates?")
+        assert result["type"] == "application_detail"
+        assert result["found"] is False
+
+    def test_found_returns_application_detail_with_data(self, monkeypatch):
+        import src.rico_chat_api as mod
+        from src.rico_chat_api import RicoChatAPI
+        from unittest.mock import MagicMock
+        import src.repositories.applications_repo as apps_repo
+
+        monkeypatch.setattr(mod, "get_profile", lambda uid: _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock(
+            tool_name=None, entities={}, tool_args={}, confirmation_prompt=None, source="keyword"
+        ))
+        monkeypatch.setattr(mod, "upsert_profile", lambda uid, u: _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        monkeypatch.setattr(apps_repo, "get_all", lambda user_id: [
+            {"job_id": "j1", "title": "HSE Officer", "company": "Emirates NBD",
+             "status": "applied", "applied_at": "2026-06-01"}
+        ])
+
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        result = api._handle_active_user("u1", "did I apply to Emirates?")
+        assert result["type"] == "application_detail"
+        assert result["found"] is True
+        assert "Emirates" in result["message"]
+
+
+# ── Company-targeted job search ────────────────────────────────────────────────
+
+class TestCompanySearch:
+    """Verify _handle_company_search routing and response types."""
+
+    @pytest.mark.parametrize("phrase", [
+        "find jobs at ADNOC",
+        "find me jobs at Emirates NBD",
+        "any openings at Carrefour?",
+        "any vacancies at DEWA",
+        "jobs at Emaar",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _COMPANY_SEARCH_RE
+        assert _COMPANY_SEARCH_RE.search(phrase), (
+            f"_COMPANY_SEARCH_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        # Location-based search — uses "in", not "at"
+        "find jobs in Dubai",
+        "jobs in Abu Dhabi",
+        # Generic search
+        "find me HSE jobs",
+        "show me applications",
+        # Generic "at" without recognizable company-style word
+        "applied at",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _COMPANY_SEARCH_RE
+        assert not _COMPANY_SEARCH_RE.search(phrase), (
+            f"_COMPANY_SEARCH_RE should NOT match: {phrase!r}"
+        )
+
+    def test_no_results_returns_no_results_type(self, monkeypatch):
+        import src.rico_chat_api as mod
+        from src.rico_chat_api import RicoChatAPI
+        from src.jsearch_client import FetchResult
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr(mod, "get_profile", lambda uid: _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock(
+            tool_name=None, entities={}, tool_args={}, confirmation_prompt=None, source="keyword"
+        ))
+        monkeypatch.setattr(mod, "upsert_profile", lambda uid, u: _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._store_recent_context = MagicMock()
+        monkeypatch.setattr(api, "_search_jsearch_meta", lambda q, loc="": FetchResult(items=[]))
+
+        result = api._handle_active_user("u1", "find jobs at ADNOC")
+        assert result["type"] == "no_results"
+        assert "ADNOC" in result["message"]
+
+    def test_with_results_returns_job_matches(self, monkeypatch):
+        import src.rico_chat_api as mod
+        from src.rico_chat_api import RicoChatAPI
+        from src.jsearch_client import FetchResult
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr(mod, "get_profile", lambda uid: _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock(
+            tool_name=None, entities={}, tool_args={}, confirmation_prompt=None, source="keyword"
+        ))
+        monkeypatch.setattr(mod, "upsert_profile", lambda uid, u: _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._store_recent_context = MagicMock()
+        monkeypatch.setattr(api, "_search_jsearch_meta", lambda q, loc="": FetchResult(items=[
+            {"title": "HSE Engineer", "company": "ADNOC", "location": "Abu Dhabi",
+             "apply_url": "https://adnoc.ae/jobs/1"},
+        ]))
+
+        result = api._handle_active_user("u1", "find jobs at ADNOC")
+        assert result["type"] == "job_matches"
+        assert result["company"] == "ADNOC"
+        assert len(result["jobs"]) >= 1
