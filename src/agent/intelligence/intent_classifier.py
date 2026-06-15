@@ -1104,11 +1104,6 @@ def _extract_arabic_role(normalized_text: str) -> Optional[str]:
     # A phrase made up entirely of location terms is a location qualifier, not a role.
     if all(w in _ARABIC_LOCATION_TERMS for w in words):
         return None
-    # Translate to English when a deterministic synonym exists so the JSearch
-    # pipeline and role classifier receive a recognisable English title.
-    english = _ARABIC_TO_ENGLISH_ROLE_MAP.get(role)
-    if english:
-        return english
     return role
 
 
@@ -1418,6 +1413,9 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         # Prefer a pure-Arabic role phrase ("وظيفه مدير عمليات في عجمان" -> "مدير عمليات");
         # fall back to a trailing English role for mixed-language messages.
         role = _extract_arabic_role(lower) or _extract_english_role_from_mixed(text)
+        # Map known Arabic role names to English so JSearch receives a recognisable title.
+        if role:
+            role = _ARABIC_TO_ENGLISH_ROLE_MAP.get(role, role)
         return IntentResult("job_search_explicit", 0.85, "regex", extracted_role=role)
 
     # Role change — only if no explicit job-search keyword present
