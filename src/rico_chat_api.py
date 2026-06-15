@@ -518,6 +518,40 @@ _RESULT_COUNT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Certification/qualification advice: "what certifications do I need for HSE?",
+# "required qualifications for finance jobs", "what certifications for QHSE manager?".
+_CERTIFICATION_ADVICE_RE = re.compile(
+    r"\bwhat\s+(?:certifications?|qualifications?|courses?|credentials?|licenses?|training)\s+"
+    r"(?:do\s+I\s+need|are\s+(?:needed|required|recommended)|should\s+I\s+(?:have|get|do))\b"
+    r"|\b(?:certifications?|qualifications?|credentials?)\s+(?:required|needed|for)\s+\w.{1,30}\b(?:jobs?|roles?|career)\b"
+    r"|\b(?:required|recommended)\s+(?:certifications?|qualifications?|credentials?|training)\b"
+    r"|\bwhat\s+(?:qualifies|makes)\s+(?:me|someone)\s+(?:eligible|qualified|suitable)\b"
+    r"|\b(?:شهادات|مؤهلات)\s+(?:مطلوبة|موصى\s+بها)\b",
+    re.IGNORECASE,
+)
+
+# Seniority-filtered search: "find senior HSE jobs", "entry level QHSE positions",
+# "manager-level roles", "junior safety engineer jobs", "director-level positions".
+_SENIORITY_SEARCH_RE = re.compile(
+    r"\b(?:find|show|search\s+for|look\s+for)\s+(?:me\s+)?(?:senior|junior|entry[- ]?level|mid[- ]?level|director[- ]?level|manager[- ]?level|executive[- ]?level|graduate|intern(?:ship)?)\s+.{0,30}\b(?:jobs?|roles?|positions?|vacancies)\b"
+    r"|\b(?:senior|junior|entry[- ]?level|mid[- ]?level|director[- ]?level|manager[- ]?level)\s+.{0,25}\b(?:jobs?|roles?|positions?|vacancies|opportunities?)\b"
+    r"|\b(?:jobs?|roles?|positions?)\s+(?:for\s+)?(?:graduates?|freshers?|entry[- ]?level|interns?)\b"
+    r"|\b(?:وظائف|فرص)\s+(?:للخريجين|الأولى|مبتدئ|خبراء|إدارية)\b",
+    re.IGNORECASE,
+)
+
+# Job market pulse: "how's the job market for HSE?", "are there many construction jobs?",
+# "is the UAE market good for finance?", "how competitive is HSE in UAE?".
+_MARKET_PULSE_RE = re.compile(
+    r"\bhow(?:'s|\s+is)\s+(?:the\s+)?(?:job\s+)?market\s+(?:for|in|like\s+for)\b"
+    r"|\bare\s+there\s+(?:many|enough|a\s+lot\s+of|few)\s+.{0,30}?\b(?:jobs?|roles?|positions?|vacancies|opportunities?)\b"
+    r"|\bhow\s+(?:competitive|active|good|strong|busy)\s+is\s+(?:the\s+)?(?:job\s+)?market\b"
+    r"|\b(?:job\s+)?market\s+(?:outlook|overview|status|situation|conditions?)\b"
+    r"|\b(?:is\s+(?:it\s+)?(?:easy|hard|difficult|competitive))\s+to\s+find\s+(?:a\s+)?(?:job|work)\b"
+    r"|\b(?:كيف\s+(?:هو\s+)?سوق|سوق\s+العمل)\b.{0,30}\b(?:في\s+الإمارات|الإمارات)?\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -4375,6 +4409,16 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        # ── Certification / qualification advice ──────────────────────────────
+        # Must come before industry search: "required qualifications for finance"
+        # overlaps with industry keywords but is advice, not a job search request.
+        if _CERTIFICATION_ADVICE_RE.search(message):
+            return self._finalize(
+                self._handle_certification_advice(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
         # ── Industry-based job search ─────────────────────────────────────────
         # "find jobs in oil and gas", "construction sector jobs in Dubai".
         if _INDUSTRY_SEARCH_RE.search(message):
@@ -4398,6 +4442,24 @@ class RicoChatAPI:
         if _RESULT_COUNT_RE.search(message):
             return self._finalize(
                 self._handle_result_count(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Seniority-filtered search ─────────────────────────────────────────
+        # "find senior HSE jobs", "entry level QHSE positions", "manager-level roles".
+        if _SENIORITY_SEARCH_RE.search(message):
+            return self._finalize(
+                self._handle_seniority_search(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Job market pulse ──────────────────────────────────────────────────
+        # "how's the job market for HSE?", "are there many construction jobs?".
+        if _MARKET_PULSE_RE.search(message):
+            return self._finalize(
+                self._handle_market_pulse(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -8769,6 +8831,320 @@ class RicoChatAPI:
             "type": "result_count",
             "count": count,
             "role": role,
+            "message": msg,
+        }
+
+    # ── Certification / qualification advice ────────────────────────────────────
+
+    def _handle_certification_advice(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Return UAE-context certification advice for a role or industry.
+
+        Detects: "what certifications do I need for HSE?", "required qualifications
+        for finance jobs", "what certifications for project management?".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        # Certification knowledge base (UAE-relevant, ordered by sector)
+        _CERT_DB: dict[str, dict[str, Any]] = {
+            "hse":          {"label": "HSE / QHSE / EHS",
+                             "certs": ["NEBOSH IGC", "IOSH Managing Safely", "ISO 45001 Lead Auditor",
+                                       "ISO 14001 Lead Auditor", "NEBOSH Diploma", "OHSAS 18001"],
+                             "note": "NEBOSH IGC is the gold standard for UAE HSE roles."},
+            "qhse":         {"label": "QHSE",
+                             "certs": ["NEBOSH IGC", "IOSH", "ISO 9001 Lead Auditor",
+                                       "ISO 45001 Lead Auditor", "ISO 14001 Lead Auditor"],
+                             "note": "ISO 9001 is essential for Quality-focused QHSE roles."},
+            "finance":      {"label": "Finance / Banking",
+                             "certs": ["CFA", "CMA", "CPA", "ACCA", "MBA (Finance)", "CIMA", "CFP"],
+                             "note": "CFA is highly valued in UAE investment and banking roles."},
+            "project management": {"label": "Project Management",
+                                   "certs": ["PMP", "PRINCE2", "PMI-ACP", "PMI-RMP", "MSP"],
+                                   "note": "PMP is almost universally required for PM roles in UAE."},
+            "hr":           {"label": "Human Resources",
+                             "certs": ["CIPD Level 5", "SHRM-CP", "PHR", "CHRP", "GPHR"],
+                             "note": "CIPD is highly recognised by UAE multinationals."},
+            "supply chain": {"label": "Supply Chain / Logistics",
+                             "certs": ["CIPS", "APICS CSCP", "CSCMP", "Lean Six Sigma Green Belt"],
+                             "note": "CIPS is the benchmark certification for procurement in UAE."},
+            "it":           {"label": "IT / Technology",
+                             "certs": ["AWS Certified Solutions Architect", "Azure Administrator",
+                                       "CISSP", "PMP", "ITIL", "Google Cloud Professional"],
+                             "note": "Cloud certifications (AWS/Azure) are in highest demand in UAE tech."},
+            "engineering":  {"label": "Engineering",
+                             "certs": ["CEng (UK)", "PE (US)", "PMP", "Chartered Engineer UAE",
+                                       "ISO 9001 Lead Auditor"],
+                             "note": "Professional engineering registration can significantly boost offers in UAE."},
+            "real estate":  {"label": "Real Estate",
+                             "certs": ["RERA (Dubai)", "CIPS", "CPM", "CCIM"],
+                             "note": "RERA registration is mandatory for all real estate brokers in Dubai."},
+            "accounting":   {"label": "Accounting / Audit",
+                             "certs": ["CPA", "ACCA", "CMA", "CIA", "CIMA", "CA (ICAEW)"],
+                             "note": "ACCA is widely accepted across UAE Big 4 and corporates."},
+            "marketing":    {"label": "Marketing / Digital",
+                             "certs": ["Google Ads Certification", "HubSpot Marketing", "Meta Blueprint",
+                                       "CIM", "Chartered Marketer"],
+                             "note": "Digital certifications are most in-demand for UAE marketing roles."},
+            "data":         {"label": "Data Science / Analytics",
+                             "certs": ["Google Data Analytics", "AWS Data Analytics", "Tableau Desktop",
+                                       "Microsoft PL-300 (Power BI)", "Python for Data Science"],
+                             "note": "Power BI and Tableau skills are heavily sought in UAE."},
+        }
+
+        # Match role/industry from message to knowledge base
+        sector = ""
+        sector_data: dict[str, Any] = {}
+        msg_lower = message.lower()
+        for key, data in _CERT_DB.items():
+            if key in msg_lower or any(w in msg_lower for w in key.split()):
+                sector = key
+                sector_data = data
+                break
+
+        # Fallback: check profile target roles
+        if not sector_data:
+            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            for role_str in target_roles:
+                role_lower = str(role_str).lower()
+                for key, data in _CERT_DB.items():
+                    if key in role_lower or any(w in role_lower for w in key.split()):
+                        sector = key
+                        sector_data = data
+                        break
+                if sector_data:
+                    break
+
+        if not sector_data:
+            msg = (
+                "أخبرني بالقطاع أو المسمى الوظيفي الذي تريد الشهادات المناسبة له، مثل: 'ما الشهادات المطلوبة لوظائف HSE؟'"
+                if arabic else
+                "Which role or industry are you asking about? For example: "
+                "'what certifications do I need for HSE roles?' or 'qualifications for finance jobs?'"
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "message": msg}
+
+        label = sector_data["label"]
+        certs = sector_data["certs"]
+        note  = sector_data.get("note", "")
+
+        if arabic:
+            lines = [f"**الشهادات الموصى بها لوظائف {label} في الإمارات:**\n"]
+            for c in certs:
+                lines.append(f"- {c}")
+            if note:
+                lines.append(f"\n💡 {note}")
+        else:
+            lines = [f"**Recommended certifications for {label} roles in the UAE:**\n"]
+            for i, c in enumerate(certs, 1):
+                lines.append(f"{i}. {c}")
+            if note:
+                lines.append(f"\n💡 **Tip:** {note}")
+            lines.append(
+                "\nSay **'find jobs in " + (sector or label) + "'** to search live openings, "
+                "or **'update my certifications'** to save these to your profile."
+            )
+
+        msg_text = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg_text)
+        return {
+            "type": "certification_advice",
+            "sector": sector,
+            "certifications": certs,
+            "message": msg_text,
+        }
+
+    # ── Seniority-filtered search ───────────────────────────────────────────────
+
+    def _handle_seniority_search(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Search for jobs filtered by seniority level.
+
+        Detects: "find senior HSE jobs", "entry level QHSE positions",
+        "manager-level roles", "director positions in Dubai".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        # Detect seniority level
+        _SENIORITY_MAP = [
+            (r"director[- ]?level|director", "Director"),
+            (r"executive[- ]?level|vp|vice\s+president|c[- ]?level", "Executive"),
+            (r"manager[- ]?level|senior\s+manager", "Senior Manager"),
+            (r"senior|sr\.?", "Senior"),
+            (r"mid[- ]?level|middle\s+level|experienced", ""),
+            (r"junior|jr\.?", "Junior"),
+            (r"entry[- ]?level|graduate|fresher|fresh\s+graduate|intern(?:ship)?", "Entry Level"),
+        ]
+
+        seniority_label = ""
+        seniority_prefix = ""
+        for pattern, prefix in _SENIORITY_MAP:
+            if _re.search(pattern, message, _re.IGNORECASE):
+                seniority_label = prefix or "Mid-level"
+                seniority_prefix = prefix
+                break
+
+        # Extract role — everything between the seniority keyword and "jobs/roles"
+        role = ""
+        _role_m = _re.search(
+            r"(?:senior|junior|entry[- ]?level|mid[- ]?level|director|manager[- ]?level|graduate|intern)\s+"
+            r"(.{2,35}?)\s+(?:jobs?|roles?|positions?|vacancies|opportunities?)\b",
+            message, _re.IGNORECASE,
+        )
+        if _role_m:
+            role = _role_m.group(1).strip()
+        # Fallback: after "find [seniority]" before "jobs"
+        if not role:
+            _role_m2 = _re.search(
+                r"\b(?:find|show|search\s+for|look\s+for)\s+(?:me\s+)?(?:senior|junior|entry[- ]?level|mid[- ]?level|director)\s+(.{3,30}?)\s+(?:jobs?|roles?|in\b|$)",
+                message, _re.IGNORECASE,
+            )
+            if _role_m2:
+                role = _role_m2.group(1).strip()
+        if not role:
+            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            role = target_roles[0] if target_roles else ""
+
+        # Location hint
+        _loc_m = _re.search(r"\bin\s+(Dubai|Abu\s+Dhabi|Sharjah|Ajman|UAE)\b", message, _re.IGNORECASE)
+        location = _loc_m.group(1).strip() if _loc_m else ""
+
+        if not role:
+            msg = (
+                "أخبرني بالمسمى الوظيفي مع المستوى، مثل: 'ابحث عن وظائف HSE للمبتدئين'."
+                if arabic else
+                "Which role are you looking for? E.g. 'find senior HSE jobs' or 'entry level QHSE positions'."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "message": msg}
+
+        search_query = f"{seniority_prefix} {role}".strip() if seniority_prefix else role
+        fetch = self._search_jsearch_meta(search_query, location)
+        matches = fetch.items or []
+
+        self._store_search_matches_context(user_id, matches[:10])
+        top = matches[:5]
+
+        if not top:
+            msg = (
+                f"لم أجد وظائف {seniority_label} لـ {role} في الإمارات."
+                if arabic else
+                f"No {seniority_label} {role} jobs found in the UAE right now."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "no_results", "message": msg}
+
+        loc_label = f" in {location}" if location else " in the UAE"
+        header = (
+            f"وجدت **{len(top)}** وظيفة {'من مستوى ' + seniority_label if seniority_label else ''} لـ **{role}**{' في ' + location if location else ' في الإمارات'}:"
+            if arabic else
+            f"Found **{len(top)} {seniority_label} {role} role{'s' if len(top) != 1 else ''}**{loc_label}:"
+        )
+        lines = [header, ""]
+        for i, job in enumerate(top, 1):
+            title   = job.get("title") or job.get("job_title") or "Role"
+            company = job.get("company") or job.get("employer_name") or ""
+            loc     = job.get("location") or job.get("job_city") or "UAE"
+            url     = job.get("apply_url") or job.get("job_apply_link") or ""
+            line = f"{i}. **{title}**" + (f" at {company}" if company else "") + f" — {loc}"
+            if url:
+                line += f" ([Apply]({url}))"
+            lines.append(line)
+
+        msg = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "job_matches",
+            "seniority": seniority_label,
+            "role": role,
+            "jobs": top,
+            "total_found": len(matches),
+            "message": msg,
+        }
+
+    # ── Job market pulse ────────────────────────────────────────────────────────
+
+    def _handle_market_pulse(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Return a market insight by running a live JSearch count + commentary.
+
+        Detects: "how's the job market for HSE in UAE?", "are there many construction
+        jobs?", "how competitive is finance in Dubai?".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        # Extract the role/industry from the message
+        role = ""
+        _role_m = _re.search(
+            r"(?:market\s+for|jobs?\s+(?:in|for)|for\s+(?:an?\s+)?|competitive\s+(?:for|in))\s+"
+            r"([A-Za-z][A-Za-z\s]{2,30}?)(?:\s+(?:in\s+(?:the\s+)?UAE|jobs?|roles?|in\s+Dubai|in\s+Abu\s+Dhabi)|\??$)",
+            message, _re.IGNORECASE,
+        )
+        if _role_m:
+            role = _role_m.group(1).strip().rstrip("? ,.")
+        if not role:
+            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            role = target_roles[0] if target_roles else ""
+
+        if not role:
+            msg = (
+                "أخبرني بالمسمى الوظيفي أو القطاع الذي تريد معرفة أوضاع سوق العمل فيه."
+                if arabic else
+                "Which role or sector are you asking about? E.g. 'how's the market for HSE in UAE?'"
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "message": msg}
+
+        fetch = self._search_jsearch_meta(role)
+        count = len(fetch.items or [])
+
+        # Market commentary based on result count
+        if count >= 15:
+            sentiment = "very active" if not arabic else "نشط جداً"
+            advice    = "Opportunities are plentiful — now is a great time to apply."
+            advice_ar = "الفرص وفيرة — الوقت مناسب جداً للتقديم."
+        elif count >= 8:
+            sentiment = "moderately active" if not arabic else "نشط بشكل معتدل"
+            advice    = "There are solid opportunities — a tailored CV and cover letter will help you stand out."
+            advice_ar = "هناك فرص جيدة — تأكد من تخصيص سيرتك الذاتية."
+        elif count >= 3:
+            sentiment = "competitive" if not arabic else "تنافسي"
+            advice    = "The market is tight — focus on networking and tailoring each application carefully."
+            advice_ar = "السوق تنافسي — ركز على التواصل المهني وتخصيص كل طلب."
+        else:
+            sentiment = "limited right now" if not arabic else "محدود حالياً"
+            advice    = "Few openings at the moment — consider broadening your search to related roles or nearby cities."
+            advice_ar = "فرص محدودة حالياً — فكر في توسيع بحثك لأدوار مشابهة أو مدن مجاورة."
+
+        if arabic:
+            msg = (
+                f"**سوق العمل لـ {role} في الإمارات — {sentiment}**\n\n"
+                f"وجدت **{count} وظيفة** حالية في لقطة الوقت الفعلي.\n\n"
+                f"💡 {advice_ar}"
+            )
+        else:
+            msg = (
+                f"**Job market for {role} in the UAE — {sentiment}**\n\n"
+                f"Live snapshot: **{count} active opening{'s' if count != 1 else ''}** found right now.\n\n"
+                f"💡 {advice}\n\n"
+                f"Say **'find {role} jobs'** to see the full list."
+            )
+
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "market_pulse",
+            "role": role,
+            "active_count": count,
+            "sentiment": sentiment,
             "message": msg,
         }
 

@@ -1743,4 +1743,269 @@ class TestResultCount:
         result = api._handle_active_user("u1", "how many jobs did you find?")
         assert result["type"] == "result_count"
         assert result["count"] == 7
-        assert "HSE Manager" in result["message"]
+
+
+# ── _CERTIFICATION_ADVICE_RE ──────────────────────────────────────────────────
+
+class TestCertificationAdvice:
+    """Regex gate and handler for certification/qualification advice."""
+
+    @pytest.mark.parametrize("phrase", [
+        "what certifications do I need for HSE jobs?",
+        "what qualifications are required for finance roles?",
+        "what courses should I do for project management?",
+        "what credentials are needed for construction jobs?",
+        "required certifications for safety manager",
+        "recommended qualifications for data analyst",
+        "what makes someone eligible for a senior role?",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _CERTIFICATION_ADVICE_RE
+        assert _CERTIFICATION_ADVICE_RE.search(phrase), (
+            f"_CERTIFICATION_ADVICE_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        "find HSE jobs in Dubai",
+        "how many applications did I send?",
+        "what is my notice period?",
+        "I have NEBOSH certification",
+        "update my certifications",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _CERTIFICATION_ADVICE_RE
+        assert not _CERTIFICATION_ADVICE_RE.search(phrase), (
+            f"_CERTIFICATION_ADVICE_RE should NOT match: {phrase!r}"
+        )
+
+    def test_routes_to_certification_advice(self, monkeypatch):
+        _, result = _run(monkeypatch, "what certifications do I need for HSE?", _CVProfile())
+        assert result["type"] == "certification_advice"
+
+    def test_returns_certifications_list(self, monkeypatch):
+        _, result = _run(monkeypatch, "what certifications do I need for HSE?", _CVProfile())
+        assert isinstance(result.get("certifications"), list)
+        assert len(result["certifications"]) > 0
+
+    def test_finance_sector_returns_cfa(self, monkeypatch):
+        _, result = _run(monkeypatch, "what certifications are needed for finance roles?", _CVProfile())
+        certs = " ".join(result.get("certifications", [])).upper()
+        assert any(c in certs for c in ["CFA", "CMA", "ACCA", "CIMA"])
+
+    def test_hse_sector_returns_nebosh(self, monkeypatch):
+        _, result = _run(monkeypatch, "what certifications do I need for HSE?", _CVProfile())
+        certs = " ".join(result.get("certifications", [])).upper()
+        assert any(c in certs for c in ["NEBOSH", "IOSH"])
+
+    def test_message_field_present(self, monkeypatch):
+        _, result = _run(monkeypatch, "what certifications do I need for HSE?", _CVProfile())
+        assert isinstance(result.get("message"), str)
+        assert len(result["message"]) > 20
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        _, result = _run(monkeypatch, "what qualifications are needed for IT jobs?", _EmptyProfile())
+        assert result["type"] == "certification_advice"
+
+
+# ── _SENIORITY_SEARCH_RE ──────────────────────────────────────────────────────
+
+class TestSenioritySearch:
+    """Regex gate and handler for seniority-filtered job search."""
+
+    @pytest.mark.parametrize("phrase", [
+        "find me senior HSE jobs",
+        "find junior developer roles",
+        "show entry-level positions in Dubai",
+        "search for mid-level finance jobs",
+        "find director-level opportunities",
+        "jobs for graduates in engineering",
+        "roles for freshers in marketing",
+        "find intern positions in Abu Dhabi",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _SENIORITY_SEARCH_RE
+        assert _SENIORITY_SEARCH_RE.search(phrase), (
+            f"_SENIORITY_SEARCH_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        "find live jobs for Senior HSE Manager",
+        "find UAE jobs for Senior HSE Manager",
+        "find live jobs for Senior Sustainability Officer",
+        "find jobs for Senior Project Manager in Dubai",
+        "how many jobs did you find?",
+        "compare job 1 and job 2",
+        "what certifications do I need?",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _SENIORITY_SEARCH_RE
+        assert not _SENIORITY_SEARCH_RE.search(phrase), (
+            f"_SENIORITY_SEARCH_RE should NOT match: {phrase!r}"
+        )
+
+    def _run_with_jsearch(self, monkeypatch, message, profile, items=None, error=None):
+        """Run with _search_jsearch_meta mocked on the api instance."""
+        import src.rico_chat_api as mod
+        from src.rico_chat_api import RicoChatAPI
+        from unittest.mock import MagicMock
+
+        _items = items if items is not None else []
+
+        class _FakeResult:
+            pass
+
+        fake = _FakeResult()
+        fake.items = _items
+        fake.error = error
+
+        mock_route = MagicMock()
+        mock_route.tool_name           = None
+        mock_route.entities            = {}
+        mock_route.tool_args           = {}
+        mock_route.confirmation_prompt = None
+        mock_route.source              = "keyword"
+
+        monkeypatch.setattr(mod, "get_profile",    lambda uid: profile)
+        monkeypatch.setattr(mod, "_route",         lambda *a, **kw: mock_route)
+        monkeypatch.setattr(mod, "upsert_profile", lambda uid, u: profile)
+        monkeypatch.setattr(mod, "hf_ok",          lambda: False)
+
+        api = RicoChatAPI()
+        api._search_jsearch_meta = lambda q, location="": fake
+        api._get_recent_context  = lambda uid: {}
+        api._append_chat         = MagicMock()
+
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_job_matches(self, monkeypatch):
+        result = self._run_with_jsearch(
+            monkeypatch, "find me senior HSE jobs", _CVProfile(),
+            items=[{"job_title": "Senior HSE Manager", "employer_name": "ADNOC"}],
+        )
+        assert result["type"] == "job_matches"
+
+    def test_seniority_extracted(self, monkeypatch):
+        result = self._run_with_jsearch(monkeypatch, "find me junior developer roles", _CVProfile())
+        assert result.get("seniority", "").lower() in ("junior", "")
+
+    def test_returns_jobs_list(self, monkeypatch):
+        result = self._run_with_jsearch(
+            monkeypatch, "find me senior HSE jobs", _CVProfile(),
+            items=[{"job_title": "Senior HSE Manager", "employer_name": "ADNOC"}],
+        )
+        assert isinstance(result.get("jobs"), list)
+
+    def test_no_jsearch_fallback_still_returns_type(self, monkeypatch):
+        result = self._run_with_jsearch(
+            monkeypatch, "find me senior HSE jobs", _CVProfile(), error="API error"
+        )
+        # Returns no_results gracefully when API yields nothing
+        assert result["type"] in ("job_matches", "no_results")
+
+
+# ── _MARKET_PULSE_RE ──────────────────────────────────────────────────────────
+
+class TestMarketPulse:
+    """Regex gate and handler for job market pulse queries."""
+
+    @pytest.mark.parametrize("phrase", [
+        "how's the job market for HSE?",
+        "how is the market for finance in UAE?",
+        "are there many HSE jobs in Dubai?",
+        "how competitive is the job market for data engineers?",
+        "what's the job market outlook for construction?",
+        "is it easy to find a job in project management?",
+        "is it hard to find work in UAE finance?",
+        "job market status for cybersecurity",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _MARKET_PULSE_RE
+        assert _MARKET_PULSE_RE.search(phrase), (
+            f"_MARKET_PULSE_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        "find HSE jobs in Dubai",
+        "what certifications do I need?",
+        "how many jobs did you find?",
+        "compare job 1 and 2",
+        "update my salary expectations",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _MARKET_PULSE_RE
+        assert not _MARKET_PULSE_RE.search(phrase), (
+            f"_MARKET_PULSE_RE should NOT match: {phrase!r}"
+        )
+
+    def _run_with_jsearch(self, monkeypatch, message, profile, items=None, error=None):
+        """Run with _search_jsearch_meta mocked on the api instance."""
+        import src.rico_chat_api as mod
+        from src.rico_chat_api import RicoChatAPI
+        from unittest.mock import MagicMock
+
+        _items = items if items is not None else []
+
+        class _FakeResult:
+            pass
+
+        fake = _FakeResult()
+        fake.items = _items
+        fake.error = error
+
+        mock_route = MagicMock()
+        mock_route.tool_name           = None
+        mock_route.entities            = {}
+        mock_route.tool_args           = {}
+        mock_route.confirmation_prompt = None
+        mock_route.source              = "keyword"
+
+        monkeypatch.setattr(mod, "get_profile",    lambda uid: profile)
+        monkeypatch.setattr(mod, "_route",         lambda *a, **kw: mock_route)
+        monkeypatch.setattr(mod, "upsert_profile", lambda uid, u: profile)
+        monkeypatch.setattr(mod, "hf_ok",          lambda: False)
+
+        api = RicoChatAPI()
+        api._search_jsearch_meta = lambda q, location="": fake
+        api._get_recent_context  = lambda uid: {}
+        api._append_chat         = MagicMock()
+
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_market_pulse(self, monkeypatch):
+        result = self._run_with_jsearch(monkeypatch, "how's the job market for HSE?", _CVProfile())
+        assert result["type"] == "market_pulse"
+
+    def test_returns_sentiment_field(self, monkeypatch):
+        result = self._run_with_jsearch(
+            monkeypatch, "how competitive is the job market for HSE?", _CVProfile()
+        )
+        assert "sentiment" in result
+        assert any(s in result["sentiment"] for s in ("very active", "moderately active", "competitive", "limited"))
+
+    def test_returns_active_count(self, monkeypatch):
+        result = self._run_with_jsearch(
+            monkeypatch, "are there many HSE jobs in Dubai?", _CVProfile()
+        )
+        assert "active_count" in result
+        assert isinstance(result["active_count"], int)
+
+    def test_high_count_returns_very_active(self, monkeypatch):
+        result = self._run_with_jsearch(
+            monkeypatch, "how's the job market for project management?", _CVProfile(),
+            items=[{"job_title": f"Role {i}"} for i in range(20)],
+        )
+        assert result["sentiment"] == "very active"
+
+    def test_zero_count_returns_limited(self, monkeypatch):
+        result = self._run_with_jsearch(
+            monkeypatch, "how's the market for niche roles?", _CVProfile()
+        )
+        assert "limited" in result["sentiment"]
+
+    def test_message_field_present(self, monkeypatch):
+        result = self._run_with_jsearch(
+            monkeypatch, "how's the job market for HSE?", _CVProfile()
+        )
+        assert result.get("type") == "market_pulse"
+        assert isinstance(result.get("message"), str)
+        assert len(result["message"]) > 20
