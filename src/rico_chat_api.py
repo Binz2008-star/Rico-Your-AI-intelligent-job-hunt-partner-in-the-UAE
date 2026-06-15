@@ -832,6 +832,92 @@ _SKILL_GAP_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Interview preparation — "how do I prepare for an interview?", "what questions to expect",
+# "tell me about yourself", "common interview questions", "behavioral interview".
+_INTERVIEW_PREP_RE = re.compile(
+    r"\bhow\s+(?:do\s+I|to|can\s+I)\s+(?:prepare\s+for|ace|pass|nail|crush|handle)\s+(?:(?:a|an|the|my)\s+)?interview\b"
+    r"|\bhow\s+(?:to\s+)?(?:ace|pass|nail|impress)\s+(?:a|an|the|my)?\s*interview\b"
+    r"|\b(?:interview\s+(?:tips?|advice|prep(?:aration)?|guide|questions?|help|practice|coaching))\b"
+    r"|\b(?:common|typical|likely|hard|tough|tricky)\s+(?:interview\s+)?questions?\b"
+    r"|\bwhat\s+questions?\s+(?:should\s+I\s+)?(?:expect|can\s+I\s+expect).{0,20}?\binterview\b"
+    r"|\bwhat\s+(?:to|should\s+I)\s+(?:say|wear|bring|expect)\s+(?:in|at|to|for)\s+.{0,15}?\binterview\b"
+    r"|\b(?:tell\s+me\s+about\s+yourself|STAR\s+method|situational\s+interview|behavioral\s+interview)\b"
+    r"|\bwhat\s+(?:should\s+I|do\s+I)\s+(?:say|answer|reply)\s+when\s+(?:asked|they\s+ask)\b"
+    r"|\bhow\s+(?:do\s+I|to)\s+(?:answer|respond\s+to)\s+(?:interview|the)\s+question\b"
+    r"|\b(?:preparing|practice)\s+for\s+(?:a|an|the|my)?\s*interview\b"
+    r"|\b(?:أسئلة\s+المقابلة|كيف\s+أتحضر\s+للمقابلة|التحضير\s+للمقابلة)\b"
+    r"|\b(?:تحضير|نصائح)\s+(?:المقابلة|الوظيفية|المقابلات)\b",
+    re.IGNORECASE,
+)
+
+# Salary negotiation — "how do I negotiate my salary?", "should I counter-offer",
+# "how to ask for a raise", "negotiation tips".
+_SALARY_NEGOTIATION_RE = re.compile(
+    r"\bhow\s+(?:do\s+I|to|should\s+I|can\s+I)\s+negotiate\s+(?:my\s+)?salary\b"
+    r"|\bhow\s+(?:do\s+I|to|can\s+I)\s+(?:negotiate|ask\s+for|request)\s+(?:a\s+)?(?:(?:higher\s+|better\s+)?salary|pay\s+rise|raise|pay\s+increase|counter[- ]?offer)\b"
+    r"|\bshould\s+I\s+(?:counter|negotiate|accept|reject)\s+(?:the\s+)?offer\b"
+    r"|\b(?:the\s+)?offer\s+(?:is|seems?)\s+(?:too\s+low|below\s+market|not\s+enough|low)\b"
+    r"|\bhow\s+(?:to|do\s+I)\s+ask\s+for\s+(?:a\s+)?(?:raise|higher\s+salary|better\s+offer|salary\s+increase)\b"
+    r"|\b(?:salary\s+)?negotiation\s+(?:tips?|advice|strategy|help|tactics?)\b"
+    r"|\bwhat\s+(?:should\s+I|can\s+I)\s+(?:ask\s+for|counter(?:\s+offer)?|negotiate)\b"
+    r"|\b(?:counter[\s-]offer|counteroffer)\b"
+    r"|\b(?:salary|pay|offer)\s+(?:negotiation|negotiating|counter[- ]?offer|counter)\b"
+    r"|\b(?:should\s+I|can\s+I)\s+(?:negotiate|counter|ask\s+for\s+more)\s+(?:the\s+)?(?:salary|offer|pay)\b"
+    r"|\b(?:ask\s+for\s+a\s+raise|request\s+a\s+(?:salary\s+)?increase|negotiate\s+(?:my\s+)?package)\b"
+    r"|\b(?:when\s+(?:should\s+I|to)\s+(?:discuss|bring\s+up|mention|negotiate)\s+salary)\b"
+    r"|\b(?:نصائح\s+(?:تفاوض|الراتب)|كيف\s+أتفاوض|مفاوضة\s+الراتب|كيف\s+أطلب\s+زيادة|التفاوض\s+على\s+الراتب)\b",
+    re.IGNORECASE,
+)
+
+# LinkedIn profile optimisation — "how do I improve my LinkedIn?", "LinkedIn tips",
+# "should I use LinkedIn for jobs in UAE?", "LinkedIn headline/summary".
+_LINKEDIN_TIPS_RE = re.compile(
+    r"\b(?:how\s+(?:do\s+I|to|can\s+I)\s+(?:improve|optimise?|optimize|update|set\s+up|use|grow|boost)\s+(?:my\s+)?LinkedIn)\b"
+    r"|\bLinkedIn\s+(?:tips?|advice|profile\s+tips?|headline|summary|bio|optimis(?:e|ation)|optim(?:ize|ization)|for\s+(?:UAE|Dubai|jobs?|job\s+search))\b"
+    r"|\b(?:should\s+I\s+(?:use|be\s+on|have\s+a?\s+|join)\s+LinkedIn)\b"
+    r"|\b(?:is\s+LinkedIn\s+(?:useful|important|worth\s+it|effective|good)\s+(?:in\s+UAE|for\s+(?:UAE|Dubai)|for\s+(?:finding\s+)?jobs?))\b"
+    r"|\b(?:LinkedIn\s+(?:connections?|network|profile|presence|page|account)\s+(?:tips?|advice|for\s+(?:UAE|jobs?)))\b"
+    r"|\b(?:نصائح\s+LinkedIn|تحسين\s+(?:ملف|حساب)\s+LinkedIn)\b",
+    re.IGNORECASE,
+)
+
+# Resignation letter — "how do I write a resignation letter?", "how to resign professionally",
+# "what should I say when I quit?", "draft a resignation letter".
+_RESIGNATION_LETTER_RE = re.compile(
+    r"\b(?:how\s+(?:do\s+I|to|should\s+I)\s+(?:write|draft|prepare|compose)\s+(?:a\s+)?resignation\s+(?:letter|email|note|message))\b"
+    r"|\b(?:resignation\s+(?:letter|email|template|format|sample|guide|tips?))\b"
+    r"|\b(?:how\s+(?:do\s+I|to|should\s+I)\s+(?:resign|quit|leave)\s+(?:professionally|properly|politely|gracefully|formally))\b"
+    r"|\b(?:how\s+(?:do\s+I|to)\s+(?:hand\s+in|give|submit)\s+(?:my\s+)?(?:notice|resignation))\b"
+    r"|\b(?:what\s+(?:should\s+I|to)\s+(?:say|write|include)\s+(?:in|when)\s+(?:a\s+)?(?:resignation|quitting|handing\s+in\s+notice))\b"
+    r"|\b(?:خطاب\s+استقالة|كيف\s+أستقيل|رسالة\s+استقالة)\b",
+    re.IGNORECASE,
+)
+
+# Relocation to UAE — "how do I move to Dubai for work?", "tips for relocating to UAE",
+# "what do I need to move to Abu Dhabi?", "relocating to UAE guide".
+_RELOCATION_UAE_RE = re.compile(
+    r"\b(?:how\s+(?:do\s+I|to|can\s+I)\s+(?:move|relocate|transfer)\s+to\s+(?:UAE|Dubai|Abu\s+Dhabi|Sharjah|the\s+UAE)(?:\s+(?:for\s+work|to\s+work|for\s+a\s+job))?)\b"
+    r"|\b(?:relocating|moving|relocation)\s+to\s+(?:UAE|Dubai|Abu\s+Dhabi|Sharjah|the\s+UAE)\b"
+    r"|\b(?:tips?|advice|guide|checklist)\s+(?:for\s+)?(?:relocating|moving)\s+to\s+(?:UAE|Dubai|Abu\s+Dhabi|the\s+UAE)\b"
+    r"|\b(?:what\s+(?:do\s+I\s+need|should\s+I\s+do|to\s+do)\s+(?:to\s+)?(?:move|relocate)\s+to\s+(?:UAE|Dubai|the\s+UAE))\b"
+    r"|\b(?:cost\s+of\s+(?:living|moving)\s+in\s+(?:UAE|Dubai|Abu\s+Dhabi))\b"
+    r"|\b(?:الانتقال\s+إلى\s+(?:الإمارات|دبي)|الهجرة\s+للعمل\s+في\s+الإمارات)\b",
+    re.IGNORECASE,
+)
+
+# Applying from abroad — "can I apply to UAE jobs from outside UAE?",
+# "do I need to be in UAE to apply?", "should I relocate before job hunting?".
+_APPLY_FROM_ABROAD_RE = re.compile(
+    r"\b(?:can\s+I\s+(?:apply|search|job\s+hunt)(?:\s+for)?(?:\s+(?:UAE|Dubai|Abu\s+Dhabi))?\s+(?:jobs?|roles?|positions?)\s+from\s+(?:abroad|outside(?:\s+(?:UAE|Dubai|the\s+UAE))?|overseas|my\s+country|home))\b"
+    r"|\b(?:do\s+I\s+(?:need\s+to\s+be|have\s+to\s+be)\s+(?:in|inside)\s+(?:UAE|Dubai|the\s+UAE)\s+to\s+(?:apply|look\s+for\s+jobs?|job\s+hunt))\b"
+    r"|\b(?:should\s+I\s+(?:move|relocate|be\s+in\s+(?:UAE|Dubai))\s+before\s+(?:applying|job\s+hunting|searching\s+for\s+a\s+job|looking\s+for\s+a\s+job))\b"
+    r"|\b(?:applying\s+for\s+(?:(?:UAE|Dubai|the\s+UAE)\s+)?jobs?\s+from\s+(?:abroad|outside(?:\s+(?:UAE|Dubai|the\s+UAE))?|overseas))\b"
+    r"|\b(?:job\s+hunt(?:ing)?\s+(?:while|from)\s+(?:abroad|outside\s+(?:UAE|Dubai)|overseas))\b"
+    r"|\b(?:is\s+it\s+(?:possible|ok|okay|better)\s+to\s+(?:apply|job\s+hunt)\s+from\s+(?:abroad|outside|overseas))\b"
+    r"|\b(?:التقديم\s+على\s+وظائف\s+الإمارات\s+من\s+الخارج|هل\s+يمكنني\s+التقديم\s+من\s+خارج\s+الإمارات)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -2757,6 +2843,10 @@ class RicoChatAPI:
         # handled by _handle_post_interview_email — do not intercept them here.
         if _POST_INTERVIEW_EMAIL_RE.search(message):
             return None
+        # Resignation letter questions contain "write ... letter" but are handled
+        # by _handle_resignation_letter — do not intercept them here.
+        if _RESIGNATION_LETTER_RE.search(message):
+            return None
 
         wants_draft = self._requests_application_draft(message)
         wants_send = self._requests_application_send(message)
@@ -4416,7 +4506,7 @@ class RicoChatAPI:
         # route deterministically here before classify_intent runs.
         # Exception: if the message already contains explicit job context (company/role),
         # skip and let the draft_message intent handler extract and use that context.
-        if _COVER_LETTER_COMMAND_RE.search(message) and not self._extract_explicit_draft_job_from_message(message):
+        if _COVER_LETTER_COMMAND_RE.search(message) and not self._extract_explicit_draft_job_from_message(message) and not _RESIGNATION_LETTER_RE.search(message):
             # If there's a cached job from a recent search, use it as context so the
             # cover letter is tailored to that specific role instead of asking the user.
             _cached_job: dict[str, Any] = {}
@@ -4868,7 +4958,8 @@ class RicoChatAPI:
 
         # ── Career change / transition advice ────────────────────────────────
         # "I want to switch careers", "how do I transition to project management?".
-        if _CAREER_CHANGE_RE.search(message):
+        # Exclude UAE relocation messages ("move to Dubai") which share "move" vocabulary.
+        if _CAREER_CHANGE_RE.search(message) and not _RELOCATION_UAE_RE.search(message):
             return self._finalize(
                 self._handle_career_change(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -4934,6 +5025,44 @@ class RicoChatAPI:
         if _SKILL_GAP_RE.search(message):
             return self._finalize(
                 self._handle_skill_gap(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── LinkedIn profile optimisation ─────────────────────────────────────
+        # Unique patterns not covered by _LINKEDIN_NETWORKING_RE:
+        # "how do I improve my LinkedIn?", "should I use LinkedIn?",
+        # "is LinkedIn useful in UAE?", "LinkedIn headline tips".
+        if _LINKEDIN_TIPS_RE.search(message):
+            return self._finalize(
+                self._handle_linkedin_tips(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Resignation letter ────────────────────────────────────────────────
+        # "how do I write a resignation letter?", "how to resign professionally".
+        if _RESIGNATION_LETTER_RE.search(message):
+            return self._finalize(
+                self._handle_resignation_letter(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Relocation to UAE ─────────────────────────────────────────────────
+        # "how do I move to Dubai for work?", "relocating to UAE guide".
+        if _RELOCATION_UAE_RE.search(message):
+            return self._finalize(
+                self._handle_relocation_uae(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Applying from abroad ──────────────────────────────────────────────
+        # "can I apply for UAE jobs from abroad?", "do I need to be in UAE?".
+        if _APPLY_FROM_ABROAD_RE.search(message):
+            return self._finalize(
+                self._handle_apply_from_abroad(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -11450,6 +11579,323 @@ class RicoChatAPI:
             "gaps": gaps,
             "message": msg,
         }
+
+    # ── Interview preparation ────────────────────────────────────────────────────
+
+    def _handle_interview_prep(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        target_role = ""
+        if profile:
+            roles = getattr(profile, "target_roles", None) or []
+            if roles:
+                target_role = roles[0]
+            if not target_role:
+                target_role = getattr(profile, "current_role", "") or ""
+
+        role_line = f" for **{target_role}**" if target_role else ""
+
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                f"## التحضير للمقابلة{role_line}\n\n"
+                "**قبل المقابلة:**\n"
+                "- ابحث عن الشركة: أهدافها، ثقافتها، آخر أخبارها\n"
+                "- راجع متطلبات الوظيفة وحضّر أمثلة من تجربتك تتوافق معها\n"
+                "- جهّز أسئلة ذكية لطرحها على المحاور\n\n"
+                "**أسئلة شائعة يجب التحضير لها:**\n"
+                "1. حدثنا عن نفسك — ملخص مهني موجز (2 دقيقتين)\n"
+                "2. ما أبرز إنجازاتك؟ — استخدم مقاييس واضحة\n"
+                "3. لماذا تريد العمل معنا؟ — اربطه بأهداف الشركة\n"
+                "4. ما نقاط قوتك وضعفك؟ — كن صادقاً مع تحسّن واضح\n"
+                "5. أين ترى نفسك بعد 5 سنوات؟ — اربطه بمسار الوظيفة\n\n"
+                "**أسلوب STAR للأسئلة السلوكية:**\n"
+                "**S**ituation → **T**ask → **A**ction → **R**esult\n\n"
+                "**في يوم المقابلة:**\n"
+                "- احضر قبل 10 دقائق على الأقل\n"
+                "- ابدأ بمصافحة واثقة وتواصل بالعيون\n"
+                "- في نهاية المقابلة اسأل: «ما الخطوة القادمة في عملية التوظيف؟»"
+            )
+        else:
+            msg = (
+                f"## Interview Preparation Guide{role_line}\n\n"
+                "**Before the interview:**\n"
+                "- Research the company: mission, culture, recent news, key projects\n"
+                "- Map the job requirements to your experience with concrete examples\n"
+                "- Prepare 3–5 smart questions to ask the interviewer\n\n"
+                "**Common questions to prepare for:**\n"
+                "1. **Tell me about yourself** — 2-minute career summary ending with why this role\n"
+                "2. **Greatest achievement?** — Use numbers: \"increased X by Y%\", \"saved AED Z\"\n"
+                "3. **Why this company?** — Tie it to their goals or products\n"
+                "4. **Strengths and weaknesses?** — Be honest; pair weaknesses with active improvement\n"
+                "5. **Where do you see yourself in 5 years?** — Align with the role's growth path\n\n"
+                "**STAR method for behavioural questions:**\n"
+                "**S**ituation → **T**ask → **A**ction → **R**esult\n\n"
+                "*Example:* \"Tell me about a time you handled a difficult stakeholder.\"\n"
+                "→ Situation, your Task, Action you took, measurable Result.\n\n"
+                "**On the day:**\n"
+                "- Arrive or join the call 10 minutes early\n"
+                "- Firm handshake, eye contact, confident posture\n"
+                "- Close by asking: \"What is the next step in your hiring process?\""
+            )
+
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "interview_prep",
+            "target_role": target_role,
+            "message": msg,
+        }
+
+    # ── Salary negotiation ───────────────────────────────────────────────────────
+
+    def _handle_salary_negotiation(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## كيف تتفاوض على راتبك في الإمارات\n\n"
+                "**التوقيت المثالي:**\n"
+                "- انتظر حتى تحصل على عرض رسمي قبل التفاوض\n"
+                "- لا تذكر توقعاتك أولاً — دع صاحب العمل يبدأ\n\n"
+                "**الخطوات:**\n"
+                "1. **ابحث عن متوسط الراتب** للدور والخبرة في الإمارات\n"
+                "2. **حدد نطاقاً** — الحد الأدنى المقبول والهدف المثالي\n"
+                "3. **برر طلبك** بإنجازاتك ومهاراتك، وليس باحتياجاتك الشخصية\n"
+                "4. **لا تقبل أو ترفض فوراً** — اطلب يومين للتفكير\n"
+                "5. **تفاوض على الباقة كاملة**: بدل السكن، التأمين، الإجازة، المسمى الوظيفي\n\n"
+                "**عبارات مفيدة:**\n"
+                "- «بناءً على خبرتي وبحثي في السوق، كنت أتوقع نطاقاً بين X وY درهم»\n"
+                "- «هل هناك مرونة في العرض؟»\n"
+                "- «أقدّر العرض — هل يمكنني أخذ يومين للنظر فيه؟»\n\n"
+                "**ملاحظة:** التفاوض أمر طبيعي ومتوقع في سوق الإمارات — 70٪ من أصحاب العمل يتوقعونه."
+            )
+        else:
+            msg = (
+                "## Salary Negotiation in the UAE\n\n"
+                "**Timing:**\n"
+                "- Wait until you have a formal offer before negotiating\n"
+                "- Avoid naming your number first — let the employer anchor\n\n"
+                "**Step-by-step:**\n"
+                "1. **Research market rates** for the role, level, and industry in the UAE\n"
+                "2. **Set your range** — know your walk-away floor and your ideal target\n"
+                "3. **Justify with value**, not personal need: cite achievements, certifications, market data\n"
+                "4. **Don't accept or decline on the spot** — ask for 48 hours to consider\n"
+                "5. **Negotiate the full package**: housing allowance, medical, annual leave, title, start date\n\n"
+                "**Phrases that work:**\n"
+                "- *\"Based on my experience and market benchmarks, I was expecting a range of AED X–Y.\"*\n"
+                "- *\"Is there flexibility in the offer?\"*\n"
+                "- *\"I appreciate the offer — could I have 48 hours to review it?\"*\n\n"
+                "**UAE tip:** Negotiation is expected here — roughly 70% of employers build room into the first offer. "
+                "Counter-offers are rarely rescinded for politely negotiating."
+            )
+
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "salary_negotiation",
+            "message": msg,
+        }
+
+    # ── LinkedIn optimisation ────────────────────────────────────────────────────
+
+    def _handle_linkedin_tips(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        target_role = ""
+        if profile:
+            roles = getattr(profile, "target_roles", None) or []
+            if roles:
+                target_role = roles[0]
+
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## تحسين ملفك على LinkedIn للبحث الوظيفي في الإمارات\n\n"
+                "**الصورة الشخصية والغلاف:**\n"
+                "- صورة احترافية بخلفية محايدة — تزيد من فرص الظهور بنسبة 14×\n"
+                "- صورة غلاف تعكس مجالك أو الشركات التي عملت فيها\n\n"
+                "**العنوان (Headline):**\n"
+                "- لا تكتف بالمسمى الوظيفي — أضف قيمتك الأساسية\n"
+                f"- مثال: «{target_role} | HSE Leadership | UAE & GCC Operations» \n\n"
+                "**ملخص About:**\n"
+                "- 3-5 أسطر تبدأ بجملة جذابة عن ما تفعله وما تتميز به\n"
+                "- أضف كلمات مفتاحية يبحث عنها المسؤولون في التوظيف\n\n"
+                "**الخبرات:**\n"
+                "- استخدم نقاط تحتوي على أرقام ونتائج ملموسة\n"
+                "- أضف الوسائط (شهادات، مشاريع، مقالات) لكل منصب\n\n"
+                "**نشاط LinkedIn:**\n"
+                "- تفاعل مع منشورات في مجالك أسبوعياً\n"
+                "- اطلب توصيات من زملاء ومديرين سابقين\n"
+                "- اتبع شركاتك المستهدفة في الإمارات\n\n"
+                "**الخصوصية:** فعّل وضع Open to Work بشكل خاص (مرئي للـ recruiters فقط)."
+            )
+        else:
+            role_line = f" (targeting: **{target_role}**)" if target_role else ""
+            msg = (
+                f"## LinkedIn Optimisation for UAE Job Search{role_line}\n\n"
+                "**Photo & banner:**\n"
+                "- Professional headshot on a neutral background — profiles with photos get 14× more views\n"
+                "- Banner image that reflects your industry or target companies\n\n"
+                "**Headline:**\n"
+                "- Go beyond job title — add your core value proposition\n"
+                f"- Example: *\"{target_role or 'Operations Manager'} | Process Optimisation | UAE & GCC\"*\n\n"
+                "**About section:**\n"
+                "- 3–5 lines opening with a hook about what you do and what sets you apart\n"
+                "- Embed keywords recruiters search for in your target role\n\n"
+                "**Experience entries:**\n"
+                "- Lead with impact bullets: numbers, percentages, AED values\n"
+                "- Add media (certificates, project links, articles) to each role\n\n"
+                "**Active presence:**\n"
+                "- Engage with 2–3 posts weekly in your niche to surface in feeds\n"
+                "- Request recommendations from ex-managers and close colleagues\n"
+                "- Follow your target UAE companies to spot openings early\n\n"
+                "**Open to Work:** Enable it privately (visible to recruiters only) to avoid alerting your current employer."
+            )
+
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "linkedin_tips",
+            "target_role": target_role,
+            "message": msg,
+        }
+
+    # ── Resignation letter ───────────────────────────────────────────────────────
+
+    def _handle_resignation_letter(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        name = getattr(profile, "name", "") or ""
+        if arabic:
+            msg = (
+                "## كيف تكتب خطاب استقالة احترافي\n\n"
+                "**القواعد الأساسية في الإمارات:**\n"
+                "- قدّم استقالتك كتابةً — لا شفهياً فقط\n"
+                "- احترم فترة الإشعار المنصوص عليها في عقدك\n"
+                "- حافظ على علاقة إيجابية — السوق الإماراتي صغير\n\n"
+                "**هيكل الرسالة:**\n"
+                "**الموضوع:** إشعار باستقالتي — [مسماك الوظيفي]\n\n"
+                "عزيزي [اسم المدير]،\n\n"
+                "أود إخطاركم رسمياً باستقالتي من منصبي كـ [مسماك الوظيفي] "
+                "في [اسم الشركة]، وذلك اعتباراً من [تاريخ آخر يوم عمل]، "
+                "مع الالتزام بفترة إشعار [X أسابيع/أشهر].\n\n"
+                "أتطلع إلى إتمام جميع المهام المعلّقة وضمان انتقال سلس. "
+                "شكراً لهذه الفرصة القيّمة والدعم الذي قدّمتموه طوال هذه المدة.\n\n"
+                "مع التقدير،\n"
+                f"{name or '[اسمك]'}\n\n"
+                "**ملاحظات مهمة:**\n"
+                "- لا تذكر أسباباً سلبية في الرسالة\n"
+                "- احتفظ بنسخة منها لسجلاتك\n"
+                "- ناقش نقل المهام مع مديرك مباشرةً"
+            )
+        else:
+            msg = (
+                "## How to Write a Professional Resignation Letter\n\n"
+                "**UAE rules of thumb:**\n"
+                "- Always resign in writing — a verbal notice is not enough\n"
+                "- Honour the notice period stated in your contract\n"
+                "- Keep it positive — the UAE market is small and references matter\n\n"
+                "**Ready-to-use template:**\n\n"
+                "---\n"
+                "**Subject:** Notice of Resignation — [Your Job Title]\n\n"
+                "Dear [Manager's Name],\n\n"
+                "I am writing to formally notify you of my resignation from my position as "
+                "[Your Job Title] at [Company Name], effective [last working date], "
+                "in line with my [X weeks/months] notice period.\n\n"
+                "I am committed to completing all pending tasks and ensuring a smooth handover. "
+                "Thank you for the opportunity and the support during my time here.\n\n"
+                f"Sincerely,\n{name or '[Your Name]'}\n\n"
+                "---\n\n"
+                "**Tips:**\n"
+                "- No need to explain *why* you're leaving — keep it brief and professional\n"
+                "- Keep a copy for your records\n"
+                "- Offer to train your replacement or document your processes\n"
+                "- Confirm receipt from HR in writing"
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "resignation_letter", "message": msg}
+
+    # ── Relocation to UAE ────────────────────────────────────────────────────────
+
+    def _handle_relocation_uae(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## دليل الانتقال للعمل في الإمارات\n\n"
+                "**قبل السفر:**\n"
+                "- احصل على عرض عمل أولاً — معظم الشركات تشترط التأشيرة من الداخل\n"
+                "- تحقق من صلاحية جواز سفرك (6 أشهر على الأقل)\n"
+                "- جهّز وثائقك المصدّقة: الشهادات، كشف الراتب، شهادة الخبرة\n\n"
+                "**بعد الوصول:**\n"
+                "- سيقوم صاحب العمل عادةً بإجراءات تأشيرة الإقامة والعمل\n"
+                "- افتح حساباً بنكياً فور الوصول (تحتاج لعقد العمل والإقامة)\n"
+                "- احصل على رخصة القيادة الإماراتية إذا كانت مطلوبة\n\n"
+                "**تكاليف المعيشة:**\n"
+                "- دبي: إيجار غرفة/استوديو من 3,500–7,000 درهم/شهر\n"
+                "- أبوظبي: أرخص بنسبة 15–20٪ عموماً\n"
+                "- الشارقة: أرخص وتبعد 30–40 دقيقة عن دبي\n\n"
+                "**نصيحة:** تفاوض على بدل السكن ضمن عرض العمل — الشركات الكبرى غالباً تُشمله."
+            )
+        else:
+            msg = (
+                "## Relocating to the UAE for Work — Practical Guide\n\n"
+                "**Before you move:**\n"
+                "- Secure a job offer first — most employers sponsor the visa from inside UAE\n"
+                "- Ensure your passport is valid for at least 6 months\n"
+                "- Prepare attested documents: degree certificates, salary slips, experience letters\n\n"
+                "**On arrival:**\n"
+                "- Your employer typically arranges the residence and work visa (UAE Labour card)\n"
+                "- Open a UAE bank account once you have your employment contract and Emirates ID\n"
+                "- Get a UAE driving licence if needed (some home-country licences can be converted)\n\n"
+                "**Cost of living benchmarks:**\n"
+                "| City | Studio/1BR rent/month |\n"
+                "|---|---|\n"
+                "| Dubai | AED 4,000–8,000 |\n"
+                "| Abu Dhabi | AED 3,500–7,000 |\n"
+                "| Sharjah | AED 2,500–5,000 (30–40 min commute to Dubai) |\n\n"
+                "**Practical tips:**\n"
+                "- Negotiate a housing allowance in your offer — large companies often provide it\n"
+                "- Dubai has no income tax — your gross salary is your take-home\n"
+                "- School fees are significant if you have children; factor in the total package"
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "relocation_uae", "message": msg}
+
+    # ── Applying from abroad ─────────────────────────────────────────────────────
+
+    def _handle_apply_from_abroad(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## التقديم على وظائف الإمارات من خارج البلاد\n\n"
+                "**هل يمكنك التقديم من الخارج؟ نعم.**\n"
+                "معظم الوظائف في الإمارات مفتوحة للمتقدمين من الخارج، "
+                "خاصةً إذا كانت الشركة تقدّم كفالة التأشيرة.\n\n"
+                "**استراتيجيات التقديم من الخارج:**\n"
+                "- وضّح في سيرتك الذاتية أنك مستعد للانتقال فوراً\n"
+                "- اذكر إذا كان لديك تأشيرة زيارة أو إمكانية الحضور لإجراء المقابلة\n"
+                "- استخدم Bayt.com وLinkedIn مع تفعيل الفلتر الجغرافي للإمارات\n\n"
+                "**ما يُزيد حظوظك:**\n"
+                "- وجود خبرة في منطقة الخليج أو الأسواق الناشئة\n"
+                "- شهادات معتمدة دولياً (PMP، NEBOSH، CPA...)\n"
+                "- إرفاق خطاب تغطية يؤكد جاهزيتك للانتقال وتوقيته\n\n"
+                "**هل تحتاج أن تكون في الإمارات قبل التعيين؟**\n"
+                "لا دائماً — لكن بعض الشركات تُفضّل من هو متاح في الدولة. "
+                "ذكر زيارة مرتقبة يُقوّي طلبك."
+            )
+        else:
+            msg = (
+                "## Applying for UAE Jobs from Abroad\n\n"
+                "**Yes, you can apply from outside the UAE.** Most roles are open to international "
+                "candidates, especially where the employer provides visa sponsorship.\n\n"
+                "**How to make your overseas application competitive:**\n"
+                "- State clearly on your CV that you are available to relocate and when\n"
+                "- Mention any planned UAE visit — even a short trip shows you're serious\n"
+                "- Use Bayt.com, LinkedIn, GulfTalent with UAE location filters\n"
+                "- Keep your profile set to 'Open to Relocation' on job boards\n\n"
+                "**What helps your chances:**\n"
+                "- Gulf or Middle East experience (even on projects)\n"
+                "- Internationally recognised certifications (PMP, NEBOSH, CPA, CFA...)\n"
+                "- A cover letter that addresses relocation: ready date, notice period, visa needs\n\n"
+                "**Do you need to be in UAE before applying?**\n"
+                "Not usually — but some roles (especially government or banking) prefer "
+                "locally-based candidates. For those, mention an upcoming visit or indicate "
+                "you can attend an in-person interview at short notice."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "apply_from_abroad", "message": msg}
 
     # ── Context-aware help ──────────────────────────────────────────────────────
 
