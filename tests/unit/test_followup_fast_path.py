@@ -5140,3 +5140,518 @@ class TestFreeZoneMainland:
     def test_empty_profile_still_works(self, monkeypatch):
         result = self._run(monkeypatch, "free zone vs mainland employment", profile=_EmptyProfile())
         assert result["type"] == "free_zone_mainland"
+
+
+# ── Working Hours / Overtime ────────────────────────────────────────────────────
+
+
+class TestWorkingHours:
+    """Tests for _WORKING_HOURS_RE and _handle_working_hours."""
+
+    _REGEX_CASES_MATCH = [
+        "what are the standard working hours in UAE?",
+        "what are the typical working hours in Dubai?",
+        "how many hours can I work per week?",
+        "how many hours do I have to work per week?",
+        "is overtime paid in UAE?",
+        "is overtime legal in UAE?",
+        "how does overtime work in UAE?",
+        "how is overtime calculated in UAE?",
+        "overtime pay UAE",
+        "overtime rules UAE",
+        "UAE working hours rules",
+        "working hours in UAE",
+        "working hours limit UAE",
+        "ساعات العمل في الإمارات",
+        "العمل الإضافي في الإمارات",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "can I work from home?",
+        "remote work in UAE",
+        "what is end of service gratuity?",
+        "show me HSE jobs",
+        "how do I negotiate salary?",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _WORKING_HOURS_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _WORKING_HOURS_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _WORKING_HOURS_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _WORKING_HOURS_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_working_hours(self, monkeypatch):
+        result = self._run(monkeypatch, "what are the standard working hours in UAE?")
+        assert result["type"] == "working_hours"
+
+    def test_overtime_paid_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "is overtime paid in UAE?")
+        assert result["type"] == "working_hours"
+
+    def test_overtime_calculation_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how is overtime calculated in UAE?")
+        assert result["type"] == "working_hours"
+
+    def test_message_mentions_48_hours(self, monkeypatch):
+        result = self._run(monkeypatch, "what are the standard working hours in UAE?")
+        assert "48" in result["message"] or "8 hours" in result["message"].lower()
+
+    def test_message_mentions_overtime_rate(self, monkeypatch):
+        result = self._run(monkeypatch, "is overtime paid in UAE?")
+        msg = result["message"].lower()
+        assert "25%" in result["message"] or "overtime" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "what are the standard working hours in UAE?")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "overtime pay UAE", profile=_EmptyProfile())
+        assert result["type"] == "working_hours"
+
+
+# ── Golden Visa ─────────────────────────────────────────────────────────────────
+
+
+class TestGoldenVisa:
+    """Tests for _GOLDEN_VISA_RE and _handle_golden_visa."""
+
+    _REGEX_CASES_MATCH = [
+        "what is the golden visa?",
+        "what is the UAE golden visa?",
+        "how do I get a UAE golden visa?",
+        "how can I apply for a golden visa?",
+        "golden visa UAE requirements",
+        "golden visa eligibility",
+        "golden visa cost",
+        "golden visa benefits",
+        "am I eligible for a UAE golden visa?",
+        "UAE golden visa process",
+        "Dubai golden visa how to get",
+        "10-year UAE visa",
+        "10 year UAE residence",
+        "تأشيرة الذهبية الإمارات",
+        "الإقامة الذهبية",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "how do I get a UAE work visa?",         # work visa handler
+        "I am on a golden tourist visa",
+        "show me jobs in Dubai",
+        "what is end of service gratuity?",
+        "can I freelance in UAE?",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _GOLDEN_VISA_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _GOLDEN_VISA_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _GOLDEN_VISA_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _GOLDEN_VISA_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_golden_visa(self, monkeypatch):
+        result = self._run(monkeypatch, "what is the UAE golden visa?")
+        assert result["type"] == "golden_visa"
+
+    def test_how_to_get_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I get a UAE golden visa?")
+        assert result["type"] == "golden_visa"
+
+    def test_eligibility_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "am I eligible for a UAE golden visa?")
+        assert result["type"] == "golden_visa"
+
+    def test_10_year_visa_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "10-year UAE visa")
+        assert result["type"] == "golden_visa"
+
+    def test_message_mentions_years(self, monkeypatch):
+        result = self._run(monkeypatch, "what is the UAE golden visa?")
+        assert "10" in result["message"] or "year" in result["message"].lower()
+
+    def test_message_mentions_sponsor(self, monkeypatch):
+        result = self._run(monkeypatch, "what is the UAE golden visa?")
+        msg = result["message"].lower()
+        assert "sponsor" in msg or "employer" in msg or "كفيل" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "what is the UAE golden visa?")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "golden visa UAE requirements", profile=_EmptyProfile())
+        assert result["type"] == "golden_visa"
+
+
+# ── Professional References ─────────────────────────────────────────────────────
+
+
+class TestJobReferences:
+    """Tests for _JOB_REFERENCES_RE and _handle_job_references."""
+
+    _REGEX_CASES_MATCH = [
+        "how do I ask for a reference?",
+        "how should I ask for a professional reference?",
+        "who should I use as a reference?",
+        "who can I list as a reference?",
+        "professional references for a job",
+        "professional references UAE",
+        "professional references tips",
+        "my employer asked for references",
+        "the company is asking for references",
+        "reference check after the offer",
+        "reference check process",
+        "can they contact my previous employer as a reference?",
+        "المراجع المهنية",
+        "كيف أطلب توصية",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "how do I write a cover letter?",
+        "show me references to HSE standards",
+        "do I need a police clearance?",
+        "how do I negotiate salary?",
+        "what is end of service gratuity?",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _JOB_REFERENCES_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _JOB_REFERENCES_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _JOB_REFERENCES_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _JOB_REFERENCES_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_job_references(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I ask for a reference?")
+        assert result["type"] == "job_references"
+
+    def test_who_to_use_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "who should I use as a reference?")
+        assert result["type"] == "job_references"
+
+    def test_employer_asked_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "my employer asked for references")
+        assert result["type"] == "job_references"
+
+    def test_reference_check_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "reference check after the offer")
+        assert result["type"] == "job_references"
+
+    def test_message_mentions_manager(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I ask for a reference?")
+        msg = result["message"].lower()
+        assert "manager" in msg or "employer" in msg or "مدير" in msg
+
+    def test_message_mentions_timing(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I ask for a reference?")
+        msg = result["message"].lower()
+        assert "after" in msg or "before" in msg or "offer" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "how do I ask for a reference?")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "professional references UAE", profile=_EmptyProfile())
+        assert result["type"] == "job_references"
+
+
+# ── Dress Code ──────────────────────────────────────────────────────────────────
+
+
+class TestDressCode:
+    """Tests for _DRESS_CODE_RE and _handle_dress_code."""
+
+    _REGEX_CASES_MATCH = [
+        "what should I wear to an interview?",
+        "what should I wear to a job interview?",
+        "how should I dress for an interview?",
+        "how do I dress for my interview?",
+        "office dress code UAE",
+        "workplace dress code Dubai",
+        "interview dress code UAE",
+        "dress code for a job interview",
+        "is smart casual ok for interviews?",
+        "is business casual appropriate in UAE?",
+        "what to wear to a UAE interview",
+        "كيف أرتدي في المقابلة",
+        "ماذا أرتدي للمقابلة",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "what is the working dress in the UAE?",  # too vague
+        "show me HSE jobs in Dubai",
+        "how do I negotiate salary?",
+        "what is end of service gratuity?",
+        "can I freelance in UAE?",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _DRESS_CODE_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _DRESS_CODE_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _DRESS_CODE_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _DRESS_CODE_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_dress_code(self, monkeypatch):
+        result = self._run(monkeypatch, "what should I wear to an interview?")
+        assert result["type"] == "dress_code"
+
+    def test_how_to_dress_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "how should I dress for an interview?")
+        assert result["type"] == "dress_code"
+
+    def test_office_dress_code_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "office dress code UAE")
+        assert result["type"] == "dress_code"
+
+    def test_message_mentions_suit_or_smart(self, monkeypatch):
+        result = self._run(monkeypatch, "what should I wear to an interview?")
+        msg = result["message"].lower()
+        assert "suit" in msg or "smart" in msg or "formal" in msg or "professional" in msg
+
+    def test_message_mentions_men_or_women(self, monkeypatch):
+        result = self._run(monkeypatch, "what should I wear to an interview?")
+        msg = result["message"].lower()
+        assert "men" in msg or "women" in msg or "رجال" in msg or "نساء" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "what should I wear to an interview?")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "interview dress code UAE", profile=_EmptyProfile())
+        assert result["type"] == "dress_code"
+
+
+# ── Remote Work UAE ─────────────────────────────────────────────────────────────
+
+
+class TestRemoteWorkUAE:
+    """Tests for _REMOTE_WORK_UAE_RE and _handle_remote_work_uae."""
+
+    _REGEX_CASES_MATCH = [
+        "can I work remotely from UAE?",
+        "can I work remotely in Dubai?",
+        "can I work for a foreign company from UAE?",
+        "can I work for a UK company from UAE?",
+        "do I need a visa to work remotely from UAE?",
+        "remote work from UAE visa",
+        "remote work from UAE rules",
+        "UAE remote work rules",
+        "UAE remote work visa",
+        "digital nomad visa UAE",
+        "digital nomad in Dubai",
+        "tax implications working remotely in UAE",
+        "العمل عن بُعد من الإمارات",
+        "تأشيرة العمل عن بُعد الإمارات",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "find remote HSE jobs",
+        "do I need a visa to work in UAE?",       # general work visa
+        "how do I get a UAE work visa?",           # work visa handler
+        "show me remote jobs in Dubai",
+        "can I freelance in UAE?",                 # freelance handler
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _REMOTE_WORK_UAE_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _REMOTE_WORK_UAE_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _REMOTE_WORK_UAE_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _REMOTE_WORK_UAE_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_remote_work_uae(self, monkeypatch):
+        result = self._run(monkeypatch, "can I work remotely from UAE?")
+        assert result["type"] == "remote_work_uae"
+
+    def test_foreign_company_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "can I work for a UK company from UAE?")
+        assert result["type"] == "remote_work_uae"
+
+    def test_digital_nomad_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "digital nomad visa UAE")
+        assert result["type"] == "remote_work_uae"
+
+    def test_message_mentions_visa(self, monkeypatch):
+        result = self._run(monkeypatch, "can I work remotely from UAE?")
+        msg = result["message"].lower()
+        assert "visa" in msg or "تأشيرة" in msg
+
+    def test_message_mentions_tax(self, monkeypatch):
+        result = self._run(monkeypatch, "can I work remotely from UAE?")
+        msg = result["message"].lower()
+        assert "tax" in msg or "ضريبة" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "can I work remotely from UAE?")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "UAE remote work rules", profile=_EmptyProfile())
+        assert result["type"] == "remote_work_uae"
+
+
+# ── Annual Leave ────────────────────────────────────────────────────────────────
+
+
+class TestAnnualLeave:
+    """Tests for _ANNUAL_LEAVE_RE and _handle_annual_leave."""
+
+    _REGEX_CASES_MATCH = [
+        "how many days annual leave in UAE?",
+        "how many annual leave days do I get?",
+        "annual leave entitlement UAE",
+        "annual leave rights UAE",
+        "annual leave policy UAE",
+        "how much leave do I get in UAE?",
+        "UAE leave entitlement",
+        "UAE leave days",
+        "public holidays in UAE",
+        "how many public holidays in UAE?",
+        "what are the public holidays in UAE?",
+        "إجازة سنوية في الإمارات",
+        "أيام الإجازة السنوية",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "how many hours can I work per week?",    # working hours handler
+        "is overtime paid?",
+        "what is end of service gratuity?",
+        "how do I take a sick day?",
+        "show me jobs in Dubai",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _ANNUAL_LEAVE_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _ANNUAL_LEAVE_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _ANNUAL_LEAVE_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _ANNUAL_LEAVE_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_annual_leave(self, monkeypatch):
+        result = self._run(monkeypatch, "how many days annual leave in UAE?")
+        assert result["type"] == "annual_leave"
+
+    def test_entitlement_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "annual leave entitlement UAE")
+        assert result["type"] == "annual_leave"
+
+    def test_public_holidays_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "public holidays in UAE")
+        assert result["type"] == "annual_leave"
+
+    def test_message_mentions_30_days(self, monkeypatch):
+        result = self._run(monkeypatch, "how many days annual leave in UAE?")
+        assert "30" in result["message"]
+
+    def test_message_mentions_public_holidays(self, monkeypatch):
+        result = self._run(monkeypatch, "how many days annual leave in UAE?")
+        msg = result["message"].lower()
+        assert "public holiday" in msg or "eid" in msg or "national" in msg or "عطلة" in msg
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "how many days annual leave in UAE?")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "UAE leave entitlement", profile=_EmptyProfile())
+        assert result["type"] == "annual_leave"

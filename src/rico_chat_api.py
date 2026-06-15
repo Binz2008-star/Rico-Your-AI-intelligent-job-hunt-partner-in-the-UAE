@@ -1039,6 +1039,86 @@ _FREE_ZONE_MAINLAND_RE = re.compile(
     re.IGNORECASE,
 )
 
+# UAE working hours and overtime — "what are the working hours in UAE?",
+# "is overtime paid?", "how many hours can I work?".
+_WORKING_HOURS_RE = re.compile(
+    r"\b(?:what\s+are\s+(?:the\s+)?(?:standard|typical|normal|UAE|legal|official)\s+working\s+hours)\b"
+    r"|\b(?:how\s+(?:many|much)\s+hours\s+(?:do\s+I|can\s+I|should\s+I|per\s+week|a\s+week)\s+(?:work|have\s+to\s+work|am\s+I\s+allowed))\b"
+    r"|\b(?:is\s+overtime\s+(?:paid|legal|mandatory|required|common|normal)\s+(?:in\s+UAE|in\s+Dubai)?)\b"
+    r"|\b(?:how\s+(?:is|does)\s+overtime\s+(?:work|pay|calculated|count)\s+(?:in\s+UAE|in\s+Dubai)?)\b"
+    r"|\b(?:overtime\s+(?:pay|rules?|laws?|calculation|rate|UAE|Dubai))\b"
+    r"|\b(?:(?:UAE|Dubai)\s+working\s+hours\s+(?:rules?|laws?|limits?|per\s+week|maximum|regulation))\b"
+    r"|\b(?:working\s+hours\s+(?:in\s+(?:UAE|Dubai)|UAE|Dubai|limit|maximum|per\s+week|regulations?))\b"
+    r"|\b(?:ساعات\s+العمل\s+(?:في\s+الإمارات|القانونية|الرسمية)|العمل\s+الإضافي\s+في\s+الإمارات)\b",
+    re.IGNORECASE,
+)
+
+# UAE Golden Visa — "what is the golden visa?", "how do I get a UAE golden visa?",
+# "am I eligible for a golden visa?", "golden visa UAE requirements".
+_GOLDEN_VISA_RE = re.compile(
+    r"\b(?:what\s+is\s+(?:the\s+)?(?:UAE\s+)?golden\s+visa)\b"
+    r"|\b(?:how\s+(?:do\s+I|to|can\s+I)\s+(?:get|apply\s+for|qualify\s+for|obtain)\s+(?:a\s+)?(?:UAE\s+)?golden\s+visa)\b"
+    r"|\b(?:golden\s+visa\s+(?:UAE|Dubai|requirements?|eligibility|cost|application|process|benefits?|categories?))\b"
+    r"|\b(?:am\s+I\s+(?:eligible|qualified)\s+for\s+(?:a\s+)?(?:UAE\s+)?golden\s+visa)\b"
+    r"|\b(?:(?:UAE|Dubai)\s+golden\s+visa\s+(?:requirements?|how\s+to\s+get|eligibility|apply|process|benefits?))\b"
+    r"|\b(?:10[- ]year\s+(?:UAE\s+)?(?:visa|residence|residency))\b"
+    r"|\b(?:تأشيرة\s+الذهبية\s+الإمارات|الإقامة\s+الذهبية|الفيزا\s+الذهبية)\b",
+    re.IGNORECASE,
+)
+
+# Professional references — "how do I ask for a reference?", "who should I use as a reference?",
+# "my employer asked for references", "reference check after offer".
+_JOB_REFERENCES_RE = re.compile(
+    r"\b(?:how\s+(?:do\s+I|to|should\s+I)\s+(?:ask\s+for|request|get|find|choose|pick)\s+(?:a\s+)?(?:professional\s+)?reference)\b"
+    r"|\b(?:who\s+(?:should\s+I|can\s+I)\s+(?:use|list|give|put)\s+as\s+(?:a\s+)?(?:reference|referee))\b"
+    r"|\b(?:(?:professional\s+)?references?\s+(?:for\s+a\s+job|on\s+(?:my\s+)?CV|UAE|tips?|advice|guide|check))\b"
+    r"|\b(?:(?:my\s+)?(?:employer|company)\s+(?:asked|is\s+asking)\s+for\s+references?)\b"
+    r"|\b(?:reference\s+check\s+(?:after\s+(?:the\s+)?offer|process|UAE|how))\b"
+    r"|\b(?:can\s+(?:I|they)\s+(?:contact|call|reach)\s+my\s+(?:previous|current|old)\s+(?:employer|manager|boss)\s+(?:as\s+a\s+)?reference)\b"
+    r"|\b(?:المراجع\s+المهنية|كيف\s+أطلب\s+(?:توصية|مرجع\s+مهني)|خطاب\s+التوصية)\b",
+    re.IGNORECASE,
+)
+
+# Interview / office dress code in UAE — "what should I wear to an interview?",
+# "what is the dress code in UAE offices?", "is smart casual ok?".
+_DRESS_CODE_RE = re.compile(
+    r"\b(?:what\s+(?:should\s+I|to)\s+(?:wear|dress)\s+(?:to|for)\s+(?:(?:a|an|the)\s+)?(?:job\s+)?interview)\b"
+    r"|\b(?:how\s+(?:should\s+I|do\s+I)\s+(?:dress|look)\s+(?:for|at|to)\s+(?:(?:a|an|the|my)\s+)?(?:job\s+)?interview)\b"
+    r"|\b(?:(?:office|workplace|interview|professional)\s+dress\s+(?:code|standard)\s+(?:UAE|Dubai|in\s+UAE|in\s+Dubai)?)\b"
+    r"|\b(?:dress\s+code\s+(?:UAE|Dubai|for\s+(?:a\s+)?(?:job\s+)?interview|in\s+(?:UAE|Dubai)))\b"
+    r"|\b(?:(?:is|are)\s+(?:smart\s+casual|business\s+casual|formal\s+dress|suit)\s+(?:ok|required|appropriate|expected)\s+(?:in|for)\s+(?:UAE|Dubai|an?\s+interview)?)\b"
+    r"|\b(?:what\s+(?:to|should\s+I)\s+(?:wear|dress)\s+(?:in|to)\s+(?:a\s+)?(?:UAE|Dubai)\s+(?:office|interview))\b"
+    r"|\b(?:كيف\s+أرتدي|ماذا\s+أرتدي)\s+(?:في\s+المقابلة|للمقابلة|في\s+العمل)\b",
+    re.IGNORECASE,
+)
+
+# Working remotely for a foreign company from UAE — "can I work remotely from UAE?",
+# "do I need a visa to work remote for a UK company?", "remote work tax UAE".
+_REMOTE_WORK_UAE_RE = re.compile(
+    r"\b(?:can\s+I\s+work\s+remotely\s+(?:from|in)\s+(?:UAE|Dubai|the\s+UAE|Abu\s+Dhabi))\b"
+    r"|\b(?:can\s+I\s+work\s+for\s+(?:a\s+)?(?:foreign|international|overseas|UK|US|European?)\s+company\s+(?:from|in|while\s+(?:in|living\s+in))\s+(?:UAE|Dubai|the\s+UAE))\b"
+    r"|\b(?:do\s+I\s+need\s+(?:a\s+)?visa\s+to\s+work\s+remotely\s+(?:from|in)\s+(?:UAE|Dubai|the\s+UAE))\b"
+    r"|\b(?:remote\s+work\s+(?:from|in)\s+(?:UAE|Dubai|the\s+UAE)\s+(?:visa|permit|rules?|allowed|legal|tax|regulations?))\b"
+    r"|\b(?:(?:UAE|Dubai)\s+remote\s+work\s+(?:visa|permit|rules?|allowed|legal|tax|policy))\b"
+    r"|\b(?:digital\s+nomad\s+(?:visa\s+UAE|UAE|Dubai|in\s+(?:UAE|Dubai)))\b"
+    r"|\b(?:tax\s+(?:implications?|on\s+remote\s+work|on\s+income)\s+(?:UAE|Dubai|working\s+remotely\s+in\s+UAE))\b"
+    r"|\b(?:العمل\s+عن\s+بُعد\s+(?:من|في)\s+الإمارات|تأشيرة\s+العمل\s+عن\s+بُعد\s+الإمارات)\b",
+    re.IGNORECASE,
+)
+
+# Annual leave entitlement in UAE — "how many days annual leave in UAE?",
+# "what is the leave entitlement?", "public holidays UAE".
+_ANNUAL_LEAVE_RE = re.compile(
+    r"\b(?:how\s+many\s+(?:days?\s+)?(?:annual\s+leave|vacation\s+days?|leave\s+days?|paid\s+leave)\s+(?:do\s+I\s+(?:get|have)|am\s+I\s+(?:entitled|owed)|in\s+(?:UAE|Dubai)))\b"
+    r"|\b(?:(?:annual\s+leave|paid\s+leave|vacation)\s+(?:days?|entitlement|rights?|policy|in\s+UAE|UAE|allowance))\b"
+    r"|\b(?:how\s+(?:much|many)\s+(?:annual\s+)?leave\s+(?:do\s+I\s+(?:get|have)|am\s+I\s+entitled\s+to)\s+(?:in\s+UAE)?)\b"
+    r"|\b(?:(?:UAE|Dubai)\s+(?:annual\s+)?leave\s+(?:entitlement|days?|policy|rules?|law))\b"
+    r"|\b(?:public\s+holidays?\s+(?:in\s+(?:UAE|Dubai)|UAE|Dubai|list|how\s+many))\b"
+    r"|\b(?:(?:how\s+many|what\s+are\s+the)\s+public\s+holidays?\s+in\s+(?:UAE|Dubai))\b"
+    r"|\b(?:إجازة\s+سنوية\s+(?:في\s+الإمارات|الإمارات)|أيام\s+الإجازة\s+السنوية)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -4980,7 +5060,7 @@ class RicoChatAPI:
 
         # ── Visa / work permit status ─────────────────────────────────────────
         # "I'm on a spouse visa", "do I need a work permit?".
-        if _VISA_STATUS_RE.search(message):
+        if _VISA_STATUS_RE.search(message) and not _GOLDEN_VISA_RE.search(message) and not _WORK_VISA_PROCESS_RE.search(message):
             return self._finalize(
                 self._handle_visa_status(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -4998,7 +5078,7 @@ class RicoChatAPI:
 
         # ── Interview preparation advice ──────────────────────────────────────
         # "how do I prepare for an interview?", "common HSE interview questions".
-        if _INTERVIEW_PREP_RE.search(message):
+        if _INTERVIEW_PREP_RE.search(message) and not _DRESS_CODE_RE.search(message):
             return self._finalize(
                 self._handle_interview_prep(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5107,7 +5187,7 @@ class RicoChatAPI:
 
         # ── UAE benefits / package query ──────────────────────────────────────
         # "what benefits should I expect?", "is housing allowance standard?".
-        if _BENEFITS_QUERY_RE.search(message) and not _EOSB_RE.search(message):
+        if _BENEFITS_QUERY_RE.search(message) and not _EOSB_RE.search(message) and not _ANNUAL_LEAVE_RE.search(message):
             return self._finalize(
                 self._handle_benefits_package(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5143,7 +5223,7 @@ class RicoChatAPI:
 
         # ── Skill gap assessment ──────────────────────────────────────────────
         # "what skills am I missing?", "am I qualified for senior role?".
-        if _SKILL_GAP_RE.search(message):
+        if _SKILL_GAP_RE.search(message) and not _GOLDEN_VISA_RE.search(message) and not _EOSB_RE.search(message):
             return self._finalize(
                 self._handle_skill_gap(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5265,6 +5345,60 @@ class RicoChatAPI:
         if _FREE_ZONE_MAINLAND_RE.search(message):
             return self._finalize(
                 self._handle_free_zone_mainland(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Working hours / overtime ──────────────────────────────────────────
+        # "what are the working hours in UAE?", "is overtime paid?".
+        if _WORKING_HOURS_RE.search(message):
+            return self._finalize(
+                self._handle_working_hours(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── UAE Golden Visa ───────────────────────────────────────────────────
+        # "what is the golden visa?", "how do I get a UAE golden visa?".
+        if _GOLDEN_VISA_RE.search(message):
+            return self._finalize(
+                self._handle_golden_visa(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Professional references ───────────────────────────────────────────
+        # "how do I ask for a reference?", "who should I use as a reference?".
+        if _JOB_REFERENCES_RE.search(message):
+            return self._finalize(
+                self._handle_job_references(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Interview / office dress code ────────────────────────────────────
+        # "what should I wear to an interview?", "what is the dress code in UAE?".
+        if _DRESS_CODE_RE.search(message):
+            return self._finalize(
+                self._handle_dress_code(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Remote work from UAE ──────────────────────────────────────────────
+        # "can I work remotely from UAE?", "do I need a visa to work remote?".
+        if _REMOTE_WORK_UAE_RE.search(message):
+            return self._finalize(
+                self._handle_remote_work_uae(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Annual leave entitlement ──────────────────────────────────────────
+        # "how many days annual leave in UAE?", "public holidays UAE".
+        if _ANNUAL_LEAVE_RE.search(message):
+            return self._finalize(
+                self._handle_annual_leave(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -12528,6 +12662,286 @@ class RicoChatAPI:
             )
         self._append_chat(user_id, "assistant", msg)
         return {"type": "free_zone_mainland", "message": msg}
+
+    # ── Working hours / overtime ─────────────────────────────────────────────────
+
+    def _handle_working_hours(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## ساعات العمل والعمل الإضافي في الإمارات\n\n"
+                "**ساعات العمل القانونية (قانون العمل الإماراتي):**\n"
+                "- **الحد الأقصى:** 8 ساعات يومياً / 48 ساعة أسبوعياً\n"
+                "- **شهر رمضان:** 6 ساعات يومياً للموظف المسلم\n"
+                "- قد يختلف التطبيق الفعلي بين الشركات والقطاعات\n\n"
+                "**العمل الإضافي:**\n"
+                "- ما يتجاوز 8 ساعات يومياً يُعتبر عملاً إضافياً\n"
+                "- **الأجر الإضافي:** الراتب الأساسي + 25% (في أيام العمل العادية)\n"
+                "- **الأجر الإضافي ليلاً (10م–4ص):** الراتب الأساسي + 50%\n"
+                "- **أيام الراحة والعطل الرسمية:** راتب مضاعف + يوم بديل\n\n"
+                "**ما يجب معرفته:**\n"
+                "- تأكد من أن عقدك يُحدد ساعات العمل والعمل الإضافي بوضوح\n"
+                "- بعض الشركات تدفع بدل إضافي ثابتاً بدلاً من احتسابه بالساعة\n"
+                "- العمال المنزليون وموظفو المناطق الحرة قد يخضعون لأحكام مختلفة"
+            )
+        else:
+            msg = (
+                "## Working Hours & Overtime in UAE\n\n"
+                "**Legal working hours (UAE Labour Law):**\n"
+                "- **Maximum:** 8 hours/day or 48 hours/week\n"
+                "- **Ramadan:** 6 hours/day for Muslim employees\n"
+                "- In practice, many professional roles operate 9–10 hours/day — "
+                "check your contract\n\n"
+                "**Overtime rules:**\n"
+                "- Anything beyond 8 hours/day counts as overtime\n"
+                "- **Overtime rate:** Basic salary + **25%** premium\n"
+                "- **Night overtime (10pm–4am):** Basic salary + **50%** premium\n"
+                "- **Rest days and public holidays:** Double pay + a compensatory day off\n\n"
+                "**Important to know:**\n"
+                "- Your offer letter/contract should state your hours — "
+                "if it says 'as required', that's worth negotiating\n"
+                "- Some companies pay a fixed monthly overtime allowance "
+                "rather than calculating by the hour\n"
+                "- Free zone employees may fall under slightly different rules "
+                "(check your free zone authority's guidelines)\n"
+                "- Disputes on unpaid overtime can be filed with MOHRE"
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "working_hours", "message": msg}
+
+    # ── UAE Golden Visa ──────────────────────────────────────────────────────────
+
+    def _handle_golden_visa(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## الإقامة الذهبية في الإمارات\n\n"
+                "**ما هي الإقامة الذهبية؟**\n"
+                "إقامة طويلة المدى (5 أو 10 سنوات) تتيح لك الإقامة والعمل والدراسة "
+                "في الإمارات دون الحاجة إلى كفيل.\n\n"
+                "**الفئات المؤهلة:**\n"
+                "- **المستثمرون:** استثمار لا يقل عن 2 مليون درهم في عقارات أو تجارة\n"
+                "- **رواد الأعمال:** مشاريع مبتكرة أو شركات ناشئة معترف بها\n"
+                "- **الكفاءات المتميزة:** الأطباء، العلماء، الأكاديميون، المهندسون البارزون\n"
+                "- **الطلاب المتفوقون:** خريجو الجامعات بمعدلات عالية\n"
+                "- **الرياضيون والفنانون المتميزون**\n\n"
+                "**المزايا:**\n"
+                "- إقامة مستقلة (بدون كفيل)\n"
+                "- إمكانية إحضار الأسرة (الزوج والأبناء وحتى الوالدين)\n"
+                "- الاحتفاظ بالتأشيرة حتى في حالة عدم العمل لفترة\n\n"
+                "**كيف تتقدم:** عبر بوابة ICP الإلكترونية أو من خلال صاحب العمل."
+            )
+        else:
+            msg = (
+                "## UAE Golden Visa\n\n"
+                "**What is it?** A long-term UAE residence visa (5 or 10 years) that lets "
+                "you live, work, and study in the UAE without needing an employer sponsor.\n\n"
+                "**Who qualifies:**\n"
+                "- **Investors:** AED 2M+ in UAE real estate or business\n"
+                "- **Entrepreneurs:** Innovative startups or ventures recognised by a "
+                "UAE incubator/accelerator\n"
+                "- **Specialised talent:** Doctors, scientists, engineers, academics, "
+                "artists with proven expertise\n"
+                "- **Outstanding students:** Graduating with a GPA of 3.75+ from "
+                "an accredited UAE university, or top high school graduates\n"
+                "- **Athletes and creative professionals** with national or international recognition\n\n"
+                "**Key benefits:**\n"
+                "- Sponsor-free residence — tied to you, not your employer\n"
+                "- Can sponsor family (spouse, children, parents)\n"
+                "- Visa stays valid even during extended periods without employment\n\n"
+                "**How to apply:** Through the ICA (Federal Authority for Identity, "
+                "Citizenship, Customs & Port Security) portal, or via your employer "
+                "or free zone if they support golden visa nominations.\n\n"
+                "**Tip:** For employed professionals, the most common pathway is "
+                "employer nomination as 'specialised talent' — ask your HR department "
+                "whether your role qualifies."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "golden_visa", "message": msg}
+
+    # ── Professional references ──────────────────────────────────────────────────
+
+    def _handle_job_references(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## كيف تتعامل مع المراجع المهنية\n\n"
+                "**من تختار كمرجع؟**\n"
+                "- مديرك المباشر السابق (الأفضل دائماً)\n"
+                "- زملاء أقدم أو مشرفون عملوا معك عن كثب\n"
+                "- عملاء أو شركاء يمكنهم تقييم عملك\n"
+                "- تجنّب الأصدقاء الشخصيين أو أفراد العائلة\n\n"
+                "**كيف تطلب مرجعاً:**\n"
+                "1. تواصل معهم قبل إدراج اسمهم بوقت كافٍ\n"
+                "2. ذكّرهم بمشاريع محددة أو إنجازات بارزة\n"
+                "3. أرسل لهم سيرتك الذاتية ووصف الوظيفة المستهدفة\n"
+                "4. أعلمهم بالجدول الزمني المتوقع\n\n"
+                "**في السياق الإماراتي:**\n"
+                "- التحقق من المراجع شائع ويتم عادةً بعد تقديم العرض الوظيفي\n"
+                "- كثير من أصحاب العمل يكتفون بمرجعين فقط\n"
+                "- إذا كنت في وضع سري، يمكنك الإشارة إلى أن المراجع 'متاحة عند الطلب'"
+            )
+        else:
+            msg = (
+                "## How to Handle Professional References\n\n"
+                "**Who to choose:**\n"
+                "- Your direct line manager (strongest reference)\n"
+                "- A senior colleague or project lead who knows your work well\n"
+                "- A client or partner who can speak to your output\n"
+                "- Avoid personal friends or family members\n\n"
+                "**How to ask:**\n"
+                "1. Contact them *before* listing their name — never surprise them\n"
+                "2. Remind them of specific projects or achievements they can speak to\n"
+                "3. Share your CV and the job description so they can tailor what they say\n"
+                "4. Give them a heads-up on timing ('they may call within the next 2 weeks')\n\n"
+                "**In UAE context:**\n"
+                "- Reference checks are standard and typically happen *after* an offer "
+                "is made\n"
+                "- Most employers ask for 2–3 references\n"
+                "- If your search is confidential, put 'References available on request' "
+                "on your CV — this is widely understood\n"
+                "- LinkedIn recommendations can supplement verbal references\n\n"
+                "**If you can't use your current employer:**\n"
+                "Mention this upfront — most hiring managers understand. You can offer "
+                "a previous manager or a client instead."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "job_references", "message": msg}
+
+    # ── Interview / office dress code ───────────────────────────────────────────
+
+    def _handle_dress_code(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## ماذا ترتدي في المقابلة الوظيفية بالإمارات\n\n"
+                "**القاعدة الأساسية: الأناقة المهنية دائماً.**\n\n"
+                "**للرجال:**\n"
+                "- بدلة رسمية (بيضاء أو رمادية أو كحلية) مع ربطة عنق: مناسبة للبنوك والقانون والشركات الحكومية\n"
+                "- قميص أنيق مع بنطال وحذاء جلدي: مقبول في معظم الشركات الدولية والتقنية\n"
+                "- تجنب: الجينز والملابس غير الرسمية حتى لو كان هناك نظام 'casual Friday'\n\n"
+                "**للنساء:**\n"
+                "- ملابس مهنية محتشمة: بنطال أو تنورة طويلة مع بلوزة أنيقة أو بدلة رسمية\n"
+                "- الأكمام الطويلة أو المتوسطة مناسبة ثقافياً\n"
+                "- الألوان الهادئة أو الكلاسيكية (كحلي، رمادي، أبيض، بيج)\n\n"
+                "**نصيحة مهمة:** إذا كانت الشركة كاجوال، فما زال يُفضَّل الحضور بمظهر أكثر رسمية "
+                "في المقابلة. الانطباع الأول يُحدث فرقاً."
+            )
+        else:
+            msg = (
+                "## What to Wear to a UAE Job Interview\n\n"
+                "**Rule of thumb: always dress one level smarter than the company culture.**\n\n"
+                "**Men:**\n"
+                "- Full suit (navy, charcoal, or grey) + tie: appropriate for finance, "
+                "law, government, and senior roles\n"
+                "- Smart trousers + collared shirt + dress shoes: acceptable for most "
+                "tech, media, and international firms\n"
+                "- Avoid: jeans, trainers, and casualwear even if the office has a "
+                "relaxed dress code day-to-day\n\n"
+                "**Women:**\n"
+                "- Professional, modest attire: tailored trousers or a knee-length (or "
+                "longer) skirt with a smart blouse, or a business suit\n"
+                "- Covered shoulders and modest neckline are culturally appropriate "
+                "and always safe in UAE\n"
+                "- Classic colours (navy, grey, white, beige) work well\n\n"
+                "**UAE-specific note:**\n"
+                "Workplaces in UAE are diverse and international — you won't be expected "
+                "to wear traditional dress. However, conservative professional attire "
+                "shows respect for local culture and makes a strong first impression.\n\n"
+                "**When in doubt:** slightly overdressed is always better than underdressed "
+                "in a UAE interview context."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "dress_code", "message": msg}
+
+    # ── Remote work from UAE ─────────────────────────────────────────────────────
+
+    def _handle_remote_work_uae(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## العمل عن بُعد من الإمارات\n\n"
+                "**هل يمكنك العمل لصالح شركة أجنبية وأنت في الإمارات؟**\n"
+                "نعم — لكن يجب أن يكون لديك الوضع القانوني المناسب.\n\n"
+                "**الخيارات المتاحة:**\n"
+                "- **تأشيرة العمل عن بُعد (Virtual Work Residence):** تُتيح لك العمل لصالح صاحب عمل "
+                "خارج الإمارات بشكل قانوني، وتُصدر لمدة سنة قابلة للتجديد.\n"
+                "- **تصريح العمل الحر:** إذا كنت مستقلاً تعمل مع عملاء دوليين.\n"
+                "- **إقامة بكفالة صاحب العمل:** إذا كانت الشركة الأجنبية لديها فرع في الإمارات.\n\n"
+                "**الضرائب:**\n"
+                "الإمارات لا تفرض ضريبة دخل شخصية — ميزة كبيرة للعمل عن بُعد. "
+                "لكن قد تظل ملزماً بالإفصاح الضريبي في بلدك الأصلي حسب قوانينه."
+            )
+        else:
+            msg = (
+                "## Working Remotely from UAE\n\n"
+                "**Can you work for a foreign company while living in UAE?** "
+                "Yes — but you need the right legal status.\n\n"
+                "**Your main options:**\n"
+                "- **Virtual Work Residence Visa:** UAE-issued 1-year (renewable) visa "
+                "specifically for remote workers employed by companies outside the UAE. "
+                "Requires proof of employment + salary AED 15,000+/month equivalent\n"
+                "- **Freelance permit:** If you're self-employed or work with multiple "
+                "international clients (issued by a free zone authority)\n"
+                "- **Employer-sponsored residence:** If your foreign employer has a UAE "
+                "branch or subsidiary and can sponsor you directly\n\n"
+                "**Tax position:**\n"
+                "- UAE has no personal income tax — a major advantage for remote workers\n"
+                "- However, you may still have tax reporting obligations in your home "
+                "country (check your country's rules on worldwide income)\n"
+                "- UK, US, and Australian citizens typically need to declare income "
+                "regardless of where they work\n\n"
+                "**Practical tip:** Ensure you have valid UAE residency (not just a "
+                "tourist or visit visa) — working on a tourist visa is not permitted."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "remote_work_uae", "message": msg}
+
+    # ── Annual leave entitlement ─────────────────────────────────────────────────
+
+    def _handle_annual_leave(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## الإجازة السنوية وأيام العطل الرسمية في الإمارات\n\n"
+                "**الإجازة السنوية (قانون العمل الإماراتي):**\n"
+                "- **السنة الأولى إلى الخامسة:** 30 يوم تقويمي سنوياً\n"
+                "- **بعد 5 سنوات خدمة:** 30 يوماً (قد تمنح بعض الشركات أكثر)\n"
+                "- إذا انتهت الخدمة قبل اكتمال السنة، يُحتسب الأجر عن أيام الإجازة المتبقية\n\n"
+                "**العطلات الرسمية (الإمارات 2024/2025):**\n"
+                "- اليوم الوطني (2–3 ديسمبر): يومان\n"
+                "- يوم الشهيد (30 نوفمبر): يوم واحد\n"
+                "- رأس السنة الميلادية (1 يناير): يوم واحد\n"
+                "- اليوم الوطني السعودي والأعياد الإسلامية (رمضان، العيدان، الهجرة، المولد)\n"
+                "- الأعياد الإسلامية تتغير سنوياً وفق الهلال\n\n"
+                "**ملاحظة:** الإجازة القانونية أيام تقويمية (تشمل الجمعة والسبت)، "
+                "وليس أياماً عمل فقط."
+            )
+        else:
+            msg = (
+                "## Annual Leave & Public Holidays in UAE\n\n"
+                "**Annual leave entitlement (UAE Labour Law):**\n"
+                "- **First 6 months:** Accruing but no leave taken (probation)\n"
+                "- **After 6 months, within first year:** 2 days/month accrual\n"
+                "- **After 1 year of service:** 30 calendar days per year\n"
+                "- Unused leave carried over or paid out depends on your contract\n\n"
+                "**Important note:** UAE counts annual leave in **calendar days**, "
+                "not working days — so weekends and days off within your leave count.\n\n"
+                "**UAE Public Holidays (approx. per year):**\n"
+                "- New Year's Day (1 Jan)\n"
+                "- Eid Al Fitr (3 days — date varies)\n"
+                "- Eid Al Adha (3 days — date varies)\n"
+                "- Islamic New Year (1 day — date varies)\n"
+                "- Prophet's Birthday (1 day — date varies)\n"
+                "- Commemoration Day / Martyrs' Day (30 Nov)\n"
+                "- UAE National Day (2–3 Dec)\n\n"
+                "**Total: ~13–15 public holidays per year.** Islamic holiday dates "
+                "shift annually based on the lunar calendar.\n\n"
+                "**Tip:** Many UAE companies also offer additional leave for weddings, "
+                "bereavement, or maternity/paternity — check your contract."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "annual_leave", "message": msg}
 
     # ── Context-aware help ──────────────────────────────────────────────────────
 
