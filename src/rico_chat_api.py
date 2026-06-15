@@ -1039,6 +1039,46 @@ _FREE_ZONE_MAINLAND_RE = re.compile(
     re.IGNORECASE,
 )
 
+# UAE working hours and overtime — "what are the working hours in UAE?",
+# "is overtime paid?", "how many hours can I work?".
+_WORKING_HOURS_RE = re.compile(
+    r"\b(?:what\s+are\s+(?:the\s+)?(?:standard|typical|normal|UAE|legal|official)\s+working\s+hours)\b"
+    r"|\b(?:how\s+(?:many|much)\s+hours\s+(?:do\s+I|can\s+I|should\s+I|per\s+week|a\s+week)\s+(?:work|have\s+to\s+work|am\s+I\s+allowed))\b"
+    r"|\b(?:is\s+overtime\s+(?:paid|legal|mandatory|required|common|normal)\s+(?:in\s+UAE|in\s+Dubai)?)\b"
+    r"|\b(?:how\s+(?:is|does)\s+overtime\s+(?:work|pay|calculated|count)\s+(?:in\s+UAE|in\s+Dubai)?)\b"
+    r"|\b(?:overtime\s+(?:pay|rules?|laws?|calculation|rate|UAE|Dubai))\b"
+    r"|\b(?:(?:UAE|Dubai)\s+working\s+hours\s+(?:rules?|laws?|limits?|per\s+week|maximum|regulation))\b"
+    r"|\b(?:working\s+hours\s+(?:in\s+(?:UAE|Dubai)|UAE|Dubai|limit|maximum|per\s+week|regulations?))\b"
+    r"|\b(?:ساعات\s+العمل\s+(?:في\s+الإمارات|القانونية|الرسمية)|العمل\s+الإضافي\s+في\s+الإمارات)\b",
+    re.IGNORECASE,
+)
+
+# UAE Golden Visa — "what is the golden visa?", "how do I get a UAE golden visa?",
+# "am I eligible for a golden visa?", "golden visa UAE requirements".
+_GOLDEN_VISA_RE = re.compile(
+    r"\b(?:what\s+is\s+(?:the\s+)?(?:UAE\s+)?golden\s+visa)\b"
+    r"|\b(?:how\s+(?:do\s+I|to|can\s+I)\s+(?:get|apply\s+for|qualify\s+for|obtain)\s+(?:a\s+)?(?:UAE\s+)?golden\s+visa)\b"
+    r"|\b(?:golden\s+visa\s+(?:UAE|Dubai|requirements?|eligibility|cost|application|process|benefits?|categories?))\b"
+    r"|\b(?:am\s+I\s+(?:eligible|qualified)\s+for\s+(?:a\s+)?(?:UAE\s+)?golden\s+visa)\b"
+    r"|\b(?:(?:UAE|Dubai)\s+golden\s+visa\s+(?:requirements?|how\s+to\s+get|eligibility|apply|process|benefits?))\b"
+    r"|\b(?:10[- ]year\s+(?:UAE\s+)?(?:visa|residence|residency))\b"
+    r"|\b(?:تأشيرة\s+الذهبية\s+الإمارات|الإقامة\s+الذهبية|الفيزا\s+الذهبية)\b",
+    re.IGNORECASE,
+)
+
+# Professional references — "how do I ask for a reference?", "who should I use as a reference?",
+# "my employer asked for references", "reference check after offer".
+_JOB_REFERENCES_RE = re.compile(
+    r"\b(?:how\s+(?:do\s+I|to|should\s+I)\s+(?:ask\s+for|request|get|find|choose|pick)\s+(?:a\s+)?(?:professional\s+)?reference)\b"
+    r"|\b(?:who\s+(?:should\s+I|can\s+I)\s+(?:use|list|give|put)\s+as\s+(?:a\s+)?(?:reference|referee))\b"
+    r"|\b(?:(?:professional\s+)?references?\s+(?:for\s+a\s+job|on\s+(?:my\s+)?CV|UAE|tips?|advice|guide|check))\b"
+    r"|\b(?:(?:my\s+)?(?:employer|company)\s+(?:asked|is\s+asking)\s+for\s+references?)\b"
+    r"|\b(?:reference\s+check\s+(?:after\s+(?:the\s+)?offer|process|UAE|how))\b"
+    r"|\b(?:can\s+(?:I|they)\s+(?:contact|call|reach)\s+my\s+(?:previous|current|old)\s+(?:employer|manager|boss)\s+(?:as\s+a\s+)?reference)\b"
+    r"|\b(?:المراجع\s+المهنية|كيف\s+أطلب\s+(?:توصية|مرجع\s+مهني)|خطاب\s+التوصية)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -4980,7 +5020,7 @@ class RicoChatAPI:
 
         # ── Visa / work permit status ─────────────────────────────────────────
         # "I'm on a spouse visa", "do I need a work permit?".
-        if _VISA_STATUS_RE.search(message):
+        if _VISA_STATUS_RE.search(message) and not _GOLDEN_VISA_RE.search(message) and not _WORK_VISA_PROCESS_RE.search(message):
             return self._finalize(
                 self._handle_visa_status(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5143,7 +5183,7 @@ class RicoChatAPI:
 
         # ── Skill gap assessment ──────────────────────────────────────────────
         # "what skills am I missing?", "am I qualified for senior role?".
-        if _SKILL_GAP_RE.search(message):
+        if _SKILL_GAP_RE.search(message) and not _GOLDEN_VISA_RE.search(message) and not _EOSB_RE.search(message):
             return self._finalize(
                 self._handle_skill_gap(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5265,6 +5305,33 @@ class RicoChatAPI:
         if _FREE_ZONE_MAINLAND_RE.search(message):
             return self._finalize(
                 self._handle_free_zone_mainland(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Working hours / overtime ──────────────────────────────────────────
+        # "what are the working hours in UAE?", "is overtime paid?".
+        if _WORKING_HOURS_RE.search(message):
+            return self._finalize(
+                self._handle_working_hours(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── UAE Golden Visa ───────────────────────────────────────────────────
+        # "what is the golden visa?", "how do I get a UAE golden visa?".
+        if _GOLDEN_VISA_RE.search(message):
+            return self._finalize(
+                self._handle_golden_visa(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Professional references ───────────────────────────────────────────
+        # "how do I ask for a reference?", "who should I use as a reference?".
+        if _JOB_REFERENCES_RE.search(message):
+            return self._finalize(
+                self._handle_job_references(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -12528,6 +12595,151 @@ class RicoChatAPI:
             )
         self._append_chat(user_id, "assistant", msg)
         return {"type": "free_zone_mainland", "message": msg}
+
+    # ── Working hours / overtime ─────────────────────────────────────────────────
+
+    def _handle_working_hours(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## ساعات العمل والعمل الإضافي في الإمارات\n\n"
+                "**ساعات العمل القانونية (قانون العمل الإماراتي):**\n"
+                "- **الحد الأقصى:** 8 ساعات يومياً / 48 ساعة أسبوعياً\n"
+                "- **شهر رمضان:** 6 ساعات يومياً للموظف المسلم\n"
+                "- قد يختلف التطبيق الفعلي بين الشركات والقطاعات\n\n"
+                "**العمل الإضافي:**\n"
+                "- ما يتجاوز 8 ساعات يومياً يُعتبر عملاً إضافياً\n"
+                "- **الأجر الإضافي:** الراتب الأساسي + 25% (في أيام العمل العادية)\n"
+                "- **الأجر الإضافي ليلاً (10م–4ص):** الراتب الأساسي + 50%\n"
+                "- **أيام الراحة والعطل الرسمية:** راتب مضاعف + يوم بديل\n\n"
+                "**ما يجب معرفته:**\n"
+                "- تأكد من أن عقدك يُحدد ساعات العمل والعمل الإضافي بوضوح\n"
+                "- بعض الشركات تدفع بدل إضافي ثابتاً بدلاً من احتسابه بالساعة\n"
+                "- العمال المنزليون وموظفو المناطق الحرة قد يخضعون لأحكام مختلفة"
+            )
+        else:
+            msg = (
+                "## Working Hours & Overtime in UAE\n\n"
+                "**Legal working hours (UAE Labour Law):**\n"
+                "- **Maximum:** 8 hours/day or 48 hours/week\n"
+                "- **Ramadan:** 6 hours/day for Muslim employees\n"
+                "- In practice, many professional roles operate 9–10 hours/day — "
+                "check your contract\n\n"
+                "**Overtime rules:**\n"
+                "- Anything beyond 8 hours/day counts as overtime\n"
+                "- **Overtime rate:** Basic salary + **25%** premium\n"
+                "- **Night overtime (10pm–4am):** Basic salary + **50%** premium\n"
+                "- **Rest days and public holidays:** Double pay + a compensatory day off\n\n"
+                "**Important to know:**\n"
+                "- Your offer letter/contract should state your hours — "
+                "if it says 'as required', that's worth negotiating\n"
+                "- Some companies pay a fixed monthly overtime allowance "
+                "rather than calculating by the hour\n"
+                "- Free zone employees may fall under slightly different rules "
+                "(check your free zone authority's guidelines)\n"
+                "- Disputes on unpaid overtime can be filed with MOHRE"
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "working_hours", "message": msg}
+
+    # ── UAE Golden Visa ──────────────────────────────────────────────────────────
+
+    def _handle_golden_visa(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## الإقامة الذهبية في الإمارات\n\n"
+                "**ما هي الإقامة الذهبية؟**\n"
+                "إقامة طويلة المدى (5 أو 10 سنوات) تتيح لك الإقامة والعمل والدراسة "
+                "في الإمارات دون الحاجة إلى كفيل.\n\n"
+                "**الفئات المؤهلة:**\n"
+                "- **المستثمرون:** استثمار لا يقل عن 2 مليون درهم في عقارات أو تجارة\n"
+                "- **رواد الأعمال:** مشاريع مبتكرة أو شركات ناشئة معترف بها\n"
+                "- **الكفاءات المتميزة:** الأطباء، العلماء، الأكاديميون، المهندسون البارزون\n"
+                "- **الطلاب المتفوقون:** خريجو الجامعات بمعدلات عالية\n"
+                "- **الرياضيون والفنانون المتميزون**\n\n"
+                "**المزايا:**\n"
+                "- إقامة مستقلة (بدون كفيل)\n"
+                "- إمكانية إحضار الأسرة (الزوج والأبناء وحتى الوالدين)\n"
+                "- الاحتفاظ بالتأشيرة حتى في حالة عدم العمل لفترة\n\n"
+                "**كيف تتقدم:** عبر بوابة ICP الإلكترونية أو من خلال صاحب العمل."
+            )
+        else:
+            msg = (
+                "## UAE Golden Visa\n\n"
+                "**What is it?** A long-term UAE residence visa (5 or 10 years) that lets "
+                "you live, work, and study in the UAE without needing an employer sponsor.\n\n"
+                "**Who qualifies:**\n"
+                "- **Investors:** AED 2M+ in UAE real estate or business\n"
+                "- **Entrepreneurs:** Innovative startups or ventures recognised by a "
+                "UAE incubator/accelerator\n"
+                "- **Specialised talent:** Doctors, scientists, engineers, academics, "
+                "artists with proven expertise\n"
+                "- **Outstanding students:** Graduating with a GPA of 3.75+ from "
+                "an accredited UAE university, or top high school graduates\n"
+                "- **Athletes and creative professionals** with national or international recognition\n\n"
+                "**Key benefits:**\n"
+                "- Sponsor-free residence — tied to you, not your employer\n"
+                "- Can sponsor family (spouse, children, parents)\n"
+                "- Visa stays valid even during extended periods without employment\n\n"
+                "**How to apply:** Through the ICA (Federal Authority for Identity, "
+                "Citizenship, Customs & Port Security) portal, or via your employer "
+                "or free zone if they support golden visa nominations.\n\n"
+                "**Tip:** For employed professionals, the most common pathway is "
+                "employer nomination as 'specialised talent' — ask your HR department "
+                "whether your role qualifies."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "golden_visa", "message": msg}
+
+    # ── Professional references ──────────────────────────────────────────────────
+
+    def _handle_job_references(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## كيف تتعامل مع المراجع المهنية\n\n"
+                "**من تختار كمرجع؟**\n"
+                "- مديرك المباشر السابق (الأفضل دائماً)\n"
+                "- زملاء أقدم أو مشرفون عملوا معك عن كثب\n"
+                "- عملاء أو شركاء يمكنهم تقييم عملك\n"
+                "- تجنّب الأصدقاء الشخصيين أو أفراد العائلة\n\n"
+                "**كيف تطلب مرجعاً:**\n"
+                "1. تواصل معهم قبل إدراج اسمهم بوقت كافٍ\n"
+                "2. ذكّرهم بمشاريع محددة أو إنجازات بارزة\n"
+                "3. أرسل لهم سيرتك الذاتية ووصف الوظيفة المستهدفة\n"
+                "4. أعلمهم بالجدول الزمني المتوقع\n\n"
+                "**في السياق الإماراتي:**\n"
+                "- التحقق من المراجع شائع ويتم عادةً بعد تقديم العرض الوظيفي\n"
+                "- كثير من أصحاب العمل يكتفون بمرجعين فقط\n"
+                "- إذا كنت في وضع سري، يمكنك الإشارة إلى أن المراجع 'متاحة عند الطلب'"
+            )
+        else:
+            msg = (
+                "## How to Handle Professional References\n\n"
+                "**Who to choose:**\n"
+                "- Your direct line manager (strongest reference)\n"
+                "- A senior colleague or project lead who knows your work well\n"
+                "- A client or partner who can speak to your output\n"
+                "- Avoid personal friends or family members\n\n"
+                "**How to ask:**\n"
+                "1. Contact them *before* listing their name — never surprise them\n"
+                "2. Remind them of specific projects or achievements they can speak to\n"
+                "3. Share your CV and the job description so they can tailor what they say\n"
+                "4. Give them a heads-up on timing ('they may call within the next 2 weeks')\n\n"
+                "**In UAE context:**\n"
+                "- Reference checks are standard and typically happen *after* an offer "
+                "is made\n"
+                "- Most employers ask for 2–3 references\n"
+                "- If your search is confidential, put 'References available on request' "
+                "on your CV — this is widely understood\n"
+                "- LinkedIn recommendations can supplement verbal references\n\n"
+                "**If you can't use your current employer:**\n"
+                "Mention this upfront — most hiring managers understand. You can offer "
+                "a previous manager or a client instead."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "job_references", "message": msg}
 
     # ── Context-aware help ──────────────────────────────────────────────────────
 
