@@ -791,6 +791,47 @@ _OFFER_EVAL_RE = re.compile(
     re.IGNORECASE,
 )
 
+# UAE labor law / probation info — "what is the probation period in UAE?",
+# "can I leave during probation?", "UAE labor law rights", "termination rights UAE".
+# Does NOT overlap with _NOTICE_PERIOD_RE (which handles personal notice updates)
+# or _VISA_STATUS_RE (which handles employment visa status).
+_UAE_LABOR_LAW_RE = re.compile(
+    r"\b(?:what\s+(?:is|are)|how\s+(?:does|do))\s+(?:the\s+)?(?:probation(?:ary)?\s+period|UAE\s+lab(?:or|our)\s+law|employment\s+law)\b"
+    r"|\b(?:probation(?:ary)?\s+period)\s+(?:in\s+(?:UAE|Dubai)|UAE\s+rules?|rules?|conditions?|terms?|duration|length)\b"
+    r"|\bcan\s+I\s+(?:leave|quit|resign|terminate)\s+(?:my\s+job\s+)?(?:during|within|before\s+completing)\s+(?:probation|the\s+probation\s+period)\b"
+    r"|\b(?:UAE\s+)?(?:labor|labour)\s+(?:law|rights?|code|card)\b"
+    r"|\b(?:termination|dismissal|redundancy)\s+(?:rights?|in\s+UAE|notice|UAE)\b"
+    r"|\b(?:MOHRE|ministry\s+of\s+human\s+resources)\b"
+    r"|\b(?:unlimited\s+contract|limited\s+contract)\s+(?:UAE|in\s+UAE|difference|vs)\b"
+    r"|\b(?:قانون\s+العمل|حقوق\s+العامل)\s*(?:في\s+الإمارات)?\b",
+    re.IGNORECASE,
+)
+
+# Post-interview thank you / follow-up email — "should I send a thank you after the interview?",
+# "how to write a thank you email", "post-interview follow-up note".
+_POST_INTERVIEW_EMAIL_RE = re.compile(
+    r"\b(?:should\s+I\s+)?(?:send|write)\s+(?:a\s+)?(?:thank[- ]you|follow[- ]?up)\s+(?:email|note|message|letter)\s+(?:after|following)\s+(?:(?:a|an|the|my)\s+)?interview\b"
+    r"|\bhow\s+(?:to|do\s+I)\s+(?:write|send)\s+(?:a\s+)?(?:thank[- ]you|follow[- ]?up)\s+(?:email|note)\s+(?:after|following)\s+(?:(?:a|an|the|my)\s+)?interview\b"
+    r"|\b(?:thank[- ]you\s+email|post[- ]interview\s+(?:email|follow[- ]?up))\b"
+    r"|\bafter\s+(?:the|my|an?)\s+interview.{0,20}?(?:should\s+I|do\s+I)\s+(?:send|write|follow\s+up)\b"
+    r"|\b(?:بريد|رسالة)\s+(?:الشكر|شكر)\s+(?:بعد\s+)?المقابلة\b",
+    re.IGNORECASE,
+)
+
+# Skill gap assessment — "what skills am I missing?", "am I qualified for director?",
+# "how do I close my skill gap?", "what do I need to land a senior role?".
+# Positioned after _PROFILE_IMPROVE_RE and _CERTIFICATION_ADVICE_RE to avoid overlap.
+_SKILL_GAP_RE = re.compile(
+    r"\bwhat\s+skills?\s+(?:am\s+I\s+missing|do\s+I\s+(?:lack|need\s+to\s+(?:develop|add|gain|build)))\b"
+    r"|\bam\s+I\s+(?:qualified|eligible|suitable|ready)\s+(?:for|to)\b"
+    r"|\bhow\s+(?:do\s+I\s+(?:close|bridge)|to\s+(?:close|bridge))\s+(?:(?:my|the)\s+)?(?:skills?\s+)?gap\b"
+    r"|\b(?:skills?\s+gap)\s+(?:analysis|assessment|for|between|to)\b"
+    r"|\bwhat\s+(?:experience|skills?|qualifications?)\s+do\s+I\s+(?:need|lack)\s+(?:for|to\s+(?:get|land|become|be\s+a))\b"
+    r"|\b(?:am\s+I\s+ready|ready\s+for)\s+(?:a\s+)?(?:senior|director|manager|lead|head)\b"
+    r"|\b(?:فجوة\s+المهارات|ما\s+المهارات\s+الناقصة)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -2711,6 +2752,10 @@ class RicoChatAPI:
     ) -> dict[str, Any] | None:
         """Clarify draft/send channels without claiming unsupported application submission."""
         if not self._looks_like_application_channel_followup(message):
+            return None
+        # Post-interview thank-you / follow-up email questions contain "send" but are
+        # handled by _handle_post_interview_email — do not intercept them here.
+        if _POST_INTERVIEW_EMAIL_RE.search(message):
             return None
 
         wants_draft = self._requests_application_draft(message)
@@ -4862,6 +4907,33 @@ class RicoChatAPI:
         if _OFFER_EVAL_RE.search(message):
             return self._finalize(
                 self._handle_offer_evaluation(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── UAE labor law / probation info ────────────────────────────────────
+        # "what is the probation period?", "UAE labor law", "termination rights".
+        if _UAE_LABOR_LAW_RE.search(message):
+            return self._finalize(
+                self._handle_uae_labor_law(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Post-interview thank you email ────────────────────────────────────
+        # "should I send a thank you after the interview?", "how to write a thank you email".
+        if _POST_INTERVIEW_EMAIL_RE.search(message):
+            return self._finalize(
+                self._handle_post_interview_email(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Skill gap assessment ──────────────────────────────────────────────
+        # "what skills am I missing?", "am I qualified for senior role?".
+        if _SKILL_GAP_RE.search(message):
+            return self._finalize(
+                self._handle_skill_gap(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -11070,6 +11142,312 @@ class RicoChatAPI:
         self._append_chat(user_id, "assistant", msg)
         return {
             "type": "offer_evaluation",
+            "message": msg,
+        }
+
+    # ── UAE labor law / probation info ───────────────────────────────────────────
+
+    def _handle_uae_labor_law(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        """Return UAE labor law facts: probation, termination rights, labor card, contract types."""
+        arabic = self._is_arabic_text(message)
+        msg_lower = message.lower()
+
+        asks_probation = bool(re.search(r"\bprobation\b", message, re.IGNORECASE))
+        asks_termination = bool(re.search(r"\b(?:termination|dismiss|redundan|fire|fired|sack)\b", message, re.IGNORECASE))
+        asks_contract = bool(re.search(r"\b(?:unlimited|limited)\s+contract\b", message, re.IGNORECASE))
+        asks_labor_card = bool(re.search(r"\blabou?r\s+card\b", message, re.IGNORECASE))
+
+        if arabic:
+            if asks_probation:
+                lines = [
+                    "**فترة التجربة في الإمارات** 📋",
+                    "",
+                    "• **المدة:** حتى 6 أشهر (قابلة للتقليل باتفاق الطرفين)",
+                    "• **إنهاء العقد خلال التجربة:** يحق لكلا الطرفين بإشعار 14 يوماً",
+                    "• **التعويض:** إذا أنهى صاحب العمل العقد دون سبب، قد تستحق تعويضاً",
+                    "• **الجرايتي:** لا تُحتسب الجرايتي للموظفين الذين يغادرون خلال التجربة",
+                    "",
+                    "**حقك:** يمكنك الاستقالة خلال التجربة بإشعار 14 يوماً. قد يطلب منك صاحب العمل التعويض إذا تركت للانضمام لمنافس.",
+                ]
+            else:
+                lines = [
+                    "**حقوق العمال في الإمارات** 🇦🇪",
+                    "",
+                    "**الحقوق الأساسية بموجب قانون العمل الاتحادي:**",
+                    "• الراتب شهرياً لا يتأخر عن 14 يوماً",
+                    "• 30 يوم إجازة سنوية مدفوعة (بعد سنة)",
+                    "• تأمين طبي إلزامي",
+                    "• مكافأة نهاية الخدمة (جرايتي)",
+                    "• تأشيرة إقامة مكفولة من صاحب العمل",
+                    "",
+                    "**إنهاء العقد:** إشعار مسبق (30-90 يوم عادةً)",
+                    "**تقديم شكوى:** MOHRE (وزارة الموارد البشرية) — الرقم 800 60",
+                ]
+        else:
+            if asks_probation:
+                lines = [
+                    "**UAE Probation Period** 📋",
+                    "",
+                    "• **Duration:** Up to 6 months (can be shorter by agreement)",
+                    "• **Notice to terminate during probation:** 14 days for either party",
+                    "• **Compensation:** If employer terminates without valid reason, you may be entitled to compensation",
+                    "• **Gratuity:** Generally not payable if you resign during probation",
+                    "",
+                    "**Your right to leave:** You can resign during probation with 14 days notice.",
+                    "**Caution:** Employer may claim compensation if you join a direct competitor within 6 months.",
+                ]
+            elif asks_termination:
+                lines = [
+                    "**Termination Rights in UAE** 🇦🇪",
+                    "",
+                    "**If terminated by employer (without cause):**",
+                    "• Notice period: as per contract (30–90 days typical)",
+                    "• End-of-service gratuity: mandatory (21 days/year for yrs 1–5, 30 days/year after)",
+                    "• Unused leave encashment: required",
+                    "",
+                    "**Unfair dismissal:** File a complaint with MOHRE (Ministry of Human Resources)",
+                    "• Call: 800 60 | Website: mohre.gov.ae",
+                    "• Complaint must be filed within 1 year of termination",
+                    "",
+                    "**If you resign:** Notice period as per contract; gratuity calculated on service duration.",
+                ]
+            elif asks_contract:
+                lines = [
+                    "**UAE Contract Types** 📋",
+                    "",
+                    "**Unlimited contract:**",
+                    "• No fixed end date",
+                    "• Either party can terminate with notice",
+                    "• Full gratuity rights",
+                    "",
+                    "**Limited (fixed-term) contract:**",
+                    "• Fixed duration (e.g., 2 years)",
+                    "• Early termination may require compensation to employer",
+                    "• Gratuity calculated differently",
+                    "",
+                    "**Since 2022:** UAE moved most employees to unlimited contracts under the new labor law.",
+                ]
+            else:
+                lines = [
+                    "**UAE Labor Law Key Facts** 🇦🇪",
+                    "",
+                    "**Employee rights under Federal Decree-Law No. 33 of 2021:**",
+                    "• Salary paid within 14 days of due date (WPS system monitors this)",
+                    "• 30 days annual leave (after 1 year)",
+                    "• Mandatory medical insurance",
+                    "• End-of-service gratuity",
+                    "• Employer-sponsored residence visa",
+                    "",
+                    "**Notice period:** Usually 30–90 days per contract",
+                    "**Complaints:** MOHRE — 800 60 | mohre.gov.ae",
+                    "**Working hours:** 8 hrs/day, 48 hrs/week (reduced in Ramadan)",
+                ]
+
+        msg = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "uae_labor_law",
+            "sub_topic": "probation" if asks_probation else "termination" if asks_termination else "contract" if asks_contract else "general",
+            "message": msg,
+        }
+
+    # ── Post-interview thank you email ────────────────────────────────────────────
+
+    def _handle_post_interview_email(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        """Return a guide and template for post-interview thank you / follow-up emails."""
+        arabic = self._is_arabic_text(message)
+
+        recent_company = ""
+        recent_role = ""
+        try:
+            rctx = self._get_recent_context(user_id)
+            recent_company = str(rctx.get("recent_company") or "").strip()
+            recent_role = str(rctx.get("recent_job") or "").strip()
+        except Exception:
+            pass
+
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        role = recent_role or (target_roles[0] if target_roles else "the role")
+        company_str = f" at {recent_company}" if recent_company else ""
+
+        if arabic:
+            lines = [
+                "**رسالة الشكر بعد المقابلة** ✉️",
+                "",
+                "**نعم، أرسلها دائماً** — معظم المتقدمين لا يفعلون، وهي ميزة تنافسية.",
+                "",
+                "**توقيت الإرسال:** خلال 24 ساعة من المقابلة.",
+                "",
+                "**نموذج مقترح:**",
+                "---",
+                f"الموضوع: شكراً — مقابلة {role}{company_str}",
+                "",
+                "السيد/السيدة [اسم المقابِل]،",
+                "",
+                f"شكراً لوقتكم اليوم ولمناقشة فرصة {role}. استمتعت بالتعرف على [أمر أعجبك في المقابلة].",
+                "",
+                "أنا متحمس جداً للانضمام إلى فريقكم، وأرى أن خبرتي في [مهارة رئيسية] ستضيف قيمة حقيقية.",
+                "",
+                "أتطلع لسماع أخباركم. لا تترددوا في التواصل معي إذا احتجتم أي معلومات إضافية.",
+                "",
+                "مع تحياتي،",
+                "[اسمك]",
+                "---",
+            ]
+        else:
+            lines = [
+                "**Post-Interview Thank You Email Guide** ✉️",
+                "",
+                "**Should you send one? Yes, always.** Most candidates don't — it's a differentiator.",
+                "",
+                "**Timing:** Within 24 hours of the interview.",
+                "",
+                "**Template:**",
+                "---",
+                f"Subject: Thank You — {role} Interview{company_str}",
+                "",
+                "Dear [Interviewer Name],",
+                "",
+                f"Thank you for taking the time to meet with me today about the {role} position. "
+                "I enjoyed learning about [specific thing that impressed you — team, project, culture].",
+                "",
+                "The conversation reinforced my enthusiasm for the role. "
+                "I believe my background in [key skill from your profile] aligns well with what you're looking for.",
+                "",
+                "Please let me know if you need any additional information. "
+                "I look forward to hearing from you.",
+                "",
+                "Best regards,",
+                "[Your Name]",
+                "---",
+                "",
+                "**Tips:**",
+                "• Keep it under 150 words",
+                "• Mention one specific detail from the conversation (shows attention)",
+                "• Do NOT follow up again for 5–7 business days after sending this",
+                "• Send to every interviewer if there were multiple",
+            ]
+
+        msg = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "post_interview_email",
+            "role": role,
+            "company": recent_company or None,
+            "message": msg,
+        }
+
+    # ── Skill gap assessment ──────────────────────────────────────────────────────
+
+    def _handle_skill_gap(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        """Return a skill gap assessment comparing profile skills to target role requirements."""
+        arabic = self._is_arabic_text(message)
+
+        skills = self._as_list(self._profile_value(profile, "skills"))
+        certs = self._as_list(self._profile_value(profile, "certifications"))
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        years_exp = 0
+        try:
+            years_exp = int(self._profile_value(profile, "years_experience") or 0)
+        except (ValueError, TypeError):
+            pass
+
+        # Extract target from message if present (e.g. "am I qualified for HSE Director?")
+        _target_m = re.search(
+            r"\b(?:for|to\s+become|to\s+be|to\s+get|ready\s+for)\s+(?:a\s+|an\s+)?([A-Z][a-zA-Z &/\-]{3,50})\b",
+            message,
+            re.IGNORECASE,
+        )
+        msg_target = _target_m.group(1).strip() if _target_m else ""
+        target_role = msg_target or (target_roles[0] if target_roles else "your target role")
+
+        skill_lower = {s.lower() for s in skills}
+        cert_lower = {c.lower() for c in certs}
+        has_skills = bool(skills)
+        has_certs = bool(certs)
+
+        # Lightweight heuristic gap analysis
+        role_lower = target_role.lower()
+        gaps: list[str] = []
+        strengths: list[str] = []
+
+        if any(x in role_lower for x in ["hse", "safety", "ehs", "health & safety"]):
+            if any(x in cert_lower for x in ["nebosh", "iosh", "bcsp"]):
+                strengths.append("Industry-standard safety certification (NEBOSH/IOSH)")
+            else:
+                gaps.append("NEBOSH IGC or IOSH Managing Safely (strongly preferred)")
+            if any(x in skill_lower for x in ["incident investigation", "risk assessment"]):
+                strengths.append("Risk assessment / incident investigation experience")
+            else:
+                gaps.append("Formal incident investigation methodology (e.g. TapRoot, ICAM)")
+            if years_exp >= 5:
+                strengths.append(f"{years_exp} years of relevant experience")
+        elif any(x in role_lower for x in ["project manager", "project management", " pm"]):
+            if any(x in cert_lower for x in ["pmp", "prince2", "agile", "scrum"]):
+                strengths.append("Project management certification (PMP/PRINCE2)")
+            else:
+                gaps.append("PMP or PRINCE2 certification")
+            if any(x in skill_lower for x in ["stakeholder", "risk", "budget", "schedule"]):
+                strengths.append("Core PM skills (stakeholder, risk, budget)")
+            else:
+                gaps.append("Demonstrated budget and schedule management experience")
+        elif any(x in role_lower for x in ["data", "analyst", "analytics", "scientist"]):
+            if any(x in skill_lower for x in ["python", "sql", "power bi", "tableau"]):
+                strengths.append("Data tools (Python/SQL/BI platforms)")
+            else:
+                gaps.append("Python or SQL proficiency")
+                gaps.append("Power BI or Tableau for visualisation")
+        elif any(x in role_lower for x in ["finance", "financial", "accountant"]):
+            if any(x in cert_lower for x in ["acca", "cpa", "cfa", "cima"]):
+                strengths.append("Professional finance qualification (ACCA/CPA/CFA)")
+            else:
+                gaps.append("ACCA, CFA, or CPA qualification")
+        else:
+            if not has_skills:
+                gaps.append("Skills details not yet in your profile — upload your CV to get a full analysis")
+            if not has_certs:
+                gaps.append("Certifications not listed — add them for a more accurate assessment")
+
+        if arabic:
+            lines = [
+                f"**تحليل فجوة المهارات لدور {target_role}** 📊",
+                "",
+            ]
+            if strengths:
+                lines += ["**نقاط قوتك:**"] + [f"✅ {s}" for s in strengths] + [""]
+            if gaps:
+                lines += ["**الفجوات التي يُنصح بسدّها:**"] + [f"⬜ {g}" for g in gaps] + [""]
+            lines += [
+                "**الخطوة التالية:** سد هذه الفجوات يزيد فرصك بشكل ملحوظ في الحصول على المقابلات.",
+            ]
+        else:
+            lines = [
+                f"**Skill Gap Assessment for {target_role}** 📊",
+                "",
+            ]
+            if strengths:
+                lines += ["**Your strengths (already have):**"] + [f"✅ {s}" for s in strengths] + [""]
+            if gaps:
+                lines += ["**Recommended gaps to close:**"] + [f"⬜ {g}" for g in gaps] + [""]
+            if years_exp:
+                if years_exp >= 8:
+                    lines.append(f"Your {years_exp} years of experience places you at a competitive level.")
+                elif years_exp >= 3:
+                    lines.append(f"With {years_exp} years, closing these gaps should position you strongly.")
+                else:
+                    lines.append("Focus on certifications and portfolio projects to compensate for limited years.")
+            lines += [
+                "",
+                "Want me to search for " + target_role + " roles that match your current profile?",
+            ]
+
+        msg = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "skill_gap",
+            "target_role": target_role,
+            "strengths": strengths,
+            "gaps": gaps,
             "message": msg,
         }
 

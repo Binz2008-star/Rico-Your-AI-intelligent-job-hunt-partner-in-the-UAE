@@ -3537,3 +3537,276 @@ class TestOfferEvaluation:
     def test_arabic_offer_query(self, monkeypatch):
         result = self._run(monkeypatch, "قبول عرض العمل")
         assert result["type"] == "offer_evaluation"
+
+
+# ── UAE Labor Law ─────────────────────────────────────────────────────────────
+
+class TestUAELaborLaw:
+    """Tests for _UAE_LABOR_LAW_RE and _handle_uae_labor_law."""
+
+    _REGEX_CASES_MATCH = [
+        "what is the probation period in UAE?",
+        "how does the probation period work?",
+        "probation period UAE rules",
+        "probation period duration in Dubai",
+        "can I leave during probation?",
+        "can I resign during the probation period?",
+        "UAE labor law",
+        "UAE labour rights",
+        "termination rights in UAE",
+        "what are my dismissal rights?",
+        "unlimited contract vs limited contract UAE",
+        "MOHRE complaint",
+        "قانون العمل في الإمارات",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "update my notice period to 30 days",  # notice period RE
+        "I'm on a spouse visa",                 # visa status RE
+        "how do I negotiate my salary?",
+        "I need a job urgently",
+        "show my applications",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _UAE_LABOR_LAW_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _UAE_LABOR_LAW_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _UAE_LABOR_LAW_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _UAE_LABOR_LAW_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_labor_law(self, monkeypatch):
+        result = self._run(monkeypatch, "what is the probation period in UAE?")
+        assert result["type"] == "uae_labor_law"
+
+    def test_termination_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "what are my termination rights in UAE?")
+        assert result["type"] == "uae_labor_law"
+
+    def test_sub_topic_probation(self, monkeypatch):
+        result = self._run(monkeypatch, "can I leave during probation?")
+        assert result["sub_topic"] == "probation"
+
+    def test_sub_topic_termination(self, monkeypatch):
+        result = self._run(monkeypatch, "termination rights in UAE")
+        assert result["sub_topic"] == "termination"
+
+    def test_sub_topic_contract(self, monkeypatch):
+        result = self._run(monkeypatch, "unlimited contract vs limited contract UAE")
+        assert result["sub_topic"] == "contract"
+
+    def test_probation_message_has_14_days(self, monkeypatch):
+        result = self._run(monkeypatch, "what is the probation period in UAE?")
+        assert "14" in result["message"]
+
+    def test_termination_message_has_mohre(self, monkeypatch):
+        result = self._run(monkeypatch, "termination rights UAE")
+        assert "MOHRE" in result["message"] or "وزارة" in result["message"]
+
+    def test_message_length(self, monkeypatch):
+        result = self._run(monkeypatch, "UAE labor law")
+        assert len(result["message"]) > 100
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "UAE labor law", profile=_EmptyProfile())
+        assert result["type"] == "uae_labor_law"
+
+
+# ── Post-Interview Email ───────────────────────────────────────────────────────
+
+class TestPostInterviewEmail:
+    """Tests for _POST_INTERVIEW_EMAIL_RE and _handle_post_interview_email."""
+
+    _REGEX_CASES_MATCH = [
+        "should I send a thank you email after the interview?",
+        "should I send a follow-up email after the interview?",
+        "how to write a thank you email after an interview",
+        "how do I send a thank you note following the interview?",
+        "thank you email after interview",
+        "post-interview email",
+        "post-interview follow-up",
+        "after the interview should I send a thank you?",
+        "after my interview do I write a follow-up?",
+        "رسالة الشكر بعد المقابلة",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "how do I prepare for an interview?",    # interview prep
+        "how to ace an interview",               # interview prep
+        "follow up timing after applying",       # followup timing
+        "I need a job urgently",
+        "show my applications",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _POST_INTERVIEW_EMAIL_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _POST_INTERVIEW_EMAIL_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _POST_INTERVIEW_EMAIL_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _POST_INTERVIEW_EMAIL_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None, recent_ctx=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: recent_ctx or {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_post_interview_email(self, monkeypatch):
+        result = self._run(monkeypatch, "should I send a thank you email after the interview?")
+        assert result["type"] == "post_interview_email"
+
+    def test_thank_you_email_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "thank you email after interview")
+        assert result["type"] == "post_interview_email"
+
+    def test_post_interview_followup_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "post-interview follow-up")
+        assert result["type"] == "post_interview_email"
+
+    def test_message_has_template(self, monkeypatch):
+        result = self._run(monkeypatch, "how to write a thank you email after an interview")
+        msg = result["message"]
+        assert "Subject" in msg or "الموضوع" in msg
+
+    def test_message_has_timing_advice(self, monkeypatch):
+        result = self._run(monkeypatch, "should I send a thank you email after the interview?")
+        msg = result["message"]
+        assert "24" in msg
+
+    def test_recent_company_in_subject(self, monkeypatch):
+        ctx = {"recent_company": "ADNOC", "recent_job": "HSE Manager"}
+        result = self._run(monkeypatch, "thank you email after interview", recent_ctx=ctx)
+        msg = result["message"]
+        assert "ADNOC" in msg
+
+    def test_role_field_present(self, monkeypatch):
+        result = self._run(monkeypatch, "thank you email after interview")
+        assert isinstance(result.get("role"), str)
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "thank you email after interview", profile=_EmptyProfile())
+        assert result["type"] == "post_interview_email"
+
+
+# ── Skill Gap Assessment ──────────────────────────────────────────────────────
+
+class TestSkillGap:
+    """Tests for _SKILL_GAP_RE and _handle_skill_gap."""
+
+    _REGEX_CASES_MATCH = [
+        "what skills am I missing?",
+        "what skills do I lack?",
+        "what skills do I need to develop for my role?",
+        "am I qualified for a senior manager?",
+        "am I eligible for a director position?",
+        "am I ready for a senior role?",
+        "how do I close my skill gap?",
+        "how to close the skills gap?",
+        "skill gap analysis",
+        "skill gap assessment for HSE",
+        "what experience do I need to get a senior role?",
+        "what qualifications do I need to land a director position?",
+        "فجوة المهارات",
+    ]
+
+    _REGEX_CASES_NO_MATCH = [
+        "what certifications do I need?",         # certification advice RE
+        "how do I improve my CV?",                # profile improve RE
+        "show my applications",
+        "I need a job urgently",
+        "how do I negotiate my salary?",
+    ]
+
+    def test_regex_matches(self):
+        from src.rico_chat_api import _SKILL_GAP_RE
+        for msg in self._REGEX_CASES_MATCH:
+            assert _SKILL_GAP_RE.search(msg), f"Should match: {msg!r}"
+
+    def test_regex_no_false_positives(self):
+        from src.rico_chat_api import _SKILL_GAP_RE
+        for msg in self._REGEX_CASES_NO_MATCH:
+            assert not _SKILL_GAP_RE.search(msg), f"Should NOT match: {msg!r}"
+
+    def _run(self, monkeypatch, message: str, profile=None):
+        from unittest.mock import MagicMock
+        from src.rico_chat_api import RicoChatAPI
+        import src.rico_chat_api as mod
+        monkeypatch.setattr(mod, "get_profile", lambda uid: profile or _CVProfile())
+        monkeypatch.setattr(mod, "_route", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile or _CVProfile())
+        monkeypatch.setattr(mod, "hf_ok", lambda: False)
+        api = RicoChatAPI()
+        api._get_recent_context = lambda uid: {}
+        api._append_chat = MagicMock()
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_skill_gap(self, monkeypatch):
+        result = self._run(monkeypatch, "what skills am I missing?")
+        assert result["type"] == "skill_gap"
+
+    def test_am_i_qualified_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "am I qualified for a senior manager?")
+        assert result["type"] == "skill_gap"
+
+    def test_skill_gap_analysis_routes(self, monkeypatch):
+        result = self._run(monkeypatch, "skill gap analysis")
+        assert result["type"] == "skill_gap"
+
+    def test_target_role_from_profile(self, monkeypatch):
+        result = self._run(monkeypatch, "what skills am I missing?", profile=_CVProfile())
+        assert result["target_role"] == "Senior HSE Manager"
+
+    def test_gaps_and_strengths_lists(self, monkeypatch):
+        result = self._run(monkeypatch, "what skills am I missing?")
+        assert isinstance(result.get("gaps"), list)
+        assert isinstance(result.get("strengths"), list)
+
+    def test_hse_profile_gets_cert_gap_or_strength(self, monkeypatch):
+        result = self._run(monkeypatch, "what skills am I missing?", profile=_CVProfile())
+        msg = result["message"]
+        assert "NEBOSH" in msg or "IOSH" in msg or "nebosh" in msg
+
+    def test_message_has_strengths_section(self, monkeypatch):
+        result = self._run(monkeypatch, "what skills am I missing?", profile=_CVProfile())
+        msg = result["message"]
+        assert "strength" in msg.lower() or "✅" in msg or "قوت" in msg
+
+    def test_message_has_gap_section(self, monkeypatch):
+        result = self._run(monkeypatch, "what skills am I missing?", profile=_CVProfile())
+        msg = result["message"]
+        assert "gap" in msg.lower() or "⬜" in msg or "فجوة" in msg
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run(monkeypatch, "what skills am I missing?", profile=_EmptyProfile())
+        assert result["type"] == "skill_gap"
+
+    def test_experience_level_mentioned(self, monkeypatch):
+        result = self._run(monkeypatch, "am I ready for a senior role?", profile=_CVProfile())
+        msg = result["message"]
+        assert isinstance(msg, str) and len(msg) > 50
