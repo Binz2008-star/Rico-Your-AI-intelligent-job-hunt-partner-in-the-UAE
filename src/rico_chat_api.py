@@ -918,6 +918,127 @@ _APPLY_FROM_ABROAD_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Employment gap explanation — "how do I explain a career gap?",
+# "I have a gap in my CV", "took time off work", "was out of work for X months".
+_EMPLOYMENT_GAP_RE = re.compile(
+    r"\b(?:how\s+(?:do\s+I|to|should\s+I)\s+(?:explain|address|handle|deal\s+with|justify)\s+(?:a\s+)?(?:career\s+gap|gap\s+in\s+(?:my\s+)?(?:CV|resume|employment|work\s+history)|employment\s+gap|work\s+gap))\b"
+    r"|\b(?:(?:I\s+have|there\s+is)\s+(?:a\s+)?(?:gap|career\s+gap|employment\s+gap)\s+in\s+(?:my\s+)?(?:CV|resume|work\s+history|employment))\b"
+    r"|\b(?:(?:career|employment|work)\s+gap\s+(?:explanation|on\s+(?:my\s+)?(?:CV|resume)|advice|tips?|in\s+interview))\b"
+    r"|\b(?:I\s+(?:took|was\s+(?:out\s+of\s+work|unemployed|on\s+a\s+break|between\s+jobs?))\s+(?:for\s+)?(?:(?:a|an|several|many|few|\d+)\s+)?(?:months?|years?|time))\b"
+    r"|\b(?:between\s+jobs?\s+(?:for|gap)|gap\s+(?:year|years?|months?)\s+(?:in\s+work|between\s+jobs?))\b"
+    r"|\b(?:فجوة\s+(?:في\s+)?(?:السيرة\s+الذاتية|مسيرتي\s+المهنية)|كيف\s+أشرح\s+(?:فترة\s+)?الانقطاع\s+عن\s+العمل)\b",
+    re.IGNORECASE,
+)
+
+# Company research before interview — "how do I research a company?",
+# "what should I know about a company before an interview?".
+_COMPANY_RESEARCH_RE = re.compile(
+    r"\b(?:how\s+(?:do\s+I|to|should\s+I)\s+(?:research|find\s+out\s+about|learn\s+about|investigate)\s+(?:a\s+|the\s+)?company(?:\s+before\s+(?:an?\s+)?interview)?)\b"
+    r"|\b(?:what\s+(?:should\s+I|to)\s+(?:know|find\s+out|research|look\s+up|check)\s+about\s+(?:a\s+|the\s+)?company\s+before\s+(?:(?:a|an|the|my)\s+)?interview)\b"
+    r"|\b(?:how\s+(?:do\s+I|to)\s+(?:prepare|research)\s+(?:for|about)\s+(?:a\s+|the\s+)?company(?:\s+interview)?)\b"
+    r"|\b(?:company\s+research\s+(?:before|for|tips?|guide|checklist))\b"
+    r"|\b(?:what\s+(?:should\s+I|to)\s+(?:know|look\s+up|research)\s+about\s+(?:them|the\s+company|my\s+interviewer)\s+before\s+(?:(?:a|an|the|my)\s+)?interview)\b"
+    r"|\b(?:كيف\s+أبحث\s+عن\s+(?:الشركة|معلومات\s+الشركة)|البحث\s+عن\s+الشركة\s+قبل\s+المقابلة)\b",
+    re.IGNORECASE,
+)
+
+# Freelance permit in UAE — "can I freelance in UAE?", "how to get a freelance visa",
+# "freelance permit UAE", "self-employed in UAE".
+_FREELANCE_UAE_RE = re.compile(
+    r"\b(?:can\s+I\s+(?:work\s+as\s+a?\s+)?freelan(?:ce|cer)\s+in\s+(?:UAE|Dubai|Abu\s+Dhabi|the\s+UAE))\b"
+    r"|\b(?:how\s+(?:to|do\s+I)\s+(?:get|apply\s+for|obtain)\s+(?:a\s+)?(?:freelance\s+(?:permit|visa|licence|license)|UAE\s+freelance))\b"
+    r"|\b(?:freelance\s+(?:permit|visa|licence|license)\s+(?:UAE|Dubai|Abu\s+Dhabi|in\s+UAE))\b"
+    r"|\b(?:(?:UAE|Dubai)\s+freelance\s+(?:permit|visa|licence|license|visa|rules?|options?))\b"
+    r"|\b(?:self[- ]?employed?\s+in\s+(?:UAE|Dubai|the\s+UAE))\b"
+    r"|\b(?:can\s+I\s+be\s+(?:self[- ]?employed?|freelan(?:ce|cer))\s+in\s+(?:UAE|Dubai|the\s+UAE))\b"
+    r"|\b(?:independent\s+contractor\s+(?:in|UAE|Dubai))\b"
+    r"|\b(?:تصريح\s+(?:العمل\s+الحر|المستقل)|العمل\s+الحر\s+في\s+الإمارات)\b",
+    re.IGNORECASE,
+)
+
+# End of service gratuity / EOSB — "what is end of service gratuity?",
+# "how much gratuity am I owed?", "how is gratuity calculated in UAE?".
+_EOSB_RE = re.compile(
+    r"\b(?:what\s+is\s+(?:end\s+of\s+service|gratuity|EOSB))\b"
+    r"|\b(?:how\s+(?:is|do\s+I\s+calculate|to\s+calculate)\s+(?:my\s+)?(?:end\s+of\s+service|gratuity))\b"
+    r"|\b(?:how\s+much\s+(?:gratuity|end\s+of\s+service)\s+(?:am\s+I\s+(?:owed|entitled\s+to)|will\s+I\s+(?:get|receive)))\b"
+    r"|\b(?:gratuity\s+(?:calculation|calculator|formula|in\s+UAE|UAE|entitlement|payment|amount|rights?))\b"
+    r"|\b(?:end\s+of\s+service\s+(?:gratuity|benefit|payment|calculation|calculator|entitlement|in\s+UAE))\b"
+    r"|\b(?:EOSB\s+(?:calculation|UAE|entitlement|amount))\b"
+    r"|\b(?:am\s+I\s+(?:entitled|eligible)\s+(?:to|for)\s+(?:end\s+of\s+service|gratuity))\b"
+    r"|\b(?:مكافأة\s+نهاية\s+الخدمة|كيف\s+(?:تُحسب|أحسب)\s+مكافأة\s+نهاية\s+الخدمة|حساب\s+مكافأة\s+نهاية\s+الخدمة)\b",
+    re.IGNORECASE,
+)
+
+# Non-compete clause in UAE — "does my non-compete apply in UAE?",
+# "can my employer enforce a non-compete?", "what is a non-compete clause?".
+_NON_COMPETE_RE = re.compile(
+    r"\b(?:what\s+is\s+(?:a\s+|an\s+|the\s+)?non[- ]compete(?:\s+(?:clause|agreement|restriction))?)\b"
+    r"|\b(?:does\s+my\s+non[- ]compete\s+(?:apply|work|matter)?)\b"
+    r"|\b(?:how\s+does\s+(?:a\s+)?non[- ]compete\s+(?:work|apply))\b"
+    r"|\b(?:non[- ]compete\s+(?:clause|agreement|restriction|clause)\s+(?:in\s+UAE|UAE|Dubai|enforceable|enforced|valid|apply))\b"
+    r"|\b(?:can\s+(?:my\s+)?(?:employer|company)\s+(?:enforce|stop\s+me\s+with|use)\s+(?:a\s+)?non[- ]compete)\b"
+    r"|\b(?:is\s+(?:my\s+|a\s+)?non[- ]compete\s+(?:enforceable|valid|legal|binding)(?:\s+(?:in\s+UAE|in\s+Dubai))?)\b"
+    r"|\b(?:non[- ]compete\s+(?:UAE|Dubai|period|duration|restriction|terms?))\b"
+    r"|\b(?:شرط\s+عدم\s+المنافسة|بند\s+عدم\s+المنافسة|اتفاقية\s+عدم\s+المنافسة)\b",
+    re.IGNORECASE,
+)
+
+# UAE work visa / sponsorship process — "how do I get a UAE work visa?",
+# "how does visa sponsorship work?", "what documents do I need for a work visa?".
+# Distinct from _VISA_STATUS_RE (which handles profile declarations).
+_WORK_VISA_PROCESS_RE = re.compile(
+    r"\b(?:how\s+(?:do\s+I|to|can\s+I)\s+(?:get|apply\s+for|obtain)\s+(?:a\s+)?(?:UAE\s+)?work\s+(?:visa|permit))\b"
+    r"|\b(?:how\s+(?:does|do)\s+(?:UAE\s+)?(?:work\s+)?visa\s+(?:sponsorship|process|application)\s+work)\b"
+    r"|\b(?:what\s+(?:documents?|papers?)\s+(?:do\s+I\s+)?(?:need|require)\s+for\s+(?:a\s+)?(?:UAE\s+)?work\s+(?:visa|permit))\b"
+    r"|\b(?:(?:UAE|Dubai)\s+work\s+(?:visa|permit)\s+(?:process|requirements?|application|guide|steps?|how\s+to\s+get|cost))\b"
+    r"|\b(?:how\s+(?:long|much)\s+(?:does|do)\s+(?:it\s+take|I\s+need)\s+(?:to\s+get|for)\s+(?:a\s+)?(?:UAE\s+)?work\s+visa)\b"
+    r"|\b(?:will\s+(?:the\s+)?(?:company|employer|they)\s+(?:sponsor|provide|arrange)\s+(?:my\s+)?visa)\b"
+    r"|\b(?:what\s+is\s+(?:the\s+)?visa\s+sponsorship\s+(?:process|cost|timeline))\b"
+    r"|\b(?:تأشيرة\s+العمل\s+(?:في\s+الإمارات|الإمارات)|كيف\s+أحصل\s+على\s+تأشيرة\s+عمل|إجراءات\s+تأشيرة\s+العمل)\b",
+    re.IGNORECASE,
+)
+
+# Arabic language requirement for UAE jobs — "do I need to speak Arabic?",
+# "will not speaking Arabic hurt my chances?", "how much Arabic do I need?".
+_ARABIC_REQUIREMENT_RE = re.compile(
+    r"\b(?:do\s+I\s+(?:need|have)\s+to\s+speak\s+Arabic)\b"
+    r"|\b(?:(?:will|does)\s+(?:not\s+)?speaking\s+Arabic\s+(?:matter|help|hurt|affect|impact))\b"
+    r"|\b(?:how\s+(?:much|important)\s+(?:is\s+)?Arabic\s+(?:do\s+I\s+need|is\s+(?:needed|required|important|useful)))\b"
+    r"|\b(?:how\s+(?:important|useful|necessary|essential)\s+is\s+Arabic)\b"
+    r"|\b(?:(?:is|are)\s+Arabic\s+(?:skills?|language)?\s+(?:required|necessary|needed|important|essential)\s+(?:for|in|to)\s+(?:UAE|Dubai|Abu\s+Dhabi|work|jobs?))\b"
+    r"|\b(?:can\s+I\s+(?:work|get\s+a\s+job|find\s+(?:a\s+)?work)\s+in\s+(?:UAE|Dubai)\s+(?:without|if\s+I\s+don't\s+speak)\s+Arabic)\b"
+    r"|\b(?:Arabic\s+(?:speaking|language|skills?)\s+(?:required|needed|necessary|job|jobs?|requirement|UAE|Dubai))\b"
+    r"|\b(?:هل\s+أحتاج\s+(?:إلى\s+)?تعلم\s+العربية|هل\s+اللغة\s+العربية\s+ضرورية)\b",
+    re.IGNORECASE,
+)
+
+# Background check / police clearance — "will they do a background check?",
+# "do I need a police clearance certificate?", "what is checked in background screening?".
+_BACKGROUND_CHECK_RE = re.compile(
+    r"\b(?:(?:will|do)\s+(?:they|employers?|the\s+company)\s+(?:do|run|conduct|check)\s+(?:a\s+)?background\s+(?:check|screening|verification))\b"
+    r"|\b(?:background\s+(?:check|screening|verification)\s+(?:UAE|Dubai|process|how|what|required|needed))\b"
+    r"|\b(?:do\s+I\s+need\s+(?:a\s+)?(?:police\s+clearance|good\s+conduct\s+certificate|criminal\s+background\s+check))\b"
+    r"|\b(?:police\s+(?:clearance|clearance\s+certificate|good\s+conduct|certificate)\s+(?:UAE|Dubai|for\s+(?:a\s+)?job|required|needed))\b"
+    r"|\b(?:police\s+good\s+conduct\s+certificate(?:\s+for\s+(?:a\s+)?(?:job|UAE|work))?)\b"
+    r"|\b(?:what\s+(?:do\s+they\s+|is\s+)?(?:check|verify|look\s+at)\s+in\s+(?:a\s+)?(?:background|employment)\s+(?:check|screening|verification))\b"
+    r"|\b(?:شهادة\s+حسن\s+السيرة|تفتيش\s+الخلفية|فحص\s+السوابق\s+الجنائية)\b",
+    re.IGNORECASE,
+)
+
+# Free zone vs mainland employment in UAE — "what is the difference between free zone and mainland?",
+# "should I work in a free zone or mainland?", "is a free zone job different?".
+_FREE_ZONE_MAINLAND_RE = re.compile(
+    r"\b(?:(?:what\s+is|what's)\s+the\s+difference\s+between\s+(?:(?:a\s+)?free\s+zone\s+and\s+mainland|mainland\s+and\s+(?:a\s+)?free\s+zone))\b"
+    r"|\b(?:(?:should\s+I|is\s+it\s+better\s+to)\s+(?:work|take\s+a\s+job)\s+in\s+(?:a\s+)?free\s+zone\s+(?:or|vs\.?|versus)\s+mainland)\b"
+    r"|\b(?:free\s+zone\s+(?:vs\.?\s+mainland|job|employment|company|benefits?|advantages?|disadvantages?|rules?|restrictions?))\b"
+    r"|\b(?:mainland\s+(?:vs\.?\s+free\s+zone|UAE|Dubai)\s+(?:job|employment|company|rules?|restrictions?))\b"
+    r"|\b(?:(?:is|are)\s+(?:free\s+zone|mainland)\s+(?:jobs?|employment|companies?)\s+(?:different|better|worse|limited|restricted))\b"
+    r"|\b(?:can\s+(?:I|a\s+free\s+zone\s+employee)\s+(?:work|be\s+employed?|be\s+hired?)\s+(?:outside|in)\s+(?:a\s+)?(?:free\s+zone|mainland))\b"
+    r"|\b(?:المنطقة\s+الحرة\s+(?:مقابل|و)\s+البر\s+الرئيسي|الفرق\s+بين\s+المنطقة\s+الحرة\s+والبر\s+الرئيسي)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -4986,7 +5107,7 @@ class RicoChatAPI:
 
         # ── UAE benefits / package query ──────────────────────────────────────
         # "what benefits should I expect?", "is housing allowance standard?".
-        if _BENEFITS_QUERY_RE.search(message):
+        if _BENEFITS_QUERY_RE.search(message) and not _EOSB_RE.search(message):
             return self._finalize(
                 self._handle_benefits_package(user_id, profile, message),
                 self.SOURCE_KEYWORD,
@@ -5063,6 +5184,87 @@ class RicoChatAPI:
         if _APPLY_FROM_ABROAD_RE.search(message):
             return self._finalize(
                 self._handle_apply_from_abroad(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Employment gap ───────────────────────────────────────────────────
+        # "how do I explain a gap in my CV?", "I have a career gap".
+        if _EMPLOYMENT_GAP_RE.search(message):
+            return self._finalize(
+                self._handle_employment_gap(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Company research ─────────────────────────────────────────────────
+        # "how do I research a company before an interview?".
+        if _COMPANY_RESEARCH_RE.search(message):
+            return self._finalize(
+                self._handle_company_research(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Freelance / self-employment in UAE ───────────────────────────────
+        # "can I freelance in UAE?", "how do I get a freelance permit?".
+        if _FREELANCE_UAE_RE.search(message):
+            return self._finalize(
+                self._handle_freelance_uae(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── End of service gratuity ──────────────────────────────────────────
+        # "what is end of service gratuity?", "how is gratuity calculated?".
+        if _EOSB_RE.search(message):
+            return self._finalize(
+                self._handle_eosb(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Non-compete clause ───────────────────────────────────────────────
+        # "does my non-compete apply in UAE?", "is a non-compete enforceable?".
+        if _NON_COMPETE_RE.search(message):
+            return self._finalize(
+                self._handle_non_compete(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Work visa / sponsorship process ─────────────────────────────────
+        # "how do I get a UAE work visa?", "will the company sponsor my visa?".
+        if _WORK_VISA_PROCESS_RE.search(message):
+            return self._finalize(
+                self._handle_work_visa_process(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Arabic language requirement ───────────────────────────────────────
+        # "do I need to speak Arabic?", "will not speaking Arabic hurt my chances?".
+        if _ARABIC_REQUIREMENT_RE.search(message):
+            return self._finalize(
+                self._handle_arabic_requirement(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Background check / police clearance ──────────────────────────────
+        # "will they do a background check?", "do I need a police clearance?".
+        if _BACKGROUND_CHECK_RE.search(message):
+            return self._finalize(
+                self._handle_background_check(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Free zone vs mainland ─────────────────────────────────────────────
+        # "what is the difference between free zone and mainland?".
+        if _FREE_ZONE_MAINLAND_RE.search(message):
+            return self._finalize(
+                self._handle_free_zone_mainland(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -11896,6 +12098,436 @@ class RicoChatAPI:
             )
         self._append_chat(user_id, "assistant", msg)
         return {"type": "apply_from_abroad", "message": msg}
+
+    # ── Employment gap ───────────────────────────────────────────────────────────
+
+    def _handle_employment_gap(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## كيف تشرح الفجوة في مسيرتك المهنية\n\n"
+                "**الفجوات في السيرة الذاتية أمر طبيعي — ما يهم هو كيف تُقدّمها.**\n\n"
+                "**أسباب مقبولة شائعة:**\n"
+                "- رعاية أحد أفراد الأسرة أو إجازة أمومة/أبوة\n"
+                "- التطوير الذاتي أو الدراسة أو الشهادات\n"
+                "- الانتقال بين الدول أو ظروف شخصية\n"
+                "- مشاريع حرّة أو عمل تطوعي\n"
+                "- إعادة تقييم المسار المهني بشكل مقصود\n\n"
+                "**كيف تشرحها في المقابلة:**\n"
+                "كن صريحاً وموجزاً — جملة أو جملتان تكفيان:\n"
+                "*«أخذتُ [X أشهر] لـ [السبب]. خلال تلك الفترة [أضف شيئاً إيجابياً "
+                "إن أمكن: دراسة، شهادة، عمل حر]. الآن أنا مستعد تماماً للانطلاق.»*\n\n"
+                "**نصائح للسيرة الذاتية:**\n"
+                "- إذا تجاوزت الفجوة ستة أشهر، أضف سطراً يشرحها\n"
+                "- استخدم تنسيق السيرة الوظيفي (بالمهارات) بدلاً من الزمني إن ساعد ذلك\n"
+                "- أبرز ما اكتسبته خلال الفترة: مهارات، شهادات، مشاريع"
+            )
+        else:
+            msg = (
+                "## How to Explain a Gap in Your CV\n\n"
+                "**Gaps are common — what matters is how you frame them.**\n\n"
+                "**Common, accepted reasons:**\n"
+                "- Family caregiving, parental leave, or personal health\n"
+                "- Studying, upskilling, or gaining certifications\n"
+                "- Relocation or international move\n"
+                "- Freelance, consulting, or voluntary work\n"
+                "- A deliberate career pivot or sabbatical\n\n"
+                "**How to address it in an interview (1-2 sentences):**\n"
+                "*\"I took [X months] to [brief reason]. During that time I [positive activity "
+                "if applicable: studied, freelanced, cared for family]. I'm now fully ready "
+                "to return and contribute.\"*\n\n"
+                "**On your CV:**\n"
+                "- If the gap is over 6 months, add a brief line explaining it\n"
+                "- For UAE roles, framing around family, relocation, or upskilling is "
+                "well understood\n"
+                "- A skills-based (functional) CV format can help de-emphasise timeline gaps\n\n"
+                "**In UAE context:** Employers here are accustomed to gaps caused by visa "
+                "transitions, family obligations, and international moves — be matter-of-fact "
+                "and move on quickly to what you offer now."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "employment_gap", "message": msg}
+
+    # ── Company research ─────────────────────────────────────────────────────────
+
+    def _handle_company_research(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## كيف تبحث عن شركة قبل المقابلة\n\n"
+                "**ما يجب أن تعرفه قبل دخول المقابلة:**\n\n"
+                "**1. أساسيات الشركة**\n"
+                "- ما الذي تفعله الشركة ومن هم عملاؤها الرئيسيون؟\n"
+                "- من هم المنافسون؟ وما موقع الشركة في السوق؟\n"
+                "- حجم الشركة وعدد الموظفين والنطاق الجغرافي\n\n"
+                "**2. مصادر البحث**\n"
+                "- الموقع الرسمي للشركة (خاصةً صفحتَي 'من نحن' والأخبار)\n"
+                "- LinkedIn: الملف التعريفي، الموظفون، آخر المنشورات\n"
+                "- Glassdoor: آراء الموظفين وتقييمات المقابلات\n"
+                "- Google News: أحدث الأخبار والتطورات\n\n"
+                "**3. ما تستخدمه في المقابلة**\n"
+                "- اطرح سؤالاً يظهر معرفتك: «رأيتُ أنكم تتوسّعون في... كيف يؤثر ذلك على هذا الدور؟»\n"
+                "- اربط مهاراتك بأهداف الشركة المُعلنة\n"
+                "- اعرف اسم المدير المباشر إن أمكن (عبر LinkedIn)"
+            )
+        else:
+            msg = (
+                "## How to Research a Company Before an Interview\n\n"
+                "**What to know before you walk in:**\n\n"
+                "**1. Company basics**\n"
+                "- What does the company do and who are their main customers?\n"
+                "- Who are their competitors and where do they sit in the market?\n"
+                "- Size, headcount, presence in UAE/GCC\n\n"
+                "**2. Where to research**\n"
+                "- Company website — especially 'About', 'News', and recent press releases\n"
+                "- LinkedIn company page: growth trends, recent posts, employee count\n"
+                "- Glassdoor: employee reviews and interview experiences\n"
+                "- Google News: any recent coverage, deals, expansions, or problems\n"
+                "- For UAE firms: Gulf Business, Zawya, Arabian Business\n\n"
+                "**3. How to use it in the interview**\n"
+                "- Ask a specific question: *\"I saw you're expanding into Saudi — how does "
+                "that affect this role?\"*\n"
+                "- Link your skills to their stated goals or recent initiatives\n"
+                "- Know your interviewer's name and role (LinkedIn before you go in)\n\n"
+                "**Target: 30 minutes of research minimum.** Knowing the company well sets "
+                "you apart from candidates who didn't bother."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "company_research", "message": msg}
+
+    # ── Freelance / self-employment in UAE ───────────────────────────────────────
+
+    def _handle_freelance_uae(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## العمل الحر في الإمارات\n\n"
+                "**نعم، يمكنك العمل حراً في الإمارات — إليك كيفية البدء:**\n\n"
+                "**الخيار 1: تصريح العمل الحر**\n"
+                "- متاح من مناطق حرة: دبي للإعلام، twofour54 (أبوظبي)، IFZA، مناطق أخرى\n"
+                "- يتيح لك العمل مع عدة عملاء دون كفيل\n"
+                "- التكلفة: تبدأ من ~7,500 درهم سنوياً (تتفاوت حسب المنطقة)\n\n"
+                "**الخيار 2: الترخيص التجاري**\n"
+                "- مناسب إذا كنت ستؤسس نشاطاً تجارياً رسمياً\n"
+                "- يمكن تأسيسه في البر الرئيسي (DED) أو في منطقة حرة\n\n"
+                "**الخيار 3: العقود عبر شركة محلية**\n"
+                "- بعض الشركات توظّف مستقلين بعقود محددة المدة دون الحاجة لترخيصك\n\n"
+                "**ما تحتاجه للتقديم:**\n"
+                "- جواز سفر ساري المفعول\n"
+                "- صورة شخصية\n"
+                "- نموذج الطلب + الرسوم\n"
+                "- بعض المناطق تطلب خطة أعمال أو عينة من محفظتك\n\n"
+                "**نصيحة:** قارن بين المناطق الحرة قبل الاختيار — تتفاوت التكاليف والقطاعات المسموح بها."
+            )
+        else:
+            msg = (
+                "## Freelancing in the UAE\n\n"
+                "**Yes, you can freelance legally in the UAE.** Here's how:\n\n"
+                "**Option 1: Freelance Permit (most popular)**\n"
+                "- Issued by free zones: Dubai Media City, twofour54 (Abu Dhabi), "
+                "IFZA, Meydan, others\n"
+                "- Lets you work with multiple clients without a local sponsor\n"
+                "- Cost: from ~AED 7,500/year (varies by free zone)\n"
+                "- Best for: media, tech, consulting, education, creative sectors\n\n"
+                "**Option 2: Free Zone Trade Licence**\n"
+                "- For setting up a formal business entity\n"
+                "- More flexibility on business activities\n"
+                "- Higher cost but more credibility with corporate clients\n\n"
+                "**Option 3: Contract via a local company**\n"
+                "- Some UAE firms hire contractors directly on short-term contracts "
+                "without requiring your own licence\n\n"
+                "**What you typically need to apply:**\n"
+                "- Valid passport + photo\n"
+                "- Application form + fee payment\n"
+                "- Some free zones require a portfolio or business plan\n\n"
+                "**Tip:** Compare free zones before committing — costs, permitted activities, "
+                "and visa eligibility differ. Meydan and IFZA are often most affordable."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "freelance_uae", "message": msg}
+
+    # ── End of service gratuity ─────────────────────────────────────────────────
+
+    def _handle_eosb(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## مكافأة نهاية الخدمة في الإمارات\n\n"
+                "**من له الحق في مكافأة نهاية الخدمة؟**\n"
+                "كل موظف أتمّ سنة كاملة في الخدمة، سواء أُنهيت خدمته أو استقال.\n\n"
+                "**طريقة الحساب (القطاع الخاص — قانون العمل الإماراتي):**\n"
+                "- السنوات الخمس الأولى: **21 يوماً** من الراتب الأساسي عن كل سنة\n"
+                "- ما بعد خمس سنوات: **30 يوماً** من الراتب الأساسي عن كل سنة إضافية\n"
+                "- الحد الأقصى للمكافأة الإجمالية: راتب سنتين كاملتين\n\n"
+                "**مثال:**\n"
+                "راتب أساسي 10,000 درهم × 4 سنوات = 21 × 4 ÷ 30 × 10,000 = **28,000 درهم**\n\n"
+                "**ملاحظات مهمة:**\n"
+                "- تُحسب على أساس الراتب الأساسي، لا الإجمالي (لا تشمل البدلات)\n"
+                "- إذا استقلت قبل اكتمال سنة، لا توجد مكافأة\n"
+                "- موظفو الحكومة يخضعون لنظام مختلف (صندوق التقاعد)\n"
+                "- بعض الشركات توفّر صناديق ادخار واستثمار بديلة (DEWS/GPSSA)"
+            )
+        else:
+            msg = (
+                "## End of Service Gratuity (EOSB) in UAE\n\n"
+                "**Who is entitled?** Any employee who has completed at least one full year "
+                "of service — whether terminated or resigned.\n\n"
+                "**How it's calculated (private sector — UAE Labour Law):**\n"
+                "- First 5 years: **21 days** basic salary per year of service\n"
+                "- Beyond 5 years: **30 days** basic salary per additional year\n"
+                "- Maximum: 2 years' total basic salary\n\n"
+                "**Example:**\n"
+                "Basic salary AED 10,000 × 4 years = (21 × 4 ÷ 30) × 10,000 = **AED 28,000**\n\n"
+                "**Important notes:**\n"
+                "- Calculated on **basic salary only** — housing, transport, and other allowances "
+                "are excluded\n"
+                "- If you resign before completing 1 year, no gratuity is owed\n"
+                "- Government employees fall under a separate pension/retirement scheme\n"
+                "- Some companies offer savings or investment schemes (DEWS, GPSSA) in lieu of "
+                "the statutory gratuity — check your contract\n\n"
+                "**Tip:** Your employer must pay gratuity within 14 days of your last working day. "
+                "If they don't, you can file a complaint with MOHRE (Ministry of Human Resources)."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "eosb", "message": msg}
+
+    # ── Non-compete clause ───────────────────────────────────────────────────────
+
+    def _handle_non_compete(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## شرط عدم المنافسة في الإمارات\n\n"
+                "**هل يُطبَّق شرط عدم المنافسة في الإمارات؟**\n"
+                "نعم، لكن بقيود واضحة. وفقاً لقانون العمل الإماراتي (المادة 10)، "
+                "يمكن للشركات إدراج شروط عدم منافسة في العقود، شريطة أن تكون:\n\n"
+                "**شروط الصحة:**\n"
+                "- **محدودة زمنياً** — لا تتجاوز عامين في الغالب\n"
+                "- **محدودة جغرافياً** — منطقة أو دولة بعينها، لا العالم أجمع\n"
+                "- **محدودة بنوع النشاط** — نفس الصناعة أو الدور الوظيفي تحديداً\n\n"
+                "**ماذا يعني هذا عملياً؟**\n"
+                "- لا يستطيع صاحب العمل منعك من العمل تماماً\n"
+                "- تُطبّق المحاكم فقط الشروط المعقولة والمتناسبة\n"
+                "- غالباً ما تكون شروط عامة جداً (مثل 'أي منافس في العالم') غير قابلة للتطبيق\n\n"
+                "**نصيحة:**\n"
+                "راجع العقد بعناية. إذا كانت الشركة الجديدة في قطاع مختلف أو دور مختلف، "
+                "فالشرط على الأرجح لن يسري. استشر محامياً قبل القبول إذا كان الشرط قاسياً."
+            )
+        else:
+            msg = (
+                "## Non-Compete Clauses in UAE\n\n"
+                "**Are non-competes enforceable in UAE?** Yes — but with clear limits. "
+                "Under UAE Labour Law (Article 10), employers can include non-compete "
+                "clauses, provided they are:\n\n"
+                "**For a clause to be enforceable it must be:**\n"
+                "- **Time-limited** — typically no more than 2 years\n"
+                "- **Geographically limited** — a specific region or country, not the entire world\n"
+                "- **Activity-specific** — same industry or role, not 'any work whatsoever'\n\n"
+                "**In practice:**\n"
+                "- Courts will only enforce clauses that are reasonable and proportionate\n"
+                "- Overly broad clauses (e.g., 'any competitor globally for 5 years') are "
+                "routinely struck down\n"
+                "- If your new role is in a different sector or function, the clause "
+                "likely won't apply\n\n"
+                "**Practical steps:**\n"
+                "1. Read your contract carefully — what sector, role, geography, and timeframe?\n"
+                "2. If the new job is clearly different, the risk is low\n"
+                "3. If there's overlap, seek legal advice before accepting — UAE employment "
+                "lawyers often offer a short consultation for a fixed fee\n"
+                "4. Negotiating a waiver from your old employer is also an option"
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "non_compete", "message": msg}
+
+    # ── Work visa / sponsorship process ─────────────────────────────────────────
+
+    def _handle_work_visa_process(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## كيف تحصل على تأشيرة عمل في الإمارات\n\n"
+                "**في معظم الحالات، الشركة هي من تُكفّلك.** إليك كيف يسير الأمر:\n\n"
+                "**الخطوات الأساسية (كفالة صاحب العمل):**\n"
+                "1. **عرض العمل والعقد** — تُصدر الشركة عرضاً رسمياً وتبدأ إجراءات التأشيرة\n"
+                "2. **الإشعار المبدئي** — يتيح لك دخول الإمارات (فترة محدودة) لإتمام الإجراءات\n"
+                "3. **الفحص الطبي** — فحص إلزامي عبر مراكز معتمدة من MOHRE\n"
+                "4. **إصدار الإقامة** — تأشيرة إقامة تصدر بعد الفحص واستيفاء المتطلبات\n"
+                "5. **بطاقة الهوية** — تُصدر من دائرة الهجرة وشؤون الأجانب (ICA)\n\n"
+                "**المدة المعتادة:** 3–6 أسابيع من تاريخ القبول\n\n"
+                "**ما يتحمّله صاحب العمل عادةً:**\n"
+                "- رسوم التأشيرة والكفالة\n"
+                "- تكاليف الفحص الطبي\n"
+                "- نفقات السفر الأولى (حسب العقد)\n\n"
+                "**ملاحظة:** تحقّق دائماً من أن العقد يتضمن نص الكفالة والتأمين الطبي."
+            )
+        else:
+            msg = (
+                "## How UAE Work Visa Sponsorship Works\n\n"
+                "**In most cases, your employer sponsors your visa.** Here's the typical process:\n\n"
+                "**Step-by-step (employer-sponsored):**\n"
+                "1. **Job offer accepted** — employer initiates the visa application with MOHRE\n"
+                "2. **Entry permit** — allows you to enter the UAE to complete the process "
+                "(usually 60 days)\n"
+                "3. **Medical test** — mandatory health check at an approved UAE center\n"
+                "4. **Residence visa stamped** — issued in your passport after medical clearance\n"
+                "5. **Emirates ID** — applied for through ICA; required for banking, phone, etc.\n\n"
+                "**Typical timeline:** 3–6 weeks from offer acceptance to residence visa\n\n"
+                "**What the employer normally covers:**\n"
+                "- Visa and sponsorship fees\n"
+                "- Medical test costs\n"
+                "- Initial flight (check your offer letter)\n\n"
+                "**What to confirm in your offer:**\n"
+                "- Visa sponsorship explicitly stated\n"
+                "- Health insurance included (mandatory in Dubai and Abu Dhabi)\n"
+                "- Who pays for your family's visas if you're relocating with dependants\n\n"
+                "**Note:** Free zone employees get their visa through the free zone authority, "
+                "not MOHRE — the process is similar but faster in many cases."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "work_visa_process", "message": msg}
+
+    # ── Arabic language requirement ──────────────────────────────────────────────
+
+    def _handle_arabic_requirement(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## هل تحتاج إلى تعلم العربية للعمل في الإمارات؟\n\n"
+                "**الإجابة القصيرة: لا، في معظم القطاعات.**\n\n"
+                "الإمارات بيئة عمل متعددة اللغات. الإنجليزية هي لغة العمل الرئيسية في:\n"
+                "- الشركات الدولية والمتعددة الجنسيات\n"
+                "- قطاعي التكنولوجيا والمال والبنوك\n"
+                "- الضيافة والسياحة\n"
+                "- الرعاية الصحية والهندسة والبناء\n\n"
+                "**متى تُفيد العربية؟**\n"
+                "- الجهات الحكومية والشبه الحكومية\n"
+                "- التسويق الموجّه للسوق المحلي والخليجي\n"
+                "- بعض أدوار خدمة العملاء\n"
+                "- الأدوار القانونية التي تتعامل مع وثائق محلية\n\n"
+                "**الخلاصة:** إجادة الإنجليزية كافية في معظم الأحيان. "
+                "إضافة العربية ولو على مستوى تحادثي تمنحك ميزة تنافسية في بعض القطاعات، "
+                "لكنها نادراً ما تكون شرطاً أساسياً لوظائف متخصصة."
+            )
+        else:
+            msg = (
+                "## Do You Need to Speak Arabic to Work in UAE?\n\n"
+                "**Short answer: No — not for most roles.**\n\n"
+                "The UAE is a multilingual work environment. English is the dominant "
+                "business language across:\n"
+                "- Multinational and international companies\n"
+                "- Finance, banking, and tech sectors\n"
+                "- Hospitality, tourism, and retail\n"
+                "- Healthcare, engineering, and construction\n\n"
+                "**When Arabic genuinely helps:**\n"
+                "- Government and semi-government entities (ADNOC, RTA, etc.)\n"
+                "- Marketing roles targeting local/GCC audiences\n"
+                "- Some customer-facing positions in retail and services\n"
+                "- Legal roles involving Arabic-language contracts or court filings\n\n"
+                "**The bottom line:**\n"
+                "Fluent English is sufficient for the vast majority of professional roles. "
+                "Adding conversational Arabic (even basic greetings) is a plus that shows "
+                "cultural respect — but for most specialist positions, your skills and "
+                "experience matter far more than language."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "arabic_requirement", "message": msg}
+
+    # ── Background check / police clearance ─────────────────────────────────────
+
+    def _handle_background_check(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## فحص الخلفية وشهادة حسن السيرة في الإمارات\n\n"
+                "**ما الذي يتحقق منه أصحاب العمل؟**\n"
+                "- **التحقق من السيرة الذاتية:** التحقق من المسمى الوظيفي والتواريخ ومكان العمل\n"
+                "- **التحقق من المؤهلات:** التحقق من الشهادات والشهادات المهنية\n"
+                "- **المراجع المهنية:** التواصل مع أصحاب العمل السابقين\n\n"
+                "**شهادة حسن السيرة والسلوك:**\n"
+                "مطلوبة في بعض القطاعات (الحكومي، الصحة، التعليم، المال).\n"
+                "- يمكن الحصول عليها من بلدك الأصلي (مختومة ومصدّقة)\n"
+                "- أو من الشرطة الإماراتية إذا كنت مقيماً في الدولة\n\n"
+                "**نصائح مهمة:**\n"
+                "- تأكد من أن ما في سيرتك الذاتية متطابق تماماً مع الحقيقة\n"
+                "- كن صادقاً مع صاحب العمل إذا كان هناك تاريخ مهني يحتاج توضيحاً\n"
+                "- فحص الخلفية عادةً يُجرى بعد تقديم العرض وقبيل التعيين الرسمي"
+            )
+        else:
+            msg = (
+                "## Background Checks & Police Clearance in UAE\n\n"
+                "**What employers typically check:**\n"
+                "- **CV verification:** Job titles, dates, and employer names\n"
+                "- **Qualification verification:** Degree and certification authenticity\n"
+                "- **Reference checks:** Calls or emails to previous employers\n"
+                "- **Criminal record:** Varies by role and sector\n\n"
+                "**Police clearance / Good Conduct Certificate:**\n"
+                "Required in certain sectors — government, healthcare, education, finance, "
+                "and roles involving security clearance.\n\n"
+                "- **If you're overseas:** Obtain from your home country's police authority "
+                "(must be apostilled/attested)\n"
+                "- **If you're in UAE already:** Apply via the UAE Police or ICP portal\n\n"
+                "**Practical tips:**\n"
+                "- Ensure your CV is 100% accurate — discrepancies are a red flag\n"
+                "- Background checks typically happen *after* the offer is made, "
+                "before your official start date\n"
+                "- Inform your employer proactively if there's anything they might find — "
+                "honesty is far better than a surprise during screening\n"
+                "- For senior or regulated roles, expect a more thorough process "
+                "(financial checks, LinkedIn verification, etc.)"
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "background_check", "message": msg}
+
+    # ── Free zone vs mainland ────────────────────────────────────────────────────
+
+    def _handle_free_zone_mainland(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "## الفرق بين العمل في المنطقة الحرة والبر الرئيسي في الإمارات\n\n"
+                "**المنطقة الحرة (Free Zone)**\n"
+                "- شركات تعمل داخل مناطق اقتصادية خاصة (DIFC، دبي للإعلام، ADGM...)\n"
+                "- التأشيرة والكفالة تصدر عبر سلطة المنطقة الحرة\n"
+                "- القوانين قد تختلف قليلاً (خاصةً في DIFC وADGM)\n"
+                "- عادةً لا يُسمح للموظف بالعمل خارج حدود المنطقة إلا بتصاريح\n"
+                "- أجور تنافسية وبيئة عمل دولية\n\n"
+                "**البر الرئيسي (Mainland)**\n"
+                "- شركات مسجّلة في دائرة التنمية الاقتصادية (DED)\n"
+                "- الكفالة عبر وزارة الموارد البشرية (MOHRE)\n"
+                "- قانون العمل الإماراتي يُطبَّق بالكامل\n"
+                "- حرية العمل في أي مكان في الدولة\n"
+                "- بعض القطاعات (الحكومي، البنية التحتية) تتطلب تسجيل البر الرئيسي\n\n"
+                "**كموظف، ماذا يعني ذلك لك؟**\n"
+                "- حقوقك العمالية (المكافأة، الإجازة، الإشعار) محمية في الحالتين\n"
+                "- الفرق الجوهري: جهة إصدار التأشيرة والكفالة\n"
+                "- إذا أردت تغيير وظيفتك، تأكد من أن نقل الكفالة ممكن"
+            )
+        else:
+            msg = (
+                "## Free Zone vs Mainland Employment in UAE\n\n"
+                "| | **Free Zone** | **Mainland** |\n"
+                "|---|---|---|\n"
+                "| **Registered with** | Free zone authority (e.g. DIFC, DMCC, IFZA) | DED / MOHRE |\n"
+                "| **Visa sponsor** | Free zone authority | Employer via MOHRE |\n"
+                "| **Labour law** | Mostly same; DIFC/ADGM have own courts | UAE Labour Law |\n"
+                "| **Work location** | Typically within free zone only | Anywhere in UAE |\n"
+                "| **Client contracts** | May need agent to work with mainland firms | No restriction |\n\n"
+                "**What this means for you as an employee:**\n"
+                "- Your core rights (gratuity, annual leave, notice period) are protected "
+                "under UAE Labour Law in both cases\n"
+                "- Free zone jobs are often in tech, media, finance, logistics — sectors "
+                "that cluster in specific zones\n"
+                "- DIFC and ADGM have their own courts and employment regulations — "
+                "read your contract carefully if joining these\n\n"
+                "**Key practical points:**\n"
+                "- If you want to switch jobs, check whether your visa transfer is "
+                "straightforward (free zone → mainland transfers are common)\n"
+                "- For freelancers: free zone permits are the primary route (see freelance permit)\n"
+                "- Most multinationals and banks operate on mainland; most startups and "
+                "media companies are in free zones"
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "free_zone_mainland", "message": msg}
 
     # ── Context-aware help ──────────────────────────────────────────────────────
 
