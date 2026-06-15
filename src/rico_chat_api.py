@@ -518,6 +518,123 @@ _RESULT_COUNT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Certification/qualification advice: "what certifications do I need for HSE?",
+# "required qualifications for finance jobs", "what certifications for QHSE manager?".
+_CERTIFICATION_ADVICE_RE = re.compile(
+    r"\bwhat\s+(?:certifications?|qualifications?|courses?|credentials?|licenses?|training)\s+"
+    r"(?:do\s+I\s+need|are\s+(?:needed|required|recommended)|should\s+I\s+(?:have|get|do))\b"
+    r"|\b(?:certifications?|qualifications?|credentials?)\s+(?:required|needed|for)\s+\w.{1,30}\b(?:jobs?|roles?|career)\b"
+    r"|\b(?:required|recommended)\s+(?:certifications?|qualifications?|credentials?|training)\b"
+    r"|\bwhat\s+(?:qualifies|makes)\s+(?:me|someone)\s+(?:eligible|qualified|suitable)\b"
+    r"|\b(?:شهادات|مؤهلات)\s+(?:مطلوبة|موصى\s+بها)\b",
+    re.IGNORECASE,
+)
+
+# Seniority-filtered search: "find senior HSE jobs", "entry level QHSE positions",
+# "manager-level roles", "junior safety engineer jobs", "director-level positions".
+_SENIORITY_SEARCH_RE = re.compile(
+    r"\b(?:find|show|search\s+for|look\s+for)\s+(?:me\s+)?(?:senior|junior|entry[- ]?level|mid[- ]?level|director[- ]?level|manager[- ]?level|executive[- ]?level|graduate|intern(?:ship)?)\s+.{0,30}\b(?:jobs?|roles?|positions?|vacancies)\b"
+    r"|\b(?:senior|junior|entry[- ]?level|mid[- ]?level|director[- ]?level|manager[- ]?level)\s+.{0,25}\b(?:jobs?|roles?|positions?|vacancies|opportunities?)\b"
+    r"|\b(?:jobs?|roles?|positions?)\s+(?:for\s+)?(?:graduates?|freshers?|entry[- ]?level|interns?)\b"
+    r"|\b(?:وظائف|فرص)\s+(?:للخريجين|الأولى|مبتدئ|خبراء|إدارية)\b",
+    re.IGNORECASE,
+)
+
+# Job market pulse: "how's the job market for HSE?", "are there many construction jobs?",
+# "is the UAE market good for finance?", "how competitive is HSE in UAE?".
+_MARKET_PULSE_RE = re.compile(
+    r"\bhow(?:'s|\s+is)\s+(?:the\s+)?(?:job\s+)?market\s+(?:for|in|like\s+for)\b"
+    r"|\bare\s+there\s+(?:many|enough|a\s+lot\s+of|few)\s+.{0,30}?\b(?:jobs?|roles?|positions?|vacancies|opportunities?)\b"
+    r"|\bhow\s+(?:competitive|active|good|strong|busy)\s+is\s+(?:the\s+)?(?:job\s+)?market\b"
+    r"|\b(?:job\s+)?market\s+(?:outlook|overview|status|situation|conditions?)\b"
+    r"|\b(?:is\s+(?:it\s+)?(?:easy|hard|difficult|competitive))\s+to\s+find\s+(?:a\s+)?(?:job|work)\b"
+    r"|\b(?:كيف\s+(?:هو\s+)?سوق|سوق\s+العمل)\b.{0,30}\b(?:في\s+الإمارات|الإمارات)?\b",
+    re.IGNORECASE,
+)
+
+# Notice period / availability declaration or query.
+# "my notice period is 30 days", "I'm available immediately", "I can join in 2 weeks",
+# "what is my notice period?", "update my availability to 1 month".
+_NOTICE_PERIOD_RE = re.compile(
+    r"\b(?:my\s+)?notice\s+period\s+(?:is|was|will\s+be|=)\s*.{1,30}"
+    r"|\bI(?:'m|\s+am)\s+available\s+(?:immediately|now|from|in\s+\d)"
+    r"|\bI\s+can\s+(?:join|start)\s+(?:in|within|immediately|next)\b"
+    r"|\b(?:update|set|change)\s+(?:my\s+)?(?:notice\s+period|availability)\b"
+    r"|\bwhat(?:'s|\s+is)\s+my\s+notice\s+period\b"
+    r"|\b(?:available\s+immediately|immediate\s+joiner|immediate\s+availability)\b"
+    r"|\b(?:فترة\s+الإشعار|الإتاحة)\s*(?:هي|لدي|الخاصة\s+بي)?\b",
+    re.IGNORECASE,
+)
+
+# Visa / work permit status declaration or query.
+# "I'm on a spouse visa", "I have a valid work permit", "do I need a visa?",
+# "update my visa status to employment visa", "my visa is expiring soon".
+_VISA_STATUS_RE = re.compile(
+    r"\b(?:I(?:'m|\s+am)\s+on\s+a?\s*)(?:spouse|visit|tourist|employment|golden|investor|freelance|dependent)\s+visa\b"
+    r"|\b(?:I\s+have\s+(?:a\s+)?(?:valid\s+)?)?(?:UAE\s+)?(?:work\s+permit|residence\s+visa|employment\s+visa|golden\s+visa)\b"
+    r"|\b(?:update|set|change)\s+(?:my\s+)?visa\s+(?:status|type|details?)\b"
+    r"|\bwhat(?:'s|\s+is)\s+my\s+visa\s+(?:status|type)\b"
+    r"|\bmy\s+visa\s+(?:is\s+)?(?:expir(?:ing|ed)|valid|active|cancelled)\b"
+    r"|\bdo\s+I\s+need\s+a\s+(?:work\s+)?visa\b"
+    r"|\b(?:need|require)\s+(?:visa\s+)?sponsorship\b"
+    r"|\b(?:تأشيرة|تصريح\s+عمل|إقامة)\s+(?:عمل|الزوج|الزوجة|سارية)?\b",
+    re.IGNORECASE,
+)
+
+# Salary negotiation advice — "how do I negotiate my salary?", "should I counter the offer?",
+# "is the offer too low?", "how to ask for a raise?", "tips for negotiating in UAE".
+_SALARY_NEGOTIATION_RE = re.compile(
+    r"\bhow\s+(?:do\s+I|to|should\s+I)\s+negotiate\s+(?:my\s+)?salary\b"
+    r"|\bshould\s+I\s+(?:counter|negotiate|accept|reject)\s+(?:the\s+)?offer\b"
+    r"|\b(?:the\s+)?offer\s+(?:is|seems?)\s+(?:too\s+low|below\s+market|not\s+enough|low)\b"
+    r"|\bhow\s+(?:to|do\s+I)\s+ask\s+for\s+(?:a\s+)?(?:raise|higher\s+salary|better\s+offer|salary\s+increase)\b"
+    r"|\b(?:salary\s+)?negotiation\s+(?:tips?|advice|strategy|help|tactics?)\b"
+    r"|\bwhat\s+(?:should\s+I|can\s+I)\s+(?:ask\s+for|counter(?:\s+offer)?|negotiate)\b"
+    r"|\b(?:counter[\s-]offer|counteroffer)\b"
+    r"|\b(?:نصائح\s+(?:تفاوض|الراتب)|كيف\s+أتفاوض)\b",
+    re.IGNORECASE,
+)
+
+# Interview preparation advice — "how do I prepare for an interview?",
+# "common interview questions for HSE", "what to wear to a UAE interview?".
+_INTERVIEW_PREP_RE = re.compile(
+    r"\bhow\s+(?:do\s+I|to)\s+prepare\s+(?:for\s+(?:a|an|the|my)\s+)?interview\b"
+    r"|\b(?:interview\s+(?:tips?|advice|prep(?:aration)?|questions?|help|practice))\b"
+    r"|\bcommon\s+interview\s+questions?\b"
+    r"|\bwhat\s+(?:to|should\s+I)\s+(?:say|wear|bring|expect)\s+(?:in|at|to|for)\s+.{0,15}?\binterview\b"
+    r"|\bhow\s+(?:to\s+)?(?:ace|pass|nail|impress)\s+(?:a|an|the|my)?\s*interview\b"
+    r"|\b(?:preparing|practice)\s+for\s+(?:a|an|the|my)?\s*interview\b"
+    r"|\b(?:تحضير|أسئلة|نصائح)\s+(?:المقابلة|الوظيفية|المقابلات)\b",
+    re.IGNORECASE,
+)
+
+# Job rejection / no response handling — "I got rejected", "haven't heard back",
+# "no response after interview", "what to do after rejection?".
+_REJECTION_HANDLING_RE = re.compile(
+    r"\b(?:I\s+(?:got|was|have\s+been)\s+)?rejected\b"
+    r"|\bno\s+(?:response|reply|answer|feedback)\s+(?:from|after|yet)\b"
+    r"|\bhaven(?:'t|\s+not)\s+heard\s+back\b"
+    r"|\bwhat\s+(?:to\s+do|should\s+I\s+do)\s+(?:after|when)\s+(?:(?:a\s+)?rejection|I\s+(?:get|got)\s+rejected|rejected)\b"
+    r"|\b(?:ghosted|being\s+ghosted)\b"
+    r"|\b(?:job\s+)?rejection\s+(?:tips?|advice|strategy|letter|response)\b"
+    r"|\bfail(?:ed|ing)\s+(?:the\s+)?interview\b"
+    r"|\b(?:رفض|لم\s+يردوا|لا\s+رد)\s+(?:الطلب|على\s+طلبي|من\s+الشركة)?\b",
+    re.IGNORECASE,
+)
+
+# LinkedIn / networking advice — "how to use LinkedIn for job search?",
+# "should I connect with the recruiter?", "how to message a hiring manager on LinkedIn?".
+_LINKEDIN_NETWORKING_RE = re.compile(
+    r"\b(?:LinkedIn|لينكد\s+إن)\s+(?:profile|tips?|advice|help|strategy|message|connection|post|network)\b"
+    r"|\bhow\s+(?:to\s+)?(?:use\s+LinkedIn|optimize\s+(?:my\s+)?LinkedIn|message\s+(?:a\s+)?(?:recruiter|hiring\s+manager|HR)|grow\s+(?:my\s+)?network)\b"
+    r"|\bshould\s+I\s+(?:connect|message|follow\s+up)\s+(?:with\s+)?(?:the\s+)?(?:recruiter|hiring\s+manager|company|employer)\b"
+    r"|\b(?:networking|network)\s+(?:tips?|advice|strategy|in\s+(?:UAE|Dubai|Abu\s+Dhabi))\b"
+    r"|\bhow\s+to\s+(?:reach\s+out(?:\s+to)?|approach|contact)\s+(?:a\s+)?(?:recruiter|hiring\s+manager|company)\b"
+    r"|\b(?:cold\s+message|cold\s+email|cold\s+outreach)\b"
+    r"|\b(?:التواصل|نتورك)\s+(?:المهني|في\s+الإمارات|مع\s+المسؤولين)?\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
     """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
@@ -4375,6 +4492,16 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        # ── Certification / qualification advice ──────────────────────────────
+        # Must come before industry search: "required qualifications for finance"
+        # overlaps with industry keywords but is advice, not a job search request.
+        if _CERTIFICATION_ADVICE_RE.search(message):
+            return self._finalize(
+                self._handle_certification_advice(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
         # ── Industry-based job search ─────────────────────────────────────────
         # "find jobs in oil and gas", "construction sector jobs in Dubai".
         if _INDUSTRY_SEARCH_RE.search(message):
@@ -4398,6 +4525,78 @@ class RicoChatAPI:
         if _RESULT_COUNT_RE.search(message):
             return self._finalize(
                 self._handle_result_count(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Seniority-filtered search ─────────────────────────────────────────
+        # "find senior HSE jobs", "entry level QHSE positions", "manager-level roles".
+        if _SENIORITY_SEARCH_RE.search(message):
+            return self._finalize(
+                self._handle_seniority_search(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Job market pulse ──────────────────────────────────────────────────
+        # "how's the job market for HSE?", "are there many construction jobs?".
+        if _MARKET_PULSE_RE.search(message):
+            return self._finalize(
+                self._handle_market_pulse(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Notice period / availability ──────────────────────────────────────
+        # "my notice period is 30 days", "I'm available immediately".
+        if _NOTICE_PERIOD_RE.search(message):
+            return self._finalize(
+                self._handle_notice_period(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Visa / work permit status ─────────────────────────────────────────
+        # "I'm on a spouse visa", "do I need a work permit?".
+        if _VISA_STATUS_RE.search(message):
+            return self._finalize(
+                self._handle_visa_status(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Salary negotiation advice ─────────────────────────────────────────
+        # "how do I negotiate my salary?", "should I counter the offer?".
+        if _SALARY_NEGOTIATION_RE.search(message):
+            return self._finalize(
+                self._handle_salary_negotiation(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Interview preparation advice ──────────────────────────────────────
+        # "how do I prepare for an interview?", "common HSE interview questions".
+        if _INTERVIEW_PREP_RE.search(message):
+            return self._finalize(
+                self._handle_interview_prep(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Job rejection / no-response handling ──────────────────────────────
+        # "I got rejected", "haven't heard back", "what to do after rejection?".
+        if _REJECTION_HANDLING_RE.search(message):
+            return self._finalize(
+                self._handle_rejection(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── LinkedIn / networking advice ──────────────────────────────────────
+        # "how to use LinkedIn?", "should I message the recruiter?".
+        if _LINKEDIN_NETWORKING_RE.search(message):
+            return self._finalize(
+                self._handle_linkedin_networking(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -8770,6 +8969,833 @@ class RicoChatAPI:
             "count": count,
             "role": role,
             "message": msg,
+        }
+
+    # ── Certification / qualification advice ────────────────────────────────────
+
+    def _handle_certification_advice(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Return UAE-context certification advice for a role or industry.
+
+        Detects: "what certifications do I need for HSE?", "required qualifications
+        for finance jobs", "what certifications for project management?".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        # Certification knowledge base (UAE-relevant, ordered by sector)
+        _CERT_DB: dict[str, dict[str, Any]] = {
+            "hse":          {"label": "HSE / QHSE / EHS",
+                             "certs": ["NEBOSH IGC", "IOSH Managing Safely", "ISO 45001 Lead Auditor",
+                                       "ISO 14001 Lead Auditor", "NEBOSH Diploma", "OHSAS 18001"],
+                             "note": "NEBOSH IGC is the gold standard for UAE HSE roles."},
+            "qhse":         {"label": "QHSE",
+                             "certs": ["NEBOSH IGC", "IOSH", "ISO 9001 Lead Auditor",
+                                       "ISO 45001 Lead Auditor", "ISO 14001 Lead Auditor"],
+                             "note": "ISO 9001 is essential for Quality-focused QHSE roles."},
+            "finance":      {"label": "Finance / Banking",
+                             "certs": ["CFA", "CMA", "CPA", "ACCA", "MBA (Finance)", "CIMA", "CFP"],
+                             "note": "CFA is highly valued in UAE investment and banking roles."},
+            "project management": {"label": "Project Management",
+                                   "certs": ["PMP", "PRINCE2", "PMI-ACP", "PMI-RMP", "MSP"],
+                                   "note": "PMP is almost universally required for PM roles in UAE."},
+            "hr":           {"label": "Human Resources",
+                             "certs": ["CIPD Level 5", "SHRM-CP", "PHR", "CHRP", "GPHR"],
+                             "note": "CIPD is highly recognised by UAE multinationals."},
+            "supply chain": {"label": "Supply Chain / Logistics",
+                             "certs": ["CIPS", "APICS CSCP", "CSCMP", "Lean Six Sigma Green Belt"],
+                             "note": "CIPS is the benchmark certification for procurement in UAE."},
+            "it":           {"label": "IT / Technology",
+                             "certs": ["AWS Certified Solutions Architect", "Azure Administrator",
+                                       "CISSP", "PMP", "ITIL", "Google Cloud Professional"],
+                             "note": "Cloud certifications (AWS/Azure) are in highest demand in UAE tech."},
+            "engineering":  {"label": "Engineering",
+                             "certs": ["CEng (UK)", "PE (US)", "PMP", "Chartered Engineer UAE",
+                                       "ISO 9001 Lead Auditor"],
+                             "note": "Professional engineering registration can significantly boost offers in UAE."},
+            "real estate":  {"label": "Real Estate",
+                             "certs": ["RERA (Dubai)", "CIPS", "CPM", "CCIM"],
+                             "note": "RERA registration is mandatory for all real estate brokers in Dubai."},
+            "accounting":   {"label": "Accounting / Audit",
+                             "certs": ["CPA", "ACCA", "CMA", "CIA", "CIMA", "CA (ICAEW)"],
+                             "note": "ACCA is widely accepted across UAE Big 4 and corporates."},
+            "marketing":    {"label": "Marketing / Digital",
+                             "certs": ["Google Ads Certification", "HubSpot Marketing", "Meta Blueprint",
+                                       "CIM", "Chartered Marketer"],
+                             "note": "Digital certifications are most in-demand for UAE marketing roles."},
+            "data":         {"label": "Data Science / Analytics",
+                             "certs": ["Google Data Analytics", "AWS Data Analytics", "Tableau Desktop",
+                                       "Microsoft PL-300 (Power BI)", "Python for Data Science"],
+                             "note": "Power BI and Tableau skills are heavily sought in UAE."},
+        }
+
+        # Match role/industry from message to knowledge base
+        sector = ""
+        sector_data: dict[str, Any] = {}
+        msg_lower = message.lower()
+        for key, data in _CERT_DB.items():
+            if key in msg_lower or any(w in msg_lower for w in key.split()):
+                sector = key
+                sector_data = data
+                break
+
+        # Fallback: check profile target roles
+        if not sector_data:
+            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            for role_str in target_roles:
+                role_lower = str(role_str).lower()
+                for key, data in _CERT_DB.items():
+                    if key in role_lower or any(w in role_lower for w in key.split()):
+                        sector = key
+                        sector_data = data
+                        break
+                if sector_data:
+                    break
+
+        if not sector_data:
+            msg = (
+                "أخبرني بالقطاع أو المسمى الوظيفي الذي تريد الشهادات المناسبة له، مثل: 'ما الشهادات المطلوبة لوظائف HSE؟'"
+                if arabic else
+                "Which role or industry are you asking about? For example: "
+                "'what certifications do I need for HSE roles?' or 'qualifications for finance jobs?'"
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "message": msg}
+
+        label = sector_data["label"]
+        certs = sector_data["certs"]
+        note  = sector_data.get("note", "")
+
+        if arabic:
+            lines = [f"**الشهادات الموصى بها لوظائف {label} في الإمارات:**\n"]
+            for c in certs:
+                lines.append(f"- {c}")
+            if note:
+                lines.append(f"\n💡 {note}")
+        else:
+            lines = [f"**Recommended certifications for {label} roles in the UAE:**\n"]
+            for i, c in enumerate(certs, 1):
+                lines.append(f"{i}. {c}")
+            if note:
+                lines.append(f"\n💡 **Tip:** {note}")
+            lines.append(
+                "\nSay **'find jobs in " + (sector or label) + "'** to search live openings, "
+                "or **'update my certifications'** to save these to your profile."
+            )
+
+        msg_text = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg_text)
+        return {
+            "type": "certification_advice",
+            "sector": sector,
+            "certifications": certs,
+            "message": msg_text,
+        }
+
+    # ── Seniority-filtered search ───────────────────────────────────────────────
+
+    def _handle_seniority_search(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Search for jobs filtered by seniority level.
+
+        Detects: "find senior HSE jobs", "entry level QHSE positions",
+        "manager-level roles", "director positions in Dubai".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        # Detect seniority level
+        _SENIORITY_MAP = [
+            (r"director[- ]?level|director", "Director"),
+            (r"executive[- ]?level|vp|vice\s+president|c[- ]?level", "Executive"),
+            (r"manager[- ]?level|senior\s+manager", "Senior Manager"),
+            (r"senior|sr\.?", "Senior"),
+            (r"mid[- ]?level|middle\s+level|experienced", ""),
+            (r"junior|jr\.?", "Junior"),
+            (r"entry[- ]?level|graduate|fresher|fresh\s+graduate|intern(?:ship)?", "Entry Level"),
+        ]
+
+        seniority_label = ""
+        seniority_prefix = ""
+        for pattern, prefix in _SENIORITY_MAP:
+            if _re.search(pattern, message, _re.IGNORECASE):
+                seniority_label = prefix or "Mid-level"
+                seniority_prefix = prefix
+                break
+
+        # Extract role — everything between the seniority keyword and "jobs/roles"
+        role = ""
+        _role_m = _re.search(
+            r"(?:senior|junior|entry[- ]?level|mid[- ]?level|director|manager[- ]?level|graduate|intern)\s+"
+            r"(.{2,35}?)\s+(?:jobs?|roles?|positions?|vacancies|opportunities?)\b",
+            message, _re.IGNORECASE,
+        )
+        if _role_m:
+            role = _role_m.group(1).strip()
+        # Fallback: after "find [seniority]" before "jobs"
+        if not role:
+            _role_m2 = _re.search(
+                r"\b(?:find|show|search\s+for|look\s+for)\s+(?:me\s+)?(?:senior|junior|entry[- ]?level|mid[- ]?level|director)\s+(.{3,30}?)\s+(?:jobs?|roles?|in\b|$)",
+                message, _re.IGNORECASE,
+            )
+            if _role_m2:
+                role = _role_m2.group(1).strip()
+        if not role:
+            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            role = target_roles[0] if target_roles else ""
+
+        # Location hint
+        _loc_m = _re.search(r"\bin\s+(Dubai|Abu\s+Dhabi|Sharjah|Ajman|UAE)\b", message, _re.IGNORECASE)
+        location = _loc_m.group(1).strip() if _loc_m else ""
+
+        if not role:
+            msg = (
+                "أخبرني بالمسمى الوظيفي مع المستوى، مثل: 'ابحث عن وظائف HSE للمبتدئين'."
+                if arabic else
+                "Which role are you looking for? E.g. 'find senior HSE jobs' or 'entry level QHSE positions'."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "message": msg}
+
+        search_query = f"{seniority_prefix} {role}".strip() if seniority_prefix else role
+        fetch = self._search_jsearch_meta(search_query, location)
+        matches = fetch.items or []
+
+        self._store_search_matches_context(user_id, matches[:10])
+        top = matches[:5]
+
+        if not top:
+            msg = (
+                f"لم أجد وظائف {seniority_label} لـ {role} في الإمارات."
+                if arabic else
+                f"No {seniority_label} {role} jobs found in the UAE right now."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "no_results", "message": msg}
+
+        loc_label = f" in {location}" if location else " in the UAE"
+        header = (
+            f"وجدت **{len(top)}** وظيفة {'من مستوى ' + seniority_label if seniority_label else ''} لـ **{role}**{' في ' + location if location else ' في الإمارات'}:"
+            if arabic else
+            f"Found **{len(top)} {seniority_label} {role} role{'s' if len(top) != 1 else ''}**{loc_label}:"
+        )
+        lines = [header, ""]
+        for i, job in enumerate(top, 1):
+            title   = job.get("title") or job.get("job_title") or "Role"
+            company = job.get("company") or job.get("employer_name") or ""
+            loc     = job.get("location") or job.get("job_city") or "UAE"
+            url     = job.get("apply_url") or job.get("job_apply_link") or ""
+            line = f"{i}. **{title}**" + (f" at {company}" if company else "") + f" — {loc}"
+            if url:
+                line += f" ([Apply]({url}))"
+            lines.append(line)
+
+        msg = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "job_matches",
+            "seniority": seniority_label,
+            "role": role,
+            "jobs": top,
+            "total_found": len(matches),
+            "message": msg,
+        }
+
+    # ── Job market pulse ────────────────────────────────────────────────────────
+
+    def _handle_market_pulse(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Return a market insight by running a live JSearch count + commentary.
+
+        Detects: "how's the job market for HSE in UAE?", "are there many construction
+        jobs?", "how competitive is finance in Dubai?".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        # Extract the role/industry from the message
+        role = ""
+        _role_m = _re.search(
+            r"(?:market\s+for|jobs?\s+(?:in|for)|for\s+(?:an?\s+)?|competitive\s+(?:for|in))\s+"
+            r"([A-Za-z][A-Za-z\s]{2,30}?)(?:\s+(?:in\s+(?:the\s+)?UAE|jobs?|roles?|in\s+Dubai|in\s+Abu\s+Dhabi)|\??$)",
+            message, _re.IGNORECASE,
+        )
+        if _role_m:
+            role = _role_m.group(1).strip().rstrip("? ,.")
+        if not role:
+            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            role = target_roles[0] if target_roles else ""
+
+        if not role:
+            msg = (
+                "أخبرني بالمسمى الوظيفي أو القطاع الذي تريد معرفة أوضاع سوق العمل فيه."
+                if arabic else
+                "Which role or sector are you asking about? E.g. 'how's the market for HSE in UAE?'"
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "message": msg}
+
+        fetch = self._search_jsearch_meta(role)
+        count = len(fetch.items or [])
+
+        # Market commentary based on result count
+        if count >= 15:
+            sentiment = "very active" if not arabic else "نشط جداً"
+            advice    = "Opportunities are plentiful — now is a great time to apply."
+            advice_ar = "الفرص وفيرة — الوقت مناسب جداً للتقديم."
+        elif count >= 8:
+            sentiment = "moderately active" if not arabic else "نشط بشكل معتدل"
+            advice    = "There are solid opportunities — a tailored CV and cover letter will help you stand out."
+            advice_ar = "هناك فرص جيدة — تأكد من تخصيص سيرتك الذاتية."
+        elif count >= 3:
+            sentiment = "competitive" if not arabic else "تنافسي"
+            advice    = "The market is tight — focus on networking and tailoring each application carefully."
+            advice_ar = "السوق تنافسي — ركز على التواصل المهني وتخصيص كل طلب."
+        else:
+            sentiment = "limited right now" if not arabic else "محدود حالياً"
+            advice    = "Few openings at the moment — consider broadening your search to related roles or nearby cities."
+            advice_ar = "فرص محدودة حالياً — فكر في توسيع بحثك لأدوار مشابهة أو مدن مجاورة."
+
+        if arabic:
+            msg = (
+                f"**سوق العمل لـ {role} في الإمارات — {sentiment}**\n\n"
+                f"وجدت **{count} وظيفة** حالية في لقطة الوقت الفعلي.\n\n"
+                f"💡 {advice_ar}"
+            )
+        else:
+            msg = (
+                f"**Job market for {role} in the UAE — {sentiment}**\n\n"
+                f"Live snapshot: **{count} active opening{'s' if count != 1 else ''}** found right now.\n\n"
+                f"💡 {advice}\n\n"
+                f"Say **'find {role} jobs'** to see the full list."
+            )
+
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "market_pulse",
+            "role": role,
+            "active_count": count,
+            "sentiment": sentiment,
+            "message": msg,
+        }
+
+    def _handle_notice_period(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Handle notice period declarations and queries.
+
+        Detects: "my notice period is 30 days", "I'm available immediately",
+        "what is my notice period?", "update my notice period to 1 month".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        # Is this a query (read) or a declaration (write)?
+        is_query = bool(_re.search(
+            r"\bwhat(?:'s|\s+is)\s+my\s+notice\s+period\b", message, _re.IGNORECASE
+        ))
+
+        if is_query:
+            current = self._profile_value(profile, "notice_period") or ""
+            if current:
+                msg = (
+                    f"فترة الإشعار المسجلة لديك هي: **{current}**."
+                    if arabic else
+                    f"Your notice period is set to: **{current}**."
+                )
+            else:
+                msg = (
+                    "لم تُحدّد فترة إشعار بعد. أخبرني بها، مثلاً: 'فترة إشعاري شهر واحد'."
+                    if arabic else
+                    "You haven't set a notice period yet. Tell me — e.g. 'my notice period is 30 days'."
+                )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "notice_period_readback", "notice_period": current, "message": msg}
+
+        # Parse the declared value
+        _IMMEDIATELY = _re.search(
+            r"\b(?:immediately|now|right\s+away|متاح\s+الآن|فوراً)\b", message, _re.IGNORECASE
+        )
+        if _IMMEDIATELY or _re.search(r"\bavailable\s+immediately\b|\bimmediate\s+joiner\b", message, _re.IGNORECASE):
+            value = "Immediate"
+        else:
+            _val_m = _re.search(
+                r"(?:notice\s+period\s+(?:is|was|=)|join\s+in|start\s+in|available\s+(?:in|from|within))\s*"
+                r"(\d+\s*(?:day|week|month|year)s?|immediately|one|two|three|four)\b",
+                message, _re.IGNORECASE,
+            )
+            value = _val_m.group(1).strip().title() if _val_m else ""
+
+        if value:
+            upsert_profile(user_id=user_id, updates={"notice_period": value})
+            msg = (
+                f"تم تحديث فترة الإشعار إلى: **{value}**. سيظهر ذلك في طلباتك القادمة."
+                if arabic else
+                f"Notice period updated to **{value}**. This will be included in your applications."
+            )
+        else:
+            msg = (
+                "أخبرني بفترة الإشعار، مثلاً: '30 يوماً' أو 'شهر واحد' أو 'متاح فوراً'."
+                if arabic else
+                "What's your notice period? E.g. '30 days', '1 month', or 'immediately available'."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "notice_period_update", "notice_period": value or None, "message": msg}
+
+    def _handle_visa_status(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Handle visa/work permit status declarations and queries.
+
+        Detects: "I'm on a spouse visa", "I have a work permit",
+        "do I need a visa?", "update my visa status".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        # General "do I need a visa?" info request
+        is_info_request = bool(_re.search(
+            r"\bdo\s+I\s+need\s+a\s+(?:work\s+)?visa\b", message, _re.IGNORECASE
+        ))
+        is_query = bool(_re.search(
+            r"\bwhat(?:'s|\s+is)\s+my\s+visa\s+(?:status|type)\b", message, _re.IGNORECASE
+        ))
+
+        if is_info_request:
+            msg = (
+                "**UAE Work Visa Information:**\n\n"
+                "To work in the UAE you typically need one of:\n"
+                "• **Employment Visa** — sponsored by your employer (most common)\n"
+                "• **Freelance Permit** — from TECOM, twofour54, or emirate-level free zones\n"
+                "• **Golden Visa** — 5 or 10-year self-sponsored for skilled professionals\n"
+                "• **Spouse/Dependent Visa** — allows work with a separate employment NOC\n\n"
+                "Most UAE employers sponsor the employment visa after a job offer is accepted. "
+                "Tell me your current visa status so I can tailor your job search — "
+                "e.g. 'I'm on a spouse visa' or 'I need visa sponsorship'."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "visa_info", "message": msg}
+
+        if is_query:
+            current = self._profile_value(profile, "visa_status") or ""
+            if current:
+                msg = (
+                    f"حالة تأشيرتك المسجلة: **{current}**."
+                    if arabic else
+                    f"Your visa status on file: **{current}**."
+                )
+            else:
+                msg = (
+                    "لم تُحدّد حالة تأشيرتك بعد. أخبرني بها، مثلاً: 'لديّ تأشيرة زوج/زوجة'."
+                    if arabic else
+                    "You haven't set your visa status yet. Tell me — e.g. 'I'm on a spouse visa' or 'I need sponsorship'."
+                )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "visa_readback", "visa_status": current, "message": msg}
+
+        # Parse declared visa type from message
+        _VISA_MAP = [
+            (r"golden\s+visa",               "Golden Visa"),
+            (r"investor\s+visa",             "Investor Visa"),
+            (r"freelance\s+(?:visa|permit)", "Freelance Permit"),
+            (r"employment\s+visa|work\s+permit|work\s+visa", "Employment Visa"),
+            (r"spouse\s+visa|dependent\s+visa", "Spouse/Dependent Visa"),
+            (r"visit\s+visa|tourist\s+visa", "Visit Visa"),
+            (r"residence\s+visa",            "Residence Visa"),
+            (r"need\s+(?:visa\s+)?sponsorship|require\s+sponsorship", "Requires Sponsorship"),
+        ]
+        visa_value = ""
+        for pattern, label in _VISA_MAP:
+            if _re.search(pattern, message, _re.IGNORECASE):
+                visa_value = label
+                break
+
+        if visa_value:
+            upsert_profile(user_id=user_id, updates={"visa_status": visa_value})
+            extra = ""
+            if visa_value == "Spouse/Dependent Visa":
+                extra = " Note: most UAE employers can issue a work permit alongside your dependent visa — I'll filter for roles that offer sponsorship."
+            elif visa_value == "Visit Visa":
+                extra = " Visit visas don't permit employment — you'll need an employer to sponsor an employment visa before starting work."
+            elif visa_value == "Employment Visa":
+                extra = " Great — you're already work-authorised, which expands your options significantly."
+            msg = (
+                f"تم تسجيل حالة التأشيرة: **{visa_value}**.{extra}"
+                if arabic else
+                f"Visa status saved as **{visa_value}**.{extra}"
+            )
+        else:
+            msg = (
+                "أخبرني بحالة تأشيرتك، مثلاً: 'تأشيرة زوج/زوجة'، 'تأشيرة عمل'، أو 'أحتاج كفالة'."
+                if arabic else
+                "What's your visa status? E.g. 'I'm on a spouse visa', 'employment visa', "
+                "or 'I need sponsorship'."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {"type": "visa_status_update", "visa_status": visa_value or None, "message": msg}
+
+    def _handle_salary_negotiation(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Return UAE-context salary negotiation advice.
+
+        Detects: "how do I negotiate my salary?", "should I counter the offer?",
+        "the offer is too low", "tips for salary negotiation in UAE".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        # Is this about countering a specific offer?
+        is_counter = bool(_re.search(
+            r"\bcounter(?:[- ]offer)?|should\s+I\s+(?:accept|reject|counter)\s+(?:the\s+)?offer\b"
+            r"|\bthe\s+offer\s+(?:is|seems?)\s+(?:too\s+low|low|below|not\s+enough)\b",
+            message, _re.IGNORECASE,
+        ))
+
+        salary_on_file = self._profile_value(profile, "salary_expectation_aed")
+        salary_str = f"AED {salary_on_file:,}" if isinstance(salary_on_file, (int, float)) and salary_on_file else str(salary_on_file) if salary_on_file else ""
+
+        if is_counter and salary_str:
+            counter_advice = (
+                f"Based on your target salary of **{salary_str}/month**, here's my advice:\n\n"
+                "**Countering a UAE job offer:**\n\n"
+                "1. **Benchmark first** — confirm the offer is genuinely below market using HRMS UAE, "
+                "Bayt Salary Insights, or GulfTalent before countering.\n"
+                "2. **Counter in writing** — email is standard in UAE; keeps a record for both sides.\n"
+                "3. **Anchor high but realistic** — counter 10–15% above the offer, not more. "
+                "UAE employers expect some negotiation, especially at mid-senior levels.\n"
+                "4. **Package over base** — if they won't move on salary, negotiate housing allowance, "
+                "transport, medical, or annual ticket (common UAE components).\n"
+                "5. **One counter is the norm** — UAE hiring culture is less multi-round than Western markets. "
+                "Make your counter count the first time.\n\n"
+                "Say **'what's my target salary?'** to review your saved expectation."
+            )
+        else:
+            counter_advice = (
+                "**UAE Salary Negotiation Tips:**\n\n"
+                "1. **Know the market** — research on Bayt, GulfTalent, and HRMS UAE before any conversation. "
+                "UAE salaries vary significantly by nationality, company type, and emirate.\n"
+                "2. **Don't reveal your current salary first** — UAE interviews often ask; it's legally "
+                "permissible to say 'I'd prefer to discuss based on the role's budget'.\n"
+                "3. **Total package thinking** — UAE offers include housing, transport, medical, and annual "
+                "tickets. A lower base with strong allowances can exceed a high-base offer.\n"
+                "4. **Timing** — raise salary only after a verbal offer. Bringing it up earlier signals "
+                "you're money-first, which can put off UAE hiring managers.\n"
+                "5. **Be direct but respectful** — UAE business culture values politeness. "
+                "Frame it as 'Based on my research and experience, I was expecting closer to X' "
+                "rather than 'your offer is too low'.\n"
+                + (f"\n💡 Your saved salary expectation is **{salary_str}/month**." if salary_str else
+                   "\n💡 Set your salary expectation by saying 'my salary expectation is X AED'.")
+            )
+
+        if arabic:
+            counter_advice = (
+                "**نصائح التفاوض على الراتب في الإمارات:**\n\n"
+                "• ابحث عن رواتب السوق في Bayt وGulfTalent قبل أي نقاش.\n"
+                "• لا تذكر راتبك الحالي أولاً — يمكنك القول 'أفضل النقاش بناءً على ميزانية الوظيفة'.\n"
+                "• فكر بمجموع الحزمة: الأساسي + السكن + المواصلات + التأمين + التذكرة السنوية.\n"
+                "• اطرح مقابلك كتابياً عبر البريد الإلكتروني، وبطريقة مهنية ومحترمة.\n"
+                "• في الإمارات عادةً جولة تفاوض واحدة — اجعلها قوية."
+            )
+
+        self._append_chat(user_id, "assistant", counter_advice)
+        return {
+            "type": "negotiation_advice",
+            "is_counter_scenario": is_counter,
+            "salary_on_file": salary_str or None,
+            "message": counter_advice,
+        }
+
+    def _handle_interview_prep(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Return UAE-context interview preparation advice, personalised by role.
+
+        Detects: "how do I prepare for an interview?", "common interview questions",
+        "interview tips for HSE", "what to wear to a UAE interview?".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        role = target_roles[0] if target_roles else ""
+
+        # Try to extract a role from the message itself
+        _role_m = _re.search(
+            r"interview\s+(?:tips?|questions?|prep(?:aration)?|advice|help)\s+for\s+([A-Za-z][A-Za-z\s]{2,30}?)(?:\s+(?:role|job|position|in\b)|\??$)",
+            message, _re.IGNORECASE,
+        )
+        if _role_m:
+            role = _role_m.group(1).strip()
+
+        role_line = f" for **{role}** roles" if role else ""
+
+        is_attire = bool(_re.search(r"\bwear|attire|dress\s+code|what\s+to\s+bring\b", message, _re.IGNORECASE))
+        is_questions = bool(_re.search(r"\bquestions?\b", message, _re.IGNORECASE))
+
+        if is_attire:
+            advice = (
+                "**UAE Interview Dress Code:**\n\n"
+                "• **Business formal** is the default for first interviews in UAE corporates and government.\n"
+                "• Men: suit and tie (dark colours preferred) or smart blazer + trousers.\n"
+                "• Women: modest professional attire — covered shoulders, knee-length or longer. "
+                "This is especially important in government, banking, and oil & gas sectors.\n"
+                "• Tech startups and creative agencies accept smart-casual, but it's always safer to overdress.\n"
+                "• Bring: printed CV copies (2-3), certifications folder, notebook, pen.\n"
+                "• Arrive 10–15 minutes early — UAE traffic is unpredictable and punctuality signals respect."
+            )
+        elif is_questions:
+            questions_block = (
+                f"\n\n**Common{role_line} Interview Questions in UAE:**\n\n"
+                "1. Tell me about yourself. *(Keep it professional, 2-3 minutes, UAE-relevant)*\n"
+                "2. Why do you want to work in the UAE / with this company?\n"
+                "3. What is your current / expected salary? *(Research market rates first)*\n"
+                "4. What is your notice period?\n"
+                "5. Describe a challenge you overcame at work.\n"
+                "6. Where do you see yourself in 5 years?\n"
+                "7. Why are you leaving your current job?\n"
+                + (f"8. Walk me through a specific {role} project or achievement.\n" if role else "")
+                + "\n💡 **Tip:** In the UAE, interviewers often ask about visa status and notice period upfront — have both answers ready."
+            )
+            advice = (
+                f"**Interview Preparation Guide{role_line}:**\n\n"
+                "• Research the company's projects, clients, and recent news — especially in UAE context.\n"
+                "• Prepare 2-3 STAR-format examples (Situation, Task, Action, Result).\n"
+                "• Know your numbers: salary expectation, years of experience, and notice period."
+                + questions_block
+            )
+        else:
+            advice = (
+                f"**Interview Preparation Tips{role_line} — UAE Context:**\n\n"
+                "**Before the interview:**\n"
+                "• Research the company's UAE projects and presence — LinkedIn, their website, news.\n"
+                "• Prepare 2-3 strong STAR stories (Situation → Task → Action → Result).\n"
+                "• Know your salary expectation and be ready to state it confidently.\n"
+                "• Confirm the interview format: in-person, Teams/Zoom, or panel.\n\n"
+                "**During the interview:**\n"
+                "• Greet formally — handshakes are standard in professional UAE settings.\n"
+                "• Let the interviewer set the pace; don't rush.\n"
+                "• Be ready for 'Why UAE?' — interviewers want to know you're committed to staying.\n"
+                "• Avoid bad-mouthing previous employers — UAE is a small professional community.\n\n"
+                "**After the interview:**\n"
+                "• Send a thank-you email within 24 hours — not expected everywhere, but always noticed.\n"
+                "• Follow up after 5–7 business days if you haven't heard.\n\n"
+                + (f"Say **'common {role} interview questions'** for role-specific questions." if role
+                   else "Say **'common interview questions'** for the most asked questions.")
+            )
+
+        if arabic:
+            advice = (
+                f"**نصائح المقابلة الوظيفية{' لـ ' + role if role else ''} في الإمارات:**\n\n"
+                "• ابحث عن الشركة ومشاريعها في الإمارات قبل المقابلة.\n"
+                "• جهّز 2-3 أمثلة بأسلوب STAR (الموقف، المهمة، الإجراء، النتيجة).\n"
+                "• اعرف توقعاتك الراتبية وفترة إشعارك.\n"
+                "• الزي الرسمي هو المعيار في معظم بيئات العمل الإماراتية.\n"
+                "• أرسل رسالة شكر بعد 24 ساعة من المقابلة."
+            )
+
+        self._append_chat(user_id, "assistant", advice)
+        return {
+            "type": "interview_prep",
+            "role": role or None,
+            "is_attire_query": is_attire,
+            "is_questions_query": is_questions,
+            "message": advice,
+        }
+
+    def _handle_rejection(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Return UAE-context advice on handling job rejection or no response.
+
+        Detects: "I got rejected", "haven't heard back", "no response after interview",
+        "what to do after rejection?", "ghosted by employer".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        is_no_response = bool(_re.search(
+            r"\b(?:no\s+(?:response|reply)|haven(?:'t|\s+not)\s+heard\s+back|ghosted)\b",
+            message, _re.IGNORECASE,
+        ))
+        is_post_interview = bool(_re.search(
+            r"\bafter\s+(?:the\s+)?interview\b|\bfail(?:ed|ing)\s+(?:the\s+)?interview\b",
+            message, _re.IGNORECASE,
+        ))
+
+        if is_no_response:
+            advice = (
+                "**No Response? Here's What to Do:**\n\n"
+                "**When to follow up:**\n"
+                "• After applying: wait 5–7 business days, then follow up once.\n"
+                "• After an interview: wait 3–5 business days, then send a polite follow-up.\n"
+                "• UAE companies, especially government-linked ones, can take 2–4 weeks to respond.\n\n"
+                "**How to follow up:**\n"
+                "Send a short, professional email:\n"
+                "_'Dear [Name], I wanted to follow up on my application / interview for [Role] on [Date]. "
+                "I remain very interested in the position and would welcome any update. "
+                "Thank you for your time.'_\n\n"
+                "**If still no response after 2 follow-ups:**\n"
+                "• Mark the role as 'inactive' in your tracker and move on.\n"
+                "• In the UAE, silence often means the role is filled or on hold — it's rarely personal.\n"
+                "• Keep your pipeline active — one company's silence shouldn't pause your search.\n\n"
+                "Say **'find more jobs'** to continue your search."
+            )
+        elif is_post_interview:
+            advice = (
+                "**Rejected After an Interview — Next Steps:**\n\n"
+                "1. **Request feedback** — email the interviewer: 'Could you share any feedback that might help me improve?' "
+                "Not all UAE companies respond, but many will if asked politely.\n"
+                "2. **Debrief yourself** — write down what went well and what you'd change. "
+                "Common UAE interview pitfalls: vague salary answers, unclear notice period, weak 'Why UAE?' response.\n"
+                "3. **Don't burn the bridge** — reply to the rejection graciously. UAE is a small market; "
+                "the same hiring manager may have a different role in 6 months.\n"
+                "4. **Look for patterns** — if you're failing multiple interviews at the same stage, "
+                "consider a mock interview or revisiting your STAR stories.\n"
+                "5. **Keep going** — the UAE job market is active; setbacks are part of the process.\n\n"
+                "Say **'find more jobs'** or **'interview tips'** to keep moving."
+            )
+        else:
+            advice = (
+                "**Handling Job Rejection in the UAE:**\n\n"
+                "**Immediate response:**\n"
+                "• Reply professionally to the rejection email — thank them and express interest in future roles. "
+                "UAE is a tight-knit professional market.\n"
+                "• Ask for feedback within 24-48 hours of rejection.\n\n"
+                "**Reflection:**\n"
+                "• Was it a CV issue, interview performance, or just a stronger candidate?\n"
+                "• If CV: make sure your skills and certifications match the role's requirements.\n"
+                "• If interview: practice STAR answers and research UAE-specific expectations.\n\n"
+                "**Action:**\n"
+                "• Don't pause your search — apply to 3 more roles this week.\n"
+                "• Rejection is feedback about fit, not about your worth.\n\n"
+                "Say **'find more jobs'** to continue your search or **'interview tips'** for prep advice."
+            )
+
+        if arabic:
+            advice = (
+                "**كيف تتعامل مع رفض طلب التوظيف في الإمارات:**\n\n"
+                "• رد بشكل مهني على بريد الرفض — الإمارات سوق صغير والعلاقات مهمة.\n"
+                "• اطلب ملاحظات تطويرية خلال 24-48 ساعة.\n"
+                "• لا توقف بحثك — تقدم لوظائف أخرى هذا الأسبوع.\n"
+                "• إذا لم يكن هناك رد: انتظر 5-7 أيام ثم أرسل متابعة مهنية واحدة.\n"
+                "• الرفض لا يعني نقصاً فيك — إنه مجرد عدم توافق في هذه اللحظة."
+            )
+
+        self._append_chat(user_id, "assistant", advice)
+        return {
+            "type": "rejection_advice",
+            "is_no_response": is_no_response,
+            "is_post_interview": is_post_interview,
+            "message": advice,
+        }
+
+    def _handle_linkedin_networking(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Return UAE-context LinkedIn and professional networking advice.
+
+        Detects: "how to use LinkedIn?", "should I connect with the recruiter?",
+        "networking tips in UAE", "how to message a hiring manager?".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        is_message_recruiter = bool(_re.search(
+            r"\b(?:message|contact|reach\s+out\s+to|approach)\s+(?:a\s+)?(?:recruiter|hiring\s+manager|HR|employer)\b"
+            r"|\bshould\s+I\s+(?:connect|message|follow\s+up)\s+with\b",
+            message, _re.IGNORECASE,
+        ))
+        is_cold_outreach = bool(_re.search(
+            r"\bcold\s+(?:message|email|outreach)\b", message, _re.IGNORECASE
+        ))
+        is_profile_optimize = bool(_re.search(
+            r"\b(?:optimize|improve|update|fix)\s+(?:my\s+)?(?:LinkedIn\s+)?profile\b",
+            message, _re.IGNORECASE,
+        ))
+
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        role = target_roles[0] if target_roles else ""
+
+        if is_message_recruiter or is_cold_outreach:
+            advice = (
+                "**How to Message a Recruiter or Hiring Manager in the UAE:**\n\n"
+                "**What works in UAE LinkedIn outreach:**\n"
+                "• Keep it short — 3-4 sentences max.\n"
+                "• Mention the specific role or company.\n"
+                "• Lead with what you bring, not what you want.\n\n"
+                "**Template:**\n"
+                "_'Hi [Name], I came across [Company]'s opening for [Role] and wanted to reach out directly. "
+                "I have [X years] of experience in [relevant skill], including [brief achievement]. "
+                "I'd welcome the chance to connect — would you be open to a brief call?'_\n\n"
+                "**UAE-specific tips:**\n"
+                "• Dubai and Abu Dhabi recruiters are highly active on LinkedIn — direct messages work.\n"
+                "• Always personalise — copy-paste messages are immediately spotted and ignored.\n"
+                "• If they don't respond in 7 days, one polite follow-up is acceptable.\n"
+                "• Arabic greetings (السلام عليكم / مرحباً) can build rapport with UAE national recruiters."
+            )
+        elif is_profile_optimize:
+            advice = (
+                "**LinkedIn Profile Optimisation for UAE Job Search:**\n\n"
+                "1. **Headline** — include your role, seniority, and UAE focus: "
+                f"e.g. _'{'Senior ' + role if role else 'HSE Manager'} | UAE | NEBOSH IGC | ISO 45001'_\n"
+                "2. **About section** — 3-5 sentences: who you are, what you do, and your UAE value.\n"
+                "3. **Open to Work** — turn it on; UAE recruiters filter by this daily.\n"
+                "4. **Location** — set to UAE or your target emirate (Dubai / Abu Dhabi).\n"
+                "5. **Certifications** — list every UAE-relevant certification prominently.\n"
+                "6. **Connections** — connect with UAE industry groups and recruiters in your sector.\n"
+                "7. **Activity** — comment on industry posts; UAE recruiters do look at profile activity.\n\n"
+                "Say **'what certifications do I need?'** to get sector-specific cert recommendations."
+            )
+        else:
+            advice = (
+                "**LinkedIn & Networking Tips for UAE Job Search:**\n\n"
+                "**LinkedIn quick wins:**\n"
+                "• Enable 'Open to Work' (visible to recruiters only, not your employer if needed).\n"
+                "• Set your location to UAE or a specific emirate.\n"
+                "• Connect with UAE-based recruiters in your industry — they're very active.\n"
+                "• Post or engage with industry content weekly — visibility matters in the UAE market.\n\n"
+                "**In-person networking:**\n"
+                "• Attend UAE industry events: ADIPEC (oil & gas), GITEX (tech), Big 5 (construction).\n"
+                "• Join professional bodies: IOSH UAE Chapter, PMI UAE, CIPS MENA.\n"
+                "• Many UAE roles are filled through referrals — your network is your pipeline.\n\n"
+                "**Cold outreach:**\n"
+                "• Personalised LinkedIn messages to recruiters and hiring managers work well in the UAE.\n"
+                "• Keep messages short, specific, and value-focused.\n\n"
+                + (f"Say **'how to message a recruiter'** for a ready-to-use {role} outreach template." if role
+                   else "Say **'how to message a recruiter'** for a ready-to-use outreach template.")
+            )
+
+        if arabic:
+            advice = (
+                "**نصائح LinkedIn والتواصل المهني في الإمارات:**\n\n"
+                "• فعّل خاصية 'Open to Work' — المجنّدون في الإمارات يبحثون عنها يومياً.\n"
+                "• اكتب عنواناً واضحاً: المسمى + الخبرة + الشهادات.\n"
+                "• تواصل مع مجنّدين إماراتيين في مجالك بشكل مباشر.\n"
+                "• رسائل LinkedIn القصيرة والمخصصة تعمل بشكل جيد في الإمارات.\n"
+                "• احضر فعاليات مثل ADIPEC وGITEX وBig 5 للتواصل المباشر.\n"
+                "• كثير من الوظائف في الإمارات تُملأ بالتوصيات — شبكتك هي خط أنابيبك."
+            )
+
+        self._append_chat(user_id, "assistant", advice)
+        return {
+            "type": "linkedin_networking",
+            "is_message_recruiter": is_message_recruiter,
+            "is_cold_outreach": is_cold_outreach,
+            "is_profile_optimize": is_profile_optimize,
+            "message": advice,
         }
 
     # ── Context-aware help ──────────────────────────────────────────────────────
