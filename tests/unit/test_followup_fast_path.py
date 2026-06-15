@@ -2701,3 +2701,241 @@ class TestAppPipelineSummary:
         result = self._run_with_apps(monkeypatch, "application summary", _CVProfile(), apps=apps)
         assert isinstance(result.get("message"), str)
         assert len(result["message"]) > 10
+
+
+# ── _PROFILE_IMPROVE_RE ───────────────────────────────────────────────────────
+
+class TestProfileImprove:
+    """Regex gate for profile improvement queries (routes to existing completeness handler)."""
+
+    @pytest.mark.parametrize("phrase", [
+        "how can I improve my profile?",
+        "how to improve my CV",
+        "what's missing from my profile?",
+        "what is missing from my resume?",
+        "how complete is my profile?",
+        "profile completeness",
+        "CV strength",
+        "profile gaps",
+        "what should I add to my profile?",
+        "improve my CV",
+        "optimize my profile",
+        "strengthen my resume",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _PROFILE_IMPROVE_RE
+        assert _PROFILE_IMPROVE_RE.search(phrase), (
+            f"_PROFILE_IMPROVE_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        "find HSE jobs in Dubai",
+        "my notice period is 30 days",
+        "how do I negotiate my salary?",
+        "interview tips",
+        "CV format tips",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _PROFILE_IMPROVE_RE
+        assert not _PROFILE_IMPROVE_RE.search(phrase), (
+            f"_PROFILE_IMPROVE_RE should NOT match: {phrase!r}"
+        )
+
+    def test_routes_to_profile_completeness(self, monkeypatch):
+        _, result = _run(monkeypatch, "how can I improve my profile?", _CVProfile())
+        assert result["type"] == "profile_completeness"
+
+    def test_empty_profile_routes_to_profile_completeness(self, monkeypatch):
+        _, result = _run(monkeypatch, "what's missing from my profile?", _EmptyProfile())
+        assert result["type"] == "profile_completeness"
+
+
+# ── _COMPANY_TYPE_SEARCH_RE ───────────────────────────────────────────────────
+
+class TestCompanyTypeSearch:
+    """Regex gate and handler for company-type filtered job search."""
+
+    @pytest.mark.parametrize("phrase", [
+        "find government jobs in Dubai",
+        "find government jobs in UAE",
+        "find me government roles",
+        "public sector jobs in Abu Dhabi",
+        "find startup jobs in Dubai",
+        "find startup roles",
+        "find multinational jobs",
+        "find MNC jobs in UAE",
+        "semi-government jobs in UAE",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _COMPANY_TYPE_SEARCH_RE
+        assert _COMPANY_TYPE_SEARCH_RE.search(phrase), (
+            f"_COMPANY_TYPE_SEARCH_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        "find HSE jobs in Dubai",
+        "find senior HSE jobs",
+        "how can I improve my profile?",
+        "I need a job urgently",
+        "government is a good employer",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _COMPANY_TYPE_SEARCH_RE
+        assert not _COMPANY_TYPE_SEARCH_RE.search(phrase), (
+            f"_COMPANY_TYPE_SEARCH_RE should NOT match: {phrase!r}"
+        )
+
+    def _run_with_jsearch(self, monkeypatch, message, profile, items=None):
+        import src.rico_chat_api as mod
+        from src.rico_chat_api import RicoChatAPI
+        from unittest.mock import MagicMock
+
+        fake_result = type("R", (), {"items": items or [], "error": None})()
+
+        mock_route = MagicMock()
+        mock_route.tool_name = None; mock_route.entities = {}
+        mock_route.tool_args = {}; mock_route.confirmation_prompt = None
+        mock_route.source = "keyword"
+
+        monkeypatch.setattr(mod, "get_profile",    lambda uid: profile)
+        monkeypatch.setattr(mod, "_route",         lambda *a, **kw: mock_route)
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile)
+        monkeypatch.setattr(mod, "hf_ok",          lambda: False)
+
+        api = RicoChatAPI()
+        api._search_jsearch_meta = lambda q, location="": fake_result
+        api._get_recent_context  = lambda uid: {}
+        api._append_chat         = MagicMock()
+
+        return api._handle_active_user("test-user", message)
+
+    def test_government_search_returns_job_matches(self, monkeypatch):
+        result = self._run_with_jsearch(
+            monkeypatch, "find government jobs in UAE", _CVProfile(),
+            items=[{"job_title": "HSE Officer", "employer_name": "Dubai Municipality"}],
+        )
+        assert result["type"] == "job_matches"
+        assert result.get("company_type") == "Government"
+
+    def test_startup_search_detected(self, monkeypatch):
+        result = self._run_with_jsearch(
+            monkeypatch, "find startup jobs in Dubai", _CVProfile(),
+            items=[{"job_title": "HSE Manager", "employer_name": "TechCorp"}],
+        )
+        assert result["type"] == "job_matches"
+        assert result.get("company_type") == "Startup"
+
+    def test_no_results_returns_no_results_type(self, monkeypatch):
+        result = self._run_with_jsearch(
+            monkeypatch, "find government jobs in UAE", _CVProfile()
+        )
+        assert result["type"] == "no_results"
+
+    def test_message_field_present(self, monkeypatch):
+        result = self._run_with_jsearch(
+            monkeypatch, "find government jobs in UAE", _CVProfile(),
+            items=[{"job_title": "Officer", "employer_name": "Ministry"}],
+        )
+        assert isinstance(result.get("message"), str)
+        assert len(result["message"]) > 10
+
+
+# ── _URGENCY_SEARCH_RE ────────────────────────────────────────────────────────
+
+class TestUrgencySearch:
+    """Regex gate and handler for urgency-framed job search."""
+
+    @pytest.mark.parametrize("phrase", [
+        "I need a job urgently",
+        "I need a job fast",
+        "I need a job asap",
+        "I need a job immediately",
+        "I need to find a job in 30 days",
+        "I need to find a job in 2 weeks",
+        "I want to get a job quickly",
+        "help me find a job fast",
+        "help me find a job urgently",
+        "find urgent job openings",
+        "find immediate openings",
+    ])
+    def test_regex_matches(self, phrase):
+        from src.rico_chat_api import _URGENCY_SEARCH_RE
+        assert _URGENCY_SEARCH_RE.search(phrase), (
+            f"_URGENCY_SEARCH_RE should match: {phrase!r}"
+        )
+
+    @pytest.mark.parametrize("phrase", [
+        "find HSE jobs in Dubai",
+        "find government jobs",
+        "how can I improve my profile?",
+        "interview tips",
+        "I need more information about the role",
+        "I need to update my notice period",
+    ])
+    def test_regex_does_not_match(self, phrase):
+        from src.rico_chat_api import _URGENCY_SEARCH_RE
+        assert not _URGENCY_SEARCH_RE.search(phrase), (
+            f"_URGENCY_SEARCH_RE should NOT match: {phrase!r}"
+        )
+
+    def _run_with_jsearch(self, monkeypatch, message, profile, items=None):
+        import src.rico_chat_api as mod
+        from src.rico_chat_api import RicoChatAPI
+        from unittest.mock import MagicMock
+
+        fake_result = type("R", (), {"items": items or [], "error": None})()
+
+        mock_route = MagicMock()
+        mock_route.tool_name = None; mock_route.entities = {}
+        mock_route.tool_args = {}; mock_route.confirmation_prompt = None
+        mock_route.source = "keyword"
+
+        monkeypatch.setattr(mod, "get_profile",    lambda uid: profile)
+        monkeypatch.setattr(mod, "_route",         lambda *a, **kw: mock_route)
+        monkeypatch.setattr(mod, "upsert_profile", lambda user_id=None, updates=None, **kw: profile)
+        monkeypatch.setattr(mod, "hf_ok",          lambda: False)
+
+        api = RicoChatAPI()
+        api._search_jsearch_meta = lambda q, location="": fake_result
+        api._get_recent_context  = lambda uid: {}
+        api._append_chat         = MagicMock()
+
+        return api._handle_active_user("test-user", message)
+
+    def test_routes_to_urgency_search(self, monkeypatch):
+        result = self._run_with_jsearch(monkeypatch, "I need a job urgently", _CVProfile())
+        assert result["type"] == "urgency_search"
+
+    def test_timeline_extracted(self, monkeypatch):
+        result = self._run_with_jsearch(
+            monkeypatch, "I need to find a job in 30 days", _CVProfile()
+        )
+        assert result["type"] == "urgency_search"
+        assert result.get("timeline") == "30 days"
+
+    def test_no_timeline_returns_none(self, monkeypatch):
+        result = self._run_with_jsearch(
+            monkeypatch, "I need a job urgently", _CVProfile()
+        )
+        assert result.get("timeline") is None
+
+    def test_role_from_profile_included(self, monkeypatch):
+        result = self._run_with_jsearch(monkeypatch, "I need a job fast", _CVProfile())
+        assert result.get("role") == "Senior HSE Manager"
+
+    def test_live_jobs_included_when_found(self, monkeypatch):
+        result = self._run_with_jsearch(
+            monkeypatch, "I need a job urgently", _CVProfile(),
+            items=[{"job_title": "HSE Manager", "employer_name": "ADNOC"}],
+        )
+        assert isinstance(result.get("live_jobs"), list)
+        assert len(result["live_jobs"]) >= 1
+
+    def test_message_field_present(self, monkeypatch):
+        result = self._run_with_jsearch(monkeypatch, "help me find a job fast", _CVProfile())
+        assert isinstance(result.get("message"), str)
+        assert len(result["message"]) > 50
+
+    def test_empty_profile_still_works(self, monkeypatch):
+        result = self._run_with_jsearch(monkeypatch, "I need a job urgently", _EmptyProfile())
+        assert result["type"] == "urgency_search"

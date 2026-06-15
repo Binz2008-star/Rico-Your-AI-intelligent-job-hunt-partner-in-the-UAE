@@ -672,8 +672,45 @@ _APP_PIPELINE_SUMMARY_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Profile improvement / completeness query — "how can I improve my profile?",
+# "what's missing from my profile?", "how complete is my profile?".
+_PROFILE_IMPROVE_RE = re.compile(
+    r"\bhow\s+(?:can\s+I\s+|to\s+)?improve\s+(?:my\s+)?(?:profile|CV|resume)\b"
+    r"|\bwhat(?:'s|\s+is)\s+missing\s+(?:from\s+)?(?:my\s+)?(?:profile|CV|resume)\b"
+    r"|\bhow\s+(?:complete|strong|good)\s+is\s+(?:my\s+)?(?:profile|CV|resume)\b"
+    r"|\b(?:profile|CV|resume)\s+(?:completeness|strength|score|review|gaps?|improvements?)\b"
+    r"|\bwhat\s+(?:should\s+I\s+add|do\s+I\s+need)\s+(?:to\s+)?(?:my\s+)?profile\b"
+    r"|\b(?:improve|strengthen|optimise|optimize)\s+(?:my\s+)?(?:profile|CV|resume)\b"
+    r"|\b(?:ملف|سيرة)\s+(?:مكتمل|ناقص|قوي|يحتاج)\b",
+    re.IGNORECASE,
+)
+
+# Company-type / sector-type search — "find government jobs", "find startup jobs",
+# "multinational companies in UAE", "find ADNOC-type oil & gas companies".
+_COMPANY_TYPE_SEARCH_RE = re.compile(
+    r"\bfind\s+(?:me\s+)?(?:government|public\s+sector|federal|ministry|municipality|semi[- ]?government)\s+(?:jobs?|roles?|positions?|vacancies)\b"
+    r"|\bfind\s+(?:me\s+)?(?:startup|start[- ]?up|tech\s+startup|scale[- ]?up)\s+(?:jobs?|roles?|positions?)\b"
+    r"|\bfind\s+(?:me\s+)?(?:multinational|MNC|Fortune\s+500|international\s+company|global\s+company)\s+(?:jobs?|roles?|positions?)\b"
+    r"|\bfind\s+(?:me\s+)?(?:SME|small\s+(?:and|&)\s+medium|family\s+business)\s+(?:jobs?|roles?|positions?)\b"
+    r"|\b(?:government|public\s+sector|semi[- ]?government)\s+(?:jobs?|vacancies|roles?)\s+(?:in\s+)?(?:UAE|Dubai|Abu\s+Dhabi)?\b"
+    r"|\b(?:وظائف\s+(?:حكومية|حكومة|القطاع\s+العام|الشركات\s+الكبرى))\b",
+    re.IGNORECASE,
+)
+
+# Urgency / timeline job search — "I need a job urgently", "find jobs I can start immediately",
+# "I need to find a job in 30 days", "help me find a job fast".
+_URGENCY_SEARCH_RE = re.compile(
+    r"\bI\s+(?:need|must\s+find|have\s+to\s+find)\s+a\s+job\s+(?:urgently|fast|quickly|asap|now|immediately|soon)\b"
+    r"|\bfind\s+(?:me\s+)?(?:urgent|immediate)\s+(?:jobs?|roles?|openings?)\b"
+    r"|\b(?:urgent(?:ly)?|immediate)\s+(?:job\s+(?:search|hunt|openings?)|employment)\b"
+    r"|\bI\s+(?:need|want)\s+to\s+(?:find|get)\s+a\s+job\s+(?:in\s+\d+\s+(?:days?|weeks?|months?)|fast|quickly|asap|urgently|as\s+soon\s+as\s+possible)\b"
+    r"|\bhelp\s+me\s+(?:find|get)\s+a\s+job\s+(?:fast|quickly|urgently|asap)\b"
+    r"|\b(?:أحتاج\s+وظيفة|ابحث\s+عن\s+وظيفة)\s+(?:عاجل|بسرعة|الآن|فوراً)\b",
+    re.IGNORECASE,
+)
+
 def generate_error_ref() -> str:
-    """Generate a unique error reference ID for tracking and success lookup."""
+    """Generate a unique error reference ID for tracking and support lookup."""
     return f"ERR-{uuid.uuid4().hex[:8].upper()}"
 
 ONBOARDING_FIELD_LABELS = {
@@ -4662,6 +4699,33 @@ class RicoChatAPI:
         if _COVER_LETTER_TIPS_RE.search(message):
             return self._finalize(
                 self._handle_cover_letter_tips(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Profile improvement / completeness ────────────────────────────────
+        # "how can I improve my profile?", "what's missing from my CV?".
+        if _PROFILE_IMPROVE_RE.search(message):
+            return self._finalize(
+                self._handle_profile_completeness(user_id, profile),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Company-type / sector-type job search ─────────────────────────────
+        # "find government jobs", "find startup jobs in UAE".
+        if _COMPANY_TYPE_SEARCH_RE.search(message):
+            return self._finalize(
+                self._handle_company_type_search(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Urgency-framed job search ─────────────────────────────────────────
+        # "I need a job urgently", "help me find a job fast".
+        if _URGENCY_SEARCH_RE.search(message):
+            return self._finalize(
+                self._handle_urgency_search(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -10104,6 +10168,189 @@ class RicoChatAPI:
             "offered": offered,
             "rejected": rejected,
             "response_rate": response_rate,
+            "message": msg,
+        }
+
+    def _handle_company_type_search(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Search for jobs filtered by company type / ownership sector.
+
+        Detects: "find government jobs", "find startup jobs in UAE",
+        "find multinational company jobs", "public sector roles in Dubai".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        # Detect company type
+        _TYPE_MAP = [
+            (r"government|public\s+sector|federal|ministry|municipality|وظائف\s+حكومية", "government", "Government"),
+            (r"semi[- ]?government|quasi[- ]?government", "semi-government", "Semi-Government"),
+            (r"startup|start[- ]?up|scale[- ]?up", "startup", "Startup"),
+            (r"multinational|MNC|Fortune\s+500|international\s+company|global\s+company", "multinational", "Multinational"),
+            (r"SME|small\s+(?:and|&)\s+medium|family\s+business", "SME", "SME / Family Business"),
+        ]
+
+        company_type_label = ""
+        search_qualifier = ""
+        for pattern, qualifier, label in _TYPE_MAP:
+            if _re.search(pattern, message, _re.IGNORECASE):
+                company_type_label = label
+                search_qualifier = qualifier
+                break
+
+        if not company_type_label:
+            company_type_label = "Government"
+            search_qualifier = "government"
+
+        # Extract role from profile or message
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        role = target_roles[0] if target_roles else ""
+
+        _role_m = _re.search(
+            r"(?:government|startup|multinational|public\s+sector|semi[- ]?government|MNC)\s+"
+            r"(.{2,30}?)\s+(?:jobs?|roles?|positions?|vacancies)\b",
+            message, _re.IGNORECASE,
+        )
+        if _role_m:
+            role = _role_m.group(1).strip()
+
+        _loc_m = _re.search(r"\bin\s+(Dubai|Abu\s+Dhabi|Sharjah|Ajman|UAE)\b", message, _re.IGNORECASE)
+        location = _loc_m.group(1).strip() if _loc_m else "UAE"
+
+        search_query = f"{search_qualifier} {role}".strip() if role else f"{search_qualifier} jobs"
+        fetch = self._search_jsearch_meta(search_query, location if location != "UAE" else "")
+        matches = fetch.items or []
+        self._store_search_matches_context(user_id, matches[:10])
+        top = matches[:5]
+
+        if not top:
+            msg = (
+                f"لم أجد وظائف في **{company_type_label}** لـ {role or 'هذا المجال'} حالياً في الإمارات."
+                if arabic else
+                f"No **{company_type_label}** {role} jobs found in the UAE right now. "
+                f"Try broadening the role or check back later."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "no_results", "company_type": company_type_label, "message": msg}
+
+        loc_label = f" in {location}" if location and location != "UAE" else " in the UAE"
+        header = (
+            f"Found **{len(top)} {company_type_label}** {role} role{'s' if len(top) != 1 else ''}{loc_label}:"
+        )
+        lines = [header, ""]
+        for i, job in enumerate(top, 1):
+            title   = job.get("title") or job.get("job_title") or "Role"
+            company = job.get("company") or job.get("employer_name") or ""
+            loc     = job.get("location") or job.get("job_city") or location
+            url     = job.get("apply_url") or job.get("job_apply_link") or ""
+            line = f"{i}. **{title}**" + (f" at {company}" if company else "") + f" — {loc}"
+            if url:
+                line += f" ([Apply]({url}))"
+            lines.append(line)
+
+        msg = "\n".join(lines)
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "job_matches",
+            "company_type": company_type_label,
+            "role": role or None,
+            "jobs": top,
+            "total_found": len(matches),
+            "message": msg,
+        }
+
+    def _handle_urgency_search(
+        self, user_id: str, profile: Any, message: str
+    ) -> dict[str, Any]:
+        """Handle urgency-framed job search with motivational + action response.
+
+        Detects: "I need a job urgently", "help me find a job fast",
+        "I need to find a job in 30 days", "find urgent openings".
+        """
+        import re as _re
+
+        arabic = self._is_arabic_text(message)
+
+        # Extract a timeline if mentioned
+        _timeline_m = _re.search(
+            r"in\s+(\d+)\s+(days?|weeks?|months?)", message, _re.IGNORECASE
+        )
+        timeline = f"{_timeline_m.group(1)} {_timeline_m.group(2)}" if _timeline_m else ""
+
+        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        role = target_roles[0] if target_roles else ""
+        has_cv = bool(self._profile_value(profile, "cv_status"))
+
+        # Run a live search immediately to show results + action plan
+        search_query = f"{role} urgent immediate" if role else "immediate start jobs UAE"
+        fetch = self._search_jsearch_meta(role or "jobs", "")
+        matches = fetch.items or []
+        self._store_search_matches_context(user_id, matches[:10])
+        top = matches[:3]
+
+        timeline_note = f" in the next **{timeline}**" if timeline else ""
+        urgency_header = (
+            f"أفهم الإلحاح — إليك خطة عمل فورية{'  للعثور على وظيفة' + (' في ' + timeline if timeline else '')}:"
+            if arabic else
+            f"Let's move fast{timeline_note}. Here's your immediate action plan:"
+        )
+
+        action_plan = [
+            urgency_header, "",
+            "**Right now (today):**",
+        ]
+        if not has_cv:
+            action_plan.append("1. Upload your CV — say **'upload my CV'** to get started. Without it, applications are slower.")
+        else:
+            action_plan.append(f"1. {'Your CV is uploaded ✓' if has_cv else 'Upload your CV first.'}")
+
+        action_plan += [
+            f"2. {'Apply to the live openings below immediately.' if top else 'I ran a search — no exact matches right now, but try a broader role.'}",
+            "3. Message 5-10 recruiters on LinkedIn today with a personalised note.",
+            "4. Update your LinkedIn to 'Open to Work' if not already done.",
+            "",
+            "**This week:**",
+            "• Apply to at least 10 roles per day — volume matters in urgent searches.",
+            "• Follow up on any existing applications that are 5+ days old.",
+            "• Register on Bayt, Naukrigulf, LinkedIn, and GulfTalent if not already.",
+            "",
+        ]
+
+        if top:
+            action_plan.append(f"**Live openings{' for ' + role if role else ''} right now:**")
+            action_plan.append("")
+            for i, job in enumerate(top, 1):
+                title   = job.get("title") or job.get("job_title") or "Role"
+                company = job.get("company") or job.get("employer_name") or ""
+                url     = job.get("apply_url") or job.get("job_apply_link") or ""
+                line = f"{i}. **{title}**" + (f" at {company}" if company else "")
+                if url:
+                    line += f" ([Apply now]({url}))"
+                action_plan.append(line)
+
+        if arabic:
+            action_plan = [
+                urgency_header, "",
+                "**اليوم:**",
+                "• ارفع سيرتك الذاتية إن لم تكن قد فعلت ذلك.",
+                "• تقدم لـ 5-10 وظائف فوراً.",
+                "• راسل 5 مجنّدين على LinkedIn برسالة مخصصة.",
+                "• فعّل 'Open to Work' على LinkedIn.",
+                "",
+                "**هذا الأسبوع:**",
+                "• تقدم لـ 10 وظائف يومياً على الأقل.",
+                "• سجّل في Bayt وNaukrigulf وGulfTalent.",
+            ]
+
+        msg = "\n".join(action_plan)
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "urgency_search",
+            "timeline": timeline or None,
+            "role": role or None,
+            "live_jobs": top,
             "message": msg,
         }
 
