@@ -6532,8 +6532,48 @@ class RicoChatAPI:
             context = self._build_router_context(user_id, profile)
             routed = _route(message, user_id=user_id, context=context)
             prefs = routed.tool_args.get("preferences", {})
-            if prefs:
-                upsert_profile(user_id=user_id, updates=prefs)
+
+            # Trust invariant: never claim a write happened when none did. A bare
+            # "update my profile" / "edit my profile" / "تحديث ملفي" carries no
+            # concrete field, so there is nothing to persist — offer the editable
+            # fields and route to /profile instead of faking success.
+            if not prefs:
+                arabic = self._is_arabic_text(message)
+                if arabic:
+                    _edit_msg = (
+                        "بالتأكيد — لم أغيّر أي شيء بعد. ما الذي تريد تحديثه؟\n\n"
+                        "يمكنك تعديل: المسمى الوظيفي المستهدف، المدن المفضّلة، سنوات الخبرة، "
+                        "المهارات، المجال، توقّع الراتب، حالة التأشيرة، اسم تيليجرام.\n\n"
+                        "أخبرني بالتغيير (مثل: «اجعل المسمى المستهدف مدير بيئة» أو «حدّد راتبي بـ 18000»)، "
+                        "أو افتح صفحة **الملف الشخصي** لتعديل كل الحقول."
+                    )
+                else:
+                    _edit_msg = (
+                        "Sure — I haven't changed anything yet. What would you like to update?\n\n"
+                        "You can edit your **target role**, **preferred cities**, **years of experience**, "
+                        "**skills**, **industry**, **salary expectation**, **visa status**, or "
+                        "**Telegram username**.\n\n"
+                        "Tell me the change (e.g. \"set my target role to Environmental Manager\" or "
+                        "\"set my salary to 18000\"), or open your **Profile** page to edit every field."
+                    )
+                self._append_chat(user_id, "assistant", _edit_msg)
+                return self._finalize(
+                    {
+                        "type": "profile_edit",
+                        "message": _edit_msg,
+                        "route": "/profile",
+                        "editable_fields": [
+                            "target_roles", "preferred_cities", "years_experience",
+                            "skills", "industries", "salary_expectation_aed",
+                            "visa_status", "telegram_username",
+                        ],
+                    },
+                    routed.source,
+                    profile=profile,
+                )
+
+            # Concrete preferences were extracted — persist them, THEN confirm.
+            upsert_profile(user_id=user_id, updates=prefs)
             _PREF_LABELS: dict[str, str] = {
                 "target_roles": "Target role",
                 "preferred_cities": "Preferred city",
@@ -6546,21 +6586,18 @@ class RicoChatAPI:
                 "nationality": "Nationality",
                 "telegram_username": "Telegram username",
             }
-            if prefs:
-                _changes = []
-                for _k, _v in prefs.items():
-                    _label = _PREF_LABELS.get(_k, _k.replace("_", " ").title())
-                    _val_str = ", ".join(str(x) for x in _v) if isinstance(_v, list) else str(_v)
-                    if _k == "salary_expectation_aed":
-                        _val_str = f"AED {_val_str}/month"
-                    _changes.append(f"**{_label}** → {_val_str}")
-                _upd_msg = (
-                    "Updated:\n"
-                    + "\n".join(f"• {c}" for c in _changes)
-                    + "\n\nThese will be applied to future job searches."
-                )
-            else:
-                _upd_msg = "Got it. I have updated your preferences and will apply them to future searches."
+            _changes = []
+            for _k, _v in prefs.items():
+                _label = _PREF_LABELS.get(_k, _k.replace("_", " ").title())
+                _val_str = ", ".join(str(x) for x in _v) if isinstance(_v, list) else str(_v)
+                if _k == "salary_expectation_aed":
+                    _val_str = f"AED {_val_str}/month"
+                _changes.append(f"**{_label}** → {_val_str}")
+            _upd_msg = (
+                "Updated:\n"
+                + "\n".join(f"• {c}" for c in _changes)
+                + "\n\nThese will be applied to future job searches."
+            )
             response = {
                 "type": "preferences_updated",
                 "message": _upd_msg,
@@ -8522,10 +8559,48 @@ class RicoChatAPI:
             f"{next_step}"
         )
 
+    def _format_application_line(self, app: dict) -> str:
+        """Render one tracked application as a markdown bullet using the available
+        title, company, status, date and apply/source URL."""
+        title = app.get("title") or app.get("role") or "Unknown role"
+        company = app.get("company") or ""
+        status = app.get("status") or ""
+        label = app.get("status_label") or self._application_status_label(status)
+        url = app.get("apply_url") or app.get("link") or app.get("source_url") or ""
+        date_raw = (
+            app.get("date_applied")
+            or app.get("applied_at")
+            or app.get("date_updated")
+            or app.get("saved_at")
+            or ""
+        )
+        line = f"• **{title}**"
+        if company:
+            line += f" at **{company}**"
+        if label:
+            line += f" — `{label}`"
+        if date_raw:
+            line += f" · {str(date_raw)[:10]}"
+        if url:
+            line += f" — [Open]({url})"
+        return line
+
     def _build_tracking_message(self, apps: list[dict], stats: dict) -> str:
-        """Build an actionable prose summary of application pipeline state."""
+        """Build a summary header followed by an itemized list of applications."""
         total = len(apps)
         if total == 0:
+            # Honest fallback: if summary stats indicate applications exist but no
+            # detailed rows are available to itemize, say so and route to the page.
+            try:
+                summary_total = int((stats or {}).get("total") or 0)
+            except (TypeError, ValueError):
+                summary_total = 0
+            if summary_total > 0:
+                return (
+                    f"You have {summary_total} tracked application"
+                    f"{'s' if summary_total != 1 else ''}, but I can't load the detailed "
+                    "records right now. Open your **Applications** page to see them."
+                )
             return (
                 "You have no tracked applications yet. "
                 "When you apply to a job through Rico, I will track it here. "
@@ -8577,8 +8652,16 @@ class RicoChatAPI:
                 f"{', '.join(fu_companies)}{suffix}."
             )
 
-        sentences.append("Ask me to 'list my applications' any time to see the full list.")
-        return " ".join(sentences)
+        header = " ".join(sentences)
+
+        # Itemized list — the actual applications. Replaces the old circular prompt
+        # ("Ask me to 'list my applications'…") that produced a dead-end for a user
+        # who had just asked to list them.
+        lines = [self._format_application_line(a) for a in apps[:10]]
+        body = "\n".join(lines)
+        if total > 10:
+            body += f"\n_…and {total - 10} more. Open your **Applications** page to see all._"
+        return f"{header}\n\n{body}"
 
     def _handle_subscription_plans(self, user_id: str, profile: Any) -> dict[str, Any]:
         """Return Rico subscription plans and pricing."""
@@ -9345,30 +9428,13 @@ class RicoChatAPI:
             self._append_chat(user_id, "assistant", msg)
             return {"type": "clarification", "message": msg}
 
-        _STATUS_LABELS: dict[str, str] = {
-            "applied":       "Applied",
-            "interview":     "Interview",
-            "offer":         "Offer",
-            "rejected":      "Rejected",
-            "saved":         "Saved",
-            "opened_external": "Opened",
-            "draft":         "Draft",
-        }
-
         total = len(apps)
         lines = [f"**Your applications ({total} total):**\n"]
         for app in apps[:10]:
-            title   = app.get("title") or app.get("role") or "Unknown role"
-            company = app.get("company") or ""
-            status  = app.get("status") or ""
-            label   = _STATUS_LABELS.get(status, status.replace("_", " ").title() if status else "Tracked")
-            entry   = f"• **{title}**" + (f" — {company}" if company else "")
-            if label:
-                entry += f"  `{label}`"
-            lines.append(entry)
+            lines.append(self._format_application_line(app))
 
         if total > 10:
-            lines.append(f"\n_…and {total - 10} more. Open the dashboard to see all._")
+            lines.append(f"\n_…and {total - 10} more. Open your **Applications** page to see all._")
 
         # Quick counts by status
         from collections import Counter

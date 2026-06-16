@@ -15,6 +15,36 @@ _GENERIC_ROLE_TOKENS = {
 }
 
 
+def _role_conflicting_excludes(exclude_keywords, target_roles, title):
+    """Excluded keywords to *suppress* for this job because they overlap a target role.
+
+    Contextual filtering for the excluded-keyword vs target-role conflict: if a user
+    excludes "manager" but targets "Environmental Manager", a job titled
+    "Environmental Manager" must not be silently hard-rejected by the "manager"
+    exclusion. Suppression only applies when the job title actually matches the
+    overlapping target role — the exclusion is still honored for unrelated jobs and
+    for text outside the role, preserving the user's filtering intent.
+    """
+    if not exclude_keywords or not target_roles:
+        return set()
+    title_l = (title or "").lower()
+    suppressed = set()
+    for raw_role in target_roles:
+        role = str(raw_role or "").strip().lower()
+        if not role or role not in title_l:
+            continue
+        role_tokens = {t for t in re.split(r"[^a-z0-9+#]+", role) if t}
+        for kw in exclude_keywords:
+            k = str(kw or "").strip().lower()
+            if not k:
+                continue
+            # single-word exclude that is a token of the role, or a multi-word
+            # exclude phrase contained in the role
+            if k in role_tokens or (" " in k and k in role):
+                suppressed.add(k)
+    return suppressed
+
+
 def score_job(job):
     """
     Roben Edwan's CV-aware job scoring system.
@@ -38,12 +68,25 @@ def score_job(job):
     exclude_keywords_str = os.getenv("EXCLUDE_KEYWORDS", "")
     exclude_keywords = [kw.strip().lower() for kw in exclude_keywords_str.split(",") if kw.strip()]
     if exclude_keywords:
-        exclude_matches = [kw for kw in exclude_keywords if kw in job_text]
+        # Contextual filtering: don't let an excluded keyword that overlaps the user's
+        # own target role silently block a job that matches that role (e.g. excluding
+        # "manager" must not drop "Environmental Manager").
+        try:
+            _target_roles = get_target_roles()
+        except Exception:
+            _target_roles = []
+        suppressed = _role_conflicting_excludes(exclude_keywords, _target_roles, title)
+        effective_excludes = [kw for kw in exclude_keywords if kw not in suppressed]
+        exclude_matches = [kw for kw in effective_excludes if kw in job_text]
         if exclude_matches:
             job["score"] = 0
             job["score_details"] = [f"Hard reject (ENV): {exclude_matches}"]
             job["hard_reject_reason"] = f"ENV exclude: {exclude_matches}"
             return 0
+        if suppressed:
+            score_details.append(
+                f"Kept despite exclude {sorted(suppressed)}: matches your target role"
+            )
 
     # STEP 1: Hard reject keywords - immediate disqualification
     # These keywords only reject when found in the job title, not the description
@@ -277,12 +320,22 @@ def _score_job_with_profile(job, candidate_profile):
     exclude_keywords_str = os.getenv("EXCLUDE_KEYWORDS", "")
     exclude_keywords = [kw.strip().lower() for kw in exclude_keywords_str.split(",") if kw.strip()]
     if exclude_keywords:
-        exclude_matches = [kw for kw in exclude_keywords if kw in job_text]
+        # Contextual filtering: don't let an excluded keyword that overlaps this user's
+        # own target role silently block a job that matches that role (e.g. excluding
+        # "manager" must not drop "Environmental Manager").
+        _target_roles = candidate_profile.get("target_roles") or []
+        suppressed = _role_conflicting_excludes(exclude_keywords, _target_roles, title)
+        effective_excludes = [kw for kw in exclude_keywords if kw not in suppressed]
+        exclude_matches = [kw for kw in effective_excludes if kw in job_text]
         if exclude_matches:
             job["score"] = 0
             job["score_details"] = [f"Hard reject (ENV): {exclude_matches}"]
             job["hard_reject_reason"] = f"ENV exclude: {exclude_matches}"
             return 0
+        if suppressed:
+            score_details.append(
+                f"Kept despite exclude {sorted(suppressed)}: matches your target role"
+            )
 
     # STEP 1: Hard reject keywords - immediate disqualification
     TITLE_ONLY_REJECT_KEYWORDS = {"civil engineer", "site engineer", "quantity surveyor", "architect"}
