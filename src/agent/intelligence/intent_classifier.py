@@ -986,6 +986,8 @@ _ARABIC_TO_ENGLISH_ROLE_MAP: dict[str, str] = {
     "مدير مشاريع": "Project Manager",
     "مدير عام": "General Manager",
     "مدير تنفيذي": "Executive Manager",
+    "مدير تطوير": "Development Manager",
+    "مدير تطوير اعمال": "Business Development Manager",
     "مدير": "Manager",
     # Finance / Accounting
     "محاسب": "Accountant",
@@ -994,12 +996,15 @@ _ARABIC_TO_ENGLISH_ROLE_MAP: dict[str, str] = {
     "محلل مالي": "Financial Analyst",
     "محلل اعمال": "Business Analyst",
     "محلل بيانات": "Data Analyst",
+    "مدير مالي": "Finance Manager",
+    "مدير الماليه": "Finance Manager",
     # HR / Admin
     "مدير موارد بشريه": "HR Manager",
     "اخصائي موارد بشريه": "HR Specialist",
     # Engineering
     "مهندس مدني": "Civil Engineer",
     "مهندس كهربائي": "Electrical Engineer",
+    "مهندس كهرباء": "Electrical Engineer",
     "مهندس ميكانيكي": "Mechanical Engineer",
     "مهندس برمجيات": "Software Engineer",
     "مطور برمجيات": "Software Developer",

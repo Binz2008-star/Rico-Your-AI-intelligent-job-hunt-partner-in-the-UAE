@@ -110,8 +110,8 @@ def test_application_tracking_not_misread_as_role_search():
     ("ابحث عن وظيفة مدير عمليات في عجمان", "Operations Manager"),
     ("ابحث عن مدير عمليات في عجمان", "Operations Manager"),
     ("اريد وظائف محاسب في دبي", "Accountant"),
-    # "مهندس كهرباء" is not in the map → returned as-is in Arabic.
-    ("ابحث عن وظيفة مهندس كهرباء في الشارقة", "مهندس كهرباء"),
+    # "مصمم جرافيك" is not in the map → returned as-is in Arabic.
+    ("ابحث عن وظيفة مصمم جرافيك في الشارقة", "مصمم جرافيك"),
 ])
 def test_arabic_role_is_extracted(message, expected_role):
     intent, role = _role(message)
