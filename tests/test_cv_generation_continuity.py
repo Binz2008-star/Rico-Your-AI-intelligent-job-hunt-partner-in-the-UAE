@@ -284,7 +284,7 @@ class TestCVBuilderFlowState:
 
         self.api._handle_active_user_inner("user-1", "please improve it")
 
-        generated.assert_called_once_with("user-1", profile)
+        generated.assert_called_once_with("user-1", profile, "please improve it")
 
     def test_no_flow_state_does_not_intercept_improve(self):
         """Without cv_builder flow state, 'improve it' must NOT intercept to CV builder."""
