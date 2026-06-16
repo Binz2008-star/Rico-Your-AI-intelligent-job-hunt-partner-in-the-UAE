@@ -972,6 +972,55 @@ _ARABIC_ROLE_LEAD_STOPWORDS = frozenset({
     "مسمي", "عمل", "شغل", "عن", "لي", "لك", "في",
 })
 
+# Deterministic Arabic→English role synonyms for UAE job titles.
+# Keys are _normalize_arabic'd forms (ta marbuta ه, bare alef ا, etc.).
+# Applied at the end of _extract_arabic_role so Arabic search queries yield
+# English role names that the JSearch / role-classifier pipeline can handle.
+_ARABIC_TO_ENGLISH_ROLE_MAP: dict[str, str] = {
+    # Compliance / Legal
+    "مدير امتثال": "Compliance Manager",
+    "مستشار قانوني": "Legal Advisor",
+    "مدير مخاطر": "Risk Manager",
+    # Operations / Management
+    "مدير عمليات": "Operations Manager",
+    "مدير مشاريع": "Project Manager",
+    "مدير عام": "General Manager",
+    "مدير تنفيذي": "Executive Manager",
+    "مدير": "Manager",
+    # Finance / Accounting
+    "محاسب": "Accountant",
+    "محاسب مالي": "Financial Accountant",
+    "محاسب قانوني": "Chartered Accountant",
+    "محلل مالي": "Financial Analyst",
+    "محلل اعمال": "Business Analyst",
+    "محلل بيانات": "Data Analyst",
+    # HR / Admin
+    "مدير موارد بشريه": "HR Manager",
+    "اخصائي موارد بشريه": "HR Specialist",
+    # Engineering
+    "مهندس مدني": "Civil Engineer",
+    "مهندس كهربائي": "Electrical Engineer",
+    "مهندس ميكانيكي": "Mechanical Engineer",
+    "مهندس برمجيات": "Software Engineer",
+    "مطور برمجيات": "Software Developer",
+    "مهندس": "Engineer",
+    # Sales / Marketing
+    "مدير تسويق": "Marketing Manager",
+    "مدير مبيعات": "Sales Manager",
+    "اخصائي تسويق": "Marketing Specialist",
+    "اخصائي مبيعات": "Sales Specialist",
+    # IT
+    "مدير تقنيه المعلومات": "IT Manager",
+    "مدير نظم معلومات": "Information Systems Manager",
+    # Supply Chain / Logistics
+    "مدير سلسله التوريد": "Supply Chain Manager",
+    "مدير لوجستيات": "Logistics Manager",
+    "مدير مشتريات": "Procurement Manager",
+    # HSE / Quality
+    "مدير جوده": "Quality Manager",
+    "مدير صحه وسلامه": "HSE Manager",
+}
+
 
 def _normalize_arabic(text: str) -> str:
     """Remove diacritics and normalise Arabic letter variants before phrase lookup."""
@@ -1364,6 +1413,9 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         # Prefer a pure-Arabic role phrase ("وظيفه مدير عمليات في عجمان" -> "مدير عمليات");
         # fall back to a trailing English role for mixed-language messages.
         role = _extract_arabic_role(lower) or _extract_english_role_from_mixed(text)
+        # Map known Arabic role names to English so JSearch receives a recognisable title.
+        if role:
+            role = _ARABIC_TO_ENGLISH_ROLE_MAP.get(role, role)
         return IntentResult("job_search_explicit", 0.85, "regex", extracted_role=role)
 
     # Role change — only if no explicit job-search keyword present

@@ -105,9 +105,12 @@ def test_application_tracking_not_misread_as_role_search():
 # ── H2: pure-Arabic role extraction ───────────────────────────────────────────
 
 @pytest.mark.parametrize("message,expected_role", [
-    ("ابحث عن وظيفة مدير عمليات في عجمان", "مدير عمليات"),
-    ("ابحث عن مدير عمليات في عجمان", "مدير عمليات"),
-    ("اريد وظائف محاسب في دبي", "محاسب"),
+    # Known roles are translated to English via _ARABIC_TO_ENGLISH_ROLE_MAP so
+    # the JSearch pipeline receives a recognisable English title.
+    ("ابحث عن وظيفة مدير عمليات في عجمان", "Operations Manager"),
+    ("ابحث عن مدير عمليات في عجمان", "Operations Manager"),
+    ("اريد وظائف محاسب في دبي", "Accountant"),
+    # "مهندس كهرباء" is not in the map → returned as-is in Arabic.
     ("ابحث عن وظيفة مهندس كهرباء في الشارقة", "مهندس كهرباء"),
 ])
 def test_arabic_role_is_extracted(message, expected_role):
