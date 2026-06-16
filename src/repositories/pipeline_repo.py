@@ -23,9 +23,14 @@ def insert_run() -> Optional[int]:
                 "INSERT INTO pipeline_runs (started_at, status) VALUES (NOW(), 'running') RETURNING id",
             )
             row = cur.fetchone()
+        conn.commit()
         return row[0] if row else None
     except Exception:
         logger.exception("pipeline_repo_insert_failed")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         return None
     finally:
         conn.close()
@@ -44,8 +49,13 @@ def update_run(run_id: int, status: str, error: Optional[str] = None) -> None:
                    WHERE id = %s""",
                 (status, error, run_id),
             )
+        conn.commit()
     except Exception:
         logger.exception("pipeline_repo_update_failed run_id=%s", run_id)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
     finally:
         conn.close()
 

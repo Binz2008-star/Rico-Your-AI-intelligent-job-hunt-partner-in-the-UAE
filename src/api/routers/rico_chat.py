@@ -1191,9 +1191,14 @@ async def rico_upload_cv(
 
         safe_name = _safe_filename(file.filename)
 
-        # Parse CV with defensive handling for dataclass vs dict return
+        # Parse CV with defensive handling for dataclass vs dict return.
+        # parse_cv is synchronous and CPU/IO-bound (PDF parsing); run it in an
+        # executor so it does not block the event loop for other requests.
         try:
-            parsed_raw = chat_service.parse_cv(data, filename=safe_name)
+            loop = asyncio.get_event_loop()
+            parsed_raw = await loop.run_in_executor(
+                None, chat_service.parse_cv, data, safe_name
+            )
 
             if hasattr(parsed_raw, "to_dict"):
                 parsed = parsed_raw.to_dict()
