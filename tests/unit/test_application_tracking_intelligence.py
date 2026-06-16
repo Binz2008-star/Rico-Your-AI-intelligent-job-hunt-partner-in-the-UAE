@@ -123,7 +123,10 @@ def test_build_message_single_applied_no_follow_up():
     assert "1 tracked application" in msg
     assert "1 applied" in msg
     assert "follow-up" not in msg.lower()
-    assert "list my applications" in msg
+    # The summary now itemizes the actual applications instead of dead-ending with
+    # "Ask me to 'list my applications'…" (P0-3 trust fix).
+    assert "Noon" in msg
+    assert "list my applications" not in msg.lower()
 
 
 def test_build_message_follow_up_callout():
