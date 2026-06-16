@@ -7,6 +7,7 @@ from typing import Any, Dict
 from src.rico_chat_api import RicoChatAPI
 from src.rico_telegram_ui import handle_callback_only
 from src.telegram_actions import answer_callback_query
+from src.telegram_bot import send_telegram_to_user
 from src.repositories.profile_repo import find_profiles_by_telegram_username, upsert_profile
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,8 @@ def _handle_start(message: Dict[str, Any]) -> Dict[str, Any]:
         "Send /stop at any time to pause notifications."
     )
     logger.info("telegram_start: bound chat_id=%s to user=%s", chat_id, bound_user_id)
+    if chat_id:
+        send_telegram_to_user(chat_id, reply)
     return {"chat_id": chat_id, "reply": reply}
 
 
@@ -81,6 +84,8 @@ def _handle_stop(message: Dict[str, Any]) -> Dict[str, Any]:
         "Notifications paused. Send /start to re-enable them whenever you're ready."
     )
     logger.info("telegram_stop: disabled notifications for chat_id=%s", chat_id)
+    if chat_id:
+        send_telegram_to_user(chat_id, reply)
     return {"chat_id": chat_id, "reply": reply}
 
 
@@ -116,6 +121,11 @@ def process_telegram_update(update: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as exc:
         logger.warning("rico_chat_api_error: %s", exc)
         response = {"message": "Rico is unavailable right now."}
+
+    chat_id = str(chat.get("id") or "")
+    reply_text = response.get("message", "") if isinstance(response, dict) else str(response)
+    if chat_id and reply_text:
+        send_telegram_to_user(chat_id, reply_text)
 
     return {
         "chat_id": chat.get("id"),
