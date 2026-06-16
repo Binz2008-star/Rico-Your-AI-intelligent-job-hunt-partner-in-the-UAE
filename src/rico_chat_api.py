@@ -9039,7 +9039,11 @@ class RicoChatAPI:
         sections: list[str] = []
 
         header_parts = [name] if name else []
-        contact_parts = [p for p in [email, phone] if isinstance(p, str) and p]
+        contact_parts = [
+            p for p in [email, phone]
+            if isinstance(p, str) and p
+            and (EMAIL_RE.fullmatch(p.strip()) or PHONE_RE.fullmatch(p.strip()))
+        ]
         if contact_parts:
             header_parts.append(" | ".join(contact_parts))
         if preferred_cities:
@@ -9052,7 +9056,7 @@ class RicoChatAPI:
             if current_role:
                 summary_parts.append(current_role)
             if years_exp is not None:
-                summary_parts.append(f"{years_exp} years of experience")
+                summary_parts.append(f"{int(years_exp)} years of experience")
             if industries:
                 summary_parts.append(f"in {', '.join(industries[:2])}")
             sections.append("**Professional Summary**\n" + " · ".join(summary_parts))
