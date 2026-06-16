@@ -2385,14 +2385,24 @@ class RicoChatAPI:
         formatted = [self._format_match(m, profile) for m in top_matches]
         execution_state = "MATCHES_SCORED" if formatted else "SEARCH_RUNNING"
         role_text = ", ".join(roles[:3])
-        msg = (
-            f"I will use your CV profile to search concrete {industry_label} career paths in the UAE. "
-            f"I am starting with: {role_text}."
-        )
-        if formatted:
-            msg += f" I found {len(formatted)} current match(es)."
+        if self._is_arabic_text(message):
+            msg = (
+                f"سأستخدم بيانات سيرتك الذاتية للبحث عن مسارات وظيفية فعلية في {industry_label} بالإمارات. "
+                f"أبدأ بـ: {role_text}."
+            )
+            if formatted:
+                msg += f" وجدت {len(formatted)} وظيفة مطابقة حالياً."
+            else:
+                msg += " لم أجد نتائج مصنّفة بعد، لذا هذه عمليات البحث جاهزة للتحسين."
         else:
-            msg += " I did not find scored matches yet, so these searches are ready to refine."
+            msg = (
+                f"I will use your CV profile to search concrete {industry_label} career paths in the UAE. "
+                f"I am starting with: {role_text}."
+            )
+            if formatted:
+                msg += f" I found {len(formatted)} current match(es)."
+            else:
+                msg += " I did not find scored matches yet, so these searches are ready to refine."
 
         response = {
             "type": "job_matches",
@@ -2422,7 +2432,7 @@ class RicoChatAPI:
         text = re.sub(r"\s+", " ", (message or "").strip().lower())
         return FOLLOWUP_BOUNDARY_PUNCT_RE.sub("", text)
 
-    def _handle_next_step_options(self, user_id: str, profile: Any) -> dict[str, Any]:
+    def _handle_next_step_options(self, user_id: str, profile: Any, message: str = "") -> dict[str, Any]:
         """Return instant options after role confirmation — no AI, no pipeline."""
         target_roles = self._as_list(self._profile_value(profile, "target_roles"))
         suggestions = self._generate_role_suggestions(
@@ -2441,7 +2451,11 @@ class RicoChatAPI:
 
         response: dict[str, Any] = {
             "type": "options",
-            "message": "Next, choose what you want me to do.",
+            "message": (
+                "بعد ذلك، اختر ما تريد أن أفعله."
+                if self._is_arabic_text(message) else
+                "Next, choose what you want me to do."
+            ),
             "options": [
                 {
                     "action": "find_live_jobs",
@@ -2472,14 +2486,22 @@ class RicoChatAPI:
         self._append_chat(user_id, "assistant", response["message"])
         return response
 
-    def _handle_keep_all_target_roles(self, user_id: str, profile: Any) -> dict[str, Any]:
+    def _handle_keep_all_target_roles(self, user_id: str, profile: Any, message: str = "") -> dict[str, Any]:
         """Handle 'keep all' follow-up - confirm keeping all target roles."""
         target_roles = self._as_list(self._profile_value(profile, "target_roles"))
-        role_text = ", ".join(map(str, target_roles)) if target_roles else "your current target roles"
+        arabic = self._is_arabic_text(message)
+        role_text = (
+            ", ".join(map(str, target_roles)) if target_roles
+            else ("أدوارك المستهدفة الحالية" if arabic else "your current target roles")
+        )
 
         response = {
             "type": "target_roles_confirmed",
-            "message": f"Got it — I will keep all current target roles: {role_text}.",
+            "message": (
+                f"تم — سأحتفظ بجميع الأدوار المستهدفة الحالية: {role_text}."
+                if arabic else
+                f"Got it — I will keep all current target roles: {role_text}."
+            ),
             "target_roles": target_roles,
             "next_actions": [
                 {"action": "find_live_jobs", "label": "Find live UAE jobs", "message": "find live jobs for my target roles"},
@@ -2491,14 +2513,18 @@ class RicoChatAPI:
         self._append_chat(user_id, "assistant", response["message"])
         return response
 
-    def _handle_both_requested_actions(self, user_id: str, profile: Any) -> dict[str, Any]:
+    def _handle_both_requested_actions(self, user_id: str, profile: Any, message: str = "") -> dict[str, Any]:
         """Handle 'both please' follow-up - trigger both job search and resume review."""
         target_roles = self._as_list(self._profile_value(profile, "target_roles"))
-        role = target_roles[-1] if target_roles else "your target role"
+        arabic = self._is_arabic_text(message)
+        role = target_roles[-1] if target_roles else ("دورك المستهدف" if arabic else "your target role")
 
         response = {
             "type": "combined_action_plan",
             "message": (
+                f"تم — سأقوم بالأمرين معاً: أبدأ بمطابقة وظائف فعلية في الإمارات لدور {role}، "
+                "ثم أحضّر سيرتك الذاتية وزاوية التقديم لأقوى المطابقات."
+                if arabic else
                 f"Got it — I will do both: start with live UAE job matching for {role}, "
                 "then prepare your resume/application angle for the strongest matches."
             ),
@@ -2610,7 +2636,7 @@ class RicoChatAPI:
         return self.normalize_role_label(text)
 
     def _handle_role_confirmation(
-        self, user_id: str, role: str, profile: Any
+        self, user_id: str, role: str, profile: Any, message: str = ""
     ) -> dict[str, Any]:
         """Deterministic role_confirmation -- no AI, no external calls."""
         skills = self._as_list(self._profile_value(profile, "skills"))
@@ -2627,34 +2653,56 @@ class RicoChatAPI:
         except (TypeError, ValueError):
             years_num = None
 
+        arabic = self._is_arabic_text(message)
         reasons: list[str] = []
 
         if any(k in s for s in all_lower for k in ("iso", "audit", "compliance")):
-            reasons.append("You have ISO, audit, or compliance background.")
+            reasons.append(
+                "لديك خلفية في الجودة (ISO)، التدقيق، أو الامتثال." if arabic else
+                "You have ISO, audit, or compliance background."
+            )
 
         if any(k in c for c in cert_lower for k in ("nebosh", "iosh")):
-            reasons.append("Your safety certifications support this role.")
+            reasons.append(
+                "شهاداتك في السلامة تدعم هذا الدور." if arabic else
+                "Your safety certifications support this role."
+            )
 
         if any(k in s for s in all_lower for k in ("environmental", "esg", "sustainability")):
-            reasons.append("Your background aligns with environmental and sustainability work.")
+            reasons.append(
+                "خلفيتك تتوافق مع العمل البيئي والاستدامة." if arabic else
+                "Your background aligns with environmental and sustainability work."
+            )
 
         if any("hse" in s or "safety" in s for s in skill_lower):
-            reasons.append("Your HSE/safety background matches this role.")
+            reasons.append(
+                "خلفيتك في الصحة والسلامة المهنية تطابق هذا الدور." if arabic else
+                "Your HSE/safety background matches this role."
+            )
 
         if years_num is not None:
             if years_num >= 10:
-                reasons.append("Your experience level supports senior roles.")
+                reasons.append("مستوى خبرتك يدعم الأدوار العليا." if arabic else "Your experience level supports senior roles.")
             elif years_num >= 5:
-                reasons.append("Your experience level supports experienced professional roles.")
+                reasons.append(
+                    "مستوى خبرتك يدعم أدوار المحترفين ذوي الخبرة." if arabic else
+                    "Your experience level supports experienced professional roles."
+                )
             else:
-                reasons.append(f"Your ~{int(years_num)} years of experience fits this role.")
+                reasons.append(
+                    f"خبرتك التي تبلغ ~{int(years_num)} سنة مناسبة لهذا الدور." if arabic else
+                    f"Your ~{int(years_num)} years of experience fits this role."
+                )
 
         if not reasons:
-            reasons.append("This role aligns with your profile.")
+            reasons.append("هذا الدور يتوافق مع ملفك الشخصي." if arabic else "This role aligns with your profile.")
 
         response = {
             "type": "role_confirmation",
-            "message": f"{role} is a strong fit for your CV.",
+            "message": (
+                f"{role} يعتبر مطابقة قوية لسيرتك الذاتية." if arabic else
+                f"{role} is a strong fit for your CV."
+            ),
             "role": role,
             "reasons": reasons,
             "next_actions": [
@@ -3071,10 +3119,19 @@ class RicoChatAPI:
         upsert_profile(user_id=user_id, updates=updates)
 
         response_msg = (
-            "I can see your CV details. I'll extract your profile from this text — "
-            "give me a moment to parse your experience, skills, and education.\n\n"
-            "Once extracted, I'll show you a profile summary and you can confirm or edit any field. "
-            "You can also upload a PDF or Word CV for more accurate extraction."
+            (
+                "أرى تفاصيل سيرتك الذاتية. سأستخرج ملفك الشخصي من هذا النص — "
+                "أعطني لحظة لتحليل خبراتك ومهاراتك وتعليمك.\n\n"
+                "بعد الاستخراج سأعرض لك ملخص الملف الشخصي وتقدر تؤكد أو تعدّل أي حقل. "
+                "تقدر أيضاً ترفع سيرة ذاتية PDF أو Word لاستخراج أدق."
+            )
+            if self._is_arabic_text(message) else
+            (
+                "I can see your CV details. I'll extract your profile from this text — "
+                "give me a moment to parse your experience, skills, and education.\n\n"
+                "Once extracted, I'll show you a profile summary and you can confirm or edit any field. "
+                "You can also upload a PDF or Word CV for more accurate extraction."
+            )
         )
         response = {
             "type": "cv_text_received",
@@ -3658,13 +3715,14 @@ class RicoChatAPI:
                 return "lifecycle_show_applied"
         return None
 
-    def _resolve_verify_followup(self, user_id: str, profile: Any) -> dict[str, Any] | None:
+    def _resolve_verify_followup(self, user_id: str, profile: Any, message: str = "") -> dict[str, Any] | None:
         """Anchor a 'make sure / are you sure' follow-up to the last real turn.
 
         Re-runs the last informational query so Rico re-confirms with fresh data
         instead of re-classifying the vague phrase as a new role/intent. Never
         triggers a mutation (apply/save) — those still require explicit action.
         """
+        arabic = self._is_arabic_text(message)
         last = self._get_last_turn(user_id)
         intent = last.get("intent")
         if not intent:
@@ -3674,22 +3732,44 @@ class RicoChatAPI:
             lifecycle_query = self._resolve_lifecycle_query_for_followup(user_id)
             if intent == "application_tracking" and not (last.get("object") or {}).get("query_type"):
                 # The last turn was the applications summary — re-run it verbatim.
-                resp = self._handle_application_tracking(user_id, intent="application_tracking")
+                resp = self._handle_application_tracking(user_id, intent="application_tracking", message=message)
             elif lifecycle_query:
-                resp = self._handle_lifecycle_query(user_id, lifecycle_query)
+                resp = self._handle_lifecycle_query(user_id, lifecycle_query, message=message)
             else:
-                resp = self._handle_application_tracking(user_id, intent="application_tracking")
+                resp = self._handle_application_tracking(user_id, intent="application_tracking", message=message)
             # Prefix so the user sees this as a re-confirmation, not a fresh answer.
             base = resp.get("message") or ""
-            resp["message"] = (
-                "I double-checked — here's exactly what I have on record:\n\n" + base
-                if base else "I double-checked your records."
-            )
+            if arabic:
+                resp["message"] = (
+                    "تحققت مرة أخرى — هذا بالضبط ما هو مسجل لدي:\n\n" + base
+                    if base else "تحققت من سجلاتك."
+                )
+            else:
+                resp["message"] = (
+                    "I double-checked — here's exactly what I have on record:\n\n" + base
+                    if base else "I double-checked your records."
+                )
             return resp
 
         if intent == "job_search":
             obj = last.get("object") or {}
             title = obj.get("title") or ""
+            if arabic:
+                if title:
+                    return {
+                        "type": "clarification",
+                        "message": (
+                            f"نعم — آخر بحث أظهرته لك كان عن \"{title}\". "
+                            "تريد أن أعيد تشغيله للحصول على نتائج فعلية جديدة، أو نضيّق الدور أو المدينة؟"
+                        ),
+                    }
+                return {
+                    "type": "clarification",
+                    "message": (
+                        "نعم — هذا كان آخر بحث فعلي قمت به. تريد أن أعيد تشغيله "
+                        "للحصول على نتائج جديدة، أو نضيّقه بالدور أو المدينة؟"
+                    ),
+                }
             if title:
                 return {
                     "type": "clarification",
@@ -3711,6 +3791,20 @@ class RicoChatAPI:
         title = obj.get("title")
         company = obj.get("company")
         if title and company:
+            if arabic:
+                action_label = {
+                    "save_job": "محفوظة", "track_job": "متابَعة",
+                    "mark_applied": "مسجَّلة كمُقدَّمة", "open_apply_link": "تم فتح رابط التقديم لها",
+                    "prepare_application": "تم تحضير طلب تقديم لها",
+                }.get(intent, "مسجَّلة")
+                return {
+                    "type": "clarification",
+                    "message": (
+                        f"مؤكَّد — \"{title}\" في {company} {action_label} في متابعاتك. "
+                        "تريد أن أعرض القائمة الكاملة أو الخطوة التالية؟"
+                    ),
+                    "entities": {"title": title, "company": company},
+                }
             action_label = {
                 "save_job": "saved", "track_job": "tracked",
                 "mark_applied": "marked as applied", "open_apply_link": "opened the apply link for",
@@ -3790,7 +3884,7 @@ class RicoChatAPI:
         )
 
         if cv_improve_signals:
-            return self._handle_cv_generate_from_profile(user_id, profile)
+            return self._handle_cv_generate_from_profile(user_id, profile, message)
         if job_search_signals:
             target_roles = self._as_list(self._profile_value(profile, "target_roles"))
             role = target_roles[0] if target_roles else "my target role"
@@ -3953,7 +4047,7 @@ class RicoChatAPI:
             self._store_recent_context(user_id, ctx)
             # Reload profile so the CV draft picks up the new cities
             updated_profile = self._resolve_profile(user_id)
-            return self._handle_cv_generate_from_profile(user_id, updated_profile)
+            return self._handle_cv_generate_from_profile(user_id, updated_profile, message)
 
         return None
 
@@ -4711,6 +4805,10 @@ class RicoChatAPI:
             fallback = {
                 "type": "clarification",
                 "message": (
+                    "أنا هنا لمساعدتك في البحث عن وظيفة بالإمارات. "
+                    "تقدر تبحث عن وظيفة، ترفع سيرتك الذاتية، تسأل عن طلباتك، "
+                    "أو تكتب 'مساعدة' لعرض كل الخيارات."
+                    if self._is_arabic_text(message) else
                     "I'm here to help with your UAE job search. "
                     "You can search for a role, upload your CV, ask about your applications, "
                     "or say 'help' for all options."
@@ -4754,7 +4852,7 @@ class RicoChatAPI:
         _flow_ctx = self._get_recent_context(user_id)
         if _flow_ctx.get("last_flow_state") == "cv_builder" and _CV_IMPROVE_FOLLOWUP_RE.search(message):
             return self._finalize(
-                self._handle_cv_generate_from_profile(user_id, profile),
+                self._handle_cv_generate_from_profile(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -4884,7 +4982,7 @@ class RicoChatAPI:
         # prior lifecycle context (which the list-followup block would need).
         if RicoChatAPI._SHOW_MY_APPLICATIONS_RE.match(text):
             return self._finalize(
-                self._handle_application_tracking(user_id, intent="application_tracking"),
+                self._handle_application_tracking(user_id, intent="application_tracking", message=message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -4921,7 +5019,7 @@ class RicoChatAPI:
             last_query = self._resolve_lifecycle_query_for_followup(user_id)
             if last_query:
                 return self._finalize(
-                    self._handle_lifecycle_query(user_id, last_query),
+                    self._handle_lifecycle_query(user_id, last_query, message=message),
                     self.SOURCE_KEYWORD,
                     profile=profile,
                 )
@@ -4963,7 +5061,7 @@ class RicoChatAPI:
         # Without this, "make sure please" after an applied-jobs reply gets
         # classified as a bare job role. Anchor it to the last_turn instead.
         if self._is_verify_followup(message):
-            verified = self._resolve_verify_followup(user_id, profile)
+            verified = self._resolve_verify_followup(user_id, profile, message=message)
             if verified is not None:
                 return self._finalize(verified, self.SOURCE_KEYWORD, profile=profile)
             # Memory miss (e.g. multi-worker Render) — acknowledge without crashing.
@@ -4971,6 +5069,9 @@ class RicoChatAPI:
                 {
                     "type": "clarification",
                     "message": (
+                        "لست متأكدًا من النتيجة التي تريد أن أتحقق منها مرة أخرى. "
+                        "هل يمكنك إخباري بما تريد أن أتحقق منه؟"
+                        if self._is_arabic_text(message) else
                         "I'm not sure which result you'd like me to double-check. "
                         "Could you tell me what you'd like me to verify?"
                     ),
@@ -4990,7 +5091,7 @@ class RicoChatAPI:
             # the best known role; otherwise ask for one.
             if self._is_continuation_intent(message):
                 return self._finalize(
-                    self._handle_post_cv_continuation(user_id, profile),
+                    self._handle_post_cv_continuation(user_id, profile, message),
                     self.SOURCE_KEYWORD,
                     profile=profile,
                 )
@@ -5016,14 +5117,14 @@ class RicoChatAPI:
         # ── Deterministic follow-up phrases (must be before role classification) ──
         if text in self._FOLLOWUP_KEEP_ALL_PHRASES:
             return self._finalize(
-                self._handle_keep_all_target_roles(user_id, profile),
+                self._handle_keep_all_target_roles(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
 
         if text in self._FOLLOWUP_BOTH_ACTION_PHRASES:
             return self._finalize(
-                self._handle_both_requested_actions(user_id, profile),
+                self._handle_both_requested_actions(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -5040,7 +5141,7 @@ class RicoChatAPI:
         ):
             logger.info("rico_followup_hit user=%s msg=%r", user_id, message)
             return self._finalize(
-                self._handle_next_step_options(user_id, profile),
+                self._handle_next_step_options(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -5053,6 +5154,7 @@ class RicoChatAPI:
                         user_id=user_id,
                         role=self._extract_selected_role(message, profile),
                         profile=profile,
+                        message=message,
                     ),
                     self.SOURCE_KEYWORD,
                     profile=profile,
@@ -5070,7 +5172,7 @@ class RicoChatAPI:
             and self._looks_like_generic_job_request(message)
         ):
             return self._finalize(
-                self._handle_profile_role_suggestions(profile),
+                self._handle_profile_role_suggestions(profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -5240,7 +5342,7 @@ class RicoChatAPI:
         # (which is the "I applied" reporting path).
         if _APPLICATION_STATUS_QUERY_RE.search(message):
             return self._finalize(
-                self._handle_application_tracking(user_id, intent=None),
+                self._handle_application_tracking(user_id, intent=None, message=message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -5250,7 +5352,7 @@ class RicoChatAPI:
         # completeness report using evaluate_minimum_profile, with optional field hints.
         if _PROFILE_COMPLETE_RE.search(message):
             return self._finalize(
-                self._handle_profile_completeness(user_id, profile),
+                self._handle_profile_completeness(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -5532,7 +5634,7 @@ class RicoChatAPI:
         # "how can I improve my profile?", "what's missing from my CV?".
         if _PROFILE_IMPROVE_RE.search(message):
             return self._finalize(
-                self._handle_profile_completeness(user_id, profile),
+                self._handle_profile_completeness(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -6103,14 +6205,14 @@ class RicoChatAPI:
                 }
                 self._append_chat(user_id, "assistant", clarify_response["message"])
                 return self._finalize(clarify_response, self.SOURCE_KEYWORD, profile=profile)
-            sub_response = self._handle_subscription_plans(user_id, profile)
+            sub_response = self._handle_subscription_plans(user_id, profile, message)
             self._append_chat(user_id, "assistant", sub_response.get("message", ""))
             return self._finalize(sub_response, self.SOURCE_KEYWORD, profile=profile)
 
         # Delegated decision — user asks Rico to choose
         if legacy_intent == "delegated_decision":
             return self._finalize(
-                self._handle_delegated_decision(user_id, profile),
+                self._handle_delegated_decision(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -6179,7 +6281,7 @@ class RicoChatAPI:
                             profile=profile,
                         )
                     return self._finalize(
-                        self._handle_profile_role_suggestions(profile),
+                        self._handle_profile_role_suggestions(profile, message),
                         self.SOURCE_KEYWORD,
                         profile=profile,
                     )
@@ -6201,7 +6303,7 @@ class RicoChatAPI:
         # CV generation — user wants a new CV draft from their existing parsed profile
         if legacy_intent == "cv_generate":
             return self._finalize(
-                self._handle_cv_generate_from_profile(user_id, profile),
+                self._handle_cv_generate_from_profile(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -6212,12 +6314,12 @@ class RicoChatAPI:
             # of asking the user to start from scratch.
             if self._has_cv_profile(profile):
                 return self._finalize(
-                    self._handle_cv_generate_from_profile(user_id, profile),
+                    self._handle_cv_generate_from_profile(user_id, profile, message),
                     self.SOURCE_KEYWORD,
                     profile=profile,
                 )
             return self._finalize(
-                self._handle_cv_creation(user_id, profile),
+                self._handle_cv_creation(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -6225,7 +6327,7 @@ class RicoChatAPI:
         # Learning profile summary — what Rico has inferred from user behavior
         if legacy_intent == "learning_profile_summary":
             return self._finalize(
-                self._handle_learning_profile_summary(user_id, profile),
+                self._handle_learning_profile_summary(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -6241,7 +6343,7 @@ class RicoChatAPI:
         # Application insights — success rates, response patterns, follow-up intel
         if legacy_intent == "application_insights":
             return self._finalize(
-                self._handle_application_insights(user_id),
+                self._handle_application_insights(user_id, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -6361,7 +6463,7 @@ class RicoChatAPI:
         # Profile role suggestions - deterministic fast path based on CV skills/certifications
         if legacy_intent == "profile_role_suggestions":
             return self._finalize(
-                self._handle_profile_role_suggestions(profile),
+                self._handle_profile_role_suggestions(profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -6451,13 +6553,13 @@ class RicoChatAPI:
 
             if text == "all":
                 return self._finalize(
-                    self._handle_keep_all_target_roles(user_id, profile),
+                    self._handle_keep_all_target_roles(user_id, profile, message),
                     self.SOURCE_KEYWORD,
                     profile=profile,
                 )
             if has_cv:
                 return self._finalize(
-                    self._handle_next_step_options(user_id, profile),
+                    self._handle_next_step_options(user_id, profile, message),
                     self.SOURCE_KEYWORD,
                     profile=profile,
                 )
@@ -6474,7 +6576,7 @@ class RicoChatAPI:
         # Application tracking — route to applications repo, NOT job search
         if legacy_intent == "application_tracking":
             return self._finalize(
-                self._handle_application_tracking(user_id, intent=intent),
+                self._handle_application_tracking(user_id, intent=intent, message=message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -6493,7 +6595,7 @@ class RicoChatAPI:
             "lifecycle_show_opened_not_applied",
         ):
             return self._finalize(
-                self._handle_lifecycle_query(user_id, legacy_intent),
+                self._handle_lifecycle_query(user_id, legacy_intent, message=message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -6737,7 +6839,7 @@ class RicoChatAPI:
                 if has_cv:
                     # CV present but no confirmed target role → suggest roles from skills
                     return self._finalize(
-                        self._handle_profile_role_suggestions(profile),
+                        self._handle_profile_role_suggestions(profile, message),
                         self.SOURCE_KEYWORD,
                         profile=profile,
                     )
@@ -6819,7 +6921,7 @@ class RicoChatAPI:
             else:
                 mark_completed(user_id, operation_id, 0)
                 if has_cv:
-                    response = self._handle_no_results_recovery(user_id, profile, target_roles)
+                    response = self._handle_no_results_recovery(user_id, profile, target_roles, message)
                     response.update({
                         "operation_id": operation_id,
                         "operation_status": "completed",
@@ -7770,7 +7872,7 @@ class RicoChatAPI:
         if message.strip().lower() in self._JOB_SEARCH_HELP_PHRASES:
             if has_cv:
                 return self._finalize(
-                    self._handle_profile_role_suggestions(profile),
+                    self._handle_profile_role_suggestions(profile, message),
                     self.SOURCE_KEYWORD,
                     profile=profile,
                 )
@@ -8585,7 +8687,7 @@ class RicoChatAPI:
             line += f" — [Open]({url})"
         return line
 
-    def _build_tracking_message(self, apps: list[dict], stats: dict) -> str:
+    def _build_tracking_message(self, apps: list[dict], stats: dict, arabic: bool = False) -> str:
         """Build a summary header followed by an itemized list of applications."""
         total = len(apps)
         if total == 0:
@@ -8596,10 +8698,21 @@ class RicoChatAPI:
             except (TypeError, ValueError):
                 summary_total = 0
             if summary_total > 0:
+                if arabic:
+                    return (
+                        f"لديك {summary_total} طلب تقديم مسجَّل، لكن لا يمكنني تحميل السجلات "
+                        "التفصيلية الآن. افتح صفحة **الطلبات** لرؤيتها."
+                    )
                 return (
                     f"You have {summary_total} tracked application"
                     f"{'s' if summary_total != 1 else ''}, but I can't load the detailed "
                     "records right now. Open your **Applications** page to see them."
+                )
+            if arabic:
+                return (
+                    "لا توجد طلبات تقديم مسجَّلة بعد. "
+                    "عندما تتقدم لوظيفة عبر Rico، سأتابعها هنا. "
+                    "يمكنك أيضًا قول 'تم التقديم' على أي وظيفة."
                 )
             return (
                 "You have no tracked applications yet. "
@@ -8663,7 +8776,7 @@ class RicoChatAPI:
             body += f"\n_…and {total - 10} more. Open your **Applications** page to see all._"
         return f"{header}\n\n{body}"
 
-    def _handle_subscription_plans(self, user_id: str, profile: Any) -> dict[str, Any]:
+    def _handle_subscription_plans(self, user_id: str, profile: Any, message: str = "") -> dict[str, Any]:
         """Return Rico subscription plans and pricing."""
         # Try to get user's current plan from subscription repo
         try:
@@ -8674,6 +8787,11 @@ class RicoChatAPI:
             current_plan = "free"
 
         plans_msg = (
+            "ريكو يوفر خطتين:\n"
+            "• **Pro** — 29 درهم/شهرياً (محادثات ذكاء اصطناعي غير محدودة، تنبيهات ذات أولوية، تحسين السيرة الذاتية)\n"
+            "• **Premium** — 49 درهم/شهرياً (كل مزايا Pro + تحضير للمقابلات، خطابات تقديم، دعم مخصص)\n\n"
+            "اشترك على ricohunt.com/subscription أو اسألني للتفاصيل."
+            if self._is_arabic_text(message) else
             "Rico has two plans:\n"
             "• **Pro** — AED 29/month (unlimited AI chats, priority alerts, CV optimization)\n"
             "• **Premium** — AED 49/month (Pro + interview prep, cover letters, dedicated support)\n\n"
@@ -8695,12 +8813,13 @@ class RicoChatAPI:
             ],
         }
 
-    def _handle_learning_profile_summary(self, user_id: str, profile: Any) -> dict[str, Any]:
+    def _handle_learning_profile_summary(self, user_id: str, profile: Any, message: str = "") -> dict[str, Any]:
         """Show the user what Rico has learned from their behavioral signals.
 
         Reads top preferences from LearningRepository and formats a plain-language
         summary so users can verify what Rico has inferred and correct mistakes.
         """
+        arabic = self._is_arabic_text(message)
         try:
             from src.repositories.learning_repo import get_learning_repository
             _lr = get_learning_repository()
@@ -8713,9 +8832,27 @@ class RicoChatAPI:
 
             if not any([roles, locs, skills, avoided]):
                 msg = (
+                    "لم أتعلم أي شيء محدد بعد — أبني ملف تفضيلاتك من أفعالك. "
+                    "احفظ، تقدّم، أو تجاوز وظائف وسأبدأ بتخصيص النتائج."
+                    if arabic else
                     "I haven't learned anything specific yet — I build your preference profile "
                     "from your actions. Save, apply, or skip jobs and I'll start personalising results."
                 )
+            elif arabic:
+                lines = ["هذا ما تعلمته من أفعالك حتى الآن:\n"]
+                if roles:
+                    lines.append(f"**الأدوار المفضلة:** {', '.join(roles)}")
+                if locs:
+                    lines.append(f"**المواقع المفضلة:** {', '.join(locs)}")
+                if skills:
+                    lines.append(f"**المهارات ذات الصلة:** {', '.join(skills)}")
+                if avoided:
+                    lines.append(f"**شركات يُفضّل تجنبها:** {', '.join(avoided)}")
+                lines.append(
+                    "\nهذا يحدد شكل ترتيب الوظائف في نتائجك. "
+                    "أخبرني إذا رأيت شيئاً غير صحيح وسأصححه."
+                )
+                msg = "\n".join(lines)
             else:
                 lines = ["Here is what I've learned from your actions so far:\n"]
                 if roles:
@@ -8733,6 +8870,8 @@ class RicoChatAPI:
                 msg = "\n".join(lines)
         except Exception:
             msg = (
+                "تعذر استرجاع ملف تفضيلاتك الآن. حاول مرة أخرى بعد قليل — بياناتك بأمان."
+                if arabic else
                 "I couldn't retrieve your preference profile right now. "
                 "Try again in a moment — your data is safe."
             )
@@ -8788,8 +8927,14 @@ class RicoChatAPI:
         # Collapse whitespace
         cleaned = _re.sub(r"\s+", " ", cleaned).strip()
 
+        arabic = self._is_arabic_text(message)
         if not cleaned or len(cleaned) < 2:
             reply = (
+                "أخبرني بالتفضيل المحدد الذي تريد إزالته — مثلاً:\n"
+                "- \"انسَ تفضيلي لدبي\"\n"
+                "- \"أزل بايثون من مهاراتي\"\n"
+                "- \"لا أريد وظائف في أبوظبي\""
+                if arabic else
                 "Please tell me what specific preference to remove — for example:\n"
                 "- \"Forget my preference for Dubai\"\n"
                 "- \"Remove Python from my skills\"\n"
@@ -8807,14 +8952,31 @@ class RicoChatAPI:
                 "skill": "skill",
                 "company": "company",
             }
-            label = _labels.get(pref_type, "preference")
-            reply = (
-                f"Done — I've removed **{cleaned}** from your {label} list. "
-                "It won't influence your results anymore.\n\n"
-                "If you change your mind, just save or apply to relevant jobs and I'll pick it up again."
-            )
+            _labels_ar = {
+                "role": "تفضيل الدور الوظيفي",
+                "location": "تفضيل الموقع",
+                "skill": "المهارة",
+                "company": "الشركة",
+            }
+            if arabic:
+                label = _labels_ar.get(pref_type, "التفضيل")
+                reply = (
+                    f"تم — أزلت **{cleaned}** من قائمة {label}. "
+                    "لن يؤثر على نتائجك بعد الآن.\n\n"
+                    "إذا غيّرت رأيك، فقط احفظ أو تقدّم لوظائف ذات صلة وسأعيد رصده."
+                )
+            else:
+                label = _labels.get(pref_type, "preference")
+                reply = (
+                    f"Done — I've removed **{cleaned}** from your {label} list. "
+                    "It won't influence your results anymore.\n\n"
+                    "If you change your mind, just save or apply to relevant jobs and I'll pick it up again."
+                )
         except Exception:
             reply = (
+                "تعذرت إزالة هذا التفضيل الآن. "
+                "حاول مرة أخرى بعد قليل — بياناتك الأخرى بأمان."
+                if arabic else
                 "I couldn't remove that preference right now. "
                 "Please try again in a moment — your other data is safe."
             )
@@ -8822,24 +8984,33 @@ class RicoChatAPI:
         self._append_chat(user_id, "assistant", reply)
         return {"type": "preference_correction", "message": reply}
 
-    def _handle_application_insights(self, user_id: str) -> dict[str, Any]:
+    def _handle_application_insights(self, user_id: str, message: str = "") -> dict[str, Any]:
         """Analyze the user's tracked applications and surface success patterns.
 
         Calls ResponseIntelligenceEngine.analyze_response_patterns() on the user's
         application history and formats a plain-language insight summary.
         """
+        arabic = self._is_arabic_text(message)
         try:
             from src.repositories.applications_repo import get_all
             apps = get_all(user_id=user_id) or []
 
             if len(apps) < 3:
                 count = len(apps)
-                noun = "application" if count == 1 else "applications"
-                msg = (
-                    f"You have {count} tracked {noun} so far. "
-                    "Once you have a few more I'll be able to show you patterns — "
-                    "success rate, how long employers typically respond, and where to focus."
-                )
+                if arabic:
+                    noun = "طلب" if count == 1 else "طلبات"
+                    msg = (
+                        f"لديك {count} {noun} مسجلة حتى الآن. "
+                        "بعد إضافة بعض الطلبات الأخرى سأقدر أعرض لك الأنماط — "
+                        "معدل النجاح، مدة استجابة أصحاب العمل المعتادة، وأين تركز جهودك."
+                    )
+                else:
+                    noun = "application" if count == 1 else "applications"
+                    msg = (
+                        f"You have {count} tracked {noun} so far. "
+                        "Once you have a few more I'll be able to show you patterns — "
+                        "success rate, how long employers typically respond, and where to focus."
+                    )
             else:
                 from src.decision_engine import JobDecisionEngine
                 from src.response_intelligence import (
@@ -8855,7 +9026,11 @@ class RicoChatAPI:
                 result = _engine.analyze_response_patterns(apps)
 
                 if "error" in result:
-                    msg = "I couldn't analyze your applications right now. Try again in a moment."
+                    msg = (
+                        "تعذر تحليل طلباتك الآن. حاول مرة أخرى بعد قليل."
+                        if arabic else
+                        "I couldn't analyze your applications right now. Try again in a moment."
+                    )
                 else:
                     total = result["total_applications"]
                     success_pct = result["success_rate_pct"]
@@ -8863,7 +9038,10 @@ class RicoChatAPI:
                     dist = result.get("response_distribution", {})
                     insights = result.get("insights", [])
 
-                    lines = [f"**Application Analysis — {total} tracked applications**\n"]
+                    lines = (
+                        [f"**تحليل الطلبات — {total} طلب مسجل**\n"] if arabic
+                        else [f"**Application Analysis — {total} tracked applications**\n"]
+                    )
 
                     status_parts = []
                     for status, count in sorted(dist.items(), key=lambda x: -x[1]):
@@ -8871,11 +9049,17 @@ class RicoChatAPI:
                             label = status.replace("_", " ").title()
                             status_parts.append(f"{label}: {count}")
                     if status_parts:
-                        lines.append("**Outcomes:** " + " · ".join(status_parts))
+                        lines.append(("**النتائج:** " if arabic else "**Outcomes:** ") + " · ".join(status_parts))
 
-                    lines.append(f"**Success rate:** {success_pct}%")
+                    lines.append(
+                        f"**معدل النجاح:** {success_pct}%" if arabic else f"**Success rate:** {success_pct}%"
+                    )
                     if avg_days > 0:
-                        lines.append(f"**Avg employer response:** {avg_days:.0f} days")
+                        lines.append(
+                            f"**متوسط استجابة أصحاب العمل:** {avg_days:.0f} يوم"
+                            if arabic else
+                            f"**Avg employer response:** {avg_days:.0f} days"
+                        )
 
                     if insights:
                         lines.append("")
@@ -8887,6 +9071,8 @@ class RicoChatAPI:
                     msg = "\n".join(lines)
         except Exception:
             msg = (
+                "تعذر تحميل بيانات طلباتك الآن. حاول مرة أخرى بعد قليل."
+                if arabic else
                 "I couldn't load your application data right now. "
                 "Try again in a moment."
             )
@@ -8901,6 +9087,7 @@ class RicoChatAPI:
         shown job so role/location/company weights are boosted. Falls back to a
         generic positive signal when no recent job context is available.
         """
+        arabic = self._is_arabic_text(message)
         try:
             from src.repositories.learning_repo import get_learning_repository
             _lr = get_learning_repository()
@@ -8909,10 +9096,12 @@ class RicoChatAPI:
             if matches:
                 top = matches[0]
                 _lr.infer_signals_from_job_action(user_id, "save", top)
-                title = top.get("title") or "that role"
+                title = top.get("title") or ("هذا الدور" if arabic else "that role")
                 company = top.get("company") or ""
                 label = f"**{title}**" + (f" at {company}" if company else "")
                 msg = (
+                    f"رائع — {label} مسجلة كمطابقة قوية. سأعطي الأولوية لأدوار مشابهة في عمليات البحث القادمة."
+                    if arabic else
                     f"Great — {label} is marked as a strong match. "
                     "I'll prioritise similar roles in future searches."
                 )
@@ -8925,9 +9114,17 @@ class RicoChatAPI:
                     source="chat_feedback",
                     metadata={"message": message[:200]},
                 )
-                msg = "Glad to hear it! Tell me if you want to save it or prepare an application."
+                msg = (
+                    "يسعدني ذلك! أخبرني إذا تريد حفظها أو تحضير طلب تقديم."
+                    if arabic else
+                    "Glad to hear it! Tell me if you want to save it or prepare an application."
+                )
         except Exception:
-            msg = "Great — I'll keep that in mind when searching for more roles."
+            msg = (
+                "رائع — سأضع ذلك في الحسبان عند البحث عن أدوار أخرى."
+                if arabic else
+                "Great — I'll keep that in mind when searching for more roles."
+            )
 
         self._append_chat(user_id, "assistant", msg)
         return {"type": "job_feedback", "message": msg}
@@ -8940,6 +9137,7 @@ class RicoChatAPI:
         signals are updated with negative weights. Falls back to a generic signal when no
         recent job is in context. Never raises — a bare acknowledgement is returned on error.
         """
+        arabic = self._is_arabic_text(message)
         try:
             from src.repositories.learning_repo import get_learning_repository
             _lr = get_learning_repository()
@@ -8948,10 +9146,12 @@ class RicoChatAPI:
             if matches:
                 top = matches[0]
                 _lr.infer_signals_from_job_action(user_id, "not_relevant", top)
-                title = top.get("title") or "that role"
+                title = top.get("title") or ("هذا الدور" if arabic else "that role")
                 company = top.get("company") or ""
                 label = f"**{title}**" + (f" at {company}" if company else "")
                 msg = (
+                    f"تم التسجيل — {label} ليست مناسبة. سأستخدم ذلك لتحسين الاقتراحات القادمة."
+                    if arabic else
                     f"Noted — {label} isn't the right fit. "
                     "I'll use that to refine future recommendations."
                 )
@@ -8964,23 +9164,34 @@ class RicoChatAPI:
                     source="chat_feedback",
                     metadata={"message": message[:200]},
                 )
-                msg = "Understood. Tell me what kind of role you're looking for and I'll find better matches."
+                msg = (
+                    "فهمت. أخبرني عن نوع الدور الذي تبحث عنه وسأجد مطابقات أفضل."
+                    if arabic else
+                    "Understood. Tell me what kind of role you're looking for and I'll find better matches."
+                )
         except Exception:
-            msg = "Got it — I'll keep that in mind when searching for roles."
+            msg = (
+                "تم — سأضع ذلك في الحسبان عند البحث عن أدوار."
+                if arabic else
+                "Got it — I'll keep that in mind when searching for roles."
+            )
 
         self._append_chat(user_id, "assistant", msg)
         return {"type": "job_feedback", "message": msg}
 
-    def _handle_delegated_decision(self, user_id: str, profile: Any) -> dict[str, Any]:
+    def _handle_delegated_decision(self, user_id: str, profile: Any, message: str = "") -> dict[str, Any]:
         """Handle 'you decide' / 'choose for me' by picking the strongest CV-aligned role."""
         has_cv = bool(profile and self._profile_value(profile, "cv_status") == "parsed")
         target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+        arabic = self._is_arabic_text(message)
 
         if has_cv and target_roles:
             chosen_role = target_roles[0]
             return {
                 "type": "job_search_explicit",
                 "message": (
+                    f"بناءً على سيرتك الذاتية، سأتابع بأقوى مطابقة: **{chosen_role}**. أبحث عن وظائف فعلية الآن..."
+                    if arabic else
                     f"Based on your CV, I'll proceed with the strongest match: **{chosen_role}**."
                     f" Searching live jobs now..."
                 ),
@@ -8994,6 +9205,8 @@ class RicoChatAPI:
             return {
                 "type": "job_search_explicit",
                 "message": (
+                    f"سأتابع بدورك المستهدف: **{chosen_role}**. أبحث عن وظائف فعلية الآن..."
+                    if arabic else
                     f"I'll proceed with your target role: **{chosen_role}**."
                     f" Searching live jobs now..."
                 ),
@@ -9005,13 +9218,16 @@ class RicoChatAPI:
         return {
             "type": "clarification",
             "message": (
+                "يسعدني أن أختار لك، لكنني أحتاج سياقاً أكثر أولاً. "
+                "ارفع سيرتك الذاتية أو أخبرني بدورك المستهدف والمدينة المفضلة."
+                if arabic else
                 "I'd be happy to choose for you, but I need more context first. "
                 "Upload your CV or tell me your target role and preferred city."
             ),
             "next_action": "need_profile_for_delegation",
         }
 
-    def _handle_post_cv_continuation(self, user_id: str, profile: Any) -> dict[str, Any]:
+    def _handle_post_cv_continuation(self, user_id: str, profile: Any, message: str = "") -> dict[str, Any]:
         """Handle 'keep going / كمل / continue' after CV upload or profile-building.
 
         Priority:
@@ -9027,9 +9243,13 @@ class RicoChatAPI:
             return self._classified_role_search(user_id, chosen_role, profile)
 
         if has_cv:
-            return self._handle_profile_role_suggestions(profile)
+            return self._handle_profile_role_suggestions(profile, message)
 
-        clarification = "What role should I search for first?"
+        clarification = (
+            "ما الدور الذي تريد أن أبحث عنه أولاً؟"
+            if self._is_arabic_text(message) else
+            "What role should I search for first?"
+        )
         self._append_chat(user_id, "assistant", clarification)
         return {
             "type": "clarification",
@@ -9037,10 +9257,13 @@ class RicoChatAPI:
             "message": clarification,
         }
 
-    def _handle_cv_creation(self, user_id: str, profile: Any) -> dict[str, Any]:
+    def _handle_cv_creation(self, user_id: str, profile: Any, message: str = "") -> dict[str, Any]:
         """Start the no-CV profile builder / CV draft flow."""
         name = self._profile_value(profile, "name") or ""
-        if name:
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            greeting = f"أهلاً {name}،" if name else "أهلاً،"
+        elif name:
             greeting = f"Hi {name},"
         else:
             greeting = "Hi there,"
@@ -9048,6 +9271,13 @@ class RicoChatAPI:
         return {
             "type": "cv_creation",
             "message": (
+                f"{greeting} يمكنني مساعدتك في بناء سيرة ذاتية من الصفر. أخبرني بـ:\n"
+                "• المسمى الوظيفي الحالي أو الأخير\n"
+                "• سنوات الخبرة\n"
+                "• المهارات الأساسية والشهادات\n"
+                "• الصناعات والمدن المفضلة\n\n"
+                "أو الصق أي سيرة عمل سابقة وسأنسقها في سيرة ذاتية مناسبة."
+                if arabic else
                 f"{greeting} I can help you build a CV from scratch. "
                 "Tell me your:\n"
                 "• Current or most recent job title\n"
@@ -9060,17 +9290,22 @@ class RicoChatAPI:
             "fields_needed": ["current_role", "years_experience", "skills", "industries", "preferred_cities"],
         }
 
-    def _handle_cv_generate_from_profile(self, user_id: str, profile: Any) -> dict[str, Any]:
+    def _handle_cv_generate_from_profile(self, user_id: str, profile: Any, message: str = "") -> dict[str, Any]:
         """Generate a professional CV draft from the user's already-parsed profile.
 
         Uses extracted fields: name, email, phone, skills, experience, target roles,
         certifications, preferred cities. Asks only for genuinely missing fields.
         """
+        arabic = self._is_arabic_text(message)
         if not self._has_cv_profile(profile):
             # No parsed profile — redirect to upload or manual creation
             return {
                 "type": "cv_creation",
                 "message": (
+                    "لا تتوفر لدي بيانات سيرتك الذاتية بعد. "
+                    "ارفع سيرتك الذاتية (PDF أو Word) وسأستخدمها لبناء سيرة جديدة، "
+                    "أو أخبرني بتاريخك الوظيفي وسأنسقه لك."
+                    if arabic else
                     "I don't have your CV data yet. "
                     "Please upload your CV (PDF or Word) and I'll use it to build a new one, "
                     "or tell me your work history and I'll format it for you."
@@ -9095,21 +9330,37 @@ class RicoChatAPI:
 
         # Identify genuinely missing fields that would improve the CV
         missing: list[str] = []
-        if not current_role:
-            missing.append("current or most recent job title")
-        if years_exp is None:
-            missing.append("years of experience")
-        if not skills:
-            missing.append("key skills and certifications")
-        if not preferred_cities:
-            missing.append("preferred cities (e.g. Dubai, Abu Dhabi)")
+        if arabic:
+            if not current_role:
+                missing.append("المسمى الوظيفي الحالي أو الأخير")
+            if years_exp is None:
+                missing.append("سنوات الخبرة")
+            if not skills:
+                missing.append("المهارات الأساسية والشهادات")
+            if not preferred_cities:
+                missing.append("المدن المفضلة (مثل دبي، أبوظبي)")
+        else:
+            if not current_role:
+                missing.append("current or most recent job title")
+            if years_exp is None:
+                missing.append("years of experience")
+            if not skills:
+                missing.append("key skills and certifications")
+            if not preferred_cities:
+                missing.append("preferred cities (e.g. Dubai, Abu Dhabi)")
 
         # Sections absent from parsed CV — do not generate placeholders for these
         unparsed_sections: list[str] = []
-        if not work_experience:
-            unparsed_sections.append("Work Experience")
-        if not education:
-            unparsed_sections.append("Education")
+        if arabic:
+            if not work_experience:
+                unparsed_sections.append("الخبرة العملية")
+            if not education:
+                unparsed_sections.append("التعليم")
+        else:
+            if not work_experience:
+                unparsed_sections.append("Work Experience")
+            if not education:
+                unparsed_sections.append("Education")
 
         # If cities are missing, store pending field so the next reply is captured
         if not preferred_cities:
@@ -9155,26 +9406,53 @@ class RicoChatAPI:
 
         cv_draft = "\n\n".join(sections)
 
-        greeting = f"Here is your CV draft, {name}:" if name else "Here is your CV draft:"
+        if arabic:
+            greeting = f"هذا مسودة سيرتك الذاتية، {name}:" if name else "هذا مسودة سيرتك الذاتية:"
+        else:
+            greeting = f"Here is your CV draft, {name}:" if name else "Here is your CV draft:"
 
         if missing:
             missing_note = (
-                "\n\n**To complete the CV I still need:**\n"
-                + "\n".join(f"• {f}" for f in missing)
-                + "\n\nReply with these details and I'll add them."
+                (
+                    "\n\n**لإكمال السيرة الذاتية، ما زلت أحتاج:**\n"
+                    + "\n".join(f"• {f}" for f in missing)
+                    + "\n\nرد بهذه التفاصيل وسأضيفها."
+                )
+                if arabic else
+                (
+                    "\n\n**To complete the CV I still need:**\n"
+                    + "\n".join(f"• {f}" for f in missing)
+                    + "\n\nReply with these details and I'll add them."
+                )
             )
         elif unparsed_sections:
             # Profile is present but parsed CV lacks full sections — be honest
             missing_note = (
-                "\n\n**Sections not yet available from your parsed CV:** "
-                + ", ".join(unparsed_sections)
-                + ".\n\nTo add these, upload your CV file (PDF or Word) "
-                "or paste your work history and I'll format it."
+                (
+                    "\n\n**أقسام غير متوفرة بعد من سيرتك الذاتية المحلَّلة:** "
+                    + ", ".join(unparsed_sections)
+                    + ".\n\nلإضافتها، ارفع ملف سيرتك الذاتية (PDF أو Word) "
+                    "أو الصق تاريخك الوظيفي وسأنسقه."
+                )
+                if arabic else
+                (
+                    "\n\n**Sections not yet available from your parsed CV:** "
+                    + ", ".join(unparsed_sections)
+                    + ".\n\nTo add these, upload your CV file (PDF or Word) "
+                    "or paste your work history and I'll format it."
+                )
             )
         else:
             missing_note = (
-                "\n\nAll available profile sections are included. "
-                "Tell me if you'd like to tailor this CV for a specific role."
+                (
+                    "\n\nكل أقسام الملف الشخصي المتوفرة مُضمّنة. "
+                    "أخبرني إذا تريد تخصيص هذه السيرة الذاتية لدور معين."
+                )
+                if arabic else
+                (
+                    "\n\nAll available profile sections are included. "
+                    "Tell me if you'd like to tailor this CV for a specific role."
+                )
             )
 
         message = f"{greeting}\n\n---\n\n{cv_draft}\n\n---{missing_note}"
@@ -14583,9 +14861,10 @@ class RicoChatAPI:
 
         return {"type": "options", "message": intro, "options": options}
 
-    def _handle_profile_completeness(self, user_id: str, profile: Any) -> dict[str, Any]:
+    def _handle_profile_completeness(self, user_id: str, profile: Any, message: str = "") -> dict[str, Any]:
         """Deterministic profile completeness report using evaluate_minimum_profile."""
         from src.agent.context.resolver import resolve_profile_context
+        arabic = self._is_arabic_text(message)
         # Try DB-backed ProfileContext first; on failure check fields directly
         # via self._profile_value() so CI (no DB) and tests still work.
         try:
@@ -14613,37 +14892,73 @@ class RicoChatAPI:
             "years_experience": "Years of experience",
             "skills": "Skills or CV upload",
         }
+        _FIELD_LABELS_AR: dict[str, str] = {
+            "target_roles": "الدور (الأدوار) المستهدف",
+            "preferred_cities": "المدينة المفضلة في الإمارات",
+            "years_experience": "سنوات الخبرة",
+            "skills": "المهارات أو رفع السيرة الذاتية",
+        }
         optional_gaps: list[str] = []
+        optional_gaps_ar: list[str] = []
         if not self._as_list(self._profile_value(profile, "industries")):
             optional_gaps.append("Industry sector (improves match quality)")
+            optional_gaps_ar.append("القطاع الصناعي (يحسّن جودة المطابقة)")
         if not self._profile_value(profile, "salary_expectation_aed"):
             optional_gaps.append("Salary expectation (filters out low offers)")
+            optional_gaps_ar.append("الراتب المتوقع (يستثني العروض المنخفضة)")
         if not self._profile_value(profile, "telegram_username"):
             optional_gaps.append("Telegram username (enables real-time job alerts)")
+            optional_gaps_ar.append("اسم مستخدم تيليجرام (يفعّل تنبيهات الوظائف الفورية)")
         if gate_ok:
-            parts = ["**Your profile is complete for job matching.**"]
-            if optional_gaps:
-                parts.append(
-                    "\nOptional fields that improve your results:\n"
-                    + "\n".join(f"• {f}" for f in optional_gaps)
-                )
-            parts.append("\nSay **'search for jobs'** and I'll start matching.")
+            if arabic:
+                parts = ["**ملفك الشخصي مكتمل لمطابقة الوظائف.**"]
+                if optional_gaps_ar:
+                    parts.append(
+                        "\nحقول اختيارية تحسّن نتائجك:\n"
+                        + "\n".join(f"• {f}" for f in optional_gaps_ar)
+                    )
+                parts.append("\nقل **'بحث عن وظائف'** وسأبدأ المطابقة.")
+            else:
+                parts = ["**Your profile is complete for job matching.**"]
+                if optional_gaps:
+                    parts.append(
+                        "\nOptional fields that improve your results:\n"
+                        + "\n".join(f"• {f}" for f in optional_gaps)
+                    )
+                parts.append("\nSay **'search for jobs'** and I'll start matching.")
         else:
-            mandatory_labels = [_FIELD_LABELS.get(f, f) for f in missing]
-            parts = [
-                "**Missing required fields:**\n"
-                + "\n".join(f"• {l}" for l in mandatory_labels)
-            ]
-            if optional_gaps:
+            if arabic:
+                mandatory_labels_ar = [_FIELD_LABELS_AR.get(f, f) for f in missing]
+                parts = [
+                    "**حقول مطلوبة ناقصة:**\n"
+                    + "\n".join(f"• {l}" for l in mandatory_labels_ar)
+                ]
+                if optional_gaps_ar:
+                    parts.append(
+                        "\nكذلك ناقصة (اختيارية لكن مُوصى بها):\n"
+                        + "\n".join(f"• {f}" for f in optional_gaps_ar)
+                    )
                 parts.append(
-                    "\nAlso missing (optional but recommended):\n"
-                    + "\n".join(f"• {f}" for f in optional_gaps)
+                    "\nيمكنك تعبئتها عبر:\n"
+                    "• رفع سيرتك الذاتية — تعبّئ معظم الحقول تلقائيًا\n"
+                    "• إخباري مباشرة: *'دوري المستهدف هو مدير سلامة'*"
                 )
-            parts.append(
-                "\nYou can fill these by:\n"
-                "• Uploading your CV — auto-fills most fields\n"
-                "• Telling me directly: *'My target role is Safety Manager'*"
-            )
+            else:
+                mandatory_labels = [_FIELD_LABELS.get(f, f) for f in missing]
+                parts = [
+                    "**Missing required fields:**\n"
+                    + "\n".join(f"• {l}" for l in mandatory_labels)
+                ]
+                if optional_gaps:
+                    parts.append(
+                        "\nAlso missing (optional but recommended):\n"
+                        + "\n".join(f"• {f}" for f in optional_gaps)
+                    )
+                parts.append(
+                    "\nYou can fill these by:\n"
+                    "• Uploading your CV — auto-fills most fields\n"
+                    "• Telling me directly: *'My target role is Safety Manager'*"
+                )
         msg = "\n".join(parts)
         self._append_chat(user_id, "assistant", msg)
         return {
@@ -14654,7 +14969,7 @@ class RicoChatAPI:
             "missing_optional": optional_gaps,
         }
 
-    def _handle_application_tracking(self, user_id: str, intent: str = "application_tracking") -> dict[str, Any]:
+    def _handle_application_tracking(self, user_id: str, intent: str = "application_tracking", message: str = "") -> dict[str, Any]:
         """Route application tracking requests to the applications repository."""
         try:
             from src.repositories.applications_repo import get_all, get_stats
@@ -14668,7 +14983,7 @@ class RicoChatAPI:
 
         enriched = self._enrich_applications(self._sort_applications_recent(apps))
         follow_up_needed = [a for a in enriched if a.get("needs_follow_up")]
-        msg = self._build_tracking_message(enriched, stats)
+        msg = self._build_tracking_message(enriched, stats, arabic=self._is_arabic_text(message))
         if enriched:
             latest = enriched[0]
             self._store_recent_context(
@@ -14700,7 +15015,7 @@ class RicoChatAPI:
             "follow_up_needed": follow_up_needed,
         }
 
-    def _handle_lifecycle_query(self, user_id: str, query_type: str) -> dict[str, Any]:
+    def _handle_lifecycle_query(self, user_id: str, query_type: str, message: str = "") -> dict[str, Any]:
         """Answer funnel-memory questions from user_job_context.
 
         Handles three Rico chat questions:
@@ -14713,18 +15028,31 @@ class RicoChatAPI:
             get_opened_not_applied,
         )
 
+        arabic = self._is_arabic_text(message)
         if query_type == "lifecycle_show_saved":
             rows = get_by_status(user_id, "saved")
             label = "saved"
-            empty_msg = "You haven't saved any jobs yet. When you save a job from Rico, it'll appear here."
+            empty_msg = (
+                "لم تحفظ أي وظائف بعد. عند حفظ وظيفة من Rico، ستظهر هنا."
+                if arabic else
+                "You haven't saved any jobs yet. When you save a job from Rico, it'll appear here."
+            )
         elif query_type == "lifecycle_show_applied":
             rows = get_by_status(user_id, "applied")
             label = "applied"
-            empty_msg = "I don't have any jobs marked as applied yet. After you apply, hit 'Mark as applied' so Rico can track it."
+            empty_msg = (
+                "لا توجد وظائف مسجَّلة كمُقدَّمة بعد. بعد التقديم، اضغط 'تم التقديم' حتى يتابعها Rico."
+                if arabic else
+                "I don't have any jobs marked as applied yet. After you apply, hit 'Mark as applied' so Rico can track it."
+            )
         else:  # lifecycle_show_opened_not_applied
             rows = get_opened_not_applied(user_id)
             label = "opened but not applied"
-            empty_msg = "No jobs in that bucket yet — these are jobs where you clicked the apply link but haven't marked as applied."
+            empty_msg = (
+                "لا توجد وظائف في هذه الفئة بعد — هذه وظائف ضغطت رابط التقديم لها لكن لم تُسجّلها كمُقدَّمة."
+                if arabic else
+                "No jobs in that bucket yet — these are jobs where you clicked the apply link but haven't marked as applied."
+            )
 
         # Always remember the last lifecycle query so "list them" can replay it.
         self._store_lifecycle_context(user_id, query_type)
@@ -14775,15 +15103,20 @@ class RicoChatAPI:
             "count": len(rows),
         }
 
-    def _handle_profile_role_suggestions(self, profile: Any) -> dict[str, Any]:
+    def _handle_profile_role_suggestions(self, profile: Any, message: str = "") -> dict[str, Any]:
         """Generate deterministic role suggestions based on CV skills/certifications.
 
         Fast path: no OpenAI, no job search, just profile data → role mapping.
         """
+        arabic = self._is_arabic_text(message)
         if not profile:
             return {
                 "type": "profile_role_suggestions",
-                "message": "I need your CV or profile data to suggest roles. Upload your CV first.",
+                "message": (
+                    "أحتاج إلى سيرتك الذاتية أو بيانات ملفك الشخصي لاقتراح أدوار. ارفع سيرتك الذاتية أولاً."
+                    if arabic else
+                    "I need your CV or profile data to suggest roles. Upload your CV first."
+                ),
                 "options": [],
                 "next_action": "upload_cv"
             }
@@ -14804,8 +15137,13 @@ class RicoChatAPI:
             return {
                 "type": "profile_role_suggestions",
                 "message": (
-                    "I need a bit more information to suggest the right roles for you. "
-                    "Add your skills or upload your CV to get started."
+                    (
+                        "أحتاج إلى مزيد من المعلومات لاقتراح الأدوار المناسبة لك. "
+                        "أضف مهاراتك أو ارفع سيرتك الذاتية للبدء."
+                    ) if arabic else (
+                        "I need a bit more information to suggest the right roles for you. "
+                        "Add your skills or upload your CV to get started."
+                    )
                 ),
                 "options": [],
                 "next_action": "add_skills",
@@ -14814,8 +15152,13 @@ class RicoChatAPI:
         return {
             "type": "profile_role_suggestions",
             "message": (
-                f"Based on your CV, here are {len(suggestions)} roles that match your background. "
-                "Choose one to start searching:"
+                (
+                    f"بناءً على سيرتك الذاتية، هذه {len(suggestions)} أدوار تطابق خلفيتك. "
+                    "اختر واحدًا لبدء البحث:"
+                ) if arabic else (
+                    f"Based on your CV, here are {len(suggestions)} roles that match your background. "
+                    "Choose one to start searching:"
+                )
             ),
             "options": suggestions,
             "next_action": "select_role_to_search",
@@ -14826,6 +15169,7 @@ class RicoChatAPI:
         user_id: str,
         profile: Any,
         searched_roles: list[str],
+        message: str = "",
     ) -> dict[str, Any]:
         """Return structured role-broadening options when live search returns no matches."""
         suggestions = self._generate_role_suggestions(
@@ -14854,12 +15198,20 @@ class RicoChatAPI:
             "message": "show roles from my cv",
         })
 
-        searched_label = ", ".join(searched_roles[:2]) if searched_roles else "your target role"
+        arabic = self._is_arabic_text(message)
+        searched_label = ", ".join(searched_roles[:2]) if searched_roles else (
+            "دورك المستهدف" if arabic else "your target role"
+        )
         return {
             "type": "no_results_recovery",
             "message": (
-                f"No live UAE matches found for **{searched_label}** right now. "
-                "Here are related roles from your CV that may have active openings:"
+                (
+                    f"لا توجد وظائف فعلية في الإمارات حاليًا لـ **{searched_label}**. "
+                    "هذه أدوار ذات صلة من سيرتك الذاتية قد تحتوي على فرص نشطة:"
+                ) if arabic else (
+                    f"No live UAE matches found for **{searched_label}** right now. "
+                    "Here are related roles from your CV that may have active openings:"
+                )
             ),
             "options": alt_options,
             "next_action": "select_role_to_search",

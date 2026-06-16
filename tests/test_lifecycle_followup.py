@@ -157,7 +157,7 @@ class TestListFollowupFlow:
         ):
             api._enrich_applications = lambda apps: []
             api._sort_applications_recent = lambda apps: []
-            api._build_tracking_message = lambda *a: "You have 0 tracked applications."
+            api._build_tracking_message = lambda *a, **kw: "You have 0 tracked applications."
             api._handle_application_tracking("user@test.com")
 
         lc = stored.get(("user@test.com", "lifecycle_query_context"))
