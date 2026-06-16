@@ -43,6 +43,7 @@ def _handle_start(message: Dict[str, Any]) -> Dict[str, Any]:
     if not bound_user_id:
         bound_user_id = chat_id
 
+    linked = False
     if chat_id:
         try:
             upsert_profile(
@@ -53,16 +54,25 @@ def _handle_start(message: Dict[str, Any]) -> Dict[str, Any]:
                     **({"telegram_username": username} if username else {}),
                 },
             )
+            linked = True
         except Exception as exc:
             logger.warning("telegram_start: upsert failed user=%s: %s", bound_user_id, exc)
 
     display = f"@{username}" if username else f"chat {chat_id}"
-    reply = (
-        f"Welcome to Rico! Your Telegram ({display}) is now linked. "
-        "I'll send you job alerts and follow-up reminders here. "
-        "Send /stop at any time to pause notifications."
-    )
-    logger.info("telegram_start: bound chat_id=%s to user=%s", chat_id, bound_user_id)
+    if linked:
+        reply = (
+            f"Welcome to Rico! Your Telegram ({display}) is now linked. "
+            "I'll send you job alerts and follow-up reminders here. "
+            "Send /stop at any time to pause notifications."
+        )
+    else:
+        # Don't tell the user linking succeeded when the profile write actually
+        # failed — they'd believe notifications are on when nothing was persisted.
+        reply = (
+            "I couldn't link your Telegram right now due to a temporary issue. "
+            "Please send /start again in a moment."
+        )
+    logger.info("telegram_start: bound chat_id=%s to user=%s linked=%s", chat_id, bound_user_id, linked)
     return {"chat_id": chat_id, "reply": reply}
 
 
@@ -71,16 +81,19 @@ def _handle_stop(message: Dict[str, Any]) -> Dict[str, Any]:
     chat_id = str(message.get("chat", {}).get("id") or message.get("from", {}).get("id") or "")
     user_id = chat_id  # for Telegram users, chat_id == Rico user_id
 
+    stopped = False
     if chat_id:
         try:
             upsert_profile(user_id, {"telegram_notifications_enabled": False})
+            stopped = True
         except Exception as exc:
             logger.warning("telegram_stop: upsert failed user=%s: %s", user_id, exc)
 
-    reply = (
-        "Notifications paused. Send /start to re-enable them whenever you're ready."
-    )
-    logger.info("telegram_stop: disabled notifications for chat_id=%s", chat_id)
+    if stopped:
+        reply = "Notifications paused. Send /start to re-enable them whenever you're ready."
+    else:
+        reply = "I couldn't update your notification settings right now. Please try /stop again shortly."
+    logger.info("telegram_stop: disabled notifications for chat_id=%s ok=%s", chat_id, stopped)
     return {"chat_id": chat_id, "reply": reply}
 
 
