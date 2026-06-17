@@ -1334,11 +1334,12 @@ export default function CommandPage() {
 
             {/* Hidden file input for CV upload */}
             <input
+                id="cv-file-upload"
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf"
-                aria-label="Upload CV PDF"
-                title="Upload CV PDF"
+                accept=".pdf,.doc,.docx"
+                aria-label="Upload CV"
+                title="Upload CV"
                 className="hidden"
                 onChange={handleCVUpload}
             />
@@ -1726,19 +1727,21 @@ export default function CommandPage() {
                         </div>
                     )}
                     <div className="flex items-end gap-2 rounded-2xl border border-border-soft bg-surface-elevated/95 p-1.5 shadow-xl shadow-black/10 backdrop-blur-md transition-[border-color,box-shadow] focus-within:border-gold/30 focus-within:shadow-[0_0_0_3px_rgba(245,166,35,0.07),0_8px_32px_rgba(0,0,0,0.12)]">
-                        {/* CV upload button */}
-                        <button
-                            type="button"
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={thinking || chatAudience === "checking"}
+                        {/* CV upload button — label triggers the hidden file input natively,
+                            avoiding the programmatic .click() which some mobile browsers block. */}
+                        <label
+                            htmlFor={thinking || chatAudience === "checking" ? undefined : "cv-file-upload"}
+                            role="button"
+                            tabIndex={thinking || chatAudience === "checking" ? -1 : 0}
+                            aria-disabled={thinking || chatAudience === "checking"}
                             title={t("cmdUploadCvTitle")}
-                            className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl text-text-secondary transition-colors hover:bg-surface-subtle hover:text-rico-text disabled:opacity-30 rico-focus-strong"
                             aria-label={t("cmdUploadCvAriaLabel")}
+                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-text-secondary transition-colors rico-focus-strong ${thinking || chatAudience === "checking" ? "opacity-30 pointer-events-none cursor-default" : "cursor-pointer hover:bg-surface-subtle hover:text-rico-text"}`}
                         >
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                             </svg>
-                        </button>
+                        </label>
 
                         {/* Text input */}
                         <div className="relative flex-1">

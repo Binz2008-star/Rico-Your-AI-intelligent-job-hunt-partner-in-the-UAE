@@ -56,6 +56,55 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260617-010 — Fix chat composer clip icon UX
+
+Status: in_progress
+Owner: Claude
+Branch: `claude/magical-allen-343jp2`
+Issue/PR: (pending)
+
+#### Objective
+Make the chat composer clip icon reliably open the file picker on all browsers,
+including mobile Safari and WebViews that block programmatic `input.click()`.
+
+#### Context
+- Relevant files:
+  - `apps/web/app/command/page.tsx` (hidden file input + clip button in composer)
+- Root cause: `<button onClick={() => fileInputRef.current?.click()}>` silently fails on
+  some mobile browsers because programmatic `.click()` on a hidden file input is treated
+  as an untrusted event. The `/upload` page works because it uses native label/input wiring.
+- Existing behavior: clip button exists and is wired, but the file picker never opens on
+  affected browsers.
+
+#### Constraints
+- Frontend composer only. No backend, no CV parser, no DB, no scoring, no AI provider.
+- Do not change upload logic (handleCVUpload, confirmCVProfile, etc.).
+- Do not change tests beyond what is practical for the click behaviour.
+
+#### Acceptance criteria
+- [x] Clicking the clip icon opens a native file picker on desktop and mobile.
+- [x] Icon is visually dimmed and non-interactive during `checking`/`thinking` state.
+- [x] Accept attribute extended to `.pdf,.doc,.docx` (more useful than `.pdf` only).
+- [x] Frontend build passes with no TypeScript errors.
+
+#### Required verification
+- [x] `npm run build` clean in `apps/web`.
+- [ ] CI QA Tests (pytest + playwright) green on PR.
+- [ ] Manual smoke: click clip icon on desktop → file picker opens.
+
+#### Handoff notes
+- Changed files:
+  - `apps/web/app/command/page.tsx` — hidden `<input>` gets `id="cv-file-upload"` and
+    `accept=".pdf,.doc,.docx"`; `<button>` replaced with `<label htmlFor="cv-file-upload">`
+    with equivalent disabled/aria styling.
+  - `AI_WORKSPACE/TASKS.md`
+- Risks: None. `<label htmlFor>` pattern is universally supported and more reliable than
+  programmatic `.click()`. The `ref` on the input is kept for the `__cv_upload__` magic
+  message path (line ~811) which is unaffected.
+- Rollback plan: revert the single file `apps/web/app/command/page.tsx`.
+
+---
+
 ### TASK-20260617-009 — CV extraction quality warnings
 
 Status: done
