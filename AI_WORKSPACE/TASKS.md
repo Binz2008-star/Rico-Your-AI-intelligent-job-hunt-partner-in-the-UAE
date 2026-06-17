@@ -58,10 +58,10 @@ Issue/PR: <link or number>
 
 ### TASK-20260617-008 — Add session-level job search history
 
-Status: in_progress
+Status: done
 Owner: Codex
 Branch: `codex/task-20260617-008-session-job-history`
-Issue/PR: (pending)
+Issue/PR: #617
 
 #### Objective
 Track lightweight job-search summaries in the current Rico chat session so Rico can answer
@@ -124,13 +124,40 @@ how many jobs it found earlier in the same conversation.
   follow-ups even when JSON recent-context writes are disabled, but it is not durable across
   process restarts or multi-worker hops. Existing `recent_context` remains the primary store when available.
 - Rollback plan: revert the TASK-008 PR commit.
+- Production: squash-merged to main as `09027412ac3287e7ec78e6b73dd964a607c36357` (#617).
+  Deployed to Render. Smoke test 2026-06-17: session job count confirmed working.
+
+### TASK-20260617-007 — Add matching guardrails
+
+Status: done
+Owner: Codex
+Branch: `codex/task-20260617-007-job-match-guardrails`
+Issue/PR: #616
+
+#### Objective
+Surface advisory warnings for contradictory matching settings and risky profile inputs on
+Settings and Profile pages without blocking saves. Preserve DB schema and scoring behavior.
+
+#### Acceptance criteria
+- [x] Backend guardrail evaluator warns on contradictory include/exclude keywords.
+- [x] Backend guardrail evaluator warns on high `min_score` with broad criteria.
+- [x] Backend guardrail evaluator warns on invalid city or excessive target roles.
+- [x] Warnings returned as advisory fields; saves are not blocked.
+- [x] English and Arabic warning messages supported.
+
+#### Handoff notes
+- Changed files: `src/services/matching_guardrails.py`, `src/api/routers/settings.py`,
+  `src/api/routers/rico_chat.py`, `src/schemas/settings.py`, frontend Settings/Profile
+  warning display, related tests.
+- Production: squash-merged to main as `a8516c188baa0841d7f2ec7b942ef9215e9e2787` (#616).
+  Deployed to Render. Smoke test 2026-06-17: guardrails confirmed working.
 
 ### TASK-20260617-002 — Fix cover-letter intent slot extraction
 
-Status: review
+Status: done
 Owner: Claude
 Branch: `claude/great-ritchie-75219u`
-Issue/PR: (pending)
+Issue/PR: #615
 
 #### Objective
 Extract role, company, city, and language from a single cover-letter request and
@@ -169,6 +196,9 @@ generate the letter directly instead of re-asking for role/company.
   clarification (safe fallback). Tightened Arabic tips regex now requires an
   interrogative/advice context.
 - Rollback plan: revert the four source/test files on this branch.
+- Production: squash-merged to main as `66f7364f8b6ea03326223383b5536c627204ffd2` (#615).
+  Deployed to Render. Smoke test 2026-06-17: Arabic cover-letter confirmed writing directly.
+  Previous failure was a deployment gap, not an active code bug.
 
 ### TASK-20260617-001 — Add AI multi-model sync workspace
 
@@ -193,3 +223,24 @@ Add a repo-native shared source of truth for AI planning, implementation handoff
 
 #### Handoff notes
 - Merged via squash into main: a76a1b6
+
+## Backlog — next priorities
+
+Ordered by current priority. Do not start without explicit scope and branch assignment.
+
+1. **CV extraction quality warnings** — surface structured warnings when CV parse quality is low
+   (missing sections, unrecognised format, low confidence fields). Advisory only; do not block upload.
+2. **Application Pipeline V1** — end-to-end application submission flow with approval gate,
+   audit log, and Telegram confirmation. Requires `RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true`.
+3. **Pipeline relevance guard** — pre-filter pipeline job results against active profile before
+   scoring to reduce false-positives reaching the user.
+4. **Match score explanation** — expose per-field score breakdown in job cards so users
+   understand why a job ranked high or low.
+5. **Blocked link UX** — detect dead/redirected apply URLs before showing them to users;
+   surface a clear "link unavailable" state instead of a broken redirect.
+
+### Active issues
+- **Issue #618** — open as backlog for Arabic intent / smoke-test observations.
+  Arabic cover-letter parser confirmed fixed in production after #615 deploy.
+  Do not treat as P0 unless a new reproducible failure appears after commit
+  `525964d758d13b86cf0f9b2907bdde7be773d9da`.
