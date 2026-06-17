@@ -6,6 +6,12 @@ This repository is Rico Hunt / Rico AI: a UAE-focused AI career companion and jo
 
 Treat this as production code. Do not add pseudo-code, placeholder implementations, or unrelated rewrites. Prefer small, safe patches that preserve the live production behavior.
 
+## AI Workspace Entry Point
+
+For new Rico work sessions, start from `AI_WORKSPACE/START_HERE.md`.
+
+Use the AI workspace as the shared source of truth for tasks, decisions, handoffs, evaluations, and prompt contracts. Do not rely on chat memory when the repository already contains current workspace files.
+
 ## Current Live Stack
 
 - Frontend: Next.js 14 / TypeScript / Tailwind in `apps/web`
