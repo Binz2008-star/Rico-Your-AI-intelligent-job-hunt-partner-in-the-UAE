@@ -133,6 +133,16 @@ export const StatsResponseSchema = z.object({
 // Settings Schemas
 // ============================================================================
 
+const MatchingGuardrailWarningSchema = z.object({
+    code: z.string(),
+    field: z.string(),
+    severity: z.string().optional(),
+    message: z.string(),
+    suggestion: z.string().optional(),
+    message_ar: z.string().optional(),
+    suggestion_ar: z.string().optional(),
+}).passthrough();
+
 export const SettingsResponseSchema = z.object({
     include_keywords: z.array(z.string()),
     exclude_keywords: z.array(z.string()),
@@ -141,7 +151,8 @@ export const SettingsResponseSchema = z.object({
     telegram_chat_id: z.string(),
     score_threshold_apply: z.number(),
     score_threshold_watch: z.number(),
-});
+    warnings: z.array(MatchingGuardrailWarningSchema).optional().default([]),
+}).passthrough();
 
 export const SettingsUpdateRequestSchema = z.object({
     include_keywords: z.array(z.string()).optional(),
@@ -341,6 +352,7 @@ export const RicoProfileResponseSchema = z.object({
     linkedin_url: z.string().nullable().optional(),
     completeness_score: z.number().nullable().optional(),
     settings: z.record(z.string(), z.unknown()).optional(),
+    warnings: z.array(MatchingGuardrailWarningSchema).optional().default([]),
 }).passthrough();
 
 export const SavedSearchSchema = z.object({
@@ -417,6 +429,7 @@ export const ConfirmCVProfileResponseSchema = z.object({
 export const ProfileUpdateResponseSchema = z.object({
     status: z.string(),
     updated_fields: z.array(z.string()),
+    warnings: z.array(MatchingGuardrailWarningSchema).optional().default([]),
 }).passthrough();
 
 // ============================================================================

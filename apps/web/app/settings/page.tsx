@@ -2,6 +2,7 @@
 
 import { AppShell } from "@/components/layout/AppShell";
 import { ErrorState } from "@/components/shared/ErrorState";
+import { GuardrailWarnings } from "@/components/shared/GuardrailWarnings";
 import { StatusCard } from "@/components/StatusCard";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -230,6 +231,8 @@ export default function SettingsPage() {
                   <span>{t("highMatchOnly")}</span>
                 </div>
               </label>
+
+              <GuardrailWarnings warnings={settings.warnings} language={language} />
 
               <label className="flex flex-col gap-2">
                 <span className="flex items-center justify-between text-[12px] font-semibold text-text-secondary">

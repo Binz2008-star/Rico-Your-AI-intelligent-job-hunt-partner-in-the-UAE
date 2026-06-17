@@ -22,6 +22,7 @@ import type {
   JobActionRequest,
   JobActionResponse,
   JobListResponse,
+  MatchingGuardrailWarning,
   SettingsResponse,
   SettingsUpdateRequest,
   TelegramStatusResponse,
@@ -249,6 +250,7 @@ export interface ProfileResponse {
   linkedin_url?: string | null;
   completeness_score?: number | null;
   settings?: Record<string, unknown>;
+  warnings?: MatchingGuardrailWarning[];
 }
 
 export async function fetchProfile(): Promise<ProfileResponse> {
@@ -766,6 +768,7 @@ const MOCK_SETTINGS: SettingsResponse = {
   telegram_chat_id: "",
   score_threshold_apply: 80,
   score_threshold_watch: 60,
+  warnings: [],
 };
 
 export async function getSettings(

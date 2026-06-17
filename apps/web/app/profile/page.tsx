@@ -3,6 +3,7 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
+import { GuardrailWarnings } from "@/components/shared/GuardrailWarnings";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { StatusCard } from "@/components/StatusCard";
 import { ToastContainer } from "@/components/ui/Toast";
@@ -438,54 +439,57 @@ function ProfileDetail({
 
             {/* Job preferences */}
             <StatusCard title={t("profileJobPreferences")} badge={hasJobPrefs ? "live" : "pending"} badgeLabel={hasJobPrefs ? t("profileBadgeSynced") : t("profileBadgePending")}>
-                <dl className="grid min-w-0 grid-cols-1 gap-3 text-sm lg:grid-cols-2">
-                    <Row label={t("profileTargetRoles")}>
-                        <EditableTextField
-                            value={profile.target_roles?.join(', ') || null}
-                            onSave={onSaveTargetRoles}
-                            placeholder={t("profileEnterTargetRoles")}
-                            label="target-roles"
-                        />
-                    </Row>
-                    <Row label={t("profileCities")}>
-                        <EditableTextField
-                            value={profile.preferred_cities?.join(', ') || null}
-                            onSave={onSaveCities}
-                            placeholder={t("profileEnterCities")}
-                            label="cities"
-                        />
-                    </Row>
-                    <Row label={t("profileSalaryTarget")}>
-                        <EditableTextField
-                            value={profile.salary_expectation_aed != null ? String(profile.salary_expectation_aed) : null}
-                            onSave={onSaveSalaryTarget}
-                            placeholder={t("profileEnterSalaryTarget")}
-                            label="salary-target"
-                        />
-                    </Row>
-                    <Row label={t("profileMinimumSalary")}>
-                        <EditableTextField
-                            value={profile.minimum_salary_aed != null ? String(profile.minimum_salary_aed) : null}
-                            onSave={async (val) => {
-                                const parsed = Number(val);
-                                if (!Number.isFinite(parsed) || parsed < 0) {
-                                    throw new Error(t("profileInvalidSalary"));
-                                }
-                                return onSaveMinSalary(parsed);
-                            }}
-                            placeholder={t("profileEnterMinSalary")}
-                            label="min-salary"
-                        />
-                    </Row>
-                    <Row label={t("profileExperience")}>
-                        <EditableTextField
-                            value={profile.years_experience != null ? String(profile.years_experience) : null}
-                            onSave={onSaveExperience}
-                            placeholder={t("profileEnterExperience")}
-                            label="experience"
-                        />
-                    </Row>
-                </dl>
+                <div className="flex flex-col gap-3">
+                    <GuardrailWarnings warnings={profile.warnings} language={language} />
+                    <dl className="grid min-w-0 grid-cols-1 gap-3 text-sm lg:grid-cols-2">
+                        <Row label={t("profileTargetRoles")}>
+                            <EditableTextField
+                                value={profile.target_roles?.join(', ') || null}
+                                onSave={onSaveTargetRoles}
+                                placeholder={t("profileEnterTargetRoles")}
+                                label="target-roles"
+                            />
+                        </Row>
+                        <Row label={t("profileCities")}>
+                            <EditableTextField
+                                value={profile.preferred_cities?.join(', ') || null}
+                                onSave={onSaveCities}
+                                placeholder={t("profileEnterCities")}
+                                label="cities"
+                            />
+                        </Row>
+                        <Row label={t("profileSalaryTarget")}>
+                            <EditableTextField
+                                value={profile.salary_expectation_aed != null ? String(profile.salary_expectation_aed) : null}
+                                onSave={onSaveSalaryTarget}
+                                placeholder={t("profileEnterSalaryTarget")}
+                                label="salary-target"
+                            />
+                        </Row>
+                        <Row label={t("profileMinimumSalary")}>
+                            <EditableTextField
+                                value={profile.minimum_salary_aed != null ? String(profile.minimum_salary_aed) : null}
+                                onSave={async (val) => {
+                                    const parsed = Number(val);
+                                    if (!Number.isFinite(parsed) || parsed < 0) {
+                                        throw new Error(t("profileInvalidSalary"));
+                                    }
+                                    return onSaveMinSalary(parsed);
+                                }}
+                                placeholder={t("profileEnterMinSalary")}
+                                label="min-salary"
+                            />
+                        </Row>
+                        <Row label={t("profileExperience")}>
+                            <EditableTextField
+                                value={profile.years_experience != null ? String(profile.years_experience) : null}
+                                onSave={onSaveExperience}
+                                placeholder={t("profileEnterExperience")}
+                                label="experience"
+                            />
+                        </Row>
+                    </dl>
+                </div>
             </StatusCard>
 
             {/* Skills */}
