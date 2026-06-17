@@ -2,17 +2,47 @@
 
 _Last updated: 2026-06-17_
 
+## Production baseline
+
+- **main HEAD:** `525964d758d13b86cf0f9b2907bdde7be773d9da`
+- **Deployed to Render:** yes — smoke test passed 2026-06-17
+- **Deployed to Vercel:** yes — frontend live at `ricohunt.com`
+
 ## Repository baseline
 
 - Rico AI is a UAE career companion.
-- The system includes job discovery, filtering, scoring, alerts, application tracking, database storage, dashboard output, reminders, and feedback loops.
+- The system includes job discovery, filtering, scoring, alerts, application tracking,
+  database storage, dashboard output, reminders, and feedback loops.
 - Rico AI sits on top of the existing job automation system as the product layer.
 - The backend foundation is FastAPI with Rico modules under `src/`.
 - The database target is Neon/PostgreSQL.
 
-## Current sync gap
+## Confirmed production state (as of 2026-06-17 smoke test)
 
-Before this workspace package, the repository did not contain a single coordination folder for shared task context, decisions, handoffs, and verification evidence.
+| Feature | PR | Status |
+|---|---|---|
+| Arabic/English cover-letter slot extraction | #615 | ✅ live and confirmed |
+| Matching guardrails (Settings + Profile) | #616 | ✅ live and confirmed |
+| Session job-search history | #617 | ✅ live and confirmed |
+| CI npm + Playwright browser cache | #619 | ✅ merged and deployed |
+
+## Arabic cover-letter parser verdict
+
+- Previous production failure (`اكتب لي خطاب تقديم لوظيفة ESG Manager ...` returning
+  clarification instead of letter) was a **deployment gap**, not an active code bug.
+- Fix was already in `main` via PR #615 (merged 2026-06-17T18:53 UTC). Render was running
+  a June 12 build until manually redeployed.
+- After deploy, smoke test confirmed Rico writes the Arabic cover letter directly.
+- **Do not treat Arabic cover-letter parser as active P0** unless a new reproducible failure
+  appears after commit `525964d758d13b86cf0f9b2907bdde7be773d9da`.
+
+## CI health
+
+- QA Tests (pytest + playwright) green on main.
+- npm cache and Playwright browser cache now active — `playwright` job no longer stalls
+  at `npm ci`. Warm-up run completed; subsequent runs restore from cache.
+- Render deploy: `workflow_dispatch` only (no auto-deploy on push to main). Must be
+  triggered manually via GitHub Actions → Manual Render Deploy after each release.
 
 ## Operating target
 
