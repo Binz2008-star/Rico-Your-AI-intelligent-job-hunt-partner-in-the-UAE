@@ -39,16 +39,31 @@ def generate_message(job: Dict[str, Any], profile: Optional[Any] = None) -> str:
             )
             return generate_cover_letter_with_identity(job, identity)
 
+        arabic = str(job.get("language") or "").strip().lower() in ("ar", "arabic")
+
         # Partial identity — return a structured prompt asking for missing fields
+        title = job.get("title") or ("الوظيفة المعلن عنها" if arabic else "the advertised role")
+        company = job.get("company") or ("الشركة" if arabic else "the company")
+
+        if arabic:
+            missing = []
+            if not name:
+                missing.append("اسمك الكامل")
+            if not location:
+                missing.append("مدينتك (مثل دبي أو أبوظبي)")
+            missing_str = " و".join(missing)
+            return (
+                f"يمكنني كتابة خطاب تقديم مخصص لوظيفة **{title}** لدى **{company}**، "
+                f"لكنني أحتاج إلى {missing_str} أولاً.\n\n"
+                "زوّدني بهذه التفاصيل وسأكتبه فوراً."
+            )
+
         missing = []
         if not name:
             missing.append("your full name")
         if not location:
             missing.append("your city (e.g. Dubai, Abu Dhabi)")
         missing_str = " and ".join(missing)
-
-        title = job.get("title") or "the advertised role"
-        company = job.get("company") or "the company"
         return (
             f"I can write a tailored cover letter for **{title}** at **{company}**, "
             f"but I need {missing_str} first.\n\n"
