@@ -656,7 +656,13 @@ _COVER_LETTER_TIPS_RE = re.compile(
     r"|\bcover\s+letter\s+(?:tips?|advice|help|format|template|example|guide|UAE)\b"
     r"|\bdo\s+I\s+need\s+a\s+cover\s+letter\b"
     r"|\bwhat\s+(?:should\s+(?:a|my)|to\s+put\s+in\s+(?:a|my))\s+cover\s+letter\b"
-    r"|\b(?:خطاب|رسالة)\s+(?:التغطية|تقديم|التقديم)\b",
+    # Arabic — interrogative / advice context only. A bare "خطاب تقديم" phrase
+    # inside an explicit drafting request ("اكتب لي خطاب تقديم لوظيفة X في شركة Y")
+    # must NOT be treated as a tips question; it routes to draft generation.
+    r"|كيف\s+(?:أكتب|اكتب|اصيغ|اعمل|اكتبها)\s+(?:خطاب|رسالة)\s+(?:التغطية|تغطية|تقديم|التقديم)"
+    r"|(?:نصائح|نموذج|نماذج|مثال|أمثلة|قالب|قوالب|صيغة|تنسيق)\s+(?:خطاب|رسالة)\s+(?:التغطية|تغطية|تقديم|التقديم)"
+    r"|(?:خطاب|رسالة)\s+(?:التغطية|تغطية|تقديم|التقديم)\s+(?:نصائح|نموذج|مثال|قالب|صيغة|تنسيق)"
+    r"|هل\s+(?:أحتاج|احتاج|احتاجه)\s+(?:إلى\s+)?(?:خطاب|رسالة)\s+(?:التغطية|تغطية|تقديم|التقديم)",
     re.IGNORECASE,
 )
 
@@ -3343,6 +3349,14 @@ class RicoChatAPI:
         if not cls._requests_application_draft(text):
             return {}
 
+        language = "ar" if cls._is_arabic_text(text) else "en"
+
+        def _finalize(job: dict[str, str]) -> dict[str, str]:
+            cleaned = {k: v for k, v in job.items() if v}
+            if cleaned:
+                cleaned.setdefault("language", language)
+            return cleaned
+
         title_company = re.search(
             r"\b(?:for|to)\s+"
             r"(?P<title>[A-Za-z][A-Za-z0-9&/()+.' -]{1,90}?)"
@@ -3361,7 +3375,7 @@ class RicoChatAPI:
             location = cls._clean_explicit_job_value(title_company.group("location"))
             if location:
                 job["location"] = location
-            return {k: v for k, v in job.items() if v}
+            return _finalize(job)
 
         company_only = re.search(
             r"\b(?:to|at)\s+"
@@ -3375,7 +3389,60 @@ class RicoChatAPI:
             location = cls._clean_explicit_job_value(company_only.group("location"))
             if location:
                 job["location"] = location
-            return {k: v for k, v in job.items() if v}
+            return _finalize(job)
+
+        # ── Arabic slot extraction ────────────────────────────────────────────
+        # "اكتب لي خطاب تقديم لوظيفة <role> في شركة <company> في <city>"
+        # Role connector: لوظيفة/لمنصب/لدور — Company connector: في شركة/لدى/لشركة/مع شركة
+        # City connector: في <city>. Company names may be English (e.g. Aldar Properties).
+        _ar_company_conn = r"(?:في\s+شرك[ةه]|مع\s+شرك[ةه]|في\s+مؤسس[ةه]|لدى|لدي|لشرك[ةه])"
+        _ar_role_conn = r"(?:لوظيف[ةه]|لمنصب|لدور|لشغل|كموظف)"
+
+        ar_full = re.search(
+            rf"{_ar_role_conn}\s+"
+            r"(?P<title>.+?)\s+"
+            rf"{_ar_company_conn}\s+"
+            r"(?:شرك[ةه]\s+)?(?P<company>.+?)"
+            r"(?:\s+في\s+(?P<location>[^.?!,؛;]+?))?"
+            r"\s*[.?!,؛;]?\s*$",
+            text,
+        )
+        if ar_full:
+            job = {
+                "title": cls._clean_explicit_job_value(ar_full.group("title")),
+                "company": cls._clean_explicit_job_value(ar_full.group("company")),
+            }
+            location = cls._clean_explicit_job_value(ar_full.group("location"))
+            if location:
+                job["location"] = location
+            return _finalize(job)
+
+        ar_company = re.search(
+            rf"{_ar_company_conn}\s+"
+            r"(?:شرك[ةه]\s+)?(?P<company>.+?)"
+            r"(?:\s+في\s+(?P<location>[^.?!,؛;]+?))?"
+            r"\s*[.?!,؛;]?\s*$",
+            text,
+        )
+        if ar_company:
+            job = {"company": cls._clean_explicit_job_value(ar_company.group("company"))}
+            location = cls._clean_explicit_job_value(ar_company.group("location"))
+            if location:
+                job["location"] = location
+            return _finalize(job)
+
+        ar_role = re.search(
+            rf"{_ar_role_conn}\s+(?P<title>.+?)"
+            r"(?:\s+في\s+(?P<location>[^.?!,؛;]+?))?"
+            r"\s*[.?!,؛;]?\s*$",
+            text,
+        )
+        if ar_role:
+            job = {"title": cls._clean_explicit_job_value(ar_role.group("title"))}
+            location = cls._clean_explicit_job_value(ar_role.group("location"))
+            if location:
+                job["location"] = location
+            return _finalize(job)
 
         return {}
 
@@ -3433,11 +3500,42 @@ class RicoChatAPI:
         self,
         profile: Any,
         partial_job: dict[str, Any] | None = None,
+        arabic: bool | None = None,
     ) -> str:
         name = self._profile_value(profile, "name") or ""
         target_roles = self._as_list(self._profile_value(profile, "target_roles"))
         title = self._job_context_value(partial_job or {}, "title")
         company = self._job_context_value(partial_job or {}, "company")
+        if arabic is None:
+            arabic = str((partial_job or {}).get("language") or "").strip().lower() == "ar"
+        if arabic:
+            if company and not title:
+                return (
+                    f"يمكنني كتابة خطاب تقديم لـ **{company}**"
+                    f"{('، ' + name) if name else ''}. ما المسمى الوظيفي المستهدف؟\n\n"
+                    "أرسل المسمى الوظيفي، أو الصق إعلان الوظيفة مباشرة."
+                )
+            if title and not company:
+                return (
+                    f"يمكنني كتابة خطاب تقديم لوظيفة **{title}**"
+                    f"{('، ' + name) if name else ''}. ما اسم الشركة المستهدفة؟\n\n"
+                    "أرسل اسم الشركة، أو الصق إعلان الوظيفة مباشرة."
+                )
+            if target_roles:
+                roles_hint = "، ".join(target_roles[:3])
+                return (
+                    f"يمكنني كتابة خطاب تقديم لك{('، ' + name) if name else ''}. "
+                    "ما المسمى الوظيفي والشركة المستهدفان؟\n\n"
+                    f"أدوارك المستهدفة: **{roles_hint}**\n\n"
+                    "أرسل المسمى الوظيفي واسم الشركة، أو الصق إعلان الوظيفة مباشرة."
+                )
+            return (
+                f"يمكنني كتابة خطاب تقديم لك{('، ' + name) if name else ''}. "
+                "ما المسمى الوظيفي والشركة المستهدفان؟\n\n"
+                "أرسل:\n"
+                "• المسمى الوظيفي واسم الشركة\n"
+                "• أو الصق إعلان الوظيفة مباشرة"
+            )
         if company and not title:
             return (
                 f"I can write a cover letter for **{company}**"
@@ -7798,7 +7896,9 @@ class RicoChatAPI:
                     return self._finalize(response, routed.source, profile=profile)
 
             self._log_document_draft_context_source("clarification_required", {})
-            msg = self._cover_letter_clarification_message(profile)
+            msg = self._cover_letter_clarification_message(
+                profile, arabic=self._is_arabic_text(message)
+            )
             self._append_chat(user_id, "assistant", msg)
             return self._finalize(
                 {"type": "cover_letter_prompt", "message": msg, "next_action": "provide_job_for_cover_letter"},
