@@ -140,6 +140,16 @@ export interface ApplicationActionResponse {
 }
 
 // ── Settings ────────────────────────────────────────────────────────────────
+export interface MatchingGuardrailWarning {
+  code: string;
+  field: string;
+  severity?: "warning" | string;
+  message: string;
+  suggestion?: string;
+  message_ar?: string;
+  suggestion_ar?: string;
+}
+
 // GET /api/v1/settings
 export interface SettingsResponse {
   include_keywords: string[];
@@ -149,6 +159,7 @@ export interface SettingsResponse {
   telegram_chat_id: string;
   score_threshold_apply: number;
   score_threshold_watch: number;
+  warnings?: MatchingGuardrailWarning[];
   [key: string]: unknown;
 }
 

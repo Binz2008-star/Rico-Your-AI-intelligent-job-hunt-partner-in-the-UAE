@@ -58,6 +58,8 @@ from src.rico_chat_api import generate_error_ref
 from src.rico_env import get_ai_provider
 from src.rico_hf_client import generate_text, is_available as hf_ok
 from src.rico_openai_agent import RicoOpenAIAgent
+from src.services.matching_guardrails import build_matching_guardrail_warnings
+from src.services.settings_service import get_settings
 from src.rico_openai_runtime import call_openai_minimal
 from src.schemas.chat import RicoChatResponse, RicoSessionContext
 from src.services import chat_service
@@ -179,6 +181,7 @@ class ProfileResponse(BaseModel):
     current_company: str | None = None
     linkedin_url: str | None = None
     completeness_score: float | None = None
+    warnings: list[dict[str, str]] = Field(default_factory=list)
 
 
 class ConfirmCVProfileRequest(BaseModel):
@@ -460,6 +463,7 @@ def rico_get_profile(request: Request) -> ProfileResponse:
     # not on the service resolver's — fetch it separately.
     from src.agent.context.resolver import resolve_profile_context
     agent_ctx = resolve_profile_context(user_id)
+    settings = get_settings(user_id=user_id)
 
     response = ProfileResponse(
         profile_exists=True,
@@ -481,6 +485,10 @@ def rico_get_profile(request: Request) -> ProfileResponse:
         current_company=getattr(profile, "current_company", None),
         linkedin_url=getattr(profile, "linkedin_url", None),
         completeness_score=agent_ctx.completeness_score,
+        warnings=build_matching_guardrail_warnings(
+            settings=settings,
+            profile=profile,
+        ),
     )
 
     _metrics.record_request((time.time() - start_time) * 1000)
@@ -1128,13 +1136,30 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
 
     logger.info("update_profile endpoint: user_id=%s updates=%s", user_id, updates)
 
+    profile_for_warnings = None
     if updates:
-        upsert_profile(user_id, updates)
+        profile_for_warnings = upsert_profile(user_id, updates)
         logger.info("profile_update user=%s fields=%s", user_id, list(updates.keys()))
     else:
         logger.warning("profile_update no fields user=%s", user_id)
+        profile_for_warnings = get_profile(user_id)
 
-    return {"status": "ok", "updated_fields": list(updates.keys())}
+    matching_fields_updated = bool({"target_roles", "preferred_cities"} & updates.keys())
+    warnings = (
+        build_matching_guardrail_warnings(
+            settings=get_settings(user_id=user_id),
+            profile=profile_for_warnings,
+        )
+        if matching_fields_updated
+        else []
+    )
+    response = {
+        "status": "ok",
+        "updated_fields": list(updates.keys()),
+    }
+    if warnings:
+        response["warnings"] = warnings
+    return response
 
 
 # ============================================================================

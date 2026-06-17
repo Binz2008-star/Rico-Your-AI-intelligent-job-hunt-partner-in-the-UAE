@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SettingsResponse(BaseModel):
@@ -14,6 +14,7 @@ class SettingsResponse(BaseModel):
     score_threshold_apply: int
     score_threshold_watch: int
     blocked_companies: List[str] = []
+    warnings: List[Dict[str, str]] = Field(default_factory=list)
 
     model_config = {"extra": "allow"}
 
