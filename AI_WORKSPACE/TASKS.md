@@ -56,6 +56,62 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260617-009 — CV extraction quality warnings
+
+Status: in_progress
+Owner: Claude
+Branch: `claude/magical-allen-343jp2`
+Issue/PR: (pending)
+
+#### Objective
+Surface lightweight advisory warnings when a CV upload produces low-quality extraction,
+an unrealistic years_experience value, very few detected skills, or a role mismatch between
+the CV's current_role and the user's target_roles. Warnings are advisory only — saves are
+never blocked and scoring is never changed.
+
+#### Context
+- Relevant files:
+  - `src/services/cv_quality_warnings.py` (new)
+  - `src/api/routers/rico_chat.py` (upload response, confirm-cv response)
+  - `src/cv_parser.py` (ParsedCV.extraction_quality, skills, years_experience_hint)
+  - `src/services/matching_guardrails.py` (pattern reference)
+  - `tests/unit/test_cv_quality_warnings.py` (new)
+- Existing behavior: `extraction_quality` is computed during parsing but no warnings
+  are surfaced to the caller.
+
+#### Constraints
+- Do not add migrations or change DB schema.
+- Do not change scoring or search ranking.
+- Do not change auth, billing, or env config.
+- Do not touch unrelated UI pages or Application Pipeline work.
+- Advisory only — no saves blocked.
+
+#### Acceptance criteria
+- [ ] `build_cv_quality_warnings()` warns on `extraction_quality` "poor"/"partial".
+- [ ] Warns when `years_experience` > 25 (high) or > 50 (unrealistic).
+- [ ] Warns when fewer than 3 skills are detected (but list is non-empty).
+- [ ] Warns when CV `current_role` shares no keywords with `target_roles`.
+- [ ] Upload response includes `warnings` field.
+- [ ] Tests cover all four warning scenarios plus the no-warnings path.
+
+#### Required verification
+- [ ] Unit tests: `tests/unit/test_cv_quality_warnings.py` all pass.
+- [ ] Syntax check: `python -m py_compile src/services/cv_quality_warnings.py src/api/routers/rico_chat.py`.
+- [ ] Full backend test suite: no regressions.
+- [ ] Frontend build: not required; no frontend files changed.
+
+#### Handoff notes
+- Changed files:
+  - `src/services/cv_quality_warnings.py` (new)
+  - `src/api/routers/rico_chat.py` (import + `warnings` field in upload response)
+  - `tests/unit/test_cv_quality_warnings.py` (new)
+  - `AI_WORKSPACE/TASKS.md`
+- Risks: role-mismatch check is keyword-overlap heuristic; unusual role phrasings may
+  produce a false positive. Warning is advisory so the impact is low.
+- Rollback plan: revert the three source/test files on this branch.
+
+---
+
 ### TASK-20260617-008 — Add session-level job search history
 
 Status: done

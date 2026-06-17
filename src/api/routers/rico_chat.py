@@ -59,6 +59,7 @@ from src.rico_env import get_ai_provider
 from src.rico_hf_client import generate_text, is_available as hf_ok
 from src.rico_openai_agent import RicoOpenAIAgent
 from src.services.matching_guardrails import build_matching_guardrail_warnings
+from src.services.cv_quality_warnings import build_cv_quality_warnings
 from src.services.settings_service import get_settings
 from src.rico_openai_runtime import call_openai_minimal
 from src.schemas.chat import RicoChatResponse, RicoSessionContext
@@ -1334,12 +1335,19 @@ async def rico_upload_cv(
             "languages": parsed.get("languages", []),
         }
 
+        cv_warnings = build_cv_quality_warnings(
+            preview=preview,
+            extraction_quality=parsed.get("extraction_quality"),
+            profile=existing_profile,
+        )
+
         _metrics.record_request((time.time() - start_time) * 1000)
         logger.info(
-            "cv_upload_preview user=%s filename=%s quality=%s preview_ready request_ref=%s",
+            "cv_upload_preview user=%s filename=%s quality=%s warnings=%d preview_ready request_ref=%s",
             resolved_user_id,
             safe_name,
             parsed.get("extraction_quality", "unknown"),
+            len(cv_warnings),
             request_ref,
         )
 
@@ -1353,6 +1361,7 @@ async def rico_upload_cv(
             "preview": preview,
             "parsed": parsed,
             "user_id": resolved_user_id,
+            "warnings": cv_warnings,
         }
     except HTTPException:
         raise
