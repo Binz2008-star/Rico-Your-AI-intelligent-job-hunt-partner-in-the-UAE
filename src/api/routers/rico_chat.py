@@ -1144,14 +1144,22 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
         logger.warning("profile_update no fields user=%s", user_id)
         profile_for_warnings = get_profile(user_id)
 
-    return {
-        "status": "ok",
-        "updated_fields": list(updates.keys()),
-        "warnings": build_matching_guardrail_warnings(
+    matching_fields_updated = bool({"target_roles", "preferred_cities"} & updates.keys())
+    warnings = (
+        build_matching_guardrail_warnings(
             settings=get_settings(user_id=user_id),
             profile=profile_for_warnings,
-        ),
+        )
+        if matching_fields_updated
+        else []
+    )
+    response = {
+        "status": "ok",
+        "updated_fields": list(updates.keys()),
     }
+    if warnings:
+        response["warnings"] = warnings
+    return response
 
 
 # ============================================================================
