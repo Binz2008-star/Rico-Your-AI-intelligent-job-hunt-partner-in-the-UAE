@@ -58,10 +58,10 @@ Issue/PR: <link or number>
 
 ### TASK-20260617-009 — CV extraction quality warnings
 
-Status: in_progress
+Status: done
 Owner: Claude
 Branch: `claude/magical-allen-343jp2`
-Issue/PR: (pending)
+Issue/PR: #621
 
 #### Objective
 Surface lightweight advisory warnings when a CV upload produces low-quality extraction,
@@ -87,18 +87,19 @@ never blocked and scoring is never changed.
 - Advisory only — no saves blocked.
 
 #### Acceptance criteria
-- [ ] `build_cv_quality_warnings()` warns on `extraction_quality` "poor"/"partial".
-- [ ] Warns when `years_experience` > 25 (high) or > 50 (unrealistic).
-- [ ] Warns when fewer than 3 skills are detected (but list is non-empty).
-- [ ] Warns when CV `current_role` shares no keywords with `target_roles`.
-- [ ] Upload response includes `warnings` field.
-- [ ] Tests cover all four warning scenarios plus the no-warnings path.
+- [x] `build_cv_quality_warnings()` warns on `extraction_quality` "poor"/"partial".
+- [x] Warns when `years_experience` > 25 (high) or > 50 (unrealistic).
+- [x] Warns when fewer than 3 skills are detected (but list is non-empty).
+- [x] Warns when CV `current_role` shares no keywords with `target_roles`.
+- [x] Upload response includes `warnings` field.
+- [x] Tests cover all four warning scenarios plus the no-warnings path.
 
 #### Required verification
-- [ ] Unit tests: `tests/unit/test_cv_quality_warnings.py` all pass.
-- [ ] Syntax check: `python -m py_compile src/services/cv_quality_warnings.py src/api/routers/rico_chat.py`.
-- [ ] Full backend test suite: no regressions.
-- [ ] Frontend build: not required; no frontend files changed.
+- [x] Unit tests: `tests/unit/test_cv_quality_warnings.py` — 30/30 passed.
+- [x] Syntax check: `python -m py_compile` clean on both changed files.
+- [x] Full backend test suite: 2620/2620 passed, no regressions.
+- [x] Frontend build: not required; no frontend files changed.
+- [x] CI: pytest ✅ playwright ✅ Vercel ✅ Neon/setup ✅ on PR #621.
 
 #### Handoff notes
 - Changed files:
@@ -108,7 +109,10 @@ never blocked and scoring is never changed.
   - `AI_WORKSPACE/TASKS.md`
 - Risks: role-mismatch check is keyword-overlap heuristic; unusual role phrasings may
   produce a false positive. Warning is advisory so the impact is low.
-- Rollback plan: revert the three source/test files on this branch.
+- Rollback plan: revert the three source/test files.
+- Production: squash-merged to main as `b9708c91c0afd1b8d8a5ea83d7ff29aee02f5fb2` (#621).
+  Render deploy not yet triggered. CV quality warnings are on main but not confirmed
+  production-live. Trigger Manual Render Deploy before smoke-testing this feature.
 
 ---
 
