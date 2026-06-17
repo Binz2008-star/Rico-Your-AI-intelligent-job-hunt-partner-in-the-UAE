@@ -248,8 +248,8 @@ class _RateLimiter:
                             pass
                     return True, "ok"
         except FileLockTimeout:
-            logger.warning("rate_limiter_lock_timeout — allowing apply")
-            return True, "lock_timeout"
+            logger.warning("rate_limiter_lock_timeout — denying apply (safe default)")
+            return False, "lock_timeout"
 
     def record(self) -> None:
         """Increment the counter after a confirmed successful apply."""
