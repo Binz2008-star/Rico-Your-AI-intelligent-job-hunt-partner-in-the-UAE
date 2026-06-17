@@ -58,10 +58,10 @@ Issue/PR: <link or number>
 
 ### TASK-20260617-010 — Fix chat composer clip icon UX
 
-Status: in_progress
+Status: done
 Owner: Claude
 Branch: `claude/magical-allen-343jp2`
-Issue/PR: (pending)
+Issue/PR: #623
 
 #### Objective
 Make the chat composer clip icon reliably open the file picker on all browsers,
@@ -89,8 +89,11 @@ including mobile Safari and WebViews that block programmatic `input.click()`.
 
 #### Required verification
 - [x] `npm run build` clean in `apps/web`.
-- [ ] CI QA Tests (pytest + playwright) green on PR.
-- [ ] Manual smoke: click clip icon on desktop → file picker opens.
+- [x] CI QA Tests (pytest + playwright) green on PR.
+- [x] Manual smoke: click clip icon on desktop → file chooser opened (Playwright confirmed).
+- [x] Manual smoke: click clip icon on mobile (iPhone 14 Pro UA) → file chooser opened.
+- [x] Disabled/checking state: no `for` attr + `pointer-events-none` + `opacity-30` confirmed.
+- [x] Upload flow (setInputFiles): no crash confirmed.
 
 #### Handoff notes
 - Changed files:
@@ -102,6 +105,11 @@ including mobile Safari and WebViews that block programmatic `input.click()`.
   programmatic `.click()`. The `ref` on the input is kept for the `__cv_upload__` magic
   message path (line ~811) which is unaffected.
 - Rollback plan: revert the single file `apps/web/app/command/page.tsx`.
+- Non-blocking follow-up: `aria-disabled`/`tabIndex` polish (SSR/hydration timing nuance,
+  functional behaviour is correct via `pointer-events-none` + missing `for` attr).
+- Production: squash-merged to main as `4df959bdee354d4bf431925c5d3fbb10354801ba` (#623).
+  Deployed to Vercel automatically (Deploy to Production ✅ 2026-06-17T22:08 UTC).
+  Render backend also live as of 2026-06-17T22:12 UTC (separate manual deploy).
 
 ---
 
