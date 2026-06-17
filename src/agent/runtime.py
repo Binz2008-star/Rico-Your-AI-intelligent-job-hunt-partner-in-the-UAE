@@ -295,6 +295,12 @@ class AgentRuntime:
         if action == "remind":
             reminder_date = data.get("reminder_date", "")
             return f"Reminder set for {reminder_date}." if reminder_date else "Reminder noted."
+        if action == "apply":
+            # apply_to_job() always returns a status-specific message (e.g.
+            # "approval_required", "manual_required", or real engine success) —
+            # never mask it with the generic static reply, or the user is told
+            # "Marked as applied" for an apply that never actually happened.
+            return data.get("message") or _REPLY.get(action, "Action completed.")
 
         return _REPLY.get(action, "Action completed.")
 

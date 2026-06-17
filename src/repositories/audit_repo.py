@@ -6,10 +6,11 @@ Two storage paths:
   1. DB preferred: writes to action_audit_log table.
   2. In-memory fallback: TTL-based dict when DB is unavailable.
 
-Idempotency scope: "apply" actions only.
+Idempotency scope: IDEMPOTENT_ACTION_TYPES (apply/skip/save/block/not_relevant).
   Same action_id submitted twice within _DEDUP_TTL_S → second call is rejected.
-  action_id is deterministic (SHA-256 of type:link), so clicking Apply twice
-  on the same job always produces the same id.
+  action_id is deterministic (MD5 of user_id:action:job_key, computed by
+  agent_runtime.handle_action), so repeating the same action on the same job
+  always produces the same id.
 """
 from __future__ import annotations
 
@@ -33,7 +34,7 @@ _DEDUP_TTL_S = 3600   # 1 hour
 _DEDUP_LOCK  = threading.Lock()
 
 # Only these action types are subject to idempotency enforcement
-IDEMPOTENT_ACTION_TYPES = frozenset({"apply", "skip", "save", "block"})
+IDEMPOTENT_ACTION_TYPES = frozenset({"apply", "skip", "save", "block", "not_relevant"})
 
 
 # ── Idempotency check ─────────────────────────────────────────────────────────
