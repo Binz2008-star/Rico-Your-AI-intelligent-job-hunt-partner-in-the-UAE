@@ -81,6 +81,151 @@ def test_store_search_matches_persists_to_db():
     mock_upsert.assert_called_once_with(USER, matches)
 
 
+def test_store_search_matches_records_session_summary():
+    api, context = _api_with_context()
+    matches = [
+        {
+            "title": "ESG Manager",
+            "company": "Aldar Properties",
+            "location": "Abu Dhabi",
+            "apply_url": "https://example.com/apply",
+            "source_url": "https://example.com/source",
+        },
+        {
+            "title": "Sustainability Manager",
+            "company": "Masdar",
+            "location": "Abu Dhabi",
+        },
+    ]
+
+    with patch("src.repositories.user_job_context_repo.upsert_matches"):
+        api._store_search_matches_context(
+            USER,
+            matches,
+            search_role="ESG Manager",
+            search_location="Abu Dhabi",
+        )
+
+    summary = context["last_job_search_summary"]
+    assert summary["count"] == 2
+    assert summary["query"] == "ESG Manager"
+    assert summary["city"] == "Abu Dhabi"
+    assert summary["top_match"] == {
+        "title": "ESG Manager",
+        "company": "Aldar Properties",
+        "location": "Abu Dhabi",
+    }
+    assert context["session_job_search_history"][-1] == summary
+
+
+def test_result_count_reads_stored_session_history_in_arabic():
+    api, _ = _api_with_context()
+    api._append_chat = MagicMock()
+    matches = [
+        {
+            "title": "ESG Manager",
+            "company": "Aldar Properties",
+            "location": "Abu Dhabi",
+        }
+        for _ in range(5)
+    ]
+
+    with patch("src.repositories.user_job_context_repo.upsert_matches"):
+        api._store_search_matches_context(
+            USER,
+            matches,
+            search_role="ESG Manager",
+            search_location="Abu Dhabi",
+        )
+
+    result = api._handle_result_count(
+        USER,
+        _profile(),
+        "كم عدد الوظائف التي وجدتها منذ بداية المحادثة",
+    )
+
+    assert result["type"] == "result_count"
+    assert result["count"] == 5
+    assert result["total_count"] == 5
+    assert result["role"] == "ESG Manager"
+    assert result["city"] == "Abu Dhabi"
+    assert result["top_match"]["company"] == "Aldar Properties"
+    assert "آخر بحث وجد **5**" in result["message"]
+
+
+def test_result_count_no_session_history_is_clear():
+    api, _ = _api_with_context()
+    api._append_chat = MagicMock()
+    user = "no-history@example.com"
+
+    result = api._handle_result_count(user, _profile(), "how many jobs did you find?")
+
+    assert result["type"] == "result_count"
+    assert result["count"] == 0
+    assert result["search_count"] == 0
+    assert "saved in this conversation" in result["message"]
+
+
+def test_result_count_reads_process_local_summary_when_context_store_is_empty():
+    api, _ = _api_with_context()
+    api._append_chat = MagicMock()
+    user = "process-local@example.com"
+    matches = [
+        {
+            "title": "Compliance Manager",
+            "company": "Etihad",
+            "location": "Abu Dhabi",
+        }
+    ]
+
+    with patch("src.repositories.user_job_context_repo.upsert_matches"):
+        api._store_search_matches_context(
+            user,
+            matches,
+            search_role="Compliance Manager",
+            search_location="Abu Dhabi",
+        )
+    api._get_recent_context = lambda _user: {}
+
+    result = api._handle_result_count(user, _profile(), "how many jobs did you find?")
+
+    assert result["count"] == 1
+    assert result["role"] == "Compliance Manager"
+    assert result["top_match"]["company"] == "Etihad"
+
+
+def test_result_count_falls_back_to_cached_recent_matches():
+    api, context = _api_with_context()
+    api._append_chat = MagicMock()
+    context.update(
+        {
+            "recent_search_matches": [
+                {
+                    "title": "HSE Manager",
+                    "company": "ADNOC",
+                    "location": "Abu Dhabi",
+                },
+                {
+                    "title": "Safety Engineer",
+                    "company": "Petrofac",
+                    "location": "Dubai",
+                },
+            ],
+            "recent_search_role": "HSE Manager",
+            "recent_search_location": "Abu Dhabi",
+        }
+    )
+
+    result = api._handle_result_count(USER, _profile(), "how many jobs did you find?")
+
+    assert result["count"] == 2
+    assert result["total_count"] == 2
+    assert result["search_count"] == 1
+    assert result["role"] == "HSE Manager"
+    assert result["city"] == "Abu Dhabi"
+    assert result["top_match"]["company"] == "ADNOC"
+
+
 def test_open_apply_link_finds_url_from_db():
     """open_apply_link must return the apply URL retrieved from user_job_context when memory/apps are empty."""
     api, _ = _api_with_context()
