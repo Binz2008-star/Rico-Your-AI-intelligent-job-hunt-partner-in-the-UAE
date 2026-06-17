@@ -56,6 +56,75 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260617-008 — Add session-level job search history
+
+Status: in_progress
+Owner: Codex
+Branch: `codex/task-20260617-008-session-job-history`
+Issue/PR: (pending)
+
+#### Objective
+Track lightweight job-search summaries in the current Rico chat session so Rico can answer
+how many jobs it found earlier in the same conversation.
+
+#### Context
+- Relevant files:
+  - `src/rico_chat_api.py`
+  - `tests/unit/test_rico_job_search_tracker_flow.py`
+  - `tests/unit/test_followup_fast_path.py`
+  - `AI_WORKSPACE/EVALS/2026-06-17-post-615-616-verification.md`
+- Existing behavior: Rico caches recent search matches but count follow-ups only read the
+  current cached match list and can miss Arabic/session-count phrasing such as
+  `كم عدد الوظائف التي وجدتها منذ بداية المحادثة`.
+
+#### Constraints
+- Do not add Redis unless already wired and necessary.
+- Do not change DB schema.
+- Do not change scoring/search ranking.
+- Do not touch unrelated UI pages.
+- Do not change Settings/Profile guardrails from #616.
+
+#### Acceptance criteria
+- [x] When Rico returns N jobs, store a lightweight search summary for the session.
+- [x] User can ask how many jobs Rico found in the current conversation.
+- [x] Response includes last search count, role/query, city if available, and top match if available.
+- [x] If no searches happened in the current session, Rico says that clearly.
+- [x] Regression tests cover storing, follow-up count, and no-history path.
+
+#### Required verification
+- [x] Unit tests: focused session job history tests.
+- [x] Existing chat/job routing tests: focused nearby tests attempted; existing local routing fixture failures are noted below.
+- [x] Frontend build: not required; no frontend files changed.
+- [x] Production/deploy smoke: not in this PR; post-#615/#616 deploy health was recorded before starting.
+
+#### Handoff notes
+- Changed files:
+  - `AI_WORKSPACE/EVALS/2026-06-17-post-615-616-verification.md`
+  - `AI_WORKSPACE/TASKS.md`
+  - `src/rico_chat_api.py`
+  - `tests/unit/test_followup_fast_path.py`
+  - `tests/unit/test_rico_job_search_tracker_flow.py`
+- Commands run:
+  - `git fetch origin main`
+  - `gh run list --branch main --limit 10 --json ...`
+  - `gh run view 27713530030 --json ...`
+  - `Invoke-RestMethod https://rico-job-automation-api.onrender.com/health`
+  - `Invoke-RestMethod https://rico-job-automation-api.onrender.com/version`
+  - `Invoke-RestMethod https://rico-job-automation-api.onrender.com/api/v1/version`
+  - `python -m py_compile src\rico_chat_api.py`
+  - `python -m pytest tests\unit\test_rico_job_search_tracker_flow.py tests\unit\test_followup_fast_path.py::TestResultCount -q`
+  - `python -m pytest tests\unit\test_rico_routing_fix.py tests\unit\test_job_search_role_extraction.py tests\unit\test_rico_profile_job_search_role_list.py tests\unit\test_self_ref_role_resolution.py tests\unit\test_role_context_routing.py -q`
+- Test results:
+  - Focused acceptance suite: `24 passed`.
+  - Syntax check: passed.
+  - Existing local routing subset: `107 passed, 2 failed`; failures were in
+    `tests/unit/test_rico_routing_fix.py` expecting `run_for_profile` calls and match the known
+    stale local routing fixture pattern. No routing/scoring code was changed for this task.
+- Risks: process-local session history is intentionally lightweight. It answers immediate
+  follow-ups even when JSON recent-context writes are disabled, but it is not durable across
+  process restarts or multi-worker hops. Existing `recent_context` remains the primary store when available.
+- Rollback plan: revert the TASK-008 PR commit.
+
 ### TASK-20260617-002 — Fix cover-letter intent slot extraction
 
 Status: review

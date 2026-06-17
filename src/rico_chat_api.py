@@ -64,6 +64,9 @@ logger = logging.getLogger(__name__)
 # _LEGACY_INTENT_MAP and _map_intent_to_legacy are imported from intent_classifier above.
 
 # Constants
+_SESSION_JOB_SEARCH_HISTORY_LIMIT = 10
+_SESSION_JOB_SEARCH_HISTORY: dict[str, list[dict[str, Any]]] = {}
+
 CV_FILE_RE = re.compile(r"\b[\w .()_-]+\.(?:pdf|docx?|txt)\b", re.IGNORECASE)
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PHONE_RE = re.compile(r"(?:\+?\d[\d\s().-]{7,}\d)")
@@ -514,7 +517,8 @@ _RESULT_COUNT_RE = re.compile(
     r"\bhow\s+many\s+(?:jobs?|roles?|results?|matches?|vacancies|positions?|openings?)\s+"
     r"(?:did\s+you\s+(?:find|get|return|show|come\s+up\s+with)|were\s+there|are\s+there|do\s+you\s+have)\b"
     r"|\btotal\s+(?:number\s+of\s+)?(?:jobs?|results?|matches?|vacancies)\b"
-    r"|\b(?:كم\s+(?:وظيفة|نتيجة|عدد))\b",
+    r"|(?:كم\s+عدد\s+الوظائف\s+التي\s+وجدتها(?:\s+منذ\s+بداية\s+المحادثة)?)"
+    r"|\b(?:كم\s+(?:عدد\s+)?(?:ال)?(?:وظائف|وظيفة|نتائج|نتيجة|عدد))\b",
     re.IGNORECASE,
 )
 
@@ -4504,7 +4508,7 @@ class RicoChatAPI:
             self._store_search_matches_context(
                 user_id, formatted,
                 search_role=search_role,
-                search_location=location,
+                search_location=location or ", ".join(map(str, cities[:2])),
             )
         return response
 
@@ -8061,6 +8065,13 @@ class RicoChatAPI:
                 }
                 for m in formatted
             ]
+            self._store_session_job_search_summary(
+                user_id=user_id,
+                ctx=ctx,
+                formatted=formatted,
+                search_role=search_role,
+                search_location=search_location,
+            )
             self._store_recent_context(user_id, ctx)
         except Exception:
             logger.debug("rico_chat: failed to store search matches context user=%s", user_id)
@@ -8092,6 +8103,89 @@ class RicoChatAPI:
                 )
         except Exception:
             logger.debug("rico_chat: failed to send Telegram job-alert user=%s", user_id)
+
+    def _store_session_job_search_summary(
+        self,
+        *,
+        user_id: str,
+        ctx: dict[str, Any],
+        formatted: list[dict[str, Any]],
+        search_role: str = "",
+        search_location: str = "",
+    ) -> None:
+        """Remember a lightweight summary for current-session count follow-ups."""
+        summary = self._build_session_job_search_summary(
+            formatted=formatted,
+            search_role=search_role,
+            search_location=search_location,
+        )
+        history = ctx.get("session_job_search_history")
+        if not isinstance(history, list):
+            history = []
+        history = [*history, summary][-_SESSION_JOB_SEARCH_HISTORY_LIMIT:]
+        ctx["session_job_search_history"] = history
+        ctx["last_job_search_summary"] = summary
+
+        # Production may run with JSON context writes disabled. Keep a bounded
+        # process-local copy so the active chat session can still answer
+        # immediate follow-up questions without Redis or a schema change.
+        session_history = _SESSION_JOB_SEARCH_HISTORY.get(user_id, [])
+        _SESSION_JOB_SEARCH_HISTORY[user_id] = (
+            [*session_history, summary][-_SESSION_JOB_SEARCH_HISTORY_LIMIT:]
+        )
+
+    @staticmethod
+    def _build_session_job_search_summary(
+        *,
+        formatted: list[dict[str, Any]],
+        search_role: str = "",
+        search_location: str = "",
+    ) -> dict[str, Any]:
+        top = formatted[0] if formatted else {}
+        top_match = {
+            "title": top.get("title", ""),
+            "company": top.get("company", ""),
+            "location": top.get("location", ""),
+        } if top else {}
+        city = search_location or top_match.get("location", "")
+        query = search_role or ""
+        return {
+            "count": len(formatted),
+            "query": query,
+            "role": query,
+            "city": city,
+            "top_match": top_match,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def _get_session_job_search_history(self, user_id: str) -> list[dict[str, Any]]:
+        ctx = self._get_recent_context(user_id)
+        history = ctx.get("session_job_search_history")
+        if isinstance(history, list):
+            return [item for item in history if isinstance(item, dict)]
+        matches = ctx.get("recent_search_matches") or []
+        if isinstance(matches, list) and matches:
+            return []
+        return list(_SESSION_JOB_SEARCH_HISTORY.get(user_id, []))
+
+    def _get_last_job_search_summary(self, user_id: str) -> dict[str, Any] | None:
+        ctx = self._get_recent_context(user_id)
+        summary = ctx.get("last_job_search_summary")
+        if isinstance(summary, dict):
+            return summary
+
+        matches = ctx.get("recent_search_matches") or []
+        if isinstance(matches, list) and matches:
+            return self._build_session_job_search_summary(
+                formatted=[m for m in matches if isinstance(m, dict)],
+                search_role=str(ctx.get("recent_search_role") or ""),
+                search_location=str(ctx.get("recent_search_location") or ""),
+            )
+
+        history = self._get_session_job_search_history(user_id)
+        if history:
+            return history[-1]
+        return None
 
     @staticmethod
     def _get_status_rank(status: str) -> int:
@@ -10806,25 +10900,66 @@ class RicoChatAPI:
         """
         arabic = self._is_arabic_text(message)
 
-        ctx    = self._get_recent_context(user_id)
-        jobs   = ctx.get("recent_search_matches") or []
-        role   = ctx.get("recent_search_role") or ""
-        count  = len(jobs)
+        history = self._get_session_job_search_history(user_id)
+        summary = self._get_last_job_search_summary(user_id)
+        count = int(summary.get("count") or 0) if summary else 0
+        role = str(
+            (summary or {}).get("role")
+            or (summary or {}).get("query")
+            or ""
+        ).strip()
+        city = str((summary or {}).get("city") or "").strip()
+        top_match = (summary or {}).get("top_match") or {}
+        if not isinstance(top_match, dict):
+            top_match = {}
+        total_count = sum(
+            int(item.get("count") or 0)
+            for item in history
+            if isinstance(item, dict)
+        ) if history else count
 
-        if count == 0:
+        if summary is None:
             msg = (
-                "لا توجد نتائج بحث حديثة. ابدأ بالبحث عن وظيفة أولاً."
+                "لا توجد لدي نتائج بحث محفوظة في هذه المحادثة. ابدأ بالبحث عن وظيفة أولاً."
                 if arabic else
-                "I don't have any recent search results. Start a job search first and then ask."
+                "I don't have any job searches saved in this conversation yet. Start a job search first and then ask."
             )
         elif arabic:
+            role_part = f" عن **{role}**" if role else ""
+            city_part = f" في **{city}**" if city else ""
+            top_title = str(top_match.get("title") or "").strip()
+            top_company = str(top_match.get("company") or "").strip()
+            top_part = (
+                f" أعلى نتيجة كانت **{top_title}**"
+                + (f" في **{top_company}**." if top_company else ".")
+                if top_title else ""
+            )
             msg = (
-                f"وجدت **{count}** وظيفة{(' لـ ' + role) if role else ''} في آخر بحث."
+                f"في هذه المحادثة، آخر بحث وجد **{count}** وظيفة{role_part}{city_part}."
+                + (
+                    f" إجمالي النتائج المسجلة منذ بداية المحادثة: **{total_count}**."
+                    if len(history) > 1 else ""
+                )
+                + (" " + top_part if top_part else "")
             )
         else:
+            role_part = f" for **{role}**" if role else ""
+            city_part = f" in **{city}**" if city else ""
+            top_title = str(top_match.get("title") or "").strip()
+            top_company = str(top_match.get("company") or "").strip()
+            top_part = (
+                f" Top match: **{top_title}**"
+                + (f" at **{top_company}**." if top_company else ".")
+                if top_title else ""
+            )
             msg = (
-                f"My last search returned **{count} result{'s' if count != 1 else ''}**"
-                + (f" for **{role}**" if role else "") + "."
+                f"In this conversation, my last search returned **{count} result{'s' if count != 1 else ''}**"
+                f"{role_part}{city_part}."
+                + (
+                    f" Total recorded since the start of this conversation: **{total_count}**."
+                    if len(history) > 1 else ""
+                )
+                + top_part
                 + (" Say 'show more' to see more results." if count > 5 else "")
             )
 
@@ -10832,7 +10967,11 @@ class RicoChatAPI:
         return {
             "type": "result_count",
             "count": count,
+            "total_count": total_count,
+            "search_count": len(history) if history else (1 if summary else 0),
             "role": role,
+            "city": city,
+            "top_match": top_match,
             "message": msg,
         }
 

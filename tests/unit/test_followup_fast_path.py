@@ -1694,6 +1694,7 @@ class TestResultCount:
         "how many matches did you get?",
         "total number of jobs",
         "how many vacancies are there?",
+        "كم عدد الوظائف التي وجدتها منذ بداية المحادثة",
     ])
     def test_regex_matches(self, phrase):
         from src.rico_chat_api import _RESULT_COUNT_RE
