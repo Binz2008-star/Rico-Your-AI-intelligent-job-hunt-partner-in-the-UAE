@@ -58,10 +58,10 @@ Issue/PR: <link or number>
 
 ### TASK-20260617-001 — Add AI multi-model sync workspace
 
-Status: in_progress
+Status: done
 Owner: ChatGPT
 Branch: `chore/ai-workspace-sync-standard`
-Issue/PR: TBD
+Issue/PR: #610
 
 #### Objective
 Add a repo-native shared source of truth for AI planning, implementation handoffs, review, verification, and decision tracking.
@@ -76,3 +76,6 @@ Add a repo-native shared source of truth for AI planning, implementation handoff
 #### Required verification
 - [ ] Documentation-only change; no runtime tests required.
 - [ ] Confirm changed files are limited to docs/templates/script.
+
+#### Handoff notes
+- Merged via squash into main: a76a1b6
