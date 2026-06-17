@@ -4,9 +4,11 @@ _Last updated: 2026-06-17_
 
 ## Production baseline
 
-- **main HEAD:** `525964d758d13b86cf0f9b2907bdde7be773d9da`
-- **Deployed to Render:** yes — smoke test passed 2026-06-17
-- **Deployed to Vercel:** yes — frontend live at `ricohunt.com`
+- **main HEAD:** `b9708c91c0afd1b8d8a5ea83d7ff29aee02f5fb2`
+- **Deployed to Render:** pending — Render deploy not yet triggered after #621. Last confirmed
+  smoke test was against `525964d758d13b86cf0f9b2907bdde7be773d9da` (2026-06-17). CV quality
+  warnings are merged to main but not yet confirmed production-live.
+- **Deployed to Vercel:** yes — frontend live at `ricohunt.com` (no frontend changes in #621)
 
 ## Repository baseline
 
@@ -25,6 +27,7 @@ _Last updated: 2026-06-17_
 | Matching guardrails (Settings + Profile) | #616 | ✅ live and confirmed |
 | Session job-search history | #617 | ✅ live and confirmed |
 | CI npm + Playwright browser cache | #619 | ✅ merged and deployed |
+| CV extraction quality warnings | #621 | ✅ merged to main — Render deploy pending |
 
 ## Arabic cover-letter parser verdict
 
