@@ -95,7 +95,7 @@ def score_job(job):
     hard_reject_matches = []
     for kw in hard_reject_keywords:
         text = title if kw in TITLE_ONLY_REJECT_KEYWORDS else job_text
-        if f" {kw} " in f" {text} " or text.startswith(kw):
+        if f" {kw} " in f" {text} ":
             hard_reject_matches.append(kw)
     if hard_reject_matches:
         job["score"] = 0
@@ -343,7 +343,7 @@ def _score_job_with_profile(job, candidate_profile):
     hard_reject_matches = []
     for kw in hard_reject_keywords:
         text = title if kw in TITLE_ONLY_REJECT_KEYWORDS else job_text
-        if f" {kw} " in f" {text} " or text.startswith(kw):
+        if f" {kw} " in f" {text} ":
             hard_reject_matches.append(kw)
     if hard_reject_matches:
         job["score"] = 0

@@ -222,10 +222,12 @@ class ProfileFitScorer:
             },
         )
 
-        # Cache eviction policy
+        # Cache eviction policy: evict only the oldest entry (dicts preserve
+        # insertion order) instead of wiping the whole cache. A full clear would
+        # force every other concurrent caller into a cold-cache miss at once.
         if len(self._cache) >= MAX_CACHE_SIZE:
-            self._cache.clear()
-            logger.info("Scorer cache cleared (reached max size)")
+            oldest_key = next(iter(self._cache))
+            del self._cache[oldest_key]
 
         self._cache[cache_key] = fit_score
         return fit_score
