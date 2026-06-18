@@ -58,10 +58,10 @@ Issue/PR: <link or number>
 
 ### TASK-20260617-013 — Application Pipeline V1 status alignment
 
-Status: in_progress
+Status: done
 Owner: Claude
 Branch: `claude/magical-allen-343jp2`
-Issue/PR: (pending)
+Issue/PR: #627
 
 #### Objective
 Align the frontend `ApplicationStatus` type with the backend `VALID_STATUSES` set by
@@ -119,6 +119,11 @@ translations, and StatusBadge accordingly.
 - Risks: Records in DB with old statuses unaffected (read-only display change).
   No scoring or ranking logic touched. No backend validation changed.
 - Rollback plan: revert the 4 frontend files.
+- Production: squash-merged to main as `62a679b6594afa4475fe9bd92b649ae623a092d8` (#627).
+  Deployed to Vercel automatically (Deploy to Production ✅ 2026-06-18T04:45 UTC).
+  Render backend not required (frontend-only change).
+  Manual smoke 2026-06-18: /flow loads, /applications→/flow redirect confirmed, board columns
+  correct, status dropdown includes Opened externally / Prepared / Follow-up due, no crash.
 
 ---
 

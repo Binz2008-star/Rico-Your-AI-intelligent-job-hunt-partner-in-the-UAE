@@ -4,13 +4,14 @@ _Last updated: 2026-06-18_
 
 ## Production baseline
 
-- **main HEAD:** `1cb66e5d34895e83e1a61fd620bba4222bc14606`
+- **main HEAD:** `62a679b6594afa4475fe9bd92b649ae623a092d8`
 - **Deployed to Render:** ✅ live — backend at `rico-job-automation-api.onrender.com`.
   Confirmed live 2026-06-17T22:12 UTC. All API routes 200 OK. CV quality warnings (#621)
-  confirmed production-live. PR #625 not yet manually deployed to Render — trigger
-  `workflow_dispatch` (Manual Render Deploy) to activate the preferred_cities guard on Render.
+  confirmed production-live. PR #625 (preferred_cities guard) not yet manually deployed to
+  Render — trigger `workflow_dispatch` (Manual Render Deploy) to activate it on the live backend.
 - **Deployed to Vercel:** ✅ live — frontend at `ricohunt.com`. Deploy to Production
-  completed 2026-06-17T22:08 UTC on commit `4df959b`. Clip icon fix (#623) confirmed live.
+  completed 2026-06-18T04:45 UTC on commit `62a679b`. Application Pipeline V1 status
+  alignment (#627) confirmed live. Manual smoke passed 2026-06-18.
 
 ## Repository baseline
 
@@ -32,6 +33,7 @@ _Last updated: 2026-06-18_
 | CV extraction quality warnings | #621 | ✅ live and confirmed (Render 2026-06-17T22:12 UTC) |
 | Chat composer clip icon fix | #623 | ✅ live and confirmed (Vercel 2026-06-17T22:08 UTC) |
 | preferred_cities yes/no guard | #625 | ✅ merged to main `1cb66e5` — Render deploy pending |
+| Application Pipeline V1 status alignment | #627 | ✅ live and confirmed (Vercel 2026-06-18T04:45 UTC) |
 
 ## preferred_cities data quality — resolved
 
