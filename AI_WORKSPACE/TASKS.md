@@ -56,6 +56,71 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260618-015 — Application Lifecycle Completion (Issue #353)
+
+Status: review
+Owner: Claude
+Branch: `claude/magical-allen-343jp2`
+Issue/PR: #353
+
+#### Objective
+Wire `rico_job_recommendations` writes into the two previously unwired paths so every job
+Rico surfaces (search results) or prepares (cover letter / application draft) immediately
+appears on the /flow board — no manual save required.
+
+#### Context
+- Root cause: `upsert_matches` (search) and `set_lifecycle_status` (prepare flow) write to
+  `user_job_context` only. `rico_job_recommendations` (the /flow board table) was only
+  written by explicit user save/apply actions.
+- Fix: extend use of the existing `_persist_application_lifecycle_event` dual-write helper
+  to both paths.
+- Status `"opened"` chosen for auto-persist (not `"saved"`) to bypass subscription gating
+  in `applications_repo.create`. `"opened"` is in `VALID_STATUSES`, appears in the Leads
+  column on /flow, and is semantically correct.
+- Regression guard: `_should_update_status` rank-orders statuses (opened=20). Any job
+  already at prepared(30)/applied(40)/interview(60)/offer(70) is not downgraded.
+- Relevant files: `src/rico_chat_api.py`, `tests/test_application_lifecycle.py`,
+  `src/repositories/applications_repo.py`, `src/applications.py`.
+
+#### Constraints
+- No DB migration. No schema changes. No new routes. No frontend changes.
+- No Gmail, follow-up workers, email sending, automation scheduler.
+- No billing/auth/AI provider changes. No destructive Neon operations.
+- No broad status vocabulary alignment (interviewing/found/archived divergence is
+  pre-existing and documented as follow-up work, NOT fixed in this PR).
+- Do not merge. Do not deploy. Deliver one focused draft PR only.
+
+#### Acceptance criteria
+- [x] Search results: after `upsert_matches`, each match with non-empty title+company calls
+      `_persist_application_lifecycle_event(status="opened")`.
+- [x] Prepare flow: after existing `set_lifecycle_status` call, also calls
+      `_persist_application_lifecycle_event(status="prepared")`.
+- [x] Both paths are non-blocking (wrapped in try/except, exceptions logged at DEBUG).
+- [x] Regression guard: `"opened"` never downgrades a job already at prepared/applied/
+      interview/offer.
+- [x] `tests/test_application_lifecycle.py` 18/18 pass — 3 new tests added, 15 existing
+      tests still pass.
+
+#### Required verification
+- [x] `python -m pytest tests/test_application_lifecycle.py -v` — 18/18 passed.
+
+#### Handoff notes
+- Changed files:
+  - `src/rico_chat_api.py` — Change A (loop after `upsert_matches`, ~line 8091) +
+    Change B (dual-write after `set_lifecycle_status`, ~line 7221)
+  - `tests/test_application_lifecycle.py` — 3 new tests appended
+  - `AI_WORKSPACE/TASKS.md` — this entry
+- Known pre-existing vocabulary divergence (NOT in scope):
+  `LIFECYCLE_STATUSES` uses `"interviewing"` while `VALID_STATUSES`/frontend uses
+  `"interview"`. `found`/`archived`/`needs_review` in LIFECYCLE only;
+  `opened`/`follow_up_due`/`decision_made` in VALID_STATUSES only.
+  Document as tech-debt follow-up in a separate PR.
+- Risks: Both changes are guarded by try/except — no search or prepare flow is affected
+  by a DB failure. The regression guard ensures no data is corrupted.
+- Rollback plan: revert the two blocks added to `src/rico_chat_api.py`.
+
+---
+
 ### TASK-20260618-014 — Open-PR backlog triage and cleanup
 
 Status: done
