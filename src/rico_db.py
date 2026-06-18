@@ -803,6 +803,7 @@ class RicoDB:
                     """,
                     (user_id, job_key, Json(job_data), score, explanation, status),
                 )
+        self._stamp_status_timestamp(user_id, job_key, status)
         return True
 
     def update_recommendation_status(
@@ -823,7 +824,62 @@ class RicoDB:
                     (status, user_id, job_key),
                 )
                 affected = cur.rowcount
+        if affected > 0:
+            self._stamp_status_timestamp(user_id, job_key, status)
         return affected > 0
+
+    def _stamp_status_timestamp(self, user_id: str, job_key: str, status: str) -> None:
+        """Best-effort: record the first time a row reaches a lifecycle stage.
+
+        Stamps ``applied_at`` / ``follow_up_due_at`` the first time a row reaches
+        that status (Issue #355). Runs in its own transaction and swallows all
+        errors so a missing column (pre-migration 027) or any DB hiccup never
+        affects the core recommendation write. ``column`` is from a fixed
+        whitelist, never user input.
+        """
+        column = {"applied": "applied_at", "follow_up_due": "follow_up_due_at"}.get(status)
+        if not column:
+            return
+        try:
+            with self._transaction() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        f"""
+                        UPDATE rico_job_recommendations
+                        SET {column} = now()
+                        WHERE user_id = %s AND job_key = %s AND {column} IS NULL
+                        """,
+                        (user_id, job_key),
+                    )
+        except Exception:
+            logger.debug(
+                "rico_db: skipped %s stamp (column may pre-date migration 027) user=%s job=%s",
+                column, user_id, job_key,
+            )
+
+    def mark_followups_due(self, interval_days: int = 7) -> int:
+        """Transition aged ``applied`` jobs to ``follow_up_due`` (Issue #355).
+
+        Idempotent: only rows currently at status='applied' whose ``applied_at``
+        is older than ``interval_days`` are transitioned, so re-running the sweep
+        produces no duplicate transitions. Returns the number of rows updated.
+        """
+        days = max(1, int(interval_days))
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE rico_job_recommendations
+                    SET status = 'follow_up_due',
+                        follow_up_due_at = now(),
+                        updated_at = now()
+                    WHERE status = 'applied'
+                      AND applied_at IS NOT NULL
+                      AND applied_at <= now() - make_interval(days => %s)
+                    """,
+                    (days,),
+                )
+                return cur.rowcount or 0
 
     def get_recommendation_stats(self, user_id: str) -> Dict[str, Any]:
         with self._transaction() as conn:

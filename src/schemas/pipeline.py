@@ -19,3 +19,9 @@ class PipelineStatusResponse(BaseModel):
 class PipelineTriggerResponse(BaseModel):
     status: str
     message: str
+
+
+class RemindersResponse(BaseModel):
+    status: str
+    interval_days: int
+    marked_due: int = 0

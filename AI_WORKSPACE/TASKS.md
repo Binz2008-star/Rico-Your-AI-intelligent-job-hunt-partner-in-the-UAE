@@ -58,10 +58,44 @@ Issue/PR: <link or number>
 
 ### TASK-20260618-018 — Follow-up Reminders, Phase 1 (Issue #355)
 
-Status: scoped (2 gated decisions pending approval — see "Blockers")
+Status: review (Phase 1 implemented; both gated items approved; owner deploy steps pending)
 Owner: Claude
 Branch: `feat/follow-up-reminders-355`
 Issue/PR: #355
+
+#### Implementation (Phase 1, 2026-06-18)
+Both gated items approved: (1) migration adding `applied_at`; (2) `RICO_CRON_SECRET`.
+- `migrations/027_followup_reminders.sql` — adds `applied_at`/`follow_up_due_at`/
+  `last_followup_at` + backfill + scan index. **Apply to Neon before deploy.**
+- `src/rico_db.py` — guarded `_stamp_status_timestamp` (stamps `applied_at` when a row
+  first becomes `applied`, `follow_up_due_at` on `follow_up_due`); called from
+  `upsert_recommendation` + `update_recommendation_status`. New idempotent
+  `mark_followups_due(interval_days)` sweep (only touches status='applied').
+  Stamping is best-effort/own-transaction so a pre-migration column never breaks writes.
+- `src/services/followup_service.py` — `run_due_scan` (never raises; safe summary on
+  DB-unavailable / pre-migration).
+- `src/api/deps.py` — `require_cron_secret` (X-Cron-Secret vs `RICO_CRON_SECRET`,
+  constant-time, fails closed with 503 when unset).
+- `src/api/routers/pipeline.py` — `POST /api/v1/pipeline/reminders` (cron-guarded,
+  optional `?interval_days`). `src/schemas/pipeline.py` — `RemindersResponse`.
+- Default interval = 7 (constant). Per-user settings interval = deferred (Phase 2).
+- Telegram DM = deferred (Phase 2). Dashboard renders `follow_up_due` already (#627).
+
+#### Tests (sandbox)
+- `tests/test_followup_reminders.py` — 10 passed (cron guard 503/403/ok; service ok/
+  unavailable/error/interval-coercion; sweep idempotency SQL + interval clamp).
+- `tests/test_application_lifecycle.py` — 21 passed (no regression from stamping calls).
+- Full-app TestClient tests not runnable in sandbox (missing deps); rely on CI.
+
+#### Owner steps before production smoke (NOT done by Claude)
+1. Apply `migrations/027_followup_reminders.sql` to Neon.
+2. Set `RICO_CRON_SECRET` on Render.
+3. Wire a Render Cron Job: daily `POST https://rico-job-automation-api.onrender.com/api/v1/pipeline/reminders`
+   with header `X-Cron-Secret: <secret>`.
+4. Manual Render Deploy, then smoke: apply a job, backfill/age it, run the sweep,
+   confirm it flips to `follow_up_due` on `/flow`; re-run → no duplicate transition.
+
+#### Original scope / blockers (now resolved)
 
 #### Objective
 After a job is `applied`, detect when it has been ≥ interval (default 7 days) with no
