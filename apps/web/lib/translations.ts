@@ -745,7 +745,10 @@ export const translations = {
     // Status labels (display only — canonical backend values are unchanged)
     flowStatusSaved: "Saved",
     flowStatusOpened: "Link opened",
+    flowStatusOpenedExternal: "Opened externally",
+    flowStatusPrepared: "Prepared",
     flowStatusApplied: "Applied",
+    flowStatusFollowUpDue: "Follow-up due",
     flowStatusInterview: "Interview",
     flowStatusOffer: "Offer",
     flowStatusRejected: "Rejected",
@@ -753,7 +756,10 @@ export const translations = {
     // Per-status next-action guidance
     flowNextSaved: "Verify the listing. Apply when ready.",
     flowNextOpened: "Did you apply? Mark it as Applied.",
+    flowNextOpenedExternal: "You opened the listing externally. Ready to prepare your application?",
+    flowNextPrepared: "Your materials are ready. Submit your application when you're confident.",
     flowNextApplied: "No reply in 5–7 days? Send a follow-up.",
+    flowNextFollowUpDue: "Time to follow up. Send a brief, polite check-in message.",
     flowNextInterview: "Prep your talking points. Review the job description.",
     flowNextOffer: "Review terms carefully. Accept, negotiate, or decline.",
     flowNextRejected: "Request feedback if useful. Move on.",
@@ -1751,7 +1757,10 @@ export const translations = {
     // Status labels (display only — canonical backend values are unchanged)
     flowStatusSaved: "محفوظة",
     flowStatusOpened: "تم فتح الرابط",
+    flowStatusOpenedExternal: "تم فتحه خارجيًا",
+    flowStatusPrepared: "جاهزة للتقديم",
     flowStatusApplied: "تم التقديم",
+    flowStatusFollowUpDue: "متابعة مطلوبة",
     flowStatusInterview: "مقابلة",
     flowStatusOffer: "عرض",
     flowStatusRejected: "مرفوضة",
@@ -1759,7 +1768,10 @@ export const translations = {
     // Per-status next-action guidance
     flowNextSaved: "تحقق من الإعلان. تقدّم عندما تكون جاهزًا.",
     flowNextOpened: "هل تقدّمت؟ حدّد الحالة كـ«تم التقديم».",
+    flowNextOpenedExternal: "فتحت الإعلان خارجيًا. هل أنت مستعد لتجهيز طلبك؟",
+    flowNextPrepared: "مواد طلبك جاهزة. قدّم عندما تكون واثقًا.",
     flowNextApplied: "لم يصلك رد خلال 5–7 أيام؟ أرسل متابعة.",
+    flowNextFollowUpDue: "حان وقت المتابعة. أرسل رسالة مختصرة ومهذّبة.",
     flowNextInterview: "جهّز نقاط حديثك. راجع الوصف الوظيفي.",
     flowNextOffer: "راجع الشروط بعناية. اقبل أو تفاوض أو ارفض.",
     flowNextRejected: "اطلب ملاحظات إن كانت مفيدة. وامضِ قدمًا.",

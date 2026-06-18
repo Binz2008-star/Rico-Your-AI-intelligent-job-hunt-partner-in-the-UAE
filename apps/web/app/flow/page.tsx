@@ -24,10 +24,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 type ViewMode = 'list' | 'board';
 
 const KANBAN_COLS: Array<{ labelKey: TranslationKey; statuses: ApplicationStatus[]; accent: string }> = [
-    { labelKey: 'flowColLeads',     statuses: ['saved', 'opened'],                     accent: 'border-text-tertiary/30' },
-    { labelKey: 'flowColApplied',   statuses: ['applied'],                             accent: 'border-sky-500/30' },
-    { labelKey: 'flowColInterview', statuses: ['interview'],                            accent: 'border-gold/40' },
-    { labelKey: 'flowColOutcome',   statuses: ['offer', 'rejected', 'decision_made'],  accent: 'border-magenta/30' },
+    { labelKey: 'flowColLeads',     statuses: ['saved', 'opened', 'opened_external', 'prepared'], accent: 'border-text-tertiary/30' },
+    { labelKey: 'flowColApplied',   statuses: ['applied', 'follow_up_due'],                       accent: 'border-sky-500/30' },
+    { labelKey: 'flowColInterview', statuses: ['interview'],                                       accent: 'border-gold/40' },
+    { labelKey: 'flowColOutcome',   statuses: ['offer', 'rejected', 'decision_made'],              accent: 'border-magenta/30' },
 ];
 
 // Maps each canonical backend status to its display-label translation key.
@@ -39,17 +39,24 @@ const STATUS_LABEL_KEYS: Record<ApplicationStatus, TranslationKey> = {
     rejected: 'flowStatusRejected',
     saved: 'flowStatusSaved',
     opened: 'flowStatusOpened',
+    opened_external: 'flowStatusOpenedExternal',
+    prepared: 'flowStatusPrepared',
+    follow_up_due: 'flowStatusFollowUpDue',
     decision_made: 'flowStatusDecision',
 };
 
 const STATUS_OPTIONS: ApplicationStatus[] = [
-    'saved', 'opened', 'applied', 'interview', 'offer', 'rejected', 'decision_made',
+    'saved', 'opened', 'opened_external', 'prepared',
+    'applied', 'follow_up_due', 'interview', 'offer', 'rejected', 'decision_made',
 ];
 
 const NEXT_ACTION_KEYS: Record<ApplicationStatus, TranslationKey> = {
     saved: 'flowNextSaved',
     opened: 'flowNextOpened',
+    opened_external: 'flowNextOpenedExternal',
+    prepared: 'flowNextPrepared',
     applied: 'flowNextApplied',
+    follow_up_due: 'flowNextFollowUpDue',
     interview: 'flowNextInterview',
     offer: 'flowNextOffer',
     rejected: 'flowNextRejected',
@@ -57,7 +64,8 @@ const NEXT_ACTION_KEYS: Record<ApplicationStatus, TranslationKey> = {
 };
 
 const STATUS_COUNT_ORDER: ApplicationStatus[] = [
-    'applied', 'interview', 'offer', 'saved', 'opened', 'rejected', 'decision_made',
+    'applied', 'follow_up_due', 'interview', 'offer',
+    'saved', 'opened', 'opened_external', 'prepared', 'rejected', 'decision_made',
 ];
 
 type ManualApplicationForm = {

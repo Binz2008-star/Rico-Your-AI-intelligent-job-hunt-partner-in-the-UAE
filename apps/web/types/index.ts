@@ -102,6 +102,9 @@ export type ApplicationStatus =
   | "rejected"
   | "saved"
   | "opened"
+  | "opened_external"
+  | "prepared"
+  | "follow_up_due"
   | "offer"
   | "decision_made";
 
