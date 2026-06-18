@@ -4,9 +4,9 @@ _Last updated: 2026-06-18_
 
 ## Production baseline
 
-- **main HEAD:** `edc53fdf37645b153148a006e68f34215d8adc8a`
-  (docs-only merges on top of production code baseline `62a679b6594afa4475fe9bd92b649ae623a092d8`;
-  no runtime change — see "PR backlog triage" below)
+- **main HEAD:** `01cff584` (#353 lifecycle board-write wiring — Changes A & B live)
+  on top of docs baseline `edc53fdf37645b153148a006e68f34215d8adc8a`
+  (which itself sits on production code baseline `62a679b6594afa4475fe9bd92b649ae623a092d8`).
 - **Deployed to Render:** ✅ live — backend at `rico-job-automation-api.onrender.com`.
   Confirmed live 2026-06-17T22:12 UTC. All API routes 200 OK. CV quality warnings (#621)
   confirmed production-live. PR #625 (preferred_cities guard) not yet manually deployed to
@@ -36,6 +36,7 @@ _Last updated: 2026-06-18_
 | Chat composer clip icon fix | #623 | ✅ live and confirmed (Vercel 2026-06-17T22:08 UTC) |
 | preferred_cities yes/no guard | #625 | ✅ merged to main `1cb66e5` — Render deploy pending |
 | Application Pipeline V1 status alignment | #627 | ✅ live and confirmed (Vercel 2026-06-18T04:45 UTC) |
+| Application Lifecycle Completion (partial) | #353 | 🟡 partial — Change A (search → `opened`) + Change B (prepare → `prepared`) merged to main `01cff584`. Remaining #353 parts not started. |
 
 ## preferred_cities data quality — resolved
 
@@ -83,8 +84,8 @@ not project test failures. Real gate (Vercel) was green on all three.
 
 Do not start without explicit scope and branch assignment.
 
-1. **#353 Application Lifecycle Completion**
-2. **#354 Apply-Link Verification**
+1. **#353 Application Lifecycle Completion** — 🟡 partial (Changes A & B live on main `01cff584`); remaining parts not started
+2. **#354 Apply-Link Verification** ⬅ next priority
 3. **#355 Follow-up Reminders**
 4. **#356 Inbox Intelligence** (design-only; #566 connector design doc now on `main`)
 

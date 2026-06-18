@@ -58,7 +58,7 @@ Issue/PR: <link or number>
 
 ### TASK-20260618-015 — Application Lifecycle Completion (Issue #353)
 
-Status: review
+Status: in_progress (partial — Changes A & B live on main)
 Owner: Claude
 Branch: `claude/magical-allen-343jp2`
 Issue/PR: #353
@@ -118,6 +118,11 @@ appears on the /flow board — no manual save required.
 - Risks: Both changes are guarded by try/except — no search or prepare flow is affected
   by a DB failure. The regression guard ensures no data is corrupted.
 - Rollback plan: revert the two blocks added to `src/rico_chat_api.py`.
+- Production: squash-merged to main as `01cff584` (#353). Change A (search → `opened`)
+  and Change B (prepare → `prepared`) are live on `main`.
+- #353 partial completion only. Remaining parts NOT started and require explicit scope +
+  branch assignment: apply-link verification (#354), follow-up reminders (#355), and any
+  further lifecycle completions (incl. the pre-existing status-vocabulary divergence above).
 
 ---
 
@@ -586,8 +591,9 @@ Add a repo-native shared source of truth for AI planning, implementation handoff
 Product roadmap order (post 2026-06-18 triage). Do not start without explicit scope and
 branch assignment.
 
-1. **#353 Application Lifecycle Completion** ⬅ next priority
-2. **#354 Apply-Link Verification**
+1. **#353 Application Lifecycle Completion** — 🟡 partial (Changes A & B live on main `01cff584`,
+   TASK-20260618-015); remaining lifecycle parts not started.
+2. **#354 Apply-Link Verification** ⬅ next priority
 3. **#355 Follow-up Reminders**
 4. **#356 Inbox Intelligence** — design-only; connector design doc (#566) now on `main`.
 
