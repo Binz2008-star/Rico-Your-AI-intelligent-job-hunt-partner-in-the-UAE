@@ -145,6 +145,38 @@ def _check_critical_tables() -> None:
         conn.close()
 
 
+def _apply_sql_migration(label: str, sql: str) -> None:
+    """Run a raw SQL migration idempotently (IF NOT EXISTS guards in each statement)."""
+    from src.db import get_db_connection
+    conn = get_db_connection()
+    if not conn:
+        logger.warning("migration_skipped label=%s (no DB connection)", label)
+        return
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+        conn.commit()
+        logger.info("migration_ok label=%s", label)
+    except Exception as exc:
+        conn.rollback()
+        logger.warning("migration_failed label=%s: %s", label, exc)
+    finally:
+        conn.close()
+
+
+def _apply_performance_indexes() -> None:
+    sql_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "migrations", "027_performance_indexes.sql"
+    )
+    sql_path = os.path.normpath(sql_path)
+    if not os.path.exists(sql_path):
+        logger.warning("performance_indexes_migration not found at %s", sql_path)
+        return
+    with open(sql_path) as f:
+        sql = f.read()
+    _apply_sql_migration("027_performance_indexes", sql)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
@@ -162,6 +194,7 @@ async def lifespan(app: FastAPI):
         logger.warning("settings_migration failed: %s", exc)
 
     _check_critical_tables()
+    _apply_performance_indexes()
     yield
 
 
