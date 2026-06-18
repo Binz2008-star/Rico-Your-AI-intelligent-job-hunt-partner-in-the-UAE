@@ -56,6 +56,44 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260618-014 — Open-PR backlog triage and cleanup
+
+Status: done
+Owner: Claude
+Branch: `claude/festive-turing-5q21s8`
+Issue/PR: #601, #608, #566
+
+#### Objective
+Reduce backlog noise without starting new feature work: triage the three open PRs and act
+(close stale, merge clean docs-only) — no production code, DB, env, or feature changes.
+
+#### Constraints
+- Read-only triage; no src/, apps/, tests/, DB/schema/migration, env/config, or production code.
+- No deploy. No merge without explicit approval.
+
+#### Outcome
+- [x] **#601 closed** as stale/superseded — too broad (~1.3k LOC), stale base, draft,
+      production code in `src/rico_chat_api.py`, unchecked test plan, body/title mismatch
+      (#601 vs "#610"). Fast paths to be re-cut later as small focused PRs from current `main`.
+      No replacement PR opened.
+- [x] **#608 merged** (squash `8941697c2be56c40d2047dcdeedd20e521dfc06f`) — adds
+      `docs/architecture/localization.md`. Verified docs-only, mergeable clean, Vercel green.
+      Documented fix (PR #606) confirmed live in `main` (`_handle_lifecycle_query(..., message="")`).
+- [x] **#566 merged** (squash `edc53fdf37645b153148a006e68f34215d8adc8a`) — adds
+      `docs/integrations/gmail-readonly-connector.md`. Verified docs-only, no conflicts,
+      Vercel green, aligned with #356 Inbox Intelligence (design-only).
+- [x] Open PR backlog now clean: **0 open PRs**. main HEAD = `edc53fd`.
+
+#### Handoff notes
+- Changed files (this workspace-sync PR): `AI_WORKSPACE/CURRENT_STATE.md`,
+  `AI_WORKSPACE/TASKS.md`, `AI_WORKSPACE/DECISIONS.md`.
+- The six "Continuous AI: …" third-party bot checks error on every PR and are not project
+  test failures — recommend disabling that integration to clean the checks UI.
+- Decision recorded: DEC-20260618-001.
+- Rollback plan: revert this docs-only commit.
+
+---
+
 ### TASK-20260617-013 — Application Pipeline V1 status alignment
 
 Status: done
@@ -480,17 +518,24 @@ Add a repo-native shared source of truth for AI planning, implementation handoff
 
 ## Backlog — next priorities
 
-Ordered by current priority. Do not start without explicit scope and branch assignment.
+Product roadmap order (post 2026-06-18 triage). Do not start without explicit scope and
+branch assignment.
 
-1. **Application Pipeline V1** ⬅ next priority — end-to-end application submission flow with
-   approval gate, audit log, and Telegram confirmation. Requires
-   `RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true`.
-2. **Pipeline relevance guard** — pre-filter pipeline job results against active profile before
-   scoring to reduce false-positives reaching the user.
-3. **Match score explanation** — expose per-field score breakdown in job cards so users
-   understand why a job ranked high or low.
-4. **Blocked link UX** — detect dead/redirected apply URLs before showing them to users;
-   surface a clear "link unavailable" state instead of a broken redirect.
+1. **#353 Application Lifecycle Completion** ⬅ next priority
+2. **#354 Apply-Link Verification**
+3. **#355 Follow-up Reminders**
+4. **#356 Inbox Intelligence** — design-only; connector design doc (#566) now on `main`.
+
+Carry-over engineering backlog (sequence within roadmap as scoped):
+
+- **Application Pipeline V1** — end-to-end application submission flow with approval gate,
+  audit log, and Telegram confirmation. Requires `RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true`.
+- **Pipeline relevance guard** — pre-filter pipeline job results against active profile before
+  scoring to reduce false-positives reaching the user.
+- **Match score explanation** — expose per-field score breakdown in job cards so users
+  understand why a job ranked high or low.
+- **Blocked link UX** — detect dead/redirected apply URLs before showing them to users;
+  surface a clear "link unavailable" state instead of a broken redirect.
 
 ### Active issues
 - **Issue #618** — open as backlog for Arabic intent / smoke-test observations.

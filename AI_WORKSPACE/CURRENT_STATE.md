@@ -4,7 +4,9 @@ _Last updated: 2026-06-18_
 
 ## Production baseline
 
-- **main HEAD:** `62a679b6594afa4475fe9bd92b649ae623a092d8`
+- **main HEAD:** `edc53fdf37645b153148a006e68f34215d8adc8a`
+  (docs-only merges on top of production code baseline `62a679b6594afa4475fe9bd92b649ae623a092d8`;
+  no runtime change — see "PR backlog triage" below)
 - **Deployed to Render:** ✅ live — backend at `rico-job-automation-api.onrender.com`.
   Confirmed live 2026-06-17T22:12 UTC. All API routes 200 OK. CV quality warnings (#621)
   confirmed production-live. PR #625 (preferred_cities guard) not yet manually deployed to
@@ -63,6 +65,28 @@ _Last updated: 2026-06-18_
   at `npm ci`. Warm-up run completed; subsequent runs restore from cache.
 - Render deploy: `workflow_dispatch` only (no auto-deploy on push to main). Must be
   triggered manually via GitHub Actions → Manual Render Deploy after each release.
+
+## PR backlog triage (2026-06-18)
+
+Read-only triage of the three open PRs, then cleanup. Open PR backlog is now **clean: 0 open PRs**.
+
+| PR | Title | Decision | Result |
+|---|---|---|---|
+| #601 | feat: job hopping / first day / upskilling + prior batch | Close as stale/superseded | Closed — too broad, stale base, draft, production code in `src/rico_chat_api.py`, test plan unchecked, body/title mismatch. Fast paths to be re-cut later as small focused PRs from current `main` if still needed. |
+| #608 | docs: detect-but-ignore localization pattern | Merge after final check | Squash-merged `8941697c2be56c40d2047dcdeedd20e521dfc06f` — adds `docs/architecture/localization.md`, docs-only. |
+| #566 | docs: Gmail read-only connector design | Merge after final check | Squash-merged `edc53fdf37645b153148a006e68f34215d8adc8a` — adds `docs/integrations/gmail-readonly-connector.md`, docs-only; aligned with #356 Inbox Intelligence (design-only). |
+
+Note: the six "Continuous AI: …" third-party bot checks error generically on every PR and are
+not project test failures. Real gate (Vercel) was green on all three.
+
+## Next product roadmap order
+
+Do not start without explicit scope and branch assignment.
+
+1. **#353 Application Lifecycle Completion**
+2. **#354 Apply-Link Verification**
+3. **#355 Follow-up Reminders**
+4. **#356 Inbox Intelligence** (design-only; #566 connector design doc now on `main`)
 
 ## Next priority
 
