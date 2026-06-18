@@ -188,6 +188,7 @@ class TestOpenApplyLinkHandler:
                 }],
             }),
             patch.object(api, "_has_apply_evidence", return_value=False),
+            patch.object(api, "_verify_link_sync", return_value=None),
         ):
             return api._handle_active_user("test-user", "open apply link for HSE Manager at TestCorp")
 

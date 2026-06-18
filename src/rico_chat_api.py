@@ -7532,35 +7532,10 @@ class RicoChatAPI:
                 return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
             if apply_url:
-                msg = f"Apply link for **{title}** at **{company}**: {apply_url}"
-                # Persist to Application Flow so opened state survives session/restart
-                self._persist_application_lifecycle_event(
-                    user_id=user_id,
-                    title=title,
-                    company=company,
-                    status="opened_external",
-                    url=apply_url,
+                return self._handle_open_apply_link_path(
+                    user_id=user_id, title=title, company=company,
+                    apply_url=apply_url, profile=profile,
                 )
-                # Store URL evidence so a subsequent "Mark as applied" can proceed
-                # without requiring a separate confirmation step.
-                self._store_recent_context(
-                    user_id,
-                    self._build_recent_application_context(
-                        title=title,
-                        company=company,
-                        status="opened_external",
-                        action="open_apply_link",
-                        link=apply_url,
-                    ),
-                )
-                # Opening an apply link is distinct browsing interest — lighter than save.
-                try:
-                    from src.repositories.learning_repo import get_learning_repository
-                    get_learning_repository().infer_signals_from_job_action(
-                        user_id, "opened_external", {"title": title, "company": company, "apply_url": apply_url}
-                    )
-                except Exception:
-                    pass
             elif db_source_url:
                 msg = (
                     f"I don't have a direct apply link saved for **{title}** at **{company}**, "
@@ -8363,6 +8338,120 @@ class RicoChatAPI:
         except Exception:
             pass
         return None
+
+    def _verify_link_sync(self, url: str):
+        """Run the async LinkVerifier from synchronous chat-handler code.
+
+        Spawns a one-shot thread so asyncio.run() creates a fresh event loop
+        without conflicting with uvicorn's event loop. Returns VerificationResult
+        or None on any failure (import error, timeout, network error). Non-blocking
+        from the caller's perspective — failures are swallowed silently.
+        """
+        if not url:
+            return None
+        try:
+            import concurrent.futures
+            from src.services.link_verifier import get_link_verifier
+
+            def _run():
+                import asyncio
+                return asyncio.run(get_link_verifier().verify_link(url))
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                return ex.submit(_run).result(timeout=12)
+        except Exception:
+            return None
+
+    def _handle_open_apply_link_path(
+        self,
+        user_id: str,
+        title: str,
+        company: str,
+        apply_url: str,
+        profile: Any,
+    ) -> "dict[str, Any]":
+        """Verify apply_url and return the complete open_apply_link response.
+
+        Runs LinkVerifier, writes verification_status back to user_job_context,
+        and returns either:
+          - expired fallback response (EXPIRED / BLOCKED)
+          - normal apply response (LIVE / NEEDS_REVIEW / timeout)
+        Non-blocking: any verifier failure falls through to the normal path.
+        """
+        _vr = self._verify_link_sync(apply_url)
+        _link_dead = False
+        if _vr is not None:
+            from src.services.link_verifier import LinkStatus as _LS
+            if _vr.status in (_LS.EXPIRED, _LS.BLOCKED):
+                _link_dead = True
+                try:
+                    from src.repositories.user_job_context_repo import (
+                        update_verification_status as _uvs,
+                    )
+                    _uvs(user_id, title, company, "expired")
+                except Exception:
+                    pass
+            elif _vr.status == _LS.LIVE:
+                try:
+                    from src.repositories.user_job_context_repo import (
+                        update_verification_status as _uvs,
+                    )
+                    _uvs(user_id, title, company, "live_verified")
+                except Exception:
+                    pass
+            # NEEDS_REVIEW / SOURCE_ONLY: uncertain — do not write live_verified
+
+        if _link_dead:
+            msg = (
+                f"The apply link for **{title}** at **{company}** appears to be expired.\n\n"
+                "You can:\n"
+                "• **Refresh** — I can try to find an updated listing\n"
+                "• **Dismiss** — Remove this role from your feed\n"
+                "• **Search** — Look for similar roles right now"
+            )
+            response = {
+                "type": "open_apply_link",
+                "intent": "open_apply_link",
+                "message": msg,
+                "apply_url": None,
+                "verification_status": "expired",
+                "options": [
+                    {"action": "refresh_link", "label": "Refresh",
+                     "message": f"refresh link for {title} at {company}"},
+                    {"action": "dismiss_job", "label": "Dismiss",
+                     "message": f"dismiss {title} at {company}"},
+                    {"action": "search_similar", "label": "Search similar",
+                     "message": f"search similar to {title} at {company}"},
+                ],
+            }
+            self._append_chat(user_id, "assistant", msg)
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+
+        # Link is live or unverified (NEEDS_REVIEW / timeout) — present normally.
+        msg = f"Apply link for **{title}** at **{company}**: {apply_url}"
+        self._persist_application_lifecycle_event(
+            user_id=user_id, title=title, company=company,
+            status="opened_external", url=apply_url,
+        )
+        self._store_recent_context(
+            user_id,
+            self._build_recent_application_context(
+                title=title, company=company,
+                status="opened_external", action="open_apply_link", link=apply_url,
+            ),
+        )
+        try:
+            from src.repositories.learning_repo import get_learning_repository
+            get_learning_repository().infer_signals_from_job_action(
+                user_id, "opened_external",
+                {"title": title, "company": company, "apply_url": apply_url},
+            )
+        except Exception:
+            pass
+        response = {"type": "open_apply_link", "intent": "open_apply_link",
+                    "message": msg, "apply_url": apply_url}
+        self._append_chat(user_id, "assistant", msg)
+        return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
     def _persist_application_lifecycle_event(
         self,

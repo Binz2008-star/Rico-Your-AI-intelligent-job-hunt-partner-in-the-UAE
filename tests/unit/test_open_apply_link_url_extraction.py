@@ -217,6 +217,7 @@ def _call_open_link(api: RicoChatAPI, message: str, apps: list) -> dict:
         patch.object(api, "_store_recent_context", side_effect=lambda uid, ctx: stored.append(ctx)),
         patch("src.rico_chat_api.classify_intent", return_value=intent),
         patch("src.repositories.applications_repo.get_all", return_value=apps),
+        patch.object(api, "_verify_link_sync", return_value=None),
     ):
         result = api.process_message(USER, message)
     return result, stored
