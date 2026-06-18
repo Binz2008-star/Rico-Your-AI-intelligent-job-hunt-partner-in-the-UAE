@@ -7071,7 +7071,19 @@ class RicoChatAPI:
             if raw_company in ("the company",):
                 raw_company = ""
 
-            title, company, _ctx_row = raw_title, raw_company, None
+            # Resolve the job back to the one Rico actually surfaced (recent search
+            # matches / persisted context) so the lifecycle job_key matches the
+            # "opened" record the search path stored. Without this, the prepared
+            # write can target a different key (title/company parsed slightly
+            # differently) and the /flow row never upgrades opened -> prepared.
+            _ctx_row = None
+            if raw_title or raw_company:
+                _ctx_row = self._resolve_card_job(user_id, raw_title, raw_company)
+            if _ctx_row:
+                title = (_ctx_row.get("title") or raw_title).strip()
+                company = (_ctx_row.get("company") or raw_company).strip()
+            else:
+                title, company = raw_title, raw_company
             self._log_document_draft_context_source(
                 "explicit_message" if title and company else "clarification_required",
                 {"title": title, "company": company},
@@ -7221,16 +7233,20 @@ class RicoChatAPI:
                 pass
 
             # Also write to rico_job_recommendations so prepared jobs appear on /flow board.
+            # Capture whether the board write actually landed so the reply only claims
+            # "Prepared" when persistence succeeded (otherwise warn the user).
+            _board_persisted = False
             try:
-                self._persist_application_lifecycle_event(
+                _board_persisted = self._persist_application_lifecycle_event(
                     user_id=user_id,
                     title=title,
                     company=company,
                     status="prepared",
                     url=_apply_url or _source_url,
+                    location=_location,
                 )
             except Exception:
-                pass
+                _board_persisted = False
 
             # 8. Learning signal for draft preparation.
             try:
@@ -7256,17 +7272,25 @@ class RicoChatAPI:
             _reuse_note = (
                 "_(Existing pending draft found — showing that one.)_\n\n" if _reused else ""
             )
+            _board_note = (
+                "\n\n_Tracked as **Prepared** on your board (/flow)._"
+                if _board_persisted
+                else "\n\n_Your draft is saved, but I couldn't update your board status just "
+                "now — it may still show the previous stage. Try again shortly._"
+            )
             msg = (
                 f"{_reuse_note}**Draft ready — {title} at {company}**\n\n"
                 f"**Cover letter preview:**\n{_cl_preview}"
                 f"{'…' if len(_cl) > 350 else ''}\n\n"
                 "Your tailored CV has been prepared. "
                 "Review the full draft from Applications (/applications)."
+                f"{_board_note}"
             )
             response = {
                 "type": "prepare_application",
                 "intent": "prepare_application",
                 "message": msg,
+                "board_status_persisted": _board_persisted,
                 "draft_id": _draft_id,
                 "job_title": title,
                 "job_company": company,
@@ -8461,13 +8485,20 @@ class RicoChatAPI:
         status: str,
         url: str = "",
         location: str = "",
-    ) -> None:
+    ) -> bool:
         """Persist application lifecycle event to rico_job_recommendations.
 
         Safely wraps DB write so response flow is not blocked on failure.
         Uses stable job key to match mark_applied/create_manual behavior.
         Prevents status regression by checking existing status before upsert.
+
+        Returns True when the /flow board row reflects at least ``status`` after
+        this call — either because the row was written, or because an existing
+        row is already at an equal/higher lifecycle tier. Returns False when the
+        board write failed (DB error), so callers can warn the user instead of
+        silently claiming success. Never raises.
         """
+        board_written = False
         try:
             from src.repositories.applications_repo import create as _create_app
 
@@ -8479,7 +8510,7 @@ class RicoChatAPI:
 
             # Only update if no record exists or new status is equal/more advanced
             if existing_status is None or self._should_update_status(existing_status, status):
-                _create_app(
+                result = _create_app(
                     job_id=job_key,
                     title=title,
                     company=company,
@@ -8489,7 +8520,11 @@ class RicoChatAPI:
                     source="chat",
                     user_id=user_id,
                 )
+                board_written = result is not False
             else:
+                # Existing status is already at a higher tier — the board already
+                # reflects this lifecycle stage or beyond, so this is not a failure.
+                board_written = True
                 logger.debug(
                     "rico_chat: skipped lifecycle status update user=%s title=%s company=%s "
                     "existing_status=%s new_status=%s (would regress)",
@@ -8497,6 +8532,7 @@ class RicoChatAPI:
                 )
         except Exception:
             # DB write failure should not block the response
+            board_written = False
             logger.debug(
                 "rico_chat: failed to persist lifecycle event user=%s title=%s company=%s status=%s",
                 user_id, title, company, status
@@ -8517,6 +8553,7 @@ class RicoChatAPI:
                 "rico_chat: failed to stamp user_job_context lifecycle user=%s title=%s",
                 user_id, title,
             )
+        return board_written
 
     def _resolve_application_status_job(
         self,

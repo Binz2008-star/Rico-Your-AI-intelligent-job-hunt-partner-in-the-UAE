@@ -435,3 +435,104 @@ def test_opened_status_does_not_downgrade_higher_statuses():
             f"_should_update_status('{current_status}', 'opened') should be False "
             f"(opened rank 20 must not downgrade {current_status})"
         )
+
+
+# ── Regression: prepare -> prepared persistence gap (fix/prepare-flow-prepared) ──
+
+
+def test_opened_upgrades_to_prepared_same_record_no_duplicate():
+    """The opened record from search must upgrade to prepared on the SAME job_key.
+
+    Reproduces the smoke bug where prepare said 'prepared' but /flow stayed at the
+    opened tier. opened (search) and prepared (prepare) must derive the same job_key
+    (title+company) so the upsert updates one row instead of creating a duplicate.
+    """
+    from src.rico_chat_api import RicoChatAPI
+
+    api = RicoChatAPI()
+    title, company = "Environmental Manager", "Environment Advisory"
+
+    # job_key must be identical regardless of which lifecycle path derives it.
+    opened_key = api._derive_lifecycle_job_key(title, company, "https://x/opened")
+    prepared_key = api._derive_lifecycle_job_key(title, company, "")
+    assert opened_key == prepared_key
+
+    create_calls = []
+
+    def mock_create(**kwargs):
+        create_calls.append(kwargs)
+        return True
+
+    # Existing board row is at "opened" (what the search auto-persist wrote).
+    def mock_find_by_job_id(job_key, user_id):
+        return {"status": "opened", "job_id": job_key}
+
+    with patch("src.repositories.applications_repo.create", side_effect=mock_create):
+        with patch(
+            "src.repositories.applications_repo.find_by_job_id",
+            side_effect=mock_find_by_job_id,
+        ):
+            ok = api._persist_application_lifecycle_event(
+                user_id="test@example.com",
+                title=title,
+                company=company,
+                status="prepared",
+                url="",
+            )
+
+    assert ok is True
+    assert len(create_calls) == 1, "must upsert exactly one row (no duplicate)"
+    assert create_calls[0]["status"] == "prepared"
+    assert create_calls[0]["job_id"] == opened_key
+
+
+def test_persist_returns_true_on_success_false_on_db_failure():
+    """The reply must be able to tell whether the board write actually landed."""
+    from src.rico_chat_api import RicoChatAPI
+
+    api = RicoChatAPI()
+
+    with patch("src.repositories.applications_repo.create", side_effect=lambda **k: True):
+        with patch(
+            "src.repositories.applications_repo.find_by_job_id",
+            side_effect=lambda *a, **k: None,
+        ):
+            assert api._persist_application_lifecycle_event(
+                user_id="u@example.com", title="Eng", company="Corp", status="prepared",
+            ) is True
+
+    def _boom(**kwargs):
+        raise Exception("DB unavailable")
+
+    with patch("src.repositories.applications_repo.create", side_effect=_boom):
+        with patch(
+            "src.repositories.applications_repo.find_by_job_id",
+            side_effect=lambda *a, **k: None,
+        ):
+            assert api._persist_application_lifecycle_event(
+                user_id="u@example.com", title="Eng", company="Corp", status="prepared",
+            ) is False
+
+
+def test_persist_returns_true_when_already_at_higher_tier():
+    """If the row is already applied/interview/offer, the board already reflects
+    'prepared or beyond' — report success (True), and do not write a regression."""
+    from src.rico_chat_api import RicoChatAPI
+
+    api = RicoChatAPI()
+    create_calls = []
+
+    with patch(
+        "src.repositories.applications_repo.create",
+        side_effect=lambda **k: create_calls.append(k),
+    ):
+        with patch(
+            "src.repositories.applications_repo.find_by_job_id",
+            side_effect=lambda *a, **k: {"status": "applied"},
+        ):
+            ok = api._persist_application_lifecycle_event(
+                user_id="u@example.com", title="Eng", company="Corp", status="prepared",
+            )
+
+    assert ok is True
+    assert create_calls == [], "must not downgrade an already-advanced record"
