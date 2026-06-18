@@ -1,13 +1,14 @@
 # Current State
 
-_Last updated: 2026-06-17_
+_Last updated: 2026-06-18_
 
 ## Production baseline
 
-- **main HEAD:** `4df959bdee354d4bf431925c5d3fbb10354801ba`
+- **main HEAD:** `1cb66e5d34895e83e1a61fd620bba4222bc14606`
 - **Deployed to Render:** ✅ live — backend at `rico-job-automation-api.onrender.com`.
   Confirmed live 2026-06-17T22:12 UTC. All API routes 200 OK. CV quality warnings (#621)
-  confirmed production-live on this build.
+  confirmed production-live. PR #625 not yet manually deployed to Render — trigger
+  `workflow_dispatch` (Manual Render Deploy) to activate the preferred_cities guard on Render.
 - **Deployed to Vercel:** ✅ live — frontend at `ricohunt.com`. Deploy to Production
   completed 2026-06-17T22:08 UTC on commit `4df959b`. Clip icon fix (#623) confirmed live.
 
@@ -20,7 +21,7 @@ _Last updated: 2026-06-17_
 - The backend foundation is FastAPI with Rico modules under `src/`.
 - The database target is Neon/PostgreSQL.
 
-## Confirmed production state (as of 2026-06-17 smoke test)
+## Confirmed production state (as of 2026-06-18)
 
 | Feature | PR | Status |
 |---|---|---|
@@ -30,13 +31,18 @@ _Last updated: 2026-06-17_
 | CI npm + Playwright browser cache | #619 | ✅ merged and deployed |
 | CV extraction quality warnings | #621 | ✅ live and confirmed (Render 2026-06-17T22:12 UTC) |
 | Chat composer clip icon fix | #623 | ✅ live and confirmed (Vercel 2026-06-17T22:08 UTC) |
+| preferred_cities yes/no guard | #625 | ✅ merged to main `1cb66e5` — Render deploy pending |
 
-## Known data quality observation (non-blocking)
+## preferred_cities data quality — resolved
 
-- **`preferred_cities: ['نعم']`** on profile `robenedwan@gmail.com` — Arabic for "Yes",
-  captured from a yes/no onboarding prompt instead of a city name. Matching guardrails
-  (#616) may surface a city-validity warning. City-based search may return unexpected
-  results for this user. Not a P0; addressable via profile edit or a targeted cleanup.
+- **`preferred_cities: ['نعم']`** on `robenedwan@gmail.com` — fixed.
+  - **Code guard:** PR #625 merged to main `1cb66e5`. Yes/no affirmations ("نعم", "yes",
+    "no", "لا", "ok") are now blocked from being stored in `preferred_cities` in both the
+    Rico chat pending-field handler and the Jotform webhook mapping.
+  - **Data patch:** Neon SQL patch completed 2026-06-18. Verification query returned 0 rows —
+    no remaining bad records.
+  - **Render deploy:** Must be triggered manually (workflow_dispatch) to activate the guard
+    on the live backend.
 
 ## Arabic cover-letter parser verdict
 
@@ -55,6 +61,18 @@ _Last updated: 2026-06-17_
   at `npm ci`. Warm-up run completed; subsequent runs restore from cache.
 - Render deploy: `workflow_dispatch` only (no auto-deploy on push to main). Must be
   triggered manually via GitHub Actions → Manual Render Deploy after each release.
+
+## Next priority
+
+- **Application Pipeline V1** — end-to-end application submission flow with approval gate,
+  audit log, and Telegram confirmation. Requires `RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true`.
+  Do not start without explicit scope and branch assignment.
+
+## Active issues
+
+- **Issue #618** — open as backlog for Arabic intent / smoke-test observations.
+  Do not treat as P0 unless a new reproducible failure appears after commit
+  `525964d758d13b86cf0f9b2907bdde7be773d9da`.
 
 ## Operating target
 

@@ -58,10 +58,10 @@ Issue/PR: <link or number>
 
 ### TASK-20260618-011 — Guard preferred_cities against yes/no input
 
-Status: in_progress
+Status: done
 Owner: Claude
 Branch: `claude/magical-allen-343jp2`
-Issue/PR: (pending)
+Issue/PR: #625
 
 #### Objective
 Prevent non-city strings ("نعم", "لا", "yes", "no") from being stored in
@@ -106,12 +106,18 @@ Also provide a SQL data patch for the one known bad record (`robenedwan@gmail.co
     `_as_city_list()` helper; `map_jotform_payload()` uses it
   - `tests/unit/test_preferred_cities_guard.py` — 21 new unit tests
   - `AI_WORKSPACE/TASKS.md`
-- Data patch SQL (run on Neon after merge):
+- Data patch SQL — **completed on Neon 2026-06-18**:
   ```sql
   UPDATE rico_profiles
   SET profile = jsonb_set(profile, '{preferred_cities}', '[]'::jsonb)
   WHERE profile->'preferred_cities' @> '["نعم"]';
   ```
+  Verification query returned 0 rows — no remaining bad records.
+- Future yes/no answers now blocked from `preferred_cities` in:
+  - Rico chat pending-field handler (`src/rico_chat_api.py`)
+  - Jotform webhook mapping (`src/rico_jotform_webhook.py`)
+- Production: squash-merged to main as `1cb66e5d34895e83e1a61fd620bba4222bc14606` (#625).
+  Render deploy required (workflow_dispatch). Vercel auto-deployed.
 - Rollback plan: revert the two source files.
 
 ---
@@ -405,15 +411,14 @@ Add a repo-native shared source of truth for AI planning, implementation handoff
 
 Ordered by current priority. Do not start without explicit scope and branch assignment.
 
-1. **CV extraction quality warnings** — surface structured warnings when CV parse quality is low
-   (missing sections, unrecognised format, low confidence fields). Advisory only; do not block upload.
-2. **Application Pipeline V1** — end-to-end application submission flow with approval gate,
-   audit log, and Telegram confirmation. Requires `RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true`.
-3. **Pipeline relevance guard** — pre-filter pipeline job results against active profile before
+1. **Application Pipeline V1** ⬅ next priority — end-to-end application submission flow with
+   approval gate, audit log, and Telegram confirmation. Requires
+   `RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true`.
+2. **Pipeline relevance guard** — pre-filter pipeline job results against active profile before
    scoring to reduce false-positives reaching the user.
-4. **Match score explanation** — expose per-field score breakdown in job cards so users
+3. **Match score explanation** — expose per-field score breakdown in job cards so users
    understand why a job ranked high or low.
-5. **Blocked link UX** — detect dead/redirected apply URLs before showing them to users;
+4. **Blocked link UX** — detect dead/redirected apply URLs before showing them to users;
    surface a clear "link unavailable" state instead of a broken redirect.
 
 ### Active issues
