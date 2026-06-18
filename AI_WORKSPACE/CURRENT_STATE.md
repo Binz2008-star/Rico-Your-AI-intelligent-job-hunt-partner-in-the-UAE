@@ -4,11 +4,12 @@ _Last updated: 2026-06-17_
 
 ## Production baseline
 
-- **main HEAD:** `b9708c91c0afd1b8d8a5ea83d7ff29aee02f5fb2`
-- **Deployed to Render:** pending — Render deploy not yet triggered after #621. Last confirmed
-  smoke test was against `525964d758d13b86cf0f9b2907bdde7be773d9da` (2026-06-17). CV quality
-  warnings are merged to main but not yet confirmed production-live.
-- **Deployed to Vercel:** yes — frontend live at `ricohunt.com` (no frontend changes in #621)
+- **main HEAD:** `4df959bdee354d4bf431925c5d3fbb10354801ba`
+- **Deployed to Render:** ✅ live — backend at `rico-job-automation-api.onrender.com`.
+  Confirmed live 2026-06-17T22:12 UTC. All API routes 200 OK. CV quality warnings (#621)
+  confirmed production-live on this build.
+- **Deployed to Vercel:** ✅ live — frontend at `ricohunt.com`. Deploy to Production
+  completed 2026-06-17T22:08 UTC on commit `4df959b`. Clip icon fix (#623) confirmed live.
 
 ## Repository baseline
 
@@ -27,7 +28,15 @@ _Last updated: 2026-06-17_
 | Matching guardrails (Settings + Profile) | #616 | ✅ live and confirmed |
 | Session job-search history | #617 | ✅ live and confirmed |
 | CI npm + Playwright browser cache | #619 | ✅ merged and deployed |
-| CV extraction quality warnings | #621 | ✅ merged to main — Render deploy pending |
+| CV extraction quality warnings | #621 | ✅ live and confirmed (Render 2026-06-17T22:12 UTC) |
+| Chat composer clip icon fix | #623 | ✅ live and confirmed (Vercel 2026-06-17T22:08 UTC) |
+
+## Known data quality observation (non-blocking)
+
+- **`preferred_cities: ['نعم']`** on profile `robenedwan@gmail.com` — Arabic for "Yes",
+  captured from a yes/no onboarding prompt instead of a city name. Matching guardrails
+  (#616) may surface a city-validity warning. City-based search may return unexpected
+  results for this user. Not a P0; addressable via profile edit or a targeted cleanup.
 
 ## Arabic cover-letter parser verdict
 
