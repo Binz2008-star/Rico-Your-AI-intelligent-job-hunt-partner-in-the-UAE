@@ -495,3 +495,54 @@ def get_opened_not_applied(user_id: str, limit: int = 25) -> list[dict]:
         return []
     finally:
         conn.close()
+
+
+def update_verification_status(
+    user_id: str,
+    title: str,
+    company: str,
+    verification_status: str,
+) -> None:
+    """Write a live-checked verification_status back to an existing row.
+
+    Called after LinkVerifier confirms or refutes a link. Only updates the
+    verification_status column; never blanks URLs or changes lifecycle state.
+    No-ops if the row doesn't exist (non-blocking). Never raises.
+    """
+    t = (title or "").strip()
+    c = (company or "").strip()
+    vs = (verification_status or "").strip()
+    if not user_id or not t or not c or not vs:
+        return
+    from src.db import get_db_connection
+
+    conn = get_db_connection()
+    if not conn:
+        return
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE user_job_context
+                   SET verification_status = %s
+                 WHERE user_id = %s
+                   AND lower(title)   = lower(%s)
+                   AND lower(company) = lower(%s)
+                """,
+                (vs, user_id, t, c),
+            )
+        conn.commit()
+        logger.debug(
+            "user_job_context_repo: verification_status=%s for %s @ %s user=%s",
+            vs, t, c, user_id,
+        )
+    except Exception:
+        logger.debug(
+            "user_job_context_repo: failed to update verification_status user=%s", user_id
+        )
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    finally:
+        conn.close()
