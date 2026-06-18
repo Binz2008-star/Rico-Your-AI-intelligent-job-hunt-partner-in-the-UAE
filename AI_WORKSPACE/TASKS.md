@@ -56,6 +56,72 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260617-013 — Application Pipeline V1 status alignment
+
+Status: in_progress
+Owner: Claude
+Branch: `claude/magical-allen-343jp2`
+Issue/PR: (pending)
+
+#### Objective
+Align the frontend `ApplicationStatus` type with the backend `VALID_STATUSES` set by
+adding the three statuses already accepted by the backend but missing from the frontend:
+`opened_external`, `prepared`, `follow_up_due`. Update the /flow board, status labels,
+translations, and StatusBadge accordingly.
+
+#### Context
+- Relevant files:
+  - `apps/web/types/index.ts` — `ApplicationStatus` union type
+  - `apps/web/app/flow/page.tsx` — board columns, label maps, option list
+  - `apps/web/components/ui/StatusBadge.tsx` — badge colour config
+  - `apps/web/lib/translations.ts` — EN + AR status labels and next-action strings
+  - `src/applications.py` — `VALID_STATUSES` (backend source of truth)
+- Root cause: backend `VALID_STATUSES` had 10 statuses; frontend type had 7.
+  Records with `opened_external`, `prepared`, or `follow_up_due` stored in DB
+  were silently dropped from board view and caused TypeScript type gaps.
+- Existing behavior: `/applications` redirects to `/flow`. Board has 4 columns.
+
+#### Constraints
+- No DB schema changes. No backend route changes. No auth/billing/scoring changes.
+- No new API endpoints. No env/config changes.
+- Frontend only: types, page, component, translations.
+
+#### Acceptance criteria
+- [x] `ApplicationStatus` type includes `opened_external`, `prepared`, `follow_up_due`.
+- [x] Board Leads column includes `opened_external` and `prepared`.
+- [x] Board Applied column includes `follow_up_due`.
+- [x] All new statuses appear in the status dropdown (manual tracking modal + inline).
+- [x] Status count row covers all 10 statuses.
+- [x] EN + AR labels and next-action guidance for all 3 new statuses.
+- [x] `StatusBadge` renders new statuses with distinct colours.
+- [x] `npm run build` clean — no TypeScript errors.
+- [x] New alignment tests: 7/7 pass.
+- [x] Existing application tests: 64/64 pass, no regressions.
+
+#### Required verification
+- [x] `npm run build` — clean in `apps/web`.
+- [x] `pytest tests/unit/test_application_pipeline_statuses.py` — 7/7 passed.
+- [x] `pytest tests/test_application_lifecycle.py tests/test_manual_application_tracking.py
+       tests/unit/test_english_manual_application_status_update.py
+       tests/unit/test_arabic_application_status_update.py
+       tests/unit/test_application_tracking_intelligence.py` — 64/64 passed.
+- [x] Frontend build: no TypeScript errors.
+
+#### Handoff notes
+- Changed files:
+  - `apps/web/types/index.ts` — added `opened_external | prepared | follow_up_due`
+  - `apps/web/app/flow/page.tsx` — updated KANBAN_COLS, STATUS_LABEL_KEYS,
+    NEXT_ACTION_KEYS, STATUS_OPTIONS, STATUS_COUNT_ORDER
+  - `apps/web/components/ui/StatusBadge.tsx` — added 3 new status configs
+  - `apps/web/lib/translations.ts` — added 6 EN + 6 AR strings
+  - `tests/unit/test_application_pipeline_statuses.py` — 7 new alignment tests
+  - `AI_WORKSPACE/TASKS.md`
+- Risks: Records in DB with old statuses unaffected (read-only display change).
+  No scoring or ranking logic touched. No backend validation changed.
+- Rollback plan: revert the 4 frontend files.
+
+---
+
 ### TASK-20260618-011 — Guard preferred_cities against yes/no input
 
 Status: done

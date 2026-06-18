@@ -2,7 +2,8 @@ import { cn } from "@/lib/utils";
 import type { ApplicationStatus } from "@/types";
 
 // Legacy aliases included so imported/legacy data renders correctly.
-// Backend canonical values: saved, opened, applied, interview, rejected, offer, decision_made
+// Backend canonical values: saved, opened, opened_external, prepared, applied,
+// follow_up_due, interview, rejected, offer, decision_made
 const config: Record<
   ApplicationStatus | "interview_scheduled" | "offer_extended",
   { label: string; className: string }
@@ -46,6 +47,18 @@ const config: Record<
   opened: {
     label: "Link opened",
     className: "text-ember bg-ember/10 border-ember/20",
+  },
+  opened_external: {
+    label: "Opened externally",
+    className: "text-sky-300 bg-sky-400/10 border-sky-400/20",
+  },
+  prepared: {
+    label: "Prepared",
+    className: "text-amber-300 bg-amber-400/10 border-amber-400/20",
+  },
+  follow_up_due: {
+    label: "Follow-up due",
+    className: "text-orange-300 bg-orange-400/10 border-orange-400/20",
   },
   decision_made: {
     label: "Decision",
