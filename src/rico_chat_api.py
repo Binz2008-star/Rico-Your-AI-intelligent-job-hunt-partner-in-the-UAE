@@ -4039,6 +4039,11 @@ class RicoChatAPI:
         "الفجيرة", "أم القيوين", "العين",
     })
 
+    # Yes/no words that must not be stored as city names
+    _CITY_REJECT_WORDS: frozenset[str] = frozenset({
+        "yes", "no", "ok", "okay", "sure", "نعم", "لا", "اوكي", "موافق",
+    })
+
     def _resolve_pending_field(
         self, user_id: str, message: str, profile: Any
     ) -> "dict[str, Any] | None":
@@ -4134,6 +4139,8 @@ class RicoChatAPI:
                 return None
             # Accept any non-empty text as city input — normalise and save
             raw_cities = [c.strip() for c in re.split(r"[,،/|]+", msg) if c.strip()]
+            # Reject yes/no affirmations stored in place of a city name
+            raw_cities = [c for c in raw_cities if c.lower() not in self._CITY_REJECT_WORDS]
             if not raw_cities:
                 return None
             # Title-case known UAE cities; keep others as entered

@@ -56,6 +56,66 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260618-011 — Guard preferred_cities against yes/no input
+
+Status: in_progress
+Owner: Claude
+Branch: `claude/magical-allen-343jp2`
+Issue/PR: (pending)
+
+#### Objective
+Prevent non-city strings ("نعم", "لا", "yes", "no") from being stored in
+`preferred_cities` when collected via the chat pending-field handler or Jotform webhook.
+Also provide a SQL data patch for the one known bad record (`robenedwan@gmail.com`).
+
+#### Context
+- Relevant files:
+  - `src/rico_chat_api.py` — pending-field handler for `preferred_cities` (line ~4136)
+  - `src/rico_jotform_webhook.py` — `map_jotform_payload()` line 116
+  - `src/services/matching_guardrails.py` — `is_uae_city()` already warns on stored invalid cities
+- Root cause: when Rico asks "What city do you prefer?" and the user replies "نعم",
+  the chat handler accepts it (not an intent verb, short enough) and stores it. Jotform
+  field mapping has no validation at all.
+- Existing behavior: matching_guardrails warns on retrieval but does not prevent storage.
+
+#### Constraints
+- No DB schema changes. No frontend changes. No scoring changes.
+- Do not add a new service module — filter inline or as a module-level constant.
+- Data patch is provided as SQL in PR description; user runs it manually on Neon.
+- Keep tests unit-only, no DB/network.
+
+#### Acceptance criteria
+- [x] Replying "نعم" / "yes" / "no" / "لا" to Rico's city prompt is rejected (returns None,
+      prompts again) — preferred_cities not updated.
+- [x] Valid city ("Dubai", "دبي") still accepted and saved correctly.
+- [x] Jotform `preferred_cities` field strips yes/no strings before storage.
+- [x] Unit tests cover yes/no rejection and valid-city acceptance.
+- [x] Backend test suite passes with no regressions.
+
+#### Required verification
+- [x] `python -m py_compile` clean on changed files.
+- [x] `python -m pytest tests/unit/test_preferred_cities_guard.py` — 21/21 passed.
+- [x] Full backend test suite: 2768 passed, no regressions.
+- [x] Frontend build: not required (no frontend changes).
+
+#### Handoff notes
+- Changed files:
+  - `src/rico_chat_api.py` — `_CITY_REJECT_WORDS` class constant + one-line filter in
+    `_resolve_pending_field` preferred_cities branch
+  - `src/rico_jotform_webhook.py` — `_CITY_REJECT_WORDS` module constant +
+    `_as_city_list()` helper; `map_jotform_payload()` uses it
+  - `tests/unit/test_preferred_cities_guard.py` — 21 new unit tests
+  - `AI_WORKSPACE/TASKS.md`
+- Data patch SQL (run on Neon after merge):
+  ```sql
+  UPDATE rico_profiles
+  SET profile = jsonb_set(profile, '{preferred_cities}', '[]'::jsonb)
+  WHERE profile->'preferred_cities' @> '["نعم"]';
+  ```
+- Rollback plan: revert the two source files.
+
+---
+
 ### TASK-20260617-010 — Fix chat composer clip icon UX
 
 Status: done
