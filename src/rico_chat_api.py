@@ -7220,6 +7220,18 @@ class RicoChatAPI:
             except Exception:
                 pass
 
+            # Also write to rico_job_recommendations so prepared jobs appear on /flow board.
+            try:
+                self._persist_application_lifecycle_event(
+                    user_id=user_id,
+                    title=title,
+                    company=company,
+                    status="prepared",
+                    url=_apply_url or _source_url,
+                )
+            except Exception:
+                pass
+
             # 8. Learning signal for draft preparation.
             try:
                 from src.repositories.learning_repo import get_learning_repository
@@ -8089,6 +8101,27 @@ class RicoChatAPI:
             upsert_matches(user_id, formatted)
         except Exception:
             logger.debug("rico_chat: failed to persist search matches to DB user=%s", user_id)
+
+        # Auto-persist surfaced jobs into rico_job_recommendations so they appear on the
+        # /flow board without requiring an explicit save. Uses status="opened" (not "saved")
+        # to avoid subscription gating. The existing regression guard in
+        # _persist_application_lifecycle_event prevents downgrading any job already at a
+        # higher status (prepared/applied/interview/offer).
+        try:
+            for _m in formatted:
+                _t = (_m.get("title") or "").strip()
+                _c = (_m.get("company") or "").strip()
+                if _t and _c:
+                    self._persist_application_lifecycle_event(
+                        user_id=user_id,
+                        title=_t,
+                        company=_c,
+                        status="opened",
+                        url=(_m.get("apply_url") or _m.get("source_url") or "").strip(),
+                        location=str(_m.get("location") or "").strip(),
+                    )
+        except Exception:
+            logger.debug("rico_chat: failed to auto-persist surfaced jobs user=%s", user_id)
 
         # Fire per-user Telegram notification for the top match (best-effort).
         # Opt-in check and rate guard happen inside send_user_notification.

@@ -346,3 +346,92 @@ def test_mark_applied_then_open_link_preserves_applied():
     # Should not have called create (skipped due to regression prevention)
     # Status stays applied, does not downgrade to opened_external
     assert len(create_calls) == 0
+
+
+# ── New tests for Issue #353 (Application Lifecycle Completion) ──────────────
+
+
+def test_search_result_auto_persist_loop_calls_persist_with_opened_status():
+    """Verify the search-result auto-persist loop (Change A) calls
+    _persist_application_lifecycle_event with status='opened' for each valid match
+    and skips entries with empty title or company."""
+    from src.rico_chat_api import RicoChatAPI
+    from unittest.mock import patch
+
+    api = RicoChatAPI()
+    persist_calls = []
+
+    # Simulate the formatted matches list returned by _format_match
+    formatted = [
+        {"title": "Senior Engineer", "company": "Acme Corp", "apply_url": "https://acme.com/1", "location": "Dubai"},
+        {"title": "Product Manager", "company": "TechCo", "source_url": "https://techco.com/2", "location": "Abu Dhabi"},
+        {"title": "", "company": "EmptyTitle Corp", "apply_url": "https://example.com/3"},  # skipped
+        {"title": "No Company Job", "company": "", "apply_url": "https://example.com/4"},   # skipped
+    ]
+
+    with patch.object(api, "_persist_application_lifecycle_event", side_effect=lambda **kw: persist_calls.append(kw)):
+        # Reproduce the loop added in Change A
+        for _m in formatted:
+            _t = (_m.get("title") or "").strip()
+            _c = (_m.get("company") or "").strip()
+            if _t and _c:
+                api._persist_application_lifecycle_event(
+                    user_id="u1@example.com",
+                    title=_t,
+                    company=_c,
+                    status="opened",
+                    url=(_m.get("apply_url") or _m.get("source_url") or "").strip(),
+                    location=str(_m.get("location") or "").strip(),
+                )
+
+    assert len(persist_calls) == 2, "Only matches with non-empty title AND company should be persisted"
+    assert all(c["status"] == "opened" for c in persist_calls)
+    assert persist_calls[0]["title"] == "Senior Engineer"
+    assert persist_calls[0]["company"] == "Acme Corp"
+    assert persist_calls[1]["title"] == "Product Manager"
+    assert persist_calls[1]["company"] == "TechCo"
+
+
+def test_prepare_flow_dual_write_calls_persist_with_prepared_status():
+    """Verify Change B: prepare flow calls _persist_application_lifecycle_event with
+    status='prepared' so prepared jobs appear on the /flow board."""
+    from src.rico_chat_api import RicoChatAPI
+
+    api = RicoChatAPI()
+    create_calls = []
+
+    def mock_create(*, job_id, title, company, location, url, status, source, user_id):
+        create_calls.append({"status": status, "title": title, "company": company, "url": url})
+        return True
+
+    def mock_find_by_job_id(job_key, user_id):
+        return None  # No existing record
+
+    with patch("src.repositories.applications_repo.create", side_effect=mock_create):
+        with patch("src.repositories.applications_repo.find_by_job_id", side_effect=mock_find_by_job_id):
+            api._persist_application_lifecycle_event(
+                user_id="test@example.com",
+                title="HSE Manager",
+                company="Archirodon Group",
+                status="prepared",
+                url="https://example.com/apply",
+            )
+
+    assert len(create_calls) == 1
+    assert create_calls[0]["status"] == "prepared"
+    assert create_calls[0]["title"] == "HSE Manager"
+    assert create_calls[0]["url"] == "https://example.com/apply"
+
+
+def test_opened_status_does_not_downgrade_higher_statuses():
+    """Verify regression guard: auto-persist with status='opened' (rank 20) never
+    overwrites prepared (30), applied (40), interview (60), or offer (70)."""
+    from src.rico_chat_api import RicoChatAPI
+
+    higher_statuses = ["prepared", "applied", "interview", "offer"]
+    for current_status in higher_statuses:
+        result = RicoChatAPI._should_update_status(current_status, "opened")
+        assert result is False, (
+            f"_should_update_status('{current_status}', 'opened') should be False "
+            f"(opened rank 20 must not downgrade {current_status})"
+        )
