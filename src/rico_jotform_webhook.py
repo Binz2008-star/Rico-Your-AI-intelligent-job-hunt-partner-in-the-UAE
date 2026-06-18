@@ -13,6 +13,27 @@ from src.services.profile_context_resolver import resolve_profile_context
 
 logger = logging.getLogger(__name__)
 
+_CITY_REJECT_WORDS: frozenset[str] = frozenset({
+    "yes", "no", "ok", "okay", "sure", "نعم", "لا", "اوكي", "موافق",
+})
+
+
+def _as_city_list(value: Any) -> "list[str] | None":
+    """Return a cleaned list of city strings, or None if no valid cities remain.
+
+    Filters out yes/no affirmations that Jotform may send when a boolean field
+    is mistakenly mapped to the preferred_cities slot.
+    """
+    if not value:
+        return None
+    if isinstance(value, str):
+        value = [c.strip() for c in value.split(",") if c.strip()]
+    if not isinstance(value, list):
+        return None
+    cities = [c for c in value if isinstance(c, str) and c.strip()
+              and c.strip().lower() not in _CITY_REJECT_WORDS]
+    return cities or None
+
 
 def _is_production() -> bool:
     """True if any of RICO_ENV / ENV / ENVIRONMENT marks production."""
@@ -113,7 +134,7 @@ def map_jotform_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         },
         "profile": {
             "target_roles": answers.get("target_roles"),
-            "preferred_cities": answers.get("preferred_cities"),
+            "preferred_cities": _as_city_list(answers.get("preferred_cities")),
             "salary_expectation_aed": answers.get("salary_expectation_aed"),
             "minimum_salary_aed": answers.get("minimum_salary_aed"),
             "skills": answers.get("skills"),
