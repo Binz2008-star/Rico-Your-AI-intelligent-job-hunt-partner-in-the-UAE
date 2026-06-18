@@ -56,9 +56,54 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260618-017 — Fix prepare→prepared lifecycle persistence (Issue #353)
+
+Status: done (live + production-smoke PASS)
+Owner: Claude
+Branch: `fix/prepare-flow-prepared-status-persistence` (merged)
+Issue/PR: #353 / PR #634
+
+#### Objective
+Close the #353 production-smoke gap where prepare-application reported "prepared" but the
+`/flow` board row stayed at the opened tier (PREPARED counter 0, no duplicate).
+
+#### Root cause
+- Prepare handler took title/company from intent extraction and hardcoded the resolved
+  context row to `None`, so its lifecycle `job_key` could diverge from the key the search
+  path stored the `opened` row under — the upsert never upgraded the same record.
+- The prepared write was best-effort/swallowed; Rico claimed success regardless of whether
+  the board write landed. (DB `status` column has no CHECK constraint — `prepared` was
+  already valid; no migration needed.)
+
+#### Fix
+- Resolve the surfaced job via `_resolve_card_job` so prepared upgrades the SAME opened
+  record (consistent `job_key`; also populates apply_url/location).
+- `_persist_application_lifecycle_event` returns whether the board reflects the status;
+  still never raises.
+- Prepare reply states "Tracked as Prepared on your board" only when persistence succeeded,
+  else warns; response exposes `board_status_persisted`.
+
+#### Outcome
+- [x] Persists `status="prepared"` to `rico_job_recommendations` (the `/flow` backing table).
+- [x] Existing `opened` record upgraded to `prepared` (same `job_key`); no duplicate.
+- [x] Rico only claims Prepared when persistence succeeds, else warns.
+- [x] Tests: `tests/test_application_lifecycle.py` 21 passed (3 new); 140 related tests pass.
+- [x] CI green (pytest + playwright + Vercel). Squash-merged to main as `c8ea4fb` (#634).
+- [x] Render deploy run #26 confirmed live (`/version` commit=`c8ea4fb`, `/health` 200).
+- [x] **Production smoke PASS 2026-06-18:** prepare works; `/flow` Prepared updates; no
+      duplicate; reply says "Tracked as Prepared on your board".
+
+#### Handoff notes
+- Changed files: `src/rico_chat_api.py`, `tests/test_application_lifecycle.py`.
+- This closes the prepare→prepared lifecycle gap for #353. Any further #353 lifecycle
+  parts remain not started. #355 Follow-up Reminders is next but NOT started.
+- Rollback plan: revert PR #634.
+
+---
+
 ### TASK-20260618-016 — Apply-Link Verification (Issue #354)
 
-Status: merged (Render deploy + smoke pending)
+Status: done (live + smoke PASS)
 Owner: Claude
 Branch: (merged)
 Issue/PR: #354 / PR #632
@@ -71,9 +116,9 @@ response with no `apply_url`.
 #### Outcome
 - [x] `LinkVerifier` wired into the `open_apply_link` handler.
 - [x] Squash-merged to main as `668d59dc` (PR #632).
-- [ ] Render deploy not confirmed — backend change, `workflow_dispatch` only.
-- [ ] Production smoke pending (live apply link → `apply_url`; dead/blocked link → fallback,
-      no `apply_url`).
+- [x] Confirmed live on Render (`c8ea4fb`, run #26, 2026-06-18).
+- [x] Production smoke PASS: live apply link → `apply_url` present; dead/blocked link →
+      fallback response with no `apply_url`.
 
 #### Handoff notes
 - Backend change merged to `main`; not confirmed live on Render. Covered by the
@@ -84,7 +129,7 @@ response with no `apply_url`.
 
 ### TASK-20260618-015 — Application Lifecycle Completion (Issue #353)
 
-Status: in_progress (partial — Changes A & B live on main)
+Status: done (Changes A & B live + production-smoke PASS via #634; further #353 parts not started)
 Owner: Claude
 Branch: `claude/magical-allen-343jp2`
 Issue/PR: #353
@@ -617,15 +662,15 @@ Add a repo-native shared source of truth for AI planning, implementation handoff
 Product roadmap order (post 2026-06-18 triage). Do not start without explicit scope and
 branch assignment.
 
-1. **#353 Application Lifecycle Completion** — 🟡 partial (Changes A & B merged to main `01cff584`,
-   TASK-20260618-015); remaining lifecycle parts not started.
-2. **#354 Apply-Link Verification** — ✅ merged to main `668d59dc` (PR #632, TASK-20260618-016);
-   Render deploy + smoke pending. No longer next priority.
-3. **#355 Follow-up Reminders** ⬅ next priority
+1. **#353 Application Lifecycle Completion** — 🟢 search→opened + prepare→prepared live and
+   smoke-PASS (this gap closed via #630 + #634, TASK-20260618-015/017); further lifecycle
+   parts not started.
+2. **#354 Apply-Link Verification** — ✅ live and smoke-PASS (PR #632, TASK-20260618-016).
+3. **#355 Follow-up Reminders** ⬅ next priority (NOT started — needs explicit scope + branch).
 4. **#356 Inbox Intelligence** — design-only; connector design doc (#566) now on `main`.
 
-Before starting #355: complete the Manual Render Deploy + production smoke checklist in
-`CURRENT_STATE.md` ("Next required action") for the merged #353/#354 backend changes.
+Deploy + production smoke for #353/#354/#634 completed 2026-06-18 (live on `c8ea4fb`,
+all four checks PASS — see `CURRENT_STATE.md`).
 
 Carry-over engineering backlog (sequence within roadmap as scoped):
 
