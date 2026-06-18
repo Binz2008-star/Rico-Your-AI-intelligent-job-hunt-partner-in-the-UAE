@@ -56,6 +56,32 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260618-016 — Apply-Link Verification (Issue #354)
+
+Status: merged (Render deploy + smoke pending)
+Owner: Claude
+Branch: (merged)
+Issue/PR: #354 / PR #632
+
+#### Objective
+Wire `LinkVerifier` into the `open_apply_link` handler so apply links are verified before
+being surfaced: a live link returns an `apply_url`; a dead/blocked link returns a fallback
+response with no `apply_url`.
+
+#### Outcome
+- [x] `LinkVerifier` wired into the `open_apply_link` handler.
+- [x] Squash-merged to main as `668d59dc` (PR #632).
+- [ ] Render deploy not confirmed — backend change, `workflow_dispatch` only.
+- [ ] Production smoke pending (live apply link → `apply_url`; dead/blocked link → fallback,
+      no `apply_url`).
+
+#### Handoff notes
+- Backend change merged to `main`; not confirmed live on Render. Covered by the
+  "Next required action" deploy + smoke checklist in `CURRENT_STATE.md`.
+- #354 is no longer the next roadmap priority — #355 Follow-up Reminders is next (needs scope).
+
+---
+
 ### TASK-20260618-015 — Application Lifecycle Completion (Issue #353)
 
 Status: in_progress (partial — Changes A & B live on main)
@@ -591,11 +617,15 @@ Add a repo-native shared source of truth for AI planning, implementation handoff
 Product roadmap order (post 2026-06-18 triage). Do not start without explicit scope and
 branch assignment.
 
-1. **#353 Application Lifecycle Completion** — 🟡 partial (Changes A & B live on main `01cff584`,
+1. **#353 Application Lifecycle Completion** — 🟡 partial (Changes A & B merged to main `01cff584`,
    TASK-20260618-015); remaining lifecycle parts not started.
-2. **#354 Apply-Link Verification** ⬅ next priority
-3. **#355 Follow-up Reminders**
+2. **#354 Apply-Link Verification** — ✅ merged to main `668d59dc` (PR #632, TASK-20260618-016);
+   Render deploy + smoke pending. No longer next priority.
+3. **#355 Follow-up Reminders** ⬅ next priority
 4. **#356 Inbox Intelligence** — design-only; connector design doc (#566) now on `main`.
+
+Before starting #355: complete the Manual Render Deploy + production smoke checklist in
+`CURRENT_STATE.md` ("Next required action") for the merged #353/#354 backend changes.
 
 Carry-over engineering backlog (sequence within roadmap as scoped):
 

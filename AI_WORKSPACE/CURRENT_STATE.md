@@ -4,9 +4,15 @@ _Last updated: 2026-06-18_
 
 ## Production baseline
 
-- **main HEAD:** `01cff584` (#353 lifecycle board-write wiring — Changes A & B live)
-  on top of docs baseline `edc53fdf37645b153148a006e68f34215d8adc8a`
-  (which itself sits on production code baseline `62a679b6594afa4475fe9bd92b649ae623a092d8`).
+- **main HEAD:** `668d59dc` (#354 Apply-Link Verification — `LinkVerifier` wired into the
+  `open_apply_link` handler). Lineage: `668d59dc` (#632/#354) ← `60d9d92` (#631 docs sync)
+  ← `01cff584` (#630/#353 lifecycle board-write wiring) ← `edc53fd` (docs) ←
+  `62a679b` (production code baseline).
+- **⚠ Production backend deploy NOT confirmed from AI_WORKSPACE.** Render is
+  `workflow_dispatch` only (no auto-deploy on push to main). The backend changes in
+  `01cff584` (#353 Changes A & B) and `668d59dc` (#354) are on `main` but may not be live
+  on the Render backend. The live deployed commit could not be verified from this workspace
+  (network policy blocks outbound to Render/Vercel). See "Next required action" below.
 - **Deployed to Render:** ✅ live — backend at `rico-job-automation-api.onrender.com`.
   Confirmed live 2026-06-17T22:12 UTC. All API routes 200 OK. CV quality warnings (#621)
   confirmed production-live. PR #625 (preferred_cities guard) not yet manually deployed to
@@ -36,7 +42,8 @@ _Last updated: 2026-06-18_
 | Chat composer clip icon fix | #623 | ✅ live and confirmed (Vercel 2026-06-17T22:08 UTC) |
 | preferred_cities yes/no guard | #625 | ✅ merged to main `1cb66e5` — Render deploy pending |
 | Application Pipeline V1 status alignment | #627 | ✅ live and confirmed (Vercel 2026-06-18T04:45 UTC) |
-| Application Lifecycle Completion (partial) | #353 | 🟡 partial — Change A (search → `opened`) + Change B (prepare → `prepared`) merged to main `01cff584`. Remaining #353 parts not started. |
+| Application Lifecycle Completion (partial) | #353 | 🟡 partial — Change A (search → `opened`) + Change B (prepare → `prepared`) merged to main `01cff584` (PR #630). Backend; Render deploy not confirmed. Remaining #353 parts not started. |
+| Apply-Link Verification | #354 | 🟡 merged to main `668d59dc` (PR #632) — `LinkVerifier` wired into `open_apply_link`. Backend; Render deploy not confirmed. |
 
 ## preferred_cities data quality — resolved
 
@@ -84,10 +91,22 @@ not project test failures. Real gate (Vercel) was green on all three.
 
 Do not start without explicit scope and branch assignment.
 
-1. **#353 Application Lifecycle Completion** — 🟡 partial (Changes A & B live on main `01cff584`); remaining parts not started
-2. **#354 Apply-Link Verification** ⬅ next priority
-3. **#355 Follow-up Reminders**
+1. **#353 Application Lifecycle Completion** — 🟡 partial (Changes A & B merged to main `01cff584`); remaining parts not started
+2. **#354 Apply-Link Verification** — ✅ merged to main `668d59dc` (no longer next priority); Render deploy + smoke pending
+3. **#355 Follow-up Reminders** ⬅ next priority
 4. **#356 Inbox Intelligence** (design-only; #566 connector design doc now on `main`)
+
+## Next required action — deploy + smoke (before new product work)
+
+The #353 and #354 backend changes are on `main` but not confirmed live on Render.
+
+1. **Manual Render Deploy** of latest `main` (`668d59dc`) via GitHub Actions →
+   Manual Render Deploy (`workflow_dispatch`). Render does not auto-deploy on push.
+2. **Production smoke** against the live backend after deploy:
+   1. search jobs → confirm they appear on `/flow` as `opened` (#353 Change A)
+   2. prepare an application → confirm `/flow` updates to `prepared` (#353 Change B)
+   3. open a live apply link → confirm `apply_url` is present (#354)
+   4. open a dead/blocked apply link → confirm fallback response with no `apply_url` (#354)
 
 ## Next priority
 
