@@ -232,6 +232,10 @@ RICO_INTERACTIVE_APPLY=false
 RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true
 RICO_TELEGRAM_PUBLIC_ALERTS=true
 
+# Shared secret for the cron-only follow-up reminders sweep
+# (POST /api/v1/pipeline/reminders, X-Cron-Secret header). Issue #355.
+RICO_CRON_SECRET=
+
 RICO_REDIS_URL=
 REDIS_URL=
 

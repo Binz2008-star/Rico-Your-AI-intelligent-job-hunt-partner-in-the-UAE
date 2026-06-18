@@ -4,6 +4,8 @@ FastAPI dependency injection for authentication and authorization.
 """
 from __future__ import annotations
 
+import hmac
+import os
 from typing import Any, Dict
 
 from fastapi import HTTPException, Request
@@ -73,3 +75,23 @@ def require_admin(request: Request) -> Dict[str, Any]:
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin role required")
     return user
+
+
+def require_cron_secret(request: Request) -> None:
+    """
+    Authorize a server-to-server cron call via a shared secret.
+
+    Render Cron jobs cannot carry a JWT cookie, so cron-only endpoints (e.g. the
+    follow-up reminders sweep) are guarded by an ``X-Cron-Secret`` header compared
+    against the ``RICO_CRON_SECRET`` env var using a constant-time comparison.
+
+    Fails closed: if ``RICO_CRON_SECRET`` is unset the endpoint is treated as
+    not-configured (503) and never falls open. Returns None on success.
+    Usage: route(_cron: None = Depends(require_cron_secret))
+    """
+    expected = (os.getenv("RICO_CRON_SECRET") or "").strip()
+    if not expected:
+        raise HTTPException(status_code=503, detail="Cron endpoint not configured")
+    provided = (request.headers.get("X-Cron-Secret") or "").strip()
+    if not provided or not hmac.compare_digest(provided, expected):
+        raise HTTPException(status_code=403, detail="Invalid cron secret")

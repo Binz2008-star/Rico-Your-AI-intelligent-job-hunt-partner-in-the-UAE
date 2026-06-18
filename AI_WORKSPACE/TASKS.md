@@ -56,6 +56,105 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260618-018 — Follow-up Reminders, Phase 1 (Issue #355)
+
+Status: review (Phase 1 implemented; both gated items approved; owner deploy steps pending)
+Owner: Claude
+Branch: `feat/follow-up-reminders-355`
+Issue/PR: #355
+
+#### Implementation (Phase 1, 2026-06-18)
+Both gated items approved: (1) migration adding `applied_at`; (2) `RICO_CRON_SECRET`.
+- `migrations/027_followup_reminders.sql` — adds `applied_at`/`follow_up_due_at`/
+  `last_followup_at` + backfill + scan index. **Apply to Neon before deploy.**
+- `src/rico_db.py` — guarded `_stamp_status_timestamp` (stamps `applied_at` when a row
+  first becomes `applied`, `follow_up_due_at` on `follow_up_due`); called from
+  `upsert_recommendation` + `update_recommendation_status`. New idempotent
+  `mark_followups_due(interval_days)` sweep (only touches status='applied').
+  Stamping is best-effort/own-transaction so a pre-migration column never breaks writes.
+- `src/services/followup_service.py` — `run_due_scan` (never raises; safe summary on
+  DB-unavailable / pre-migration).
+- `src/api/deps.py` — `require_cron_secret` (X-Cron-Secret vs `RICO_CRON_SECRET`,
+  constant-time, fails closed with 503 when unset).
+- `src/api/routers/pipeline.py` — `POST /api/v1/pipeline/reminders` (cron-guarded,
+  optional `?interval_days`). `src/schemas/pipeline.py` — `RemindersResponse`.
+- Default interval = 7 (constant). Per-user settings interval = deferred (Phase 2).
+- Telegram DM = deferred (Phase 2). Dashboard renders `follow_up_due` already (#627).
+
+#### Tests (sandbox)
+- `tests/test_followup_reminders.py` — 10 passed (cron guard 503/403/ok; service ok/
+  unavailable/error/interval-coercion; sweep idempotency SQL + interval clamp).
+- `tests/test_application_lifecycle.py` — 21 passed (no regression from stamping calls).
+- Full-app TestClient tests not runnable in sandbox (missing deps); rely on CI.
+
+#### Owner steps before production smoke (NOT done by Claude)
+1. Apply `migrations/027_followup_reminders.sql` to Neon.
+2. Set `RICO_CRON_SECRET` on Render.
+3. Wire a Render Cron Job: daily `POST https://rico-job-automation-api.onrender.com/api/v1/pipeline/reminders`
+   with header `X-Cron-Secret: <secret>`.
+4. Manual Render Deploy, then smoke: apply a job, backfill/age it, run the sweep,
+   confirm it flips to `follow_up_due` on `/flow`; re-run → no duplicate transition.
+
+#### Original scope / blockers (now resolved)
+
+#### Objective
+After a job is `applied`, detect when it has been ≥ interval (default 7 days) with no
+follow-up and transition it `applied → follow_up_due`; surface due items on the `/flow`
+dashboard so the user can act. No auto-send. Idempotent.
+
+#### Agreed decisions (2026-06-18)
+- **Scheduler:** Render Cron → protected `POST /api/v1/pipeline/reminders` endpoint
+  (chosen over in-process APScheduler — lower ops risk, matches existing manual-deploy/cron
+  model). Rico provides the endpoint + scan logic; the Render Cron schedule is wired by the
+  owner (infra, out of code scope).
+- **Channel:** Dashboard-first. Surface `follow_up_due` on `/flow` (status already renders
+  since #627). **Telegram DM deferred to a later phase** to keep Phase 1 simple/user-friendly.
+
+#### Existing building blocks
+- `follow_up_due` already a valid status and renders on `/flow` (#627).
+- Legacy `src/follow_up.py` = global JSON blast (not user-scoped, not idempotent) — to be
+  superseded, not extended.
+- `pipeline` router exists; per-user Telegram (`send_user_notification`) exists for later.
+
+#### Blockers — require explicit approval before implementation
+1. **No `applied_at` timestamp.** `rico_job_recommendations` has only `created_at`/`updated_at`
+   (and `get_recommendations` maps `date_applied = created_at`). "7 days since applied" has no
+   reliable source. Options:
+   - (a) **Add `applied_at TIMESTAMPTZ` (+ `follow_up_due_at`, `last_followup_at`) via a
+     migration** — cleanest, but a DB schema change (gated).
+   - (b) Approximate from `updated_at` at the time status became `applied` — no migration, but
+     imprecise (any later edit moves `updated_at`).
+   - Recommendation: (a) — correctness matters for a reminder feature.
+2. **Cron auth.** A Render Cron call can't carry a JWT. Needs a shared-secret guard
+   (e.g. `X-Cron-Secret` header vs a new `RICO_CRON_SECRET` env var) — an env/config addition
+   (gated). Recommendation: add `RICO_CRON_SECRET`, reject the endpoint without it.
+
+#### Scope (Phase 1, after approval)
+- In: reminders endpoint + idempotent per-user scan over `rico_job_recommendations`; status
+  transition `applied → follow_up_due → follow_up_sent`; configurable interval in settings
+  (default 7); unit tests (mocked DB, no live calls).
+- Out: auto-send emails/messages; Telegram (later phase); Redis/RQ; SMS; the Render Cron infra
+  config itself; replacing legacy `follow_up.py` beyond deprecating its use.
+
+#### Acceptance criteria (maps to issue #355)
+- [ ] Follow-up becomes due automatically at interval after applied.
+- [ ] Default interval 7 days, configurable per user in settings.
+- [ ] Due items surface on `/flow` (dashboard).
+- [ ] No duplicates; worker/endpoint idempotent (re-run = no extra transitions).
+- [ ] No auto-send (state stops at `follow_up_due`; user confirms later).
+- [ ] State transitions `applied → follow_up_due → follow_up_sent`.
+
+#### Required verification
+- [ ] `pytest` unit tests for due-detection + idempotency (mocked repo/DB).
+- [ ] `python -m py_compile` on changed files.
+- [ ] Post-deploy production smoke (owner-run) once merged + Render Cron wired.
+
+#### Handoff notes
+- Do NOT implement until Blockers 1 + 2 are approved (migration + cron env var).
+- No Telegram, no auto-send, no Redis/RQ in Phase 1.
+
+---
+
 ### TASK-20260618-017 — Fix prepare→prepared lifecycle persistence (Issue #353)
 
 Status: done (live + production-smoke PASS)
