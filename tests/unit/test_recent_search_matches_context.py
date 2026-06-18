@@ -75,6 +75,7 @@ def _open_link_with_context(api: RicoChatAPI, context: dict, apps: list) -> tupl
         patch.object(api, "_store_recent_context", side_effect=lambda uid, ctx: stored.append(ctx)),
         patch("src.rico_chat_api.classify_intent", return_value=intent),
         patch("src.repositories.applications_repo.get_all", return_value=apps),
+        patch.object(api, "_verify_link_sync", return_value=None),
     ):
         result = api.process_message(USER, "open apply link for HSE Officer at Acme Corp")
     return result, stored
