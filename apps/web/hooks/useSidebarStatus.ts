@@ -1,7 +1,7 @@
 "use client";
 
 import { fetchProfile, getApplicationStats, getMySubscription, getApplicationQueue } from "@/lib/api";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 // Read-only career-status feed for the desktop sidebar workspace.
 // Reuses existing API helpers only — no new endpoints, no backend changes.
@@ -32,15 +32,19 @@ export interface SidebarStatus {
     plan: SidebarPlan | null;
     queueCount: number;
     loading: boolean;
+    error: boolean;
+    refresh: () => void;
 }
 
-type StatusData = Omit<SidebarStatus, "loading">;
+type StatusData = Pick<SidebarStatus, "readiness" | "pipeline" | "plan" | "queueCount">;
 
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
 const TTL_MS = 60_000;
 
-// Module-level cache + in-flight dedupe so the three reads happen once per
-// session and are shared across every page that renders the sidebar.
+// Module-level cache + in-flight dedupe so the reads are shared across every
+// page that renders the sidebar. Only SUCCESSFUL loads are cached — a failed
+// load is never stored, so the next mount retries instead of serving stuck
+// empty widgets (the "blank grey boxes on navigate back" bug).
 let cache: { at: number; data: StatusData } | null = null;
 let inflight: Promise<StatusData> | null = null;
 
@@ -60,13 +64,25 @@ async function loadStatus(): Promise<StatusData> {
         };
     }
 
-    // Isolated so one rejection only hides its own module.
-    const [profile, stats, sub, queue] = await Promise.all([
-        fetchProfile().catch(() => null),
-        getApplicationStats().catch(() => null),
-        getMySubscription().catch(() => null),
-        getApplicationQueue().catch(() => null),
+    // allSettled so one rejection only hides its own module.
+    const [profileR, statsR, subR, queueR] = await Promise.allSettled([
+        fetchProfile(),
+        getApplicationStats(),
+        getMySubscription(),
+        getApplicationQueue(),
     ]);
+
+    // A cold/unreachable backend fails every read at once. Throwing here keeps
+    // getStatus() from caching an all-empty result, so navigating back retries
+    // instead of showing stuck blank widgets.
+    if (profileR.status === "rejected" && statsR.status === "rejected") {
+        throw new Error("sidebar-status: core sources unavailable");
+    }
+
+    const profile = profileR.status === "fulfilled" ? profileR.value : null;
+    const stats = statsR.status === "fulfilled" ? statsR.value : null;
+    const sub = subR.status === "fulfilled" ? subR.value : null;
+    const queue = queueR.status === "fulfilled" ? queueR.value : null;
 
     const readiness: SidebarReadiness | null =
         profile && profile.profile_exists
@@ -101,8 +117,8 @@ async function loadStatus(): Promise<StatusData> {
     return { readiness, pipeline, plan, queueCount };
 }
 
-function getStatus(): Promise<StatusData> {
-    if (cache && Date.now() - cache.at < TTL_MS) return Promise.resolve(cache.data);
+function getStatus(force = false): Promise<StatusData> {
+    if (!force && cache && Date.now() - cache.at < TTL_MS) return Promise.resolve(cache.data);
     if (inflight) return inflight;
     inflight = loadStatus()
         .then((data) => {
@@ -118,39 +134,63 @@ function getStatus(): Promise<StatusData> {
 /**
  * Read-only sidebar career status. `enabled` must be the authenticated-session
  * signal so logged-out users never trigger a fetch. Serves cached data
- * immediately and revalidates in the background (stale-while-revalidate).
+ * immediately and revalidates on mount, so navigating back to a page recovers
+ * from an earlier failed/empty load (failures are never cached). `refresh()`
+ * forces a TTL-bypassing reload (used by the error-state retry affordance).
  */
 export function useSidebarStatus(enabled: boolean): SidebarStatus {
-    const [state, setState] = useState<SidebarStatus>(() => ({
+    const [state, setState] = useState<Omit<SidebarStatus, "refresh">>(() => ({
         readiness: cache?.data.readiness ?? null,
         pipeline: cache?.data.pipeline ?? null,
         plan: cache?.data.plan ?? null,
         queueCount: cache?.data.queueCount ?? 0,
         loading: enabled && !cache,
+        error: false,
     }));
 
+    // Bumped by refresh() to force a TTL-bypassing refetch.
+    const [refreshTick, setRefreshTick] = useState(0);
+
     useEffect(() => {
-        if (!enabled) return; // never fetch for logged-out users
+        if (!enabled) return;
         let active = true;
 
+        // Serve cached data instantly (no flicker); show the skeleton only when
+        // there is nothing cached yet.
         if (cache) {
-            setState({ ...cache.data, loading: false });
+            setState({ ...cache.data, loading: false, error: false });
         } else {
-            setState((s) => ({ ...s, loading: true }));
+            setState((s) => ({ ...s, loading: true, error: false }));
         }
 
-        getStatus()
+        getStatus(refreshTick > 0)
             .then((data) => {
-                if (active) setState({ ...data, loading: false });
+                if (active) setState({ ...data, loading: false, error: false });
             })
             .catch(() => {
-                if (active) setState((s) => ({ ...s, loading: false }));
+                if (!active) return;
+                // Surface the retry affordance only when there is nothing to
+                // show; otherwise keep the data we already have on screen.
+                setState((s) =>
+                    s.readiness || s.pipeline
+                        ? { ...s, loading: false, error: false }
+                        : {
+                              readiness: null,
+                              pipeline: null,
+                              plan: null,
+                              queueCount: 0,
+                              loading: false,
+                              error: true,
+                          }
+                );
             });
 
         return () => {
             active = false;
         };
-    }, [enabled]);
+    }, [enabled, refreshTick]);
 
-    return state;
+    const refresh = useCallback(() => setRefreshTick((n) => n + 1), []);
+
+    return { ...state, refresh };
 }
