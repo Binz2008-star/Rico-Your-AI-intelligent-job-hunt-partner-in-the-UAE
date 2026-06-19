@@ -4,19 +4,16 @@ _Last updated: 2026-06-19_
 
 ## Production baseline
 
-- **Repository main HEAD:** `e104135c7f1df69fa749d5da1f0b7f1f999e3dad`
-  (#656 chore: redact archived DB credential). Recent lineage:
+- **Repository main HEAD:** `712be798e0763d1933a48350cd38c23cebd2e68b`
+  (#658 sidebar status retry). Recent lineage:
+  `712be79` (#658 sidebar status retry) ←
+  `f89c555` (#657 BUG-05 public-chat loop) ←
   `e104135` (#656 credential redaction) ←
-  `f4bacfa` (#655 BUG-04 unauthorized profile mutation) ←
-  `b0807c0` (#652 BUG-03 hotfix: alt_link Google intermediary) ←
-  `8685458` (#651 BUG-03: Google source_url fallback) ←
-  `631ce7d` (#649 BUG-02 A/B/C/D routing off-by-one) ←
-  `3e997073` (remove bug01-smoke.yml, CI-only) ←
-  `40636ba` (#648 BUG-01 cover-letter guard) ← earlier.
-- **Production backend deployed SHA:** `f4bacfafde4cdc8b42cb33da0490516f87db0ee3`
-  (BUG-04 — confirmed live via Vercel deployment `dpl_ArjxouNKhjYnVMb9tMg1bLS1MdXf`,
-  2026-06-19T15:51Z). `e104135` (#656) is docs-only — no Render deploy needed.
-- **Deployed to Vercel:** ✅ live — frontend at `ricohunt.com` (`f4bacfa` confirmed).
+  `f4bacfa` (#655 BUG-04 unauthorized profile mutation) ← earlier.
+- **Production backend deployed SHA:** `f89c555aa969f75f99ee8b7d0296bb7582c272cd`
+  (BUG-05 — confirmed live via Render manual deploy, 2026-06-19T~19:15Z).
+  `712be79` (#658) is frontend-only — Vercel auto-deploys; no Render deploy needed.
+- **Deployed to Vercel:** ✅ auto-deploying `712be79` from main.
 
 ## BUG-04 Unauthorized Profile Mutation — RESOLVED (2026-06-19)
 
