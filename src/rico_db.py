@@ -269,27 +269,26 @@ class RicoDB:
         if not self.available:
             raise RuntimeError("RicoDB unavailable: DATABASE_URL or psycopg2 missing")
 
-        pool = _get_pool(self.database_url)
-        if pool:
-            try:
-                conn = pool.getconn()
-                # Validate — stale pool connections have closed == 1
-                if conn.closed:
-                    pool.putconn(conn, close=True)
-                    conn = pool.getconn()
-            except Exception as exc:
-                logger.warning("db_pool_getconn_failed: %s — using direct connection", exc)
-                conn = psycopg2.connect(
-                    self.database_url, cursor_factory=RealDictCursor, connect_timeout=5
-                )
-                pool = None  # don't try to return to pool in _transaction
-        else:
-            conn = psycopg2.connect(
-                self.database_url, cursor_factory=RealDictCursor, connect_timeout=5
-            )
-
-        # Stash pool reference on connection object so _transaction can return it
-        conn._rico_pool = pool  # type: ignore[attr-defined]
+        # Connection pooling is intentionally DISABLED here.
+        #
+        # The pooling path stashed the pool on the connection object
+        # (`conn._rico_pool = pool`), but psycopg2 connection objects have no
+        # __dict__, so that assignment raised
+        #   AttributeError: 'psycopg2.extensions.connection' object has no attribute '_rico_pool'
+        # on EVERY db.connect() call — taking down all DB-backed endpoints.
+        #
+        # Pooling is also incompatible with the many direct `db.connect()` callers
+        # (subscription_repo / applications_repo / profile_repo), including
+        # `with db.connect() as conn:` blocks that never close the connection —
+        # those would leak pooled connections (and memory) because they never
+        # return the connection to the pool.
+        #
+        # Re-enabling pooling safely requires routing ALL connection consumers
+        # through a single acquire/release path; tracked as a follow-up. For now
+        # use a direct per-request connection (the proven pre-overhaul behavior).
+        conn = psycopg2.connect(
+            self.database_url, cursor_factory=RealDictCursor, connect_timeout=5
+        )
 
         if not ensure_schema:
             return conn
@@ -302,14 +301,7 @@ class RicoDB:
 
     @staticmethod
     def _return_or_close(conn) -> None:
-        """Return connection to pool or close it directly."""
-        pool = getattr(conn, "_rico_pool", None)
-        if pool:
-            try:
-                pool.putconn(conn)
-                return
-            except Exception as exc:
-                logger.warning("db_pool_putconn_failed: %s — closing directly", exc)
+        """Close the connection. (Pooling disabled — see connect().)"""
         try:
             conn.close()
         except Exception:
