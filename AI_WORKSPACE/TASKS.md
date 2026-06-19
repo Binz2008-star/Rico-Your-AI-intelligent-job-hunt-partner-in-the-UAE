@@ -58,10 +58,10 @@ Issue/PR: <link or number>
 
 ### TASK-20260619-026 — BUG-05: Public-chat onboarding infinite loop
 
-Status: review
+Status: done
 Owner: Claude
-Branch: `claude/ai-workspace-review-vtdjrb`
-Issue/PR: (draft PR created 2026-06-19)
+Branch: `claude/ai-workspace-review-vtdjrb` (merged → `f89c555` via PR #657)
+Issue/PR: #657
 
 #### Objective
 Fix the `/command` public chat returning identical "Welcome to Rico AI…" on every message

@@ -4,8 +4,9 @@ _Last updated: 2026-06-19_
 
 ## Production baseline
 
-- **Repository main HEAD:** `e104135c7f1df69fa749d5da1f0b7f1f999e3dad`
-  (#656 chore: redact archived DB credential). Recent lineage:
+- **Repository main HEAD:** `f89c555aa969f75f99ee8b7d0296bb7582c272cd`
+  (#657 BUG-05 public-chat onboarding loop). Recent lineage:
+  `f89c555` (#657 BUG-05 public-chat loop) ←
   `e104135` (#656 credential redaction) ←
   `f4bacfa` (#655 BUG-04 unauthorized profile mutation) ←
   `b0807c0` (#652 BUG-03 hotfix: alt_link Google intermediary) ←
@@ -253,7 +254,7 @@ BUG-04). Build green. Still draft — **do not merge without explicit approval.*
 | BUG-03 Google-intermediary link | #651/#652 | ✅ merged `b0807c0` |
 | BUG-04 unauthorized profile mutation | #655 | ✅ merged + prod confirmed `f4bacfa` |
 | Archived credential redaction | #656 | ✅ merged `e104135` (docs-only) |
-| BUG-05 public-chat onboarding loop | PR on `claude/ai-workspace-review-vtdjrb` | 🔄 in review |
+| BUG-05 public-chat onboarding loop | #657 | ✅ merged `f89c555` |
 
 ## BUG-05 Public-Chat Onboarding Loop — RESOLVED (2026-06-19)
 
