@@ -28,9 +28,13 @@ function VerifyEmailContent() {
         if (!token) return;
 
         verifyEmail(token)
-            .then(() => {
+            .then((res) => {
                 setStatus("success");
-                setTimeout(() => router.push("/login"), 2000);
+                // Pre-fill email on login page so the user doesn't have to retype it.
+                const destination = res?.email
+                    ? `/login?email=${encodeURIComponent(res.email)}`
+                    : "/login";
+                setTimeout(() => router.push(destination), 2000);
             })
             .catch(() => {
                 setStatus("error");

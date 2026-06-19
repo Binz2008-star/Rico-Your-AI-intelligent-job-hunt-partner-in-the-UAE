@@ -1,24 +1,19 @@
 # Current State
 
-_Last updated: 2026-06-18_
+_Last updated: 2026-06-19_
 
 ## Production baseline
 
-- **main HEAD:** `c8ea4fb` (#634 prepare→prepared persistence fix). Lineage:
-  `c8ea4fb` (#634) ← `668d59dc` (#632/#354) ← `60d9d92` (#631 docs sync) ←
-  `01cff584` (#630/#353 lifecycle board-write wiring) ← `edc53fd` (docs) ←
-  `62a679b` (production code baseline).
-- **✅ Production backend confirmed live on `c8ea4fb`.** Manual Render Deploy
-  (`workflow_dispatch`) run #26 verified `/version` `commit=c8ea4fb` and `/health` 200
-  on 2026-06-18. This includes #353 (Changes A & B), #354 (LinkVerifier), and #634
-  (prepare→prepared fix). Render remains `workflow_dispatch` only — no auto-deploy on push.
+- **main HEAD:** `9d7c1e0` (system overhaul v1). Lineage:
+  `9d7c1e0` (overhaul v1) ← `a95c413` (#636 follow-up reminders Phase 1) ←
+  `c8ea4fb` (#634 prepare→prepared persistence fix) ← `668d59dc` (#632/#354) ←
+  `60d9d92` (#631 docs sync) ← `01cff584` (#630/#353 lifecycle board-write wiring).
 - **Deployed to Render:** ✅ live — backend at `rico-job-automation-api.onrender.com`.
-  Confirmed live 2026-06-17T22:12 UTC. All API routes 200 OK. CV quality warnings (#621)
-  confirmed production-live. PR #625 (preferred_cities guard) not yet manually deployed to
-  Render — trigger `workflow_dispatch` (Manual Render Deploy) to activate it on the live backend.
-- **Deployed to Vercel:** ✅ live — frontend at `ricohunt.com`. Deploy to Production
-  completed 2026-06-18T04:45 UTC on commit `62a679b`. Application Pipeline V1 status
-  alignment (#627) confirmed live. Manual smoke passed 2026-06-18.
+  Last confirmed live on `c8ea4fb` (run #26, 2026-06-18). System overhaul v1+v2 are
+  on `engineering/system-overhaul-v2` branch (PR #638, draft) — **not yet merged to main**.
+  Render deploy: `workflow_dispatch` only (no auto-deploy on push to main).
+- **Deployed to Vercel:** ✅ live — frontend at `ricohunt.com`. System overhaul v2
+  preview deployed on Vercel for PR #638 branch.
 
 ## Repository baseline
 
@@ -29,7 +24,27 @@ _Last updated: 2026-06-18_
 - The backend foundation is FastAPI with Rico modules under `src/`.
 - The database target is Neon/PostgreSQL.
 
-## Confirmed production state (as of 2026-06-18)
+## Active branch: engineering/system-overhaul-v2 (PR #638, draft)
+
+### v1 — Commit `9d7c1e0` (on main)
+
+| Change | File(s) | Status |
+|---|---|---|
+| Telegram DM replies fixed — bot now calls `sendMessage` in all reply paths | `src/rico_telegram_webhook.py` | ✅ on main |
+| Telegram `update_id` deduplication (bounded deque, 2000 entries, 1h TTL) | `src/rico_telegram_webhook.py` | ✅ on main |
+| 12 missing DB indexes via `028_performance_indexes.sql`; applied at startup | `migrations/028_performance_indexes.sql`, `src/api/app.py` | ✅ on main |
+| Jobs pagination — "Load more" button with page tracking | `apps/web/app/jobs/page.tsx` | ✅ on main |
+
+### v2 — Commit `65709b9` (on engineering/system-overhaul-v2, PR #638)
+
+| Change | File(s) | Status |
+|---|---|---|
+| DB connection pooling — ThreadedConnectionPool (min=1, max=10) | `src/rico_db.py` | PR #638 |
+| Email pre-fill after verification — `/login?email=...` redirect | `apps/web/app/verify-email/page.tsx` | PR #638 |
+| `initialEmail` prop + `useSearchParams` + `Suspense` on login page | `apps/web/components/auth/LoginForm.tsx`, `apps/web/app/login/page.tsx` | PR #638 |
+| TagInputField component for target_roles, preferred_cities, skills | `apps/web/app/profile/page.tsx` | PR #638 |
+
+## Confirmed production state (as of 2026-06-19)
 
 | Feature | PR | Status |
 |---|---|---|
@@ -37,87 +52,47 @@ _Last updated: 2026-06-18_
 | Matching guardrails (Settings + Profile) | #616 | ✅ live and confirmed |
 | Session job-search history | #617 | ✅ live and confirmed |
 | CI npm + Playwright browser cache | #619 | ✅ merged and deployed |
-| CV extraction quality warnings | #621 | ✅ live and confirmed (Render 2026-06-17T22:12 UTC) |
-| Chat composer clip icon fix | #623 | ✅ live and confirmed (Vercel 2026-06-17T22:08 UTC) |
-| preferred_cities yes/no guard | #625 | ✅ merged to main `1cb66e5` — Render deploy pending |
-| Application Pipeline V1 status alignment | #627 | ✅ live and confirmed (Vercel 2026-06-18T04:45 UTC) |
-| Application Lifecycle Completion (partial) | #353 | 🟢 search→`opened` (Change A, #630) and prepare→`prepared` (Change B, #630 + fix #634) confirmed live and **production-smoke PASS** 2026-06-18. Remaining #353 lifecycle parts (beyond this item) not started. |
-| Apply-Link Verification | #354 | ✅ live on `668d59dc`/`c8ea4fb` (PR #632) — `LinkVerifier` wired into `open_apply_link`. Smoke PASS. |
-| Prepare→prepared persistence fix | #634 | ✅ live on `c8ea4fb` — upgrades the same `opened` record (no duplicate); reply only claims "Prepared" when the board write succeeds. Production-smoke PASS 2026-06-18. |
-
-## preferred_cities data quality — resolved
-
-- **`preferred_cities: ['نعم']`** on `robenedwan@gmail.com` — fixed.
-  - **Code guard:** PR #625 merged to main `1cb66e5`. Yes/no affirmations ("نعم", "yes",
-    "no", "لا", "ok") are now blocked from being stored in `preferred_cities` in both the
-    Rico chat pending-field handler and the Jotform webhook mapping.
-  - **Data patch:** Neon SQL patch completed 2026-06-18. Verification query returned 0 rows —
-    no remaining bad records.
-  - **Render deploy:** Must be triggered manually (workflow_dispatch) to activate the guard
-    on the live backend.
-
-## Arabic cover-letter parser verdict
-
-- Previous production failure (`اكتب لي خطاب تقديم لوظيفة ESG Manager ...` returning
-  clarification instead of letter) was a **deployment gap**, not an active code bug.
-- Fix was already in `main` via PR #615 (merged 2026-06-17T18:53 UTC). Render was running
-  a June 12 build until manually redeployed.
-- After deploy, smoke test confirmed Rico writes the Arabic cover letter directly.
-- **Do not treat Arabic cover-letter parser as active P0** unless a new reproducible failure
-  appears after commit `525964d758d13b86cf0f9b2907bdde7be773d9da`.
+| CV extraction quality warnings | #621 | ✅ live and confirmed |
+| Chat composer clip icon fix | #623 | ✅ live and confirmed |
+| preferred_cities yes/no guard | #625 | ✅ merged to main — Render deploy pending |
+| Application Pipeline V1 status alignment | #627 | ✅ live and confirmed (Vercel 2026-06-18) |
+| Application Lifecycle Completion (partial) | #353 | ✅ search→opened + prepare→prepared smoke-PASS 2026-06-18 |
+| Apply-Link Verification | #354 | ✅ live and smoke-PASS (PR #632) |
+| Prepare→prepared persistence fix | #634 | ✅ live on `c8ea4fb` — smoke-PASS 2026-06-18 |
+| Follow-up Reminders Phase 1 | #636 | ✅ merged to main `a95c413` — owner deploy steps pending |
+| System overhaul v1 (Telegram, indexes, pagination) | on main `9d7c1e0` | ✅ merged — Render deploy pending |
+| System overhaul v2 (pooling, email pre-fill, tag UX) | PR #638 | 🔄 draft PR — CI pending |
 
 ## CI health
 
 - QA Tests (pytest + playwright) green on main.
-- npm cache and Playwright browser cache now active — `playwright` job no longer stalls
-  at `npm ci`. Warm-up run completed; subsequent runs restore from cache.
-- Render deploy: `workflow_dispatch` only (no auto-deploy on push to main). Must be
-  triggered manually via GitHub Actions → Manual Render Deploy after each release.
+- npm cache and Playwright browser cache active.
+- Render deploy: `workflow_dispatch` only. Must be triggered manually after each release.
 
-## PR backlog triage (2026-06-18)
+## PR #638 status (2026-06-19)
 
-Read-only triage of the three open PRs, then cleanup. Open PR backlog is now **clean: 0 open PRs**.
-
-| PR | Title | Decision | Result |
-|---|---|---|---|
-| #601 | feat: job hopping / first day / upskilling + prior batch | Close as stale/superseded | Closed — too broad, stale base, draft, production code in `src/rico_chat_api.py`, test plan unchecked, body/title mismatch. Fast paths to be re-cut later as small focused PRs from current `main` if still needed. |
-| #608 | docs: detect-but-ignore localization pattern | Merge after final check | Squash-merged `8941697c2be56c40d2047dcdeedd20e521dfc06f` — adds `docs/architecture/localization.md`, docs-only. |
-| #566 | docs: Gmail read-only connector design | Merge after final check | Squash-merged `edc53fdf37645b153148a006e68f34215d8adc8a` — adds `docs/integrations/gmail-readonly-connector.md`, docs-only; aligned with #356 Inbox Intelligence (design-only). |
-
-Note: the six "Continuous AI: …" third-party bot checks error generically on every PR and are
-not project test failures. Real gate (Vercel) was green on all three.
+- Draft PR open on `engineering/system-overhaul-v2`.
+- Vercel preview: ✅ deployed.
+- pytest: queued at last check.
+- playwright: in_progress at last check.
+- No review comments.
 
 ## Next product roadmap order
 
 Do not start without explicit scope and branch assignment.
 
-1. **#353 Application Lifecycle Completion** — 🟢 search→opened + prepare→prepared live and smoke-PASS (this lifecycle gap closed via #630 + #634); any further #353 lifecycle parts not started
-2. **#354 Apply-Link Verification** — ✅ live and smoke-PASS
-3. **#355 Follow-up Reminders** ⬅ next priority (NOT started — needs explicit scope + branch)
-4. **#356 Inbox Intelligence** (design-only; #566 connector design doc now on `main`)
+1. **PR #638** — merge system overhaul v1+v2 once CI green.
+2. **#355 Follow-up Reminders** — Phase 1 merged (`a95c413`); owner must apply
+   migration + set `RICO_CRON_SECRET` + wire Render Cron.
+3. **#356 Inbox Intelligence** (design-only; connector design doc on `main`).
 
-## Deploy + smoke — completed 2026-06-18
+## Carry-over engineering backlog
 
-The #353/#354/#634 backend changes are live on Render (`c8ea4fb`, run #26) and the
-production smoke passed:
-
-1. ✅ search jobs → `/flow` shows them as `opened` (#353 Change A)
-2. ✅ prepare an application → `/flow` Prepared counter/status updates (#353 Change B + #634)
-3. ✅ live apply link → `apply_url` present (#354)
-4. ✅ dead/blocked apply link → fallback response, no `apply_url` (#354)
-5. ✅ no duplicate record on prepare; Rico only claims "Prepared" when board persistence succeeds (#634)
-
-## Next priority
-
-- **Application Pipeline V1** — end-to-end application submission flow with approval gate,
-  audit log, and Telegram confirmation. Requires `RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true`.
-  Do not start without explicit scope and branch assignment.
-
-## Active issues
-
-- **Issue #618** — open as backlog for Arabic intent / smoke-test observations.
-  Do not treat as P0 unless a new reproducible failure appears after commit
-  `525964d758d13b86cf0f9b2907bdde7be773d9da`.
+- JWT revocation after password reset (old sessions stay valid after reset)
+- Per-user rate limiting on /apply endpoint
+- Race condition in guest→auth identity merge
+- Settings page keywords tag input (same UX fix as profile TagInputField)
+- Password complexity validation on register/reset
 
 ## Operating target
 

@@ -4,10 +4,14 @@ import { LoginForm } from '@/components/auth/LoginForm';
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTranslation } from "@/lib/translations";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 
-export default function LoginPage() {
+function LoginPageContent() {
     const { language } = useLanguage();
     const t = useTranslation(language);
+    const searchParams = useSearchParams();
+    const initialEmail = searchParams.get("email") ?? "";
     return (
         <main className="flex min-h-screen items-center justify-center bg-background px-4 relative overflow-hidden">
             {/* Ambient glow - cinematic magenta/cyan */}
@@ -28,8 +32,16 @@ export default function LoginPage() {
                     <p className="mt-3 text-sm text-text-muted">{t('signInToAgent')}</p>
                 </div>
 
-                <LoginForm />
+                <LoginForm initialEmail={initialEmail} />
             </div>
         </main>
+    );
+}
+
+export default function LoginPage() {
+    return (
+        <Suspense>
+            <LoginPageContent />
+        </Suspense>
     );
 }

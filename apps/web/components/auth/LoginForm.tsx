@@ -12,8 +12,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import React, { useState } from 'react';
 
-export function LoginForm() {
-    const [email, setEmail] = useState('');
+export function LoginForm({ initialEmail = '' }: { initialEmail?: string }) {
+    const [email, setEmail] = useState(initialEmail);
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [failedAttempts, setFailedAttempts] = useState(0);

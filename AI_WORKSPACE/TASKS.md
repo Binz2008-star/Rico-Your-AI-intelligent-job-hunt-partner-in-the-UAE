@@ -56,6 +56,62 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260619-019 — System Overhaul v1+v2
+
+Status: review
+Owner: Claude
+Branch: `engineering/system-overhaul-v2`
+Issue/PR: #638 (draft)
+
+#### Objective
+Multi-area engineering improvement based on full codebase audit — backend reliability,
+DB performance, and frontend UX, delivered in two commits.
+
+#### v1 changes (commit `9d7c1e0`, on main)
+- **Telegram DM fix**: `process_telegram_update()` was returning replies in the HTTP body
+  (Telegram ignores). Now calls `send_telegram_to_user()` in `/start`, `/stop`, and general DM paths.
+- **Telegram deduplication**: `update_id` tracked in bounded deque (2000 entries, 1h TTL).
+- **12 DB indexes**: `migrations/028_performance_indexes.sql` — indexes on all unindexed
+  FK columns. Applied at startup via `_apply_performance_indexes()` in `app.py` lifespan.
+- **Jobs pagination**: frontend now tracks `page`/`totalPages`; "Load more" button appends
+  results. PAGE_SIZE=20.
+
+#### v2 changes (commit `65709b9`, on branch / PR #638)
+- **DB connection pooling**: `psycopg2.ThreadedConnectionPool` (min=1, max=10) in
+  `src/rico_db.py`. `_return_or_close()` returns to pool or closes directly. Fallback to
+  direct connect if pool init fails.
+- **Email pre-fill after verification**: `verify-email` page redirects to `/login?email=...`
+  so login form is pre-filled. `LoginForm` accepts `initialEmail` prop. `login/page.tsx`
+  uses `useSearchParams` + `Suspense`.
+- **TagInputField component**: chip/tag UI for `target_roles`, `preferred_cities`, `skills`
+  in profile page. Enter/comma to add; × to remove; Backspace to delete last. Handlers
+  updated to take `string[]` directly.
+
+#### Acceptance criteria
+- [ ] Telegram: DM `/start` → bot replies in DM
+- [ ] Telegram: duplicate update silently dropped
+- [ ] DB startup: `migration_ok label=028_performance_indexes` in logs
+- [ ] Jobs: "Load more" shows when >20 jobs; appends correctly
+- [ ] Verify email → login pre-filled with email
+- [ ] Profile TagInputField: add/remove chips; saves correctly
+- [ ] CI green (pytest + playwright + Vercel)
+
+#### Required verification
+- [ ] pytest CI
+- [ ] playwright CI
+- [ ] Vercel preview
+- [ ] Post-merge: Render deploy + smoke
+
+#### Handoff notes
+- Changed files: `src/rico_telegram_webhook.py`, `migrations/028_performance_indexes.sql`,
+  `src/api/app.py`, `apps/web/app/jobs/page.tsx`, `src/rico_db.py`,
+  `apps/web/app/verify-email/page.tsx`, `apps/web/components/auth/LoginForm.tsx`,
+  `apps/web/app/login/page.tsx`, `apps/web/app/profile/page.tsx`
+- Migration number: 028 (027 was already taken by follow-up reminders)
+- Rollback plan: revert the two commits on this branch.
+
+---
+
 ### TASK-20260618-018 — Follow-up Reminders, Phase 1 (Issue #355)
 
 Status: review (Phase 1 implemented; both gated items approved; owner deploy steps pending)

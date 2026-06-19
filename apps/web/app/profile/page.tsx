@@ -245,6 +245,158 @@ function EditableTextField({
     );
 }
 
+function TagInputField({
+    values,
+    onSave,
+    placeholder = "Add item",
+    label = "field",
+}: {
+    values: string[] | null | undefined;
+    onSave: (next: string[]) => Promise<void>;
+    placeholder?: string;
+    label?: string;
+}) {
+    const { language } = useLanguage();
+    const t = useTranslation(language);
+    const [editing, setEditing] = useState(false);
+    const [tags, setTags] = useState<string[]>(values ?? []);
+    const [inputVal, setInputVal] = useState("");
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const commitInput = (current: string[]) => {
+        const trimmed = inputVal.trim();
+        if (trimmed && !current.includes(trimmed)) {
+            return [...current, trimmed];
+        }
+        return current;
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === "Enter" || e.key === ",") {
+            e.preventDefault();
+            const trimmed = inputVal.trim();
+            if (trimmed && !tags.includes(trimmed)) {
+                setTags((prev) => [...prev, trimmed]);
+            }
+            setInputVal("");
+        } else if (e.key === "Backspace" && !inputVal && tags.length > 0) {
+            setTags((prev) => prev.slice(0, -1));
+        }
+    };
+
+    const handleBlur = () => {
+        const trimmed = inputVal.trim();
+        if (trimmed && !tags.includes(trimmed)) {
+            setTags((prev) => [...prev, trimmed]);
+            setInputVal("");
+        }
+    };
+
+    const removeTag = (tag: string) => {
+        setTags((prev) => prev.filter((t) => t !== tag));
+    };
+
+    const handleCancel = () => {
+        setTags(values ?? []);
+        setInputVal("");
+        setEditing(false);
+        setError(null);
+    };
+
+    const handleSave = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const finalTags = commitInput(tags);
+        setSaving(true);
+        setError(null);
+        try {
+            await onSave(finalTags);
+            setTags(finalTags);
+            setInputVal("");
+            setEditing(false);
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : t("profileCouldNotSave"));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (!editing) {
+        return (
+            <>
+                {(values?.length ?? 0) > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                        {values!.map((v) => (
+                            <span key={v} className="rounded-md bg-surface-glass px-2 py-0.5 text-xs text-text-secondary">{v}</span>
+                        ))}
+                    </div>
+                ) : (
+                    <span className="text-text-tertiary">—</span>
+                )}
+                <button
+                    type="button"
+                    aria-label={`${t("edit")} ${label}`}
+                    onClick={() => { setTags(values ?? []); setError(null); setEditing(true); }}
+                    className="ms-2 text-[11px] font-semibold text-magenta underline underline-offset-2 transition-colors hover:text-magenta-hover"
+                >
+                    {t("edit")}
+                </button>
+            </>
+        );
+    }
+
+    return (
+        <form className="mt-2 flex w-full max-w-lg flex-col gap-2" onSubmit={handleSave}>
+            <div className="flex min-h-[42px] flex-wrap gap-1.5 rounded-lg border border-border-soft bg-surface-glass px-3 py-2 transition focus-within:border-rico-accent">
+                {tags.map((tag) => (
+                    <span key={tag} className="inline-flex items-center gap-1 rounded-md bg-surface-elevated px-2 py-0.5 text-xs text-text-primary">
+                        {tag}
+                        <button
+                            type="button"
+                            onClick={() => removeTag(tag)}
+                            disabled={saving}
+                            aria-label={`Remove ${tag}`}
+                            className="text-text-tertiary transition-colors hover:text-red-400 disabled:opacity-40"
+                        >
+                            ×
+                        </button>
+                    </span>
+                ))}
+                <input
+                    type="text"
+                    value={inputVal}
+                    onChange={(e) => setInputVal(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    onBlur={handleBlur}
+                    className="min-w-[120px] flex-1 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-tertiary"
+                    placeholder={tags.length === 0 ? placeholder : "Add more…"}
+                    disabled={saving}
+                    aria-label={label}
+                />
+            </div>
+            <p className="text-[10px] text-text-tertiary">Press Enter or comma to add each item</p>
+            {error && <p className="text-xs text-rico-red" role="alert">{error}</p>}
+            <div className="flex flex-wrap items-center gap-2">
+                <button
+                    type="submit"
+                    disabled={saving}
+                    className="rounded-lg bg-rico-accent px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-rico-accent-hover disabled:opacity-60"
+                >
+                    {saving ? t("profileSaving") : t("save")}
+                </button>
+                <button
+                    type="button"
+                    onClick={handleCancel}
+                    disabled={saving}
+                    className="rounded-lg border border-border-soft px-3 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:border-border-strong hover:text-text-primary disabled:opacity-60"
+                >
+                    {t("cancel")}
+                </button>
+            </div>
+        </form>
+    );
+}
+
 type ProfileField = {
     key: string;
     labelKey: TranslationKey;
@@ -348,11 +500,11 @@ function ProfileDetail({
     onSaveCurrentCompany: (nextCompany: string) => Promise<void>;
     onSaveCurrentRole: (nextRole: string) => Promise<void>;
     onSaveLinkedin: (nextLinkedin: string) => Promise<void>;
-    onSaveTargetRoles: (nextRoles: string) => Promise<void>;
-    onSaveCities: (nextCities: string) => Promise<void>;
+    onSaveTargetRoles: (nextRoles: string[]) => Promise<void>;
+    onSaveCities: (nextCities: string[]) => Promise<void>;
     onSaveSalaryTarget: (nextSalary: string) => Promise<void>;
     onSaveExperience: (nextExperience: string) => Promise<void>;
-    onSaveSkills: (nextSkills: string) => Promise<void>;
+    onSaveSkills: (nextSkills: string[]) => Promise<void>;
 }) {
     const { language } = useLanguage();
     const t = useTranslation(language);
@@ -443,16 +595,16 @@ function ProfileDetail({
                     <GuardrailWarnings warnings={profile.warnings} language={language} />
                     <dl className="grid min-w-0 grid-cols-1 gap-3 text-sm lg:grid-cols-2">
                         <Row label={t("profileTargetRoles")}>
-                            <EditableTextField
-                                value={profile.target_roles?.join(', ') || null}
+                            <TagInputField
+                                values={profile.target_roles}
                                 onSave={onSaveTargetRoles}
                                 placeholder={t("profileEnterTargetRoles")}
                                 label="target-roles"
                             />
                         </Row>
                         <Row label={t("profileCities")}>
-                            <EditableTextField
-                                value={profile.preferred_cities?.join(', ') || null}
+                            <TagInputField
+                                values={profile.preferred_cities}
                                 onSave={onSaveCities}
                                 placeholder={t("profileEnterCities")}
                                 label="cities"
@@ -494,8 +646,8 @@ function ProfileDetail({
 
             {/* Skills */}
             <StatusCard title={t("profileSkills")} badge={hasSkills ? "live" : "pending"} badgeLabel={hasSkills ? t("profileBadgeSynced") : t("profileBadgePending")}>
-                <EditableTextField
-                    value={profile.skills?.join(', ') || null}
+                <TagInputField
+                    values={profile.skills}
                     onSave={onSaveSkills}
                     placeholder={t("profileEnterSkills")}
                     label="skills"
@@ -660,10 +812,9 @@ export default function ProfilePage() {
         }
     }, [warnRefreshFail]);
 
-    const handleSaveTargetRoles = useCallback(async (nextRoles: string) => {
-        const roles = nextRoles.split(',').map(r => r.trim()).filter(Boolean);
-        await updateProfile({ target_roles: roles });
-        setProfile((current) => (current ? { ...current, target_roles: roles } : current));
+    const handleSaveTargetRoles = useCallback(async (nextRoles: string[]) => {
+        await updateProfile({ target_roles: nextRoles });
+        setProfile((current) => (current ? { ...current, target_roles: nextRoles } : current));
 
         try {
             const refreshed = await fetchProfile();
@@ -673,10 +824,9 @@ export default function ProfilePage() {
         }
     }, [warnRefreshFail]);
 
-    const handleSaveCities = useCallback(async (nextCities: string) => {
-        const cities = nextCities.split(',').map(c => c.trim()).filter(Boolean);
-        await updateProfile({ preferred_cities: cities });
-        setProfile((current) => (current ? { ...current, preferred_cities: cities } : current));
+    const handleSaveCities = useCallback(async (nextCities: string[]) => {
+        await updateProfile({ preferred_cities: nextCities });
+        setProfile((current) => (current ? { ...current, preferred_cities: nextCities } : current));
 
         try {
             const refreshed = await fetchProfile();
@@ -718,10 +868,9 @@ export default function ProfilePage() {
         }
     }, [warnRefreshFail, t]);
 
-    const handleSaveSkills = useCallback(async (nextSkills: string) => {
-        const skills = nextSkills.split(',').map(s => s.trim()).filter(Boolean);
-        await updateProfile({ skills });
-        setProfile((current) => (current ? { ...current, skills } : current));
+    const handleSaveSkills = useCallback(async (nextSkills: string[]) => {
+        await updateProfile({ skills: nextSkills });
+        setProfile((current) => (current ? { ...current, skills: nextSkills } : current));
 
         try {
             const refreshed = await fetchProfile();
