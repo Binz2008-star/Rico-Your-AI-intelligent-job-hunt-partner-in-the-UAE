@@ -114,9 +114,9 @@ DB performance, and frontend UX, delivered in two commits.
 
 ### TASK-20260618-018 — Follow-up Reminders, Phase 1 (Issue #355)
 
-Status: review (Phase 1 implemented; both gated items approved; owner deploy steps pending)
+Status: verified — production smoke PASS 9/9 (only Render Cron wiring remains, gated on approval)
 Owner: Claude
-Branch: `feat/follow-up-reminders-355`
+Branch: `feat/follow-up-reminders-355` (merged → `a95c413`, in current main)
 Issue/PR: #355
 
 #### Implementation (Phase 1, 2026-06-18)
@@ -143,13 +143,25 @@ Both gated items approved: (1) migration adding `applied_at`; (2) `RICO_CRON_SEC
 - `tests/test_application_lifecycle.py` — 21 passed (no regression from stamping calls).
 - Full-app TestClient tests not runnable in sandbox (missing deps); rely on CI.
 
-#### Owner steps before production smoke (NOT done by Claude)
-1. Apply `migrations/027_followup_reminders.sql` to Neon.
-2. Set `RICO_CRON_SECRET` on Render.
-3. Wire a Render Cron Job: daily `POST https://rico-job-automation-api.onrender.com/api/v1/pipeline/reminders`
-   with header `X-Cron-Secret: <secret>`.
-4. Manual Render Deploy, then smoke: apply a job, backfill/age it, run the sweep,
-   confirm it flips to `follow_up_due` on `/flow`; re-run → no duplicate transition.
+#### Rollout + production smoke (2026-06-19) — PASS
+1. [x] **Migration `027_followup_reminders.sql` applied to Neon production** (project
+   `old-frog-88141983`, branch `production`, db `neondb`): 3 columns + index verified, no data loss.
+2. [x] **`RICO_CRON_SECRET` set on Render** (and as a GitHub Actions secret for the smoke).
+3. [x] **Production verified live on `9d7c1e0`**: `/health` 200, `/version` commit `9d7c1e0`
+   (via `ricohunt.com/proxy/*` Vercel MCP; `x-render-origin-server: uvicorn`).
+4. [x] **Smoke PASS 9/9** — dispatch-only CI workflow `followup-smoke.yml` (#642),
+   run `27810675201`, test-safe isolated data (5000-day row, `interval_days=4000`):
+   - guard: missing→403, wrong→403, correct→200 `{"interval_days":4000,"marked_due":1}`
+   - old applied → `follow_up_due`; fresh → stays `applied`
+   - idempotent re-run → `marked_due=0`, `follow_up_due_at` unchanged
+   - `/flow`-backing status = `follow_up_due`; no duplicate rows (1 each)
+   - smoke test rows cleaned up; secrets masked in log (`***`).
+5. [ ] **Render Cron** ⏳ NOT configured — gated on explicit approval.
+6. [ ] **Phase 2** ⏳ not started.
+
+Migration collision concern RESOLVED — no duplicate number:
+- follow-up reminders migration = `027_followup_reminders.sql`
+- performance indexes migration = `028_performance_indexes.sql`
 
 #### Original scope / blockers (now resolved)
 
