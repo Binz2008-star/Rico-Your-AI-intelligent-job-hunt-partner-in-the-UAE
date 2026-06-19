@@ -25,10 +25,43 @@ load_dotenv()
 try:
     import psycopg2
     from psycopg2.extras import RealDictCursor, Json
+    from psycopg2 import pool as _pg_pool
 except Exception:  # pragma: no cover - dependency may be installed by cloud later
     psycopg2 = None
     RealDictCursor = None
     Json = None
+    _pg_pool = None
+
+
+# ---------------------------------------------------------------------------
+# Module-level connection pool — one pool per DATABASE_URL, shared across all
+# RicoDB instances and threads.  ThreadedConnectionPool is safe for use in
+# multi-threaded FastAPI workers.  Min=1 keeps a warm connection alive between
+# requests; max=10 is conservative for Neon's serverless connection limits.
+# ---------------------------------------------------------------------------
+_pool_lock = Lock()
+_pool_registry: Dict[str, Any] = {}
+
+
+def _get_pool(database_url: str) -> Optional[Any]:
+    """Return (creating if necessary) the ThreadedConnectionPool for this URL."""
+    if not psycopg2 or not _pg_pool or not database_url:
+        return None
+    with _pool_lock:
+        if database_url not in _pool_registry:
+            try:
+                _pool_registry[database_url] = _pg_pool.ThreadedConnectionPool(
+                    minconn=1,
+                    maxconn=10,
+                    dsn=database_url,
+                    cursor_factory=RealDictCursor,
+                    connect_timeout=5,
+                )
+                logger.info("db_pool_created minconn=1 maxconn=10")
+            except Exception as exc:
+                logger.warning("db_pool_init_failed: %s — falling back to per-request connections", exc)
+                return None
+        return _pool_registry.get(database_url)
 
 
 _RICO_SCHEMA_DDL = """
@@ -235,19 +268,56 @@ class RicoDB:
     def connect(self, *, ensure_schema: bool = True):
         if not self.available:
             raise RuntimeError("RicoDB unavailable: DATABASE_URL or psycopg2 missing")
-        conn = psycopg2.connect(self.database_url, cursor_factory=RealDictCursor, connect_timeout=5)
+
+        pool = _get_pool(self.database_url)
+        if pool:
+            try:
+                conn = pool.getconn()
+                # Validate — stale pool connections have closed == 1
+                if conn.closed:
+                    pool.putconn(conn, close=True)
+                    conn = pool.getconn()
+            except Exception as exc:
+                logger.warning("db_pool_getconn_failed: %s — using direct connection", exc)
+                conn = psycopg2.connect(
+                    self.database_url, cursor_factory=RealDictCursor, connect_timeout=5
+                )
+                pool = None  # don't try to return to pool in _transaction
+        else:
+            conn = psycopg2.connect(
+                self.database_url, cursor_factory=RealDictCursor, connect_timeout=5
+            )
+
+        # Stash pool reference on connection object so _transaction can return it
+        conn._rico_pool = pool  # type: ignore[attr-defined]
+
         if not ensure_schema:
             return conn
         try:
             self._ensure_schema(conn)
         except Exception:
-            conn.close()
+            self._return_or_close(conn)
             raise
         return conn
 
+    @staticmethod
+    def _return_or_close(conn) -> None:
+        """Return connection to pool or close it directly."""
+        pool = getattr(conn, "_rico_pool", None)
+        if pool:
+            try:
+                pool.putconn(conn)
+                return
+            except Exception as exc:
+                logger.warning("db_pool_putconn_failed: %s — closing directly", exc)
+        try:
+            conn.close()
+        except Exception:
+            pass
+
     @contextmanager
     def _transaction(self, *, ensure_schema: bool = True):
-        """Open a connection, yield it, commit on success, always close."""
+        """Acquire a connection from the pool (or open one), commit on success."""
         conn = self.connect(ensure_schema=ensure_schema)
         try:
             yield conn
@@ -259,7 +329,7 @@ class RicoDB:
                 pass
             raise
         finally:
-            conn.close()
+            self._return_or_close(conn)
 
     def init(self) -> None:
         """Create Rico tables in the existing Neon database."""
