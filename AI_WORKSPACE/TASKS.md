@@ -56,6 +56,57 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260619-026 — BUG-05: Public-chat onboarding infinite loop
+
+Status: review
+Owner: Claude
+Branch: `claude/ai-workspace-review-vtdjrb`
+Issue/PR: (draft PR created 2026-06-19)
+
+#### Objective
+Fix the `/command` public chat returning identical "Welcome to Rico AI…" on every message
+after the first, and the double API call from the streaming fallback guard.
+
+#### Root cause
+Three compounding issues:
+1. `IntentRouter` sends most messages (not starting with `?` / question word / "show me") to
+   the legacy classifier.
+2. Legacy classifier always returns the onboarding welcome when `profile is None`, and never
+   saves state for public sessions (`_persist=False`), creating an infinite loop.
+3. Frontend `if (!streamStarted)` fallback fired even when the legacy path already applied a
+   response via the SSE `"done"` event — causing a duplicate API call.
+
+#### Fix summary
+- **Fix A** (`src/services/chat_service.py`): `_force_ai` gate redirects public no-profile
+  legacy decisions to `_conversational_ai_reply`.
+- **Fix B** (`src/api/routers/rico_chat.py`): streaming endpoint only takes legacy path when
+  `profile is not None`.
+- **Fix C** (`apps/web/app/command/page.tsx`): fallback guard changed to
+  `!streamStarted && !responseApplied`.
+- 7 unit tests in `tests/test_public_chat_no_profile_loop.py` (all PASS).
+
+#### Acceptance criteria
+- [x] Public user messages (interview prep, profile data, injection) route to AI, not welcome
+- [x] Public user WITH existing profile still routes to legacy (unchanged)
+- [x] Authenticated users unaffected (legacy for no-profile, AI for AI-decision)
+- [x] No duplicate API call from streaming fallback
+- [x] 7 unit tests passing
+
+#### Required verification
+- [x] Unit tests: 7/7 PASS (`tests/test_public_chat_no_profile_loop.py`)
+- [ ] Frontend build: node_modules not installed in this environment; change is a 1-line guard
+- [ ] Render deploy: pending PR merge
+- [ ] Production smoke: pending PR merge
+
+#### Handoff notes
+- Changed files: `src/services/chat_service.py`, `src/api/routers/rico_chat.py`,
+  `apps/web/app/command/page.tsx`, `tests/test_public_chat_no_profile_loop.py`
+- Risks: `_force_ai` gate is additive; authenticated users and public users with profiles
+  are unaffected. Rollback: revert `_force_ai` conditional in `send_message`.
+- Open: #653 sidebar retry still draft; unrelated to BUG-05.
+
+---
+
 ### TASK-20260619-025 — Security: redact archived database credential
 
 Status: done
