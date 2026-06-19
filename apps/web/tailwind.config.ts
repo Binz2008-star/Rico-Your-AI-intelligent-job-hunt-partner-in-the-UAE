@@ -10,10 +10,11 @@ const config: Config = {
     theme: {
         extend: {
             colors: {
-                // Rico AI Cinematic Design System v3
-                // Primary: Gold/Amber — premium AI product
-                // Secondary: Magenta — energy + action
-                // Tertiary: Cyan — data + intelligence
+                // Rico AI Design System v4 — Premium UAE Career
+                // Primary:   Gold/Amber  — brand, CTAs
+                // Secondary: Indigo      — actions, interactive (professional)
+                // Tertiary:  Sky Blue    — data, links
+                // Success:   Emerald     — confirmed, applied, live
 
                 // Rico Site v3 token system — all semantic colors resolve through
                 // CSS variables (channels) so they switch with the .light theme and
@@ -79,12 +80,21 @@ const config: Config = {
                     border: "rgb(var(--aura) / 0.40)",
                 },
 
+                // Success System — Emerald
+                success: {
+                    DEFAULT: "rgb(var(--success) / <alpha-value>)",
+                    hover: "rgb(var(--success-hover) / <alpha-value>)",
+                    soft: "rgb(var(--success) / 0.10)",
+                    border: "rgb(var(--success) / 0.30)",
+                    glow: "rgb(var(--success) / 0.20)",
+                },
+
                 // Gradient System
                 gradient: {
-                    gold: "linear-gradient(135deg, #f5a623 0%, #fbbf24 100%)",
-                    magenta: "linear-gradient(135deg, #ff2d8e 0%, #ff1a5c 100%)",
-                    cyan: "linear-gradient(135deg, #00e5ff 0%, #00b8cc 100%)",
-                    duo: "linear-gradient(135deg, #f5a623 0%, #ff2d8e 100%)",
+                    gold: "linear-gradient(135deg, #f0a94a 0%, #fbbf24 100%)",
+                    magenta: "linear-gradient(135deg, #818cf8 0%, #6366f1 100%)",
+                    cyan: "linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%)",
+                    duo: "linear-gradient(135deg, #f0a94a 0%, #818cf8 100%)",
                     subtle: "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 100%)",
                 },
 
@@ -124,7 +134,7 @@ const config: Config = {
                     "accent-muted": "rgb(var(--gold) / 0.10)",
                     "accent-border": "rgb(var(--gold) / 0.35)",
                     "accent-glow": "rgb(var(--gold) / 0.20)",
-                    // Secondary accent → magenta
+                    // Secondary accent → indigo (was magenta)
                     magenta: "rgb(var(--magenta) / <alpha-value>)",
                     "magenta-muted": "rgb(var(--magenta) / 0.10)",
                     text: "rgb(var(--text-primary) / <alpha-value>)",
@@ -132,10 +142,13 @@ const config: Config = {
                     "text-dim": "rgb(var(--text-tertiary) / <alpha-value>)",
                     purple: "rgb(var(--magenta) / <alpha-value>)",
                     teal: "rgb(var(--cyan) / <alpha-value>)",
-                    red: "#ff5e5b",
+                    red: "#f87171",
                     // Gold aliases
                     amber: "rgb(var(--gold) / <alpha-value>)",
                     gold: "rgb(var(--gold) / <alpha-value>)",
+                    // Success alias
+                    success: "rgb(var(--success) / <alpha-value>)",
+                    "success-muted": "rgb(var(--success) / 0.10)",
                 },
             },
             // Nocturne hairline alpha stops — Tailwind's `/N` color-alpha modifier only
@@ -148,13 +161,14 @@ const config: Config = {
                 16: "0.16",
             },
             borderRadius: {
-                DEFAULT: "0.25rem",
-                lg: "0.5rem",
-                xl: "0.75rem",
+                DEFAULT: "0.375rem",
+                lg: "0.625rem",
+                xl: "0.875rem",
+                "2xl": "1.125rem",
                 full: "9999px",
-                // Nocturne radii
-                rico: "14px",
-                "rico-lg": "22px",
+                // Rico card radii — slightly more rounded for premium feel
+                rico: "16px",
+                "rico-lg": "24px",
             },
             spacing: {
                 unit: "8px",
