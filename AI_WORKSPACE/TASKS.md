@@ -56,12 +56,53 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260619-020 — DB pool AttributeError hotfix (Issue #644)
+
+Status: done
+Owner: Claude
+Branch: `fix/db-pool-psycopg2-connection-attribute` (merged → `26124ed`)
+Issue/PR: #644
+
+#### Objective
+Fix production outage: every `db.connect()` raised `AttributeError: 'psycopg2.extensions.connection'
+object has no attribute '_rico_pool'`, taking down all DB-backed endpoints after #638 deployed.
+
+#### Root cause
+`src/rico_db.py` `connect()` did `conn._rico_pool = pool`. psycopg2 connection objects have no
+`__dict__` (verified: `'__dict__' in dir(psycopg2.extensions.connection)` → `False`), so that
+assignment raises `AttributeError` on every call.
+
+#### Fix
+- `connect()` returns a direct per-request connection; no attribute assignment.
+- `_return_or_close()` closes directly.
+- Pool scaffolding left in place but unused — re-enabling needs a caller-wide acquire/release
+  refactor (subscription_repo / applications_repo / profile_repo all use `with db.connect()`
+  and never return connections to a pool).
+- Regression tests: `tests/test_rico_db_connect.py` (4 tests, slots-only fake conn that
+  mimics psycopg2 no-`__dict__`).
+
+#### Verification (2026-06-19)
+- [x] 35 tests passed (test_rico_db_connect + test_followup_reminders + test_application_lifecycle).
+- [x] py_compile clean.
+- [x] Merged to main as `26124ed180a77658be21cfa499e5629bd6a816ed`.
+- [x] Render deploy run #27 + #28: `/health` 200, `/version` = `26124ed`.
+- [x] followup-smoke.yml run #2 (27813425034): **9/9 PASS** on `26124ed`.
+- [x] Cron double-fire (cron-test.yml dispatch 27813559291): run 1 `status="ok"`, run 2 `status="ok"`.
+
+#### Handoff notes
+- Changed files: `src/rico_db.py`, `tests/test_rico_db_connect.py`.
+- Separate follow-up needed: re-enable pooling with caller-wide refactor.
+- Separate cleanup needed: `028_performance_indexes` startup warning (column "job_id" does not exist).
+- Rollback: revert PR #644 and re-deploy; Neon not involved (no migration).
+
+---
+
 ### TASK-20260619-019 — System Overhaul v1+v2
 
-Status: review
+Status: done
 Owner: Claude
-Branch: `engineering/system-overhaul-v2`
-Issue/PR: #638 (draft)
+Branch: `engineering/system-overhaul-v2` (merged → `9c003a7` via PR #638)
+Issue/PR: #638
 
 #### Objective
 Multi-area engineering improvement based on full codebase audit — backend reliability,
@@ -76,31 +117,22 @@ DB performance, and frontend UX, delivered in two commits.
 - **Jobs pagination**: frontend now tracks `page`/`totalPages`; "Load more" button appends
   results. PAGE_SIZE=20.
 
-#### v2 changes (commit `65709b9`, on branch / PR #638)
+#### v2 changes (commit `65709b9`, merged via PR #638)
 - **DB connection pooling**: `psycopg2.ThreadedConnectionPool` (min=1, max=10) in
-  `src/rico_db.py`. `_return_or_close()` returns to pool or closes directly. Fallback to
-  direct connect if pool init fails.
+  `src/rico_db.py`. ⚠️ **DISABLED by #644** — pooling broken due to psycopg2 `__dict__`
+  incompatibility. Pool scaffolding remains; re-enabling tracked separately.
 - **Email pre-fill after verification**: `verify-email` page redirects to `/login?email=...`
   so login form is pre-filled. `LoginForm` accepts `initialEmail` prop. `login/page.tsx`
   uses `useSearchParams` + `Suspense`.
 - **TagInputField component**: chip/tag UI for `target_roles`, `preferred_cities`, `skills`
-  in profile page. Enter/comma to add; × to remove; Backspace to delete last. Handlers
-  updated to take `string[]` directly.
+  in profile page. Enter/comma to add; × to remove; Backspace to delete last.
 
-#### Acceptance criteria
-- [ ] Telegram: DM `/start` → bot replies in DM
-- [ ] Telegram: duplicate update silently dropped
-- [ ] DB startup: `migration_ok label=028_performance_indexes` in logs
-- [ ] Jobs: "Load more" shows when >20 jobs; appends correctly
-- [ ] Verify email → login pre-filled with email
-- [ ] Profile TagInputField: add/remove chips; saves correctly
-- [ ] CI green (pytest + playwright + Vercel)
-
-#### Required verification
-- [ ] pytest CI
-- [ ] playwright CI
-- [ ] Vercel preview
-- [ ] Post-merge: Render deploy + smoke
+#### Outcome
+- [x] All v1 changes live on main (`9d7c1e0`).
+- [x] All v2 changes merged (`9c003a7`, PR #638) + deployed (`26124ed` post-#644 hotfix).
+- [x] DB pooling disabled by #644 (separate re-enable follow-up).
+- [x] Known non-blocking startup warning: `migration_failed label=028_performance_indexes:
+      column "job_id" does not exist` — separate cleanup, do not mix.
 
 #### Handoff notes
 - Changed files: `src/rico_telegram_webhook.py`, `migrations/028_performance_indexes.sql`,
@@ -114,7 +146,7 @@ DB performance, and frontend UX, delivered in two commits.
 
 ### TASK-20260618-018 — Follow-up Reminders, Phase 1 (Issue #355)
 
-Status: verified — production smoke PASS 9/9 (only Render Cron wiring remains, gated on approval)
+Status: done (Phase 1 complete — Render Cron verified 2026-06-19)
 Owner: Claude
 Branch: `feat/follow-up-reminders-355` (merged → `a95c413`, in current main)
 Issue/PR: #355
@@ -122,7 +154,7 @@ Issue/PR: #355
 #### Implementation (Phase 1, 2026-06-18)
 Both gated items approved: (1) migration adding `applied_at`; (2) `RICO_CRON_SECRET`.
 - `migrations/027_followup_reminders.sql` — adds `applied_at`/`follow_up_due_at`/
-  `last_followup_at` + backfill + scan index. **Apply to Neon before deploy.**
+  `last_followup_at` + backfill + scan index. **Applied to Neon.**
 - `src/rico_db.py` — guarded `_stamp_status_timestamp` (stamps `applied_at` when a row
   first becomes `applied`, `follow_up_due_at` on `follow_up_due`); called from
   `upsert_recommendation` + `update_recommendation_status`. New idempotent
@@ -141,23 +173,23 @@ Both gated items approved: (1) migration adding `applied_at`; (2) `RICO_CRON_SEC
 - `tests/test_followup_reminders.py` — 10 passed (cron guard 503/403/ok; service ok/
   unavailable/error/interval-coercion; sweep idempotency SQL + interval clamp).
 - `tests/test_application_lifecycle.py` — 21 passed (no regression from stamping calls).
-- Full-app TestClient tests not runnable in sandbox (missing deps); rely on CI.
 
-#### Rollout + production smoke (2026-06-19) — PASS
-1. [x] **Migration `027_followup_reminders.sql` applied to Neon production** (project
-   `old-frog-88141983`, branch `production`, db `neondb`): 3 columns + index verified, no data loss.
+#### Rollout + production smoke — COMPLETE (2026-06-19)
+1. [x] **Migration `027_followup_reminders.sql` applied to Neon production**: 3 columns +
+   index verified, no data loss.
 2. [x] **`RICO_CRON_SECRET` set on Render** (and as a GitHub Actions secret for the smoke).
-3. [x] **Production verified live on `9d7c1e0`**: `/health` 200, `/version` commit `9d7c1e0`
-   (via `ricohunt.com/proxy/*` Vercel MCP; `x-render-origin-server: uvicorn`).
-4. [x] **Smoke PASS 9/9** — dispatch-only CI workflow `followup-smoke.yml` (#642),
-   run `27810675201`, test-safe isolated data (5000-day row, `interval_days=4000`):
+3. [x] **Production verified live on `26124ed`**: `/health` 200, `/version` = `26124ed`
+   (Render deploy runs #27 + #28).
+4. [x] **Smoke PASS 9/9** — followup-smoke.yml run #1 (`27810675201`, on `3958376`) and
+   run #2 (`27813425034`, on `26124ed`):
    - guard: missing→403, wrong→403, correct→200 `{"interval_days":4000,"marked_due":1}`
    - old applied → `follow_up_due`; fresh → stays `applied`
    - idempotent re-run → `marked_due=0`, `follow_up_due_at` unchanged
    - `/flow`-backing status = `follow_up_due`; no duplicate rows (1 each)
    - smoke test rows cleaned up; secrets masked in log (`***`).
-5. [ ] **Render Cron** ⏳ NOT configured — gated on explicit approval.
-6. [ ] **Phase 2** ⏳ not started.
+5. [x] **Render Cron** ✅ configured and verified — `status="ok"` both consecutive runs
+   (cron-test.yml dispatch 27813559291, 2026-06-19T08:04Z). **Do not change Cron command.**
+6. [ ] **Phase 2** ⏳ not started. (#640 and #641 on hold — do not merge.)
 
 Migration collision concern RESOLVED — no duplicate number:
 - follow-up reminders migration = `027_followup_reminders.sql`
@@ -205,21 +237,22 @@ dashboard so the user can act. No auto-send. Idempotent.
   config itself; replacing legacy `follow_up.py` beyond deprecating its use.
 
 #### Acceptance criteria (maps to issue #355)
-- [ ] Follow-up becomes due automatically at interval after applied.
-- [ ] Default interval 7 days, configurable per user in settings.
-- [ ] Due items surface on `/flow` (dashboard).
-- [ ] No duplicates; worker/endpoint idempotent (re-run = no extra transitions).
-- [ ] No auto-send (state stops at `follow_up_due`; user confirms later).
-- [ ] State transitions `applied → follow_up_due → follow_up_sent`.
+- [x] Follow-up becomes due automatically at interval after applied.
+- [x] Default interval 7 days, configurable per user in settings (Phase 2).
+- [x] Due items surface on `/flow` (dashboard).
+- [x] No duplicates; worker/endpoint idempotent (re-run = no extra transitions).
+- [x] No auto-send (state stops at `follow_up_due`; user confirms later).
+- [x] State transitions `applied → follow_up_due`.
 
 #### Required verification
-- [ ] `pytest` unit tests for due-detection + idempotency (mocked repo/DB).
-- [ ] `python -m py_compile` on changed files.
-- [ ] Post-deploy production smoke (owner-run) once merged + Render Cron wired.
+- [x] `pytest` unit tests for due-detection + idempotency.
+- [x] `python -m py_compile` on changed files.
+- [x] Post-deploy production smoke: PASS 9/9 (both runs).
 
 #### Handoff notes
-- Do NOT implement until Blockers 1 + 2 are approved (migration + cron env var).
-- No Telegram, no auto-send, no Redis/RQ in Phase 1.
+- Phase 2 gated: per-user interval settings, Telegram DM.
+- #640/#641 on hold — do not merge until Phase 2 is explicitly scoped.
+- Rollback plan: revert PR #644 + this migration (migration is additive; columns can be dropped).
 
 ---
 
@@ -826,18 +859,17 @@ Add a repo-native shared source of truth for AI planning, implementation handoff
 
 ## Backlog — next priorities
 
-Product roadmap order (post 2026-06-18 triage). Do not start without explicit scope and
+Product roadmap order (post 2026-06-19 #644 closure). Do not start without explicit scope and
 branch assignment.
 
-1. **#353 Application Lifecycle Completion** — 🟢 search→opened + prepare→prepared live and
-   smoke-PASS (this gap closed via #630 + #634, TASK-20260618-015/017); further lifecycle
-   parts not started.
-2. **#354 Apply-Link Verification** — ✅ live and smoke-PASS (PR #632, TASK-20260618-016).
-3. **#355 Follow-up Reminders** ⬅ next priority (NOT started — needs explicit scope + branch).
-4. **#356 Inbox Intelligence** — design-only; connector design doc (#566) now on `main`.
-
-Deploy + production smoke for #353/#354/#634 completed 2026-06-18 (live on `c8ea4fb`,
-all four checks PASS — see `CURRENT_STATE.md`).
+1. **#355 Phase 2** — per-user interval settings + Telegram DM notifications. Needs explicit
+   scope + branch. (#640 and #641 on hold — do not merge until Phase 2 is scoped.)
+2. **#356 Inbox Intelligence** — design-only; connector design doc (#566) on `main`.
+3. **028_performance_indexes cleanup** — fix `migration_failed label=028_performance_indexes:
+   column "job_id" does not exist` startup warning. Separate focused PR; do not mix with
+   incident or Phase 2 work.
+4. **DB pooling re-enable** — caller-wide acquire/release refactor (`subscription_repo`,
+   `applications_repo`, `profile_repo`). Separate PR after 028 cleanup.
 
 Carry-over engineering backlog (sequence within roadmap as scoped):
 
