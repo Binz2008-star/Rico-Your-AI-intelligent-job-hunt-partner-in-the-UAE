@@ -45,6 +45,9 @@ export default function JobsPage() {
     }, [router]);
     const [jobs, setJobs] = useState<Job[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
     const [error, setError] = useState<"auth" | "other" | null>(null);
     const [filter, setFilter] = useState<Filter>("all");
     const [sort, setSort] = useState<SortKey>("score_desc");
@@ -54,11 +57,16 @@ export default function JobsPage() {
     // pass the submittingId state check before setSubmittingId completes.
     const _submittingRef = useRef(false);
 
-    const fetchJobs = useCallback(async () => {
+    const PAGE_SIZE = 20;
+
+    const fetchJobs = useCallback(async (pageNum = 1, append = false) => {
         if (!user) return;
         try {
-            const response = await getJobs();
-            setJobs(response.jobs || []);
+            const response = await getJobs(pageNum, PAGE_SIZE);
+            const incoming = response.jobs || [];
+            setJobs((prev) => append ? [...prev, ...incoming] : incoming);
+            setTotalPages(response.pages ?? 1);
+            setPage(pageNum);
             setError(null);
         } catch (err) {
             const is401 = err instanceof ApiError && err.statusCode === 401;
@@ -66,21 +74,28 @@ export default function JobsPage() {
             toast(is401 ? "Session expired — please log in again" : "Could not load jobs", "error");
         } finally {
             setLoading(false);
+            setLoadingMore(false);
         }
     }, [user, toast]);
 
     useEffect(() => {
         if (!user) return;
         const timeoutId = window.setTimeout(() => {
-            void fetchJobs();
+            void fetchJobs(1, false);
         }, 0);
         return () => window.clearTimeout(timeoutId);
     }, [fetchJobs, user]);
 
+    const handleLoadMore = useCallback(() => {
+        if (loadingMore || page >= totalPages) return;
+        setLoadingMore(true);
+        void fetchJobs(page + 1, true);
+    }, [fetchJobs, loadingMore, page, totalPages]);
+
     const handleRetry = useCallback(() => {
         setLoading(true);
         setError(null);
-        void fetchJobs();
+        void fetchJobs(1, false);
     }, [fetchJobs]);
 
     const filtered = useMemo(() => {
@@ -255,11 +270,12 @@ export default function JobsPage() {
         </div>
     );
 
+    const hasMore = page < totalPages;
     const subtitle = loading
         ? t("jobsLoading")
         : filtered.length !== jobs.length
-            ? `${filtered.length} ${t("jobsOf")} ${jobs.length} ${t("jobsRoles")}`
-            : `${jobs.length} ${t("jobsRoles")}`;
+            ? `${filtered.length} ${t("jobsOf")} ${jobs.length} ${t("jobsRoles")}${hasMore ? "+" : ""}`
+            : `${jobs.length}${hasMore ? "+" : ""} ${t("jobsRoles")}`;
 
     return (
         <AppShell
@@ -283,11 +299,29 @@ export default function JobsPage() {
                     onRetry={handleRetry}
                 />
             ) : filtered.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {filtered.map((job) => (
-                        <JobCard key={job.job_id} job={job} onAction={handleAction} isSubmitting={submittingId === job.job_id} />
-                    ))}
-                </div>
+                <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {filtered.map((job) => (
+                            <JobCard key={job.job_id} job={job} onAction={handleAction} isSubmitting={submittingId === job.job_id} />
+                        ))}
+                    </div>
+                    {hasMore && (
+                        <div className="mt-6 flex justify-center">
+                            <button
+                                onClick={handleLoadMore}
+                                disabled={loadingMore}
+                                className={cn(
+                                    "px-6 py-2.5 rounded-xl text-sm font-semibold transition-all border",
+                                    loadingMore
+                                        ? "border-border-soft text-text-tertiary cursor-not-allowed"
+                                        : "border-gold/30 text-gold bg-gold/5 hover:bg-gold/10"
+                                )}
+                            >
+                                {loadingMore ? "Loading…" : `Load more (page ${page + 1} of ${totalPages})`}
+                            </button>
+                        </div>
+                    )}
+                </>
             ) : (
                 <EmptyState
                     title={t("jobsEmptyTitle")}

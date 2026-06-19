@@ -2,16 +2,53 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
+import time
+from collections import deque
+from threading import Lock
+from typing import Any, Deque, Dict, Set, Tuple
 
 from src.rico_chat_api import RicoChatAPI
 from src.rico_telegram_ui import handle_callback_only
 from src.telegram_actions import answer_callback_query
+from src.telegram_bot import send_telegram_to_user
 from src.repositories.profile_repo import find_profiles_by_telegram_username, upsert_profile
 
 logger = logging.getLogger(__name__)
 
 chat_api = RicoChatAPI()
+
+# ---------------------------------------------------------------------------
+# Duplicate-update guard: prevent Telegram webhook retries from double-processing
+# ---------------------------------------------------------------------------
+# Stores (update_id, expiry_ts) pairs. Capacity-bounded — keeps at most
+# _SEEN_MAX entries so memory stays O(1) regardless of traffic.
+_SEEN_LOCK: Lock = Lock()
+_SEEN_IDS: Deque[Tuple[int, float]] = deque()
+_SEEN_SET: Set[int] = set()
+_SEEN_MAX = 2000
+_SEEN_TTL = 3600  # 1 hour — Telegram retries expire well within this window
+
+
+def _is_duplicate_update(update_id: int) -> bool:
+    """Return True if this update_id was already processed. Thread-safe."""
+    now = time.monotonic()
+    with _SEEN_LOCK:
+        # Purge expired entries from the front of the deque
+        while _SEEN_IDS and _SEEN_IDS[0][1] < now:
+            _SEEN_SET.discard(_SEEN_IDS.popleft()[0])
+
+        if update_id in _SEEN_SET:
+            return True
+
+        # Evict oldest if at capacity
+        if len(_SEEN_SET) >= _SEEN_MAX:
+            oldest_id, _ = _SEEN_IDS.popleft()
+            _SEEN_SET.discard(oldest_id)
+
+        expiry = now + _SEEN_TTL
+        _SEEN_IDS.append((update_id, expiry))
+        _SEEN_SET.add(update_id)
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -73,6 +110,8 @@ def _handle_start(message: Dict[str, Any]) -> Dict[str, Any]:
             "Please send /start again in a moment."
         )
     logger.info("telegram_start: bound chat_id=%s to user=%s linked=%s", chat_id, bound_user_id, linked)
+    if chat_id:
+        send_telegram_to_user(chat_id, reply)
     return {"chat_id": chat_id, "reply": reply}
 
 
@@ -94,6 +133,8 @@ def _handle_stop(message: Dict[str, Any]) -> Dict[str, Any]:
     else:
         reply = "I couldn't update your notification settings right now. Please try /stop again shortly."
     logger.info("telegram_stop: disabled notifications for chat_id=%s ok=%s", chat_id, stopped)
+    if chat_id:
+        send_telegram_to_user(chat_id, reply)
     return {"chat_id": chat_id, "reply": reply}
 
 
@@ -102,6 +143,13 @@ def _handle_stop(message: Dict[str, Any]) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def process_telegram_update(update: Dict[str, Any]) -> Dict[str, Any]:
+    # Deduplicate: Telegram retries the same update_id if our server returns
+    # a non-2xx response or times out. Silently ack duplicates without re-processing.
+    update_id = update.get("update_id")
+    if update_id is not None and _is_duplicate_update(int(update_id)):
+        logger.debug("telegram_duplicate_update skipped update_id=%s", update_id)
+        return {"ok": True, "skipped": True}
+
     if update.get("callback_query"):
         result = handle_callback_only(update)
         callback_id = result.get("callback_id", "")
@@ -115,7 +163,8 @@ def process_telegram_update(update: Dict[str, Any]) -> Dict[str, Any]:
     tg_user = message.get("from", {})
 
     text = (message.get("text") or "").strip()
-    user_id = str(chat.get("id") or tg_user.get("id") or "telegram-user")
+    chat_id = str(chat.get("id") or tg_user.get("id") or "")
+    user_id = chat_id or "telegram-user"
 
     # Bot command routing — must run before generic chat handler
     command = text.split()[0].lower() if text.startswith("/") else ""
@@ -129,6 +178,12 @@ def process_telegram_update(update: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as exc:
         logger.warning("rico_chat_api_error: %s", exc)
         response = {"message": "Rico is unavailable right now."}
+
+    reply_text = response.get("message", "") if isinstance(response, dict) else str(response)
+    if chat_id and reply_text:
+        ok = send_telegram_to_user(chat_id, reply_text)
+        if not ok:
+            logger.warning("telegram_send_failed chat_id=%s", chat_id)
 
     return {
         "chat_id": chat.get("id"),
