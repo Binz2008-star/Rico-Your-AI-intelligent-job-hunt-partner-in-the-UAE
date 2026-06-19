@@ -118,9 +118,9 @@ Show a per-job fit score (e.g. `82% match`) on each job card, with a matched-ski
 
 ### TASK-20260619-024 — Sidebar widgets fetch/render on every mount
 
-Status: proposed
-Owner: unassigned
-Branch: —
+Status: review
+Owner: Claude
+Branch: `claude/ui-ux-audit-2026-06-19`
 Issue/PR: —
 Priority: 🟠 High · Effort: Low · Audit §1-D
 
@@ -133,13 +133,24 @@ READINESS and PIPELINE sidebar widgets must load on every navigation to `/comman
 - Existing behavior: widgets blank on re-navigation; data fetched only on first session load.
 
 #### Acceptance criteria
-- [ ] Widgets refetch on mount/navigation.
-- [ ] Skeleton shimmer shown while loading (no empty grey boxes).
-- [ ] Error state handled gracefully.
+- [x] Widgets refetch on mount/navigation.
+- [x] Skeleton shimmer shown while loading (no empty grey boxes).
+- [x] Error state handled gracefully (retry affordance).
 
 #### Verification
-- [ ] `npm run build` in `apps/web`.
-- [ ] Local smoke: navigate away and back to `/command`; widgets repopulate.
+- [x] `npm run build` in `apps/web` — passed (all routes compiled; type-check + ESLint clean).
+- [ ] Local smoke: navigate away and back to `/command`; widgets repopulate (pending deploy/manual).
+
+#### Handoff notes
+- Root cause: `useSidebarStatus` cached failed/empty loads for 60s (`getStatus` TTL), so a
+  cold-start failure left READINESS/PIPELINE blank on every remount without retrying.
+- Fix: `loadStatus()` now uses `Promise.allSettled` and throws when both core reads
+  (profile + stats) reject, so failures are never cached → the next mount retries. Added an
+  `error` flag + `refresh()` to the hook, and an error→retry affordance in the sidebar
+  (new `navStatusRetry` i18n key, en + ar). Cached data is served instantly to avoid flicker.
+- Changed files: `apps/web/hooks/useSidebarStatus.ts`,
+  `apps/web/components/layout/AppSidebar.tsx`, `apps/web/lib/translations.ts`.
+- Risk: low — read-only sidebar, no backend/API/endpoint changes. Rollback: revert the commit.
 
 ---
 

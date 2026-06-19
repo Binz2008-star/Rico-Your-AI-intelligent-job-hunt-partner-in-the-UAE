@@ -100,8 +100,20 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                 <Separator />
 
                 {/* Career status modules — read-only; each hides silently on failure */}
-                {enabled && (status.loading || status.readiness || status.pipeline) && (
+                {enabled && (status.loading || status.readiness || status.pipeline || status.error) && (
                     <div className="space-y-3 px-3 pt-4">
+                        {status.error ? (
+                            <button
+                                type="button"
+                                onClick={status.refresh}
+                                aria-label={t("navStatusRetry")}
+                                className="flex w-full items-center justify-center gap-2 rounded-lg border border-overlay/10 bg-surface-subtle/40 p-3 text-[11px] font-medium text-text-tertiary transition-colors hover:border-gold/25 hover:bg-surface-subtle hover:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+                            >
+                                <MaterialIcon icon="refresh" size={14} className="opacity-70" />
+                                <span>{t("navStatusRetry")}</span>
+                            </button>
+                        ) : (
+                          <>
                         {status.loading && !status.readiness ? (
                             <div className="h-[70px] animate-pulse rounded-lg border border-overlay/10 bg-surface-subtle/40 motion-reduce:animate-none" />
                         ) : status.readiness ? (
@@ -172,6 +184,8 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                                 </Link>
                             </div>
                         ) : null}
+                          </>
+                        )}
                     </div>
                 )}
 
