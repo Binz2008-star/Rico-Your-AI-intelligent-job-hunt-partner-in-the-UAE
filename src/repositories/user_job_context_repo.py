@@ -311,6 +311,73 @@ def get_recently_discussed(user_id: str, limit: int = 3, max_age_days: int = 14)
     return _recent_rows(user_id, "last_discussed_at", limit, max_age_days)
 
 
+def get_recent_matches(
+    user_id: str,
+    limit: int = 10,
+    max_age_minutes: int = 60,
+) -> list[dict]:
+    """
+    Return the most recently searched job matches for a user in their original
+    search-result order.
+
+    Finds the latest search batch (jobs inserted within max_age_minutes) and
+    returns them ordered by searched_at ASC to preserve the original list order.
+    Used as a cross-worker fallback when in-process memory context is empty.
+
+    Returns [] when DB is unavailable or no rows exist within the time window.
+    Never raises.
+    """
+    if not user_id:
+        return []
+    from src.db import get_db_connection
+
+    conn = get_db_connection()
+    if not conn:
+        return []
+    cutoff = datetime.now(_UTC) - timedelta(minutes=max_age_minutes)
+    try:
+        with conn.cursor() as cur:
+            # Get the most recent N matches, then return them in insertion order.
+            # Sub-select DESC to find the latest batch, outer ORDER BY ASC to
+            # preserve the original search-result ordering.
+            cur.execute(
+                """
+                SELECT title, company, location, apply_url, source_url,
+                       alt_url, verification_status, searched_at
+                  FROM (
+                       SELECT title, company, location, apply_url, source_url,
+                              alt_url, verification_status, searched_at
+                         FROM user_job_context
+                        WHERE user_id = %s
+                          AND searched_at >= %s
+                        ORDER BY searched_at DESC
+                        LIMIT %s
+                       ) recent_batch
+                 ORDER BY searched_at ASC
+                """,
+                (user_id, cutoff, limit),
+            )
+            rows = cur.fetchall() or []
+        return [
+            {
+                "title":               r[0] or "",
+                "company":             r[1] or "",
+                "location":            r[2] or "",
+                "apply_url":           r[3] or "",
+                "source_url":          r[4] or "",
+                "link":                r[3] or r[4] or "",
+                "alt_url":             r[5] or "",
+                "verification_status": r[6] or "lead_needs_verification",
+            }
+            for r in rows
+        ]
+    except Exception:
+        logger.exception("user_job_context_repo_recent_matches_failed user=%s", user_id)
+        return []
+    finally:
+        conn.close()
+
+
 # ── Application Lifecycle ──────────────────────────────────────────────────────
 
 def set_lifecycle_status(
