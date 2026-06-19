@@ -55,6 +55,7 @@ CREATE INDEX IF NOT EXISTS idx_user_documents_user_id
 CREATE INDEX IF NOT EXISTS idx_application_drafts_user_id
     ON application_drafts(user_id, status);
 
--- user_job_context: queried per user on context resolution
-CREATE INDEX IF NOT EXISTS idx_user_job_context_user_job
-    ON user_job_context(user_id, job_id);
+-- user_job_context: primary query filters by user_id and searched_at (recency window)
+-- The table has no job_id column; the FK to action_audit_log is on a separate table.
+CREATE INDEX IF NOT EXISTS idx_user_job_context_user_searched_at
+    ON user_job_context(user_id, searched_at DESC);
