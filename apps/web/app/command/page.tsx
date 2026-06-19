@@ -439,7 +439,7 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
     };
     const applyUrl = clean(match.apply_url);
     const sourceUrl = (() => { const u = clean(match.source_url); return _isGoogleIntermediary(u) ? "" : u; })();
-    const altUrl = clean(match.alt_link);
+    const altUrl = (() => { const u = clean(match.alt_link); return _isGoogleIntermediary(u) ? "" : u; })();
 
     // Determine which link button(s) to show — conditional on what the provider returned.
     // apply_url = direct apply page (highest trust)
