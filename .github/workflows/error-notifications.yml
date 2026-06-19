@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PAGERDUTY_CONFIGURED: ${{ secrets.PAGERDUTY_INTEGRATION_KEY != '' }}
-      TELEGRAM_CONFIGURED: ${{ secrets.TELEGRAM_TO != '' && secrets.TELEGRAM_TOKEN != '' }}
+      TELEGRAM_CONFIGURED: ${{ secrets.TELEGRAM_CHAT_ID != '' && secrets.TELEGRAM_BOT_TOKEN != '' }}
       DISCORD_CONFIGURED: ${{ secrets.DISCORD_WEBHOOK_URL != '' }}
 
     steps:
@@ -74,8 +74,8 @@ jobs:
         if: ${{ github.event.workflow_run.conclusion == 'failure' && env.TELEGRAM_CONFIGURED == 'true' }}
         uses: appleboy/telegram-action@221e6b684967abe813051ee4a37dd61770a83ad3  # v1.0.1
         with:
-          to: ${{ secrets.TELEGRAM_TO }}
-          token: ${{ secrets.TELEGRAM_TOKEN }}
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           format: markdown
           message: |
             🚨 **Workflow Failed!**

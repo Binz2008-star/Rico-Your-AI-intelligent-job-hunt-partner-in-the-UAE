@@ -16,6 +16,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Trigger Render deploy
+        run: |
+          curl -s -o /dev/null -w "Render deploy hook: HTTP %{http_code}\n" \
+            -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+
       - name: Wait for Render deploy propagation
         run: sleep 30
 
