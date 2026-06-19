@@ -5574,9 +5574,40 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        # ── Cover letter with explicit job context (BUG-01 guard) ───────────────
+        # Must come BEFORE _COMPANY_SEARCH_RE: "role at [Company]" in a cover-letter
+        # prompt ("Draft me a cover letter for the HSE MANAGER role at Dutco Group")
+        # matches _COMPANY_SEARCH_RE pattern-2, routing to job search instead of
+        # cover letter generation. When the cover letter command is present AND slots
+        # are fully extractable, generate the letter deterministically here.
+        if _COVER_LETTER_COMMAND_RE.search(message) and not _RESIGNATION_LETTER_RE.search(message):
+            _cl_ej = self._extract_explicit_draft_job_from_message(message)
+            if _cl_ej:
+                from src.message_generator import generate_message as _gen_msg
+                _cl_draft_job, _cl_ctx_src = self._resolve_explicit_draft_job_context(user_id, _cl_ej)
+                if (
+                    self._job_context_value(_cl_draft_job, "title", "job_title")
+                    and self._job_context_value(_cl_draft_job, "company", "company_name")
+                ):
+                    self._log_document_draft_context_source(_cl_ctx_src, _cl_draft_job)
+                    cover = _gen_msg(_cl_draft_job, profile=profile)
+                    self._append_chat(user_id, "assistant", cover)
+                    return self._finalize(
+                        {"type": "draft_message", "intent": "draft_message", "message": cover},
+                        self.SOURCE_KEYWORD,
+                        profile=profile,
+                    )
+                _cl_msg = self._cover_letter_clarification_message(profile, _cl_draft_job)
+                self._append_chat(user_id, "assistant", _cl_msg)
+                return self._finalize(
+                    {"type": "cover_letter_prompt", "message": _cl_msg, "next_action": "provide_job_for_cover_letter"},
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
+
         # ── Company-targeted job search ───────────────────────────────────────
         # "find jobs at ADNOC", "jobs at Emirates NBD", "any openings at DEWA".
-        if _COMPANY_SEARCH_RE.search(message):
+        if _COMPANY_SEARCH_RE.search(message) and not _COVER_LETTER_COMMAND_RE.search(message):
             return self._finalize(
                 self._handle_company_search(user_id, profile, message),
                 self.SOURCE_KEYWORD,

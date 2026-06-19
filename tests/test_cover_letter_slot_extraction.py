@@ -190,3 +190,47 @@ class TestCoverLetterEndToEnd:
         # Asks for the role/title (Arabic), not the company
         assert "المسمى الوظيفي" in message
         assert _ARABIC_RE.search(message)
+
+
+# ---------------------------------------------------------------------------
+# 3. BUG-01 regression — cover letter for "role at Company" must not trigger
+#    company job search (_COMPANY_SEARCH_RE matches "roles? at [A-Z]")
+# ---------------------------------------------------------------------------
+
+DUTCO_HSE = "Draft me a cover letter for the HSE MANAGER - DATA CENTERS role at Dutco Group"
+HSE_ADNOC = "Write me a cover letter for the HSE Manager role at ADNOC"
+
+
+class TestBug01CoverLetterCompanySearchGuard:
+
+    def test_dutco_hse_slots_extracted(self):
+        """Slot extractor must find company=Dutco Group in the BUG-01 message."""
+        slots = RicoChatAPI._extract_explicit_draft_job_from_message(DUTCO_HSE)
+        assert slots.get("company") == "Dutco Group"
+        assert slots.get("title")  # title present (exact wording may vary)
+
+    def test_company_search_re_matches_role_at_pattern(self):
+        """Root-cause confirmation: 'role at Dutco Group' hits _COMPANY_SEARCH_RE."""
+        from src.rico_chat_api import _COMPANY_SEARCH_RE
+        assert _COMPANY_SEARCH_RE.search("HSE MANAGER - DATA CENTERS role at Dutco Group")
+
+    def test_dutco_hse_routes_to_cover_letter_not_job_search(self):
+        """BUG-01: cover letter request must return draft_message or cover_letter_prompt."""
+        result = _run(DUTCO_HSE)
+        assert result["type"] in ("draft_message", "cover_letter_prompt"), (
+            f"Expected cover letter response, got type={result['type']!r}: {result}"
+        )
+        assert result.get("intent") != "company_search"
+
+    def test_hse_adnoc_routes_to_cover_letter_not_job_search(self):
+        """Variant: 'HSE Manager role at ADNOC' must also route to cover letter."""
+        result = _run(HSE_ADNOC)
+        assert result["type"] in ("draft_message", "cover_letter_prompt"), (
+            f"Expected cover letter response, got type={result['type']!r}: {result}"
+        )
+
+    def test_dutco_hse_cover_letter_contains_company_name(self):
+        """If fully generated, the letter body must reference Dutco Group."""
+        result = _run(DUTCO_HSE)
+        if result["type"] == "draft_message":
+            assert "Dutco" in result["message"]
