@@ -4,12 +4,15 @@ _Last updated: 2026-06-19_
 
 ## Production baseline
 
-- **main HEAD:** `26124ed180a77658be21cfa499e5629bd6a816ed` (fix(db): stop connect()
-  crashing on conn._rico_pool — PR #644). Full recent lineage:
+- **Repository main HEAD:** `7f80cc63528079fc07c5e10ced97a926002eb41a`
+  (cleanup/docs — PR #647). Recent lineage:
+  `7f80cc6` (#647 cleanup/docs) ← `ac8c8ad` (#646 workflow secrets cleanup) ←
   `26124ed` (#644 DB hotfix) ← `3fbe2ea` (#643 workspace sync) ←
   `3958376` (#642 followup-smoke.yml) ← `9c003a7` (#638 system-overhaul-v1+v2) ←
   `9d7c1e0` (overhaul v1) ← earlier.
-- **Deployed to Render:** ✅ live — `26124ed` confirmed deployed.
+- **Production backend deployed SHA:** `26124ed180a77658be21cfa499e5629bd6a816ed`
+  (latest runtime-impacting PR: #644 DB hotfix). PRs #646 and #647 are
+  docs/workflow-only — no Render deploy needed or triggered for them.
   Manual Render Deploy runs #27 and #28 succeeded (2026-06-19, 07:55Z and 08:01Z).
   `/health` 200, `/version` = `26124ed`. No `_rico_pool` AttributeError in logs.
 - **Deployed to Vercel:** ✅ live — frontend at `ricohunt.com`.
