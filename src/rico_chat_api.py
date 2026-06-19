@@ -8224,15 +8224,8 @@ class RicoChatAPI:
         except Exception:
             logger.debug("rico_chat: failed to store search matches context user=%s", user_id)
 
-        # Also persist to DB so ordinal/detail follow-ups survive across workers
+        # Persist to Neon so ordinal/detail follow-ups survive across workers
         # and RICO_MEMORY_BACKEND=postgres mode (where JSON context is disabled).
-        try:
-            from src.repositories.user_job_context_repo import upsert_matches as _upsert_ctx_matches
-            _upsert_ctx_matches(user_id, formatted)
-        except Exception:
-            logger.debug("rico_chat: failed to upsert search matches to DB user=%s", user_id)
-
-        # Persist to Neon so links survive restarts and postgres memory mode.
         try:
             from src.repositories.user_job_context_repo import upsert_matches
             upsert_matches(user_id, formatted)
