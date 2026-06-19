@@ -56,6 +56,103 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260619-025 — Security: redact archived database credential
+
+Status: done
+Owner: Claude
+Branch: `chore/redact-archived-db-credential` (merged → `e104135` via PR #656)
+Issue/PR: #656
+
+#### Objective
+Remove a real Neon connection string committed in `docs/archive/AUDIT_REPORT_2026-05-14.md`
+from the current tree.
+
+#### Fix
+Replaced `DATABASE_URL=postgresql://authenticator:npg_R8hdwAMu9cOs@ep-long-poetry-am9o9qth-pooler...`
+with `DATABASE_URL=postgresql://<role>:<redacted>@<neon-host>/<database>?sslmode=require`.
+
+#### Scope
+- 1 file changed: `docs/archive/AUDIT_REPORT_2026-05-14.md` only.
+- No app code, env examples, Neon, or Render changes.
+
+#### Notes
+- Old credential (`authenticator` / `npg_R8hdwAMu9cOs`) believed rotated/invalid.
+- Current credential (`neondb_owner` / `npg_DI5SJWxO8wVj`) was NOT in the repo.
+- Git history purge (`git filter-repo`) is out of scope — requires coordinated force-push.
+- CI green (pytest ✅ playwright ✅ Vercel ✅). Merged `e104135`, 2026-06-19.
+
+---
+
+### TASK-20260619-024 — BUG-04 Unauthorized profile mutation (Hard Audit)
+
+Status: done
+Owner: Claude
+Branch: `claude/clever-galileo-gii41r` (merged → `f4bacfa` via PR #655)
+Issue/PR: #655
+
+#### Objective
+Close three code paths that silently wrote to `rico_profiles` via `upsert_profile` without
+explicit user consent.
+
+#### Fix summary
+- **Fix A** (`src/rico_chat_api.py`): `profile_update` intent now asks before persisting.
+  `_pending_field="confirm_profile_update"` + `_format_pref_changes` helper. `upsert_profile`
+  fires only on affirmative reply via `_resolve_pending_field`.
+- **Fix B** (`src/rico_chat_api.py`): Removed `upsert_profile` from
+  `_target_role_search_response`. Searching a role no longer persists it as a `target_role`.
+- **Fix C** (`src/agent/context/resolver.py`): `_hydrate_from_chat` NER enrichment stripped
+  from DB write via `_chat_added` delta. In-memory profile retains NER values for the current
+  request. CV/Jotform/action-derived values preserved.
+
+#### Tests
+- 13 new tests: `tests/test_bug04_profile_mutation.py`.
+- `test_p0_trust_fixes.py::test_concrete_profile_update_*` updated to assert ask-first behavior.
+- Zero new failures vs main baseline (115 pre-existing failures unchanged).
+
+#### Verification
+- CI green. Merged `f4bacfa`, 2026-06-19T15:51Z.
+- Production confirmed: Vercel `dpl_ArjxouNKhjYnVMb9tMg1bLS1MdXf` at `f4bacfa`.
+
+---
+
+### TASK-20260619-023 — BUG-03 Google-intermediary link (Hard Audit)
+
+Status: done
+Owner: Claude
+Branch: `fix/bug03-alt-link-google-root` + hotfix (merged → `b0807c0` via PRs #651/#652)
+Issue/PR: #651 / #652
+
+#### Objective
+Prevent Google search/redirect URLs from appearing in job card apply/alt links.
+
+#### Fix
+- `_format_match` no longer promotes `job_google_link` into `apply_url` when it contains
+  `google.com/search` or `google.com/url`.
+- `alt_link` Google intermediary cleared at write time (hotfix #652).
+
+#### DB cleanup
+Neon sweep confirmed zero Google URLs in `jobs` or `user_job_context`. Talent BluePrint
+row in `rico_job_recommendations` had empty URLs (not Google URLs) — contamination was
+display-only, resolved at write time. No DB write required.
+
+---
+
+### TASK-20260619-022 — BUG-02 A/B/C/D letter-choice routing off-by-one (Hard Audit)
+
+Status: done
+Owner: Claude
+Branch: `claude/clever-galileo-gii41r` (merged → `631ce7d` via PR #649)
+Issue/PR: #649
+
+#### Objective
+Fix off-by-one in letter-choice router: selecting "A" was routing to option B, "B" to C, etc.
+
+#### Fix
+Zero-vs-one-based index corrected in the letter-choice handler in `src/rico_chat_api.py`.
+CI green. Merged `631ce7d`, 2026-06-19.
+
+---
+
 ### TASK-20260619-021 — BUG-01 Cover-letter company-search routing guard (Hard Audit)
 
 Status: done
@@ -916,31 +1013,39 @@ Add a repo-native shared source of truth for AI planning, implementation handoff
 
 ## Backlog — next priorities
 
-Product roadmap order (post 2026-06-19 #644 closure). Do not start without explicit scope and
+Product roadmap order (post 2026-06-19 BUG-04 closure). Do not start without explicit scope and
 branch assignment.
 
-1. **#355 Phase 2** — per-user interval settings + Telegram DM notifications. Needs explicit
-   scope + branch. (#640 and #641 on hold — do not merge until Phase 2 is scoped.)
-2. **#356 Inbox Intelligence** — design-only; connector design doc (#566) on `main`.
-3. **028_performance_indexes cleanup** — fix `migration_failed label=028_performance_indexes:
-   column "job_id" does not exist` startup warning. Separate focused PR; do not mix with
-   incident or Phase 2 work.
-4. **DB pooling re-enable** — caller-wide acquire/release refactor (`subscription_repo`,
-   `applications_repo`, `profile_repo`). Separate PR after 028 cleanup.
+1. **#653 (TASK-024)** — sidebar status widget retry; draft, rebased onto `f4bacfa`, build-green.
+   Awaiting review/merge. Do not merge without explicit approval.
+2. **TASK-013 Application Pipeline V1** (P1) — end-to-end application submission with approval
+   gate, audit log, Telegram confirmation. Needs dedicated issue + branch.
+3. **TASK-010 Pipeline relevance guard** (P1) — pre-filter pipeline results against active
+   profile before scoring. Needs dedicated issue + branch.
+4. **#355 Phase 2** — per-user interval settings + Telegram DM notifications. (#640 and #641
+   on hold — do not merge until Phase 2 is scoped.)
+5. **#356 Inbox Intelligence** — design-only; connector design doc (#566) on `main`.
+6. **028_performance_indexes cleanup** — fix `migration_failed label=028_performance_indexes:
+   column "job_id" does not exist` startup warning. Separate focused PR.
+7. **DB pooling re-enable** — caller-wide acquire/release refactor. Separate PR after 028 cleanup.
 
-Carry-over engineering backlog (sequence within roadmap as scoped):
+Open #618 UX tasks (8 remaining, tracked in #618 as living tracker):
+TASK-010 (P1), TASK-011 (P2), TASK-013 (P1), TASK-014 (P2), TASK-015 (P2),
+TASK-016 (P3 — sidebar loading fixed in #653; metric reconciliation open),
+TASK-017 (P3), TASK-018 (P2).
 
-- **Application Pipeline V1** — end-to-end application submission flow with approval gate,
-  audit log, and Telegram confirmation. Requires `RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true`.
-- **Pipeline relevance guard** — pre-filter pipeline job results against active profile before
-  scoring to reduce false-positives reaching the user.
-- **Match score explanation** — expose per-field score breakdown in job cards so users
-  understand why a job ranked high or low.
-- **Blocked link UX** — detect dead/redirected apply URLs before showing them to users;
-  surface a clear "link unavailable" state instead of a broken redirect.
+Carry-over engineering backlog:
+- **Match score explanation** — expose per-field score breakdown in job cards.
+- **Blocked link UX** (#354 remainder) — clean blocked-link messaging + verified alternative.
+  Overlaps #263. Existing verifier from #266–#268.
+- **Neon duplicate profile/document cleanup** — DB write, needs explicit approval.
+- **028_performance_indexes startup warning** — `column "job_id" does not exist`.
+- **git filter-repo purge** of old archived credential — coordinated force-push, out of scope.
 
 ### Active issues
-- **Issue #618** — open as backlog for Arabic intent / smoke-test observations.
-  Arabic cover-letter parser confirmed fixed in production after #615 deploy.
-  Do not treat as P0 unless a new reproducible failure appears after commit
-  `525964d758d13b86cf0f9b2907bdde7be773d9da`.
+- **Issue #618** — living tracker for 8 open UX tasks (reconciled 2026-06-19,
+  status index posted as issuecomment-4753155540). Keep open.
+- **Issue #654** — AI Workflow V2 tracker; absorbed timeout/city/profile/routing observations
+  from #618 (cross-link posted 2026-06-19). Do not implement AI Workflow V2 without explicit
+  scope confirmation.
+- **PR #640 / #641** — on hold, awaiting explicit approval. Do not merge.

@@ -4,20 +4,72 @@ _Last updated: 2026-06-19_
 
 ## Production baseline
 
-- **Repository main HEAD:** `3e997073b9713f269031566f0d1cb6103ccb346b`
-  (chore: remove bug01-smoke.yml after one-shot use). Recent lineage:
+- **Repository main HEAD:** `e104135c7f1df69fa749d5da1f0b7f1f999e3dad`
+  (#656 chore: redact archived DB credential). Recent lineage:
+  `e104135` (#656 credential redaction) ←
+  `f4bacfa` (#655 BUG-04 unauthorized profile mutation) ←
+  `b0807c0` (#652 BUG-03 hotfix: alt_link Google intermediary) ←
+  `8685458` (#651 BUG-03: Google source_url fallback) ←
+  `631ce7d` (#649 BUG-02 A/B/C/D routing off-by-one) ←
   `3e997073` (remove bug01-smoke.yml, CI-only) ←
-  `aa9281bf` (add bug01-smoke.yml, CI-only) ←
-  `40636ba` (#648 BUG-01 cover-letter guard) ←
-  `7f80cc6` (#647 cleanup/docs) ← `ac8c8ad` (#646 workflow secrets cleanup) ←
-  `26124ed` (#644 DB hotfix) ← `3fbe2ea` (#643 workspace sync) ←
-  `3958376` (#642 followup-smoke.yml) ← `9c003a7` (#638 system-overhaul-v1+v2) ←
-  `9d7c1e0` (overhaul v1) ← earlier.
-- **Production backend deployed SHA:** `40636ba6ed2fd15cf135ef38030c6e1d2641ecab`
-  (latest runtime-impacting PR: #648 BUG-01 cover-letter guard). Render deploy run #29
-  triggered 2026-06-19T09:34Z. `/health` 200, `/version` = `40636ba`.
-  `aa9281bf` and `3e997073` are CI-workflow-only — no Render deploy needed.
-- **Deployed to Vercel:** ✅ live — frontend at `ricohunt.com`.
+  `40636ba` (#648 BUG-01 cover-letter guard) ← earlier.
+- **Production backend deployed SHA:** `f4bacfafde4cdc8b42cb33da0490516f87db0ee3`
+  (BUG-04 — confirmed live via Vercel deployment `dpl_ArjxouNKhjYnVMb9tMg1bLS1MdXf`,
+  2026-06-19T15:51Z). `e104135` (#656) is docs-only — no Render deploy needed.
+- **Deployed to Vercel:** ✅ live — frontend at `ricohunt.com` (`f4bacfa` confirmed).
+
+## BUG-04 Unauthorized Profile Mutation — RESOLVED (2026-06-19)
+
+**Symptom:** Three code paths silently wrote to Neon via `upsert_profile` without explicit
+user consent: (A) `profile_update` intent persisted before confirming; (B)
+`_target_role_search_response` appended searched role to `target_roles` on every search;
+(C) `resolver._hydrate_from_chat` NER-inferred fields (cities/skills/roles/industries) were
+persisted to DB from chat context.
+
+**Fix (PR #655, merged `f4bacfa`, 2026-06-19T15:51Z):**
+- **Fix A:** `profile_update` intent now stashes prefs as `_pending_field="confirm_profile_update"`,
+  shows a before-save prompt, and calls `upsert_profile` only on affirmative reply. New
+  `_format_pref_changes` helper. `_resolve_pending_field` handles confirm/cancel/pass-through.
+- **Fix B:** Removed `upsert_profile` call from `_target_role_search_response`. Searching a
+  role no longer promotes it to a standing `target_role`.
+- **Fix C:** `resolver.py` snapshots 4 chat-inferable fields pre-NER, computes `_chat_added`
+  delta, strips only that delta from the DB write. In-memory profile for the current request
+  retains NER enrichment. CV/Jotform/action-derived values unaffected.
+- 13 new tests in `tests/test_bug04_profile_mutation.py`.
+- `test_p0_trust_fixes.py::test_concrete_profile_update_*` updated to assert ask-first behavior
+  (old test was asserting the bug).
+
+**Verification:** CI green (pytest ✅ playwright ✅ Vercel ✅). Zero new failures vs main
+baseline (115 pre-existing failures unchanged). Production confirmed at `f4bacfa` via Vercel.
+
+---
+
+## BUG-03 Google-Intermediary Link — RESOLVED (2026-06-19)
+
+**Symptom:** Job cards showed `google.com/search?...` as the apply/alt link because
+`_format_match` was promoting `job_google_link` into `apply_url`/`source_url` without
+stripping the Google intermediary.
+
+**Fix (PR #651 `8685458` + hotfix PR #652 `b0807c0`, 2026-06-19):**
+- `source_url` fallback no longer accepts Google search/URL links.
+- `alt_link` Google intermediary cleared at write time.
+
+**DB cleanup:** Read-only Neon sweep confirmed zero Google URLs in `jobs` or
+`user_job_context`. One `rico_job_recommendations` row (Senior HSE Manager — Events /
+Talent BluePrint, `job_key=6b1e9b6fdca6ad6b`) had empty `apply_url`/`source_url` —
+contamination was display-only, already fixed at write time by #651/#652. No DB write needed.
+
+---
+
+## BUG-02 A/B/C/D Letter-Choice Routing — RESOLVED (2026-06-19)
+
+**Symptom:** When Rico presented lettered options (A/B/C/D), user selecting "A" was routed
+to option B, "B" to C, etc. — off-by-one in the index lookup.
+
+**Fix (PR #649, merged `631ce7d`, 2026-06-19):** Zero-vs-one-based index corrected in the
+letter-choice router. CI green on merge.
+
+---
 
 ## BUG-01 Cover-Letter Company-Search Guard — RESOLVED (2026-06-19)
 
@@ -128,7 +180,57 @@ Pre-existing schema gap. Does not affect runtime. Track separately.
 - **PR #640** — on hold, awaiting explicit approval. Do not merge.
 - **PR #641** — on hold, awaiting explicit approval. Do not merge.
 
-## Confirmed production state (as of 2026-06-19, updated post-#648)
+## Security — credential redaction (2026-06-19)
+
+An old Neon connection string (`authenticator:npg_R8hdwAMu9cOs`) was found committed in
+`docs/archive/AUDIT_REPORT_2026-05-14.md`. Redacted via PR #656 (merged `e104135`,
+2026-06-19). The credential is believed rotated/invalid (different user, different password
+from current). Current chat-exposed credential (`npg_DI5SJWxO8wVj`, `neondb_owner`) was
+**not** in the repo. Rotation of the current password is left to the owner (Neon console →
+Reset password → update Render `DATABASE_URL` → redeploy).
+
+**Note:** `git filter-repo` purge of the old credential from history is out of scope —
+requires a coordinated force-push. Track separately if needed.
+
+---
+
+## #618 Reconciliation — complete (2026-06-19)
+
+Status index posted as GitHub comment (issuecomment-4753155540). #654 absorbed-observations
+note posted (issuecomment-4753155919). #618 remains open as the living tracker for 8 open
+UX tasks. Workflow-class items moved to #654. Resolved items checked off.
+
+**8 open tasks remaining in #618:**
+TASK-010 Pipeline relevance guard (P1) · TASK-011 Match-score explanation (P2) ·
+TASK-013 Application Pipeline V1 status alignment (P1) · TASK-014 Queue Arabic empty state (P2) ·
+TASK-015 Pipeline notes/activity log (P2) · TASK-016 Profile completeness vs readiness (P3,
+sidebar widget loading fixed in #653; metric reconciliation still open) ·
+TASK-017 Daily application-limit explanation (P3) · TASK-018 Telegram Chat-ID validation (P2).
+
+---
+
+## #653 (TASK-024) — draft, rebased, awaiting review/merge
+
+Sidebar status widgets retry after failed cold-start. Rebased onto `f4bacfa` (new main post
+BUG-04). Build green. Still draft — **do not merge without explicit approval.**
+
+---
+
+## Neon production audit — complete (2026-06-19)
+
+| Item | Finding |
+|---|---|
+| Production branch | `br-restless-cherry-amq6wj7o` (primary, default) |
+| Active compute | `ep-long-poetry-am9o9qth` (PostgreSQL 17, aws-us-east-1) |
+| Core Rico tables | All present (rico_users, rico_profiles, rico_chat_history, rico_saved_searches, rico_job_recommendations, rico_webhook_events, applications, application_drafts, user_job_context, user_documents, user_subscriptions, subscription_events, search_context, jobs) |
+| Migration ledger | Inline idempotent (`CREATE TABLE IF NOT EXISTS` + `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`) — no Alembic; current as of `f4bacfa` |
+| Google URLs in DB | Zero — `jobs` and `user_job_context` clean |
+| Stale Neon branches >7 days | None — all closed PRs within 7 days |
+| Live preview branches | 3 expected: pr-640, pr-641, pr-653 |
+
+---
+
+## Confirmed production state (as of 2026-06-19, updated post-BUG-04)
 
 | Feature | PR | Status |
 |---|---|---|
@@ -147,25 +249,35 @@ Pre-existing schema gap. Does not affect runtime. Track separately.
 | System overhaul v1+v2 | #638 | ✅ merged + deployed `26124ed` |
 | DB pool AttributeError hotfix | #644 | ✅ merged + deployed `26124ed` |
 | BUG-01 cover-letter company-search guard | #648 | ✅ merged + deployed `40636ba` |
+| BUG-02 A/B/C/D letter-choice routing | #649 | ✅ merged `631ce7d` |
+| BUG-03 Google-intermediary link | #651/#652 | ✅ merged `b0807c0` |
+| BUG-04 unauthorized profile mutation | #655 | ✅ merged + prod confirmed `f4bacfa` |
+| Archived credential redaction | #656 | ✅ merged `e104135` (docs-only) |
 
 ## CI health
 
-- QA Tests (pytest + playwright): green on main.
+- QA Tests (pytest + playwright): green on main (`e104135`).
 - followup-smoke.yml: 9/9 PASS on `26124ed` (run #2, 2026-06-19).
 - bug01-smoke.yml: **4/4 PASS** on `40636ba` (run #1, 2026-06-19). **Removed** after one-shot use.
-- Render deploy: `workflow_dispatch` only — must be triggered manually after each release.
+- Render deploy: `workflow_dispatch` only — must be triggered manually after each runtime release.
+  Note: `/health` returns 403 from external networks (Render network-level policy) — verify via
+  Render dashboard or GitHub Actions workflow (not WebFetch).
 - cron-test.yml: **removed** (one-off #644 verification, cleaned up 2026-06-19).
 
 ## Next product roadmap order
 
 Do not start without explicit scope and branch assignment.
 
-1. **#355 Phase 2** — per-user interval settings, Telegram DM notifications (deferred
-   from Phase 1). Needs explicit scope + branch.
-2. **#356 Inbox Intelligence** — design-only; connector design doc on `main`.
-3. **028_performance_indexes cleanup** — fix `column "job_id" does not exist` startup warning.
-   Separate PR; do not mix with incident or Phase 2 work.
-4. **DB pooling re-enable** — caller-wide acquire/release refactor required first; separate PR.
+1. **#653 (TASK-024)** — sidebar status widget retry; draft, rebased, build-green. Awaiting
+   review/merge decision.
+2. **TASK-013 Application Pipeline V1** (P1) — end-to-end application submission with approval
+   gate, audit log, Telegram confirmation. Needs dedicated issue + branch.
+3. **TASK-010 Pipeline relevance guard** (P1) — pre-filter pipeline results against active
+   profile before scoring. Needs dedicated issue + branch.
+4. **#355 Phase 2** — per-user interval settings + Telegram DM notifications.
+5. **#356 Inbox Intelligence** — design-only; connector design doc (#566) on `main`.
+6. **028_performance_indexes cleanup** — fix `column "job_id" does not exist` startup warning.
+7. **DB pooling re-enable** — caller-wide acquire/release refactor; separate PR after 028 cleanup.
 
 ## Carry-over engineering backlog
 
