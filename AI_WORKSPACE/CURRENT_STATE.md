@@ -1,19 +1,39 @@
 # Current State
 
-_Last updated: 2026-06-19_
+_Last updated: 2026-06-19 (post P0 QA matrix fixes)_
 
 ## Production baseline
 
-- **Repository main HEAD:** `712be798e0763d1933a48350cd38c23cebd2e68b`
-  (#658 sidebar status retry). Recent lineage:
+- **Repository main HEAD:** `2bc48981fea8368c337931cc00323cb66feba703`
+  (#661 duplicate upsert fix). Recent lineage:
+  `2bc489` (#661 duplicate upsert_matches CI fix) ←
+  `518a1a8` (#660 P0 context-loss bugs — 4 fixes) ←
+  `a4f038a` (#658 workspace sync) ←
   `712be79` (#658 sidebar status retry) ←
-  `f89c555` (#657 BUG-05 public-chat loop) ←
-  `e104135` (#656 credential redaction) ←
-  `f4bacfa` (#655 BUG-04 unauthorized profile mutation) ← earlier.
+  `f89c555` (#657 BUG-05 public-chat loop).
 - **Production backend deployed SHA:** `f89c555aa969f75f99ee8b7d0296bb7582c272cd`
-  (BUG-05 — confirmed live via Render manual deploy, 2026-06-19T~19:15Z).
-  `712be79` (#658) is frontend-only — Vercel auto-deploys; no Render deploy needed.
-- **Deployed to Vercel:** ✅ auto-deploying `712be79` from main.
+  (BUG-05 — last confirmed Render deploy 2026-06-19T~19:15Z).
+  `518a1a8` / `2bc489` backend changes need a Manual Render Deploy to go live.
+- **Deployed to Vercel:** ✅ auto-deploying `2bc489` from main.
+
+## P0 Context-Loss Bugs — RESOLVED (2026-06-19, PR #660 + #661)
+
+Four adversarial QA failures fixed and merged to main. Root cause: `RICO_MEMORY_BACKEND=postgres`
+sets `_JSON_WRITE_ENABLED=False`, silently neutering all in-process context storage in production.
+
+| Bug | Symptom | Fix |
+|---|---|---|
+| BUG-A | Ordinal follow-up ("Open the second one") → "No recent job search" | DB fallback in `_handle_job_detail`; `get_recent_matches()` added to `user_job_context_repo` |
+| BUG-B | Bare company name ("Majid Al Futtaim") → "not a job role" | Company-name check against recent context + DB before emitting unknown-role error |
+| BUG-C | "Give me the URL" misrouted to search | Extended `_OPEN_APPLY_LINK_RE` to match natural language URL requests |
+| BUG-D | Apply link silently absent in job detail | `source_url` fallback + explicit "No apply link available" notice |
+
+Also: `_store_search_matches_context` now calls `upsert_matches` on every search so results
+persist to Neon across workers and process restarts (#660). Duplicate call removed in #661.
+
+**Live QA validation (2026-06-19):** BUG-A and BUG-B confirmed working against production
+Render endpoint. BUG-C and BUG-D code-confirmed (egress throttle prevented full E2E).
+23 unit tests in `tests/test_p0_context_bugs.py` — all passing in CI.
 
 ## BUG-04 Unauthorized Profile Mutation — RESOLVED (2026-06-19)
 
@@ -166,11 +186,9 @@ Command:  curl -fsS -X POST -H "X-Cron-Secret: $RICO_CRON_SECRET" \
 | `initialEmail` prop + Suspense on login page | ✅ on main |
 | TagInputField chips for profile page | ✅ on main |
 
-**Known non-blocking startup warning (separate cleanup, do not fix here):**
-```
-migration_failed label=028_performance_indexes: column "job_id" does not exist
-```
-Pre-existing schema gap. Does not affect runtime. Track separately.
+**028_performance_indexes startup warning — FIXED in PR #662:**
+`job_id` → `searched_at DESC` in the `user_job_context` index.
+`user_job_context` never had a `job_id` column; the correct column is `searched_at`.
 
 ## On-hold PRs
 
@@ -250,7 +268,8 @@ BUG-04). Build green. Still draft — **do not merge without explicit approval.*
 | BUG-03 Google-intermediary link | #651/#652 | ✅ merged `b0807c0` |
 | BUG-04 unauthorized profile mutation | #655 | ✅ merged + prod confirmed `f4bacfa` |
 | Archived credential redaction | #656 | ✅ merged `e104135` (docs-only) |
-| BUG-05 public-chat onboarding loop | PR on `claude/ai-workspace-review-vtdjrb` | 🔄 in review |
+| BUG-05 public-chat onboarding loop | #657 | ✅ merged `f89c555`, live on Render |
+| P0 context-loss bugs (BUG-A/B/C/D) | #660 + #661 | ✅ merged `518a1a8` + `2bc489`; needs Render deploy |
 
 ## BUG-05 Public-Chat Onboarding Loop — RESOLVED (2026-06-19)
 
@@ -318,8 +337,8 @@ Do not start without explicit scope and branch assignment.
    profile before scoring. Needs dedicated issue + branch.
 4. **#355 Phase 2** — per-user interval settings + Telegram DM notifications.
 5. **#356 Inbox Intelligence** — design-only; connector design doc (#566) on `main`.
-6. **028_performance_indexes cleanup** — fix `column "job_id" does not exist` startup warning.
-7. **DB pooling re-enable** — caller-wide acquire/release refactor; separate PR after 028 cleanup.
+6. ~~**028_performance_indexes cleanup**~~ — fixed in #662 (2026-06-19).
+7. **DB pooling re-enable** — caller-wide acquire/release refactor; separate PR after 028 fix.
 
 ## Carry-over engineering backlog
 
