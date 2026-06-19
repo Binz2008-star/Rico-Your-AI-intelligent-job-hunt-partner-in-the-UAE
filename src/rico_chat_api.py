@@ -8224,6 +8224,14 @@ class RicoChatAPI:
         except Exception:
             logger.debug("rico_chat: failed to store search matches context user=%s", user_id)
 
+        # Also persist to DB so ordinal/detail follow-ups survive across workers
+        # and RICO_MEMORY_BACKEND=postgres mode (where JSON context is disabled).
+        try:
+            from src.repositories.user_job_context_repo import upsert_matches as _upsert_ctx_matches
+            _upsert_ctx_matches(user_id, formatted)
+        except Exception:
+            logger.debug("rico_chat: failed to upsert search matches to DB user=%s", user_id)
+
         # Persist to Neon so links survive restarts and postgres memory mode.
         try:
             from src.repositories.user_job_context_repo import upsert_matches
@@ -10050,6 +10058,14 @@ class RicoChatAPI:
             except Exception:
                 pass
         if not matches or not isinstance(matches, list):
+            # DB fallback: cross-worker / postgres-backend safe.
+            # Reads the most recently searched matches from user_job_context table.
+            try:
+                from src.repositories.user_job_context_repo import get_recent_matches as _get_recent_db_matches
+                matches = _get_recent_db_matches(user_id, limit=10, max_age_minutes=60) or []
+            except Exception:
+                pass
+        if not matches or not isinstance(matches, list):
             msg = (
                 "لا يوجد بحث حديث في جلستك. ابدأ بالبحث عن وظيفة وسأعرض التفاصيل."
                 if arabic else
@@ -10088,6 +10104,12 @@ class RicoChatAPI:
             lines.append(f"\n**Worth checking:**\n{worth_check}")
         if apply_url:
             lines.append(f"\n[Apply now]({apply_url})")
+        else:
+            source_url = job.get("source_url") or ""
+            if source_url:
+                lines.append(f"\n_No direct apply link — [view source listing]({source_url})_")
+            else:
+                lines.append("\n_No apply link available for this listing. Check the company careers page directly._")
         msg = "\n".join(lines)
         self._append_chat(user_id, "assistant", msg)
         return {"type": "job_detail", "message": msg, "job": job}
@@ -15939,7 +15961,28 @@ class RicoChatAPI:
                 pass
             return response
 
-        # unknown role
+        # unknown role — check if text is actually a company name from recent matches
+        # before emitting the "not a job role" error. Catches "Majid Al Futtaim",
+        # "ADNOC", "Etisalat" typed without "jobs at" prefix.
+        try:
+            _role_ctx = self._get_recent_context(user_id)
+            _role_companies = {
+                (m.get("company") or "").strip().lower()
+                for m in (_role_ctx.get("recent_search_matches") or [])
+                if m.get("company")
+            }
+            if not _role_companies:
+                from src.repositories.user_job_context_repo import get_recent_matches as _grm
+                for _dbm in _grm(user_id, limit=10, max_age_minutes=60):
+                    if _dbm.get("company"):
+                        _role_companies.add((_dbm["company"]).strip().lower())
+            if role_lower in _role_companies:
+                return self._handle_company_search(
+                    user_id, profile, f"jobs at {role_text}",
+                )
+        except Exception:
+            pass
+
         target_roles = self._as_list(self._profile_value(profile, "target_roles"))
         suggestion = ""
         if target_roles:
