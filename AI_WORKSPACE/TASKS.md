@@ -56,6 +56,552 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+> **Batch: UI/UX Live Audit (2026-06-19).** Tasks 022–041 below are sourced from
+> `docs/audits/ui-ux-live-audit-2026-06-19.md`. Listed in priority order (table items
+> 022–035, then secondary items 036–041), not strict ID order. All start at `proposed`;
+> assign a branch before starting. File paths are best-guess starting points to confirm.
+
+### TASK-20260619-022 — Clickable option buttons in chat (replace A/B/C/D typing)
+
+Status: proposed
+Owner: unassigned
+Branch: —
+Issue/PR: —
+Priority: 🔴 Critical · Effort: Low · Audit §1-A
+
+#### Objective
+Render Rico's multi-choice replies as inline tappable action buttons instead of numbered/lettered text the user has to type.
+
+#### Context
+- Likely files: `apps/web/app/command/page.tsx`, `apps/web/lib/api.ts`; response shaping in `src/rico_chat_api.py` / `src/services/chat_service.py`.
+- Audit: `docs/audits/ui-ux-live-audit-2026-06-19.md` §1-A.
+- Existing behavior: choices shown as plain text; typing "A"/"1" can misroute (relates to BUG-02).
+
+#### Acceptance criteria
+- [ ] Multi-choice responses render as buttons below the message.
+- [ ] One tap dispatches the choice; no typing path required.
+- [ ] BUG-02 misrouting avoided from the user's perspective.
+
+#### Verification
+- [ ] `npm run build` in `apps/web`.
+- [ ] Local smoke: tapping a choice triggers the correct action.
+
+---
+
+### TASK-20260619-023 — Real fit-score badge on job cards
+
+Status: proposed
+Owner: unassigned
+Branch: —
+Issue/PR: —
+Priority: 🔴 Critical · Effort: Medium · Audit §1-B
+
+#### Objective
+Show a per-job fit score (e.g. `82% match`) on each job card, with a matched-skills / gaps / location breakdown on expand — replacing the boilerplate "Role title aligns with your target".
+
+#### Context
+- Likely files: job card rendering in `apps/web/app/command/page.tsx`; score source `src/api/routers/jobs.py`, scoring in `src/run_daily.py` / `src/rico_repo_adapter.py`.
+- Audit: §1-B.
+- Existing behavior: every card shows identical boilerplate, no differentiation.
+
+#### Acceptance criteria
+- [ ] Each card shows a numeric fit-score badge (top-right).
+- [ ] Expand reveals ✅ matched skills / ⚠️ gaps / 📍 location match.
+- [ ] Score is real (from backend scoring), not hardcoded.
+
+#### Verification
+- [ ] `npm run build` in `apps/web`.
+- [ ] Backend tests for the score field if API shape changes (`python -m pytest tests/ -q`).
+- [ ] Local smoke: distinct scores across cards.
+
+---
+
+### TASK-20260619-024 — Sidebar widgets fetch/render on every mount
+
+Status: proposed
+Owner: unassigned
+Branch: —
+Issue/PR: —
+Priority: 🟠 High · Effort: Low · Audit §1-D
+
+#### Objective
+READINESS and PIPELINE sidebar widgets must load on every navigation to `/command`, not only on fresh session load (no more blank grey boxes).
+
+#### Context
+- Likely files: `apps/web/components/layout/AppSidebar.tsx`, `apps/web/hooks/useSidebarStatus.ts`.
+- Audit: §1-D.
+- Existing behavior: widgets blank on re-navigation; data fetched only on first session load.
+
+#### Acceptance criteria
+- [ ] Widgets refetch on mount/navigation.
+- [ ] Skeleton shimmer shown while loading (no empty grey boxes).
+- [ ] Error state handled gracefully.
+
+#### Verification
+- [ ] `npm run build` in `apps/web`.
+- [ ] Local smoke: navigate away and back to `/command`; widgets repopulate.
+
+---
+
+### TASK-20260619-025 — "Mark as Applied" inline CTA on pipeline cards
+
+Status: proposed
+Owner: unassigned
+Branch: —
+Issue/PR: —
+Priority: 🟠 High · Effort: Low · Audit §2-D
+
+#### Objective
+Promote the "Did you apply?" nudge to a distinct emerald "✓ Mark as Applied" CTA directly under the job title when status is "Link opened".
+
+#### Context
+- Likely files: `apps/web/app/flow/page.tsx`; action dispatch via `src/api/routers/actions.py` → `agent_runtime.handle_action()` (do not call repo layer directly).
+- Audit: §2-D.
+- Existing behavior: nudge is small grey text at the bottom of the card.
+
+#### Acceptance criteria
+- [ ] Visible CTA button below the title for "Link opened" cards.
+- [ ] Tapping it advances the card to "Applied" idempotently via `agent_runtime`.
+- [ ] Button hidden once status ≥ Applied.
+
+#### Verification
+- [ ] `npm run build` in `apps/web`.
+- [ ] `python -m pytest tests/test_agent_runtime.py -q` if action path touched.
+- [ ] Local smoke: mark applied, stage updates.
+
+---
+
+### TASK-20260619-026 — Profile conflict banner at top of page
+
+Status: proposed
+Owner: unassigned
+Branch: —
+Issue/PR: —
+Priority: 🟠 High · Effort: Low · Audit §3-B
+
+#### Objective
+Surface active preference conflicts (excluded keyword vs target role, invalid city, too many roles) as a banner at the top of Profile, expandable to one-tap fixes.
+
+#### Context
+- Likely files: `apps/web/app/profile/page.tsx`; conflict detection currently inline in the preference form.
+- Audit: §3-B.
+- Existing behavior: warnings buried as small orange text inside the form.
+
+#### Acceptance criteria
+- [ ] Banner shows count + "Fix now →" when conflicts exist.
+- [ ] Expand lists each conflict with a quick fix.
+- [ ] No banner when there are zero conflicts.
+
+#### Verification
+- [ ] `npm run build` in `apps/web`.
+- [ ] Local smoke: induce a conflict; banner appears.
+
+---
+
+### TASK-20260619-027 — Input validation for City + Target roles (Settings/Profile)
+
+Status: proposed
+Owner: unassigned
+Branch: —
+Issue/PR: —
+Priority: 🟠 High · Effort: Low · Audit §5-A
+
+#### Objective
+Stop garbage preferences: validate City against a UAE city list, cap Target roles at 3–4 with a counter, and warn when an excluded keyword matches a target role.
+
+#### Context
+- Likely files: `apps/web/app/settings/page.tsx` (and Profile prefs); backend `src/api/routers/settings.py`, `src/api/routers/user.py`.
+- Audit: §5-A.
+- Existing behavior: City accepted "hello"; 8 target roles accepted with no cap.
+
+#### Acceptance criteria
+- [ ] City rejects unrecognized values with inline error (UAE list).
+- [ ] Target roles capped (3–4) with "n/4" counter.
+- [ ] Real-time warning on excluded-keyword vs target-role overlap.
+- [ ] Backend validates too (not client-only).
+
+#### Verification
+- [ ] `npm run build` in `apps/web`.
+- [ ] `python -m pytest tests/ -q` for settings/user validation.
+- [ ] Local smoke: invalid city + 5th role both rejected.
+
+---
+
+### TASK-20260619-028 — Search timeout / progress indicator + reliable fallback
+
+Status: proposed
+Owner: unassigned
+Branch: —
+Issue/PR: —
+Priority: 🟠 High · Effort: Low · Audit §1-C
+
+#### Objective
+Replace the indefinite "Searching now…" spinner with a visible countdown/progress, falling back to the recovery buttons after ~30s.
+
+#### Context
+- Likely files: `apps/web/app/command/page.tsx`, `apps/web/lib/api.ts`.
+- Audit: §1-C.
+- Existing behavior: spinner runs indefinitely; fallback buttons exist but are not guaranteed to appear.
+
+#### Acceptance criteria
+- [ ] Visible elapsed/countdown indicator during search.
+- [ ] After ~30s, fallback UI ("Suggest related roles" / "Find jobs from my CV") always shows.
+- [ ] Indicator clears on response.
+
+#### Verification
+- [ ] `npm run build` in `apps/web`.
+- [ ] Local smoke: simulate slow/hung search; fallback appears.
+
+---
+
+### TASK-20260619-029 — Profile completeness score: single source of truth
+
+Status: proposed
+Owner: unassigned
+Branch: —
+Issue/PR: —
+Priority: 🟠 High · Effort: Low · Audit §3-A
+
+#### Objective
+Reconcile the sidebar (71%) vs profile (54%) completeness mismatch into one calculation shown consistently everywhere, with a "what counts" tooltip.
+
+#### Context
+- Likely files: `apps/web/hooks/useSidebarStatus.ts`, `apps/web/app/profile/page.tsx`; backend `src/api/routers/stats.py` / user profile.
+- Audit: §3-A.
+- Existing behavior: two different numbers for the same concept.
+
+#### Acceptance criteria
+- [ ] One calculation method (ideally backend-computed) used by both surfaces.
+- [ ] Identical % on sidebar and profile.
+- [ ] Tooltip explains contributing fields.
+
+#### Verification
+- [ ] `npm run build` in `apps/web`.
+- [ ] `python -m pytest tests/ -q` if score moves to backend.
+- [ ] Local smoke: both surfaces match.
+
+---
+
+### TASK-20260619-030 — Navy/indigo design system (move off near-black + gold)
+
+Status: proposed
+Owner: unassigned
+Branch: —
+Issue/PR: —
+Priority: 🟡 Medium · Effort: Medium · Audit §6-A
+
+#### Objective
+Shift the theme from near-black `#06060c` + gold/amber to a deep navy base (`#0a0e1a`) with indigo accents and clean cards — a professional career-tool look. Coordinate with the pending style PR.
+
+#### Context
+- Likely files: `apps/web/app/globals.css`, Tailwind theme/config, shared UI tokens.
+- Audit: §6-A. Use the `/ui-ux-pro-max` skill for palette/contrast guidance.
+- Existing behavior: gaming/entertainment feel; references current colors as the baseline to move away from.
+
+#### Acceptance criteria
+- [ ] Centralized theme tokens updated to navy/indigo.
+- [ ] Contrast meets 4.5:1 for body text in both modes.
+- [ ] No regressions across audited screens.
+
+#### Verification
+- [ ] `npm run build` in `apps/web`.
+- [ ] Visual check across `/command`, `/flow`, `/profile`, `/settings` (light + dark).
+
+---
+
+### TASK-20260619-031 — Demote "Link Opened" from primary pipeline stage
+
+Status: proposed
+Owner: unassigned
+Branch: —
+Issue/PR: —
+Priority: 🟡 Medium · Effort: Low · Audit §2-A
+
+#### Objective
+Stop "Link opened" dominating the pipeline; visible stages should be Saved → Applied → Interview → Offer, with link-open kept only as card metadata (timestamp).
+
+#### Context
+- Likely files: `apps/web/app/flow/page.tsx`; stage model in `src/api/routers/applications.py`.
+- Audit: §2-A (see also 037 for the zero-stat grid).
+- Existing behavior: 38/39 items sit at "Link opened".
+
+#### Acceptance criteria
+- [ ] "Link opened" no longer a primary visible stage.
+- [ ] Link-open shown as metadata/timestamp on the card.
+- [ ] Existing items remapped sensibly (no data loss).
+
+#### Verification
+- [ ] `npm run build` in `apps/web`.
+- [ ] `python -m pytest tests/ -q` if stage model changes.
+- [ ] Local smoke: pipeline reads cleanly.
+
+---
+
+### TASK-20260619-032 — CV role-mismatch warning on My Files
+
+Status: proposed
+Owner: unassigned
+Branch: —
+Issue/PR: —
+Priority: 🟡 Medium · Effort: Low · Audit §4-A
+
+#### Objective
+When the active CV's parsed role doesn't match the profile's target roles, show a yellow banner on My Files suggesting a better-matched CV.
+
+#### Context
+- Likely files: `apps/web/app/upload/page.tsx`; parsed-role data from CV parse + profile target roles.
+- Audit: §4-A.
+- Existing behavior: mismatch mentioned only in chat, never on My Files.
+
+#### Acceptance criteria
+- [ ] Banner appears when active CV role ∉ target roles.
+- [ ] Banner names the CV's role and the target roles.
+- [ ] No banner when they align.
+
+#### Verification
+- [ ] `npm run build` in `apps/web`.
+- [ ] Local smoke: mismatched CV → banner shows.
+
+---
+
+### TASK-20260619-033 — First-use onboarding checklist
+
+Status: proposed
+Owner: unassigned
+Branch: —
+Issue/PR: —
+Priority: 🟡 Medium · Effort: Medium · Audit §6-B
+
+#### Objective
+Give new users a dismissable "Get started" checklist (Upload CV / Set target roles / Run first search) that auto-dismisses when complete.
+
+#### Context
+- Likely files: `apps/web/app/command/page.tsx` or `apps/web/components/layout/AppSidebar.tsx`.
+- Audit: §6-B.
+- Existing behavior: empty `/command` with no first-run guidance.
+
+#### Acceptance criteria
+- [ ] Checklist shows for new users (CV / roles / first search).
+- [ ] Items tick as completed; auto-dismiss when all done.
+- [ ] Manually dismissable and stays dismissed.
+
+#### Verification
+- [ ] `npm run build` in `apps/web`.
+- [ ] Local smoke: fresh-user state shows checklist.
+
+---
+
+### TASK-20260619-034 — Cold-start amber banner
+
+Status: proposed
+Owner: unassigned
+Branch: —
+Issue/PR: —
+Priority: 🟡 Medium · Effort: Low · Audit §1-E
+
+#### Objective
+Make the idle/cold-start warning a visible amber banner with an ETA ("⚡ Rico is starting up — your first search may take ~45 seconds"), auto-dismissing on first response.
+
+#### Context
+- Likely files: `apps/web/app/command/page.tsx`.
+- Audit: §1-E.
+- Existing behavior: warning is small grey text most users miss.
+
+#### Acceptance criteria
+- [ ] Amber banner with ETA on first request after idle.
+- [ ] Auto-dismisses once the first response arrives.
+
+#### Verification
+- [ ] `npm run build` in `apps/web`.
+- [ ] Local smoke: cold-start path shows banner.
+
+---
+
+### TASK-20260619-035 — WhatsApp support → floating help icon
+
+Status: proposed
+Owner: unassigned
+Branch: —
+Issue/PR: —
+Priority: 🟡 Low · Effort: Low · Audit §6-D
+
+#### Objective
+Move "Support on WhatsApp" out of the sidebar into a floating bottom-right help icon, freeing the sidebar for navigation only.
+
+#### Context
+- Likely files: `apps/web/components/layout/AppSidebar.tsx`; new floating help component.
+- Audit: §6-D.
+- Existing behavior: WhatsApp link wedged between nav and account items.
+
+#### Acceptance criteria
+- [ ] Floating help icon (bottom-right) opens WhatsApp support.
+- [ ] Sidebar no longer carries the WhatsApp row.
+
+#### Verification
+- [ ] `npm run build` in `apps/web`.
+- [ ] Local smoke: help icon present; sidebar cleaned.
+
+---
+
+### TASK-20260619-036 — Pipeline stage editing: drag-and-drop + larger pill
+
+Status: proposed
+Owner: unassigned
+Branch: —
+Issue/PR: —
+Priority: 🟡 Medium · Effort: Medium · Audit §2-B
+
+#### Objective
+Improve stage changes: drag-and-drop between columns in Board view, and a larger clickable stage pill in List view (replace the small dark dropdown).
+
+#### Context
+- Likely files: `apps/web/app/flow/page.tsx`; actions via `agent_runtime.handle_action()`.
+- Audit: §2-B.
+- Existing behavior: small `Link opened ▼` dropdown blends into the dark card.
+
+#### Acceptance criteria
+- [ ] Board view supports drag-and-drop across columns.
+- [ ] List view uses a larger, discoverable stage pill.
+- [ ] Stage updates persist idempotently.
+
+#### Verification
+- [ ] `npm run build` in `apps/web`.
+- [ ] Local smoke: drag a card; stage persists.
+
+---
+
+### TASK-20260619-037 — Collapse zero-value stat boxes on Pipeline
+
+Status: proposed
+Owner: unassigned
+Branch: —
+Issue/PR: —
+Priority: 🟡 Medium · Effort: Low · Audit §2-C
+
+#### Objective
+Reduce the 9-box stat grid noise: lead with Applied / Interview / Offer, and collapse zero-value boxes into a compact secondary row.
+
+#### Context
+- Likely files: `apps/web/app/flow/page.tsx`.
+- Audit: §2-C (pairs with 031).
+- Existing behavior: eight zero boxes dominate the screen.
+
+#### Acceptance criteria
+- [ ] Primary row shows the meaningful non-zero stats.
+- [ ] Zero-value stats collapsed/secondary, not dominant.
+
+#### Verification
+- [ ] `npm run build` in `apps/web`.
+- [ ] Local smoke: grid reads cleanly with mostly-zero data.
+
+---
+
+### TASK-20260619-038 — "Active CV" chip on Profile page
+
+Status: proposed
+Owner: unassigned
+Branch: —
+Issue/PR: —
+Priority: 🟡 Low · Effort: Low · Audit §3-C
+
+#### Objective
+Show which CV is actively used for matching via an "Active CV: [filename]" chip near the top of Profile, linking to My Files.
+
+#### Context
+- Likely files: `apps/web/app/profile/page.tsx`; active-CV state shared with `/upload`.
+- Audit: §3-C.
+- Existing behavior: active CV only discoverable on My Files.
+
+#### Acceptance criteria
+- [ ] Chip shows active CV filename on Profile.
+- [ ] Chip links to My Files.
+
+#### Verification
+- [ ] `npm run build` in `apps/web`.
+- [ ] Local smoke: chip reflects the active CV.
+
+---
+
+### TASK-20260619-039 — CV parse-confidence indicator + review
+
+Status: proposed
+Owner: unassigned
+Branch: —
+Issue/PR: —
+Priority: 🟡 Medium · Effort: Medium · Audit §4-B
+
+#### Objective
+Signal CV parse quality ("Parsed: Good / Needs review") and offer a "Review parsed data" view so users can verify extraction (e.g. the bogus "30 yrs exp").
+
+#### Context
+- Likely files: `apps/web/app/upload/page.tsx`; parser `src/cv_parser.py` (sync; call via `run_in_executor`).
+- Audit: §4-B.
+- Existing behavior: cards show counts with no confidence signal.
+
+#### Acceptance criteria
+- [ ] Confidence indicator on each CV card.
+- [ ] "Review parsed data" shows extracted fields.
+- [ ] Obvious outliers flagged.
+
+#### Verification
+- [ ] `npm run build` in `apps/web`.
+- [ ] `python -m pytest tests/ -q` if parse output shape changes.
+- [ ] Local smoke: review panel shows parsed fields.
+
+---
+
+### TASK-20260619-040 — Fit-score slider guidance labels (Settings)
+
+Status: proposed
+Owner: unassigned
+Branch: —
+Issue/PR: —
+Priority: 🟡 Low · Effort: Low · Audit §5-B
+
+#### Objective
+Add dynamic guidance under the fit-score slider explaining what the threshold hides (e.g. "At 80%, Rico hides 60–79% matches — Recommended: 60%").
+
+#### Context
+- Likely files: `apps/web/app/settings/page.tsx`.
+- Audit: §5-B.
+- Existing behavior: slider shows a % with no explanation.
+
+#### Acceptance criteria
+- [ ] Guidance text updates live with the slider value.
+- [ ] Recommended value surfaced.
+
+#### Verification
+- [ ] `npm run build` in `apps/web`.
+- [ ] Local smoke: drag slider; guidance updates.
+
+---
+
+### TASK-20260619-041 — "Ask Rico" sidebar visual hierarchy
+
+Status: proposed
+Owner: unassigned
+Branch: —
+Issue/PR: —
+Priority: 🟡 Low · Effort: Low · Audit §6-C
+
+#### Objective
+Make "Ask Rico" the visually dominant sidebar action (filled button, larger), demoting nav items (Pipeline/Applications/Profile) to secondary weight.
+
+#### Context
+- Likely files: `apps/web/components/layout/AppSidebar.tsx`, `apps/web/components/layout/app-nav.ts`.
+- Audit: §6-C.
+- Existing behavior: "Ask Rico" looks like every other nav row.
+
+#### Acceptance criteria
+- [ ] "Ask Rico" rendered as a distinct primary button.
+- [ ] Nav items visually secondary.
+
+#### Verification
+- [ ] `npm run build` in `apps/web`.
+- [ ] Visual check of the sidebar hierarchy.
+
+---
+
 ### TASK-20260619-021 — BUG-01 Cover-letter company-search routing guard (Hard Audit)
 
 Status: done
