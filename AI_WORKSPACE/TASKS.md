@@ -56,6 +56,63 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260619-021 — BUG-01 Cover-letter company-search routing guard (Hard Audit)
+
+Status: done
+Owner: Claude
+Branch: `claude/clever-galileo-gii41r` (merged → `40636ba` via PR #648)
+Issue/PR: #648
+
+#### Objective
+Fix BUG-01 from the Hard Audit: a cover letter prompt containing "role at [Company]"
+(e.g. "Draft me a cover letter for the HSE MANAGER - DATA CENTERS role at Dutco Group")
+triggered `_COMPANY_SEARCH_RE` and returned job search results instead of a cover letter.
+
+#### Root cause
+Pre-classifier `_COMPANY_SEARCH_RE` pattern-2
+(`\b(?:jobs?|roles?|vacancies|openings?|positions?)\s+at\s+[A-Z][A-Za-z]`) matched
+"role at Dutco Group" because `roles?` also matches the singular "role". This check fires
+before `classify_intent` and before the cover-letter slot extractor, so cover letter
+prompts with "role at" were silently routed to company search.
+
+#### Fix
+- New early-exit block inserted before `_COMPANY_SEARCH_RE` check: when
+  `_COVER_LETTER_COMMAND_RE` matches and slot extractor returns results, generate the
+  letter immediately (or ask only for the missing field).
+- Belt-and-suspenders: `_COMPANY_SEARCH_RE` guard also gets
+  `not _COVER_LETTER_COMMAND_RE.search(message)`.
+- Regression tests: `TestBug01CoverLetterCompanySearchGuard` (5 new tests in
+  `tests/test_cover_letter_slot_extraction.py`; 15/15 total pass).
+
+#### Constraints
+- No DB schema changes. No migrations. No frontend changes.
+- No #640/#641. No Phase 2. No BUG-02/BUG-03 in this PR.
+- Changed files limited to: `src/rico_chat_api.py`,
+  `tests/test_cover_letter_slot_extraction.py`, `AI_WORKSPACE/CURRENT_STATE.md`.
+
+#### Verification (2026-06-19)
+- [x] 15/15 tests in `test_cover_letter_slot_extraction.py` PASS.
+- [x] CI green (pytest + playwright) on PR #648.
+- [x] Merged to main as `40636ba6ed2fd15cf135ef38030c6e1d2641ecab`.
+- [x] Render deploy run #29 (09:34Z): `/health` 200, `/version` = `40636ba`.
+- [x] bug01-smoke.yml run #1 (27818302534, 09:45Z): **4/4 PASS**
+      (version check + cover-letter smoke + company-search regression + health).
+- [x] Manual app smoke (user-confirmed): cover letter drafted, no job_results,
+      no Dutco company search, no unrelated apply links, `/flow` uncontaminated.
+- [x] Company-search regression confirmed: "find jobs at Dutco Group" still works
+      normally (smoke step 3 PASS + user manual test).
+
+#### Handoff notes
+- Changed files: `src/rico_chat_api.py`, `tests/test_cover_letter_slot_extraction.py`,
+  `AI_WORKSPACE/CURRENT_STATE.md`.
+- bug01-smoke.yml was a one-off verification workflow; pushed to main then deleted
+  (commit `3e997073`) after smoke PASS.
+- Rollback: revert PR #648 and re-deploy.
+- BUG-02 and BUG-03 from the Hard Audit are now unblocked (smoke passed).
+  Do not start without explicit scope and branch assignment.
+
+---
+
 ### TASK-20260619-020 — DB pool AttributeError hotfix (Issue #644)
 
 Status: done

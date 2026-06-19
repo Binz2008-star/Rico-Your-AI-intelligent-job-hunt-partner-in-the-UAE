@@ -4,18 +4,53 @@ _Last updated: 2026-06-19_
 
 ## Production baseline
 
-- **Repository main HEAD:** `7f80cc63528079fc07c5e10ced97a926002eb41a`
-  (cleanup/docs — PR #647). Recent lineage:
+- **Repository main HEAD:** `3e997073b9713f269031566f0d1cb6103ccb346b`
+  (chore: remove bug01-smoke.yml after one-shot use). Recent lineage:
+  `3e997073` (remove bug01-smoke.yml, CI-only) ←
+  `aa9281bf` (add bug01-smoke.yml, CI-only) ←
+  `40636ba` (#648 BUG-01 cover-letter guard) ←
   `7f80cc6` (#647 cleanup/docs) ← `ac8c8ad` (#646 workflow secrets cleanup) ←
   `26124ed` (#644 DB hotfix) ← `3fbe2ea` (#643 workspace sync) ←
   `3958376` (#642 followup-smoke.yml) ← `9c003a7` (#638 system-overhaul-v1+v2) ←
   `9d7c1e0` (overhaul v1) ← earlier.
-- **Production backend deployed SHA:** `26124ed180a77658be21cfa499e5629bd6a816ed`
-  (latest runtime-impacting PR: #644 DB hotfix). PRs #646 and #647 are
-  docs/workflow-only — no Render deploy needed or triggered for them.
-  Manual Render Deploy runs #27 and #28 succeeded (2026-06-19, 07:55Z and 08:01Z).
-  `/health` 200, `/version` = `26124ed`. No `_rico_pool` AttributeError in logs.
+- **Production backend deployed SHA:** `40636ba6ed2fd15cf135ef38030c6e1d2641ecab`
+  (latest runtime-impacting PR: #648 BUG-01 cover-letter guard). Render deploy run #29
+  triggered 2026-06-19T09:34Z. `/health` 200, `/version` = `40636ba`.
+  `aa9281bf` and `3e997073` are CI-workflow-only — no Render deploy needed.
 - **Deployed to Vercel:** ✅ live — frontend at `ricohunt.com`.
+
+## BUG-01 Cover-Letter Company-Search Guard — RESOLVED (2026-06-19)
+
+**Symptom:** Cover letter prompts like
+"Draft me a cover letter for the HSE MANAGER - DATA CENTERS role at Dutco Group"
+triggered a company job search instead of generating a cover letter.
+
+**Root cause:** Pre-classifier `_COMPANY_SEARCH_RE` pattern-2
+(`\b(?:jobs?|roles?|vacancies|openings?|positions?)\s+at\s+[A-Z][A-Za-z]`) matched
+"role at Dutco Group" before the cover-letter slot extractor ran.
+
+**Fix (PR #648, merged `40636ba6ed2fd15cf135ef38030c6e1d2641ecab`, 2026-06-19T09:34Z):**
+- New early-exit block: when `_COVER_LETTER_COMMAND_RE` matches, extract slots and
+  either generate the letter (title + company present) or ask only for the missing
+  field — before `_COMPANY_SEARCH_RE` is evaluated.
+- Belt-and-suspenders guard: `_COMPANY_SEARCH_RE` check now also requires
+  `not _COVER_LETTER_COMMAND_RE.search(message)`.
+- 5 new regression tests in `TestBug01CoverLetterCompanySearchGuard`
+  (15/15 total in `test_cover_letter_slot_extraction.py`).
+
+**Verification chain:**
+- Pre-merge: 15/15 tests PASS.
+- Render deploy run #29 (09:34Z, SHA `40636ba`): all steps PASS, `/health` 200.
+- bug01-smoke.yml run #1 (27818302534, 09:45Z): **4/4 PASS**
+  - `/version` = `40636ba6ed2fd15cf135ef38030c6e1d2641ecab` ✅
+  - Cover-letter smoke: `type=onboarding` (not `job_results`) ✅
+  - Company-search regression: `type=onboarding` (not `draft_message`/`cover_letter_prompt`) ✅
+  - `/health` = 200 ✅
+- Manual app smoke (user-confirmed 2026-06-19): "Draft me a cover letter for the HSE
+  MANAGER - DATA CENTERS role at Dutco Group" → Rico drafted cover letter, no job_results,
+  no Dutco company search, no unrelated apply links. ✅
+- `/flow` contamination: none — smoke session had no profile, no jobs surfaced or tracked.
+- bug01-smoke.yml cleaned up from main (commit `3e997073`).
 
 ## #644 Production Incident — RESOLVED (2026-06-19)
 
@@ -93,7 +128,7 @@ Pre-existing schema gap. Does not affect runtime. Track separately.
 - **PR #640** — on hold, awaiting explicit approval. Do not merge.
 - **PR #641** — on hold, awaiting explicit approval. Do not merge.
 
-## Confirmed production state (as of 2026-06-19)
+## Confirmed production state (as of 2026-06-19, updated post-#648)
 
 | Feature | PR | Status |
 |---|---|---|
@@ -111,11 +146,13 @@ Pre-existing schema gap. Does not affect runtime. Track separately.
 | Follow-up Reminders Phase 1 | #355/#636 | ✅ **Phase 1 COMPLETE** |
 | System overhaul v1+v2 | #638 | ✅ merged + deployed `26124ed` |
 | DB pool AttributeError hotfix | #644 | ✅ merged + deployed `26124ed` |
+| BUG-01 cover-letter company-search guard | #648 | ✅ merged + deployed `40636ba` |
 
 ## CI health
 
 - QA Tests (pytest + playwright): green on main.
 - followup-smoke.yml: 9/9 PASS on `26124ed` (run #2, 2026-06-19).
+- bug01-smoke.yml: **4/4 PASS** on `40636ba` (run #1, 2026-06-19). **Removed** after one-shot use.
 - Render deploy: `workflow_dispatch` only — must be triggered manually after each release.
 - cron-test.yml: **removed** (one-off #644 verification, cleaned up 2026-06-19).
 
