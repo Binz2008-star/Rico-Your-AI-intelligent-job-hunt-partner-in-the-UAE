@@ -58,7 +58,7 @@ Issue/PR: <link or number>
 
 ### TASK-20260618-018 — Follow-up Reminders, Phase 1 (Issue #355)
 
-Status: rollout in progress (migration + secret done; deploy verifying; cron/smoke pending)
+Status: rollout in progress (migration ✅ + secret ✅ + prod deploy 9d7c1e0 VERIFIED ✅; smoke + cron pending)
 Owner: Claude
 Branch: `feat/follow-up-reminders-355` (merged → main `a95c413`, included in current main `9d7c1e0`)
 Issue/PR: #355
@@ -94,17 +94,26 @@ Both gated items approved: (1) migration adding `applied_at`; (2) `RICO_CRON_SEC
    SQL Editor by owner (sandbox has no Neon egress).
 2. [x] **`RICO_CRON_SECRET` set on Render** (strong random value generated for owner; not
    committed / not logged).
-3. [~] **Render redeploy in progress** — auto-triggered by the env-var change. Ships current
-   main `9d7c1e0` (includes #636 `a95c413` + migration-dependent code). **Pending:** confirm
-   `/version` commit = `9d7c1e0` and `/health` 200.
-4. [ ] **Production smoke** (after deploy live): aged `applied` job → `follow_up_due`; fresh
-   `applied` stays; sweep idempotent; `/flow` shows `follow_up_due`; no duplicates; cron-secret
-   guard rejects missing/wrong, accepts correct.
-5. [ ] **Wire Render Cron** — only after deploy + smoke pass AND explicit approval.
+3. [x] **Production live on `9d7c1e0` — VERIFIED 2026-06-19.** `/health` = 200; `/version`
+   `commit=9d7c1e0660d8822d454e412c0514dbceea9cbdb0`. Verified via `ricohunt.com/proxy/*`
+   using the Vercel MCP fetch (sandbox is origin-IP-blocked → 403 direct); response header
+   `x-render-origin-server: uvicorn` confirmed the real Render backend (not a Vercel cache).
+   #636 migration-dependent code confirmed present at `9d7c1e0`.
+4. [ ] **Production smoke** ⏳ pending: aged `applied` job → `follow_up_due`; fresh `applied`
+   stays; sweep idempotent; `/flow` shows `follow_up_due`; no duplicates; cron-secret guard
+   rejects missing/wrong, accepts correct.
+5. [ ] **Wire Render Cron** ⏳ not configured — only after smoke pass AND explicit approval.
+6. [ ] **Phase 2** ⏳ not started.
 
-Note: an external commit `9d7c1e0` "System overhaul v1: Telegram DM replies, DB indexes,
-job pagination" landed on main outside this session (not authored here). It is now the deploy
-target; its scope overlaps Phase 2 (Telegram) and should be reviewed separately.
+main / prod mismatch: main HEAD is now `9c003a7` (#638) but production is `9d7c1e0`.
+**#638 is merged but NOT live** — do not deploy #638 in this task.
+
+Risk note — external commit `9d7c1e0` / #638 (not authored here):
+- **Duplicate migration number `027`:** `027_followup_reminders.sql` (#636, mine) and
+  `027_performance_indexes.sql` (#638). `027_performance_indexes.sql` is **likely NOT applied
+  to Neon**. Recommend separate focused cleanup: renumber to `028_…` and review/apply separately.
+- Scope (Telegram DM replies, DB pooling/indexes, job pagination) overlaps #355 Phase 2 and
+  needs separate review before Phase 2.
 
 #### Original scope / blockers (now resolved)
 

@@ -4,21 +4,25 @@ _Last updated: 2026-06-19_
 
 ## Production baseline
 
-- **main HEAD:** `9d7c1e0` ("System overhaul v1: Telegram DM replies, DB indexes, job
-  pagination" — landed on main outside this session). Lineage includes:
-  `9d7c1e0` ← `a95c413` (#636 follow-up reminders Phase 1) ← `c8ea4fb` (#634) ←
-  `668d59dc` (#354) ← `01cff584` (#353) ← `62a679b` (production code baseline).
-- **#355 Phase 1 rollout in progress (2026-06-19):** migration 027 applied to Neon prod ✅,
-  `RICO_CRON_SECRET` set on Render ✅, Render redeploy auto-triggered by the env change
-  (ships `9d7c1e0`). **Pending:** verify `/version=9d7c1e0` + `/health` 200, then production
-  smoke; Render Cron not wired yet.
-- **⚠ Last AI-verified live commit was `c8ea4fb`** (Manual Render Deploy run #26, 2026-06-18:
-  `/version=c8ea4fb`, `/health` 200 — included #353/#354/#634). The current redeploy to
-  `9d7c1e0` is not yet AI-verified. Render is normally `workflow_dispatch` only; an env-var
-  change also triggers a redeploy.
-- **⚠ External change on main:** `9d7c1e0` ("System overhaul v1") was not authored in this
-  session; its scope (Telegram DM replies, DB indexes, job pagination) overlaps #355 Phase 2
-  and should be reviewed separately before relying on it.
+- **main HEAD:** `9c003a7` (#638 "System overhaul v1+v2: Telegram DM fix, DB pooling,
+  indexes, pagination, tag UX" — landed on main outside this session).
+- **Production live commit:** `9d7c1e0` — **VERIFIED 2026-06-19.** `/health` = 200 and
+  `/version` `commit=9d7c1e0660d8822d454e412c0514dbceea9cbdb0`. Verification done through
+  `ricohunt.com/proxy/*` via the Vercel MCP fetch (sandbox is origin-IP-blocked → 403 direct;
+  Vercel proxy reaches the backend). Response header `x-render-origin-server: uvicorn`
+  confirmed it hit the real Render backend, not a Vercel cache.
+- **⚠ main / prod mismatch:** main HEAD is `9c003a7` (#638) but production is `9d7c1e0`.
+  **#638 is merged but NOT live.** Do not deploy #638 in the current task.
+- **#355 Phase 1 rollout (2026-06-19):** migration 027 applied to Neon prod ✅,
+  `RICO_CRON_SECRET` set on Render ✅, production live on `9d7c1e0` ✅,
+  production smoke ⏳ pending, Render Cron ⏳ not configured, Phase 2 ⏳ not started.
+- **⚠ External commit risk (`9d7c1e0` / #638):** not authored in this session.
+  - **Duplicate migration number `027`:** `027_followup_reminders.sql` (#636, mine) and
+    `027_performance_indexes.sql` (#638). `027_performance_indexes.sql` is **likely NOT
+    applied to Neon**. Recommend a separate focused cleanup: renumber it to `028_…` and
+    review/apply it separately.
+  - Scope (Telegram DM replies, DB pooling/indexes, job pagination) overlaps #355 Phase 2 and
+    needs separate review before Phase 2 starts.
 - **Deployed to Render:** ✅ live — backend at `rico-job-automation-api.onrender.com`.
   Confirmed live 2026-06-17T22:12 UTC. All API routes 200 OK. CV quality warnings (#621)
   confirmed production-live. PR #625 (preferred_cities guard) not yet manually deployed to
