@@ -266,7 +266,7 @@ class TestRequireAdmin:
                  last_login_at=None,
              )):
             r = tc.post("/api/v1/auth/register",
-                        json={"email": "anon@rico.ai", "password": "pass1234xx"})
+                        json={"email": "anon@rico.ai", "password": "Pass1234xx"})
         assert r.status_code == 201
 
 
