@@ -1,0 +1,27 @@
+name: "#355 Follow-up Reminders Smoke (manual)"
+
+# Dispatch-only. Runs the #355 Phase 1 production smoke against the live backend
+# using test-safe, isolated data (a 5000-day-old test row swept with
+# interval_days=4000 so no real user job is touched). Always cleans up.
+# Never runs automatically.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Follow-up Reminders Phase 1 Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install --quiet psycopg2-binary
+      - name: Run #355 smoke
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RICO_CRON_SECRET: ${{ secrets.RICO_CRON_SECRET }}
+        run: python scripts/followup_smoke.py
