@@ -59,9 +59,23 @@ _Last updated: 2026-06-19_
 | Application Lifecycle Completion (partial) | #353 | ✅ search→opened + prepare→prepared smoke-PASS 2026-06-18 |
 | Apply-Link Verification | #354 | ✅ live and smoke-PASS (PR #632) |
 | Prepare→prepared persistence fix | #634 | ✅ live on `c8ea4fb` — smoke-PASS 2026-06-18 |
-| Follow-up Reminders Phase 1 | #636 | ✅ merged to main `a95c413` — owner deploy steps pending |
+| Follow-up Reminders Phase 1 | #636 | ✅ live on `9d7c1e0` — **production smoke PASS 9/9** (2026-06-19); Render Cron not yet wired |
 | System overhaul v1 (Telegram, indexes, pagination) | on main `9d7c1e0` | ✅ merged — Render deploy pending |
 | System overhaul v2 (pooling, email pre-fill, tag UX) | PR #638 | 🔄 draft PR — CI pending |
+
+## #355 Follow-up Reminders Phase 1 — production smoke PASS (2026-06-19)
+
+- Migration `027_followup_reminders.sql` applied to Neon production (3 columns + index, no data loss).
+- `RICO_CRON_SECRET` set on Render (and as a GitHub Actions secret for the smoke run).
+- Production verified live on `9d7c1e0`: `/health` 200, `/version` commit `9d7c1e0`
+  (via `ricohunt.com/proxy/*` Vercel MCP fetch; `x-render-origin-server: uvicorn`).
+- **Smoke PASS 9/9** via dispatch-only CI workflow `followup-smoke.yml` (#642), run
+  `27810675201`, test-safe isolated data (5000-day row, `interval_days=4000`):
+  guard 403/403/200, old→`follow_up_due`, fresh stays `applied`, idempotent `marked_due=0`,
+  no duplicate rows, `/flow`-backing status correct. Smoke test rows cleaned up.
+- **Render Cron: not configured** (gated on approval). **Phase 2: not started.**
+- Migration-collision concern RESOLVED — no duplicate number: follow-up reminders =
+  `027_followup_reminders.sql`; performance indexes = `028_performance_indexes.sql`.
 
 ## CI health
 
