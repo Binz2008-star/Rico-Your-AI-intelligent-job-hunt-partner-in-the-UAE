@@ -14,9 +14,8 @@ _Last updated: 2026-06-19_
   `631ce7d` (#649 BUG-02 A/B/C/D routing off-by-one) ←
   `3e997073` (remove bug01-smoke.yml, CI-only) ←
   `40636ba` (#648 BUG-01 cover-letter guard) ← earlier.
-- **Production backend deployed SHA:** `f4bacfafde4cdc8b42cb33da0490516f87db0ee3`
-  (BUG-04 — confirmed live via Vercel deployment `dpl_ArjxouNKhjYnVMb9tMg1bLS1MdXf`,
-  2026-06-19T15:51Z). `e104135` (#656) is docs-only — no Render deploy needed.
+- **Production backend deployed SHA:** `f89c555aa969f75f99ee8b7d0296bb7582c272cd`
+  (BUG-05 — confirmed live via Render manual deploy, 2026-06-19T~19:15Z).
 - **Deployed to Vercel:** ✅ live — frontend at `ricohunt.com` (`f4bacfa` confirmed).
 
 ## BUG-04 Unauthorized Profile Mutation — RESOLVED (2026-06-19)
@@ -273,7 +272,7 @@ string. Chat never progressed, ignored conversation history, and never routed to
    `streamStarted=false` but `responseApplied=true`; the `if (!streamStarted)` guard in the
    frontend fired a redundant second `sendChatPublic` call.
 
-**Fix (PR on branch `claude/ai-workspace-review-vtdjrb`, 2026-06-19):**
+**Fix (PR #657, merged `f89c555`, deployed to Render 2026-06-19):**
 - **Fix A** (`src/services/chat_service.py`): Added `_force_ai` gate — when legacy path is
   chosen AND `profile is None` AND `ctx.can_persist_profile is False`, redirect to
   `_conversational_ai_reply` so public users get real responses instead of the welcome loop.
