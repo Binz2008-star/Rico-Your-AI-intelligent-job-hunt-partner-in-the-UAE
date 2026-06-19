@@ -721,7 +721,11 @@ def rico_chat_stream_public(request: Request, payload: RicoPublicChatRequest) ->
                 user_id=user_id,
                 profile_context_present=profile is not None,
             )
-            if not decision.should_use_ai:
+            # Only take the legacy (non-streaming) path when the user has a profile.
+            # When profile is None the legacy classifier loops back to the onboarding
+            # welcome on every turn (no profile to persist for public sessions).
+            # Fall through to the AI streaming path so profileless guests get real replies.
+            if not decision.should_use_ai and profile is not None:
                 result = chat_service.send_message(ctx=ctx, message=payload.message, language=payload.language)
                 yield f'data: {_json.dumps({"type":"done","response":result})}\n\n'
                 return

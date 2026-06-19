@@ -971,7 +971,11 @@ export default function CommandPage() {
                 }
             }
 
-            if (!streamStarted) {
+            // Only fall back to the non-streaming endpoint when streaming truly
+            // produced nothing. A "done" event without tokens (legacy path) already
+            // called applyDoneResponse — responseApplied guards against a double call
+            // that would waste a rate-limit slot and could overwrite the first response.
+            if (!streamStarted && !responseApplied) {
                 const res: ChatApiResponse =
                     chatAudience === "authenticated"
                         ? await sendChat(trimmed, controller.signal, undefined, language)

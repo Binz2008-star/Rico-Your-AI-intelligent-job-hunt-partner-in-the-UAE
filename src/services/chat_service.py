@@ -138,7 +138,12 @@ def send_message(
         profile_context_present=profile_present,
     )
 
-    if decision.should_use_ai:
+    # When the legacy path is chosen but there is no profile and profile writes are
+    # disabled (public/guest session), the legacy classifier loops back to the
+    # onboarding welcome on every turn because it can never persist state.
+    # Route to conversational AI instead so public users get real responses.
+    _force_ai = not decision.should_use_ai and profile is None and not ctx.can_persist_profile
+    if decision.should_use_ai or _force_ai:
         result = _conversational_ai_reply(ctx=ctx, message=message, profile=profile, language=language)
     else:
         result = _legacy_send_message(ctx=ctx, message=message, operation_id=operation_id, language=language)

@@ -253,6 +253,51 @@ BUG-04). Build green. Still draft — **do not merge without explicit approval.*
 | BUG-03 Google-intermediary link | #651/#652 | ✅ merged `b0807c0` |
 | BUG-04 unauthorized profile mutation | #655 | ✅ merged + prod confirmed `f4bacfa` |
 | Archived credential redaction | #656 | ✅ merged `e104135` (docs-only) |
+| BUG-05 public-chat onboarding loop | PR on `claude/ai-workspace-review-vtdjrb` | 🔄 in review |
+
+## BUG-05 Public-Chat Onboarding Loop — RESOLVED (2026-06-19)
+
+**Symptom:** Every message sent from the `/command` (Ask Rico) public chat after the first
+returned the identical "Welcome to Rico AI. Upload your CV or tell me your target role…"
+string. Chat never progressed, ignored conversation history, and never routed to real AI.
+
+**Root cause (three-part):**
+1. `IntentRouter` routes "Give me 3 interview questions", fully-specified profile strings,
+   and prompt-injection attempts to the legacy classifier (`should_use_ai=False`), not AI.
+2. The legacy classifier's `process_message` checks `profile is None` → skips `upsert_profile`
+   + `set_onboarding_status` when `_persist=False` (all public sessions) → always falls back
+   to the onboarding welcome string. Since nothing is ever persisted for public users, every
+   turn repeats the welcome.
+3. When the streaming endpoint returns a `"done"` event without any SSE tokens (legacy path),
+   `streamStarted=false` but `responseApplied=true`; the `if (!streamStarted)` guard in the
+   frontend fired a redundant second `sendChatPublic` call.
+
+**Fix (PR on branch `claude/ai-workspace-review-vtdjrb`, 2026-06-19):**
+- **Fix A** (`src/services/chat_service.py`): Added `_force_ai` gate — when legacy path is
+  chosen AND `profile is None` AND `ctx.can_persist_profile is False`, redirect to
+  `_conversational_ai_reply` so public users get real responses instead of the welcome loop.
+- **Fix B** (`src/api/routers/rico_chat.py`): `rico_chat_stream_public` only takes the
+  non-streaming legacy path when `profile is not None`. No-profile public users fall through
+  to AI streaming.
+- **Fix C** (`apps/web/app/command/page.tsx`): Streaming fallback changed from
+  `if (!streamStarted)` to `if (!streamStarted && !responseApplied)` to prevent double API
+  call when the legacy path already applied the response via the `"done"` event.
+- 7 unit tests in `tests/test_public_chat_no_profile_loop.py` covering the full routing
+  matrix (public/no-profile/legacy → AI; public/no-profile/AI → AI; public/with-profile →
+  legacy; auth/no-profile → legacy; auth/AI → AI).
+
+**Routing matrix after fix:**
+
+| Session | Profile | Router decision | Route taken |
+|---|---|---|---|
+| Public | None | Legacy | **AI** (new _force_ai gate) |
+| Public | None | AI | AI (unchanged) |
+| Public | present | Legacy | Legacy (unchanged) |
+| Public | present | AI | AI (unchanged) |
+| Auth | None | Legacy | Legacy (can persist state) |
+| Auth | None | AI | AI |
+
+---
 
 ## CI health
 
