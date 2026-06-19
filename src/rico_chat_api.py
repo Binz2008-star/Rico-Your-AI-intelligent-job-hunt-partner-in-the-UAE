@@ -2798,11 +2798,13 @@ class RicoChatAPI:
                 verification_status = "google_intermediary"
             else:
                 verification_status = classify_url(apply_url or source_url)
-            # source_url must never be a Google search intermediary page — it is a
-            # search-results page, not a job listing. Clear it so the frontend falls
-            # through to "Link unavailable" instead of surfacing google.com/search?q=jobs.
+            # source_url and alt_link must never be Google search intermediary pages.
+            # Clear both so the frontend falls through to "Link unavailable" instead
+            # of surfacing google.com/search?q=jobs as View Source or Alt link.
             if source_url and is_google_intermediary(source_url):
                 source_url = ""
+            if alt_link and is_google_intermediary(alt_link):
+                alt_link = ""
             company_quality = classify_company(str(m.get("company") or ""))
         except Exception:
             verification_status = "needs_source_verification" if apply_url else "lead_needs_verification"

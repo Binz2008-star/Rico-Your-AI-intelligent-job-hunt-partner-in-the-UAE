@@ -83,7 +83,7 @@ function resolveCardState(match: JobMatch) {
     const clean = (u?: string) => (u && u !== "#" ? u.trim() : "");
     const applyUrl = clean(match.apply_url);
     const sourceUrl = (() => { const u = clean(match.source_url); return _isGoogleIntermediary(u) ? "" : u; })();
-    const altUrl = clean(match.alt_link);
+    const altUrl = (() => { const u = clean(match.alt_link); return _isGoogleIntermediary(u) ? "" : u; })();
     const vStatus = match.verification_status;
 
     const _rawScore = match.score ?? null;
@@ -280,6 +280,54 @@ describe("JobMatchCard — BUG-03: google.com/search root rejected as source_url
         const { linkKind, linkHref } = resolveCardState({
             title: "T", company: "C",
             source_url: "https://google.com/search?q=jobs",
+            alt_link: "https://naukrigulf.com/job/456",
+            verification_status: "google_intermediary",
+        });
+        expect(linkKind).toBe("alt");
+        expect(linkHref).toBe("https://naukrigulf.com/job/456");
+    });
+});
+
+// ---------------------------------------------------------------------------
+// BUG-03 hotfix — alt_link with Google root must never show "Alt link" button
+// Smoke evidence: Talent BluePrint card (rate_limited + google job_google_link)
+// showed "Alt link" button opening google.com/search?q=jobs
+// ---------------------------------------------------------------------------
+
+describe("JobMatchCard — BUG-03 hotfix: google.com/search root rejected as alt_link", () => {
+    it("shows Link unavailable when alt_link is generic google.com/search (Talent BluePrint case)", () => {
+        const { linkKind, linkHref } = resolveCardState({
+            title: "Senior HSE Manager",
+            company: "Talent BluePrint",
+            apply_url: "https://ae.trabajo.org/job/123",
+            alt_link: "https://www.google.com/search?q=jobs&gl=ae&hl=ar&udm=8",
+            verification_status: "rate_limited",
+        });
+        expect(linkKind).toBe("unavailable");
+        expect(linkHref).toBe("");
+    });
+
+    it("shows Link unavailable when alt_link is google.com/search with aggregator_untrusted", () => {
+        const { linkKind } = resolveCardState({
+            title: "T", company: "C",
+            alt_link: "https://google.com/search?q=HSE+Manager+jobs",
+            verification_status: "aggregator_untrusted",
+        });
+        expect(linkKind).toBe("unavailable");
+    });
+
+    it("shows Link unavailable when alt_link is jobs.google.com", () => {
+        const { linkKind } = resolveCardState({
+            title: "T", company: "C",
+            alt_link: "https://jobs.google.com/jobs/results/1234567890",
+            verification_status: "google_intermediary",
+        });
+        expect(linkKind).toBe("unavailable");
+    });
+
+    it("still shows real alt_link when it is a specific job-board URL", () => {
+        const { linkKind, linkHref } = resolveCardState({
+            title: "T", company: "C",
             alt_link: "https://naukrigulf.com/job/456",
             verification_status: "google_intermediary",
         });

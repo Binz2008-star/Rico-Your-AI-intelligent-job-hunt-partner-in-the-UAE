@@ -245,3 +245,79 @@ class TestExistingApplyLinkFlowUnaffected:
         })
         assert result["apply_url"] == "https://ae.trabajo.org/job/456"
         assert result["verification_status"] == "rate_limited"
+
+
+# ---------------------------------------------------------------------------
+# 7. alt_link cleared when it IS a Google intermediary (BUG-03 hotfix)
+#    Smoke evidence: Talent BluePrint card, rate_limited + google job_google_link
+#    showed "Alt link" button opening google.com/search?q=jobs
+# ---------------------------------------------------------------------------
+
+class TestAltLinkGoogleIntermediaryCleared:
+
+    def test_rate_limited_card_google_job_google_link_alt_link_cleared(self):
+        """Talent BluePrint-style card: rate_limited apply + google alt_link must produce no buttons."""
+        result = _fmt({
+            "title": "Senior HSE Manager",
+            "company": "Talent BluePrint",
+            "job_apply_link": "https://ae.trabajo.org/job/123",
+            "job_google_link": "https://www.google.com/search?q=jobs&gl=ae&hl=ar&udm=8",
+        })
+        assert result["alt_link"] == "", (
+            f"alt_link must be cleared when job_google_link is a Google intermediary, "
+            f"got: {result['alt_link']!r}"
+        )
+        assert result["source_url"] == "", (
+            f"source_url must be cleared when inherited from a Google intermediary alt_link, "
+            f"got: {result['source_url']!r}"
+        )
+
+    def test_aggregator_card_google_job_google_link_alt_link_cleared(self):
+        """aggregator_untrusted + google job_google_link: alt_link must be empty."""
+        result = _fmt({
+            "title": "HSE Manager",
+            "company": "Some Aggregator",
+            "job_apply_link": "https://aggregator.example.com/job/456",
+            "job_google_link": "https://google.com/search?q=HSE+Manager+jobs",
+        })
+        assert result["alt_link"] == "", (
+            f"alt_link must not expose google.com/search: {result['alt_link']!r}"
+        )
+
+    def test_google_intermediary_apply_url_alt_link_also_cleared(self):
+        """When apply_url is google_intermediary and no real alt_link exists, alt_link must not be the google URL."""
+        result = _fmt({
+            "title": "HSE Manager",
+            "company": "Dutco Group",
+            "job_apply_link": "https://google.com/search?q=HSE+Manager+Dutco",
+        })
+        assert result["apply_url"] == ""
+        assert result["verification_status"] == "google_intermediary"
+        assert result["alt_link"] == "", (
+            f"alt_link must be cleared after google_intermediary apply_url, got: {result['alt_link']!r}"
+        )
+        assert result["source_url"] == ""
+
+    def test_jobs_google_com_alt_link_cleared(self):
+        """jobs.google.com in job_google_link must be cleared from alt_link."""
+        result = _fmt({
+            "title": "HSE Manager",
+            "company": "Dutco Group",
+            "job_apply_link": "https://ae.trabajo.org/job/789",
+            "job_google_link": "https://jobs.google.com/jobs/results/9876543210",
+        })
+        assert result["alt_link"] == "", (
+            f"jobs.google.com alt_link must be cleared, got: {result['alt_link']!r}"
+        )
+
+    def test_real_alt_link_naukrigulf_kept(self):
+        """A real job-board alt_link must be preserved."""
+        result = _fmt({
+            "title": "HSE Manager",
+            "company": "Dutco Group",
+            "job_apply_link": "https://google.com/search?q=HSE+Manager+Dutco",
+            "job_google_link": "https://naukrigulf.com/job/999",
+        })
+        assert result["alt_link"] == "https://naukrigulf.com/job/999", (
+            f"Real job-board alt_link must not be cleared: {result['alt_link']!r}"
+        )
