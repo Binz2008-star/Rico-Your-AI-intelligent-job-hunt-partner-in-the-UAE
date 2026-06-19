@@ -284,9 +284,23 @@ class ProfileContextResolver:
             profile = self._hydrate_from_jotform(profile, jotform_data)
             hydration_sources.append("jotform")
 
+        # BUG-04: chat NER enriches the in-memory profile for THIS request only
+        # (so the current search/response can use casually-mentioned context).
+        # We snapshot the chat-inferable fields beforehand so the inferred
+        # additions are stripped from the DB write below — persisting a standing
+        # preference requires explicit user consent, not a passing mention.
+        _CHAT_INFERRED_FIELDS = ("preferred_cities", "skills", "target_roles", "industries")
+        _chat_added: dict[str, list] = {}
         if chat_history and _nlp:
+            _pre_chat = {
+                f: list(getattr(profile, f, None) or []) for f in _CHAT_INFERRED_FIELDS
+            }
             profile = self._hydrate_from_chat(profile, chat_history)
             hydration_sources.append("chat")
+            _chat_added = {
+                f: [v for v in (getattr(profile, f, None) or []) if v not in _pre_chat[f]]
+                for f in _CHAT_INFERRED_FIELDS
+            }
 
         # Always hydrate from actions (non-destructive)
         profile = self._hydrate_from_actions(profile, canonical_user_id)
@@ -297,7 +311,16 @@ class ProfileContextResolver:
         new_fields = self._get_profile_fieldset(profile)
         if new_fields != original_fields:
             try:
-                upsert_profile(user_id=canonical_user_id, updates=profile.__dict__)
+                updates = dict(profile.__dict__)
+                # BUG-04: never persist chat-NER-inferred preferences without
+                # explicit consent. Strip only the chat delta — CV/Jotform values
+                # and behavioural (action-derived) inferences are preserved.
+                for _f, _added in _chat_added.items():
+                    if _added:
+                        updates[_f] = [
+                            v for v in (updates.get(_f) or []) if v not in _added
+                        ]
+                upsert_profile(user_id=canonical_user_id, updates=updates)
                 logger.debug(f"Profile persisted for {canonical_user_id}")
             except Exception as e:
                 logger.error(f"Failed to persist profile: {e}")

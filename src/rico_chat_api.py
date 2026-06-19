@@ -3297,6 +3297,35 @@ class RicoChatAPI:
         return bool(re.search(r"[\u0600-\u06FF]", message or ""))
 
     @staticmethod
+    def _format_pref_changes(prefs: "dict[str, Any]") -> list[str]:
+        """Render a preferences dict as human-readable '**Label** \u2192 value' lines.
+
+        Shared by the BUG-04 profile-update consent flow: the confirmation prompt
+        (before persisting) and the post-save acknowledgement both use it so the
+        wording stays identical.
+        """
+        labels: dict[str, str] = {
+            "target_roles": "Target role",
+            "preferred_cities": "Preferred city",
+            "years_experience": "Years of experience",
+            "skills": "Skills",
+            "industries": "Industry",
+            "salary_expectation_aed": "Salary expectation",
+            "employment_type": "Employment type",
+            "visa_status": "Visa status",
+            "nationality": "Nationality",
+            "telegram_username": "Telegram username",
+        }
+        changes: list[str] = []
+        for _k, _v in (prefs or {}).items():
+            _label = labels.get(_k, _k.replace("_", " ").title())
+            _val_str = ", ".join(str(x) for x in _v) if isinstance(_v, list) else str(_v)
+            if _k == "salary_expectation_aed":
+                _val_str = f"AED {_val_str}/month"
+            changes.append(f"**{_label}** \u2192 {_val_str}")
+        return changes
+
+    @staticmethod
     def _wants_no_favorite(message: str) -> bool:
         lower = (message or "").lower()
         return bool(
@@ -4168,6 +4197,54 @@ class RicoChatAPI:
             updated_profile = self._resolve_profile(user_id)
             return self._handle_cv_generate_from_profile(user_id, updated_profile, message)
 
+        # ── Confirm profile update (BUG-04 consent gate) ──────────────────────
+        # A 'profile_update' intent stashes the extracted preferences here and
+        # asks for confirmation instead of writing immediately. We persist ONLY
+        # on an explicit affirmative; anything else cancels the pending write.
+        if pending_field == "confirm_profile_update":
+            pending = ctx.get("_pending_profile_update") or {}
+            # One-shot: clear the pending state regardless of the outcome so it
+            # can never linger and silently apply on a later, unrelated turn.
+            ctx.pop("_pending_field", None)
+            ctx.pop("_pending_profile_update", None)
+            self._store_recent_context(user_id, ctx)
+            arabic = self._is_arabic_text(msg)
+
+            if self._is_affirmative(msg) and pending:
+                upsert_profile(user_id=user_id, updates=pending)
+                _changes = self._format_pref_changes(pending)
+                if arabic:
+                    reply = (
+                        "تم الحفظ:\n"
+                        + "\n".join(f"• {c}" for c in _changes)
+                        + "\n\nسأطبّق هذا على عمليات البحث القادمة."
+                    )
+                else:
+                    reply = (
+                        "Saved:\n"
+                        + "\n".join(f"• {c}" for c in _changes)
+                        + "\n\nI'll apply this to future job searches."
+                    )
+                self._append_chat(user_id, "assistant", reply)
+                return {
+                    "type": "preferences_updated",
+                    "message": reply,
+                    "updated": pending,
+                }
+
+            if self._is_negative(msg):
+                reply = (
+                    "تمام — لم أغيّر أي شيء في ملفك الشخصي."
+                    if arabic
+                    else "No problem — I haven't changed anything in your profile."
+                )
+                self._append_chat(user_id, "assistant", reply)
+                return {"type": "info", "message": reply}
+
+            # Neither yes nor no: the user moved on. Pending is already cleared,
+            # so let the new message route normally through intent classification.
+            return None
+
         return None
 
     def _resolve_settings_command(
@@ -4281,8 +4358,10 @@ class RicoChatAPI:
 
         target_roles = self._as_list(self._profile_value(profile, "target_roles"))
         if normalized_role and normalized_role.lower() not in {str(item).lower() for item in target_roles}:
+            # BUG-04: searching for a role must NOT silently persist it as a
+            # standing target_role. Use it for THIS search context only — the
+            # user can save it deliberately ("save <role> as my target role").
             target_roles.append(normalized_role)
-            profile = upsert_profile(user_id=user_id, updates={"target_roles": target_roles})
 
         search_role = normalized_role or role
         operation = self._begin_job_search_operation(user_id, search_role)
@@ -6838,38 +6917,34 @@ class RicoChatAPI:
                     profile=profile,
                 )
 
-            # Concrete preferences were extracted — persist them, THEN confirm.
-            upsert_profile(user_id=user_id, updates=prefs)
-            _PREF_LABELS: dict[str, str] = {
-                "target_roles": "Target role",
-                "preferred_cities": "Preferred city",
-                "years_experience": "Years of experience",
-                "skills": "Skills",
-                "industries": "Industry",
-                "salary_expectation_aed": "Salary expectation",
-                "employment_type": "Employment type",
-                "visa_status": "Visa status",
-                "nationality": "Nationality",
-                "telegram_username": "Telegram username",
-            }
-            _changes = []
-            for _k, _v in prefs.items():
-                _label = _PREF_LABELS.get(_k, _k.replace("_", " ").title())
-                _val_str = ", ".join(str(x) for x in _v) if isinstance(_v, list) else str(_v)
-                if _k == "salary_expectation_aed":
-                    _val_str = f"AED {_val_str}/month"
-                _changes.append(f"**{_label}** → {_val_str}")
-            _upd_msg = (
-                "Updated:\n"
-                + "\n".join(f"• {c}" for c in _changes)
-                + "\n\nThese will be applied to future job searches."
-            )
+            # BUG-04: concrete preferences were extracted, but a chat message is
+            # NOT consent to mutate the stored profile. Stash the pending update
+            # and ASK first — the DB write happens only when the user confirms
+            # (handled by the 'confirm_profile_update' branch in
+            # _resolve_pending_field, which runs before intent classification).
+            _changes = self._format_pref_changes(prefs)
+            ctx = self._get_recent_context(user_id)
+            ctx["_pending_field"] = "confirm_profile_update"
+            ctx["_pending_profile_update"] = prefs
+            self._store_recent_context(user_id, ctx)
+            if self._is_arabic_text(message):
+                _ask_msg = (
+                    "قبل أن أحفظ هذه التغييرات في ملفك الشخصي:\n"
+                    + "\n".join(f"• {c}" for c in _changes)
+                    + "\n\nهل أحفظها؟ ردّ بـ **نعم** للحفظ أو **لا** للإلغاء."
+                )
+            else:
+                _ask_msg = (
+                    "Before I save these to your profile:\n"
+                    + "\n".join(f"• {c}" for c in _changes)
+                    + "\n\nShall I save them? Reply **yes** to confirm or **no** to cancel."
+                )
             response = {
-                "type": "preferences_updated",
-                "message": _upd_msg,
-                "updated": prefs,
+                "type": "clarification",
+                "message": _ask_msg,
+                "pending": prefs,
             }
-            self._append_chat(user_id, "assistant", _upd_msg)
+            self._append_chat(user_id, "assistant", _ask_msg)
             return self._finalize(response, routed.source, profile=profile)
 
         # Role change — extract role and classify

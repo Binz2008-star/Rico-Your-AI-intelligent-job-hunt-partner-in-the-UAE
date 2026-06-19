@@ -147,14 +147,19 @@ def test_bare_profile_update_does_not_fake_success(monkeypatch, message):
         assert claim not in lowered, f"must not claim '{claim}' without a real write"
 
 
-def test_concrete_profile_update_persists_then_confirms(monkeypatch):
+def test_concrete_profile_update_asks_before_persisting(monkeypatch):
+    # BUG-04: profile updates must ask for confirmation BEFORE writing to DB.
+    # The old behavior ("persists then confirms") was the bug being fixed.
     api, writes = _profile_update_api(monkeypatch, prefs={"target_roles": ["Data Analyst"]})
+    monkeypatch.setattr(api, "_get_recent_context", lambda *a, **kw: {})
+    monkeypatch.setattr(api, "_store_recent_context", lambda *a, **kw: None)
     response = api._handle_active_user("test@example.com", "update my profile")
 
-    assert response["type"] == "preferences_updated"
-    assert len(writes) == 1
-    assert writes[0]["updates"] == {"target_roles": ["Data Analyst"]}
-    assert "Updated" in response["message"]
+    # Must ask for confirmation — no write may happen yet
+    assert response["type"] == "clarification"
+    assert writes == [], "no DB write may happen before user confirms"
+    assert "Data Analyst" in response["message"]
+    assert "yes" in response["message"].lower() or "confirm" in response["message"].lower() or "save" in response["message"].lower()
 
 
 # ── P0-3: applications listing itemizes, never dead-ends ───────────────────────
