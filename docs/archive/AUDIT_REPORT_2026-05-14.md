@@ -94,7 +94,7 @@ email = os.getenv("INDEED_EMAIL", "robenedwan@gmail.com")
 **Issue:** Contains a real-looking Neon connection string:
 
 ```
-DATABASE_URL=postgresql://authenticator:npg_R8hdwAMu9cOs@ep-long-poetry-am9o9qth-pooler...
+DATABASE_URL=postgresql://<role>:<redacted>@<neon-host>/<database>?sslmode=require
 ```
 
 Even if this is a rotated/invalid credential, it trains developers to commit connection strings and reveals internal infrastructure naming (Neon, region, project ID).
