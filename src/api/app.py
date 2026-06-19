@@ -166,7 +166,7 @@ def _apply_sql_migration(label: str, sql: str) -> None:
 
 def _apply_performance_indexes() -> None:
     sql_path = os.path.join(
-        os.path.dirname(__file__), "..", "..", "migrations", "027_performance_indexes.sql"
+        os.path.dirname(__file__), "..", "..", "migrations", "028_performance_indexes.sql"
     )
     sql_path = os.path.normpath(sql_path)
     if not os.path.exists(sql_path):
@@ -174,7 +174,7 @@ def _apply_performance_indexes() -> None:
         return
     with open(sql_path) as f:
         sql = f.read()
-    _apply_sql_migration("027_performance_indexes", sql)
+    _apply_sql_migration("028_performance_indexes", sql)
 
 
 @asynccontextmanager
