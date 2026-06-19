@@ -4,15 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       render_api_key:
-        description: 'Render API Key (rnd_...)'
-        required: true
+        description: 'Render API Key override (leave blank to use stored secret)'
+        required: false
 
 jobs:
   audit:
     name: Render Optimization Audit
     runs-on: ubuntu-latest
     env:
-      RENDER_KEY: ${{ github.event.inputs.render_api_key }}
+      RENDER_KEY: ${{ github.event.inputs.render_api_key || secrets.RENDER_API_KEY }}
       BACKEND_URL: https://rico-job-automation-api.onrender.com
 
     steps:
