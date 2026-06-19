@@ -726,12 +726,20 @@ _BULK_APPLY_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Free-text "open apply link for <title> at <company>"
+# Free-text URL / apply-link requests.  Catches:
+#   "open apply link for <title> at <company>"
+#   "give me the URL", "what's the link", "share the apply link",
+#   "send me the link", "what is the apply link", "how do I apply" (link request form)
 _OPEN_APPLY_LINK_RE = re.compile(
     r"\bopen\s+apply\s+link\b"
     r"(?:\s+for\s+(.+?)\s+at\s+(.+?)"
     r"(?:[\s,;:]+(?:please|pls|thanks|thank\s+you))?"
-    r")?\s*[.!?]*\s*$",
+    r")?\s*[.!?]*\s*$"
+    r"|\b(?:give|send|share|show|get)\s+(?:me\s+)?(?:the\s+)?(?:apply\s+)?(?:url|link|application\s+link|apply\s+link)\b"
+    r"|\bwhat(?:'s|\s+is)\s+(?:the\s+)?(?:apply\s+)?(?:url|link|application\s+link)\b"
+    r"|\b(?:apply\s+)?link\s+(?:please|pls|for\s+(?:this|that|the)\s+(?:job|role|position))\b"
+    r"|\bwhere\s+(?:can\s+I|do\s+I)\s+apply\b"
+    r"|\bapply\s+(?:url|link)\s*[.!?]*\s*$",
     re.IGNORECASE,
 )
 
