@@ -1,17 +1,24 @@
 # Current State
 
-_Last updated: 2026-06-18_
+_Last updated: 2026-06-19_
 
 ## Production baseline
 
-- **main HEAD:** `c8ea4fb` (#634 prepare→prepared persistence fix). Lineage:
-  `c8ea4fb` (#634) ← `668d59dc` (#632/#354) ← `60d9d92` (#631 docs sync) ←
-  `01cff584` (#630/#353 lifecycle board-write wiring) ← `edc53fd` (docs) ←
-  `62a679b` (production code baseline).
-- **✅ Production backend confirmed live on `c8ea4fb`.** Manual Render Deploy
-  (`workflow_dispatch`) run #26 verified `/version` `commit=c8ea4fb` and `/health` 200
-  on 2026-06-18. This includes #353 (Changes A & B), #354 (LinkVerifier), and #634
-  (prepare→prepared fix). Render remains `workflow_dispatch` only — no auto-deploy on push.
+- **main HEAD:** `9d7c1e0` ("System overhaul v1: Telegram DM replies, DB indexes, job
+  pagination" — landed on main outside this session). Lineage includes:
+  `9d7c1e0` ← `a95c413` (#636 follow-up reminders Phase 1) ← `c8ea4fb` (#634) ←
+  `668d59dc` (#354) ← `01cff584` (#353) ← `62a679b` (production code baseline).
+- **#355 Phase 1 rollout in progress (2026-06-19):** migration 027 applied to Neon prod ✅,
+  `RICO_CRON_SECRET` set on Render ✅, Render redeploy auto-triggered by the env change
+  (ships `9d7c1e0`). **Pending:** verify `/version=9d7c1e0` + `/health` 200, then production
+  smoke; Render Cron not wired yet.
+- **⚠ Last AI-verified live commit was `c8ea4fb`** (Manual Render Deploy run #26, 2026-06-18:
+  `/version=c8ea4fb`, `/health` 200 — included #353/#354/#634). The current redeploy to
+  `9d7c1e0` is not yet AI-verified. Render is normally `workflow_dispatch` only; an env-var
+  change also triggers a redeploy.
+- **⚠ External change on main:** `9d7c1e0` ("System overhaul v1") was not authored in this
+  session; its scope (Telegram DM replies, DB indexes, job pagination) overlaps #355 Phase 2
+  and should be reviewed separately before relying on it.
 - **Deployed to Render:** ✅ live — backend at `rico-job-automation-api.onrender.com`.
   Confirmed live 2026-06-17T22:12 UTC. All API routes 200 OK. CV quality warnings (#621)
   confirmed production-live. PR #625 (preferred_cities guard) not yet manually deployed to

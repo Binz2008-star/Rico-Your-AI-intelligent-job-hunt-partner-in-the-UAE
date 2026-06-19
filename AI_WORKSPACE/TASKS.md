@@ -58,9 +58,9 @@ Issue/PR: <link or number>
 
 ### TASK-20260618-018 — Follow-up Reminders, Phase 1 (Issue #355)
 
-Status: review (Phase 1 implemented; both gated items approved; owner deploy steps pending)
+Status: rollout in progress (migration + secret done; deploy verifying; cron/smoke pending)
 Owner: Claude
-Branch: `feat/follow-up-reminders-355`
+Branch: `feat/follow-up-reminders-355` (merged → main `a95c413`, included in current main `9d7c1e0`)
 Issue/PR: #355
 
 #### Implementation (Phase 1, 2026-06-18)
@@ -87,13 +87,24 @@ Both gated items approved: (1) migration adding `applied_at`; (2) `RICO_CRON_SEC
 - `tests/test_application_lifecycle.py` — 21 passed (no regression from stamping calls).
 - Full-app TestClient tests not runnable in sandbox (missing deps); rely on CI.
 
-#### Owner steps before production smoke (NOT done by Claude)
-1. Apply `migrations/027_followup_reminders.sql` to Neon.
-2. Set `RICO_CRON_SECRET` on Render.
-3. Wire a Render Cron Job: daily `POST https://rico-job-automation-api.onrender.com/api/v1/pipeline/reminders`
-   with header `X-Cron-Secret: <secret>`.
-4. Manual Render Deploy, then smoke: apply a job, backfill/age it, run the sweep,
-   confirm it flips to `follow_up_due` on `/flow`; re-run → no duplicate transition.
+#### Rollout progress (2026-06-19)
+1. [x] **Migration 027 applied to Neon production** (project `old-frog-88141983`, branch
+   `production`, db `neondb`). Verified: 3 columns present (`applied_at`,
+   `follow_up_due_at`, `last_followup_at`), index present, no data loss. Applied via Neon
+   SQL Editor by owner (sandbox has no Neon egress).
+2. [x] **`RICO_CRON_SECRET` set on Render** (strong random value generated for owner; not
+   committed / not logged).
+3. [~] **Render redeploy in progress** — auto-triggered by the env-var change. Ships current
+   main `9d7c1e0` (includes #636 `a95c413` + migration-dependent code). **Pending:** confirm
+   `/version` commit = `9d7c1e0` and `/health` 200.
+4. [ ] **Production smoke** (after deploy live): aged `applied` job → `follow_up_due`; fresh
+   `applied` stays; sweep idempotent; `/flow` shows `follow_up_due`; no duplicates; cron-secret
+   guard rejects missing/wrong, accepts correct.
+5. [ ] **Wire Render Cron** — only after deploy + smoke pass AND explicit approval.
+
+Note: an external commit `9d7c1e0` "System overhaul v1: Telegram DM replies, DB indexes,
+job pagination" landed on main outside this session (not authored here). It is now the deploy
+target; its scope overlaps Phase 2 (Telegram) and should be reviewed separately.
 
 #### Original scope / blockers (now resolved)
 
