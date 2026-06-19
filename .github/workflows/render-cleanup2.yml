@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       render_api_key:
-        description: 'Render API Key (rnd_...)'
-        required: true
+        description: 'Render API Key override (leave blank to use stored secret)'
+        required: false
       dry_run:
         description: 'dry_run: true = list only, false = execute'
         required: false
@@ -20,7 +20,7 @@ jobs:
     name: Render Cleanup 2
     runs-on: ubuntu-latest
     env:
-      RENDER_KEY: ${{ github.event.inputs.render_api_key }}
+      RENDER_KEY: ${{ github.event.inputs.render_api_key || secrets.RENDER_API_KEY }}
       DRY_RUN: ${{ github.event.inputs.dry_run }}
 
     steps:

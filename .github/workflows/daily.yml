@@ -166,12 +166,12 @@ jobs:
           TELEGRAM_BOT_TOKEN:  ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:    ${{ secrets.TELEGRAM_CHAT_ID }}
           EXCLUDE_KEYWORDS:    ${{ secrets.EXCLUDE_KEYWORDS }}
-          NG_ENABLED:          "false"
-          NG_DRY_RUN:          "false"
-          NG_HEADLESS:         "false"
-          NG_MAX_PER_RUN:      "1"
-          NG_DAILY_LIMIT:      "2"
-          NG_SCORE_THRESHOLD:  "85"
+          NG_ENABLED:          ${{ secrets.NG_ENABLED || 'false' }}
+          NG_DRY_RUN:          ${{ secrets.NG_DRY_RUN || 'false' }}
+          NG_HEADLESS:         ${{ secrets.NG_HEADLESS || 'false' }}
+          NG_MAX_PER_RUN:      ${{ secrets.NG_MAX_PER_RUN || '1' }}
+          NG_DAILY_LIMIT:      ${{ secrets.NG_DAILY_LIMIT || '2' }}
+          NG_SCORE_THRESHOLD:  ${{ secrets.NG_SCORE_THRESHOLD || '85' }}
           NG_COOLDOWN_SECONDS: "180"
           NG_SLOW_MO:          "800"
           NG_PROFILE_DIR:      "data/ng_profile"
