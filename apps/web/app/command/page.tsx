@@ -429,8 +429,16 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
     const vStatus = match.verification_status;
 
     const clean = (u?: string) => (u && u !== "#" ? u.trim() : "");
+    const _isGoogleIntermediary = (u: string): boolean => {
+        if (!u) return false;
+        try {
+            const p = new URL(u);
+            const h = p.hostname.replace(/^www\./, "");
+            return h === "jobs.google.com" || (h === "google.com" && p.pathname.includes("/search"));
+        } catch { return false; }
+    };
     const applyUrl = clean(match.apply_url);
-    const sourceUrl = clean(match.source_url);
+    const sourceUrl = (() => { const u = clean(match.source_url); return _isGoogleIntermediary(u) ? "" : u; })();
     const altUrl = clean(match.alt_link);
 
     // Determine which link button(s) to show — conditional on what the provider returned.
