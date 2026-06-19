@@ -58,7 +58,7 @@ Issue/PR: <link or number>
 
 ### TASK-20260618-018 — Follow-up Reminders, Phase 1 (Issue #355)
 
-Status: rollout in progress (migration ✅ + secret ✅ + prod deploy 9d7c1e0 VERIFIED ✅; smoke + cron pending)
+Status: verified (migration ✅ + secret ✅ + prod 9d7c1e0 ✅ + production smoke PASS 9/9 ✅; only Render Cron wiring remains, gated on approval)
 Owner: Claude
 Branch: `feat/follow-up-reminders-355` (merged → main `a95c413`, included in current main `9d7c1e0`)
 Issue/PR: #355
@@ -99,10 +99,16 @@ Both gated items approved: (1) migration adding `applied_at`; (2) `RICO_CRON_SEC
    using the Vercel MCP fetch (sandbox is origin-IP-blocked → 403 direct); response header
    `x-render-origin-server: uvicorn` confirmed the real Render backend (not a Vercel cache).
    #636 migration-dependent code confirmed present at `9d7c1e0`.
-4. [ ] **Production smoke** ⏳ pending: aged `applied` job → `follow_up_due`; fresh `applied`
-   stays; sweep idempotent; `/flow` shows `follow_up_due`; no duplicates; cron-secret guard
-   rejects missing/wrong, accepts correct.
-5. [ ] **Wire Render Cron** ⏳ not configured — only after smoke pass AND explicit approval.
+4. [x] **Production smoke — PASS 2026-06-19** (9/9) via dispatch-only CI workflow
+   `followup-smoke.yml` (#642, run #27810675201), test-safe isolated data
+   (5000-day row, `interval_days=4000`):
+   - 1 missing secret → **403** ✅ · 2 wrong secret → **403** ✅
+   - 3 correct secret → **200** `{"status":"ok","interval_days":4000,"marked_due":1}` ✅
+   - 4 old applied → **follow_up_due** (due_at set) ✅ · 5 fresh → stays **applied** ✅
+   - 6 idempotent re-run → **200 marked_due=0**, due_at unchanged ✅
+   - 7 `/flow`-backing status = follow_up_due ✅ · 8 no duplicates (1 each) ✅
+   - cleanup: test rows deleted ✅ · secrets masked in log (`***`).
+5. [ ] **Wire Render Cron** ⏳ not configured — gated on explicit approval.
 6. [ ] **Phase 2** ⏳ not started.
 
 main / prod mismatch: main HEAD is now `9c003a7` (#638) but production is `9d7c1e0`.

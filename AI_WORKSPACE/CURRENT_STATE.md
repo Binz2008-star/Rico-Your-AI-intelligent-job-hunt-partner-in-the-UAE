@@ -15,7 +15,10 @@ _Last updated: 2026-06-19_
   **#638 is merged but NOT live.** Do not deploy #638 in the current task.
 - **#355 Phase 1 rollout (2026-06-19):** migration 027 applied to Neon prod ✅,
   `RICO_CRON_SECRET` set on Render ✅, production live on `9d7c1e0` ✅,
-  production smoke ⏳ pending, Render Cron ⏳ not configured, Phase 2 ⏳ not started.
+  **production smoke PASS 9/9 ✅** (CI workflow `followup-smoke.yml` #642, run
+  #27810675201: guard 403/403/200, old→follow_up_due, fresh stays applied,
+  idempotent marked_due=0, no duplicates, test rows cleaned up).
+  Render Cron ⏳ not configured (gated on approval), Phase 2 ⏳ not started.
 - **⚠ External commit risk (`9d7c1e0` / #638):** not authored in this session.
   - **Duplicate migration number `027`:** `027_followup_reminders.sql` (#636, mine) and
     `027_performance_indexes.sql` (#638). `027_performance_indexes.sql` is **likely NOT
