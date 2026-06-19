@@ -70,10 +70,19 @@ vi.mock("@/lib/translations", () => ({
 // trust invariants through a pure-logic helper that mirrors the component's
 // decision tree without JSX, matching exact behavior.
 
+function _isGoogleIntermediary(u: string): boolean {
+    if (!u) return false;
+    try {
+        const p = new URL(u);
+        const h = p.hostname.replace(/^www\./, "");
+        return h === "jobs.google.com" || (h === "google.com" && p.pathname.includes("/search"));
+    } catch { return false; }
+}
+
 function resolveCardState(match: JobMatch) {
     const clean = (u?: string) => (u && u !== "#" ? u.trim() : "");
     const applyUrl = clean(match.apply_url);
-    const sourceUrl = clean(match.source_url);
+    const sourceUrl = (() => { const u = clean(match.source_url); return _isGoogleIntermediary(u) ? "" : u; })();
     const altUrl = clean(match.alt_link);
     const vStatus = match.verification_status;
 
@@ -221,6 +230,61 @@ describe("JobMatchCard — link button logic", () => {
         });
         // '#' is cleaned to empty → no apply link
         expect(linkKind).toBe("unavailable");
+    });
+});
+
+// ---------------------------------------------------------------------------
+// BUG-03 regression — generic Google root must never be shown as View Source
+// ---------------------------------------------------------------------------
+
+describe("JobMatchCard — BUG-03: google.com/search root rejected as source_url", () => {
+    it("shows Link unavailable when source_url is generic google.com/search?q=jobs", () => {
+        const { linkKind, linkHref } = resolveCardState({
+            title: "T", company: "C",
+            source_url: "https://google.com/search?q=jobs",
+            verification_status: "rate_limited",
+        });
+        expect(linkKind).toBe("unavailable");
+        expect(linkHref).toBe("");
+    });
+
+    it("shows Link unavailable when source_url is www.google.com/search", () => {
+        const { linkKind } = resolveCardState({
+            title: "T", company: "C",
+            source_url: "https://www.google.com/search?q=HSE+Manager+jobs",
+            verification_status: "aggregator_untrusted",
+        });
+        expect(linkKind).toBe("unavailable");
+    });
+
+    it("shows Link unavailable when source_url is jobs.google.com", () => {
+        const { linkKind } = resolveCardState({
+            title: "T", company: "C",
+            source_url: "https://jobs.google.com/jobs/results/1234567890",
+            verification_status: "needs_source_verification",
+        });
+        expect(linkKind).toBe("unavailable");
+    });
+
+    it("still shows specific source_url when not a Google intermediary", () => {
+        const { linkKind, linkHref } = resolveCardState({
+            title: "T", company: "C",
+            source_url: "https://www.naukrigulf.com/hse-manager-jobs/123",
+            verification_status: "needs_source_verification",
+        });
+        expect(linkKind).toBe("source");
+        expect(linkHref).toBe("https://www.naukrigulf.com/hse-manager-jobs/123");
+    });
+
+    it("google_intermediary with real alt_link still shows alt link", () => {
+        const { linkKind, linkHref } = resolveCardState({
+            title: "T", company: "C",
+            source_url: "https://google.com/search?q=jobs",
+            alt_link: "https://naukrigulf.com/job/456",
+            verification_status: "google_intermediary",
+        });
+        expect(linkKind).toBe("alt");
+        expect(linkHref).toBe("https://naukrigulf.com/job/456");
     });
 });
 
