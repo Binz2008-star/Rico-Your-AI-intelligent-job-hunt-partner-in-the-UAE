@@ -71,6 +71,9 @@ CV_FILE_RE = re.compile(r"\b[\w .()_-]+\.(?:pdf|docx?|txt)\b", re.IGNORECASE)
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PHONE_RE = re.compile(r"(?:\+?\d[\d\s().-]{7,}\d)")
 FOLLOWUP_BOUNDARY_PUNCT_RE = re.compile(r"^[\s\"'([{]+|[\s\"')\]}.,!?;:]+$")
+# Single-letter choice: exactly one letter A–D (upper or lower) with optional trailing
+# punctuation/whitespace.  "apple", "AB", "a b" do NOT match.
+_LETTER_CHOICE_RE = re.compile(r"^[A-Da-d][.:\s]*$")
 PROFILE_LIST_SPLIT_RE = re.compile(r"[,;\n\r|]+")
 # Telegram username: @handle (5–32 chars, alphanumeric + underscore)
 TELEGRAM_HANDLE_RE = re.compile(r"^@[A-Za-z0-9_]{5,32}$")
@@ -4908,7 +4911,12 @@ class RicoChatAPI:
           5. Unknown / nonsense → clarification, not search
         """
         try:
-            return self._handle_active_user_inner(user_id, message)
+            result = self._handle_active_user_inner(user_id, message)
+            # Persist options so the user can reply "A"/"B"/"C"/"D" next turn.
+            _options = result.get("options")
+            if _options and isinstance(_options, list):
+                self._save_pending_options(user_id, _options)
+            return result
         except Exception:
             logger.exception("rico_routing_error user=%s msg=%r", user_id, message)
             fallback = {
@@ -4952,6 +4960,15 @@ class RicoChatAPI:
         pending_field_result = self._resolve_pending_field(user_id, message, profile)
         if pending_field_result is not None:
             return self._finalize(pending_field_result, self.SOURCE_KEYWORD, profile=profile)
+
+        # ── Letter-choice resolver (BUG-02) ──────────────────────────────────
+        # When the last response contained an options list and the user replies
+        # with a bare letter A–D (e.g. "A"), map it to the nth option's message
+        # and re-route as if the user typed that message.  Strict regex guard
+        # (`^[A-Da-d][.:\s]*$`) ensures "apple", "AB", "a b" etc. never match.
+        _chosen_msg = self._resolve_letter_choice(user_id, message)
+        if _chosen_msg:
+            return self._handle_active_user_inner(user_id, _chosen_msg)
 
         # ── CV builder flow-state follow-up ──────────────────────────────────
         # When Rico has just returned a CV draft (last_flow_state == "cv_builder"),
@@ -8846,6 +8863,58 @@ class RicoChatAPI:
             return self.memory.get_context(user_id, "recent_context") or {}
         except Exception:
             return {}
+
+    # ── Letter-choice resolver (BUG-02) ──────────────────────────────────────
+
+    def _save_pending_options(self, user_id: str, options: list) -> None:
+        """Persist the options list from the last response for letter-choice resolution."""
+        if not options or not isinstance(options, list):
+            return
+        try:
+            ctx = self._get_recent_context(user_id)
+            ctx["_pending_options"] = [
+                {
+                    "action": str(o.get("action") or ""),
+                    "message": str(o.get("message") or ""),
+                    "label": str(o.get("label") or ""),
+                }
+                for o in options
+                if isinstance(o, dict)
+            ]
+            self._store_recent_context(user_id, ctx)
+        except Exception:
+            pass
+
+    def _resolve_letter_choice(self, user_id: str, message: str) -> str | None:
+        """Map a single-letter reply (A/B/C/D) to the nth pending option's message.
+
+        Returns the chosen option's message string, or None when:
+          - message is not exactly one letter A–D (case-insensitive),
+          - no pending options are stored, or
+          - the index is out of range.
+
+        Consuming the options list clears it so a second bare letter does not
+        accidentally re-use the same menu.
+        """
+        if not _LETTER_CHOICE_RE.match(message.strip()):
+            return None
+        letter = message.strip()[0].upper()
+        idx = ord(letter) - ord("A")   # A→0, B→1, C→2, D→3
+        try:
+            ctx = self._get_recent_context(user_id)
+            options: list = ctx.get("_pending_options") or []
+            if not options or idx >= len(options):
+                return None
+            chosen = options[idx]
+            chosen_message = chosen.get("message") or chosen.get("label") or ""
+            if not chosen_message:
+                return None
+            # Consume: clear so the next bare letter doesn't re-use this menu.
+            ctx["_pending_options"] = []
+            self._store_recent_context(user_id, ctx)
+            return chosen_message
+        except Exception:
+            return None
 
     @staticmethod
     def _extract_rec_url(rec: dict[str, Any]) -> str:
