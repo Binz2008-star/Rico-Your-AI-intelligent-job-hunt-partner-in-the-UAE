@@ -2,82 +2,80 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Rico AI Cinematic Design System v3
- * Primary: Gold/Amber (#f5a623) — premium AI product
- * Secondary: Magenta (#ff2d8e) — energy + action
- * Tertiary: Cyan (#00e5ff) — data + intelligence
+/* Rico AI Design System v4 — Premium UAE Career
+ * Primary:   Gold/Amber   (#f0a94a) — brand, CTAs, premium
+ * Secondary: Indigo       (#818cf8) — actions, interactive (replaces hot magenta)
+ * Tertiary:  Sky Blue     (#60a5fa) — data, links (replaces neon cyan)
+ * Success:   Emerald      (#10b981) — confirmed, applied, live
  */
 
 /* ───────────────────────────────────────────────────────────────────────────
- * Rico Site v2 — Token layer (Phase 1)
+ * Token layer
  *
- * Semantic colors are CSS variables expressed as space-separated RGB channels
- * so Tailwind's alpha modifiers (e.g. `bg-surface/60`) keep working through the
- * `rgb(var(--token) / <alpha-value>)` pattern wired in tailwind.config.ts.
+ * Semantic colors expressed as space-separated RGB channels so Tailwind's
+ * alpha modifiers (`bg-surface/60`) resolve through the
+ * `rgb(var(--token) / <alpha-value>)` pattern in tailwind.config.ts.
  *
- * `:root` is the DARK theme (the default — production renders unchanged).
- * `.light` remaps the same semantic tokens to an AA-contrast light palette.
- *
- * Accent colors (magenta/cyan) are intentionally darkened in light mode so text
- * and UI on light surfaces still pass WCAG AA. Do not hardcode hex for these
- * semantic roles in components — use the Tailwind token utilities.
+ * `:root` = dark theme (production default).
+ * `.light` remaps to a clean white AA-contrast palette.
  * ─────────────────────────────────────────────────────────────────────────── */
 :root {
     color-scheme: dark;
 
-    /* Canvas + surfaces — Nocturne */
-    --bg: 6 6 12;
-    /* void */
-    --surface: 17 19 32;
-    --surface-elevated: 22 26 43;
-    /* Overlay channel for translucent fills/borders (white on dark canvas) */
+    /* Canvas + surfaces — deep navy/indigo (professional, not void-black) */
+    --bg: 11 13 28;
+    --surface: 16 20 42;
+    --surface-elevated: 23 28 58;
+    /* Overlay channel for translucent fills/borders */
     --overlay: 255 255 255;
 
-    /* Accents — Nocturne. Ember = Rico's voice; Aura (teal) = intelligence/data only. */
+    /* Primary: Gold — UAE premium brand, unchanged */
     --gold: 240 169 74;
-    /* ember */
-    --gold-hover: 255 200 115;
-    /* ember-bright */
+    --gold-hover: 255 196 110;
+
+    /* Intelligence accent: Teal/Aura — unchanged (data/AI outputs only) */
     --aura: 111 233 208;
-    /* teal — intelligence / data */
     --aura-dim: 63 185 166;
-    /* Legacy magenta/cyan retained (still referenced by some primitives/glows) — use sparingly. */
-    --magenta: 255 45 142;
-    --magenta-hover: 255 74 158;
-    --cyan: 0 229 255;
-    --cyan-hover: 51 235 255;
 
-    /* Text — Nocturne scale */
-    --text-primary: 238 240 246;
-    --text-secondary: 154 163 184;
-    --text-tertiary: 100 109 131;
-    --text-muted: 71 71 71;
-    --text-disabled: 41 41 41;
+    /* Secondary: Indigo (professional, replaces hot magenta) */
+    --magenta: 129 140 248;
+    --magenta-hover: 149 160 255;
 
-    /* Ambient canvas glow (ember TL, aura BR) — Nocturne atmosphere */
+    /* Tertiary: Sky Blue (professional, replaces neon cyan) */
+    --cyan: 96 165 250;
+    --cyan-hover: 125 185 255;
+
+    /* Success: Emerald — job applied, email verified, live status */
+    --success: 16 185 129;
+    --success-hover: 5 150 105;
+
+    /* Text — strong contrast on navy canvas */
+    --text-primary: 242 244 250;
+    --text-secondary: 158 168 192;
+    --text-tertiary: 108 118 142;
+    --text-muted: 72 80 100;
+    --text-disabled: 44 50 68;
+
+    /* Ambient canvas: gold TL + indigo BR (subtle, premium atmosphere) */
     --canvas-glow-1: 240 169 74;
-    --canvas-glow-2: 111 233 208;
+    --canvas-glow-2: 99 102 241;
 
-    /* Glass panel base (Nocturne — elevated surface → ink) */
-    --glass-top: 22 26 43;
-    --glass-bottom: 10 11 19;
+    /* Glass panel: navy-tinted surfaces */
+    --glass-top: 23 28 58;
+    --glass-bottom: 13 16 38;
 
-    /* Ambient drop-shadow color (near-black on the dark canvas) */
-    --shadow-color: 5 5 16;
+    /* Drop-shadow color */
+    --shadow-color: 5 6 18;
 
-    /* Focus ring - gold accent (premium, high contrast) */
+    /* Focus ring — gold, high contrast */
     --focus-ring: rgb(var(--gold));
     --focus-ring-shadow: rgb(var(--gold) / 0.20);
     --focus-ring-offset: 3px;
     --focus-ring-width: 2px;
 
-    /* ── Rico Command (--rico-*) alias layer ───────────────────────────────────
-     * The Command page and Rico UI primitives consume a parallel --rico-* token
-     * namespace. These were historically undefined (falling back to inherited
-     * body colors). Aliasing them to the channel tokens above makes the Command
-     * experience render correctly AND flip with the .light theme automatically,
-     * because each rgb(var(--token)) is substituted at use-site against the
-     * cascaded (dark or light) channel value. Define once here in :root.
+    /* ── Rico Command alias layer ─────────────────────────────────────────────
+     * The Command page and Rico UI primitives use --rico-* tokens.
+     * These alias the channel tokens above so they flip with .light automatically.
      * ─────────────────────────────────────────────────────────────────────── */
     --rico-bg: rgb(var(--bg));
     --rico-fg-1: rgb(var(--text-primary));
@@ -85,225 +83,200 @@
     --rico-fg-3: rgb(var(--text-tertiary));
     --rico-fg-4: rgb(var(--text-muted));
     --rico-border-subtle: rgb(var(--overlay) / 0.06);
-    --rico-border-soft: rgb(var(--overlay) / 0.1);
+    --rico-border-soft: rgb(var(--overlay) / 0.10);
     --rico-border-medium: rgb(var(--overlay) / 0.16);
-    /* Primary accent → gold (premium) */
+    /* Primary accent → gold */
     --rico-primary: rgb(var(--gold));
     --rico-primary-container: rgb(var(--gold) / 0.15);
     --rico-on-primary: #0a0a0f;
-    /* Secondary accent → magenta */
+    /* Secondary accent → indigo (was magenta) */
     --rico-secondary: rgb(var(--magenta));
     --rico-secondary-dim: rgb(var(--magenta) / 0.6);
-    --rico-magenta-glow: rgb(var(--magenta) / 0.3);
-    --rico-cyan-glow: rgb(var(--cyan) / 0.3);
+    --rico-magenta-glow: rgb(var(--magenta) / 0.20);
+    --rico-cyan-glow: rgb(var(--cyan) / 0.20);
     --rico-gold-glow: rgb(var(--gold) / 0.25);
     --rico-focus-ring: rgb(var(--gold));
-    --rico-error: #ff5e5b;
-    --rico-error-bg: rgb(255 94 91 / 0.1);
+    --rico-error: #f87171;
+    --rico-error-bg: rgb(248 113 113 / 0.10);
+    /* Success */
+    --rico-success: rgb(var(--success));
+    --rico-success-bg: rgb(var(--success) / 0.10);
 
-    /* Radius scale consumed by Rico primitives */
-    --r-lg: 0.5rem;
-    --r-xl: 0.75rem;
+    /* Radius scale */
+    --r-lg: 0.625rem;
+    --r-xl: 0.875rem;
     --r-full: 9999px;
 }
 
 .light {
     color-scheme: light;
 
-    --bg: 250 250 252;
+    /* Clean white — professional, spacious */
+    --bg: 248 249 252;
     --surface: 255 255 255;
-    --surface-elevated: 244 244 248;
-    --overlay: 17 17 24;
+    --surface-elevated: 241 243 249;
+    --overlay: 15 17 32;
 
     /* Darkened accents for AA on light surfaces */
-    --gold: 161 87 0;
-    /* ember (AA on light) */
-    --gold-hover: 133 68 0;
+    --gold: 168 95 0;
+    --gold-hover: 140 75 0;
     --aura: 15 118 110;
-    /* teal (AA on light) */
     --aura-dim: 13 95 85;
-    --magenta: 197 24 96;
-    --magenta-hover: 168 18 80;
-    --cyan: 13 110 135;
-    --cyan-hover: 9 90 112;
+    --magenta: 99 102 241;
+    --magenta-hover: 79 82 221;
+    --cyan: 37 99 235;
+    --cyan-hover: 29 78 216;
+    --success: 5 150 105;
+    --success-hover: 4 120 87;
 
-    --text-primary: 17 17 24;
-    --text-secondary: 74 74 90;
-    --text-tertiary: 110 110 128;
-    --text-muted: 150 150 165;
-    --text-disabled: 190 190 200;
+    --text-primary: 15 17 32;
+    --text-secondary: 68 76 98;
+    --text-tertiary: 108 118 142;
+    --text-muted: 148 158 178;
+    --text-disabled: 188 196 212;
 
     --canvas-glow-1: 240 169 74;
-    --canvas-glow-2: 111 233 208;
+    --canvas-glow-2: 99 102 241;
 
-    /* Light glass = near-white translucent */
+    /* Light glass = pure white translucent */
     --glass-top: 255 255 255;
-    --glass-bottom: 244 244 248;
+    --glass-bottom: 241 243 249;
 
-    /* Soft neutral shadow so elevation reads on light surfaces (not a black blob) */
-    --shadow-color: 100 100 120;
+    /* Soft neutral shadow on light surfaces */
+    --shadow-color: 88 94 120;
 }
 
 /* ── Command dark lock ──────────────────────────────────────────────────────
- * The /command experience is built for a dark canvas: its message bubbles,
- * job cards, and markdown use literal `text-white` and white-translucent glass.
- * Light mode is not QA'd for that surface, so flipping the global theme there
- * makes white text fall on a near-white canvas (unreadable). Until light mode
- * is explicitly designed for Command, lock that subtree to the dark palette by
- * resetting the base channel tokens — the --rico-* aliases resolve from these,
- * so the whole Command tree renders dark regardless of the global toggle.
- * This is scoped (no global theme change, no localStorage write) and does not
- * touch the light palette itself. Do not redesign Command to remove this.
+ * /command is designed for dark canvas. Lock it to the dark palette so white
+ * text stays legible regardless of global theme toggle.
  * ─────────────────────────────────────────────────────────────────────────── */
 .command-dark-lock {
     color-scheme: dark;
 
-    --bg: 6 6 12;
-    --surface: 17 19 32;
-    --surface-elevated: 22 26 43;
+    --bg: 11 13 28;
+    --surface: 16 20 42;
+    --surface-elevated: 23 28 58;
     --overlay: 255 255 255;
 
     --gold: 240 169 74;
-    --gold-hover: 255 200 115;
+    --gold-hover: 255 196 110;
     --aura: 111 233 208;
     --aura-dim: 63 185 166;
-    --magenta: 255 45 142;
-    --magenta-hover: 255 74 158;
-    --cyan: 0 229 255;
-    --cyan-hover: 51 235 255;
+    --magenta: 129 140 248;
+    --magenta-hover: 149 160 255;
+    --cyan: 96 165 250;
+    --cyan-hover: 125 185 255;
+    --success: 16 185 129;
+    --success-hover: 5 150 105;
 
-    --text-primary: 238 240 246;
-    --text-secondary: 154 163 184;
-    --text-tertiary: 100 109 131;
-    --text-muted: 71 71 71;
-    --text-disabled: 41 41 41;
+    --text-primary: 242 244 250;
+    --text-secondary: 158 168 192;
+    --text-tertiary: 108 118 142;
+    --text-muted: 72 80 100;
+    --text-disabled: 44 50 68;
 
-    --glass-top: 22 26 43;
-    --glass-bottom: 10 11 19;
+    --glass-top: 23 28 58;
+    --glass-bottom: 13 16 38;
 
-    --shadow-color: 5 5 16;
+    --shadow-color: 5 6 18;
 
     --focus-ring: rgb(var(--gold));
     --focus-ring-shadow: rgb(var(--gold) / 0.20);
     --rico-primary: rgb(var(--gold));
     --rico-primary-container: rgb(var(--gold) / 0.15);
     --rico-focus-ring: rgb(var(--gold));
+    --rico-success: rgb(var(--success));
+    --rico-success-bg: rgb(var(--success) / 0.10);
 }
 
 html,
 body {
-    /* Ambient canvas — theme-aware via token channels */
+    /* Ambient canvas — subtle premium atmosphere */
     background:
-        radial-gradient(circle at top left, rgb(var(--canvas-glow-1) / 0.08) 0%, transparent 38%),
-        radial-gradient(circle at bottom right, rgb(var(--canvas-glow-2) / 0.06) 0%, transparent 32%),
+        radial-gradient(circle at top left, rgb(var(--canvas-glow-1) / 0.06) 0%, transparent 36%),
+        radial-gradient(circle at bottom right, rgb(var(--canvas-glow-2) / 0.05) 0%, transparent 30%),
         rgb(var(--bg));
     color: rgb(var(--text-primary));
     font-family: var(--font-body), system-ui, sans-serif;
-    /* Do NOT set height: 100% here. Combining height:100% with overflow-x:hidden
-       forces overflow-y:auto on body (CSS spec), making body a fixed-height scroll
-       container instead of the window — this breaks Framer Motion whileInView for
-       all below-fold content. Let body grow naturally to fit content. */
     overflow-x: hidden;
 }
 
-/* Glass panel utility */
+/* Glass panel — clean, professional elevation */
 .glass-panel {
-    backdrop-filter: blur(36px);
+    backdrop-filter: blur(32px);
     background:
-        linear-gradient(180deg, rgb(var(--glass-top) / 0.78) 0%, rgb(var(--glass-bottom) / 0.7) 100%);
-    border: 1px solid rgb(var(--overlay) / 0.08);
+        linear-gradient(180deg, rgb(var(--glass-top) / 0.80) 0%, rgb(var(--glass-bottom) / 0.72) 100%);
+    border: 1px solid rgb(var(--overlay) / 0.09);
     box-shadow:
-        0 20px 60px rgb(var(--shadow-color) / 0.28),
-        inset 0 1px 0 rgb(var(--overlay) / 0.05);
+        0 16px 48px rgb(var(--shadow-color) / 0.24),
+        inset 0 1px 0 rgb(var(--overlay) / 0.06);
 }
 
 .glass-island {
-    backdrop-filter: blur(40px);
+    backdrop-filter: blur(36px);
     background:
-        linear-gradient(180deg, rgb(var(--glass-top) / 0.84) 0%, rgb(var(--glass-bottom) / 0.76) 100%);
-    border-top: 0.5px solid rgb(var(--overlay) / 0.1);
-    border-left: 0.5px solid rgb(var(--overlay) / 0.05);
+        linear-gradient(180deg, rgb(var(--glass-top) / 0.86) 0%, rgb(var(--glass-bottom) / 0.78) 100%);
+    border-top: 0.5px solid rgb(var(--overlay) / 0.10);
+    border-left: 0.5px solid rgb(var(--overlay) / 0.06);
     box-shadow:
-        0 18px 45px rgb(var(--shadow-color) / 0.24),
-        inset 0 1px 0 rgb(var(--overlay) / 0.04);
+        0 14px 40px rgb(var(--shadow-color) / 0.20),
+        inset 0 1px 0 rgb(var(--overlay) / 0.05);
 }
 
-/* Aura glow effects */
+/* Aura glow effects — toned down, professional */
 .aura-glow-gold {
-    background: radial-gradient(circle, rgba(245, 166, 35, 0.14) 0%, rgba(0, 0, 0, 0) 70%);
+    background: radial-gradient(circle, rgba(240, 169, 74, 0.10) 0%, rgba(0, 0, 0, 0) 70%);
 }
 
 .aura-glow-cyan {
-    background: radial-gradient(circle, rgba(0, 221, 221, 0.12) 0%, rgba(0, 0, 0, 0) 70%);
+    background: radial-gradient(circle, rgba(96, 165, 250, 0.08) 0%, rgba(0, 0, 0, 0) 70%);
 }
 
 .aura-glow-magenta {
-    background: radial-gradient(circle, rgba(254, 0, 254, 0.09) 0%, rgba(0, 0, 0, 0) 70%);
+    background: radial-gradient(circle, rgba(129, 140, 248, 0.07) 0%, rgba(0, 0, 0, 0) 70%);
 }
 
 .glow-aura {
     filter: blur(140px);
-    background: radial-gradient(circle, rgba(245, 166, 35, 0.16) 0%, rgba(245, 166, 35, 0) 70%);
+    background: radial-gradient(circle, rgba(240, 169, 74, 0.12) 0%, rgba(240, 169, 74, 0) 70%);
 }
 
 .glow-gold-point {
     filter: blur(40px);
-    background: rgba(245, 166, 35, 0.12);
+    background: rgba(240, 169, 74, 0.10);
 }
 
 .glow-cyan-point {
     filter: blur(40px);
-    background: rgba(0, 229, 255, 0.10);
+    background: rgba(96, 165, 250, 0.08);
 }
 
-/* Skeleton shimmer animation */
+/* Skeleton shimmer */
 @keyframes shimmer {
-    0% {
-        background-position: -200% 0;
-    }
-
-    100% {
-        background-position: 200% 0;
-    }
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
 }
 
 .skeleton-shimmer {
     background: linear-gradient(90deg,
-            rgb(var(--overlay) / 0.05) 0%,
-            rgb(var(--overlay) / 0.10) 50%,
-            rgb(var(--overlay) / 0.05) 100%);
+        rgb(var(--overlay) / 0.04) 0%,
+        rgb(var(--overlay) / 0.09) 50%,
+        rgb(var(--overlay) / 0.04) 100%);
     background-size: 200% 100%;
     animation: shimmer 1.8s ease-in-out infinite;
 }
 
 /* Scrollbar */
-::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
-}
-
-::-webkit-scrollbar-track {
-    background: transparent;
-}
-
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-    background: rgb(var(--overlay) / 0.1);
+    background: rgb(var(--overlay) / 0.10);
     border-radius: 99px;
 }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--overlay) / 0.18); }
 
-::-webkit-scrollbar-thumb:hover {
-    background: rgb(var(--overlay) / 0.18);
-}
-
-.no-scrollbar::-webkit-scrollbar {
-    display: none;
-}
-
-.no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-    /* Firefox */
-}
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 /* Focus system */
 :where(a, button, input, textarea, select, summary, [tabindex]:not([tabindex="-1"])):focus-visible {
@@ -311,7 +284,7 @@ body {
     outline-offset: var(--focus-ring-offset);
 }
 
-/* Ambient grain overlay — Nocturne (subtle fixed fractal noise ~0.035, behind nothing interactive) */
+/* Ambient grain overlay — very subtle (0.028) */
 body::after {
     content: '';
     position: fixed;
@@ -319,60 +292,38 @@ body::after {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     pointer-events: none;
     z-index: 9999;
-    opacity: 0.035;
+    opacity: 0.028;
 }
 
 /* Cinematic entrance keyframes */
 @keyframes fadeSlideIn {
-    from {
-        opacity: 0;
-        transform: translateY(8px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes glowPulse {
-
-    0%,
-    100% {
-        box-shadow: 0 0 20px rgba(245, 166, 35, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    0%, 100% {
+        box-shadow: 0 0 16px rgba(240, 169, 74, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.04);
     }
-
     50% {
-        box-shadow: 0 0 32px rgba(245, 166, 35, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        box-shadow: 0 0 28px rgba(240, 169, 74, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.07);
     }
 }
 
 /* Glass panel interactive states */
 .glass-panel:focus-within {
-    border-color: rgb(var(--gold) / 0.22);
+    border-color: rgb(var(--gold) / 0.20);
     box-shadow:
-        0 20px 60px rgb(var(--shadow-color) / 0.28),
-        inset 0 1px 0 rgb(var(--overlay) / 0.05),
-        0 0 40px rgb(var(--gold) / 0.06);
+        0 16px 48px rgb(var(--shadow-color) / 0.24),
+        inset 0 1px 0 rgb(var(--overlay) / 0.06),
+        0 0 32px rgb(var(--gold) / 0.05);
 }
 
 .glass-panel:hover {
-    border-color: rgb(var(--overlay) / 0.12);
+    border-color: rgb(var(--overlay) / 0.13);
 }
 
-@media (prefers-reduced-motion: reduce) {
-
-    *,
-    *::before,
-    *::after {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        scroll-behavior: auto !important;
-        transition-duration: 0.01ms !important;
-    }
-}
-
-/* ── Rico thinking indicator ──────────────────────────────────────────────── */
+/* ── Rico thinking indicator ─────────────────────────────────────────────── */
 .rico-thinking-row {
     display: flex;
     align-items: center;
@@ -390,11 +341,11 @@ body::after {
     font-weight: 700;
     font-size: 13px;
     background:
-        radial-gradient(circle at center, rgba(245, 166, 35, 0.9), rgba(245, 166, 35, 0.7)),
-        #f5a623;
-    border: 1px solid rgba(245, 166, 35, 0.8);
+        radial-gradient(circle at center, rgba(240, 169, 74, 0.9), rgba(240, 169, 74, 0.7)),
+        #f0a94a;
+    border: 1px solid rgba(240, 169, 74, 0.8);
     box-shadow:
-        0 0 12px rgba(245, 166, 35, 0.30),
+        0 0 12px rgba(240, 169, 74, 0.28),
         inset 0 1px 0 rgba(255, 255, 255, 0.20);
     animation: ricoOrbPulse 2s ease-in-out infinite;
     flex-shrink: 0;
@@ -431,65 +382,31 @@ body::after {
     animation: ricoDot 1.4s ease-in-out infinite;
 }
 
-.rico-dots i:nth-child(2) {
-    animation-delay: 0.18s;
-}
-
-.rico-dots i:nth-child(3) {
-    animation-delay: 0.36s;
-}
+.rico-dots i:nth-child(2) { animation-delay: 0.18s; }
+.rico-dots i:nth-child(3) { animation-delay: 0.36s; }
 
 @keyframes ricoRSpin {
-    from {
-        transform: rotate(0deg);
-    }
-
-    to {
-        transform: rotate(360deg);
-    }
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
 }
 
 @keyframes ricoOrbPulse {
-
-    0%,
-    100% {
-        transform: scale(1);
-        box-shadow: 0 0 8px rgba(245, 166, 35, 0.25);
-    }
-
-    50% {
-        transform: scale(1.05);
-        box-shadow: 0 0 16px rgba(245, 166, 35, 0.45);
-    }
+    0%, 100% { transform: scale(1); box-shadow: 0 0 8px rgba(240, 169, 74, 0.22); }
+    50%       { transform: scale(1.05); box-shadow: 0 0 16px rgba(240, 169, 74, 0.40); }
 }
 
 @keyframes ricoDot {
-
-    0%,
-    100% {
-        opacity: 0.30;
-        transform: translateY(0);
-    }
-
-    50% {
-        opacity: 1;
-        transform: translateY(-2px);
-    }
+    0%, 100% { opacity: 0.30; transform: translateY(0); }
+    50%       { opacity: 1; transform: translateY(-2px); }
 }
 
-/* ========================================
-   Reduced Motion Support
-   ======================================== */
-
+/* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
-
-    *,
-    *::before,
-    *::after {
+    *, *::before, *::after {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
         scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
     }
 
     .animate-breathe,
@@ -500,13 +417,8 @@ body::after {
     .skeleton-shimmer {
         animation: none !important;
     }
-
-    .motion-reduce\:opacity-50 {
-        opacity: 0.3 !important;
-    }
 }
 
-/* Utility for motion-safe animations */
 @media (prefers-reduced-motion: no-preference) {
     .motion-safe\:animate-breathe {
         animation: breathe 5.5s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
