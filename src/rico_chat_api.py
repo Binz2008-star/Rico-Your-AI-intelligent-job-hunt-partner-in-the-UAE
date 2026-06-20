@@ -3921,11 +3921,10 @@ class RicoChatAPI:
 
         Returns a response dict if a pending intent was resolved, else None.
         """
-        if not self._is_affirmative(message):
-            return None
-
         # Priority 0: stored pending job search state (most reliable — set explicitly when
         # Rico announces a search plan and the turn ends without executing it).
+        # Checked BEFORE the _is_affirmative guard because this method is called from
+        # both the affirmative path (yes/ok) and the follow_up_confirmation path (تمام/نعم/كمل).
         pending_js = self._get_pending_job_search(user_id)
         if pending_js and pending_js.get("role"):
             self._clear_pending_job_search(user_id)
@@ -3934,6 +3933,9 @@ class RicoChatAPI:
             return self._classified_role_search(
                 user_id, pending_role, profile, location=pending_loc
             )
+
+        if not self._is_affirmative(message):
+            return None
 
         last = self._get_last_assistant_message(user_id).lower()
         if not last:
@@ -3971,18 +3973,14 @@ class RicoChatAPI:
                 )
             # No role available — ask for role instead of promising search
             arabic = self._is_arabic_text(message)
-            return self._finalize(
-                {
-                    "type": "clarification",
-                    "message": (
-                        "ما هو الدور الذي تبحث عنه؟ أحتاج المسمى الوظيفي لأبدأ البحث."
-                        if arabic else
-                        "What role are you looking for? I need a job title to run the search."
-                    ),
-                },
-                self.SOURCE_KEYWORD,
-                profile=profile,
-            )
+            return {
+                "type": "clarification",
+                "message": (
+                    "ما هو الدور الذي تبحث عنه؟ أحتاج المسمى الوظيفي لأبدأ البحث."
+                    if arabic else
+                    "What role are you looking for? I need a job title to run the search."
+                ),
+            }
         if application_angle_signals:
             return self._answer_with_ai_fallback(
                 user_id=user_id,
@@ -5198,6 +5196,21 @@ class RicoChatAPI:
         # them as acknowledgements and return a short warm reply immediately.
         _msg_lower = message.strip().lower()
         if _msg_lower in _ACKNOWLEDGEMENT_REPLIES:
+            # Before emitting a static ack, honour any pending job search. Arabic short
+            # confirmations like "تمام" (fine/ok) are in _ACKNOWLEDGEMENT_REPLIES but also
+            # used to confirm a search Rico promised in the previous turn. These phrases
+            # never reach _is_affirmative or the follow_up_confirmation dispatch, so the
+            # pending search check must live here.
+            _ack_pending_js = self._get_pending_job_search(user_id)
+            if _ack_pending_js and _ack_pending_js.get("role"):
+                _ack_role = _ack_pending_js["role"]
+                _ack_loc = _ack_pending_js.get("location", "")
+                self._clear_pending_job_search(user_id)
+                return self._finalize(
+                    self._classified_role_search(user_id, _ack_role, profile, location=_ack_loc),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
             ack_text = _acknowledgement_reply(message)
             response = {"type": "acknowledgement", "message": ack_text}
             self._append_chat(user_id, "assistant", ack_text)
@@ -6622,6 +6635,23 @@ class RicoChatAPI:
                     )
             except Exception:
                 pass  # fall through to generic confirmation handling
+
+            # Priority 1.5: stored pending job search (set when Rico promised "ببحث" but
+            # the turn ended without executing the search). Checked here so that "تمام"
+            # and other follow_up_confirmation phrases correctly trigger the search.
+            try:
+                _pending_js = self._get_pending_job_search(user_id)
+                if _pending_js and _pending_js.get("role"):
+                    _js_role = _pending_js["role"]
+                    _js_loc = _pending_js.get("location", "")
+                    self._clear_pending_job_search(user_id)
+                    return self._finalize(
+                        self._classified_role_search(user_id, _js_role, profile, location=_js_loc),
+                        self.SOURCE_KEYWORD,
+                        profile=profile,
+                    )
+            except Exception:
+                pass
 
             # Priority 2: resume a pending role search confirmation
             # (user replied YES after known_but_off_profile clarification)
