@@ -242,7 +242,13 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
                 </section>
             )}
 
-            {job.match_explanation && <MatchExplanationPanel explanation={job.match_explanation} t={t} />}
+            {job.match_explanation ? (
+                <MatchExplanationPanel explanation={job.match_explanation} t={t} />
+            ) : job.score > 0 ? (
+                <p className="relative z-10 mt-3 text-[11px] font-mono text-text-tertiary">
+                    {t("jobCardScoreNoBreakdown")}
+                </p>
+            ) : null}
 
             <div className="relative z-10 mt-4 flex flex-wrap items-center gap-2">
                 {(job.salary_range || job.salary) && (
