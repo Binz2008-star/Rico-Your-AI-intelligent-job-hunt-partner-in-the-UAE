@@ -524,6 +524,9 @@ function ProfileDetail({
 
     return (
         <div className="flex w-full flex-col gap-5">
+            {/* Profile conflict warnings — shown at top so they're visible without scrolling */}
+            <GuardrailWarnings warnings={profile.warnings} language={language} />
+
             {/* Completeness score */}
             <ProfileCompleteness profile={profile} />
 
@@ -598,7 +601,6 @@ function ProfileDetail({
             {/* Job preferences */}
             <StatusCard title={t("profileJobPreferences")} badge={hasJobPrefs ? "live" : "pending"} badgeLabel={hasJobPrefs ? t("profileBadgeSynced") : t("profileBadgePending")}>
                 <div className="flex flex-col gap-3">
-                    <GuardrailWarnings warnings={profile.warnings} language={language} />
                     <dl className="grid min-w-0 grid-cols-1 gap-3 text-sm lg:grid-cols-2">
                         <Row label={t("profileTargetRoles")}>
                             <TagInputField
