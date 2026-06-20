@@ -300,6 +300,28 @@ function WorkingIndicator({ message }: { message: string }) {
     );
 }
 
+function SearchElapsedTimer({ t }: { t: (k: TranslationKey) => string }) {
+    const [elapsed, setElapsed] = useState(0);
+    useEffect(() => {
+        const id = setInterval(() => setElapsed((s) => s + 1), 1000);
+        return () => clearInterval(id);
+    }, []);
+    const hint =
+        elapsed >= 20 ? t("cmdSearchWakingUp")
+        : elapsed >= 10 ? t("cmdSearchStillLooking")
+        : null;
+    return (
+        <div className="pl-[42px] flex flex-col gap-1">
+            <span className="text-[11px] tabular-nums text-text-muted" aria-live="off">{elapsed}s</span>
+            {hint && (
+                <p className="text-[11px] text-text-muted animate-pulse motion-reduce:animate-none" role="status">
+                    {hint}
+                </p>
+            )}
+        </div>
+    );
+}
+
 function CvReadyOnboardingPanel({
     onAction,
     disabled,
@@ -423,9 +445,11 @@ function SourceQualityBadge({ status }: { status: VerificationStatus }) {
     return null;
 }
 
-function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onAction: (prompt: string) => void }) {
+function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt: string) => void }) {
     const { language } = useLanguage();
     const t = useTranslation(language);
+    const [linkOpened, setLinkOpened] = useState(false);
+    const [markedApplied, setMarkedApplied] = useState(false);
 
     // Score: only display when a real score was calculated (non-null, non-zero).
     // Backend emits null when no scorer ran — never show a default 50%.
@@ -536,6 +560,7 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
                         rel="noopener noreferrer"
                         data-testid={linkTestId}
                         aria-label={`${linkLabel}: ${match.title} at ${match.company}`}
+                        onClick={() => setLinkOpened(true)}
                         className="rounded-md border border-gold/30 bg-gold/10 px-2.5 py-1.5 text-[10px] font-medium text-gold transition-colors hover:bg-gold/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-1 focus-visible:ring-offset-surface"
                     >
                         {linkLabel}
@@ -562,6 +587,25 @@ function JobMatchCard({ match, onAction: _onAction }: { match: JobMatch; onActio
                     </a>
                 )}
             </div>
+
+            {/* Mark as Applied CTA — appears after the user opens the apply link */}
+            {linkOpened && !markedApplied && (
+                <button
+                    type="button"
+                    onClick={() => {
+                        setMarkedApplied(true);
+                        onAction(`I've applied to ${match.title} at ${match.company}`);
+                    }}
+                    className="w-full rounded-md border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1.5 text-[10px] font-medium text-emerald-200 transition-colors hover:bg-emerald-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50 animate-in fade-in slide-in-from-bottom-1"
+                >
+                    {t("cmdMarkApplied")}
+                </button>
+            )}
+            {markedApplied && (
+                <p className="text-[10px] text-emerald-300 font-medium px-0.5">
+                    ✓ {t("cmdMarkAppliedConfirm")}
+                </p>
+            )}
 
             {/* Source quality row — only shown when there is something to say */}
             {vStatus && (
@@ -1867,11 +1911,14 @@ export default function CommandPage() {
                     {thinking && (
                         <div className="flex flex-col gap-2">
                             <WorkingIndicator message={operationState?.message ?? t("cmdWorking")} />
-                            {slowHint && (
-                                <p className="text-[11px] text-text-muted pl-[42px] animate-pulse motion-reduce:animate-none" role="status">
-                                    {t("cmdWorkingSlowHint")}
-                                </p>
-                            )}
+                            {operationState?.state === "searching"
+                                ? <SearchElapsedTimer t={t} />
+                                : slowHint && (
+                                    <p className="text-[11px] text-text-muted pl-[42px] animate-pulse motion-reduce:animate-none" role="status">
+                                        {t("cmdWorkingSlowHint")}
+                                    </p>
+                                )
+                            }
                         </div>
                     )}
 
