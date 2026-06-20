@@ -1,125 +1,131 @@
 """audit_writer.py
 
-Async, append-only writer for agent_audit_log.
+Append-only writer for agent_audit_log.
+Every policy decision MUST call write_audit_event — allowed or denied.
 
-Contracts:
-- Never raises on DB errors; logs the error instead (non-blocking audit).
-- Always writes a row for every policy decision, ALLOWED or DENIED.
-- Caller is responsible for providing all validated fields.
-- No side effects beyond the INSERT.
+Rules:
+- Never UPDATE or DELETE rows.
+- Never swallow exceptions silently; re-raise after logging.
+- No PII in intent_summary beyond what is minimally necessary.
+- approval_token_hash stores SHA-256 of the raw token, never the token.
 """
+
 from __future__ import annotations
 
 import hashlib
 import logging
-import os
-from typing import Any
+import uuid
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Literal, Optional
 
 import asyncpg  # type: ignore[import]
 
 logger = logging.getLogger(__name__)
 
-_DATABASE_URL: str = os.environ["DATABASE_URL"]
+RiskClass = Literal[
+    "safe-read",
+    "draft-write",
+    "reversible-write",
+    "external-commit",
+    "destructive",
+]
+
+PolicyDecision = Literal["allowed", "denied"]
 
 
-async def _get_conn() -> asyncpg.Connection:  # pragma: no cover
-    """Return a single-use connection. Caller must close it."""
-    return await asyncpg.connect(_DATABASE_URL)
+@dataclass(slots=True)
+class AuditEventPayload:
+    event_type: str
+    action_id: uuid.UUID
+    card_id: str
+    user_id: uuid.UUID
+    agent_id: str
+    risk_class: RiskClass
+    intent_summary: str
+    policy_decision: PolicyDecision
+    idempotency_key: str
+    denial_reason: Optional[str] = None
+    approval_token_raw: Optional[str] = None  # will be hashed before storage
+    tool_name: Optional[str] = None
+    target_resource: Optional[str] = None
+    expected_effect: Optional[str] = None
+    actual_effect: Optional[str] = None
+    undo_capability: bool = False
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
-def _hash_token(raw_token: str) -> str:
-    """SHA-256 of the raw token. Stored for traceability; never the token itself."""
-    return hashlib.sha256(raw_token.encode()).hexdigest()
+def _hash_token(raw: Optional[str]) -> Optional[str]:
+    if raw is None:
+        return None
+    return hashlib.sha256(raw.encode()).hexdigest()
 
 
 async def write_audit_event(
-    *,
-    actor_user_id: str,
-    agent_id: str,
-    card_id: str,
-    idempotency_key: str,
-    intent_summary: str,
-    risk_class: str,
-    requested_scopes: list[str],
-    policy_decision: str,             # 'ALLOWED' | 'DENIED'
-    denial_reason: str | None,
-    approval_state: str,              # 'pending' | 'approved' | 'rejected'
-    token_issued_at: Any,             # datetime (UTC)
-    token_expires_at: Any,            # datetime (UTC)
-    effect_summary: dict[str, Any] | None,
-    undo_capable: bool,
-    raw_token: str,
-    _conn: asyncpg.Connection | None = None,  # injectable for tests
+    pool: asyncpg.Pool,
+    payload: AuditEventPayload,
 ) -> None:
-    """Insert one row into agent_audit_log.
+    """Append one audit event row. Never raises silently."""
+    token_hash = _hash_token(payload.approval_token_raw)
+    intent = payload.intent_summary[:512]  # enforce field cap
 
-    On constraint violation (duplicate idempotency_key for ALLOWED),
-    the row is silently skipped — idempotent by design.
-
-    On any other DB error, logs at ERROR level and returns without raising,
-    so a failing audit write never blocks the gate response.
+    sql = """
+        INSERT INTO agent_audit_log (
+            event_type, action_id, card_id, user_id, agent_id,
+            risk_class, intent_summary, policy_decision, denial_reason,
+            idempotency_key, approval_token_hash, tool_name,
+            target_resource, expected_effect, actual_effect,
+            undo_capability, metadata, created_at
+        ) VALUES (
+            $1, $2, $3, $4, $5,
+            $6, $7, $8, $9,
+            $10, $11, $12,
+            $13, $14, $15,
+            $16, $17, $18
+        )
     """
-    token_hash = _hash_token(raw_token)
-    close_after = _conn is None
-    conn = _conn or await _get_conn()
 
     try:
-        await conn.execute(
-            """
-            INSERT INTO agent_audit_log (
-                actor_user_id, agent_id, card_id, idempotency_key,
-                intent_summary, risk_class, requested_scopes,
-                policy_decision, denial_reason, approval_state,
-                token_issued_at, token_expires_at,
-                effect_summary, undo_capable, raw_token_hash
-            ) VALUES (
-                $1, $2, $3, $4,
-                $5, $6, $7::jsonb,
-                $8, $9, $10,
-                $11, $12,
-                $13::jsonb, $14, $15
+        async with pool.acquire() as conn:
+            await conn.execute(
+                sql,
+                payload.event_type,
+                payload.action_id,
+                payload.card_id,
+                payload.user_id,
+                payload.agent_id,
+                payload.risk_class,
+                intent,
+                payload.policy_decision,
+                payload.denial_reason,
+                payload.idempotency_key,
+                token_hash,
+                payload.tool_name,
+                payload.target_resource,
+                payload.expected_effect,
+                payload.actual_effect,
+                payload.undo_capability,
+                payload.metadata,
+                datetime.now(timezone.utc),
             )
-            ON CONFLICT (actor_user_id, card_id, idempotency_key)
-            WHERE policy_decision = 'ALLOWED'
-            DO NOTHING
-            """,
-            actor_user_id,
-            agent_id,
-            card_id,
-            idempotency_key,
-            intent_summary,
-            risk_class,
-            requested_scopes,
-            policy_decision,
-            denial_reason,
-            approval_state,
-            token_issued_at,
-            token_expires_at,
-            effect_summary,
-            undo_capable,
-            token_hash,
-        )
-        logger.info(
-            "audit_event_written",
+    except Exception:
+        logger.exception(
+            "audit_writer: failed to write audit event",
             extra={
-                "actor_user_id": actor_user_id,
-                "card_id": card_id,
-                "policy_decision": policy_decision,
-                "idempotency_key": idempotency_key,
-                "denial_reason": denial_reason,
+                "action_id": str(payload.action_id),
+                "card_id": payload.card_id,
+                "user_id": str(payload.user_id),
+                "policy_decision": payload.policy_decision,
             },
         )
-    except asyncpg.UniqueViolationError:
-        logger.info(
-            "audit_idempotent_skip",
-            extra={"card_id": card_id, "idempotency_key": idempotency_key},
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.error(
-            "audit_write_failed",
-            extra={"error": str(exc), "card_id": card_id},
-            exc_info=True,
-        )
-    finally:
-        if close_after:
-            await conn.close()
+        raise
+
+    logger.info(
+        "audit_writer: event written",
+        extra={
+            "event_type": payload.event_type,
+            "action_id": str(payload.action_id),
+            "policy_decision": payload.policy_decision,
+            "risk_class": payload.risk_class,
+        },
+    )

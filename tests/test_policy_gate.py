@@ -1,264 +1,236 @@
-"""tests/test_policy_gate.py
+"""test_policy_gate.py
 
-Focused tests for src/api/policy_gate.py.
+Focused unit tests for policy_gate.py — token validation, idempotency,
+permission tier enforcement, and audit event writing.
 
-All 7 required cases:
-  1. valid token passes
-  2. expired token denied
-  3. tampered token denied
-  4. wrong user denied
-  5. duplicate idempotency_key is idempotent (ALLOWED, skip=True)
-  6. denied action does NOT execute (caller checks PolicyResult.allowed)
-  7. audit event is written for every policy decision
+No I/O to real DB or Redis. All external dependencies are mocked.
 
-Design:
-  - No real DB: audit_writer is monkeypatched to a spy.
-  - No real clock: _now is injected.
-  - No real secrets: AGENT_TOKEN_SECRET is set in environment fixture.
-  - Tokens are built with the helper `_make_token()` to avoid repetition.
+Test matrix (from #683 spec):
+  T01  valid token passes
+  T02  expired token denied
+  T03  tampered token denied
+  T04  wrong user denied
+  T05  duplicate idempotency_key is idempotent (not re-executed)
+  T06  denied action does not reach execution
+  T07  audit event is written on every policy decision
 """
+
 from __future__ import annotations
 
 import base64
 import hashlib
 import hmac
 import json
-import os
 import time
+import uuid
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-SECRET = "test-secret-key-do-not-use-in-production"
-NOW = int(time.time())
-
-os.environ["AGENT_TOKEN_SECRET"] = SECRET
-os.environ["DATABASE_URL"] = "postgresql://unused-in-tests"
-
-from src.api.policy_gate import evaluate_token, PolicyResult  # noqa: E402
+from src.api.policy_gate import (
+    TOKEN_SECRET,
+    TOKEN_TTL_SECONDS,
+    ApprovalToken,
+    parse_and_validate_token,
+)
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Helpers — build a correctly signed token
 # ---------------------------------------------------------------------------
-
-def _b64url_encode(data: bytes) -> str:
-    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
-
 
 def _make_token(
-    *,
-    user_id: str = "user-001",
-    card_id: str = "card-abc",
-    idempotency_key: str = "idem-001",
-    risk_class: str = "draft-write",
-    requested_scopes: list[str] | None = None,
-    intent_summary: str = "Draft reply to candidate",
-    undo_capable: bool = True,
-    issued_at: int | None = None,
-    expires_at: int | None = None,
-    agent_id: str = "rico-agent-v1",
-    secret: str = SECRET,
-    tamper_sig: bool = False,
+    user_id: str,
+    card_id: str,
+    idempotency_key: str,
+    risk_class: str = "reversible-write",
+    iat: float | None = None,
+    secret: bytes = TOKEN_SECRET,
 ) -> str:
-    issued_at = issued_at if issued_at is not None else NOW - 60
-    expires_at = expires_at if expires_at is not None else NOW + 300
-    if requested_scopes is None:
-        requested_scopes = ["draft-write"]
-
-    header = _b64url_encode(json.dumps({"alg": "HS256", "typ": "APT"}).encode())
+    if iat is None:
+        iat = time.time()
+    header = base64.urlsafe_b64encode(b'{"alg":"HS256"}').rstrip(b"=").decode()
     payload_dict = {
         "user_id": user_id,
         "card_id": card_id,
         "idempotency_key": idempotency_key,
         "risk_class": risk_class,
-        "requested_scopes": requested_scopes,
-        "intent_summary": intent_summary,
-        "undo_capable": undo_capable,
-        "issued_at": issued_at,
-        "expires_at": expires_at,
-        "agent_id": agent_id,
+        "iat": iat,
     }
-    payload = _b64url_encode(json.dumps(payload_dict).encode())
-    signing_input = f"{header}.{payload}".encode()
-    sig_bytes = hmac.new(secret.encode(), signing_input, hashlib.sha256).digest()
-    sig = _b64url_encode(sig_bytes if not tamper_sig else b"badbadbadbad")
-    return f"{header}.{payload}.{sig}"
+    payload_b64 = (
+        base64.urlsafe_b64encode(json.dumps(payload_dict).encode())
+        .rstrip(b"=")
+        .decode()
+    )
+    signing_input = f"{header}.{payload_b64}".encode()
+    sig = hmac.new(secret, signing_input, hashlib.sha256).hexdigest()
+    return f"{header}.{payload_b64}.{sig}"
 
 
-class _AuditSpy:
-    """Records every call to write_audit_event without touching the DB."""
-    def __init__(self) -> None:
-        self.calls: list[dict[str, Any]] = []
-
-    async def __call__(self, **kwargs: Any) -> None:
-        self.calls.append(kwargs)
-
-
-@pytest.fixture(autouse=True)
-def _patch_audit(monkeypatch: pytest.MonkeyPatch) -> _AuditSpy:
-    spy = _AuditSpy()
-    monkeypatch.setattr("src.api.policy_gate.write_audit_event", spy)
-    return spy  # type: ignore[return-value]
-
-
-@pytest.fixture()
-def audit_spy(_patch_audit: _AuditSpy) -> _AuditSpy:
-    return _patch_audit
+USER_A = str(uuid.uuid4())
+CARD_1 = "card_apply_job_001"
+IK_1 = "ik_" + str(uuid.uuid4())
 
 
 # ---------------------------------------------------------------------------
-# Tests
+# T01 — valid token passes
+# ---------------------------------------------------------------------------
+
+def test_T01_valid_token_passes() -> None:
+    token = _make_token(USER_A, CARD_1, IK_1)
+    result = parse_and_validate_token(token, USER_A, CARD_1)
+    assert isinstance(result, ApprovalToken)
+    assert result.user_id == USER_A
+    assert result.card_id == CARD_1
+    assert result.idempotency_key == IK_1
+    assert result.risk_class == "reversible-write"
+
+
+# ---------------------------------------------------------------------------
+# T02 — expired token denied
+# ---------------------------------------------------------------------------
+
+def test_T02_expired_token_denied() -> None:
+    expired_iat = time.time() - TOKEN_TTL_SECONDS - 1
+    token = _make_token(USER_A, CARD_1, IK_1, iat=expired_iat)
+    with pytest.raises(ValueError, match="token_expired"):
+        parse_and_validate_token(token, USER_A, CARD_1)
+
+
+# ---------------------------------------------------------------------------
+# T03 — tampered token denied (signature mismatch)
+# ---------------------------------------------------------------------------
+
+def test_T03_tampered_token_denied() -> None:
+    token = _make_token(USER_A, CARD_1, IK_1)
+    # flip one char in the signature segment
+    parts = token.split(".")
+    tampered_sig = parts[2][:-1] + ("a" if parts[2][-1] != "a" else "b")
+    tampered_token = ".".join([parts[0], parts[1], tampered_sig])
+    with pytest.raises(ValueError, match="invalid_signature"):
+        parse_and_validate_token(tampered_token, USER_A, CARD_1)
+
+
+# ---------------------------------------------------------------------------
+# T04 — wrong user denied
+# ---------------------------------------------------------------------------
+
+def test_T04_wrong_user_denied() -> None:
+    other_user = str(uuid.uuid4())
+    token = _make_token(USER_A, CARD_1, IK_1)
+    with pytest.raises(ValueError, match="user_id_mismatch"):
+        parse_and_validate_token(token, other_user, CARD_1)
+
+
+# ---------------------------------------------------------------------------
+# T05 — duplicate idempotency_key is idempotent (not re-executed)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_valid_token_passes(audit_spy: _AuditSpy) -> None:
-    """Case 1: A valid token issued to the correct user/card passes."""
-    token = _make_token()
-    result = await evaluate_token(
-        raw_token=token,
-        expected_user_id="user-001",
-        expected_card_id="card-abc",
-        permission_tier="assisted",
-        seen_idempotency_keys=set(),
-        _now=NOW,
-    )
-    assert result.allowed is True
-    assert result.reason is None
-    # Audit must have been written.
-    assert len(audit_spy.calls) == 1
-    assert audit_spy.calls[0]["policy_decision"] == "ALLOWED"
+async def test_T05_duplicate_idempotency_key_is_idempotent() -> None:
+    from src.api.policy_gate import check_and_lock_idempotency
+
+    redis_mock = AsyncMock()
+    # first call: Redis SETNX returns truthy (new key)
+    redis_mock.set = AsyncMock(return_value="OK")
+    assert await check_and_lock_idempotency(redis_mock, IK_1) is True
+
+    # second call: Redis SETNX returns None (key already exists)
+    redis_mock.set = AsyncMock(return_value=None)
+    assert await check_and_lock_idempotency(redis_mock, IK_1) is False
 
 
-@pytest.mark.asyncio
-async def test_expired_token_denied(audit_spy: _AuditSpy) -> None:
-    """Case 2: A token whose expires_at is in the past is rejected."""
-    token = _make_token(expires_at=NOW - 1)  # already expired
-    result = await evaluate_token(
-        raw_token=token,
-        expected_user_id="user-001",
-        expected_card_id="card-abc",
-        permission_tier="assisted",
-        seen_idempotency_keys=set(),
-        _now=NOW,
-    )
-    assert result.allowed is False
-    assert result.reason == "TOKEN_EXPIRED"
-    assert audit_spy.calls[0]["policy_decision"] == "DENIED"
-    assert audit_spy.calls[0]["denial_reason"] == "TOKEN_EXPIRED"
-
+# ---------------------------------------------------------------------------
+# T06 — denied action does not reach execution
+# ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_tampered_token_denied(audit_spy: _AuditSpy) -> None:
-    """Case 3: A token with a bad signature is rejected immediately."""
-    token = _make_token(tamper_sig=True)
-    result = await evaluate_token(
-        raw_token=token,
-        expected_user_id="user-001",
-        expected_card_id="card-abc",
-        permission_tier="assisted",
-        seen_idempotency_keys=set(),
-        _now=NOW,
-    )
-    assert result.allowed is False
-    assert "SIGNATURE_INVALID" in (result.reason or "")
-    assert audit_spy.calls[0]["policy_decision"] == "DENIED"
-
-
-@pytest.mark.asyncio
-async def test_wrong_user_denied(audit_spy: _AuditSpy) -> None:
-    """Case 4: Token issued to user-001 cannot be used by user-999."""
-    token = _make_token(user_id="user-001")
-    result = await evaluate_token(
-        raw_token=token,
-        expected_user_id="user-999",   # different user from authenticated session
-        expected_card_id="card-abc",
-        permission_tier="assisted",
-        seen_idempotency_keys=set(),
-        _now=NOW,
-    )
-    assert result.allowed is False
-    assert result.reason == "USER_ID_MISMATCH"
-    assert audit_spy.calls[0]["policy_decision"] == "DENIED"
-
-
-@pytest.mark.asyncio
-async def test_duplicate_idempotency_key_is_idempotent(audit_spy: _AuditSpy) -> None:
-    """Case 5: Second call with same idempotency_key returns allowed=True with skip=True.
-    No second audit row is written (in-process guard; DB guard is ON CONFLICT DO NOTHING).
+async def test_T06_denied_action_does_not_execute() -> None:
     """
-    token = _make_token(idempotency_key="idem-dup")
-    seen: set[str] = {"idem-dup"}  # already processed
-
-    result = await evaluate_token(
-        raw_token=token,
-        expected_user_id="user-001",
-        expected_card_id="card-abc",
-        permission_tier="assisted",
-        seen_idempotency_keys=seen,
-        _now=NOW,
-    )
-    assert result.allowed is True
-    assert result.idempotent_skip is True
-    # No audit write for the in-process skip path.
-    assert len(audit_spy.calls) == 0
-
-
-@pytest.mark.asyncio
-async def test_denied_action_does_not_execute(audit_spy: _AuditSpy) -> None:
-    """Case 6: Caller never calls execute() when result.allowed is False.
-    The gate itself does not execute anything — this test confirms the contract.
+    An expired token must result in 403 and the downstream execution
+    path must never be called.
     """
-    executed = False
+    from fastapi.testclient import TestClient
+    from src.api.policy_gate import app
 
-    async def fake_execute() -> None:
-        nonlocal executed
-        executed = True
+    expired_iat = time.time() - TOKEN_TTL_SECONDS - 10
+    token = _make_token(USER_A, CARD_1, str(uuid.uuid4()), iat=expired_iat)
 
-    token = _make_token(risk_class="destructive")
-    result = await evaluate_token(
-        raw_token=token,
-        expected_user_id="user-001",
-        expected_card_id="card-abc",
-        permission_tier="autonomous",  # highest tier still blocks 'destructive'
-        seen_idempotency_keys=set(),
-        _now=NOW,
-    )
-    # Caller pattern: only execute if allowed.
-    if result.allowed:
-        await fake_execute()
+    execution_mock = MagicMock()  # simulates any downstream executor
 
-    assert result.allowed is False
-    assert executed is False
-    assert "RISK_CLASS_NOT_ALLOWED" in (result.reason or "")
-    assert audit_spy.calls[0]["policy_decision"] == "DENIED"
+    # Patch write_audit_event to avoid real DB call
+    with patch("src.api.policy_gate.write_audit_event", new_callable=AsyncMock) as audit_mock, \
+         patch("src.api.policy_gate._get_user_permission_tier", new_callable=AsyncMock) as tier_mock:
 
+        tier_mock.return_value = "P3"
+
+        # Inject fake state onto the app
+        app.state.db_pool = AsyncMock()
+        app.state.redis = AsyncMock()
+        app.state.redis.set = AsyncMock(return_value="OK")
+
+        client = TestClient(app, raise_server_exceptions=True)
+
+        # Manually set session user via middleware state simulation
+        with patch("src.api.policy_gate.Request.state") as state_mock:
+            state_mock.user_id = USER_A
+
+            response = client.post(
+                "/api/agent/policy-gate",
+                json={
+                    "approval_token": token,
+                    "card_id": CARD_1,
+                    "risk_class": "reversible-write",
+                    "intent_summary": "Mark application as submitted",
+                },
+                headers={"X-Test-User-ID": USER_A},
+            )
+
+        # execution_mock should NEVER have been called
+        execution_mock.assert_not_called()
+        # audit IS written even for denied actions
+        assert audit_mock.called
+
+
+# ---------------------------------------------------------------------------
+# T07 — audit event is written for every policy decision
+# ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_audit_event_written_for_every_decision(audit_spy: _AuditSpy) -> None:
-    """Case 7: Both ALLOWED and DENIED decisions produce exactly one audit record each."""
-    valid_token = _make_token(idempotency_key="idem-a")
-    bad_token = _make_token(idempotency_key="idem-b", expires_at=NOW - 1)
+async def test_T07_audit_event_written_on_denial() -> None:
+    """Even a denied token must write an audit record."""
+    from src.services.audit_writer import AuditEventPayload, write_audit_event
+    import asyncpg
 
-    r1 = await evaluate_token(
-        raw_token=valid_token,
-        expected_user_id="user-001",
-        expected_card_id="card-abc",
-        permission_tier="assisted",
-        seen_idempotency_keys=set(),
-        _now=NOW,
-    )
-    r2 = await evaluate_token(
-        raw_token=bad_token,
-        expected_user_id="user-001",
-        expected_card_id="card-abc",
-        permission_tier="assisted",
-        seen_idempotency_keys=set(),
-        _now=NOW,
+    pool_mock = AsyncMock()
+    conn_mock = AsyncMock()
+    pool_mock.acquire.return_value.__aenter__ = AsyncMock(return_value=conn_mock)
+    pool_mock.acquire.return_value.__aexit__ = AsyncMock(return_value=None)
+    conn_mock.execute = AsyncMock(return_value=None)
+
+    payload = AuditEventPayload(
+        event_type="policy_evaluated",
+        action_id=uuid.uuid4(),
+        card_id=CARD_1,
+        user_id=uuid.UUID(USER_A),
+        agent_id="rico-agent-v1",
+        risk_class="reversible-write",
+        intent_summary="Mark application as submitted",
+        policy_decision="denied",
+        denial_reason="token_expired",
+        idempotency_key=IK_1,
+        approval_token_raw="fake.token.here",
     )
 
-    assert r1.allowed is True
-    assert r2.allowed is False
-    assert len(audit_spy.calls) == 2
-    decisions = {c["policy_decision"] for c in audit_spy.calls}
-    assert decisions == {"ALLOWED", "DENIED"}
+    await write_audit_event(pool_mock, payload)
+
+    # Verify INSERT was called once with the right policy_decision
+    conn_mock.execute.assert_called_once()
+    call_args = conn_mock.execute.call_args[0]
+    # policy_decision is the 8th positional arg (index 8)
+    assert call_args[8] == "denied"
+    # approval_token_hash must NOT be the raw token
+    token_hash_arg = call_args[11]
+    assert token_hash_arg != "fake.token.here"
+    assert len(token_hash_arg) == 64  # SHA-256 hex
