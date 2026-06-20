@@ -212,6 +212,90 @@ export const AgentUIResponseSchema = z.object({
 });
 
 // ============================================================================
+// Agentic UI Schemas (CAREER-OS-01)
+// ============================================================================
+
+export const RicoActionKindSchema = z.enum([
+    'navigate',
+    'submit',
+    'chat_continue',
+    'open_drawer',
+    'approve',
+    'cancel',
+]);
+
+export const RicoActionImpactSchema = z.enum(['low', 'medium', 'high']);
+
+export const RicoChatActionSchema = z.object({
+    id: z.string(),
+    label: z.string(),
+    kind: RicoActionKindSchema,
+    impact: RicoActionImpactSchema.default('low'),
+    requires_confirmation: z.boolean().default(false),
+    endpoint: z.string().nullable().optional(),
+    href: z.string().nullable().optional(),
+    payload: z.record(z.string(), z.unknown()).default({}),
+    tracking_key: z.string().nullable().optional(),
+});
+
+export const RicoPermissionRequestSchema = z.object({
+    id: z.string(),
+    title: z.string(),
+    summary: z.string(),
+    risk_level: z.enum(['medium', 'high']),
+    data_used: z.array(z.string()).default([]),
+    effects: z.array(z.string()).default([]),
+    approve_action: RicoChatActionSchema,
+    review_action: RicoChatActionSchema.nullable().optional(),
+    cancel_action: RicoChatActionSchema,
+});
+
+export const RicoProgressStepSchema = z.object({
+    id: z.string(),
+    label: z.string(),
+    status: z.enum(['pending', 'running', 'complete', 'failed']),
+});
+
+export const RicoProposedChangeSchema = z.object({
+    field: z.string(),
+    current_value: z.unknown().nullable().optional(),
+    proposed_value: z.unknown(),
+    source: z.enum(['chat', 'cv', 'file', 'screenshot', 'system', 'user_action']),
+});
+
+export const RicoAttachmentPurposeSchema = z.enum([
+    'cv_resume',
+    'job_post',
+    'recruiter_message',
+    'application_form',
+    'certificate',
+    'offer_letter',
+    'contract_or_legalish',
+    'company_profile',
+    'public_comment',
+    'unknown_document',
+]);
+
+export const RicoAttachmentAnalysisSchema = z.object({
+    id: z.string(),
+    filename: z.string().nullable().optional(),
+    mime_type: z.string().nullable().optional(),
+    purpose: RicoAttachmentPurposeSchema,
+    confidence: z.number(),
+    extracted_summary: z.string().nullable().optional(),
+    extracted_fields: z.record(z.string(), z.unknown()).default({}),
+    warnings: z.array(z.string()).default([]),
+});
+
+export const RicoAgenticUiSchema = z.object({
+    actions: z.array(RicoChatActionSchema).default([]),
+    permission_request: RicoPermissionRequestSchema.nullable().optional(),
+    progress: z.array(RicoProgressStepSchema).default([]),
+    proposed_changes: z.array(RicoProposedChangeSchema).default([]),
+    attachment_analysis: z.array(RicoAttachmentAnalysisSchema).default([]),
+});
+
+// ============================================================================
 // Rico Chat Schemas
 // ============================================================================
 
@@ -329,6 +413,7 @@ export const RicoChatResponseSchema = z.object({
     provider_available: z.boolean().optional(),
     openai_model: StringFromUnknownSchema,
     jotform_form_id: StringFromUnknownSchema.nullable(),
+    agentic_ui: RicoAgenticUiSchema.optional(),
 }).passthrough();
 
 export const RicoProfileResponseSchema = z.object({
@@ -619,6 +704,16 @@ export type AgentAction = z.infer<typeof AgentActionSchema>;
 export type AgentUIComponent = z.infer<typeof AgentUIComponentSchema>;
 export type AgentChatRequest = z.infer<typeof AgentChatRequestSchema>;
 export type AgentUIResponse = z.infer<typeof AgentUIResponseSchema>;
+
+export type RicoActionKind = z.infer<typeof RicoActionKindSchema>;
+export type RicoActionImpact = z.infer<typeof RicoActionImpactSchema>;
+export type RicoChatAction = z.infer<typeof RicoChatActionSchema>;
+export type RicoPermissionRequest = z.infer<typeof RicoPermissionRequestSchema>;
+export type RicoProgressStep = z.infer<typeof RicoProgressStepSchema>;
+export type RicoProposedChange = z.infer<typeof RicoProposedChangeSchema>;
+export type RicoAttachmentPurpose = z.infer<typeof RicoAttachmentPurposeSchema>;
+export type RicoAttachmentAnalysis = z.infer<typeof RicoAttachmentAnalysisSchema>;
+export type RicoAgenticUi = z.infer<typeof RicoAgenticUiSchema>;
 
 export type RicoChatRequest = z.infer<typeof RicoChatRequestSchema>;
 export type RicoPublicChatRequest = z.infer<typeof RicoPublicChatRequestSchema>;
