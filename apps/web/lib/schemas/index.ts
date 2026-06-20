@@ -212,39 +212,6 @@ export const AgentUIResponseSchema = z.object({
 });
 
 // ============================================================================
-// Agentic UI Contract Schemas (CAREER-OS-01)
-// Optional structured UI hints a Rico response may attach so future renderers
-// can display richer components (cards, buttons, etc.) alongside chat text.
-// Mirrors AgenticUIContract / AgenticUIComponentContract / AgenticUIActionContract
-// in src/schemas/chat.py.
-// ============================================================================
-
-export const AgenticUIActionStyleSchema = z.enum(['primary', 'secondary', 'danger']);
-
-export const AgenticUIActionContractSchema = z.object({
-    action_id: z.string().default(''),
-    type: z.string().default('send_message'),
-    label: z.string().default(''),
-    style: AgenticUIActionStyleSchema.default('secondary'),
-    job_id: z.string().optional(),
-    href: z.string().optional(),
-    payload: z.record(z.string(), z.any()).default({}),
-}).passthrough();
-
-export const AgenticUIComponentContractSchema = z.object({
-    component: z.string().default('text_block'),
-    title: z.string().optional(),
-    data: z.record(z.string(), z.any()).default({}),
-    actions: z.array(AgenticUIActionContractSchema).default([]),
-}).passthrough();
-
-export const AgenticUIContractSchema = z.object({
-    version: z.string().default('1'),
-    components: z.array(AgenticUIComponentContractSchema).default([]),
-    primary_action: AgenticUIActionContractSchema.optional(),
-}).passthrough();
-
-// ============================================================================
 // Rico Chat Schemas
 // ============================================================================
 
@@ -362,7 +329,6 @@ export const RicoChatResponseSchema = z.object({
     provider_available: z.boolean().optional(),
     openai_model: StringFromUnknownSchema,
     jotform_form_id: StringFromUnknownSchema.nullable(),
-    agentic_ui: AgenticUIContractSchema.optional(),
 }).passthrough();
 
 export const RicoProfileResponseSchema = z.object({
@@ -676,7 +642,3 @@ export type RecruiterInteraction = z.infer<typeof RecruiterInteractionSchema>;
 export type CompensationTarget = z.infer<typeof CompensationTargetSchema>;
 export type StrategicPreference = z.infer<typeof StrategicPreferenceSchema>;
 export type OpportunityWeighting = z.infer<typeof OpportunityWeightingSchema>;
-
-export type AgenticUIActionContract = z.infer<typeof AgenticUIActionContractSchema>;
-export type AgenticUIComponentContract = z.infer<typeof AgenticUIComponentContractSchema>;
-export type AgenticUIContract = z.infer<typeof AgenticUIContractSchema>;
