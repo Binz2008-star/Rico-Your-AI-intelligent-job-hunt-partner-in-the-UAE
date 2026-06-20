@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import type { RicoChatAction } from "@/lib/schemas";
+import type { RicoChatAction, RicoActionImpact } from "@/lib/schemas";
 
 export interface ChatActionsRowProps {
     actions: RicoChatAction[];
@@ -20,22 +20,64 @@ function sanitizeHref(href: string | null | undefined): string | null {
 }
 
 /**
- * True only when the action can execute in this PR.
- * High-impact or confirmation-required actions are blocked regardless of kind.
+ * Returns true only when the action can be executed in the current context.
+ * High-impact and confirmation-required actions are always gated — they must
+ * go through the PermissionRequestCard flow, never inline action cards.
  */
 function isEnabled(action: RicoChatAction): boolean {
-    if (action.impact === "high" || action.requires_confirmation) return false;
+    if (action.impact === "high") return false;
+    if (action.requires_confirmation) return false;
     if (action.kind === "navigate") return !!sanitizeHref(action.href);
     if (action.kind === "chat_continue") return true;
-    return false; // open_drawer, submit, approve, cancel, unknown kinds
+    return false;
+}
+
+/**
+ * Human-readable explanation of why an action card is disabled.
+ * Shown as both `title` (hover tooltip) and `aria-label` (screen readers).
+ *
+ * Kind is checked before impact so that approve/cancel actions always surface
+ * the permission-card message regardless of their impact level.
+ */
+function disabledReason(action: RicoChatAction): string {
+    if (action.kind === "approve" || action.kind === "cancel") {
+        return "Use the permission card below to approve or cancel";
+    }
+    if (action.impact === "high") {
+        return "High-impact action — approval required via the permission card";
+    }
+    if (action.requires_confirmation) {
+        return "Confirmation required before this action can proceed";
+    }
+    if (action.kind === "open_drawer") {
+        return "Coming soon";
+    }
+    if (action.kind === "submit") {
+        return "Not available yet";
+    }
+    if (action.kind === "navigate" && !action.href) {
+        return "No destination configured";
+    }
+    return "Not available";
 }
 
 const BASE =
     "text-[12px] px-3 py-2 rounded-xl border transition-colors select-none rico-focus-strong";
-const ACTIVE = cn(
-    BASE,
-    "border-gold/30 text-gold hover:bg-gold/10 hover:border-gold/50 cursor-pointer",
-);
+
+/** Styling for enabled action cards — medium impact gets a slightly elevated presence. */
+function activeClass(impact: RicoActionImpact): string {
+    if (impact === "medium") {
+        return cn(
+            BASE,
+            "border-gold/50 bg-gold/5 text-gold hover:bg-gold/15 hover:border-gold/70 cursor-pointer",
+        );
+    }
+    return cn(
+        BASE,
+        "border-gold/30 text-gold hover:bg-gold/10 hover:border-gold/50 cursor-pointer",
+    );
+}
+
 const INACTIVE = cn(BASE, "border-border-soft text-text-muted opacity-50 cursor-not-allowed");
 
 function ChatActionCard({
@@ -57,7 +99,8 @@ function ChatActionCard({
                 href={href}
                 {...(isExternal ? { target: "_blank", rel: "noopener noreferrer" } : {})}
                 data-testid="action-card-navigate"
-                className={ACTIVE}
+                data-impact={action.impact}
+                className={activeClass(action.impact)}
             >
                 {action.label}
             </Link>
@@ -71,21 +114,25 @@ function ChatActionCard({
             <button
                 type="button"
                 data-testid="action-card-chat-continue"
+                data-impact={action.impact}
                 onClick={() => onChatContinue(msg)}
-                className={ACTIVE}
+                className={activeClass(action.impact)}
             >
                 {action.label}
             </button>
         );
     }
 
+    const reason = disabledReason(action);
     return (
         <button
             type="button"
             data-testid="action-card-disabled"
+            data-disabled-reason={reason}
             disabled
+            title={reason}
+            aria-label={`${action.label} — ${reason}`}
             className={INACTIVE}
-            title={action.kind === "open_drawer" ? "Coming soon" : undefined}
         >
             {action.label}
         </button>

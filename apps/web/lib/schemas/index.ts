@@ -212,6 +212,46 @@ export const AgentUIResponseSchema = z.object({
 });
 
 // ============================================================================
+// Permission Engine Schemas (CAREER-OS-03)
+// Must mirror EXECUTE_ALLOWED_ACTIONS in src/schemas/actions.py.
+// ============================================================================
+
+// Actions the permission engine is allowed to execute on the user's behalf.
+// trigger_pipeline is intentionally absent — it is an admin/scheduler action.
+export const EXECUTE_ALLOWED_ACTIONS = [
+    "apply", "save", "skip", "not_relevant", "block", "draft", "why", "remind",
+] as const;
+
+export type ExecuteAllowedAction = (typeof EXECUTE_ALLOWED_ACTIONS)[number];
+
+export const ExecutePermissionActionRequestSchema = z.object({
+    permission_id: z.string().min(1).max(128),
+    action: z.enum(EXECUTE_ALLOWED_ACTIONS),
+    job_key: z.string().max(256).default(""),
+    job: z.record(z.string(), z.unknown()).nullable().optional(),
+    source: z.string().max(64).default("permission_card"),
+});
+
+export const ExecutePermissionActionResponseSchema = z.object({
+    ok: z.boolean(),
+    message: z.string(),
+    action: z.string(),
+    job_key: z.string(),
+    source: z.string(),
+    user_id: z.string(),
+    dry_run: z.boolean(),
+    data: z.record(z.string(), z.unknown()).default({}),
+    error: z.string().nullable(),
+    confidence: z.number(),
+    explanation: z.string(),
+    duration_ms: z.number().int(),
+}).passthrough();
+
+// Use z.input<> so callers may omit fields with .default() (job_key, source).
+export type ExecutePermissionActionRequest = z.input<typeof ExecutePermissionActionRequestSchema>;
+export type ExecutePermissionActionResponse = z.infer<typeof ExecutePermissionActionResponseSchema>;
+
+// ============================================================================
 // Agentic UI Schemas (CAREER-OS-01)
 // ============================================================================
 

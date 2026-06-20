@@ -2,6 +2,7 @@ import {
   AgentChatRequestSchema,
   AgentUIResponseSchema,
   ConfirmCVProfileResponseSchema,
+  ExecutePermissionActionResponseSchema,
   MeResponseSchema,
   ProfileUpdateResponseSchema,
   RicoChatHistoryResponseSchema,
@@ -10,7 +11,12 @@ import {
   SavedSearchesResponseSchema,
   UploadCVResponseSchema,
 } from "@/lib/schemas";
-import type { AgentChatRequest, AgentUIResponse } from "@/lib/schemas";
+import type {
+  AgentChatRequest,
+  AgentUIResponse,
+  ExecutePermissionActionRequest,
+  ExecutePermissionActionResponse,
+} from "@/lib/schemas";
 import type {
   Application,
   ApplicationActionRequest,
@@ -1667,36 +1673,21 @@ export async function recordSubscriptionIntent(
 }
 
 // ── CAREER-OS-03: Permission Engine ──────────────────────────────────────────
+// Types are derived from Zod schemas in lib/schemas/index.ts so the contract
+// is validated at the API boundary — consistent with all other Rico endpoints.
+export type { ExecutePermissionActionRequest, ExecutePermissionActionResponse };
 
-export interface ExecutePermissionActionRequest {
-  permission_id: string;
-  action: string;
-  job_key?: string;
-  job?: Record<string, unknown> | null;
-  source?: string;
-}
-
-export interface ExecutePermissionActionResponse {
-  ok: boolean;
-  message: string;
-  action: string;
-  job_key: string;
-  source: string;
-  user_id: string;
-  dry_run: boolean;
-  data: Record<string, unknown>;
-  error: string | null;
-  confidence: number;
-  explanation: string;
-  duration_ms: number;
-}
-
-/** Call POST /api/v1/rico/actions/execute — requires the user to be authenticated. */
+/** Call POST /api/v1/rico/actions/execute — requires the user to be authenticated.
+ *
+ * The response is validated against ExecutePermissionActionResponseSchema so any
+ * unexpected shape from the backend fails loudly at the boundary rather than
+ * silently producing undefined fields deeper in the component tree.
+ */
 export async function executePermissionAction(
   req: ExecutePermissionActionRequest,
   signal?: AbortSignal,
 ): Promise<ExecutePermissionActionResponse> {
-  return requestJson<ExecutePermissionActionResponse>(
+  const raw = await requestJson<unknown>(
     "/api/v1/rico/actions/execute",
     {
       method: "POST",
@@ -1710,4 +1701,5 @@ export async function executePermissionAction(
       }),
     },
   );
+  return validateShape(ExecutePermissionActionResponseSchema, raw, "executePermissionAction");
 }

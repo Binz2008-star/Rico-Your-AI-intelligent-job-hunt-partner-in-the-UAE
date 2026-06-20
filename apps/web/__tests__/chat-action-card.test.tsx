@@ -1,11 +1,13 @@
 /**
  * apps/web/__tests__/chat-action-card.test.tsx
  *
- * CAREER-OS-02: Unit tests for ChatActionsRow / ChatActionCard component.
+ * CAREER-OS-02 / CAREER-OS-03: Unit tests for ChatActionsRow / ChatActionCard.
  *
  * Verifies:
  * - navigate and chat_continue actions are interactive.
  * - open_drawer, high-impact, requires_confirmation, and unknown kinds are disabled.
+ * - Every disabled state carries a descriptive title and aria-label explaining WHY.
+ * - Medium-impact enabled actions carry data-impact="medium" for visual distinction.
  * - Empty actions list renders nothing.
  * - disabled prop suppresses all interactions.
  */
@@ -290,5 +292,153 @@ describe("multiple actions", () => {
         expect(screen.getByText("View jobs")).toBeInTheDocument();
         expect(screen.getByText("Find jobs")).toBeInTheDocument();
         expect(screen.getByText("Preview")).toBeInTheDocument();
+    });
+});
+
+// ── Disabled reason labels ────────────────────────────────────────────────────
+// Every disabled action must carry a title (hover tooltip) and aria-label that
+// explains WHY the action is unavailable. Vague "disabled" states erode trust.
+
+describe("disabled reason labels", () => {
+    it("high-impact action explains approval is required", () => {
+        render(
+            <ChatActionsRow
+                actions={[navigateAction({ impact: "high", href: "/jobs" })]}
+                onChatContinue={vi.fn()}
+            />,
+        );
+        const btn = screen.getByTestId("action-card-disabled");
+        expect(btn).toHaveAttribute("title", "High-impact action — approval required via the permission card");
+        expect(btn).toHaveAttribute("aria-label", expect.stringContaining("approval required"));
+    });
+
+    it("requires_confirmation action explains confirmation is needed", () => {
+        render(
+            <ChatActionsRow
+                actions={[chatContinueAction({ requires_confirmation: true })]}
+                onChatContinue={vi.fn()}
+            />,
+        );
+        const btn = screen.getByTestId("action-card-disabled");
+        expect(btn).toHaveAttribute("title", "Confirmation required before this action can proceed");
+    });
+
+    it("open_drawer action keeps 'Coming soon' label", () => {
+        render(
+            <ChatActionsRow actions={[openDrawerAction()]} onChatContinue={vi.fn()} />,
+        );
+        const btn = screen.getByTestId("action-card-disabled");
+        expect(btn).toHaveAttribute("title", "Coming soon");
+    });
+
+    it("approve kind explains to use the permission card", () => {
+        render(
+            <ChatActionsRow
+                actions={[{
+                    id: "approve-1",
+                    label: "Submit application",
+                    kind: "approve",
+                    impact: "high",
+                    requires_confirmation: true,
+                    payload: {},
+                }]}
+                onChatContinue={vi.fn()}
+            />,
+        );
+        const btn = screen.getByTestId("action-card-disabled");
+        expect(btn).toHaveAttribute("title", "Use the permission card below to approve or cancel");
+    });
+
+    it("cancel kind explains to use the permission card", () => {
+        render(
+            <ChatActionsRow
+                actions={[{
+                    id: "cancel-1",
+                    label: "Cancel",
+                    kind: "cancel",
+                    impact: "low",
+                    requires_confirmation: false,
+                    payload: {},
+                }]}
+                onChatContinue={vi.fn()}
+            />,
+        );
+        const btn = screen.getByTestId("action-card-disabled");
+        expect(btn).toHaveAttribute("title", "Use the permission card below to approve or cancel");
+    });
+
+    it("submit kind explains it is not available yet", () => {
+        render(
+            <ChatActionsRow
+                actions={[{
+                    id: "submit-1",
+                    label: "Save search",
+                    kind: "submit",
+                    impact: "low",
+                    requires_confirmation: false,
+                    payload: {},
+                }]}
+                onChatContinue={vi.fn()}
+            />,
+        );
+        const btn = screen.getByTestId("action-card-disabled");
+        expect(btn).toHaveAttribute("title", "Not available yet");
+    });
+
+    it("navigate with missing href explains no destination", () => {
+        render(
+            <ChatActionsRow
+                actions={[navigateAction({ href: undefined })]}
+                onChatContinue={vi.fn()}
+            />,
+        );
+        const btn = screen.getByTestId("action-card-disabled");
+        expect(btn).toHaveAttribute("title", "No destination configured");
+    });
+});
+
+// ── Impact visual distinction ─────────────────────────────────────────────────
+// Enabled actions carry a data-impact attribute so the visual layer can
+// apply elevated styling for medium-impact actions without requiring CSS class tests.
+
+describe("impact visual distinction", () => {
+    it("low-impact navigate carries data-impact='low'", () => {
+        render(
+            <ChatActionsRow
+                actions={[navigateAction({ impact: "low" })]}
+                onChatContinue={vi.fn()}
+            />,
+        );
+        expect(screen.getByTestId("action-card-navigate")).toHaveAttribute("data-impact", "low");
+    });
+
+    it("medium-impact navigate carries data-impact='medium'", () => {
+        render(
+            <ChatActionsRow
+                actions={[navigateAction({ impact: "medium" })]}
+                onChatContinue={vi.fn()}
+            />,
+        );
+        expect(screen.getByTestId("action-card-navigate")).toHaveAttribute("data-impact", "medium");
+    });
+
+    it("low-impact chat_continue carries data-impact='low'", () => {
+        render(
+            <ChatActionsRow
+                actions={[chatContinueAction({ impact: "low" })]}
+                onChatContinue={vi.fn()}
+            />,
+        );
+        expect(screen.getByTestId("action-card-chat-continue")).toHaveAttribute("data-impact", "low");
+    });
+
+    it("medium-impact chat_continue carries data-impact='medium'", () => {
+        render(
+            <ChatActionsRow
+                actions={[chatContinueAction({ impact: "medium" })]}
+                onChatContinue={vi.fn()}
+            />,
+        );
+        expect(screen.getByTestId("action-card-chat-continue")).toHaveAttribute("data-impact", "medium");
     });
 });

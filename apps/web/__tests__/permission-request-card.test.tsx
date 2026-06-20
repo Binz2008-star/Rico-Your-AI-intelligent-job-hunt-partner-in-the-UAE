@@ -140,6 +140,35 @@ describe("PermissionRequestCard rendering", () => {
         );
         expect(screen.getByTestId("permission-review-btn")).toHaveTextContent("Review details");
     });
+
+    it("review button is disabled when no onReview handler is provided", () => {
+        const reviewAction: RicoChatAction = {
+            id: "review-1",
+            label: "Review details",
+            kind: "navigate",
+            impact: "low",
+            requires_confirmation: false,
+            payload: {},
+        };
+        render(
+            <PermissionRequestCard
+                request={makeRequest({ review_action: reviewAction })}
+                onApprove={vi.fn()}
+                onCancel={vi.fn()}
+                // onReview intentionally omitted
+            />,
+        );
+        expect(screen.getByTestId("permission-review-btn")).toBeDisabled();
+    });
+
+    it("error region has role='alert' for screen reader announcement", async () => {
+        const user = userEvent.setup();
+        const handler = vi.fn().mockRejectedValue(new Error("Server error"));
+        render(<PermissionRequestCard request={makeRequest()} onApprove={handler} onCancel={vi.fn()} />);
+        await user.click(screen.getByTestId("permission-approve-btn"));
+        await waitFor(() => expect(screen.getByTestId("permission-error")).toBeInTheDocument());
+        expect(screen.getByTestId("permission-error")).toHaveAttribute("role", "alert");
+    });
 });
 
 // ── Interactions ──────────────────────────────────────────────────────────────
@@ -256,5 +285,82 @@ describe("PermissionRequestCard disabled prop", () => {
         render(<PermissionRequestCard request={makeRequest()} onApprove={handler} onCancel={vi.fn()} disabled />);
         await user.click(screen.getByTestId("permission-approve-btn"));
         expect(handler).not.toHaveBeenCalled();
+    });
+});
+
+// ── onReview handler ──────────────────────────────────────────────────────────
+
+function makeReviewAction(overrides: Partial<RicoChatAction> = {}): RicoChatAction {
+    return {
+        id: "review-1",
+        label: "Review details",
+        kind: "navigate",
+        impact: "low",
+        requires_confirmation: false,
+        payload: { href: "/jobs/123" },
+        ...overrides,
+    };
+}
+
+describe("PermissionRequestCard review action", () => {
+    it("review button is enabled when onReview is provided", () => {
+        render(
+            <PermissionRequestCard
+                request={makeRequest({ review_action: makeReviewAction() })}
+                onApprove={vi.fn()}
+                onCancel={vi.fn()}
+                onReview={vi.fn()}
+            />,
+        );
+        expect(screen.getByTestId("permission-review-btn")).not.toBeDisabled();
+    });
+
+    it("calls onReview with the review_action when review button clicked", async () => {
+        const user = userEvent.setup();
+        const reviewHandler = vi.fn();
+        const reviewAction = makeReviewAction();
+        render(
+            <PermissionRequestCard
+                request={makeRequest({ review_action: reviewAction })}
+                onApprove={vi.fn()}
+                onCancel={vi.fn()}
+                onReview={reviewHandler}
+            />,
+        );
+        await user.click(screen.getByTestId("permission-review-btn"));
+        expect(reviewHandler).toHaveBeenCalledOnce();
+        expect(reviewHandler).toHaveBeenCalledWith(reviewAction);
+    });
+
+    it("does not call onReview when review button is disabled (no handler)", async () => {
+        const user = userEvent.setup();
+        const reviewAction = makeReviewAction();
+        render(
+            <PermissionRequestCard
+                request={makeRequest({ review_action: reviewAction })}
+                onApprove={vi.fn()}
+                onCancel={vi.fn()}
+                // onReview intentionally omitted
+            />,
+        );
+        const btn = screen.getByTestId("permission-review-btn");
+        expect(btn).toBeDisabled();
+        await user.click(btn);
+        // No handler to call — just assert button is still in the DOM
+        expect(btn).toBeInTheDocument();
+    });
+
+    it("review button has tooltip when no onReview handler", () => {
+        render(
+            <PermissionRequestCard
+                request={makeRequest({ review_action: makeReviewAction() })}
+                onApprove={vi.fn()}
+                onCancel={vi.fn()}
+            />,
+        );
+        expect(screen.getByTestId("permission-review-btn")).toHaveAttribute(
+            "title",
+            "Review details — coming soon",
+        );
     });
 });

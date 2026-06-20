@@ -5,7 +5,8 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, RicoOption, UploadCVResponse } from "@/lib/api";
-import type { RicoAgenticUi, RicoChatAction } from "@/lib/schemas";
+import type { RicoAgenticUi, RicoChatAction, ExecuteAllowedAction } from "@/lib/schemas";
+import { EXECUTE_ALLOWED_ACTIONS } from "@/lib/schemas";
 import { ChatActionsRow } from "@/components/ui/rico/ChatActionCard";
 import { PermissionRequestCard } from "@/components/ui/rico/PermissionRequestCard";
 import { clearChatHistory, confirmCVProfile, executePermissionAction, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, uploadCV } from "@/lib/api";
@@ -1313,6 +1314,44 @@ export default function CommandPage() {
         }
     }
 
+    /** Execute a permission-engine approved action and add the result to the thread.
+     *
+     * Called by PermissionRequestCard.onApprove. Throws on network/API errors so
+     * the card can show an inline error and let the user retry or cancel.
+     * On success, dismisses the card and appends Rico's response to the message list.
+     */
+    async function handlePermissionApprove(m: Message, action: RicoChatAction): Promise<void> {
+        const permission = m.agentic_ui!.permission_request!;
+        const rawAction = String((action.payload as Record<string, unknown>)?.action ?? "");
+        if (!(EXECUTE_ALLOWED_ACTIONS as readonly string[]).includes(rawAction)) {
+            throw new Error(`Action "${rawAction}" is not permitted via the permission engine.`);
+        }
+        const actionName = rawAction as ExecuteAllowedAction;
+        const jobKey = String((action.payload as Record<string, unknown>)?.job_key ?? "");
+        const job = (action.payload as Record<string, unknown>)?.job as Record<string, unknown> | null;
+
+        const res = await executePermissionAction({
+            permission_id: permission.id,
+            action: actionName,
+            job_key: jobKey,
+            job,
+        });
+
+        const resultMsg = res.ok
+            ? res.message || `${action.label} completed.`
+            : res.error || res.message || "Could not complete this action. Please try again.";
+
+        // Dismiss the card so it doesn't linger after the action resolves.
+        setMessages((prev) =>
+            prev.map((msg) => msg.id === m.id ? { ...msg, permission_dismissed: true } : msg),
+        );
+        // Append Rico's response as a new message in the thread.
+        setMessages((prev) => [
+            ...prev,
+            { id: nextId(), role: "rico" as const, text: resultMsg },
+        ]);
+    }
+
     if (sessionExpired) {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center">
@@ -1680,29 +1719,9 @@ export default function CommandPage() {
                                         <PermissionRequestCard
                                             request={m.agentic_ui.permission_request}
                                             disabled={thinking}
-                                            onApprove={async (action: RicoChatAction) => {
-                                                const res = await executePermissionAction({
-                                                    permission_id: m.agentic_ui!.permission_request!.id,
-                                                    action: String((action.payload as Record<string, unknown>)?.action ?? ""),
-                                                    job_key: String((action.payload as Record<string, unknown>)?.job_key ?? ""),
-                                                    job: (action.payload as Record<string, unknown>)?.job as Record<string, unknown> | null,
-                                                    source: "permission_card",
-                                                });
-                                                const resultMsg = res.ok
-                                                    ? res.message || action.label
-                                                    : `Action failed: ${res.message}`;
-                                                setMessages((prev) =>
-                                                    prev.map((msg) =>
-                                                        msg.id === m.id
-                                                            ? { ...msg, permission_dismissed: true }
-                                                            : msg,
-                                                    ),
-                                                );
-                                                setMessages((prev) => [
-                                                    ...prev,
-                                                    { id: nextId(), role: "rico" as const, text: resultMsg },
-                                                ]);
-                                            }}
+                                            onApprove={(action: RicoChatAction) =>
+                                                handlePermissionApprove(m, action)
+                                            }
                                             onCancel={() =>
                                                 setMessages((prev) =>
                                                     prev.map((msg) =>

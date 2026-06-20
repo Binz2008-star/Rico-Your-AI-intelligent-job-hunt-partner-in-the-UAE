@@ -185,17 +185,51 @@ class TestPermissionAuditSource:
         assert "perm-trace-123" in r.json()["source"]
 
 
-# ── Unknown action ────────────────────────────────────────────────────────────
+# ── Action allowlist (schema-layer safety) ────────────────────────────────────
 
-class TestPermissionExecuteUnknownAction:
-    def test_unknown_action_returns_200_ok_false(self, client):
+class TestExecuteActionAllowlist:
+    """Verify that the explicit action allowlist in ExecutePermissionActionRequest
+    blocks non-user-facing actions at the Pydantic layer — before they ever reach
+    agent_runtime. This is defence-in-depth on top of the runtime's own validation."""
+
+    def test_unknown_action_rejected_at_schema_level(self):
+        from pydantic import ValidationError
+        from src.schemas.actions import ExecutePermissionActionRequest
+        with pytest.raises(ValidationError):
+            ExecutePermissionActionRequest(permission_id="perm-001", action="launch_rocket")
+
+    def test_trigger_pipeline_rejected_at_schema_level(self):
+        """trigger_pipeline is a valid agent action but must not be executable
+        through the permission engine (it is an admin/scheduler action)."""
+        from pydantic import ValidationError
+        from src.schemas.actions import ExecutePermissionActionRequest
+        with pytest.raises(ValidationError):
+            ExecutePermissionActionRequest(permission_id="perm-001", action="trigger_pipeline")
+
+    def test_unknown_action_returns_422_not_200(self, client):
+        """Now that action is validated at the Pydantic layer, unknown actions return
+        422 Unprocessable Entity — not 200 ok=False — which is more semantically correct."""
         r = client.post(_URL, json={
             "permission_id": "perm-001",
             "action": "launch_rocket",
             "job": _JOB,
         })
-        assert r.status_code == 200
-        assert r.json()["ok"] is False
+        assert r.status_code == 422
+
+    def test_trigger_pipeline_returns_422(self, client):
+        r = client.post(_URL, json={
+            "permission_id": "perm-001",
+            "action": "trigger_pipeline",
+            "job": _JOB,
+        })
+        assert r.status_code == 422
+
+    def test_all_allowed_actions_accepted_at_schema_level(self):
+        """Every action in EXECUTE_ALLOWED_ACTIONS must pass schema validation."""
+        from src.schemas.actions import ExecutePermissionActionRequest, EXECUTE_ALLOWED_ACTIONS
+        for action in EXECUTE_ALLOWED_ACTIONS:
+            req = ExecutePermissionActionRequest(permission_id="perm-001", action=action)
+            assert req.action == action
 
 
 # ── Live execution ────────────────────────────────────────────────────────────
