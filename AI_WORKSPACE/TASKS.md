@@ -77,9 +77,8 @@ impact vs. effort. `ref` below = the section id in the audit doc.
 #### Backlog (grouped by audit impact)
 
 Critical:
-- [ ] 1-A — Replace A/B/C/D typed options with clickable inline action buttons. BUG-02
-  (TASK-022) fixed the letter-routing; this is the UI half that removes typing entirely.
-- [ ] 1-B — Real fit-score badge on job cards (e.g. "82% match") + skills/gaps/location breakdown.
+- [x] 1-A — Replace A/B/C/D typed options with clickable inline action buttons. DONE via PR #678.
+- [x] 1-B — Real fit-score badge on job cards (e.g. "82% match") + skills/gaps/location breakdown. DONE via PR #679.
 
 High:
 - [x] 1-D — Sidebar widgets load on every mount. DONE via TASK-20260619-027 / PR #658.

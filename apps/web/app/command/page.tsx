@@ -300,6 +300,28 @@ function WorkingIndicator({ message }: { message: string }) {
     );
 }
 
+function SearchElapsedTimer({ t }: { t: (k: TranslationKey) => string }) {
+    const [elapsed, setElapsed] = useState(0);
+    useEffect(() => {
+        const id = setInterval(() => setElapsed((s) => s + 1), 1000);
+        return () => clearInterval(id);
+    }, []);
+    const hint =
+        elapsed >= 20 ? t("cmdSearchWakingUp")
+        : elapsed >= 10 ? t("cmdSearchStillLooking")
+        : null;
+    return (
+        <div className="pl-[42px] flex flex-col gap-1">
+            <span className="text-[11px] tabular-nums text-text-muted" aria-live="off">{elapsed}s</span>
+            {hint && (
+                <p className="text-[11px] text-text-muted animate-pulse motion-reduce:animate-none" role="status">
+                    {hint}
+                </p>
+            )}
+        </div>
+    );
+}
+
 function CvReadyOnboardingPanel({
     onAction,
     disabled,
@@ -1867,11 +1889,14 @@ export default function CommandPage() {
                     {thinking && (
                         <div className="flex flex-col gap-2">
                             <WorkingIndicator message={operationState?.message ?? t("cmdWorking")} />
-                            {slowHint && (
-                                <p className="text-[11px] text-text-muted pl-[42px] animate-pulse motion-reduce:animate-none" role="status">
-                                    {t("cmdWorkingSlowHint")}
-                                </p>
-                            )}
+                            {operationState?.state === "searching"
+                                ? <SearchElapsedTimer t={t} />
+                                : slowHint && (
+                                    <p className="text-[11px] text-text-muted pl-[42px] animate-pulse motion-reduce:animate-none" role="status">
+                                        {t("cmdWorkingSlowHint")}
+                                    </p>
+                                )
+                            }
                         </div>
                     )}
 
