@@ -2,9 +2,9 @@
 
 ## Objective
 
-Move Rico from a text-only chatbot experience to a modern agentic career assistant UI where Rico can present contextual actions, permission prompts, progress states, and approval queues inside the chat and related product surfaces.
+Move Rico from a text-only chatbot experience to a modern agentic career assistant UI where Rico can present contextual actions, permission prompts, progress states, approval queues, and multimodal document intelligence inside the chat and related product surfaces.
 
-The goal is to make Rico feel like a current AI product: guided, proactive, permission-aware, and execution-oriented, without sacrificing safety or user control.
+The goal is to make Rico feel like a current AI product: guided, proactive, permission-aware, document-aware, and execution-oriented, without sacrificing safety or user control.
 
 ## Product Principle
 
@@ -14,7 +14,21 @@ Rico should not only answer. Rico should propose the next safe action, explain w
 User intent -> Rico interpretation -> suggested action -> user approval -> execution -> audit trail
 ```
 
-The long-term product direction is conversation-first: the chat becomes the primary control surface, and traditional pages become supporting views that Rico can open, explain, and prefill through conversation.
+The long-term product direction is conversation-first and multimodal: the chat becomes the primary control surface, users can bring screenshots/files/messages into the conversation, and traditional pages become supporting views that Rico can open, explain, and prefill through conversation.
+
+## Product Positioning
+
+Rico should not be presented as “another job-search tool.” Rico should be presented as a focused AI career entity for the UAE job market.
+
+The user should feel:
+
+- Rico understands career context, not just keywords.
+- Rico can read what the user sees: screenshots, files, job posts, recruiter messages, CVs, and application material.
+- Rico can turn messy real-world inputs into structured next actions.
+- Rico asks before doing anything sensitive.
+- Rico is specialized for job search, applications, profile improvement, career decisions, and UAE-market execution.
+
+This positioning directly addresses the concern that users do not need another generic tool. Rico must become a specialized AI career operating system.
 
 ## Design Targets
 
@@ -27,6 +41,7 @@ The long-term product direction is conversation-first: the chat becomes the prim
 - Backward-compatible API response shape where possible.
 - Reduce manual form-filling by letting users configure profile, settings, searches, and application preferences through chat.
 - Reduce sidebar/page dependence over time without removing deep links or fallback views too early.
+- Accept screenshots and files beyond CVs, classify them, extract useful career context, and propose the next safe action.
 
 ## Core Concepts
 
@@ -42,6 +57,8 @@ Examples:
 - `Draft cover letter`
 - `Complete profile`
 - `Upload CV`
+- `Analyze screenshot`
+- `Extract job details`
 - `Open application queue`
 
 Action cards are low or medium impact. They may navigate, open a drawer, submit a safe action, or continue the chat with structured payload.
@@ -56,6 +73,7 @@ Examples:
 - Send a cover letter or email.
 - Save profile changes.
 - Replace the active CV.
+- Use a screenshot/file to update the user's profile.
 - Enable recurring reminders or searches.
 
 Permission prompts must show:
@@ -74,11 +92,11 @@ Visible execution state for longer tasks.
 Examples:
 
 ```text
-Searching jobs
-✓ Reading profile
-✓ Searching UAE roles
-✓ Filtering by fit
-• Ranking matches
+Analyzing upload
+✓ Detecting file type
+✓ Reading screenshot text
+✓ Extracting job details
+• Preparing next actions
 ```
 
 Progress can be optimistic in Phase 1 and event-driven later.
@@ -93,6 +111,7 @@ Examples:
 - Draft cover letter for voco Dubai Monaco — ready to review.
 - Create saved search for QHSE Manager in Dubai — waiting approval.
 - Improve CV for compliance roles — draft ready.
+- Save extracted LinkedIn job as tracked opportunity — waiting approval.
 
 The queue becomes the bridge between chat and real execution.
 
@@ -108,6 +127,9 @@ The user should be able to say:
 - `وقف التقديم التلقائي وخلي كل طلب بموافقتي`
 - `ورجيني إعداداتي الحالية`
 - `كمل بروفايلي من السي في`
+- `حلل صورة إعلان الوظيفة هاي`
+- `هاي رسالة recruiter، شو أرد؟`
+- `هاي لقطة من LinkedIn، هل الوظيفة مناسبة؟`
 
 Rico should respond with a structured review card instead of forcing the user to visit a settings page:
 
@@ -146,6 +168,91 @@ Target flows:
 | Notifications/reminders | Rico proposes schedule/trigger and asks permission |
 
 Every write must use a permission prompt or explicit confirmation summary.
+
+### 7. Multimodal Career Intake
+
+Rico must accept more than CV uploads. Users often have screenshots, recruiter messages, job posts, offer letters, LinkedIn comments, PDFs, Word documents, images, and partial information.
+
+Supported intake categories should include:
+
+| Input | Example user intent | Rico output |
+|---|---|---|
+| CV/resume | `حلل السي في` | Parsed profile, gaps, improvement actions |
+| Job screenshot | Screenshot from LinkedIn/Indeed/company site | Extracted job title/company/location/requirements + fit estimate |
+| Recruiter message | WhatsApp/email/LinkedIn DM screenshot | Suggested reply + action options |
+| Job description file | PDF/DOCX/TXT | Fit analysis + tailored CV/cover letter actions |
+| Application form screenshot | User stuck on a field | Guidance on what to fill, no fabricated data |
+| Offer/contract document | Offer or salary package | Career-focused summary, risk flags, questions to ask |
+| Certificate/license | Training or credential proof | Profile update proposal after confirmation |
+| Company profile | Employer or target company document | Company summary + job-search relevance |
+| Public comment/reply | Someone comments on Rico ad/post | Sentiment/objection analysis + suggested response |
+
+The upload experience should be one universal entry point:
+
+```text
+Drop anything Rico should understand:
+CV, job post, screenshot, recruiter message, certificate, offer, or application form.
+```
+
+Rico then classifies the input before deciding what to do.
+
+## Multimodal Intake Flow
+
+```text
+User uploads screenshot/file
+  -> Store raw file according to retention policy
+  -> Detect file type and likely document purpose
+  -> Extract text/metadata where possible
+  -> Classify career intent
+  -> Produce structured analysis
+  -> Render action cards or proposed changes
+  -> Ask confirmation before saving or executing
+```
+
+Example:
+
+```text
+User uploads LinkedIn job screenshot
+
+Rico:
+I found a job post in this screenshot.
+
+Extracted:
+- Role: QHSE Manager
+- Company: Example Group
+- Location: Dubai
+- Key requirements: ISO 45001, site audits, UAE experience
+
+Your likely fit: Strong, but salary is not visible.
+
+[Save opportunity] [Compare to my CV] [Draft message] [Find similar jobs]
+```
+
+## Document Intelligence Rules
+
+Rico should classify uploaded items before processing:
+
+```text
+cv_resume
+job_post
+recruiter_message
+application_form
+certificate
+offer_letter
+contract_or_legalish
+company_profile
+public_comment
+unknown_document
+```
+
+Rules:
+
+- Do not assume every upload is a CV.
+- Do not save extracted profile changes without confirmation.
+- Do not fabricate missing information for forms or applications.
+- If the file appears legal/contractual, provide career-oriented observations and recommend qualified legal review when needed.
+- If the file contains sensitive identity data, minimize retention and avoid unnecessary display.
+- If OCR/extraction confidence is low, say so and ask the user to confirm.
 
 ## Proposed Backend Schema
 
@@ -206,7 +313,31 @@ class RicoProposedChange(BaseModel):
     field: str
     current_value: Any | None = None
     proposed_value: Any
-    source: Literal["chat", "cv", "system", "user_action"]
+    source: Literal["chat", "cv", "file", "screenshot", "system", "user_action"]
+
+
+class RicoAttachmentPurpose(str, Enum):
+    cv_resume = "cv_resume"
+    job_post = "job_post"
+    recruiter_message = "recruiter_message"
+    application_form = "application_form"
+    certificate = "certificate"
+    offer_letter = "offer_letter"
+    contract_or_legalish = "contract_or_legalish"
+    company_profile = "company_profile"
+    public_comment = "public_comment"
+    unknown_document = "unknown_document"
+
+
+class RicoAttachmentAnalysis(BaseModel):
+    id: str
+    filename: str | None = None
+    mime_type: str | None = None
+    purpose: RicoAttachmentPurpose
+    confidence: float
+    extracted_summary: str | None = None
+    extracted_fields: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
 
 
 class RicoAgenticUi(BaseModel):
@@ -214,19 +345,21 @@ class RicoAgenticUi(BaseModel):
     permission_request: RicoPermissionRequest | None = None
     progress: list[RicoProgressStep] = Field(default_factory=list)
     proposed_changes: list[RicoProposedChange] = Field(default_factory=list)
+    attachment_analysis: list[RicoAttachmentAnalysis] = Field(default_factory=list)
 ```
 
 Then existing chat responses can include:
 
 ```python
 {
-    "message": "I found 5 strong HSE roles in Dubai.",
-    "type": "job_results",
+    "message": "I found a job post in your screenshot.",
+    "type": "document_analysis",
     "agentic_ui": {
         "actions": [...],
         "permission_request": None,
         "progress": [...],
-        "proposed_changes": [...]
+        "proposed_changes": [...],
+        "attachment_analysis": [...]
     }
 }
 ```
@@ -243,6 +376,8 @@ ApprovalQueueDrawer.tsx
 CommandSuggestionBar.tsx
 ProposedChangesCard.tsx
 ConversationPanel.tsx
+AttachmentAnalysisCard.tsx
+UniversalUploadDropzone.tsx
 ```
 
 Expected rendering surfaces:
@@ -253,6 +388,7 @@ Expected rendering surfaces:
 - Dashboard/sidebar/global drawer for approval queue.
 - Empty states and profile banners for suggested commands.
 - Proposed changes card for profile/settings/search preference updates.
+- Attachment analysis card for uploaded screenshots/files.
 - Focused drawer/panel for visual review when chat alone is not enough.
 
 ## Navigation Strategy
@@ -266,12 +402,14 @@ The target is not “no pages”; the target is “no forced manual pages.”
 - `/jobs` as a visual results/review surface.
 - `/applications` or approval queue view until queue is embedded well.
 - `/profile` and `/settings` as fallback/manual correction surfaces.
+- Existing upload/CV page if present, but reframe it as universal career intake rather than CV-only.
 
 ### Demote over time
 
 - Sidebar becomes status + quick access, not the main workflow.
 - Common actions move into chat action cards.
 - Profile/settings pages become “advanced/manual edit” rather than required onboarding.
+- File upload becomes part of the chat composer and onboarding conversation.
 - Help/support moves to a floating or contextual affordance.
 
 ### Do not remove until
@@ -293,6 +431,7 @@ High-impact action examples:
 - Send an email/message.
 - Mutate profile preferences.
 - Replace CV.
+- Save extracted data from a file into profile/settings.
 - Enable recurring cron-like behavior.
 
 Rules:
@@ -304,6 +443,8 @@ Rules:
 5. Existing `RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true` remains mandatory.
 6. Every approval/rejection should be auditable.
 7. Profile/settings mutations must show a proposed-changes summary before saving.
+8. Uploaded files must be purpose-classified before any write or downstream action.
+9. Sensitive documents must not be used beyond the user's requested career workflow.
 
 ## Data Flow
 
@@ -345,6 +486,19 @@ User states preference or profile change
   -> Chat confirms saved state
 ```
 
+### Screenshot/file analysis
+
+```text
+User uploads file or screenshot
+  -> Backend stores/streams upload according to retention policy
+  -> File classifier detects purpose
+  -> Extractor reads text/metadata/visual context
+  -> Rico returns attachment_analysis[] with confidence and warnings
+  -> Rico proposes contextual actions
+  -> User chooses next step
+  -> Any save/send/apply action requires confirmation
+```
+
 ## Phase Plan
 
 ### Phase 0 — Architecture and contracts
@@ -370,7 +524,8 @@ Scope:
   - Review jobs
   - Save search
   - Complete profile
-  - Upload CV
+  - Upload CV/file
+  - Analyze screenshot
   - Draft cover letter prompt
 
 Constraints:
@@ -386,7 +541,32 @@ Verification:
 - Chat smoke: job search message renders action buttons.
 - Mobile smoke.
 
-### Phase 2 — Conversational Profile and Settings Review Cards
+### Phase 2 — Universal Multimodal Career Intake
+
+Scope:
+
+- Add upload handling that does not assume every file is a CV.
+- Add purpose classification for CV, job post, recruiter message, application form, certificate, offer, company profile, public comment, and unknown document.
+- Add `attachment_analysis` response support.
+- Add frontend attachment analysis card.
+- Start with screenshots and text/PDF/DOCX files already feasible in the current stack.
+
+Constraints:
+
+- No profile/settings writes from extracted data without confirmation.
+- No fabricated answers for application forms.
+- OCR/extraction confidence must be visible when low.
+- Sensitive identity documents require conservative handling.
+
+Verification:
+
+- Uploading a CV still works.
+- Uploading a job screenshot returns extracted job details and action cards.
+- Uploading a recruiter message suggests a reply but does not send it.
+- Uploading unknown document asks clarifying question.
+- Arabic and English screenshots/messages are handled as well as extraction allows.
+
+### Phase 3 — Conversational Profile and Settings Review Cards
 
 Scope:
 
@@ -413,7 +593,7 @@ Verification:
 - Cancel does not mutate state.
 - Arabic and English commands work.
 
-### Phase 3 — Permission Prompt for Apply and Profile Mutation
+### Phase 4 — Permission Prompt for Apply and Profile Mutation
 
 Scope:
 
@@ -435,7 +615,7 @@ Verification:
 - Approved action records audit log.
 - Arabic and English prompt copy render correctly.
 
-### Phase 4 — Approval Queue
+### Phase 5 — Approval Queue
 
 Scope:
 
@@ -449,11 +629,11 @@ Verification:
 - Approve/reject updates state.
 - Reload does not lose pending action if persistence is implemented.
 
-### Phase 5 — Conversation-First App Shell
+### Phase 6 — Conversation-First App Shell
 
 Scope:
 
-- Make chat the default workspace for profile, settings, saved search, and application workflows.
+- Make chat the default workspace for profile, settings, saved search, document analysis, and application workflows.
 - Reduce sidebar prominence.
 - Convert page navigation into contextual action cards and focused panels.
 - Keep deep links and fallback pages until replacement flows are stable.
@@ -462,23 +642,24 @@ Verification:
 
 - A new user can complete onboarding through chat without manually visiting settings.
 - Existing users can update preferences through chat.
+- A user can upload a non-CV screenshot/file and continue the workflow from chat.
 - Main mobile workflow fits in the chat surface.
 - Direct URLs still work for fallback/manual correction.
 
-### Phase 6 — Progress Steps and Streaming-like UX
+### Phase 7 — Progress Steps and Streaming-like UX
 
 Scope:
 
-- Render progress steps for search and CV generation.
+- Render progress steps for search, upload analysis, and CV generation.
 - Start with deterministic milestones.
 - Later upgrade to event-driven progress if backend supports it.
 
 Verification:
 
-- Slow search shows visible progress/fallback.
+- Slow search/upload analysis shows visible progress/fallback.
 - Timeout state gives recovery buttons.
 
-### Phase 7 — Polish and Productization
+### Phase 8 — Polish and Productization
 
 Scope:
 
@@ -549,6 +730,23 @@ Changes:
 [Save changes] [Edit] [Cancel]
 ```
 
+### LinkedIn Screenshot Analysis
+
+```text
+User uploads screenshot from LinkedIn.
+
+Rico: I found a comment on your Rico post.
+
+Comment concern:
+- The user thinks the market does not need another tool.
+- They want a specialized AI entity for this career direction.
+
+Recommended response:
+Position Rico as a UAE-focused AI career entity, not a generic job board.
+
+[Draft reply] [Save objection insight] [Create product task]
+```
+
 ## Files Likely Involved Later
 
 Backend candidates:
@@ -561,6 +759,7 @@ Backend candidates:
 - `src/api/routers/settings.py`
 - `src/api/routers/user.py`
 - `src/rico_safety.py`
+- `src/cv_parser.py`
 - `src/repositories/*`
 
 Frontend candidates:
@@ -586,13 +785,15 @@ Docs/workspace:
 | Risk | Mitigation |
 |---|---|
 | Action buttons bypass backend safety | Server-side confirmation and `agent_runtime` boundary |
-| UI becomes flashy but not useful | Start with job/profile/apply flows only |
+| UI becomes flashy but not useful | Start with job/profile/apply/upload flows only |
 | Breaking existing chat responses | Add optional `agentic_ui`; keep old fields intact |
-| Too much scope in one PR | Phase by contracts, low-impact actions, high-impact permissions, queue |
+| Too much scope in one PR | Phase by contracts, low-impact actions, multimodal intake, high-impact permissions, queue |
 | Arabic/English mismatch | Add i18n keys with every visible action label |
 | Mobile composer overlap | Test mobile viewport before merge for UI phases |
 | Removing pages too early breaks power users or recovery flows | Demote pages first; remove only after replacement flows are verified |
 | Conversational settings mutate wrong data | Proposed-changes card, validation, and explicit save confirmation |
+| Misclassifying uploaded files | Purpose classifier, confidence score, warnings, and clarifying questions |
+| Sensitive documents over-retained or overused | Conservative retention, explicit consent, and purpose-limited processing |
 
 ## Non-goals for Phase 1
 
@@ -603,6 +804,7 @@ Docs/workspace:
 - No deleting sidebar or existing pages in early phases.
 - No persistent approval queue until a dedicated phase.
 - No live third-party API calls in unit tests.
+- No claiming legal review for contracts/offers; provide career-oriented observations only.
 
 ## Success Criteria
 
@@ -616,6 +818,14 @@ The first visible win is:
 - Any high-impact action requires a clear approval card.
 
 The second visible win is:
+
+- A user can upload a screenshot or non-CV document.
+- Rico classifies what it is.
+- Rico extracts useful career context.
+- Rico proposes the next action.
+- Rico does not save/send/apply without approval.
+
+The third visible win is:
 
 - A user can update profile/settings/search preferences naturally through Rico.
 - Rico summarizes the proposed changes.
