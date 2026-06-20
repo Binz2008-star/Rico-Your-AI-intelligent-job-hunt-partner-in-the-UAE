@@ -80,6 +80,11 @@ For backend changes, do not claim production is live until verified:
 5. Confirm `/version.commit` matches the expected SHA or explicitly report the mismatch.
 6. Run feature-specific smoke checks when routes or behavior changed.
 
+Render **auto-deploys on every push to `main`** via `deploy-render.yml` (PR #686): it triggers the
+deploy hook and blocks until `/version.commit` matches the pushed SHA, so the deploy run itself performs
+steps 2–5 above. Check that run's status to confirm a backend release. A manual `workflow_dispatch` run
+is still available for on-demand redeploys.
+
 If `main` is ahead of Render, report: `backend not live yet` and identify the deployed SHA and expected SHA.
 
 ## Frontend / Vercel Verification
