@@ -8,10 +8,17 @@ Sends a one-time follow-up email to users who:
 Invoked by the cron-guarded POST /api/v1/pipeline/profile-nudge endpoint.
 Requires migration 029 (profile_nudge_sent_at column on users).
 Idempotent: re-running never double-sends because sent_at is stamped before delivery.
+
+Schema facts:
+  - users.email links to rico_users.external_user_id
+  - rico_profiles.user_id references rico_users.id
+  - profile fields live in rico_profiles.profile JSONB
+  - users has no name column; name comes from rico_users.name
 """
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
@@ -38,7 +45,7 @@ def _build_nudge_body(name: str | None, email: str, missing: list[str]) -> str:
         "",
         "— The RicoHunt Team",
         "",
-        "────────────────────────────────",
+        "────────────────────────────────────────────────",
         "You're receiving this because you registered at ricohunt.com.",
         "If you no longer wish to receive emails from us, reply with 'unsubscribe'.",
     ])
@@ -58,20 +65,17 @@ def run_profile_nudge_sweep() -> Dict[str, Any]:
         logger.warning("profile_nudge_sweep: DB unavailable — skipping")
         return {"status": "unavailable", "nudges_sent": 0, "nudges_failed": 0, "skipped": 0}
 
-    conn = getattr(db, "conn", None) or getattr(db, "_conn", None)
-    if conn is None:
-        # Try getting connection via db.get_conn or similar
-        try:
-            conn = db.get_connection()
-        except Exception:
-            conn = None
-    if conn is None:
-        logger.warning("profile_nudge_sweep: no DB connection available")
+    try:
+        # RicoDB.connect() uses RealDictCursor — rows are dicts.
+        # ensure_schema=False: we don't need rico DDL here, just queries.
+        conn = db.connect(ensure_schema=False)
+    except Exception as exc:
+        logger.warning("profile_nudge_sweep: connect failed: %s", exc)
         return {"status": "unavailable", "nudges_sent": 0, "nudges_failed": 0, "skipped": 0}
 
     try:
         with conn.cursor() as cur:
-            # Check the column exists (migration 029 guard)
+            # Guard: migration 029 adds profile_nudge_sent_at to users
             cur.execute("""
                 SELECT 1 FROM information_schema.columns
                 WHERE table_name = 'users' AND column_name = 'profile_nudge_sent_at'
@@ -80,23 +84,32 @@ def run_profile_nudge_sweep() -> Dict[str, Any]:
                 logger.warning("profile_nudge_sweep: migration 029 not applied — skipping")
                 return {"status": "migration_pending", "nudges_sent": 0, "nudges_failed": 0, "skipped": 0}
 
-            # Fetch candidates
+            # Join chain: users → rico_users (via external_user_id) → rico_profiles
+            # Profile fields are inside rico_profiles.profile JSONB.
+            # timedelta parameter lets psycopg2 produce a safe INTERVAL literal.
             cur.execute("""
-                SELECT u.id, u.email, u.name,
-                       rp.cv_filename,
-                       rp.target_roles,
-                       rp.preferred_cities
+                SELECT
+                    u.id                               AS user_id,
+                    u.email,
+                    ru.name,
+                    rp.profile->>'cv_filename'         AS cv_filename,
+                    rp.profile->'target_roles'         AS target_roles,
+                    rp.profile->'preferred_cities'     AS preferred_cities
                 FROM users u
-                LEFT JOIN rico_profiles rp ON rp.user_id = u.id
-                WHERE u.created_at < NOW() - INTERVAL '%s hours'
+                LEFT JOIN rico_users ru
+                    ON ru.external_user_id = u.email
+                LEFT JOIN rico_profiles rp
+                    ON rp.user_id = ru.id
+                WHERE u.created_at < NOW() - %s
                   AND u.profile_nudge_sent_at IS NULL
                   AND u.email IS NOT NULL
                 ORDER BY u.created_at ASC
                 LIMIT 200
-            """, (NUDGE_DELAY_HOURS,))
+            """, (timedelta(hours=NUDGE_DELAY_HOURS),))
             rows = cur.fetchall()
     except Exception as exc:
         logger.warning("profile_nudge_sweep: query failed: %s", exc)
+        conn.close()
         return {"status": "error", "nudges_sent": 0, "nudges_failed": 0, "skipped": 0}
 
     sent = 0
@@ -104,7 +117,13 @@ def run_profile_nudge_sweep() -> Dict[str, Any]:
     skipped = 0
 
     for row in rows:
-        user_id, email, name, cv_filename, target_roles, preferred_cities = row
+        user_id = row["user_id"]
+        email = row["email"]
+        name = row["name"]
+        # psycopg2 auto-decodes JSONB arrays to Python lists; text fields stay as str/None
+        cv_filename: str | None = row["cv_filename"]
+        target_roles: list | None = row["target_roles"]
+        preferred_cities: list | None = row["preferred_cities"]
 
         missing: list[str] = []
         if not cv_filename:
@@ -115,7 +134,7 @@ def run_profile_nudge_sweep() -> Dict[str, Any]:
             missing.append("Add your preferred UAE cities (e.g. Dubai, Abu Dhabi)")
 
         if not missing:
-            # Profile is already sufficiently filled — just stamp and skip
+            # Profile already complete — stamp without sending email
             skipped += 1
             try:
                 with conn.cursor() as cur:
@@ -125,11 +144,12 @@ def run_profile_nudge_sweep() -> Dict[str, Any]:
                     )
                 conn.commit()
             except Exception as exc:
-                logger.warning("profile_nudge_sweep: stamp skip failed user_id=%s: %s", user_id, exc)
+                logger.warning("profile_nudge_sweep: stamp-skip failed user_id=%s: %s", user_id, exc)
+                conn.rollback()
             continue
 
+        # Stamp first — prevents double-send if mailer crashes mid-sweep
         try:
-            # Stamp first so a mailer crash doesn't re-send on next sweep
             with conn.cursor() as cur:
                 cur.execute(
                     "UPDATE users SET profile_nudge_sent_at = NOW() WHERE id = %s",
@@ -138,6 +158,7 @@ def run_profile_nudge_sweep() -> Dict[str, Any]:
             conn.commit()
         except Exception as exc:
             logger.warning("profile_nudge_sweep: stamp failed user_id=%s: %s", user_id, exc)
+            conn.rollback()
             failed += 1
             continue
 
@@ -154,6 +175,7 @@ def run_profile_nudge_sweep() -> Dict[str, Any]:
             failed += 1
             logger.warning("profile_nudge_sweep: email failed user_id=%s", user_id)
 
+    conn.close()
     return {
         "status": "ok",
         "nudges_sent": sent,
