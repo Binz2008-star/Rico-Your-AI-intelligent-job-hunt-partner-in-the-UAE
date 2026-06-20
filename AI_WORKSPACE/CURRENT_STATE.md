@@ -340,9 +340,14 @@ string. Chat never progressed, ignored conversation history, and never routed to
 - QA Tests (pytest + playwright): green on main (`e104135`).
 - followup-smoke.yml: 9/9 PASS on `26124ed` (run #2, 2026-06-19).
 - bug01-smoke.yml: **4/4 PASS** on `40636ba` (run #1, 2026-06-19). **Removed** after one-shot use.
-- Render deploy: `workflow_dispatch` only — must be triggered manually after each runtime release.
-  Note: `/health` returns 403 from external networks (Render network-level policy) — verify via
-  Render dashboard or GitHub Actions workflow (not WebFetch).
+- Render deploy: **auto-deploys on every push to `main`** via `deploy-render.yml` (PR #686 added the
+  `push: [main]` trigger). The workflow fires the Render deploy hook, then polls `/version` until the
+  deployed commit (`RENDER_GIT_COMMIT`) matches the merged SHA before it passes — so a green deploy run
+  proves the **new** backend is serving, not merely that the old one is healthy. `workflow_dispatch` is
+  retained for on-demand redeploys. (Render has no native auto-deploy on this service — the workflow is
+  the mechanism; the earlier "auto-deploys from main" note in #668 was incorrect until #686.)
+  Note: `/health` and `/version` return 403 from external networks (Render network-level policy) —
+  verify via the GitHub Actions deploy run or the Render dashboard (not WebFetch / curl from CI containers).
 - cron-test.yml: **removed** (one-off #644 verification, cleaned up 2026-06-19).
 
 ## Next product roadmap order
