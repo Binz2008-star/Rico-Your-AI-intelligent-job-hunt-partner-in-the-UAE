@@ -8,6 +8,13 @@ This is the entrypoint for new Rico AI work sessions.
 Rico mode. Start from AI_WORKSPACE/START_HERE.md.
 ```
 
+## Latest handoff
+
+Before starting new Rico work, read the latest rollout handoff:
+
+1. `AI_WORKSPACE/HANDOFFS/2026-06-20-profile-nudge-render-rollout.md`
+2. Then continue with the read order below.
+
 ## Read order
 
 Start with the current repository state, then read:
@@ -58,5 +65,5 @@ Use one writer per branch. Other tools or reviewers can inspect and comment with
 ## Standard handoff prompt
 
 ```text
-Rico mode. Start from AI_WORKSPACE/START_HERE.md. Read the current task in AI_WORKSPACE/TASKS.md, follow AI_WORKSPACE/PROMPT_CONTRACT.md, use one branch, and return summary, changed files, commands run, test results, risks, rollback plan, and open questions.
+Rico mode. Start from AI_WORKSPACE/START_HERE.md. Read the latest handoff, read the current task in AI_WORKSPACE/TASKS.md, follow AI_WORKSPACE/PROMPT_CONTRACT.md, use one branch, and return summary, changed files, commands run, test results, risks, rollback plan, and open questions.
 ```
