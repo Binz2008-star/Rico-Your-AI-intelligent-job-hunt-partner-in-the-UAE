@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import type { RicoChatAction, RicoActionImpact } from "@/lib/schemas";
 
 export interface ChatActionsRowProps {
     actions: RicoChatAction[];
     onChatContinue: (message: string) => void;
+    onSubmit?: (action: RicoChatAction) => Promise<void>;
+    onOpenDrawer?: (action: RicoChatAction) => void;
     disabled?: boolean;
 }
 
@@ -29,15 +32,14 @@ function isEnabled(action: RicoChatAction): boolean {
     if (action.requires_confirmation) return false;
     if (action.kind === "navigate") return !!sanitizeHref(action.href);
     if (action.kind === "chat_continue") return true;
+    if (action.kind === "submit") return !!action.endpoint;
+    if (action.kind === "open_drawer") return true;
     return false;
 }
 
 /**
  * Human-readable explanation of why an action card is disabled.
  * Shown as both `title` (hover tooltip) and `aria-label` (screen readers).
- *
- * Kind is checked before impact so that approve/cancel actions always surface
- * the permission-card message regardless of their impact level.
  */
 function disabledReason(action: RicoChatAction): string {
     if (action.kind === "approve" || action.kind === "cancel") {
@@ -49,11 +51,8 @@ function disabledReason(action: RicoChatAction): string {
     if (action.requires_confirmation) {
         return "Confirmation required before this action can proceed";
     }
-    if (action.kind === "open_drawer") {
-        return "Coming soon";
-    }
-    if (action.kind === "submit") {
-        return "Not available yet";
+    if (action.kind === "submit" && !action.endpoint) {
+        return "No endpoint configured for this action";
     }
     if (action.kind === "navigate" && !action.href) {
         return "No destination configured";
@@ -83,12 +82,18 @@ const INACTIVE = cn(BASE, "border-border-soft text-text-muted opacity-50 cursor-
 function ChatActionCard({
     action,
     onChatContinue,
+    onSubmit,
+    onOpenDrawer,
     disabled = false,
 }: {
     action: RicoChatAction;
     onChatContinue: (message: string) => void;
+    onSubmit?: (action: RicoChatAction) => Promise<void>;
+    onOpenDrawer?: (action: RicoChatAction) => void;
     disabled?: boolean;
 }) {
+    const [submitting, setSubmitting] = useState(false);
+    const [submitError, setSubmitError] = useState<string | null>(null);
     const enabled = !disabled && isEnabled(action);
 
     if (action.kind === "navigate" && enabled) {
@@ -123,6 +128,54 @@ function ChatActionCard({
         );
     }
 
+    if (action.kind === "submit" && enabled && onSubmit) {
+        async function handleSubmit() {
+            if (submitting) return;
+            setSubmitting(true);
+            setSubmitError(null);
+            try {
+                await onSubmit!(action);
+            } catch (err) {
+                setSubmitError(
+                    err instanceof Error ? err.message : "Something went wrong.",
+                );
+            } finally {
+                setSubmitting(false);
+            }
+        }
+        return (
+            <span className="flex flex-col gap-1">
+                <button
+                    type="button"
+                    data-testid="action-card-submit"
+                    data-impact={action.impact}
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                    className={cn(activeClass(action.impact), submitting && "opacity-70 cursor-wait")}
+                >
+                    {submitting ? "Saving…" : action.label}
+                </button>
+                {submitError && (
+                    <span className="text-[11px] text-red-400 px-1">{submitError}</span>
+                )}
+            </span>
+        );
+    }
+
+    if (action.kind === "open_drawer" && enabled && onOpenDrawer) {
+        return (
+            <button
+                type="button"
+                data-testid="action-card-open-drawer"
+                data-impact={action.impact}
+                onClick={() => onOpenDrawer(action)}
+                className={activeClass(action.impact)}
+            >
+                {action.label}
+            </button>
+        );
+    }
+
     const reason = disabledReason(action);
     return (
         <button
@@ -142,6 +195,8 @@ function ChatActionCard({
 export function ChatActionsRow({
     actions,
     onChatContinue,
+    onSubmit,
+    onOpenDrawer,
     disabled = false,
 }: ChatActionsRowProps) {
     if (!actions.length) return null;
@@ -157,6 +212,8 @@ export function ChatActionsRow({
                     key={action.id}
                     action={action}
                     onChatContinue={onChatContinue}
+                    onSubmit={onSubmit}
+                    onOpenDrawer={onOpenDrawer}
                     disabled={disabled}
                 />
             ))}

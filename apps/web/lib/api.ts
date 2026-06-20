@@ -1657,6 +1657,25 @@ export async function getFollowUpReminders(
   });
 }
 
+// ── Agentic UI action execution (CAREER-OS-05) ────────────────────────────────
+
+/**
+ * Generic submit handler for RicoChatAction.kind === "submit".
+ * Posts to the action's endpoint with its payload.
+ * For profile updates (/api/v1/rico/profile) the caller should prefer
+ * updateProfile() which uses PATCH and validates the response shape.
+ */
+export async function submitAction(
+  endpoint: string,
+  payload: Record<string, unknown>,
+  method: "POST" | "PATCH" = "POST",
+): Promise<Record<string, unknown>> {
+  return requestJson<Record<string, unknown>>(endpoint, {
+    method,
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function recordSubscriptionIntent(
   plan: string,
   billingMode: "manual" | "stripe" = "manual",

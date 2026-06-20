@@ -198,13 +198,16 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                             </h3>
                             <ul className="space-y-0.5">
                                 {section.items.map((item) => {
-                                    const isActive = pathname === item.href;
+                                    const navHref = item.chatPrompt
+                                        ? `/command?q=${encodeURIComponent(item.chatPrompt)}`
+                                        : item.href;
+                                    const isActive = pathname === item.href || (item.chatPrompt ? pathname === "/command" : false);
                                     return (
                                         <li key={item.href}>
                                             <Tooltip>
                                                 <TooltipTrigger asChild>
                                                     <Link
-                                                        href={item.href}
+                                                        href={navHref}
                                                         aria-current={isActive ? "page" : undefined}
                                                         className={cn(
                                                             "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-2 focus-visible:ring-offset-surface",

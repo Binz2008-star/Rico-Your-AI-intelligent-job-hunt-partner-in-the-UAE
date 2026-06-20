@@ -4,12 +4,13 @@ import { MobileCommandHeader } from "@/components/command/MobileCommandHeader";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { useLanguage } from "@/contexts/LanguageContext";
-import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, RicoOption, UploadCVResponse } from "@/lib/api";
-import type { RicoAgenticUi, RicoChatAction, ExecuteAllowedAction } from "@/lib/schemas";
+import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, ProfileUpdatePayload, RicoOption, UploadCVResponse } from "@/lib/api";
+import type { RicoAgenticUi, RicoChatAction, RicoProposedChange, ExecuteAllowedAction } from "@/lib/schemas";
 import { EXECUTE_ALLOWED_ACTIONS } from "@/lib/schemas";
 import { ChatActionsRow } from "@/components/ui/rico/ChatActionCard";
 import { PermissionRequestCard } from "@/components/ui/rico/PermissionRequestCard";
-import { clearChatHistory, confirmCVProfile, executePermissionAction, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, uploadCV } from "@/lib/api";
+import { ProposedChangeCard } from "@/components/ui/rico/ProposedChangeCard";
+import { clearChatHistory, confirmCVProfile, executePermissionAction, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { buildAuthHref } from "@/lib/redirect";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
@@ -78,6 +79,7 @@ interface Message {
     stale?: boolean;
     agentic_ui?: RicoAgenticUi | null;
     permission_dismissed?: boolean;
+    proposed_dismissed?: boolean;
 }
 
 type ChatAudience = "checking" | "authenticated" | "public";
@@ -714,10 +716,11 @@ export default function CommandPage() {
 
     // Read URL params client-side only so SSR and first client render both produce
     // cvReady=false / prompt=null, preventing a hydration mismatch.
+    // Supports ?prompt= (legacy) and ?q= (CAREER-OS-10 sidebar deep-links).
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         setCvReady(params.get("cv") === "ready");
-        setPrompt(params.get("prompt") ?? null);
+        setPrompt(params.get("prompt") ?? params.get("q") ?? null);
     }, []);
 
     const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -1133,9 +1136,14 @@ export default function CommandPage() {
         if (!file || chatAudience === "checking") return;
         e.target.value = "";
         setUploadError("");
-        setMessages((prev) => [...prev, { id: nextId(), role: "user", text: `📎 ${t("cmdCvUploading")}: ${file.name}` }]);
+        const isImageOrDoc = /\.(jpe?g|png|webp|gif|bmp|eml|msg|txt)$/i.test(file.name);
+        setMessages((prev) => [...prev, {
+            id: nextId(),
+            role: "user",
+            text: `📎 ${isImageOrDoc ? "Uploading document" : t("cmdCvUploading")}: ${file.name}`,
+        }]);
         setThinking(true);
-        setOperationState({ state: "reading", message: t("cmdWorkingReadingCv") });
+        setOperationState({ state: "reading", message: isImageOrDoc ? "Analyzing document…" : t("cmdWorkingReadingCv") });
         scrollBottom();
         try {
             const result: UploadCVResponse =
@@ -1352,6 +1360,49 @@ export default function CommandPage() {
         ]);
     }
 
+    /** Execute a submit-kind action from ChatActionsRow or ProposedChangeCard.
+     *
+     * Profile update actions POST/PATCH to the known profile endpoint via updateProfile().
+     * All other endpoints use the generic submitAction() POST helper.
+     * Dismisses the agentic_ui card on success and appends Rico's response.
+     */
+    async function handleActionSubmit(m: Message, action: RicoChatAction): Promise<void> {
+        const endpoint = action.endpoint ?? "";
+        const payload = action.payload as Record<string, unknown>;
+
+        let resultText: string;
+        if (endpoint === "/api/v1/rico/profile") {
+            const res = await updateProfile(payload as ProfileUpdatePayload);
+            const fields = res.updated_fields ?? [];
+            resultText = fields.length
+                ? `Profile updated: ${fields.join(", ")}.`
+                : "Profile saved.";
+        } else {
+            const res = await submitAction(endpoint, payload);
+            resultText = String(res.message ?? "Done.");
+        }
+
+        setMessages((prev) =>
+            prev.map((msg) =>
+                msg.id === m.id ? { ...msg, proposed_dismissed: true } : msg,
+            ),
+        );
+        setMessages((prev) => [
+            ...prev,
+            { id: nextId(), role: "rico" as const, text: resultText },
+        ]);
+    }
+
+    /** Handle open_drawer action — injects the drawer content as a new Rico message. */
+    function handleOpenDrawer(m: Message, action: RicoChatAction): void {
+        const payload = action.payload as Record<string, unknown>;
+        const content = String(payload.content ?? payload.message ?? action.label);
+        setMessages((prev) => [
+            ...prev,
+            { id: nextId(), role: "rico" as const, text: content },
+        ]);
+    }
+
     if (sessionExpired) {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center">
@@ -1399,9 +1450,9 @@ export default function CommandPage() {
                 id="cv-file-upload"
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.doc,.docx"
-                aria-label="Upload CV"
-                title="Upload CV"
+                accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.webp,.gif,.bmp,.eml,.msg"
+                aria-label="Upload document"
+                title="Upload document"
                 className="hidden"
                 onChange={handleCVUpload}
             />
@@ -1712,6 +1763,8 @@ export default function CommandPage() {
                                         <ChatActionsRow
                                             actions={m.agentic_ui.actions}
                                             onChatContinue={(prompt) => sendMessage(prompt)}
+                                            onSubmit={(action) => handleActionSubmit(m, action)}
+                                            onOpenDrawer={(action) => handleOpenDrawer(m, action)}
                                             disabled={thinking}
                                         />
                                     )}
@@ -1731,6 +1784,27 @@ export default function CommandPage() {
                                                     ),
                                                 )
                                             }
+                                        />
+                                    )}
+                                    {!m.streaming && !m.proposed_dismissed &&
+                                        m.agentic_ui?.proposed_changes &&
+                                        m.agentic_ui.proposed_changes.length > 0 && (
+                                        <ProposedChangeCard
+                                            changes={m.agentic_ui.proposed_changes as RicoProposedChange[]}
+                                            submitAction={m.agentic_ui.actions?.find(
+                                                (a) => a.kind === "submit",
+                                            )}
+                                            onSubmit={(action) => handleActionSubmit(m, action)}
+                                            onCancel={() =>
+                                                setMessages((prev) =>
+                                                    prev.map((msg) =>
+                                                        msg.id === m.id
+                                                            ? { ...msg, proposed_dismissed: true }
+                                                            : msg,
+                                                    ),
+                                                )
+                                            }
+                                            disabled={thinking}
                                         />
                                     )}
 
