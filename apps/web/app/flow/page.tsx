@@ -63,9 +63,12 @@ const NEXT_ACTION_KEYS: Record<ApplicationStatus, TranslationKey> = {
     decision_made: 'flowNextDecision',
 };
 
+// 'opened' and 'opened_external' are excluded from the stat grid — they auto-populate
+// on any link click and create noise (most items land here). They remain tracked in the
+// Kanban "Leads" column but are not featured as top-line stats.
 const STATUS_COUNT_ORDER: ApplicationStatus[] = [
     'applied', 'follow_up_due', 'interview', 'offer',
-    'saved', 'opened', 'opened_external', 'prepared', 'rejected', 'decision_made',
+    'saved', 'prepared', 'rejected', 'decision_made',
 ];
 
 type ManualApplicationForm = {

@@ -1520,6 +1520,17 @@ export default function CommandPage() {
             />
 
             <main id="command-main" className="relative z-10 mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col px-2 sm:px-4 lg:px-6">
+                {/* Cold-start banner — amber, shown when any request exceeds ~5 s */}
+                {slowHint && thinking && (
+                    <div
+                        role="status"
+                        className="mx-2 mb-1 mt-2 flex items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-[11px] font-medium text-amber-300 animate-in fade-in slide-in-from-top-1 motion-reduce:animate-none sm:mx-4"
+                    >
+                        <span aria-hidden="true">⚡</span>
+                        {t("cmdWorkingSlowHint")}
+                    </div>
+                )}
+
                 {/* Messages Container */}
                 <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 py-5 space-y-4 scroll-pb-32 sm:px-4 sm:py-7" role="log" aria-live="polite" aria-atomic="false" aria-label="Chat messages">
 
@@ -1911,14 +1922,9 @@ export default function CommandPage() {
                     {thinking && (
                         <div className="flex flex-col gap-2">
                             <WorkingIndicator message={operationState?.message ?? t("cmdWorking")} />
-                            {operationState?.state === "searching"
-                                ? <SearchElapsedTimer t={t} />
-                                : slowHint && (
-                                    <p className="text-[11px] text-text-muted pl-[42px] animate-pulse motion-reduce:animate-none" role="status">
-                                        {t("cmdWorkingSlowHint")}
-                                    </p>
-                                )
-                            }
+                            {operationState?.state === "searching" && (
+                                <SearchElapsedTimer t={t} />
+                            )}
                         </div>
                     )}
 
