@@ -234,7 +234,10 @@ export function DashboardStats() {
                 <p className="text-sm text-on-surface-variant">
                     {getJobsCopy(stats)}
                 </p>
-                <div className="mt-3 flex flex-wrap gap-2">
+                <span className="mt-1 block text-[10px] text-text-tertiary font-mono">
+                    source: /api/v1/jobs
+                </span>
+                <div className="mt-2 flex flex-wrap gap-2">
                     {stats.jobsError ? (
                         <button
                             type="button"
@@ -260,7 +263,10 @@ export function DashboardStats() {
                 <p className="text-sm text-on-surface-variant">
                     {getApplicationsCopy(stats)}
                 </p>
-                <span className="mt-3 inline-flex text-[12px] font-semibold text-gold">Open Flow</span>
+                <span className="mt-1 block text-[10px] text-text-tertiary font-mono">
+                    source: /api/v1/applications
+                </span>
+                <span className="mt-2 inline-flex text-[12px] font-semibold text-gold">Open Flow</span>
             </StatusCard>
             <StatusCard
                 title="Apply pacing"
@@ -269,7 +275,10 @@ export function DashboardStats() {
                 href="/settings"
             >
                 <p className="text-sm text-on-surface-variant">{getDailyLimitCopy(stats)}</p>
-                <span className="mt-3 inline-flex text-[12px] font-semibold text-gold">Review settings</span>
+                <span className="mt-1 block text-[10px] text-text-tertiary font-mono">
+                    source: /api/v1/settings
+                </span>
+                <span className="mt-2 inline-flex text-[12px] font-semibold text-gold">Review settings</span>
             </StatusCard>
         </div>
         </div>
