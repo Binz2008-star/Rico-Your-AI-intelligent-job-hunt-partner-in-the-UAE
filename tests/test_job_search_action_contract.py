@@ -329,8 +329,6 @@ class TestFullTurnPendingSearch:
         so the normal acknowledgement branch handles it."""
         api = self._make_api()
         result = api._resolve_pending_intent("u1", "تمام", _PROFILE)
-        # No pending search and message is not affirmative enough for job_search_signals
-        # → _resolve_pending_intent returns None (caller handles normal ack)
         assert result is None
 
     def test_promise_only_reply_arms_pending_search_in_ai_fallback(self):
@@ -365,3 +363,77 @@ class TestFullTurnPendingSearch:
         stored = api._store.get(("u1", RicoChatAPI._PENDING_JOB_SEARCH_KEY))
         assert stored is not None, "_store_pending_job_search not called after promise-only AI reply"
         assert stored["role"] == "Environmental Manager"
+
+
+# ── wiring: search-offer responses store a pending search ─────────────────────
+# Regression for the gap where _store_pending_job_search() was defined but never
+# called in src/, so the "تمام" confirmation path could never fire in production.
+
+class TestPendingSearchWiring:
+    def test_offer_response_stores_pending_with_profile_role(self):
+        api = _make_api_with_profile()
+        with patch.object(api, "_resolve_profile", return_value=_PROFILE), \
+             patch.object(api, "_store_pending_job_search") as mock_store:
+            api._maybe_store_pending_job_search(
+                "u1",
+                {"type": "clarification", "message": "Shall I search for live jobs now?"},
+            )
+        mock_store.assert_called_once()
+        assert mock_store.call_args.kwargs.get("role") == "Environmental Manager"
+
+    def test_arabic_offer_response_stores_pending(self):
+        api = _make_api_with_profile()
+        with patch.object(api, "_resolve_profile", return_value=_PROFILE), \
+             patch.object(api, "_store_pending_job_search") as mock_store:
+            api._maybe_store_pending_job_search(
+                "u1",
+                {"type": "clarification", "message": "تمام، سأبحث عن وظائف مناسبة لك."},
+            )
+        mock_store.assert_called_once()
+
+    def test_executed_search_result_does_not_store(self):
+        api = _make_api_with_profile()
+        with patch.object(api, "_resolve_profile", return_value=_PROFILE), \
+             patch.object(api, "_store_pending_job_search") as mock_store:
+            api._maybe_store_pending_job_search(
+                "u1",
+                {"type": "job_matches", "message": "Found 5 roles for you."},
+            )
+        mock_store.assert_not_called()
+
+    def test_non_offer_response_does_not_store(self):
+        api = _make_api_with_profile()
+        with patch.object(api, "_resolve_profile", return_value=_PROFILE), \
+             patch.object(api, "_store_pending_job_search") as mock_store:
+            api._maybe_store_pending_job_search(
+                "u1",
+                {"type": "acknowledgement", "message": "You're welcome!"},
+            )
+        mock_store.assert_not_called()
+
+    def test_offer_without_target_roles_does_not_store(self):
+        api = _make_api_with_profile()
+        with patch.object(api, "_resolve_profile", return_value={"target_roles": []}), \
+             patch.object(api, "_store_pending_job_search") as mock_store:
+            api._maybe_store_pending_job_search(
+                "u1",
+                {"type": "clarification", "message": "Shall I search for roles?"},
+            )
+        mock_store.assert_not_called()
+
+    def test_handle_active_user_invokes_wiring(self):
+        """_handle_active_user must call the wiring on every active-user turn."""
+        api = _make_api_with_profile()
+        offer = {"type": "clarification", "message": "Shall I search for live jobs?"}
+        with patch.object(api, "_handle_active_user_inner", return_value=offer), \
+             patch.object(api, "_maybe_store_pending_job_search") as mock_wire:
+            api._handle_active_user("u1", "find me work")
+        mock_wire.assert_called_once_with("u1", offer)
+
+    def test_arabic_career_change_offer_signal_matched(self):
+        """Arabic 'هل تريد البحث' must be in _SEARCH_OFFER_SIGNALS."""
+        assert "هل تريد البحث" in RicoChatAPI._SEARCH_OFFER_SIGNALS
+
+    def test_should_i_search_signal_matched(self):
+        """English 'should i search' (known_but_off_profile) must be in _SEARCH_OFFER_SIGNALS."""
+        assert "should i search" in RicoChatAPI._SEARCH_OFFER_SIGNALS
