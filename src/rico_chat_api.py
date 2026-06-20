@@ -4102,9 +4102,11 @@ class RicoChatAPI:
     # explicit offers/promises to avoid storing on incidental CV-flow chatter.
     _SEARCH_OFFER_SIGNALS: tuple[str, ...] = (
         "shall i search", "shall i start searching", "want me to search",
+        "should i search",  # known_but_off_profile clarification path
         "search for roles", "ready to search", "you can now search",
         "what should i search", "find live jobs", "shall i look for",
         "أبحث لك", "هل أبحث", "سأبحث", "ببحث", "وظائف حية", "أبحث عن وظائف",
+        "هل تريد البحث",  # Arabic career-change offer: "هل تريد البحث عن وظائف في X؟"
     )
 
     def _maybe_store_pending_job_search(self, user_id: str, result: dict[str, Any]) -> None:

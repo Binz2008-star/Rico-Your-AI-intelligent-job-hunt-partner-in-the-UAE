@@ -437,3 +437,66 @@ class TestPendingSearchWiring:
     def test_should_i_search_signal_matched(self):
         """English 'should i search' (known_but_off_profile) must be in _SEARCH_OFFER_SIGNALS."""
         assert "should i search" in RicoChatAPI._SEARCH_OFFER_SIGNALS
+
+    def test_off_profile_clarification_stores_canonical_role(self):
+        """known_but_off_profile path must store canonical_role, not profile.target_roles[0]."""
+        api = _make_api_with_profile()
+        stored_calls: list = []
+        api.memory.set_context.side_effect = lambda u, k, v: stored_calls.append((u, k, v))
+        with patch.object(api, "_append_chat"), \
+             patch.object(api, "_get_recent_context", return_value={}), \
+             patch.object(api, "_store_recent_context"):
+            api._store_pending_job_search("u1", role="Data Scientist", query_type="off_profile_confirmation")
+        stored = next((v for u, k, v in stored_calls if k == RicoChatAPI._PENDING_JOB_SEARCH_KEY), None)
+        assert stored is not None
+        assert stored["role"] == "Data Scientist"
+
+
+# ── full-turn: handler arms state, confirmation fires search ──────────────────
+
+def _make_api_live_memory():
+    """API with an in-process dict memory so store/get round-trips work."""
+    api = RicoChatAPI.__new__(RicoChatAPI)
+    _store: dict = {}
+    memory = MagicMock()
+    memory.get_context.side_effect = lambda u, k: _store.get((u, k), {})
+    memory.set_context.side_effect = lambda u, k, v: _store.__setitem__((u, k), v)
+    api.memory = memory
+    return api
+
+
+class TestFullTurnPendingArmedByHandler:
+    """No pre-seeded state — handler stores via signal detection, confirmation fires search."""
+
+    def test_maybe_store_then_tamam_fires_search(self):
+        """_maybe_store_pending_job_search arms state → _resolve_pending_intent fires search."""
+        api = _make_api_live_memory()
+
+        offer_response = {
+            "type": "career_change_advice",
+            "message": "Want me to search for Environmental Manager jobs?",
+        }
+
+        with patch.object(api, "_resolve_profile", return_value=_PROFILE), \
+             patch.object(api, "_classified_role_search",
+                          return_value={"type": "job_results", "jobs": _JOBS, "message": "Found 1 job"}) as mock_search:
+
+            api._maybe_store_pending_job_search("u1", offer_response)
+            assert api._get_pending_job_search("u1").get("role"), (
+                "_maybe_store_pending_job_search must arm a pending search when signal found"
+            )
+            result = api._resolve_pending_intent("u1", "تمام", _PROFILE)
+
+        mock_search.assert_called_once()
+        assert result is not None
+        assert result.get("type") == "job_results"
+
+    def test_no_pending_tamam_returns_none_not_search(self):
+        """'تمام' with no pending search must NOT call _classified_role_search."""
+        api = _make_api_live_memory()
+
+        with patch.object(api, "_classified_role_search") as mock_search:
+            result = api._resolve_pending_intent("u1", "تمام", _PROFILE)
+
+        mock_search.assert_not_called()
+        assert result is None
