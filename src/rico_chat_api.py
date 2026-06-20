@@ -2823,6 +2823,13 @@ class RicoChatAPI:
         _raw_desc = str(m.get("description") or m.get("job_description") or "").strip()
         _snippet = _raw_desc[:350].rsplit(" ", 1)[0] + ("…" if len(_raw_desc) > 350 else "") if _raw_desc else ""
 
+        _me_verdict = _v2.get("verdict") or explanation.get("verdict") or "weak_fit"
+        _me_summary = _v2.get("summary") or explanation.get("summary") or ""
+        _me_why = _v2.get("why_this_fits") or explanation.get("match_reasons") or []
+        _me_checks = _v2.get("worth_checking") or explanation.get("match_concerns") or []
+        _me_next = _v2.get("recommended_next_step") or ""
+        _me_conf = _v2.get("confidence") or "low"
+
         result = {
             "title": str(m.get("title") or "Untitled role"),
             "company": str(m.get("company") or "Unknown company"),
@@ -2835,10 +2842,19 @@ class RicoChatAPI:
             "actions": ["Prepare application", "Save", "Ask why", "Skip"],
             **explanation,
             # v2 richer explanation fields (preferred by updated UI over v1 match_reasons)
-            "why_this_fits": _v2.get("why_this_fits") or explanation.get("match_reasons") or [],
-            "worth_checking": _v2.get("worth_checking") or explanation.get("match_concerns") or [],
-            "verdict": _v2.get("verdict", ""),
-            "summary": _v2.get("summary", ""),
+            "why_this_fits": _me_why,
+            "worth_checking": _me_checks,
+            "verdict": _me_verdict,
+            "summary": _me_summary,
+            # Nested MatchExplanation object for MatchExplanationPanel in JobCard.
+            "match_explanation": {
+                "verdict": _me_verdict,
+                "summary": _me_summary,
+                "why_this_fits": _me_why,
+                "worth_checking": _me_checks,
+                "recommended_next_step": _me_next,
+                "confidence": _me_conf,
+            },
         }
 
         location = m.get("location")
