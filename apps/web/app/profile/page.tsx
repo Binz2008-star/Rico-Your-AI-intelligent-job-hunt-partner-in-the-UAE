@@ -426,8 +426,14 @@ function ProfileCompleteness({ profile }: { profile: ProfileResponse }) {
     const t = useTranslation(language);
 
     const fields = buildFields(profile);
-    const filledCount = fields.filter((f) => f.filled).length;
-    const pct = Math.round((filledCount / fields.length) * 100);
+    // Use the backend score when available (same source as the sidebar) so both
+    // widgets stay in sync. Fall back to local field-counting only when the backend
+    // hasn't computed a score yet.
+    const backendScore = profile.completeness_score;
+    const pct =
+        backendScore != null
+            ? Math.max(0, Math.min(100, Math.round(backendScore > 1 ? backendScore : backendScore * 100)))
+            : Math.round((fields.filter((f) => f.filled).length / fields.length) * 100);
     const missing = fields.filter((f) => !f.filled).slice(0, 3);
 
     const barColor =
