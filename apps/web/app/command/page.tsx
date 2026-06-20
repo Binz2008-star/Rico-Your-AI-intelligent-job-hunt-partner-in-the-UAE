@@ -13,6 +13,7 @@ import { ProposedChangeCard } from "@/components/ui/rico/ProposedChangeCard";
 import { clearChatHistory, confirmCVProfile, executePermissionAction, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { buildAuthHref } from "@/lib/redirect";
+import { buildWhatsAppManageUrl } from "@/lib/billing";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
 import { translations, useTranslation, type TranslationKey } from "@/lib/translations";
 import Link from "next/link";
@@ -715,6 +716,77 @@ function OptionButtons({ options, onAction }: { options: RicoOption[]; onAction:
                     {opt.label}
                 </button>
             ))}
+        </div>
+    );
+}
+
+const CHECKLIST_DISMISSED_KEY = "rico_getstarted_dismissed";
+
+function GetStartedChecklist({
+    cvDone,
+    t,
+    language,
+}: {
+    cvDone: boolean;
+    t: (k: TranslationKey) => string;
+    language: "en" | "ar";
+}) {
+    const [dismissed, setDismissed] = useState(() => {
+        if (typeof window === "undefined") return false;
+        return !!localStorage.getItem(CHECKLIST_DISMISSED_KEY);
+    });
+
+    if (dismissed) return null;
+
+    const items = [
+        { label: t("cmdGetStartedCvItem"), done: cvDone, href: "/upload" },
+        { label: t("cmdGetStartedRolesItem"), done: false, href: "/profile" },
+        { label: t("cmdGetStartedSearchItem"), done: false, href: undefined },
+    ];
+
+    const handleDismiss = () => {
+        localStorage.setItem(CHECKLIST_DISMISSED_KEY, "1");
+        setDismissed(true);
+    };
+
+    return (
+        <div
+            dir={language === "ar" ? "rtl" : "ltr"}
+            className="mx-auto w-full max-w-xl rounded-xl border border-gold/20 bg-gold/[0.05] p-4 animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none"
+        >
+            <div className="flex items-start justify-between gap-3">
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-gold">
+                    {t("cmdGetStartedTitle")}
+                </p>
+                <button
+                    type="button"
+                    onClick={handleDismiss}
+                    className="text-[11px] text-text-muted hover:text-text-secondary transition-colors"
+                >
+                    {t("cmdGetStartedDismiss")}
+                </button>
+            </div>
+            <ul className="mt-3 flex flex-col gap-2">
+                {items.map((item) => (
+                    <li key={item.label} className="flex items-center gap-2.5">
+                        <span className={`flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full border text-[9px] font-bold ${item.done ? "border-emerald-400/60 bg-emerald-500/15 text-emerald-300" : "border-overlay/25 text-text-tertiary"}`}>
+                            {item.done ? "✓" : ""}
+                        </span>
+                        {item.href ? (
+                            <a
+                                href={item.href}
+                                className={`text-[12px] transition-colors hover:text-text-primary ${item.done ? "text-text-tertiary line-through" : "text-text-secondary"}`}
+                            >
+                                {item.label}
+                            </a>
+                        ) : (
+                            <span className={`text-[12px] ${item.done ? "text-text-tertiary line-through" : "text-text-secondary"}`}>
+                                {item.label}
+                            </span>
+                        )}
+                    </li>
+                ))}
+            </ul>
         </div>
     );
 }
@@ -1584,6 +1656,11 @@ export default function CommandPage() {
                         />
                     )}
 
+                    {/* First-use checklist — shown to new authenticated users with no chat history */}
+                    {chatAudience === "authenticated" && historyState === "empty" && messages.length === 0 && !thinking && (
+                        <GetStartedChecklist cvDone={cvReady} t={t} language={language} />
+                    )}
+
                     {/* Welcome hero + quick start chips */}
                     {messages.length === 0 && !thinking && !cvReady && (
                         <div className="flex flex-col items-center gap-5 pb-4 pt-6 sm:pt-10 animate-in fade-in slide-in-from-bottom-3 motion-reduce:animate-none">
@@ -2030,6 +2107,19 @@ export default function CommandPage() {
 
             {/* Mobile bottom dock — matches AppShell; authenticated only (public gets sign-in links in MobileCommandHeader) */}
             {chatAudience === "authenticated" && <MobileBottomNav />}
+
+            {/* Floating help button — visible when authenticated */}
+            {chatAudience === "authenticated" && (
+                <a
+                    href={buildWhatsAppManageUrl()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Support on WhatsApp"
+                    className="fixed bottom-6 end-5 z-50 flex h-11 w-11 items-center justify-center rounded-full border border-overlay/15 bg-surface-elevated/90 text-text-secondary shadow-lg backdrop-blur-sm transition-colors hover:bg-surface-subtle hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 md:bottom-8 md:end-6"
+                >
+                    <span className="text-[17px] leading-none">?</span>
+                </a>
+            )}
         </div>
     );
 }

@@ -2,6 +2,7 @@
 
 import { AuraGlow } from "@/components/ui/AuraGlow";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { buildWhatsAppManageUrl } from "@/lib/billing";
 import { cn } from "@/lib/utils";
 import { AppSidebar } from "./AppSidebar";
 import { AppTopbar } from "./AppTopbar";
@@ -55,6 +56,17 @@ export function AppShell({
 
             {/* Mobile bottom dock — only rendered below md breakpoint */}
             <MobileBottomNav />
+
+            {/* Floating help button — bottom-right, links to WhatsApp support */}
+            <a
+                href={buildWhatsAppManageUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Support on WhatsApp"
+                className="fixed bottom-6 end-5 z-50 flex h-11 w-11 items-center justify-center rounded-full border border-overlay/15 bg-surface-elevated/90 text-text-secondary shadow-lg backdrop-blur-sm transition-colors hover:bg-surface-subtle hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 md:bottom-8 md:end-6"
+            >
+                <span className="text-[17px] leading-none">?</span>
+            </a>
         </div>
     );
 }

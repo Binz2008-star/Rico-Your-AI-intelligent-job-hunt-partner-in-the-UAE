@@ -735,6 +735,11 @@ export const translations = {
     cmdMsgLimitOne: "1 message left this month.",
     cmdMsgLimitFew: "{n} messages left this month.",
     cmdUpgrade: "Upgrade",
+    cmdGetStartedTitle: "Get started",
+    cmdGetStartedCvItem: "Upload your CV",
+    cmdGetStartedRolesItem: "Set your target roles",
+    cmdGetStartedSearchItem: "Run your first search",
+    cmdGetStartedDismiss: "Dismiss",
 
     // Application Flow page (/flow)
     flowTitle: "Application Flow",
@@ -1766,6 +1771,11 @@ export const translations = {
     cmdMsgLimitOne: "تبقّت رسالة واحدة هذا الشهر.",
     cmdMsgLimitFew: "تبقّت {n} رسائل هذا الشهر.",
     cmdUpgrade: "ترقية الخطة",
+    cmdGetStartedTitle: "ابدأ الآن",
+    cmdGetStartedCvItem: "ارفع سيرتك الذاتية",
+    cmdGetStartedRolesItem: "حدد أدوارك المستهدفة",
+    cmdGetStartedSearchItem: "أجرِ أول بحث لك",
+    cmdGetStartedDismiss: "إغلاق",
 
     // Application Flow page (/flow)
     flowTitle: "مسار الطلبات",
