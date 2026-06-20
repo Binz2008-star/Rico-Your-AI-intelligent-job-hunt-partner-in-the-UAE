@@ -3357,11 +3357,12 @@ class RicoChatAPI:
             "current_company": "Current company",
             "notice_period": "Notice period",
         }
+        profile_dict: dict = profile if isinstance(profile, dict) else (vars(profile) if profile else {})
         changes: list[dict] = []
         for field, proposed_value in (prefs or {}).items():
             changes.append({
                 "field": labels.get(field, field.replace("_", " ").title()),
-                "current_value": (profile or {}).get(field),
+                "current_value": profile_dict.get(field),
                 "proposed_value": proposed_value,
                 "source": "chat",
             })
