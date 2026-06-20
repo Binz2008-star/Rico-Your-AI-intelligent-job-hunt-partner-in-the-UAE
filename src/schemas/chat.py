@@ -1,9 +1,100 @@
 """Canonical chat schemas shared by authenticated and public Rico chat endpoints."""
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+# ── Agentic UI contracts (CAREER-OS-01) ──────────────────────────────────────
+
+
+class RicoActionKind(str, Enum):
+    navigate = "navigate"
+    submit = "submit"
+    chat_continue = "chat_continue"
+    open_drawer = "open_drawer"
+    approve = "approve"
+    cancel = "cancel"
+
+
+class RicoActionImpact(str, Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+
+
+class RicoChatAction(BaseModel):
+    id: str
+    label: str
+    kind: RicoActionKind
+    impact: RicoActionImpact = RicoActionImpact.low
+    requires_confirmation: bool = False
+    endpoint: str | None = None
+    href: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    tracking_key: str | None = None
+
+
+class RicoPermissionRequest(BaseModel):
+    id: str
+    title: str
+    summary: str
+    risk_level: Literal["medium", "high"]
+    data_used: list[str] = Field(default_factory=list)
+    effects: list[str] = Field(default_factory=list)
+    approve_action: RicoChatAction
+    review_action: RicoChatAction | None = None
+    cancel_action: RicoChatAction
+
+
+class RicoProgressStep(BaseModel):
+    id: str
+    label: str
+    status: Literal["pending", "running", "complete", "failed"]
+
+
+class RicoProposedChange(BaseModel):
+    field: str
+    current_value: Any | None = None
+    proposed_value: Any
+    source: Literal["chat", "cv", "file", "screenshot", "system", "user_action"]
+
+
+class RicoAttachmentPurpose(str, Enum):
+    cv_resume = "cv_resume"
+    job_post = "job_post"
+    recruiter_message = "recruiter_message"
+    application_form = "application_form"
+    certificate = "certificate"
+    offer_letter = "offer_letter"
+    contract_or_legalish = "contract_or_legalish"
+    company_profile = "company_profile"
+    public_comment = "public_comment"
+    unknown_document = "unknown_document"
+
+
+class RicoAttachmentAnalysis(BaseModel):
+    id: str
+    filename: str | None = None
+    mime_type: str | None = None
+    purpose: RicoAttachmentPurpose
+    confidence: float
+    extracted_summary: str | None = None
+    extracted_fields: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class RicoAgenticUi(BaseModel):
+    actions: list[RicoChatAction] = Field(default_factory=list)
+    permission_request: RicoPermissionRequest | None = None
+    progress: list[RicoProgressStep] = Field(default_factory=list)
+    proposed_changes: list[RicoProposedChange] = Field(default_factory=list)
+    attachment_analysis: list[RicoAttachmentAnalysis] = Field(default_factory=list)
+
+
+# ── Chat response ─────────────────────────────────────────────────────────────
 
 
 class RicoChatResponse(BaseModel):
@@ -37,6 +128,7 @@ class RicoChatResponse(BaseModel):
     operation_status: str | None = None
     operation_type: str | None = None
     result_count: int | None = None
+    agentic_ui: RicoAgenticUi | None = None
 
 
 class RicoSessionContext(BaseModel):
