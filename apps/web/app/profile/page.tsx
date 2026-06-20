@@ -447,10 +447,10 @@ function ProfileCompleteness({ profile }: { profile: ProfileResponse }) {
         backendScore != null
             ? Math.max(0, Math.min(100, Math.round(backendScore > 1 ? backendScore : backendScore * 100)))
             : Math.round((fields.filter((f) => f.filled).length / fields.length) * 100);
-    const missing = fields.filter((f) => !f.filled).slice(0, 3);
 
     const barColor =
         pct >= 80 ? "bg-green-500" : pct >= 50 ? "bg-gold" : "bg-red-500";
+    const scoreColor = pct >= 80 ? "text-green-400" : pct >= 50 ? "text-gold" : "text-red-400";
 
     return (
         <div className="rounded-xl border border-overlay/8 bg-surface-elevated/50 p-4 backdrop-blur-sm">
@@ -458,7 +458,7 @@ function ProfileCompleteness({ profile }: { profile: ProfileResponse }) {
                 <span className="text-xs font-semibold uppercase tracking-[0.1em] text-text-secondary">
                     {t("profileCompleteness")}
                 </span>
-                <span className={`text-sm font-bold ${pct >= 80 ? "text-green-400" : pct >= 50 ? "text-gold" : "text-red-400"}`}>
+                <span className={`text-sm font-bold ${scoreColor}`}>
                     {pct}%
                 </span>
             </div>
@@ -468,23 +468,24 @@ function ProfileCompleteness({ profile }: { profile: ProfileResponse }) {
                     style={{ width: `${pct}%` }}
                 />
             </div>
-            {missing.length > 0 && (
-                <div className="mt-3">
-                    <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-text-tertiary">
-                        {t("profileQuickWins")}
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                        {missing.map((f) => (
-                            <span
-                                key={f.key}
-                                className="rounded-md border border-overlay/10 bg-surface-glass px-2 py-0.5 text-[11px] text-text-secondary"
-                            >
-                                + {t(f.labelKey)}
+
+            {/* Full field breakdown */}
+            <div className="mt-4 space-y-1">
+                {fields.map((f) => (
+                    <div key={f.key} className="flex items-center justify-between gap-2 py-0.5">
+                        <span className="text-[11px] text-text-secondary">{t(f.labelKey)}</span>
+                        {f.filled ? (
+                            <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-400">
+                                <span className="material-icons-round text-[11px]">check_circle</span>
+                                Provided
                             </span>
-                        ))}
+                        ) : (
+                            <span className="text-[10px] text-text-tertiary">Missing</span>
+                        )}
                     </div>
-                </div>
-            )}
+                ))}
+            </div>
+
             {pct === 100 && (
                 <p className="mt-2 text-[11px] text-green-400">{t("profileCompletenessTip")}</p>
             )}
@@ -622,6 +623,15 @@ function ProfileDetail({
                                 placeholder={t("profileEnterTargetRoles")}
                                 label="target-roles"
                             />
+                            {(profile.target_roles?.length ?? 0) > 0 ? (
+                                <p className="mt-1.5 text-[10px] font-mono text-text-tertiary">
+                                    source: profile · {profile.target_roles!.length} role{profile.target_roles!.length !== 1 ? "s" : ""}
+                                </p>
+                            ) : (
+                                <p className="mt-1.5 text-[10px] text-text-tertiary">
+                                    Not enough evidence — add roles to enable matching.
+                                </p>
+                            )}
                         </Row>
                         <Row label={t("profileCities")}>
                             <TagInputField

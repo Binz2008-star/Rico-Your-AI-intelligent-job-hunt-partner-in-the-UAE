@@ -101,6 +101,24 @@ function fmtDate(iso: string | undefined, language: 'en' | 'ar') {
     return d.toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+function DateProvenance({ app, language }: { app: Application; language: 'en' | 'ar' }) {
+    if (app.applied_at) {
+        return (
+            <span className="text-[10px] text-text-tertiary font-mono">
+                applied · {fmtDate(app.applied_at, language)}
+            </span>
+        );
+    }
+    if (app.updated_at) {
+        return (
+            <span className="text-[10px] text-text-tertiary font-mono">
+                updated · {fmtDate(app.updated_at, language)}
+            </span>
+        );
+    }
+    return <span className="text-[10px] text-text-tertiary">No date recorded</span>;
+}
+
 export default function FlowPage() {
     const { language } = useLanguage();
     const t = useTranslation(language);
@@ -332,9 +350,7 @@ export default function FlowPage() {
                                                             </a>
                                                         )}
                                                         <div className="mt-2 flex items-center justify-between gap-2">
-                                                            <span className="text-[10px] text-text-tertiary">
-                                                                {fmtDate(item.applied_at, language) ?? ''}
-                                                            </span>
+                                                            <DateProvenance app={item} language={language} />
                                                             <label className="sr-only" htmlFor={`board-status-${item.application_id}`}>
                                                                 {`Change status for ${item.title}`}
                                                             </label>
@@ -402,9 +418,7 @@ export default function FlowPage() {
                                             )}
 
                                             <div className="mt-4 flex flex-col gap-3 border-t border-border-subtle pt-4 sm:flex-row sm:items-center">
-                                                <span className="text-xs text-text-tertiary">
-                                                    {fmtDate(item.applied_at, language) ?? t('flowNoDate')}
-                                                </span>
+                                                <DateProvenance app={item} language={language} />
                                                 <div className="hidden flex-1 sm:block" />
                                                 <label className="sr-only" htmlFor={`status-${item.application_id}`}>
                                                     {`Change status for ${item.title}`}
