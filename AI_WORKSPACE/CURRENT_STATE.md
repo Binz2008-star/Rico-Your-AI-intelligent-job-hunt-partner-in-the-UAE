@@ -1,6 +1,6 @@
 # Current State
 
-_Last updated: 2026-06-19 (post P0 QA matrix fixes)_
+_Last updated: 2026-06-20 (sidebar retry verified + UI/UX audit backlog logged)_
 
 ## Production baseline
 
@@ -219,15 +219,32 @@ UX tasks. Workflow-class items moved to #654. Resolved items checked off.
 TASK-010 Pipeline relevance guard (P1) · TASK-011 Match-score explanation (P2) ·
 TASK-013 Application Pipeline V1 status alignment (P1) · TASK-014 Queue Arabic empty state (P2) ·
 TASK-015 Pipeline notes/activity log (P2) · TASK-016 Profile completeness vs readiness (P3,
-sidebar widget loading fixed in #653; metric reconciliation still open) ·
+sidebar widget loading fixed in #658; metric reconciliation still open) ·
 TASK-017 Daily application-limit explanation (P3) · TASK-018 Telegram Chat-ID validation (P2).
 
 ---
 
-## #653 (TASK-024) — draft, rebased, awaiting review/merge
+## Sidebar status-widget retry (TASK-027 / PR #658) — DONE + smoke-PASS (2026-06-20)
 
-Sidebar status widgets retry after failed cold-start. Rebased onto `f4bacfa` (new main post
-BUG-04). Build green. Still draft — **do not merge without explicit approval.**
+Sidebar READINESS/PIPELINE widgets no longer cache failed cold-start loads (the "blank grey
+boxes on navigate-back" bug). Merged `712be79` via **PR #658**, which replaced #653 — that
+branch had 46 stale commits already on main and was **closed/superseded**. Production smoke
+PASS 2026-06-20 (full table on PR #658, issuecomment-4756899519). Tracked as
+**TASK-20260619-027**.
+
+> Earlier chat shorthand called this "TASK-024" — that is incorrect; TASK-024 is BUG-04. The
+> sidebar fix had no ledger ID until TASK-027 was added.
+
+---
+
+## UI/UX live-audit backlog (2026-06-19) — logged as TASK-028
+
+The 2026-06-19 live production UI/UX audit (`docs/audits/ui-ux-live-audit-2026-06-19.md`,
+shipped via #658) produced 20 prioritized recommendations across `/command`, `/flow`,
+`/profile`, `/upload`, `/settings`, `/subscription`, and the sidebar. They are now tracked as a
+backlog in **TASK-20260619-028**. Item 1-D (sidebar widgets) is already DONE (TASK-027); each
+remaining item spins into its own scoped TASK-NNN when picked up. Top pick per the audit:
+**1-A** (clickable option buttons — biggest UX win for least effort).
 
 ---
 
@@ -270,6 +287,7 @@ BUG-04). Build green. Still draft — **do not merge without explicit approval.*
 | Archived credential redaction | #656 | ✅ merged `e104135` (docs-only) |
 | BUG-05 public-chat onboarding loop | #657 | ✅ merged `f89c555`, live on Render |
 | P0 context-loss bugs (BUG-A/B/C/D) | #660 + #661 | ✅ merged `518a1a8` + `2bc489`; needs Render deploy |
+| Sidebar status-widget retry (cold-start) | #658 | ✅ merged `712be79`, smoke-PASS 2026-06-20 (TASK-027) |
 
 ## BUG-05 Public-Chat Onboarding Loop — RESOLVED (2026-06-19)
 
@@ -329,8 +347,8 @@ string. Chat never progressed, ignored conversation history, and never routed to
 
 Do not start without explicit scope and branch assignment.
 
-1. **#653 (TASK-024)** — sidebar status widget retry; draft, rebased, build-green. Awaiting
-   review/merge decision.
+1. ~~**#653 (TASK-024)** — sidebar status widget retry~~ — DONE: merged via #658 (`712be79`),
+   production smoke-PASS 2026-06-20. Tracked as TASK-20260619-027.
 2. **TASK-013 Application Pipeline V1** (P1) — end-to-end application submission with approval
    gate, audit log, Telegram confirmation. Needs dedicated issue + branch.
 3. **TASK-010 Pipeline relevance guard** (P1) — pre-filter pipeline results against active

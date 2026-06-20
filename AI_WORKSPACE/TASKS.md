@@ -56,6 +56,110 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260619-028 — UI/UX live-audit backlog (2026-06-19)
+
+Status: proposed (tracking task — spin each item into its own TASK-NNN when picked up)
+Owner: unassigned
+Branch: —
+Issue/PR: docs-only (this ledger entry)
+
+#### Objective
+Track the prioritized recommendations from the 2026-06-19 live production UI/UX audit so they
+are not lost in chat history. Full detail (problem + fix + mockups) lives in
+`docs/audits/ui-ux-live-audit-2026-06-19.md` (shipped via #658); this entry is the actionable
+backlog distilled from it.
+
+#### Source
+Direct live audit of `ricohunt.com` covering `/command`, `/flow`, `/profile`, `/upload`,
+`/settings`, `/subscription`, and the global sidebar. 20 recommendations, prioritized by
+impact vs. effort. `ref` below = the section id in the audit doc.
+
+#### Backlog (grouped by audit impact)
+
+Critical:
+- [ ] 1-A — Replace A/B/C/D typed options with clickable inline action buttons. BUG-02
+  (TASK-022) fixed the letter-routing; this is the UI half that removes typing entirely.
+- [ ] 1-B — Real fit-score badge on job cards (e.g. "82% match") + skills/gaps/location breakdown.
+
+High:
+- [x] 1-D — Sidebar widgets load on every mount. DONE via TASK-20260619-027 / PR #658.
+- [ ] 2-D — "Mark as Applied" inline CTA button on Link-opened cards.
+- [ ] 3-B — Surface profile conflict warnings as a top-of-page banner.
+- [ ] 5-A — Input validation: City (UAE list), Target roles (max 3–4), excluded-vs-target keyword warn.
+- [ ] 1-C — Search timeout/countdown indicator with reliable fallback buttons (30s).
+- [ ] 3-A — Profile completeness score: single source of truth (sidebar 71% vs profile 54%).
+
+Medium:
+- [ ] 6-A — Navy/indigo design system (style PR; move off near-black + gold).
+- [ ] 2-A — Demote "Link Opened" from a primary pipeline stage to card metadata.
+- [ ] 4-A — CV role-mismatch warning banner on My Files.
+- [ ] 6-B — First-use onboarding checklist (dismissable).
+- [ ] 1-E — Cold-start amber banner ("Rico is starting up ~45s").
+
+Low:
+- [ ] 6-D — Move WhatsApp support to a floating help icon; free the sidebar for navigation.
+
+Additional (in the audit body, outside the top-14 priority table):
+- [ ] 2-B — Drag-and-drop between pipeline columns / larger stage pill.
+- [ ] 2-C — Collapse zero-value pipeline stat boxes; lead with Applied/Interview/Offer.
+- [ ] 3-C — "Active CV" indicator chip on the Profile page.
+- [ ] 4-B — CV parse-confidence indicator + "Review parsed data".
+- [ ] 5-B — Fit-score slider guidance text (explain what 80% hides).
+- [ ] 6-C — Visual hierarchy: make "Ask Rico" the dominant sidebar action.
+
+#### Constraints
+- Docs/ledger only in this PR — no code changes.
+- Each item becomes its own scoped TASK-NNN + branch when implemented. Do not start without
+  explicit scope/branch assignment (per the Operating target in `CURRENT_STATE.md`).
+
+#### Notes
+- Per the audit, 1-A is the biggest UX win for the least effort — likely first to spin out.
+- Sourced solely from the in-repo 2026-06-19 live audit doc. If a separate/larger UI/UX
+  review exists, append its items here rather than starting a parallel list.
+
+---
+
+### TASK-20260619-027 — Sidebar status widgets: retry after failed cold-start load
+
+Status: done (verified — production smoke PASS 2026-06-20)
+Owner: Claude
+Branch: `fix/sidebar-status-retry-653` (merged → `712be79` via PR #658)
+Issue/PR: #658 (replaced #653, which was closed/superseded)
+
+#### Objective
+Stop the desktop sidebar READINESS/PIPELINE widgets from showing permanent blank grey boxes
+when navigating back to a page after a cold-start (backend-idle) load.
+
+#### Root cause
+`useSidebarStatus` cached failed/empty cold-start loads for 60s. When the backend was cold,
+all sources resolved to `null`, that empty result was cached, and subsequent remounts served
+the stuck nulls — so the widgets stayed blank on navigate-back.
+
+#### Fix (PR #658, merged `712be79`, 2026-06-19)
+- `loadStatus()` uses `Promise.allSettled` and throws when both core reads (profile + stats)
+  reject, so a failed cold-start is never cached and the next mount retries.
+- Cached successes are served instantly and revalidated (stale-while-revalidate) to avoid flicker.
+- Sidebar shows a retry affordance when status can't load (`navStatusRetry`, en + ar); the chip
+  calls a TTL-bypassing `refresh()`.
+- Changed files: `apps/web/hooks/useSidebarStatus.ts`,
+  `apps/web/components/layout/AppSidebar.tsx`, `apps/web/lib/translations.ts`,
+  `docs/audits/ui-ux-live-audit-2026-06-19.md` (audit doc).
+
+#### Verification
+- `npm run build` green; CI (pytest + playwright) green on #658.
+- Production smoke PASS (2026-06-20): widgets render on mount, repopulate instantly on
+  navigate-back (SWR), skeleton→data on hard refresh. Retry chip not exercised (Render warm —
+  `status.error` only flips when both core reads reject on a cold mount); rendering path is
+  covered by build + the both-locale `navStatusRetry` key. Smoke table recorded on PR #658
+  (issuecomment-4756899519).
+
+#### Notes
+- Addresses audit item 1-D (see TASK-20260619-028).
+- This is NOT TASK-024 — earlier chat shorthand mislabeled it. TASK-024 is BUG-04. The sidebar
+  fix had no ledger ID until this entry, which closes that gap.
+
+---
+
 ### TASK-20260619-026 — BUG-05: Public-chat onboarding infinite loop
 
 Status: review
