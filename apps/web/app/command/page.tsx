@@ -5,6 +5,8 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, RicoOption, UploadCVResponse } from "@/lib/api";
+import type { RicoAgenticUi } from "@/lib/schemas";
+import { ChatActionsRow } from "@/components/ui/rico/ChatActionCard";
 import { clearChatHistory, confirmCVProfile, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { buildAuthHref } from "@/lib/redirect";
@@ -72,6 +74,7 @@ interface Message {
     rate_limit_notice?: string;
     streaming?: boolean;
     stale?: boolean;
+    agentic_ui?: RicoAgenticUi | null;
 }
 
 type ChatAudience = "checking" | "authenticated" | "public";
@@ -934,6 +937,7 @@ export default function CommandPage() {
                             applications: (res as Record<string, unknown>).applications as ApplicationEntry[] | undefined,
                             follow_up_needed: (res as Record<string, unknown>).follow_up_needed as ApplicationEntry[] | undefined,
                             profile_gaps: (res as Record<string, unknown>).profile_gaps as string[] | undefined,
+                            agentic_ui: (res as Record<string, unknown>).agentic_ui as RicoAgenticUi | null | undefined,
                             streaming: false,
                         }];
                     });
@@ -1657,6 +1661,13 @@ export default function CommandPage() {
                                     )}
                                     {!m.streaming && m.options && m.options.length > 0 && (
                                         <OptionButtons options={m.options} onAction={(prompt) => sendMessage(prompt)} />
+                                    )}
+                                    {!m.streaming && m.agentic_ui?.actions && m.agentic_ui.actions.length > 0 && (
+                                        <ChatActionsRow
+                                            actions={m.agentic_ui.actions}
+                                            onChatContinue={(prompt) => sendMessage(prompt)}
+                                            disabled={thinking}
+                                        />
                                     )}
 
                                     {/* Role confirmation reasons + next_actions */}

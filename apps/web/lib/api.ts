@@ -935,6 +935,7 @@ export interface ChatApiResponse {
   rate_limit_notice?: string;
   messages_remaining?: number;
   messages_limit?: number;
+  agentic_ui?: unknown;
 }
 
 export interface ParsedCV {
