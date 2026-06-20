@@ -6,6 +6,55 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
+# ── Agentic UI Contract (CAREER-OS-01) ───────────────────────────────────────
+# Optional structured UI hints that a Rico response MAY attach so future
+# renderers can display richer components (cards, action buttons, etc.).
+# All fields have defaults so existing code paths that never set agentic_ui
+# continue to work unchanged. Set agentic_ui=None (default) to omit entirely.
+
+
+class AgenticUIActionContract(BaseModel):
+    """A single action the UI can render as a button or chip."""
+
+    model_config = ConfigDict(extra="allow")
+
+    action_id: str = ""
+    type: str = "send_message"
+    label: str = ""
+    style: Literal["primary", "secondary", "danger"] = "secondary"
+    job_id: str | None = None
+    href: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgenticUIComponentContract(BaseModel):
+    """A single renderable UI component hint."""
+
+    model_config = ConfigDict(extra="allow")
+
+    component: str = "text_block"
+    title: str | None = None
+    data: dict[str, Any] = Field(default_factory=dict)
+    actions: list[AgenticUIActionContract] = Field(default_factory=list)
+
+
+class AgenticUIContract(BaseModel):
+    """Optional structured UI hints attached to a RicoChatResponse.
+
+    If absent the message field provides the text fallback.
+    Version-stamped so future schema changes can be detected by renderers.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    version: str = "1"
+    components: list[AgenticUIComponentContract] = Field(default_factory=list)
+    primary_action: AgenticUIActionContract | None = None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+
 class RicoChatResponse(BaseModel):
     """Canonical response shape for Rico chat endpoints.
 
@@ -37,6 +86,7 @@ class RicoChatResponse(BaseModel):
     operation_status: str | None = None
     operation_type: str | None = None
     result_count: int | None = None
+    agentic_ui: AgenticUIContract | None = None
 
 
 class RicoSessionContext(BaseModel):
