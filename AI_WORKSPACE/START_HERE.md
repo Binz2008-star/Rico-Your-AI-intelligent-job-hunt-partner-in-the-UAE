@@ -8,12 +8,25 @@ This is the entrypoint for new Rico AI work sessions.
 Rico mode. Start from AI_WORKSPACE/START_HERE.md.
 ```
 
-## Latest handoff
+## Current session rule
 
-Before starting new Rico work, read the latest rollout handoff:
+Before starting work, verify GitHub `main` and the latest PR state. Do not assume older handoffs, `CURRENT_STATE.md`, or `TASKS.md` are current if they conflict with GitHub.
 
-1. `AI_WORKSPACE/HANDOFFS/2026-06-20-profile-nudge-render-rollout.md`
-2. Then continue with the read order below.
+Current known baseline after the latest workspace refresh:
+
+- Latest completed product trust work: PR #693 and PR #694.
+- #685 and #688 are parked drafts.
+- #691 is open but lower priority.
+- Next active task: `TASK-20260620-033 — Wire pending job-search confirmation in runtime`.
+
+## Latest handoff / state files
+
+Read in this order:
+
+1. `AI_WORKSPACE/CURRENT_STATE.md`
+2. `AI_WORKSPACE/TASKS.md`
+3. `AI_WORKSPACE/OPERATING_RULES.md`
+4. Then continue with the standard read order below.
 
 ## Read order
 
@@ -38,7 +51,8 @@ python scripts/sync_context.py
 
 ```text
 Task entry
-  -> handoff brief
+  -> verify GitHub main + open PRs
+  -> current state + task ledger
   -> operating rules
   -> one branch
   -> pull request
@@ -68,5 +82,5 @@ Use one writer per branch. Other tools or reviewers can inspect and comment with
 ## Standard handoff prompt
 
 ```text
-Rico mode. Start from AI_WORKSPACE/START_HERE.md. Read the latest handoff, current state, current task in AI_WORKSPACE/TASKS.md, AI_WORKSPACE/OPERATING_RULES.md, and AI_WORKSPACE/PROMPT_CONTRACT.md. Use one branch and return summary, changed files, commands run, test results, CI/deploy status, risks, rollback plan, and open questions.
+Rico mode. Start from AI_WORKSPACE/START_HERE.md. Verify GitHub main and open PRs first. Then read AI_WORKSPACE/CURRENT_STATE.md, AI_WORKSPACE/TASKS.md, AI_WORKSPACE/OPERATING_RULES.md, and AI_WORKSPACE/PROMPT_CONTRACT.md. Use one branch and return summary, changed files, commands run, test results, CI/deploy status, risks, rollback plan, and open questions.
 ```
