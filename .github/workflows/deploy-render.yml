@@ -1,7 +1,21 @@
-name: Manual Render Deploy
+name: Deploy Render Backend
 
+# Render has no native auto-deploy on this service, so the FastAPI backend
+# (src/api, src/rico_chat_api.py, ...) only ships when this workflow fires the
+# Render deploy hook. Run automatically on every push to main so merged backend
+# changes go live without a manual trigger; workflow_dispatch is kept for
+# on-demand redeploys.
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
+
+# Only the latest commit on main needs to be live. If a newer push lands while
+# a deploy is still being verified, cancel the older run — Render's deploy hook
+# always deploys the branch tip anyway.
+concurrency:
+  group: render-deploy
+  cancel-in-progress: true
 
 jobs:
   deploy:
@@ -10,25 +24,53 @@ jobs:
     permissions:
       contents: read
 
+    env:
+      API_BASE: https://rico-job-automation-api.onrender.com
+
     steps:
       - name: Trigger Render deploy hook
         run: |
-          curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
-          echo "Render deploy triggered"
+          if [ -z "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" ]; then
+            echo "::error::RENDER_DEPLOY_HOOK_URL secret is not set — cannot deploy"
+            exit 1
+          fi
+          curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" > /dev/null
+          echo "Render deploy triggered for ${GITHUB_SHA}"
 
-      - name: Wait for Render deploy propagation
-        run: sleep 30
+      - name: Wait until Render serves this commit
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          # Render's /version reports the deployed commit via RENDER_GIT_COMMIT.
+          # Poll until it matches the commit we just deployed, so a green run
+          # actually proves the new backend is live (not just that the old one
+          # is still healthy). Build + boot can take a few minutes.
+          echo "Waiting for ${API_BASE}/version commit to match ${EXPECTED_SHA:0:12} ..."
+          matched=0
+          for attempt in $(seq 1 48); do
+            sleep 10
+            body=$(curl -fsS "${API_BASE}/version" 2>/dev/null || echo '{}')
+            deployed=$(printf '%s' "$body" | jq -r '.commit // ""' 2>/dev/null | cut -c1-12)
+            echo "attempt ${attempt}: deployed=${deployed:-<none>}"
+            if [ -n "$deployed" ] && [ "$deployed" != "unknown" ] \
+               && [ "${EXPECTED_SHA:0:${#deployed}}" = "$deployed" ]; then
+              echo "Render is now serving ${deployed} (matches ${EXPECTED_SHA:0:12})"
+              matched=1
+              break
+            fi
+          done
+          if [ "$matched" != "1" ]; then
+            echo "::error::Render did not report commit ${EXPECTED_SHA:0:12} within ~8 min"
+            echo "Last /version response: $body"
+            exit 1
+          fi
 
       - name: Verify backend health
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://rico-job-automation-api.onrender.com/health)
-          if [ "$STATUS" != "200" ]; then
-            echo "Backend health check failed (HTTP $STATUS)"
+          status=$(curl -s -o /dev/null -w "%{http_code}" "${API_BASE}/health")
+          if [ "$status" != "200" ]; then
+            echo "::error::Backend health check failed (HTTP $status)"
             exit 1
           fi
-          echo "Backend health: OK ($STATUS)"
-          curl -s https://rico-job-automation-api.onrender.com/health | python3 -m json.tool
-
-      - name: Verify version
-        run: |
-          curl -s https://rico-job-automation-api.onrender.com/version
+          echo "Backend health: OK ($status)"
+          curl -s "${API_BASE}/health" | python3 -m json.tool
