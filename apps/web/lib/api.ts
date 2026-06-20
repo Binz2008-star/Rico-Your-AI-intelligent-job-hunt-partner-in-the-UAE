@@ -971,6 +971,16 @@ export interface ProfilePreview {
   languages: string[];
 }
 
+export interface DocumentClassificationScore {
+  [doc_type: string]: number;
+}
+
+export interface ClassifiedAction {
+  label: string;
+  kind: string;
+  message?: string;
+}
+
 export interface UploadCVResponse {
   ok: boolean;
   status: string;
@@ -982,6 +992,12 @@ export interface UploadCVResponse {
   parsed?: ParsedCV;
   message?: string;
   user_id?: string;
+  // Document Intelligence fields (status === "classified")
+  confidence?: number;
+  confidence_scores?: DocumentClassificationScore;
+  suggested_actions?: ClassifiedAction[];
+  display_label?: string;
+  file_format?: string;
 }
 
 export interface ConfirmCVProfileRequest {
