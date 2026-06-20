@@ -1,11 +1,14 @@
 import { cn } from "@/lib/utils";
 
 export function ScoreBadge({ score }: { score?: number | null }) {
-    const safe = typeof score === "number" ? Math.min(100, Math.round(score)) : 0;
+    if (typeof score !== "number" || score <= 0) return null;
+    // Chat endpoint emits 0.0–1.0 floats; /jobs endpoint emits 0–100 integers.
+    const pct = Math.min(100, Math.round(score <= 1 ? score * 100 : score));
+    if (pct === 0) return null;
     const className =
-        safe >= 85
+        pct >= 85
             ? "text-[#00c9a7] bg-[rgba(0,201,167,0.1)] border-[rgba(0,201,167,0.2)]"
-            : safe >= 65
+            : pct >= 65
                 ? "text-ember bg-ember/10 border-ember/20"
                 : "text-white/50 bg-white/4 border-white/10";
 
@@ -16,7 +19,7 @@ export function ScoreBadge({ score }: { score?: number | null }) {
                 className
             )}
         >
-            {safe}%
+            {pct}%
         </span>
     );
 }
