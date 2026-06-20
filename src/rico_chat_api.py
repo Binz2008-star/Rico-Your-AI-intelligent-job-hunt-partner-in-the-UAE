@@ -2907,6 +2907,22 @@ class RicoChatAPI:
     SOURCE_FALLBACK = "fallback"
     SOURCE_RATE_LIMITED = "rate_limited"
 
+    # Patterns that indicate a promise-only reply (no actual search executed).
+    # Used by _is_promise_only_reply() to guard against returning a hollow response.
+    _PROMISE_ONLY_PATTERNS: frozenset = frozenset([
+        "جاري البحث", "ببحث الآن", "ببحث", "ثواني", "انتظرني", "لحظة",
+        "باستخدام أداة البحث", "سأبحث الآن", "سوف أبحث",
+        "i'm searching", "i'll search now", "searching now",
+        "i'll look now", "wait", "one moment", "hold on",
+        "i'll get back to you",
+    ])
+
+    @staticmethod
+    def _is_promise_only_reply(text: str) -> bool:
+        """Return True if text is a hollow promise (search announced but not executed)."""
+        lower = text.lower().strip()
+        return any(p in lower for p in RicoChatAPI._PROMISE_ONLY_PATTERNS)
+
     @staticmethod
     def _source_for_openai_response(response: dict[str, Any]) -> str:
         """Determine source type from response metadata."""
@@ -3833,6 +3849,53 @@ class RicoChatAPI:
         except Exception:
             return {}
 
+    # ── Pending job search state helpers ─────────────────────────────────────
+    # Stores intent for job search so when user says "تمام"/"نعم"/"ok" after Rico
+    # announces a search plan, the search is actually executed rather than just
+    # re-promising. TTL is 15 minutes to avoid stale state across sessions.
+
+    _PENDING_JOB_SEARCH_KEY: str = "pending_job_search"
+
+    def _store_pending_job_search(
+        self,
+        user_id: str,
+        *,
+        role: str,
+        location: str = "",
+        query_type: str = "profile_based",
+    ) -> None:
+        try:
+            import time
+            self.memory.set_context(
+                user_id,
+                self._PENDING_JOB_SEARCH_KEY,
+                {
+                    "role": role,
+                    "location": location,
+                    "query_type": query_type,
+                    "created_at": int(time.time()),
+                    "expires_at": int(time.time()) + 900,  # 15 min TTL
+                },
+            )
+        except Exception:
+            pass
+
+    def _get_pending_job_search(self, user_id: str) -> dict:
+        try:
+            ctx = self.memory.get_context(user_id, self._PENDING_JOB_SEARCH_KEY) or {}
+            import time
+            if ctx.get("expires_at", 0) < int(time.time()):
+                return {}
+            return ctx
+        except Exception:
+            return {}
+
+    def _clear_pending_job_search(self, user_id: str) -> None:
+        try:
+            self.memory.set_context(user_id, self._PENDING_JOB_SEARCH_KEY, {})
+        except Exception:
+            pass
+
     def _get_last_assistant_message(self, user_id: str) -> str:
         """Return the last assistant message text for pending-intent resolution."""
         try:
@@ -3861,6 +3924,17 @@ class RicoChatAPI:
         if not self._is_affirmative(message):
             return None
 
+        # Priority 0: stored pending job search state (most reliable — set explicitly when
+        # Rico announces a search plan and the turn ends without executing it).
+        pending_js = self._get_pending_job_search(user_id)
+        if pending_js and pending_js.get("role"):
+            self._clear_pending_job_search(user_id)
+            pending_role = pending_js["role"]
+            pending_loc = pending_js.get("location", "")
+            return self._classified_role_search(
+                user_id, pending_role, profile, location=pending_loc
+            )
+
         last = self._get_last_assistant_message(user_id).lower()
         if not last:
             return None
@@ -3886,13 +3960,28 @@ class RicoChatAPI:
         if cv_improve_signals:
             return self._handle_cv_generate_from_profile(user_id, profile, message)
         if job_search_signals:
+            # Execute the actual search — do NOT route to _answer_with_ai_fallback which
+            # only produces a conversational promise ("ببحث الآن...") without fetching jobs.
             target_roles = self._as_list(self._profile_value(profile, "target_roles"))
-            role = target_roles[0] if target_roles else "my target role"
-            return self._answer_with_ai_fallback(
-                user_id=user_id,
-                message=f"Find live UAE jobs for {role}",
+            role = target_roles[0] if target_roles else None
+            if role:
+                self._clear_pending_job_search(user_id)
+                return self._classified_role_search(
+                    user_id, role, profile
+                )
+            # No role available — ask for role instead of promising search
+            arabic = self._is_arabic_text(message)
+            return self._finalize(
+                {
+                    "type": "clarification",
+                    "message": (
+                        "ما هو الدور الذي تبحث عنه؟ أحتاج المسمى الوظيفي لأبدأ البحث."
+                        if arabic else
+                        "What role are you looking for? I need a job title to run the search."
+                    ),
+                },
+                self.SOURCE_KEYWORD,
                 profile=profile,
-                save_user_message=False,
             )
         if application_angle_signals:
             return self._answer_with_ai_fallback(
