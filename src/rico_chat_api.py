@@ -4096,6 +4096,48 @@ class RicoChatAPI:
         except Exception:
             pass
 
+    # Outgoing-message signals meaning Rico offered/announced a job search this
+    # turn without executing it. Mirror of the read-side job_search_signals so a
+    # follow-up confirmation ("تمام"/"yes") runs the real search. Kept focused on
+    # explicit offers/promises to avoid storing on incidental CV-flow chatter.
+    _SEARCH_OFFER_SIGNALS: tuple[str, ...] = (
+        "shall i search", "shall i start searching", "want me to search",
+        "should i search",  # known_but_off_profile clarification path
+        "search for roles", "ready to search", "you can now search",
+        "what should i search", "find live jobs", "shall i look for",
+        "أبحث لك", "هل أبحث", "سأبحث", "ببحث", "وظائف حية", "أبحث عن وظائف",
+        "هل تريد البحث",  # Arabic career-change offer: "هل تريد البحث عن وظائف في X؟"
+    )
+
+    def _maybe_store_pending_job_search(self, user_id: str, result: dict[str, Any]) -> None:
+        """Persist a pending job search when Rico's response offers/announces a
+        search but does not execute one this turn.
+
+        Without this, ``_store_pending_job_search`` is never called, so the
+        ``_get_pending_job_search`` checks (Priority-0 in ``_resolve_pending_intent``
+        and the "تمام" acknowledgement intercept) can never fire and a confirmed
+        search silently falls back to a dead-end acknowledgement. Profile is only
+        resolved when an offer is actually detected to avoid a per-turn DB hit.
+        """
+        try:
+            rtype = str(result.get("type") or "")
+            # A search was already executed this turn — nothing left pending.
+            if rtype in ("job_matches", "job_list"):
+                return
+            msg = str(result.get("message") or "")
+            if not msg:
+                return
+            low = msg.lower()  # lower() leaves Arabic unchanged, so AR signals still match
+            if not any(sig in low for sig in self._SEARCH_OFFER_SIGNALS):
+                return
+            profile = self._resolve_profile(user_id)
+            target_roles = self._as_list(self._profile_value(profile, "target_roles"))
+            role = target_roles[0] if target_roles else None
+            if role:
+                self._store_pending_job_search(user_id, role=role)
+        except Exception:
+            pass
+
     def _get_last_assistant_message(self, user_id: str) -> str:
         """Return the last assistant message text for pending-intent resolution."""
         try:
@@ -4932,6 +4974,14 @@ class RicoChatAPI:
 
         if filtered_ai_message:
             self._append_chat(user_id, "assistant", filtered_ai_message)
+            # If the AI produced a hollow promise ("ببحث الآن...", "Searching now...") but did
+            # not actually fetch jobs, arm the pending-search slot so the user's next
+            # confirmation ("تمام"/"ok") triggers _classified_role_search instead of
+            # receiving another promise.
+            if self._is_promise_only_reply(filtered_ai_message) and profile:
+                _promise_roles = self._as_list(self._profile_value(profile, "target_roles"))
+                if _promise_roles:
+                    self._store_pending_job_search(user_id, role=str(_promise_roles[0]))
 
         result = self._finalize(
             ai_response,
@@ -5144,6 +5194,10 @@ class RicoChatAPI:
         """
         try:
             result = self._handle_active_user_inner(user_id, message)
+            # Wire pending job-search: if Rico offered/announced a search this turn
+            # but didn't run it, remember it so a follow-up "تمام"/"yes" executes the
+            # real search (read side: _get_pending_job_search / _resolve_pending_intent).
+            self._maybe_store_pending_job_search(user_id, result)
             # Persist options so the user can reply "A"/"B"/"C"/"D" next turn.
             _options = result.get("options")
             if _options and isinstance(_options, list):
@@ -16209,6 +16263,9 @@ class RicoChatAPI:
                 self._store_recent_context(user_id, _ctx)
             except Exception:
                 pass
+            # Arm pending search so "تمام"/"yes"/"ok" in the next turn executes the search
+            # rather than producing another hollow promise or a good-luck reply.
+            self._store_pending_job_search(user_id, role=canonical_role, location=location, query_type="known_but_off_profile")
             return response
 
         # unknown role — check if text is actually a company name from recent matches
