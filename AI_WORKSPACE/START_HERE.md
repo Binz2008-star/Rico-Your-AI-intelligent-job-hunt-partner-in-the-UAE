@@ -24,8 +24,9 @@ Start with the current repository state, then read:
 3. `AI_WORKSPACE/ARCHITECTURE.md`
 4. `AI_WORKSPACE/CURRENT_STATE.md`
 5. `AI_WORKSPACE/TASKS.md`
-6. `AI_WORKSPACE/DECISIONS.md`
-7. `AI_WORKSPACE/PROMPT_CONTRACT.md`
+6. `AI_WORKSPACE/OPERATING_RULES.md`
+7. `AI_WORKSPACE/DECISIONS.md`
+8. `AI_WORKSPACE/PROMPT_CONTRACT.md`
 
 Optional context bundle:
 
@@ -38,10 +39,12 @@ python scripts/sync_context.py
 ```text
 Task entry
   -> handoff brief
+  -> operating rules
   -> one branch
   -> pull request
   -> review and verification
   -> merge
+  -> deploy verification when runtime changed
   -> workspace update if needed
 ```
 
@@ -65,5 +68,5 @@ Use one writer per branch. Other tools or reviewers can inspect and comment with
 ## Standard handoff prompt
 
 ```text
-Rico mode. Start from AI_WORKSPACE/START_HERE.md. Read the latest handoff, read the current task in AI_WORKSPACE/TASKS.md, follow AI_WORKSPACE/PROMPT_CONTRACT.md, use one branch, and return summary, changed files, commands run, test results, risks, rollback plan, and open questions.
+Rico mode. Start from AI_WORKSPACE/START_HERE.md. Read the latest handoff, current state, current task in AI_WORKSPACE/TASKS.md, AI_WORKSPACE/OPERATING_RULES.md, and AI_WORKSPACE/PROMPT_CONTRACT.md. Use one branch and return summary, changed files, commands run, test results, CI/deploy status, risks, rollback plan, and open questions.
 ```
