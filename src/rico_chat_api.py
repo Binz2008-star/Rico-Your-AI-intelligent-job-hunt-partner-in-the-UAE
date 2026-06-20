@@ -1985,6 +1985,15 @@ class RicoChatAPI:
             except Exception:
                 pass
 
+            # Inject career memory (CAREER-OS-09): blocked companies, recent applies, etc.
+            try:
+                from src.services.career_memory import build_memory_context
+                _mem = build_memory_context(user_id)
+                if _mem:
+                    ctx["career_memory"] = _mem
+            except Exception:
+                pass
+
         return ctx
 
     def _recent_jobs_summary(self, user_id: str, limit: int = 3) -> str:
@@ -3327,6 +3336,36 @@ class RicoChatAPI:
             if _k == "salary_expectation_aed":
                 _val_str = f"AED {_val_str}/month"
             changes.append(f"**{_label}** \u2192 {_val_str}")
+        return changes
+
+    @staticmethod
+    def _build_proposed_changes(prefs: "dict[str, Any]", profile: "dict[str, Any]") -> "list[dict[str, Any]]":
+        """Build a list of RicoProposedChange dicts for agentic_ui (CAREER-OS-07)."""
+        labels: dict[str, str] = {
+            "target_roles": "Target role",
+            "preferred_cities": "Preferred city",
+            "years_experience": "Years of experience",
+            "skills": "Skills",
+            "industries": "Industry",
+            "salary_expectation_aed": "Salary expectation (AED/mo)",
+            "minimum_salary_aed": "Minimum salary (AED/mo)",
+            "employment_type": "Employment type",
+            "visa_status": "Visa status",
+            "nationality": "Nationality",
+            "telegram_username": "Telegram username",
+            "current_role": "Current role",
+            "current_company": "Current company",
+            "notice_period": "Notice period",
+        }
+        profile_dict: dict = profile if isinstance(profile, dict) else (vars(profile) if profile else {})
+        changes: list[dict] = []
+        for field, proposed_value in (prefs or {}).items():
+            changes.append({
+                "field": labels.get(field, field.replace("_", " ").title()),
+                "current_value": profile_dict.get(field),
+                "proposed_value": proposed_value,
+                "source": "chat",
+            })
         return changes
 
     @staticmethod
@@ -6935,13 +6974,13 @@ class RicoChatAPI:
                 _ask_msg = (
                     "قبل أن أحفظ هذه التغييرات في ملفك الشخصي:\n"
                     + "\n".join(f"• {c}" for c in _changes)
-                    + "\n\nهل أحفظها؟ ردّ بـ **نعم** للحفظ أو **لا** للإلغاء."
+                    + "\n\nاضغط **حفظ التغييرات** أدناه، أو ردّ بـ **نعم** للحفظ أو **لا** للإلغاء."
                 )
             else:
                 _ask_msg = (
                     "Before I save these to your profile:\n"
                     + "\n".join(f"• {c}" for c in _changes)
-                    + "\n\nShall I save them? Reply **yes** to confirm or **no** to cancel."
+                    + "\n\nClick **Save changes** below, or reply **yes** to confirm or **no** to cancel."
                 )
             response = {
                 "type": "clarification",
@@ -6949,7 +6988,34 @@ class RicoChatAPI:
                 "pending": prefs,
             }
             self._append_chat(user_id, "assistant", _ask_msg)
-            return self._finalize(response, routed.source, profile=profile)
+
+            # CAREER-OS-07: emit ProposedChangeCard so the frontend can render
+            # a structured confirmation UI instead of a text yes/no prompt.
+            _proposed = self._build_proposed_changes(prefs, profile or {})
+            import uuid as _uuid
+            _submit_action = {
+                "id": f"submit-profile-{_uuid.uuid4().hex[:8]}",
+                "label": "Save changes",
+                "kind": "submit",
+                "impact": "medium",
+                "requires_confirmation": False,
+                "endpoint": "/api/v1/rico/profile",
+                "payload": dict(prefs),
+            }
+
+            class _Agentic:
+                def __init__(self, **kw: Any) -> None:
+                    self.data = kw
+
+            return self._finalize(
+                response,
+                routed.source,
+                profile=profile,
+                runtime_result=_Agentic(
+                    proposed_changes=_proposed,
+                    actions=[_submit_action],
+                ),
+            )
 
         # Role change — extract role and classify
         if legacy_intent == "role_change" and intent_result.extracted_role:
