@@ -1665,3 +1665,49 @@ export async function recordSubscriptionIntent(
     // Fire-and-forget — never surface errors to the user
   }
 }
+
+// ── CAREER-OS-03: Permission Engine ──────────────────────────────────────────
+
+export interface ExecutePermissionActionRequest {
+  permission_id: string;
+  action: string;
+  job_key?: string;
+  job?: Record<string, unknown> | null;
+  source?: string;
+}
+
+export interface ExecutePermissionActionResponse {
+  ok: boolean;
+  message: string;
+  action: string;
+  job_key: string;
+  source: string;
+  user_id: string;
+  dry_run: boolean;
+  data: Record<string, unknown>;
+  error: string | null;
+  confidence: number;
+  explanation: string;
+  duration_ms: number;
+}
+
+/** Call POST /api/v1/rico/actions/execute — requires the user to be authenticated. */
+export async function executePermissionAction(
+  req: ExecutePermissionActionRequest,
+  signal?: AbortSignal,
+): Promise<ExecutePermissionActionResponse> {
+  return requestJson<ExecutePermissionActionResponse>(
+    "/api/v1/rico/actions/execute",
+    {
+      method: "POST",
+      signal,
+      body: JSON.stringify({
+        permission_id: req.permission_id,
+        action: req.action,
+        job_key: req.job_key ?? "",
+        job: req.job ?? null,
+        source: req.source ?? "permission_card",
+      }),
+    },
+  );
+}

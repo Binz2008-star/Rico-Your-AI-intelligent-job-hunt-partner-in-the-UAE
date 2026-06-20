@@ -51,3 +51,17 @@ class ActionResponse(BaseModel):
     confidence: float
     explanation: str
     duration_ms: int
+
+
+class ExecutePermissionActionRequest(BaseModel):
+    """Request body for POST /api/v1/rico/actions/execute (CAREER-OS-03).
+
+    Called by the frontend PermissionRequestCard when the user explicitly
+    approves a high-impact action surfaced via agentic_ui.permission_request.
+    """
+    permission_id: str = Field(..., min_length=1, max_length=128,
+                               description="ID from permission_request.id")
+    action: str = Field(..., description="Action name to forward to agent_runtime (e.g. 'apply', 'save')")
+    job_key: str = Field("", max_length=256)
+    job: Optional[Dict[str, Any]] = Field(None, description="Full job dict when available")
+    source: str = Field("permission_card", max_length=64)

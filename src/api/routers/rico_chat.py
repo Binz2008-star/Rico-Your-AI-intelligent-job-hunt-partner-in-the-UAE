@@ -62,6 +62,7 @@ from src.services.matching_guardrails import build_matching_guardrail_warnings
 from src.services.cv_quality_warnings import build_cv_quality_warnings
 from src.services.settings_service import get_settings
 from src.rico_openai_runtime import call_openai_minimal
+from src.schemas.actions import ActionRequest, ActionResponse, ExecutePermissionActionRequest
 from src.schemas.chat import RicoChatResponse, RicoSessionContext
 from src.services import chat_service
 from src.agent.responses.schema import build_error_response
@@ -1592,3 +1593,30 @@ async def rico_github_webhook(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
 
     return chat_service.handle_github_event(event, payload)
+
+
+# ── CAREER-OS-03: Permission Engine execute endpoint ──────────────────────────
+
+
+@router.post("/actions/execute", response_model=ActionResponse)
+@limiter.limit(LIMIT_CHAT)
+def execute_permission_action(
+    request: Request,
+    req: ExecutePermissionActionRequest,
+    user: dict = Depends(get_current_user),
+) -> ActionResponse:
+    """Execute a Rico action that the user explicitly approved via the Permission Engine UI.
+
+    `user_id` is always derived from the JWT — callers cannot spoof other users.
+    The `permission_id` is recorded in the audit source so approvals are traceable.
+    Routes through the agent_runtime singleton; safety guardrails are always enforced.
+    """
+    result = agent_runtime.handle_action(
+        user_id=user["email"],
+        action=req.action,
+        job_key=req.job_key,
+        job=req.job,
+        source=f"permission:{req.permission_id}",
+        dry_run=False,
+    )
+    return ActionResponse(**result.to_dict())
