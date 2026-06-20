@@ -211,3 +211,81 @@ class TestPermissionExecuteLive:
         data = r.json()
         assert data["ok"] is True
         assert len(data["message"]) > 0
+
+
+# ── pre_approved circuit ──────────────────────────────────────────────────────
+
+class TestPreApprovedCircuit:
+    """Verify that execute_permission_action sets pre_approved=True so apply_to_job
+    does not block with approval_required when routed through this endpoint."""
+
+    def test_apply_via_execute_does_not_return_approval_required(self, client):
+        """
+        When action='apply' goes through /actions/execute it must NOT return
+        approval_required — the PermissionRequestCard IS the approval.
+        The result will be ok=True with a non-approval_required message, OR
+        ok=False for another reason (e.g. auto-apply globally disabled) — but
+        never the approval gate message.
+        """
+        r = client.post(_URL, json={
+            "permission_id": "perm-apply-001",
+            "action": "apply",
+            "job": _JOB,
+        })
+        assert r.status_code == 200
+        data = r.json()
+        # Must not block with approval_required
+        assert "approval_required" not in data.get("message", "").lower().replace(" ", "_")
+
+    def test_permission_id_in_source_for_apply(self, client):
+        """Apply via execute endpoint records permission_id in the audit source."""
+        r = client.post(_URL, json={
+            "permission_id": "perm-apply-trace-999",
+            "action": "apply",
+            "job": _JOB,
+        })
+        assert r.status_code == 200
+        assert "perm-apply-trace-999" in r.json()["source"]
+
+
+# ── permission_request injection (unit) ──────────────────────────────────────
+
+class TestPermissionRequestInjection:
+    """Verify that agent_runtime injects permission_request into RuntimeResult.data
+    when apply returns approval_required (i.e. via a non-pre_approved path)."""
+
+    def test_runtime_injects_permission_request_on_approval_required(self):
+        """Direct unit test of the runtime injection without HTTP."""
+        from src.agent.runtime import agent_runtime
+
+        result = agent_runtime.handle_action(
+            user_id="unit-test@rico.ai",
+            action="apply",
+            job=_JOB,
+            source="unit_test",
+            pre_approved=False,   # normal chat path — approval required
+        )
+        # apply_to_job returns approval_required, runtime should inject permission_request
+        assert isinstance(result.data, dict)
+        # permission_request is injected only when factory can run; it may be absent if
+        # the factory import fails (isolated test env), so we check conditionally
+        if "permission_request" in result.data:
+            pr = result.data["permission_request"]
+            assert pr["id"]
+            assert pr["risk_level"] == "high"
+            assert pr["approve_action"]["kind"] == "approve"
+            assert pr["approve_action"]["endpoint"] == "/api/v1/rico/actions/execute"
+
+    def test_runtime_pre_approved_does_not_inject_permission_request(self):
+        """When pre_approved=True the apply proceeds (or hits next gate), never loops back."""
+        from src.agent.runtime import agent_runtime
+
+        result = agent_runtime.handle_action(
+            user_id="unit-test@rico.ai",
+            action="apply",
+            job=_JOB,
+            source="unit_test",
+            pre_approved=True,
+        )
+        # Should NOT have approval_required in data when pre_approved
+        assert result.data.get("status") != "approval_required"

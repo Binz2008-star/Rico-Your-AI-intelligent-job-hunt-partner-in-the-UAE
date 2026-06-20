@@ -1618,5 +1618,6 @@ def execute_permission_action(
         job=req.job,
         source=f"permission:{req.permission_id}",
         dry_run=False,
+        pre_approved=True,
     )
     return ActionResponse(**result.to_dict())

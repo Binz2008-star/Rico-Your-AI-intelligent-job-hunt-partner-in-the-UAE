@@ -194,6 +194,49 @@ describe("PermissionRequestCard interactions", () => {
     });
 });
 
+// ── Error state ───────────────────────────────────────────────────────────────
+
+describe("PermissionRequestCard error state", () => {
+    it("shows inline error when onApprove rejects", async () => {
+        const user = userEvent.setup();
+        const handler = vi.fn().mockRejectedValue(new Error("Network error"));
+        render(<PermissionRequestCard request={makeRequest()} onApprove={handler} onCancel={vi.fn()} />);
+        await user.click(screen.getByTestId("permission-approve-btn"));
+        await waitFor(() => expect(screen.getByTestId("permission-error")).toBeInTheDocument());
+        expect(screen.getByTestId("permission-error")).toHaveTextContent("Network error");
+    });
+
+    it("keeps card visible after error (allows retry)", async () => {
+        const user = userEvent.setup();
+        const handler = vi.fn().mockRejectedValue(new Error("Timeout"));
+        render(<PermissionRequestCard request={makeRequest()} onApprove={handler} onCancel={vi.fn()} />);
+        await user.click(screen.getByTestId("permission-approve-btn"));
+        await waitFor(() => expect(screen.getByTestId("permission-error")).toBeInTheDocument());
+        expect(screen.getByTestId("permission-request-card")).toBeInTheDocument();
+    });
+
+    it("approve button re-enables after error", async () => {
+        const user = userEvent.setup();
+        const handler = vi.fn().mockRejectedValue(new Error("500"));
+        render(<PermissionRequestCard request={makeRequest()} onApprove={handler} onCancel={vi.fn()} />);
+        await user.click(screen.getByTestId("permission-approve-btn"));
+        await waitFor(() => expect(screen.getByTestId("permission-error")).toBeInTheDocument());
+        expect(screen.getByTestId("permission-approve-btn")).not.toBeDisabled();
+    });
+
+    it("clears previous error on retry click", async () => {
+        const user = userEvent.setup();
+        const handler = vi.fn()
+            .mockRejectedValueOnce(new Error("First error"))
+            .mockResolvedValueOnce(undefined);
+        render(<PermissionRequestCard request={makeRequest()} onApprove={handler} onCancel={vi.fn()} />);
+        await user.click(screen.getByTestId("permission-approve-btn"));
+        await waitFor(() => expect(screen.getByTestId("permission-error")).toBeInTheDocument());
+        await user.click(screen.getByTestId("permission-approve-btn"));
+        await waitFor(() => expect(screen.queryByTestId("permission-error")).not.toBeInTheDocument());
+    });
+});
+
 // ── disabled prop ─────────────────────────────────────────────────────────────
 
 describe("PermissionRequestCard disabled prop", () => {

@@ -72,18 +72,24 @@ class AgentRuntime:
         job: Optional[Dict[str, Any]] = None,
         source: str = "api",
         dry_run: bool = False,
+        pre_approved: bool = False,
     ) -> RuntimeResult:
         """
         Execute a single named action on behalf of a user.
 
         Args:
-            user_id:  Identifies the user (Telegram chat_id, email, etc.)
-            action:   One of VALID_ACTION_TYPES
-            job_key:  Fingerprint from get_job_id() — used to look up job if
-                      `job` dict not provided
-            job:      Full job dict. If None, resolved from Telegram job cache.
-            source:   Caller label for audit logs ("telegram", "api", …)
-            dry_run:  When True, the action is NOT executed; only logged.
+            user_id:      Identifies the user (Telegram chat_id, email, etc.)
+            action:       One of VALID_ACTION_TYPES
+            job_key:      Fingerprint from get_job_id() — used to look up job if
+                          `job` dict not provided
+            job:          Full job dict. If None, resolved from Telegram job cache.
+            source:       Caller label for audit logs ("telegram", "api", …)
+            dry_run:      When True, the action is NOT executed; only logged.
+            pre_approved: When True (set by execute_permission_action after explicit
+                          user approval via PermissionRequestCard), injects ``_approved``
+                          sentinel so apply_to_job bypasses the approval gate. This flag
+                          must never be set by untrusted callers — only the
+                          /actions/execute endpoint (which derives user_id from JWT) sets it.
 
         Returns:
             RuntimeResult — always returned, never raises.
@@ -107,6 +113,14 @@ class AgentRuntime:
 
         # 2. Resolve job dict
         resolved_job = self._resolve_job(job, job_key)
+
+        # 2a. When the caller has already surfaced a PermissionRequestCard and the user
+        #     explicitly clicked Approve, inject the sentinel so apply_job passes it
+        #     through to apply_to_job(approved=True). This is the ONLY path where the
+        #     approval gate is bypassed — and only after a traceable permission_id is
+        #     recorded in `source` by execute_permission_action.
+        if pre_approved and action == "apply":
+            resolved_job = {**resolved_job, "_approved": True}
 
         # 3. Idempotency guard for state-changing actions
         if action in _IDEMPOTENT and is_duplicate(action_id):
@@ -190,7 +204,19 @@ class AgentRuntime:
 
         elapsed = int((time.monotonic() - wall_start) * 1000)
         tool_ok = bool(tool_result and tool_result.success)
-        tool_data = (tool_result.data or {}) if tool_result else {}
+        tool_data = dict((tool_result.data or {}) if tool_result else {})
+
+        # 6a. When apply is gated (approval_required), attach a PermissionRequest payload
+        #     so any caller (chat router, API layer) can surface the PermissionRequestCard
+        #     without building the payload themselves.
+        if action == "apply" and tool_ok and tool_data.get("status") == "approval_required":
+            try:
+                from src.services.permission_factory import build_apply_permission_dict
+                tool_data["permission_request"] = build_apply_permission_dict(
+                    resolved_job, user_id
+                )
+            except Exception:
+                logger.debug("runtime: failed to build permission_request payload", exc_info=True)
 
         # 7. Build message
         message = self._build_message(action, tool_ok, tool_data, error_str)

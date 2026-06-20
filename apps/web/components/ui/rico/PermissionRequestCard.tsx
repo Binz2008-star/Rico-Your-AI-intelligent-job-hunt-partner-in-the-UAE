@@ -29,13 +29,17 @@ export function PermissionRequestCard({
 }: PermissionRequestCardProps) {
     const [executing, setExecuting] = useState(false);
     const [executed, setExecuted] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     async function handleApprove() {
         if (executing || executed) return;
         setExecuting(true);
+        setError(null);
         try {
             await onApprove(request.approve_action);
             setExecuted(true);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
         } finally {
             setExecuting(false);
         }
@@ -107,6 +111,16 @@ export function PermissionRequestCard({
                         ))}
                     </ul>
                 </div>
+            )}
+
+            {/* Inline error */}
+            {error && (
+                <p
+                    data-testid="permission-error"
+                    className="text-[12px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2"
+                >
+                    {error}
+                </p>
             )}
 
             {/* Actions */}
