@@ -599,6 +599,8 @@ export const translations = {
     filesLegacyNote: "Upload a new CV to update your profile",
     filesSaveLabel: "Save",
     filesCancelLabel: "Cancel",
+    filesRoleMismatchTitle: "CV role mismatch",
+    filesRoleMismatchBody: "Your active CV is for a {cvRole} role — your target roles are {targetRoles}. Consider uploading a CV tailored to your target roles.",
 
     // Command page (chat interface)
     cmdHeroTitle: "Hi, I'm Rico",
@@ -1628,6 +1630,8 @@ export const translations = {
     filesLegacyNote: "ارفع سيرة ذاتية جديدة لتحديث ملفك",
     filesSaveLabel: "حفظ",
     filesCancelLabel: "إلغاء",
+    filesRoleMismatchTitle: "عدم تطابق دور السيرة الذاتية",
+    filesRoleMismatchBody: "سيرتك الذاتية النشطة لمنصب {cvRole} — أدوارك المستهدفة هي {targetRoles}. فكر في رفع سيرة ذاتية مخصصة لأدوارك المستهدفة.",
 
     // Command page (chat interface)
     cmdHeroTitle: "مرحباً، أنا ريكو",

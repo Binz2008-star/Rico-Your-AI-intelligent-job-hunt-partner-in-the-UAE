@@ -10,6 +10,7 @@ import {
     ApiError,
     deleteUserFile,
     fetchMe,
+    fetchProfile,
     listUserFiles,
     setPrimaryFile,
     updateUserFile,
@@ -323,11 +324,30 @@ function FileManagerView({ isAr, t, router }: FileManagerViewProps) {
     const [isProcessing, setIsProcessing] = useState(false);
     // True after CV parse+preview completes; user must visit /command to confirm.
     const [cvPendingConfirm, setCvPendingConfirm] = useState(false);
+    // Role mismatch: { cvRole, targetRoles } when primary CV role doesn't match profile targets.
+    const [roleMismatch, setRoleMismatch] = useState<{ cvRole: string; targetRoles: string[] } | null>(null);
 
     const loadFiles = useCallback(async () => {
         try {
-            const res = await listUserFiles();
+            const [res, profile] = await Promise.all([
+                listUserFiles(),
+                fetchProfile().catch(() => null),
+            ]);
             setFiles(res.files);
+
+            // Compute role mismatch between primary CV and target roles.
+            const primaryCv = res.files.find((f) => f.doc_type === 'cv' && f.is_primary && f.current_role);
+            const targets = profile?.target_roles ?? [];
+            if (primaryCv?.current_role && targets.length > 0) {
+                const cvRole = primaryCv.current_role.toLowerCase();
+                const matched = targets.some((r) => {
+                    const t2 = r.toLowerCase();
+                    return cvRole.includes(t2) || t2.includes(cvRole);
+                });
+                setRoleMismatch(matched ? null : { cvRole: primaryCv.current_role, targetRoles: targets });
+            } else {
+                setRoleMismatch(null);
+            }
         } catch (err) {
             // 404/500/503 = backend cold-start or endpoint not yet deployed — treat as empty
             if (err instanceof ApiError && (err.statusCode === 404 || err.statusCode === 500 || err.statusCode === 503)) {
@@ -443,6 +463,18 @@ function FileManagerView({ isAr, t, router }: FileManagerViewProps) {
             {error && (
                 <div className="rounded-lg border border-rico-red/25 bg-rico-red/10 px-4 py-3 text-sm text-rico-red" role="alert">
                     {error}
+                </div>
+            )}
+
+            {/* CV role-mismatch warning */}
+            {roleMismatch && !error && (
+                <div className="flex flex-col gap-1 rounded-lg border border-amber-400/30 bg-amber-500/[0.08] px-4 py-3 text-sm text-amber-300" role="alert">
+                    <span className="font-semibold">{t('filesRoleMismatchTitle')}</span>
+                    <span className="text-[12px] text-amber-200/80">
+                        {t('filesRoleMismatchBody')
+                            .replace('{cvRole}', roleMismatch.cvRole)
+                            .replace('{targetRoles}', roleMismatch.targetRoles.join(', '))}
+                    </span>
                 </div>
             )}
 
