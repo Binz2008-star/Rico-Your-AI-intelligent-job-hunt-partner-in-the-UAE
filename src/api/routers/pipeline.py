@@ -13,10 +13,12 @@ from src.api.deps import get_current_user, require_admin, require_cron_secret
 from src.schemas.pipeline import (
     PipelineStatusResponse,
     PipelineTriggerResponse,
+    ProfileNudgeResponse,
     RemindersResponse,
 )
 from src.services.followup_service import DEFAULT_FOLLOWUP_INTERVAL_DAYS, run_due_scan
 from src.services.pipeline_service import get_status, trigger
+from src.services.profile_nudge_service import run_profile_nudge_sweep
 
 router = APIRouter(prefix="/api/v1/pipeline", tags=["pipeline"])
 
@@ -62,3 +64,18 @@ def run_reminders(
 
     summary = run_due_scan(interval)
     return RemindersResponse(**summary)
+
+
+@router.post("/profile-nudge", response_model=ProfileNudgeResponse)
+def run_profile_nudge(
+    _cron: None = Depends(require_cron_secret),
+) -> ProfileNudgeResponse:
+    """One-time profile completion nudge sweep (requires migration 029).
+
+    Finds users registered > 24 h ago with no nudge sent yet and an incomplete
+    profile (missing CV, target roles, or preferred cities), sends them a single
+    email, and stamps profile_nudge_sent_at so the sweep is idempotent.
+    Guarded by X-Cron-Secret. Safe to call repeatedly — never double-sends.
+    """
+    summary = run_profile_nudge_sweep()
+    return ProfileNudgeResponse(**summary)
