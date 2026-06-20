@@ -934,6 +934,8 @@ _ARABIC_REQUEST_TERMS = frozenset([
     "ابحث", "بحث", "دور", "اريد", "ابي", "ابغي",
     "احتاج", "محتاج", "شوف", "طلع", "جيب",
     "ساعدني", "ايجاد", "طلب",
+    # Display / show request verbs — e.g. "اعرضلي" (show me), "احدث" (latest)
+    "اعرض", "اعرضلي", "عرض", "عرضلي", "احدث", "ارني", "وريني", "جيبلي",
     # MSA formal verbs (all stored in normalised form — alef variants stripped)
     "ارغب",   # أرغب — I wish / want
     "اسعي",   # أسعى — I seek
@@ -975,9 +977,13 @@ _ARABIC_LOCATION_TERMS = frozenset({
 })
 
 # Arabic job nouns / connectors stripped from the edges of a captured role phrase.
+# Also includes profile-reference phrases like "بمجالي" (in my field) that should
+# not be treated as a role — they imply profile-based search with no explicit role.
 _ARABIC_ROLE_LEAD_STOPWORDS = frozenset({
     "وظيفه", "وظائف", "فرصه", "فرص", "شاغر", "شواغر", "منصب", "مناصب",
     "مسمي", "عمل", "شغل", "عن", "لي", "لك", "في",
+    # Profile-reference suffixes — mean "in my field/domain", not a job title
+    "بمجالي", "بمجال", "مجالي", "تخصصي", "في مجالي",
 })
 
 # Deterministic Arabic→English role synonyms for UAE job titles.

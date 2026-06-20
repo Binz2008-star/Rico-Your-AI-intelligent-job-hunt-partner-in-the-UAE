@@ -2952,6 +2952,22 @@ class RicoChatAPI:
     SOURCE_FALLBACK = "fallback"
     SOURCE_RATE_LIMITED = "rate_limited"
 
+    # Patterns that indicate a promise-only reply (no actual search executed).
+    # Used by _is_promise_only_reply() to guard against returning a hollow response.
+    _PROMISE_ONLY_PATTERNS: frozenset = frozenset([
+        "جاري البحث", "ببحث الآن", "ببحث", "ثواني", "انتظرني", "لحظة",
+        "باستخدام أداة البحث", "سأبحث الآن", "سوف أبحث",
+        "i'm searching", "i'll search now", "searching now",
+        "i'll look now", "wait", "one moment", "hold on",
+        "i'll get back to you",
+    ])
+
+    @staticmethod
+    def _is_promise_only_reply(text: str) -> bool:
+        """Return True if text is a hollow promise (search announced but not executed)."""
+        lower = text.lower().strip()
+        return any(p in lower for p in RicoChatAPI._PROMISE_ONLY_PATTERNS)
+
     @staticmethod
     def _source_for_openai_response(response: dict[str, Any]) -> str:
         """Determine source type from response metadata."""
@@ -4033,6 +4049,53 @@ class RicoChatAPI:
         except Exception:
             return {}
 
+    # ── Pending job search state helpers ─────────────────────────────────────
+    # Stores intent for job search so when user says "تمام"/"نعم"/"ok" after Rico
+    # announces a search plan, the search is actually executed rather than just
+    # re-promising. TTL is 15 minutes to avoid stale state across sessions.
+
+    _PENDING_JOB_SEARCH_KEY: str = "pending_job_search"
+
+    def _store_pending_job_search(
+        self,
+        user_id: str,
+        *,
+        role: str,
+        location: str = "",
+        query_type: str = "profile_based",
+    ) -> None:
+        try:
+            import time
+            self.memory.set_context(
+                user_id,
+                self._PENDING_JOB_SEARCH_KEY,
+                {
+                    "role": role,
+                    "location": location,
+                    "query_type": query_type,
+                    "created_at": int(time.time()),
+                    "expires_at": int(time.time()) + 900,  # 15 min TTL
+                },
+            )
+        except Exception:
+            pass
+
+    def _get_pending_job_search(self, user_id: str) -> dict:
+        try:
+            ctx = self.memory.get_context(user_id, self._PENDING_JOB_SEARCH_KEY) or {}
+            import time
+            if ctx.get("expires_at", 0) < int(time.time()):
+                return {}
+            return ctx
+        except Exception:
+            return {}
+
+    def _clear_pending_job_search(self, user_id: str) -> None:
+        try:
+            self.memory.set_context(user_id, self._PENDING_JOB_SEARCH_KEY, {})
+        except Exception:
+            pass
+
     def _get_last_assistant_message(self, user_id: str) -> str:
         """Return the last assistant message text for pending-intent resolution."""
         try:
@@ -4058,6 +4121,19 @@ class RicoChatAPI:
 
         Returns a response dict if a pending intent was resolved, else None.
         """
+        # Priority 0: stored pending job search state (most reliable — set explicitly when
+        # Rico announces a search plan and the turn ends without executing it).
+        # Checked BEFORE the _is_affirmative guard because this method is called from
+        # both the affirmative path (yes/ok) and the follow_up_confirmation path (تمام/نعم/كمل).
+        pending_js = self._get_pending_job_search(user_id)
+        if pending_js and pending_js.get("role"):
+            self._clear_pending_job_search(user_id)
+            pending_role = pending_js["role"]
+            pending_loc = pending_js.get("location", "")
+            return self._classified_role_search(
+                user_id, pending_role, profile, location=pending_loc
+            )
+
         if not self._is_affirmative(message):
             return None
 
@@ -4086,14 +4162,25 @@ class RicoChatAPI:
         if cv_improve_signals:
             return self._handle_cv_generate_from_profile(user_id, profile, message)
         if job_search_signals:
+            # Execute the actual search — do NOT route to _answer_with_ai_fallback which
+            # only produces a conversational promise ("ببحث الآن...") without fetching jobs.
             target_roles = self._as_list(self._profile_value(profile, "target_roles"))
-            role = target_roles[0] if target_roles else "my target role"
-            return self._answer_with_ai_fallback(
-                user_id=user_id,
-                message=f"Find live UAE jobs for {role}",
-                profile=profile,
-                save_user_message=False,
-            )
+            role = target_roles[0] if target_roles else None
+            if role:
+                self._clear_pending_job_search(user_id)
+                return self._classified_role_search(
+                    user_id, role, profile
+                )
+            # No role available — ask for role instead of promising search
+            arabic = self._is_arabic_text(message)
+            return {
+                "type": "clarification",
+                "message": (
+                    "ما هو الدور الذي تبحث عنه؟ أحتاج المسمى الوظيفي لأبدأ البحث."
+                    if arabic else
+                    "What role are you looking for? I need a job title to run the search."
+                ),
+            }
         if application_angle_signals:
             return self._answer_with_ai_fallback(
                 user_id=user_id,
@@ -5382,6 +5469,21 @@ class RicoChatAPI:
         # them as acknowledgements and return a short warm reply immediately.
         _msg_lower = message.strip().lower()
         if _msg_lower in _ACKNOWLEDGEMENT_REPLIES:
+            # Before emitting a static ack, honour any pending job search. Arabic short
+            # confirmations like "تمام" (fine/ok) are in _ACKNOWLEDGEMENT_REPLIES but also
+            # used to confirm a search Rico promised in the previous turn. These phrases
+            # never reach _is_affirmative or the follow_up_confirmation dispatch, so the
+            # pending search check must live here.
+            _ack_pending_js = self._get_pending_job_search(user_id)
+            if _ack_pending_js and _ack_pending_js.get("role"):
+                _ack_role = _ack_pending_js["role"]
+                _ack_loc = _ack_pending_js.get("location", "")
+                self._clear_pending_job_search(user_id)
+                return self._finalize(
+                    self._classified_role_search(user_id, _ack_role, profile, location=_ack_loc),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
             ack_text = _acknowledgement_reply(message)
             response = {"type": "acknowledgement", "message": ack_text}
             self._append_chat(user_id, "assistant", ack_text)
@@ -6837,6 +6939,23 @@ class RicoChatAPI:
                     )
             except Exception:
                 pass  # fall through to generic confirmation handling
+
+            # Priority 1.5: stored pending job search (set when Rico promised "ببحث" but
+            # the turn ended without executing the search). Checked here so that "تمام"
+            # and other follow_up_confirmation phrases correctly trigger the search.
+            try:
+                _pending_js = self._get_pending_job_search(user_id)
+                if _pending_js and _pending_js.get("role"):
+                    _js_role = _pending_js["role"]
+                    _js_loc = _pending_js.get("location", "")
+                    self._clear_pending_job_search(user_id)
+                    return self._finalize(
+                        self._classified_role_search(user_id, _js_role, profile, location=_js_loc),
+                        self.SOURCE_KEYWORD,
+                        profile=profile,
+                    )
+            except Exception:
+                pass
 
             # Priority 2: resume a pending role search confirmation
             # (user replied YES after known_but_off_profile clarification)
