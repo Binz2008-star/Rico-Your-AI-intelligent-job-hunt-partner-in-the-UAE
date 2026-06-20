@@ -32,3 +32,4 @@ class ProfileNudgeResponse(BaseModel):
     nudges_sent: int = 0
     nudges_failed: int = 0
     skipped: int = 0
+    skipped_synthetic: int = 0
