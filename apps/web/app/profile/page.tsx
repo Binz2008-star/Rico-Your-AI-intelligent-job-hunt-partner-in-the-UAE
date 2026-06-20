@@ -15,6 +15,19 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+const UAE_CITIES = new Set([
+    "abu dhabi", "dubai", "sharjah", "ajman", "ras al khaimah",
+    "fujairah", "al ain", "umm al quwain",
+    "أبوظبي", "أبو ظبي", "دبي", "الشارقة", "عجمان",
+    "رأس الخيمة", "الفجيرة", "العين", "أم القيوين",
+]);
+
+function isUAECity(city: string): boolean {
+    return UAE_CITIES.has(city.toLowerCase().trim()) || UAE_CITIES.has(city.trim());
+}
+
+const MAX_TARGET_ROLES = 4;
+
 function Tag({ label }: { label: string }) {
     return (
         <span className="rounded-md bg-surface-glass px-2 py-0.5 text-xs text-text-secondary">
@@ -524,6 +537,9 @@ function ProfileDetail({
 
     return (
         <div className="flex w-full flex-col gap-5">
+            {/* Profile conflict warnings — shown at top so they're visible without scrolling */}
+            <GuardrailWarnings warnings={profile.warnings} language={language} />
+
             {/* Completeness score */}
             <ProfileCompleteness profile={profile} />
 
@@ -598,7 +614,6 @@ function ProfileDetail({
             {/* Job preferences */}
             <StatusCard title={t("profileJobPreferences")} badge={hasJobPrefs ? "live" : "pending"} badgeLabel={hasJobPrefs ? t("profileBadgeSynced") : t("profileBadgePending")}>
                 <div className="flex flex-col gap-3">
-                    <GuardrailWarnings warnings={profile.warnings} language={language} />
                     <dl className="grid min-w-0 grid-cols-1 gap-3 text-sm lg:grid-cols-2">
                         <Row label={t("profileTargetRoles")}>
                             <TagInputField
@@ -819,6 +834,9 @@ export default function ProfilePage() {
     }, [warnRefreshFail]);
 
     const handleSaveTargetRoles = useCallback(async (nextRoles: string[]) => {
+        if (nextRoles.length > MAX_TARGET_ROLES) {
+            throw new Error(t("profileTooManyRoles"));
+        }
         await updateProfile({ target_roles: nextRoles });
         setProfile((current) => (current ? { ...current, target_roles: nextRoles } : current));
 
@@ -828,9 +846,13 @@ export default function ProfilePage() {
         } catch {
             warnRefreshFail();
         }
-    }, [warnRefreshFail]);
+    }, [t, warnRefreshFail]);
 
     const handleSaveCities = useCallback(async (nextCities: string[]) => {
+        const invalid = nextCities.find((c) => !isUAECity(c));
+        if (invalid) {
+            throw new Error(t("profileInvalidCity"));
+        }
         await updateProfile({ preferred_cities: nextCities });
         setProfile((current) => (current ? { ...current, preferred_cities: nextCities } : current));
 
@@ -840,7 +862,7 @@ export default function ProfilePage() {
         } catch {
             warnRefreshFail();
         }
-    }, [warnRefreshFail]);
+    }, [t, warnRefreshFail]);
 
     const handleSaveSalaryTarget = useCallback(async (nextSalary: string) => {
         const parsed = Number(nextSalary);
