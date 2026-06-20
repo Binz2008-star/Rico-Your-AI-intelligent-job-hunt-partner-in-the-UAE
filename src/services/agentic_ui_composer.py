@@ -29,6 +29,15 @@ def compose(result: Any) -> Any | None:
     if actions := data.get("actions"):
         components["actions"] = actions
 
+    if proposed := data.get("proposed_changes"):
+        components["proposed_changes"] = proposed
+
+    if attachment := data.get("attachment_analysis"):
+        components["attachment_analysis"] = attachment
+
+    if progress := data.get("progress"):
+        components["progress"] = progress
+
     if not components:
         return None
 

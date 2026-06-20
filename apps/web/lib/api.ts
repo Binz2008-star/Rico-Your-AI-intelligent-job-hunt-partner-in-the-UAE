@@ -971,6 +971,16 @@ export interface ProfilePreview {
   languages: string[];
 }
 
+export interface DocumentClassificationScore {
+  [doc_type: string]: number;
+}
+
+export interface ClassifiedAction {
+  label: string;
+  kind: string;
+  message?: string;
+}
+
 export interface UploadCVResponse {
   ok: boolean;
   status: string;
@@ -982,6 +992,12 @@ export interface UploadCVResponse {
   parsed?: ParsedCV;
   message?: string;
   user_id?: string;
+  // Document Intelligence fields (status === "classified")
+  confidence?: number;
+  confidence_scores?: DocumentClassificationScore;
+  suggested_actions?: ClassifiedAction[];
+  display_label?: string;
+  file_format?: string;
 }
 
 export interface ConfirmCVProfileRequest {
@@ -1654,6 +1670,25 @@ export async function getFollowUpReminders(
   return requestJson<ApplicationDraft[]>("/api/v1/apply/follow-ups", {
     method: "GET",
     signal,
+  });
+}
+
+// ── Agentic UI action execution (CAREER-OS-05) ────────────────────────────────
+
+/**
+ * Generic submit handler for RicoChatAction.kind === "submit".
+ * Posts to the action's endpoint with its payload.
+ * For profile updates (/api/v1/rico/profile) the caller should prefer
+ * updateProfile() which uses PATCH and validates the response shape.
+ */
+export async function submitAction(
+  endpoint: string,
+  payload: Record<string, unknown>,
+  method: "POST" | "PATCH" = "POST",
+): Promise<Record<string, unknown>> {
+  return requestJson<Record<string, unknown>>(endpoint, {
+    method,
+    body: JSON.stringify(payload),
   });
 }
 

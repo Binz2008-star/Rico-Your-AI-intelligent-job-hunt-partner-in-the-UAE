@@ -274,6 +274,16 @@ class AgentRuntime:
             except Exception:
                 logger.debug("runtime: learning signal failed action=%s", action, exc_info=True)
 
+        # 11. Career memory — persist the action so Rico can reference it across
+        #     sessions (blocked companies, recent applies, etc). Fire-and-forget.
+        _MEMORY_ACTIONS = frozenset({"apply", "save", "skip", "block", "not_relevant"})
+        if tool_ok and action in _MEMORY_ACTIONS and resolved_job:
+            try:
+                from src.services.career_memory import record_action as _cm_record
+                _cm_record(user_id, action, resolved_job)
+            except Exception:
+                logger.debug("runtime: career_memory record failed", exc_info=True)
+
         return RuntimeResult(
             ok=tool_ok,
             message=message,

@@ -1985,6 +1985,15 @@ class RicoChatAPI:
             except Exception:
                 pass
 
+            # Inject career memory (CAREER-OS-09): blocked companies, recent applies, etc.
+            try:
+                from src.services.career_memory import build_memory_context
+                _mem = build_memory_context(user_id)
+                if _mem:
+                    ctx["career_memory"] = _mem
+            except Exception:
+                pass
+
         return ctx
 
     def _recent_jobs_summary(self, user_id: str, limit: int = 3) -> str:
@@ -2814,6 +2823,13 @@ class RicoChatAPI:
         _raw_desc = str(m.get("description") or m.get("job_description") or "").strip()
         _snippet = _raw_desc[:350].rsplit(" ", 1)[0] + ("…" if len(_raw_desc) > 350 else "") if _raw_desc else ""
 
+        _me_verdict = _v2.get("verdict") or explanation.get("verdict") or "weak_fit"
+        _me_summary = _v2.get("summary") or explanation.get("summary") or ""
+        _me_why = _v2.get("why_this_fits") or explanation.get("match_reasons") or []
+        _me_checks = _v2.get("worth_checking") or explanation.get("match_concerns") or []
+        _me_next = _v2.get("recommended_next_step") or ""
+        _me_conf = _v2.get("confidence") or "low"
+
         result = {
             "title": str(m.get("title") or "Untitled role"),
             "company": str(m.get("company") or "Unknown company"),
@@ -2826,10 +2842,19 @@ class RicoChatAPI:
             "actions": ["Prepare application", "Save", "Ask why", "Skip"],
             **explanation,
             # v2 richer explanation fields (preferred by updated UI over v1 match_reasons)
-            "why_this_fits": _v2.get("why_this_fits") or explanation.get("match_reasons") or [],
-            "worth_checking": _v2.get("worth_checking") or explanation.get("match_concerns") or [],
-            "verdict": _v2.get("verdict", ""),
-            "summary": _v2.get("summary", ""),
+            "why_this_fits": _me_why,
+            "worth_checking": _me_checks,
+            "verdict": _me_verdict,
+            "summary": _me_summary,
+            # Nested MatchExplanation object for MatchExplanationPanel in JobCard.
+            "match_explanation": {
+                "verdict": _me_verdict,
+                "summary": _me_summary,
+                "why_this_fits": _me_why,
+                "worth_checking": _me_checks,
+                "recommended_next_step": _me_next,
+                "confidence": _me_conf,
+            },
         }
 
         location = m.get("location")
@@ -3327,6 +3352,36 @@ class RicoChatAPI:
             if _k == "salary_expectation_aed":
                 _val_str = f"AED {_val_str}/month"
             changes.append(f"**{_label}** \u2192 {_val_str}")
+        return changes
+
+    @staticmethod
+    def _build_proposed_changes(prefs: "dict[str, Any]", profile: "dict[str, Any]") -> "list[dict[str, Any]]":
+        """Build a list of RicoProposedChange dicts for agentic_ui (CAREER-OS-07)."""
+        labels: dict[str, str] = {
+            "target_roles": "Target role",
+            "preferred_cities": "Preferred city",
+            "years_experience": "Years of experience",
+            "skills": "Skills",
+            "industries": "Industry",
+            "salary_expectation_aed": "Salary expectation (AED/mo)",
+            "minimum_salary_aed": "Minimum salary (AED/mo)",
+            "employment_type": "Employment type",
+            "visa_status": "Visa status",
+            "nationality": "Nationality",
+            "telegram_username": "Telegram username",
+            "current_role": "Current role",
+            "current_company": "Current company",
+            "notice_period": "Notice period",
+        }
+        profile_dict: dict = profile if isinstance(profile, dict) else (vars(profile) if profile else {})
+        changes: list[dict] = []
+        for field, proposed_value in (prefs or {}).items():
+            changes.append({
+                "field": labels.get(field, field.replace("_", " ").title()),
+                "current_value": profile_dict.get(field),
+                "proposed_value": proposed_value,
+                "source": "chat",
+            })
         return changes
 
     @staticmethod
@@ -5006,6 +5061,8 @@ class RicoChatAPI:
             _options = result.get("options")
             if _options and isinstance(_options, list):
                 self._save_pending_options(user_id, _options)
+                # 1-A: also surface as clickable chat_continue buttons in agentic_ui
+                result = self._inject_option_buttons(result, _options)
             return result
         except Exception:
             logger.exception("rico_routing_error user=%s msg=%r", user_id, message)
@@ -6935,13 +6992,13 @@ class RicoChatAPI:
                 _ask_msg = (
                     "قبل أن أحفظ هذه التغييرات في ملفك الشخصي:\n"
                     + "\n".join(f"• {c}" for c in _changes)
-                    + "\n\nهل أحفظها؟ ردّ بـ **نعم** للحفظ أو **لا** للإلغاء."
+                    + "\n\nاضغط **حفظ التغييرات** أدناه، أو ردّ بـ **نعم** للحفظ أو **لا** للإلغاء."
                 )
             else:
                 _ask_msg = (
                     "Before I save these to your profile:\n"
                     + "\n".join(f"• {c}" for c in _changes)
-                    + "\n\nShall I save them? Reply **yes** to confirm or **no** to cancel."
+                    + "\n\nClick **Save changes** below, or reply **yes** to confirm or **no** to cancel."
                 )
             response = {
                 "type": "clarification",
@@ -6949,7 +7006,34 @@ class RicoChatAPI:
                 "pending": prefs,
             }
             self._append_chat(user_id, "assistant", _ask_msg)
-            return self._finalize(response, routed.source, profile=profile)
+
+            # CAREER-OS-07: emit ProposedChangeCard so the frontend can render
+            # a structured confirmation UI instead of a text yes/no prompt.
+            _proposed = self._build_proposed_changes(prefs, profile or {})
+            import uuid as _uuid
+            _submit_action = {
+                "id": f"submit-profile-{_uuid.uuid4().hex[:8]}",
+                "label": "Save changes",
+                "kind": "submit",
+                "impact": "medium",
+                "requires_confirmation": False,
+                "endpoint": "/api/v1/rico/profile",
+                "payload": dict(prefs),
+            }
+
+            class _Agentic:
+                def __init__(self, **kw: Any) -> None:
+                    self.data = kw
+
+            return self._finalize(
+                response,
+                routed.source,
+                profile=profile,
+                runtime_result=_Agentic(
+                    proposed_changes=_proposed,
+                    actions=[_submit_action],
+                ),
+            )
 
         # Role change — extract role and classify
         if legacy_intent == "role_change" and intent_result.extracted_role:
@@ -8975,6 +9059,52 @@ class RicoChatAPI:
             self._store_recent_context(user_id, ctx)
         except Exception:
             pass
+
+    @staticmethod
+    def _inject_option_buttons(
+        result: "dict[str, Any]",
+        options: "list[dict[str, Any]]",
+    ) -> "dict[str, Any]":
+        """Mirror letter-choice options as agentic_ui chat_continue buttons (audit 1-A).
+
+        Buttons send the full option message so clicking has the same effect as typing
+        the letter, but works without relying on _pending_options still being valid.
+        """
+        import uuid as _uuid
+        from src.schemas.chat import RicoChatAction, RicoActionKind, RicoAgenticUi
+
+        _letters = "ABCD"
+        new_actions: list = []
+        for i, opt in enumerate(options[:4]):
+            if not isinstance(opt, dict):
+                continue
+            label = str(opt.get("label") or "").strip()
+            message = str(opt.get("message") or opt.get("label") or "").strip()
+            if not label or not message:
+                continue
+            prefix = f"{_letters[i]}) "
+            btn_label = label if label.upper().startswith(prefix.upper()) else f"{prefix}{label}"
+            new_actions.append(
+                RicoChatAction(
+                    id=f"opt-{_uuid.uuid4().hex[:8]}",
+                    label=btn_label,
+                    kind=RicoActionKind.chat_continue,
+                    payload={"message": message},
+                )
+            )
+
+        if not new_actions:
+            return result
+
+        existing_ui = result.get("agentic_ui")
+        if isinstance(existing_ui, RicoAgenticUi):
+            updated_ui = existing_ui.model_copy(
+                update={"actions": list(existing_ui.actions) + new_actions}
+            )
+        else:
+            updated_ui = RicoAgenticUi(actions=new_actions)
+
+        return {**result, "agentic_ui": updated_ui}
 
     def _resolve_letter_choice(self, user_id: str, message: str) -> str | None:
         """Map a single-letter reply (A/B/C/D) to the nth pending option's message.

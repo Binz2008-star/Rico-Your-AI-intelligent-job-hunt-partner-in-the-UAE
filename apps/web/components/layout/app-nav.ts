@@ -6,6 +6,8 @@ export interface NavItem {
     href: string;
     icon: string;
     badge?: string;
+    /** When set, clicking this item opens /command with this pre-filled prompt (CAREER-OS-10). */
+    chatPrompt?: string;
 }
 
 export interface NavSection {
@@ -19,15 +21,18 @@ export const mainNavSections: NavSection[] = [
     {
         title: "Search",
         items: [
-            { label: "Ask Rico",    href: "/command", icon: "auto_awesome"    },
-            { label: "Pipeline",    href: "/flow",    icon: "insights"        },
-            { label: "Applications", href: "/queue",   icon: "rocket_launch"   },
+            { label: "Ask Rico",      href: "/command", icon: "auto_awesome"  },
+            { label: "Pipeline",      href: "/flow",    icon: "insights",
+              chatPrompt: "Show me the pipeline status and any recent job matches." },
+            { label: "Applications",  href: "/queue",   icon: "rocket_launch",
+              chatPrompt: "Show my job applications and their current status." },
         ],
     },
     {
         title: "Career",
         items: [
-            { label: "Profile", href: "/profile", icon: "person"      },
+            { label: "Profile",  href: "/profile", icon: "person",
+              chatPrompt: "Review my career profile and tell me what's missing or needs updating." },
             { label: "My Files", href: "/upload",  icon: "folder_open" },
         ],
     },
@@ -35,7 +40,8 @@ export const mainNavSections: NavSection[] = [
         title: "Account",
         items: [
             { label: "Pro Plan", href: "/subscription", icon: "workspace_premium" },
-            { label: "Settings", href: "/settings",     icon: "settings"          },
+            { label: "Settings", href: "/settings",     icon: "settings",
+              chatPrompt: "Help me update my job search preferences and settings." },
         ],
     },
 ];
