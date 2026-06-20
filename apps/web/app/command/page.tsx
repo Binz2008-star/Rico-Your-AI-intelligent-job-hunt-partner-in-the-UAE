@@ -78,6 +78,7 @@ interface Message {
     stale?: boolean;
     agentic_ui?: RicoAgenticUi | null;
     permission_dismissed?: boolean;
+    actions?: RicoChatAction[];
 }
 
 type ChatAudience = "checking" | "authenticated" | "public";
@@ -1133,9 +1134,12 @@ export default function CommandPage() {
         if (!file || chatAudience === "checking") return;
         e.target.value = "";
         setUploadError("");
-        setMessages((prev) => [...prev, { id: nextId(), role: "user", text: `📎 ${t("cmdCvUploading")}: ${file.name}` }]);
+        const isImage = file.type.startsWith("image/");
+        const isEmail = file.name.endsWith(".eml") || file.name.endsWith(".msg");
+        const uploadLabel = isImage ? "image" : isEmail ? "email" : "document";
+        setMessages((prev) => [...prev, { id: nextId(), role: "user", text: `📎 Uploading ${uploadLabel}: ${file.name}` }]);
         setThinking(true);
-        setOperationState({ state: "reading", message: t("cmdWorkingReadingCv") });
+        setOperationState({ state: "reading", message: isImage ? "Analysing image…" : t("cmdWorkingReadingCv") });
         scrollBottom();
         try {
             const result: UploadCVResponse =
@@ -1147,17 +1151,38 @@ export default function CommandPage() {
                 localStorage.setItem("rico_public_uid", result.user_id);
             }
 
-            // Check if document was rejected due to wrong type
-            if (result.ok === false && result.document_type) {
-                const text = result.message || t("cmdCvWrongType");
-                setMessages((prev) => [...prev, { id: nextId(), role: "rico", text }]);
+            // Document Intelligence: non-CV classification with suggested actions
+            if (result.status === "classified" && result.document_type) {
+                const actions = (result.suggested_actions ?? []).map((a, i) => ({
+                    id: `doc-action-${Date.now()}-${i}`,
+                    label: a.label,
+                    kind: "chat_continue" as const,
+                    impact: "low" as const,
+                    requires_confirmation: false,
+                    payload: { message: a.message ?? a.label },
+                }));
+                setMessages((prev) => [
+                    ...prev,
+                    {
+                        id: nextId(),
+                        role: "rico" as const,
+                        text: result.message ?? `I detected this as: **${result.display_label ?? result.document_type}**\n\nWhat would you like me to do with it?`,
+                        actions,
+                    },
+                ]);
                 return;
             }
 
-            // Check if preview is ready for confirmation
+            // Hard rejection (identity docs, etc.)
+            if (result.ok === false) {
+                const text = result.message ?? t("cmdCvWrongType");
+                setMessages((prev) => [...prev, { id: nextId(), role: "rico" as const, text }]);
+                return;
+            }
+
+            // CV preview ready for confirmation
             if (result.status === "preview_ready" && result.preview) {
                 const preview = result.preview;
-                // Handle both new (skills_detected) and old (skills) response shapes
                 const skills = preview.skills_detected ?? preview.skills ?? [];
                 const previewText = (
                     `${t("cmdCvPreviewTitle")}\n\n` +
@@ -1170,7 +1195,6 @@ export default function CommandPage() {
                     `${t("cmdCvPreviewQuality")} ${result.extraction_quality || "—"}\n\n` +
                     t("cmdCvConfirmPrompt")
                 );
-
                 const message: Message = {
                     id: nextId(),
                     role: "rico",
@@ -1185,7 +1209,7 @@ export default function CommandPage() {
                 return;
             }
 
-            // Fallback for old response format (shouldn't happen with new backend)
+            // Fallback for old response format
             const p = result.parsed;
             if (p) {
                 const skills = p.skills ?? [];
@@ -1194,7 +1218,6 @@ export default function CommandPage() {
                     p.emails?.length ? `${t("cmdCvPreviewEmail")} ${p.emails[0]}` : "",
                     p.phones?.length ? `${t("cmdCvPreviewPhone")} ${p.phones[0]}` : "",
                 ].filter(Boolean).join(" · ");
-
                 let text: string;
                 if (p.extraction_quality === "poor") {
                     text = t("cmdCvPoor");
@@ -1399,9 +1422,9 @@ export default function CommandPage() {
                 id="cv-file-upload"
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.doc,.docx"
-                aria-label="Upload CV"
-                title="Upload CV"
+                accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.webp,.gif,.bmp,.eml,.msg"
+                aria-label="Upload document"
+                title="Upload document"
                 className="hidden"
                 onChange={handleCVUpload}
             />
@@ -1711,6 +1734,13 @@ export default function CommandPage() {
                                     {!m.streaming && m.agentic_ui?.actions && m.agentic_ui.actions.length > 0 && (
                                         <ChatActionsRow
                                             actions={m.agentic_ui.actions}
+                                            onChatContinue={(prompt) => sendMessage(prompt)}
+                                            disabled={thinking}
+                                        />
+                                    )}
+                                    {!m.streaming && m.actions && m.actions.length > 0 && (
+                                        <ChatActionsRow
+                                            actions={m.actions}
                                             onChatContinue={(prompt) => sendMessage(prompt)}
                                             disabled={thinking}
                                         />
