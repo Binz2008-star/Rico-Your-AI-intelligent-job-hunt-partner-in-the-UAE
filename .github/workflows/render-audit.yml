@@ -74,7 +74,10 @@ jobs:
           print("Name:        ", s.get("name"))
           print("Type:        ", s.get("type"))
           print("Plan:        ", s.get("plan"))
-          print("Status:      ", "suspended" if s.get("suspended") else "active")
+          status_str = "suspended (idle — wakes on request)" if s.get("suspended") else "active"
+          print("Status:      ", status_str)
+          with open("/tmp/svc_status.txt", "w") as sf:
+              sf.write(status_str)
           print("Service URL: ", sd.get("url", "N/A"))
           print("PR previews: ", sd.get("pullRequestPreviewsEnabled", "N/A"))
           print("Branch:      ", sd.get("branch", "N/A"))
@@ -92,7 +95,7 @@ jobs:
           echo "Service ID: $SVC_ID"
           HTTP=$(curl -s -o /tmp/envvars.json -w "%{http_code}" \
             -H "Authorization: Bearer $RENDER_KEY" \
-            "https://api.render.com/v1/services/$SVC_ID/env-vars?limit=200")
+            "https://api.render.com/v1/services/$SVC_ID/env-vars?limit=100")
           echo "HTTP status: $HTTP"
 
           python3 - /tmp/envvars.json << 'PYEOF'
@@ -178,6 +181,21 @@ jobs:
             --max-time 30 "$BACKEND_URL/version")
           echo "HTTP $HTTP"
           cat /tmp/version.json
+          python3 - /tmp/version.json << 'PYEOF'
+          import sys, json
+          with open(sys.argv[1]) as f:
+              raw = f.read()
+          try:
+              data = json.loads(raw)
+              sha = data.get("commit", "unknown")
+              with open("/tmp/deploy_sha.txt", "w") as f:
+                  f.write(sha[:12])
+              print("\nCommit SHA   :", sha[:12])
+              print("Environment  :", data.get("environment", "?"))
+              print("Deployed at  :", data.get("deployed_at", "?"))
+          except Exception as e:
+              print("Could not parse version response:", e)
+          PYEOF
 
       - name: 7. JotForm webhook route probe (OPTIONS -- no payload)
         run: |
@@ -223,6 +241,10 @@ jobs:
           worker_svcs = [item.get("service", item) for item in data if item.get("service", item).get("type") == "worker"]
           print("Cron jobs found:", len(cron_svcs))
           print("Workers found:", len(worker_svcs))
+          with open("/tmp/cron_count.txt", "w") as f:
+              f.write(str(len(cron_svcs)))
+          for c in cron_svcs:
+              print("  Cron:", c.get("name"), "| id=" + str(c.get("id")))
           PYEOF
 
       - name: 10. Workspace / owner info
@@ -248,6 +270,9 @@ jobs:
       - name: 11. Summary
         run: |
           SVC_ID=$(cat /tmp/svc_id.txt 2>/dev/null || echo "unknown")
+          DEPLOY_SHA=$(cat /tmp/deploy_sha.txt 2>/dev/null || echo "unknown")
+          SVC_STATUS=$(cat /tmp/svc_status.txt 2>/dev/null || echo "unknown")
+          CRON_COUNT=$(cat /tmp/cron_count.txt 2>/dev/null || echo "?")
           echo ""
           echo "========================================="
           echo "   RENDER OPTIMIZATION AUDIT SUMMARY"
@@ -256,11 +281,9 @@ jobs:
           echo "Production backend : rico-job-automation-api"
           echo "Backend URL        : $BACKEND_URL"
           echo "Service ID         : $SVC_ID"
-          echo ""
-          echo "Cleanup completed:"
-          echo "  - 7 PR preview services : DELETED"
-          echo "  - eco-pipeline-webhook  : DELETED"
-          echo "  - PR auto-previews      : DISABLED"
+          echo "Service status     : $SVC_STATUS"
+          echo "Live deploy SHA    : $DEPLOY_SHA"
+          echo "Cron jobs active   : $CRON_COUNT"
           echo ""
           echo "Webhook URLs:"
           echo "  JotForm  : $BACKEND_URL/api/v1/rico/webhooks/jotform"
@@ -268,11 +291,5 @@ jobs:
           echo "  GitHub   : $BACKEND_URL/api/v1/rico/webhooks/github"
           echo ""
           echo "Vercel proxy: https://ricohunt.com/proxy/* -> $BACKEND_URL/*"
-          echo "/command    : uses proxy for all API calls"
           echo ""
-          echo "Expected monthly cost: ~7 USD (Starter web service only)"
-          echo ""
-          echo "Cron: No cron jobs exist. Starter plan supports cron_job services."
-          echo "Future cron plan: follow-up reminders at 7-day intervals is feasible."
-          echo ""
-          echo "render.yaml: plan free -> should be updated to starter (see PR 462)"
+          echo "Note: 'suspended (idle)' is normal for Starter plan — service wakes on first request."
