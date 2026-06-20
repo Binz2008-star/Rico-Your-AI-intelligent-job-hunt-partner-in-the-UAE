@@ -477,10 +477,10 @@ function ProfileCompleteness({ profile }: { profile: ProfileResponse }) {
                         {f.filled ? (
                             <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-400">
                                 <span className="material-icons-round text-[11px]">check_circle</span>
-                                Provided
+                                {t("profileFieldProvided")}
                             </span>
                         ) : (
-                            <span className="text-[10px] text-text-tertiary">Missing</span>
+                            <span className="text-[10px] text-text-tertiary">{t("profileFieldMissing")}</span>
                         )}
                     </div>
                 ))}
@@ -625,11 +625,14 @@ function ProfileDetail({
                             />
                             {(profile.target_roles?.length ?? 0) > 0 ? (
                                 <p className="mt-1.5 text-[10px] font-mono text-text-tertiary">
-                                    source: profile · {profile.target_roles!.length} role{profile.target_roles!.length !== 1 ? "s" : ""}
+                                    {t("profileTargetRoleSource")} · {profile.target_roles!.length}{" "}
+                                    {profile.target_roles!.length === 1
+                                        ? t("profileRoleUnitSingular")
+                                        : t("profileRoleUnitPlural")}
                                 </p>
                             ) : (
                                 <p className="mt-1.5 text-[10px] text-text-tertiary">
-                                    Not enough evidence — add roles to enable matching.
+                                    {t("profileTargetRoleNoEvidence")}
                                 </p>
                             )}
                         </Row>

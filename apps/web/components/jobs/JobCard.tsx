@@ -246,7 +246,7 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
                 <MatchExplanationPanel explanation={job.match_explanation} t={t} />
             ) : job.score > 0 ? (
                 <p className="relative z-10 mt-3 text-[11px] font-mono text-text-tertiary">
-                    Pipeline score · Breakdown not available
+                    {t("jobCardScoreNoBreakdown")}
                 </p>
             ) : null}
 
