@@ -329,6 +329,8 @@ export const RicoChatResponseSchema = z.object({
     provider_available: z.boolean().optional(),
     openai_model: StringFromUnknownSchema,
     jotform_form_id: StringFromUnknownSchema.nullable(),
+    // CAREER-OS-01: optional structured UI hints; reuses AgentUIResponseSchema
+    agentic_ui: AgentUIResponseSchema.optional(),
 }).passthrough();
 
 export const RicoProfileResponseSchema = z.object({

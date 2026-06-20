@@ -1,9 +1,11 @@
 """Canonical chat schemas shared by authenticated and public Rico chat endpoints."""
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from src.schemas.agent import AgentUIResponse  # noqa: F401 — used as agentic_ui type
 
 
 class RicoChatResponse(BaseModel):
@@ -37,6 +39,8 @@ class RicoChatResponse(BaseModel):
     operation_status: str | None = None
     operation_type: str | None = None
     result_count: int | None = None
+    # CAREER-OS-01: optional structured UI hints; reuses AgentUIResponse from agent.py
+    agentic_ui: Optional[AgentUIResponse] = None
 
 
 class RicoSessionContext(BaseModel):
