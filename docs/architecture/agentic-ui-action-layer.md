@@ -14,6 +14,8 @@ Rico should not only answer. Rico should propose the next safe action, explain w
 User intent -> Rico interpretation -> suggested action -> user approval -> execution -> audit trail
 ```
 
+The long-term product direction is conversation-first: the chat becomes the primary control surface, and traditional pages become supporting views that Rico can open, explain, and prefill through conversation.
+
 ## Design Targets
 
 - Modern AI command experience comparable to current agentic products.
@@ -23,6 +25,8 @@ User intent -> Rico interpretation -> suggested action -> user approval -> execu
 - Mobile-first cards and buttons.
 - Arabic and English support from the first implementation.
 - Backward-compatible API response shape where possible.
+- Reduce manual form-filling by letting users configure profile, settings, searches, and application preferences through chat.
+- Reduce sidebar/page dependence over time without removing deep links or fallback views too early.
 
 ## Core Concepts
 
@@ -92,6 +96,57 @@ Examples:
 
 The queue becomes the bridge between chat and real execution.
 
+### 5. Conversation-First App Shell
+
+Rico should eventually make the chat the main workspace and demote the sidebar from the primary navigation model to a lightweight context/status layer.
+
+The user should be able to say:
+
+- `غير المدينة لدبي والشارقة`
+- `خلي الوظائف تكون HSE و QHSE فقط`
+- `ارفع الحد الأدنى للراتب إلى 15000`
+- `وقف التقديم التلقائي وخلي كل طلب بموافقتي`
+- `ورجيني إعداداتي الحالية`
+- `كمل بروفايلي من السي في`
+
+Rico should respond with a structured review card instead of forcing the user to visit a settings page:
+
+```text
+Rico will update your job preferences:
+
+- Cities: Dubai, Sharjah
+- Target roles: HSE Manager, QHSE Manager
+- Minimum salary: AED 15,000
+- Application approval: Required
+
+[Save changes] [Edit] [Cancel]
+```
+
+This does not mean deleting pages immediately. The safer model is:
+
+1. Keep existing pages as fallback/deep-link/admin-friendly views.
+2. Add conversational read/write flows for the same data.
+3. Let action cards open focused panels/drawers only when visual review is needed.
+4. Measure which pages become unnecessary after chat flows are reliable.
+5. Remove or hide sidebar items only after equivalent chat-first flows exist and pass smoke tests.
+
+### 6. Conversational Settings and Profile Editing
+
+Manual forms should become optional, not required.
+
+Target flows:
+
+| Current page/manual action | Conversation-first replacement |
+|---|---|
+| Profile fields | Rico asks missing fields one by one, summarizes, asks to save |
+| Settings filters | User states preferences naturally; Rico turns them into structured settings |
+| Saved searches | User says what to monitor; Rico creates a saved search after approval |
+| CV/profile sync | Rico extracts from CV, shows proposed changes, asks to confirm |
+| Application preferences | Rico asks approval rules, salary, locations, excluded companies |
+| Notifications/reminders | Rico proposes schedule/trigger and asks permission |
+
+Every write must use a permission prompt or explicit confirmation summary.
+
 ## Proposed Backend Schema
 
 Add a typed response extension without breaking existing `message`/`type` behavior.
@@ -147,10 +202,18 @@ class RicoProgressStep(BaseModel):
     status: Literal["pending", "running", "complete", "failed"]
 
 
+class RicoProposedChange(BaseModel):
+    field: str
+    current_value: Any | None = None
+    proposed_value: Any
+    source: Literal["chat", "cv", "system", "user_action"]
+
+
 class RicoAgenticUi(BaseModel):
     actions: list[RicoChatAction] = Field(default_factory=list)
     permission_request: RicoPermissionRequest | None = None
     progress: list[RicoProgressStep] = Field(default_factory=list)
+    proposed_changes: list[RicoProposedChange] = Field(default_factory=list)
 ```
 
 Then existing chat responses can include:
@@ -162,7 +225,8 @@ Then existing chat responses can include:
     "agentic_ui": {
         "actions": [...],
         "permission_request": None,
-        "progress": [...]
+        "progress": [...],
+        "proposed_changes": [...]
     }
 }
 ```
@@ -177,6 +241,8 @@ PermissionPromptCard.tsx
 ProgressSteps.tsx
 ApprovalQueueDrawer.tsx
 CommandSuggestionBar.tsx
+ProposedChangesCard.tsx
+ConversationPanel.tsx
 ```
 
 Expected rendering surfaces:
@@ -186,6 +252,36 @@ Expected rendering surfaces:
 - Search/result messages for progress steps.
 - Dashboard/sidebar/global drawer for approval queue.
 - Empty states and profile banners for suggested commands.
+- Proposed changes card for profile/settings/search preference updates.
+- Focused drawer/panel for visual review when chat alone is not enough.
+
+## Navigation Strategy
+
+The target is not “no pages”; the target is “no forced manual pages.”
+
+### Keep initially
+
+- `/command` or main Rico chat surface.
+- `/dashboard` as a status overview until chat can replace most dashboard tasks.
+- `/jobs` as a visual results/review surface.
+- `/applications` or approval queue view until queue is embedded well.
+- `/profile` and `/settings` as fallback/manual correction surfaces.
+
+### Demote over time
+
+- Sidebar becomes status + quick access, not the main workflow.
+- Common actions move into chat action cards.
+- Profile/settings pages become “advanced/manual edit” rather than required onboarding.
+- Help/support moves to a floating or contextual affordance.
+
+### Do not remove until
+
+- Equivalent chat-first flow exists.
+- Server-side validation exists.
+- Permission prompt exists for writes.
+- Mobile smoke passes.
+- Arabic and English flows pass.
+- Rollback path is clear.
 
 ## Safety Model
 
@@ -207,6 +303,7 @@ Rules:
 4. Existing `agent_runtime.handle_action()` remains the execution boundary for job actions.
 5. Existing `RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true` remains mandatory.
 6. Every approval/rejection should be auditable.
+7. Profile/settings mutations must show a proposed-changes summary before saving.
 
 ## Data Flow
 
@@ -236,6 +333,18 @@ User message
   -> Chat shows final state
 ```
 
+### Conversational settings/profile update
+
+```text
+User states preference or profile change
+  -> Rico extracts structured fields
+  -> Backend validates fields and computes proposed_changes[]
+  -> Frontend renders proposed changes card
+  -> User approves, edits, or cancels
+  -> Backend writes only approved changes
+  -> Chat confirms saved state
+```
+
 ## Phase Plan
 
 ### Phase 0 — Architecture and contracts
@@ -243,7 +352,6 @@ User message
 Scope:
 
 - Add this architecture plan.
-- Add task ledger entry.
 - No runtime changes.
 
 Acceptance:
@@ -278,7 +386,34 @@ Verification:
 - Chat smoke: job search message renders action buttons.
 - Mobile smoke.
 
-### Phase 2 — Permission Prompt for Apply and Profile Mutation
+### Phase 2 — Conversational Profile and Settings Review Cards
+
+Scope:
+
+- Add `proposed_changes` support for profile/settings/search preferences.
+- Let Rico summarize proposed changes before saving.
+- Start with low-risk settings:
+  - target roles
+  - cities
+  - salary expectation
+  - language preference
+  - search filters
+
+Constraints:
+
+- No silent profile/settings writes.
+- Server-side validation required.
+- Keep `/profile` and `/settings` as fallback views.
+
+Verification:
+
+- User can ask Rico to change a setting.
+- Rico shows before/after values.
+- Save only happens after approval.
+- Cancel does not mutate state.
+- Arabic and English commands work.
+
+### Phase 3 — Permission Prompt for Apply and Profile Mutation
 
 Scope:
 
@@ -300,7 +435,7 @@ Verification:
 - Approved action records audit log.
 - Arabic and English prompt copy render correctly.
 
-### Phase 3 — Approval Queue
+### Phase 4 — Approval Queue
 
 Scope:
 
@@ -314,7 +449,23 @@ Verification:
 - Approve/reject updates state.
 - Reload does not lose pending action if persistence is implemented.
 
-### Phase 4 — Progress Steps and Streaming-like UX
+### Phase 5 — Conversation-First App Shell
+
+Scope:
+
+- Make chat the default workspace for profile, settings, saved search, and application workflows.
+- Reduce sidebar prominence.
+- Convert page navigation into contextual action cards and focused panels.
+- Keep deep links and fallback pages until replacement flows are stable.
+
+Verification:
+
+- A new user can complete onboarding through chat without manually visiting settings.
+- Existing users can update preferences through chat.
+- Main mobile workflow fits in the chat surface.
+- Direct URLs still work for fallback/manual correction.
+
+### Phase 6 — Progress Steps and Streaming-like UX
 
 Scope:
 
@@ -327,7 +478,7 @@ Verification:
 - Slow search shows visible progress/fallback.
 - Timeout state gives recovery buttons.
 
-### Phase 5 — Polish and Productization
+### Phase 7 — Polish and Productization
 
 Scope:
 
@@ -384,6 +535,20 @@ Your profile is missing 4 items that affect match quality:
 [Complete profile] [Upload CV] [Skip for now]
 ```
 
+### Settings Change Through Chat
+
+```text
+User: خلي بحثي على دبي والشارقة بس، والراتب أقل شي 15000.
+
+Rico: I can update your search preferences.
+
+Changes:
+- Cities: Dubai, Sharjah
+- Minimum salary: AED 15,000
+
+[Save changes] [Edit] [Cancel]
+```
+
 ## Files Likely Involved Later
 
 Backend candidates:
@@ -393,6 +558,8 @@ Backend candidates:
 - `src/services/chat_service.py`
 - `src/agent/runtime.py`
 - `src/api/routers/actions.py`
+- `src/api/routers/settings.py`
+- `src/api/routers/user.py`
 - `src/rico_safety.py`
 - `src/repositories/*`
 
@@ -400,9 +567,12 @@ Frontend candidates:
 
 - `apps/web/app/chat/page.tsx`
 - `apps/web/app/command/page.tsx`
+- `apps/web/app/profile/page.tsx`
+- `apps/web/app/settings/page.tsx`
 - `apps/web/lib/api.ts`
 - `apps/web/components/*`
 - `apps/web/hooks/*`
+- `apps/web/components/layout/*`
 - i18n/translation files used by the current app
 
 Docs/workspace:
@@ -421,6 +591,8 @@ Docs/workspace:
 | Too much scope in one PR | Phase by contracts, low-impact actions, high-impact permissions, queue |
 | Arabic/English mismatch | Add i18n keys with every visible action label |
 | Mobile composer overlap | Test mobile viewport before merge for UI phases |
+| Removing pages too early breaks power users or recovery flows | Demote pages first; remove only after replacement flows are verified |
+| Conversational settings mutate wrong data | Proposed-changes card, validation, and explicit save confirmation |
 
 ## Non-goals for Phase 1
 
@@ -428,12 +600,13 @@ Docs/workspace:
 - No replacing the current chat engine.
 - No new AI provider.
 - No large redesign of the whole app.
+- No deleting sidebar or existing pages in early phases.
 - No persistent approval queue until a dedicated phase.
 - No live third-party API calls in unit tests.
 
 ## Success Criteria
 
-Rico should feel like an execution-capable assistant, not a text-only chatbot.
+Rico should feel like an execution-capable assistant, not a text-only chatbot or a form-heavy dashboard.
 
 The first visible win is:
 
@@ -441,3 +614,10 @@ The first visible win is:
 - Rico returns job results with polished inline actions.
 - The user can click next steps instead of typing commands.
 - Any high-impact action requires a clear approval card.
+
+The second visible win is:
+
+- A user can update profile/settings/search preferences naturally through Rico.
+- Rico summarizes the proposed changes.
+- The user approves or cancels.
+- Manual settings pages become fallback, not the primary workflow.
