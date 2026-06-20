@@ -90,7 +90,7 @@ High:
 - [ ] 3-A — Profile completeness score: single source of truth (sidebar 71% vs profile 54%).
 
 Medium:
-- [ ] 6-A — Navy/indigo design system (style PR; move off near-black + gold).
+- [x] 6-A — Navy/indigo design system. DONE via PR #641 (v4 tokens, `6fac4c0`); live + smoke-PASS 2026-06-20.
 - [ ] 2-A — Demote "Link Opened" from a primary pipeline stage to card metadata.
 - [ ] 4-A — CV role-mismatch warning banner on My Files.
 - [ ] 6-B — First-use onboarding checklist (dismissable).

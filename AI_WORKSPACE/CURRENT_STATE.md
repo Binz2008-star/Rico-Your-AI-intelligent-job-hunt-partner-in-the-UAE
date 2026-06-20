@@ -171,7 +171,7 @@ Command:  curl -fsS -X POST -H "X-Cron-Secret: $RICO_CRON_SECRET" \
           https://rico-job-automation-api.onrender.com/api/v1/pipeline/reminders
 ```
 
-**Phase 2: not started.** (#640 and #641 on hold — do not merge.)
+**Phase 2: not started.** (#640 on hold — do not merge. #641 merged 2026-06-20, see below.)
 
 ## System overhaul v1+v2 — merged to main (PR #638, commit `9c003a7`)
 
@@ -193,7 +193,8 @@ Command:  curl -fsS -X POST -H "X-Cron-Secret: $RICO_CRON_SECRET" \
 ## On-hold PRs
 
 - **PR #640** — on hold, awaiting explicit approval. Do not merge.
-- **PR #641** — on hold, awaiting explicit approval. Do not merge.
+- ~~**PR #641** — on hold~~ → ✅ **MERGED** `6fac4c0` (2026-06-20T07:59Z): v4 navy/indigo
+  design tokens, live + smoke-PASS. Addresses audit item 6-A (see TASK-028).
 
 ## Security — credential redaction (2026-06-19)
 
@@ -288,6 +289,7 @@ remaining item spins into its own scoped TASK-NNN when picked up. Top pick per t
 | BUG-05 public-chat onboarding loop | #657 | ✅ merged `f89c555`, live on Render |
 | P0 context-loss bugs (BUG-A/B/C/D) | #660 + #661 | ✅ merged `518a1a8` + `2bc489`; needs Render deploy |
 | Sidebar status-widget retry (cold-start) | #658 | ✅ merged `712be79`, smoke-PASS 2026-06-20 (TASK-027) |
+| Navy/indigo v4 design tokens | #641 | ✅ merged `6fac4c0`, smoke-PASS 2026-06-20 (audit 6-A / TASK-028) |
 
 ## BUG-05 Public-Chat Onboarding Loop — RESOLVED (2026-06-19)
 
