@@ -62,7 +62,13 @@ def get_ranked_jobs(
 
 
 def apply_job(job: Dict[str, Any]) -> ToolExecutionResult:
-    """Trigger automated application for a single job."""
+    """Trigger automated application for a single job.
+
+    When the job dict contains ``_approved: True`` (injected by execute_permission_action
+    after the user explicitly approved via the PermissionRequestCard), the approval gate
+    in apply_to_job is bypassed. All other callers receive approval_required so Rico can
+    never auto-apply without explicit user confirmation.
+    """
     if not job.get("link"):
         return ToolExecutionResult(
             success=False,
@@ -71,11 +77,9 @@ def apply_job(job: Dict[str, Any]) -> ToolExecutionResult:
         )
     from src.services.apply_service import apply_to_job
     start = time.monotonic()
+    pre_approved = bool(job.get("_approved", False))
     try:
-        # Agent/automation path: deliberately does NOT pass approved=True. When approval
-        # mode is on (default), apply_to_job returns an "approval_required" result instead
-        # of submitting, so Rico can never auto-apply on the user's behalf from here.
-        data = apply_to_job(job)
+        data = apply_to_job(job, approved=pre_approved)
         return _timed("apply_job", True, data, int((time.monotonic() - start) * 1000))
     except Exception as exc:
         return _timed("apply_job", False, exc, int((time.monotonic() - start) * 1000))

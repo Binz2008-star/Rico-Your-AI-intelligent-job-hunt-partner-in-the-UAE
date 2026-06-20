@@ -2,6 +2,7 @@ import {
   AgentChatRequestSchema,
   AgentUIResponseSchema,
   ConfirmCVProfileResponseSchema,
+  ExecutePermissionActionResponseSchema,
   MeResponseSchema,
   ProfileUpdateResponseSchema,
   RicoChatHistoryResponseSchema,
@@ -10,7 +11,12 @@ import {
   SavedSearchesResponseSchema,
   UploadCVResponseSchema,
 } from "@/lib/schemas";
-import type { AgentChatRequest, AgentUIResponse } from "@/lib/schemas";
+import type {
+  AgentChatRequest,
+  AgentUIResponse,
+  ExecutePermissionActionRequest,
+  ExecutePermissionActionResponse,
+} from "@/lib/schemas";
 import type {
   Application,
   ApplicationActionRequest,
@@ -935,6 +941,7 @@ export interface ChatApiResponse {
   rate_limit_notice?: string;
   messages_remaining?: number;
   messages_limit?: number;
+  agentic_ui?: unknown;
 }
 
 export interface ParsedCV {
@@ -1663,4 +1670,36 @@ export async function recordSubscriptionIntent(
   } catch {
     // Fire-and-forget — never surface errors to the user
   }
+}
+
+// ── CAREER-OS-03: Permission Engine ──────────────────────────────────────────
+// Types are derived from Zod schemas in lib/schemas/index.ts so the contract
+// is validated at the API boundary — consistent with all other Rico endpoints.
+export type { ExecutePermissionActionRequest, ExecutePermissionActionResponse };
+
+/** Call POST /api/v1/rico/actions/execute — requires the user to be authenticated.
+ *
+ * The response is validated against ExecutePermissionActionResponseSchema so any
+ * unexpected shape from the backend fails loudly at the boundary rather than
+ * silently producing undefined fields deeper in the component tree.
+ */
+export async function executePermissionAction(
+  req: ExecutePermissionActionRequest,
+  signal?: AbortSignal,
+): Promise<ExecutePermissionActionResponse> {
+  const raw = await requestJson<unknown>(
+    "/api/v1/rico/actions/execute",
+    {
+      method: "POST",
+      signal,
+      body: JSON.stringify({
+        permission_id: req.permission_id,
+        action: req.action,
+        job_key: req.job_key ?? "",
+        job: req.job ?? null,
+        source: req.source ?? "permission_card",
+      }),
+    },
+  );
+  return validateShape(ExecutePermissionActionResponseSchema, raw, "executePermissionAction");
 }

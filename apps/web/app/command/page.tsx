@@ -5,7 +5,11 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, RicoOption, UploadCVResponse } from "@/lib/api";
-import { clearChatHistory, confirmCVProfile, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, uploadCV } from "@/lib/api";
+import type { RicoAgenticUi, RicoChatAction, ExecuteAllowedAction } from "@/lib/schemas";
+import { EXECUTE_ALLOWED_ACTIONS } from "@/lib/schemas";
+import { ChatActionsRow } from "@/components/ui/rico/ChatActionCard";
+import { PermissionRequestCard } from "@/components/ui/rico/PermissionRequestCard";
+import { clearChatHistory, confirmCVProfile, executePermissionAction, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { buildAuthHref } from "@/lib/redirect";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
@@ -72,6 +76,8 @@ interface Message {
     rate_limit_notice?: string;
     streaming?: boolean;
     stale?: boolean;
+    agentic_ui?: RicoAgenticUi | null;
+    permission_dismissed?: boolean;
 }
 
 type ChatAudience = "checking" | "authenticated" | "public";
@@ -694,6 +700,11 @@ export default function CommandPage() {
     const [historyState, setHistoryState] = useState<"pending" | "has_history" | "empty">("pending");
     const [messagesRemaining, setMessagesRemaining] = useState<number | null>(null);
 
+    // True when the latest Rico message has an unresolved permission request — blocks new input.
+    const hasPendingPermission = messages.some(
+        (m) => m.role === "rico" && !m.permission_dismissed && !!m.agentic_ui?.permission_request,
+    );
+
     useEffect(() => {
         if (typeof window !== "undefined") {
             document.documentElement.dir = language === "ar" ? "rtl" : "ltr";
@@ -934,6 +945,7 @@ export default function CommandPage() {
                             applications: (res as Record<string, unknown>).applications as ApplicationEntry[] | undefined,
                             follow_up_needed: (res as Record<string, unknown>).follow_up_needed as ApplicationEntry[] | undefined,
                             profile_gaps: (res as Record<string, unknown>).profile_gaps as string[] | undefined,
+                            agentic_ui: (res as Record<string, unknown>).agentic_ui as RicoAgenticUi | null | undefined,
                             streaming: false,
                         }];
                     });
@@ -1302,6 +1314,44 @@ export default function CommandPage() {
         }
     }
 
+    /** Execute a permission-engine approved action and add the result to the thread.
+     *
+     * Called by PermissionRequestCard.onApprove. Throws on network/API errors so
+     * the card can show an inline error and let the user retry or cancel.
+     * On success, dismisses the card and appends Rico's response to the message list.
+     */
+    async function handlePermissionApprove(m: Message, action: RicoChatAction): Promise<void> {
+        const permission = m.agentic_ui!.permission_request!;
+        const rawAction = String((action.payload as Record<string, unknown>)?.action ?? "");
+        if (!(EXECUTE_ALLOWED_ACTIONS as readonly string[]).includes(rawAction)) {
+            throw new Error(`Action "${rawAction}" is not permitted via the permission engine.`);
+        }
+        const actionName = rawAction as ExecuteAllowedAction;
+        const jobKey = String((action.payload as Record<string, unknown>)?.job_key ?? "");
+        const job = (action.payload as Record<string, unknown>)?.job as Record<string, unknown> | null;
+
+        const res = await executePermissionAction({
+            permission_id: permission.id,
+            action: actionName,
+            job_key: jobKey,
+            job,
+        });
+
+        const resultMsg = res.ok
+            ? res.message || `${action.label} completed.`
+            : res.error || res.message || "Could not complete this action. Please try again.";
+
+        // Dismiss the card so it doesn't linger after the action resolves.
+        setMessages((prev) =>
+            prev.map((msg) => msg.id === m.id ? { ...msg, permission_dismissed: true } : msg),
+        );
+        // Append Rico's response as a new message in the thread.
+        setMessages((prev) => [
+            ...prev,
+            { id: nextId(), role: "rico" as const, text: resultMsg },
+        ]);
+    }
+
     if (sessionExpired) {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center">
@@ -1658,6 +1708,31 @@ export default function CommandPage() {
                                     {!m.streaming && m.options && m.options.length > 0 && (
                                         <OptionButtons options={m.options} onAction={(prompt) => sendMessage(prompt)} />
                                     )}
+                                    {!m.streaming && m.agentic_ui?.actions && m.agentic_ui.actions.length > 0 && (
+                                        <ChatActionsRow
+                                            actions={m.agentic_ui.actions}
+                                            onChatContinue={(prompt) => sendMessage(prompt)}
+                                            disabled={thinking}
+                                        />
+                                    )}
+                                    {!m.streaming && !m.permission_dismissed && m.agentic_ui?.permission_request && (
+                                        <PermissionRequestCard
+                                            request={m.agentic_ui.permission_request}
+                                            disabled={thinking}
+                                            onApprove={(action: RicoChatAction) =>
+                                                handlePermissionApprove(m, action)
+                                            }
+                                            onCancel={() =>
+                                                setMessages((prev) =>
+                                                    prev.map((msg) =>
+                                                        msg.id === m.id
+                                                            ? { ...msg, permission_dismissed: true }
+                                                            : msg,
+                                                    ),
+                                                )
+                                            }
+                                        />
+                                    )}
 
                                     {/* Role confirmation reasons + next_actions */}
                                     {!m.streaming && m.type === "role_confirmation" && (
@@ -1742,13 +1817,13 @@ export default function CommandPage() {
                         {/* CV upload button — label triggers the hidden file input natively,
                             avoiding the programmatic .click() which some mobile browsers block. */}
                         <label
-                            htmlFor={thinking || chatAudience === "checking" ? undefined : "cv-file-upload"}
+                            htmlFor={thinking || chatAudience === "checking" || hasPendingPermission ? undefined : "cv-file-upload"}
                             role="button"
-                            tabIndex={thinking || chatAudience === "checking" ? -1 : 0}
-                            aria-disabled={thinking || chatAudience === "checking"}
+                            tabIndex={thinking || chatAudience === "checking" || hasPendingPermission ? -1 : 0}
+                            aria-disabled={thinking || chatAudience === "checking" || hasPendingPermission}
                             title={t("cmdUploadCvTitle")}
                             aria-label={t("cmdUploadCvAriaLabel")}
-                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-text-secondary transition-colors rico-focus-strong ${thinking || chatAudience === "checking" ? "opacity-30 pointer-events-none cursor-default" : "cursor-pointer hover:bg-surface-subtle hover:text-rico-text"}`}
+                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-text-secondary transition-colors rico-focus-strong ${thinking || chatAudience === "checking" || hasPendingPermission ? "opacity-30 pointer-events-none cursor-default" : "cursor-pointer hover:bg-surface-subtle hover:text-rico-text"}`}
                         >
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
@@ -1766,19 +1841,21 @@ export default function CommandPage() {
                                     e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
                                 }}
                                 onKeyDown={handleKeyDown}
-                                disabled={thinking || chatAudience === "checking"}
+                                disabled={thinking || chatAudience === "checking" || hasPendingPermission}
                                 rows={1}
                                 aria-label="Message Rico"
                                 aria-describedby="command-input-hint"
-                                placeholder={chatAudience === "checking"
-                                    ? t("cmdPlaceholderChecking")
-                                    : t("cmdPlaceholderReady")}
+                                placeholder={hasPendingPermission
+                                    ? "Approve or cancel the request above to continue"
+                                    : chatAudience === "checking"
+                                        ? t("cmdPlaceholderChecking")
+                                        : t("cmdPlaceholderReady")}
                                 className="max-h-[120px] w-full resize-none rounded-xl border-0 bg-transparent py-3 pe-12 ps-3 text-sm text-rico-text placeholder:text-text-muted outline-none transition-all"
                             />
                             <button
                                 type="button"
                                 onClick={handleSend}
-                                disabled={thinking || chatAudience === "checking" || !input.trim()}
+                                disabled={thinking || chatAudience === "checking" || hasPendingPermission || !input.trim()}
                                 className="absolute bottom-1.5 end-1.5 top-1.5 flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl bg-gold text-[#0a0a1a] transition-colors hover:bg-gold-hover disabled:opacity-30 disabled:grayscale rico-focus-strong"
                                 aria-label={thinking ? t("cmdSending") : t("send")}
                             >
