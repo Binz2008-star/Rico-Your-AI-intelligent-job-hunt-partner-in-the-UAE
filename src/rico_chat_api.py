@@ -4932,6 +4932,14 @@ class RicoChatAPI:
 
         if filtered_ai_message:
             self._append_chat(user_id, "assistant", filtered_ai_message)
+            # If the AI produced a hollow promise ("ببحث الآن...", "Searching now...") but did
+            # not actually fetch jobs, arm the pending-search slot so the user's next
+            # confirmation ("تمام"/"ok") triggers _classified_role_search instead of
+            # receiving another promise.
+            if self._is_promise_only_reply(filtered_ai_message) and profile:
+                _promise_roles = self._as_list(self._profile_value(profile, "target_roles"))
+                if _promise_roles:
+                    self._store_pending_job_search(user_id, role=str(_promise_roles[0]))
 
         result = self._finalize(
             ai_response,
@@ -16209,6 +16217,9 @@ class RicoChatAPI:
                 self._store_recent_context(user_id, _ctx)
             except Exception:
                 pass
+            # Arm pending search so "تمام"/"yes"/"ok" in the next turn executes the search
+            # rather than producing another hollow promise or a good-luck reply.
+            self._store_pending_job_search(user_id, role=canonical_role, location=location, query_type="known_but_off_profile")
             return response
 
         # unknown role — check if text is actually a company name from recent matches
