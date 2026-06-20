@@ -23,6 +23,7 @@ _MAGIC_TABLE: list[tuple[bytes, str]] = [
     (b"GIF89a",          "image"),
     (b"BM",              "image"),       # BMP
     (b"\xd0\xcf\x11\xe0", "compound"),  # Compound Doc — .doc or .msg
+    (b"MZ",              "executable"),  # DOS/Windows EXE/DLL — always rejected
 ]
 _WEBP_RIFF   = b"RIFF"
 _WEBP_MARKER = b"WEBP"
@@ -298,6 +299,14 @@ class DocumentClassifier:
 
     def classify(self, data: bytes, filename: str = "") -> ClassificationResult:
         file_format = detect_format(data, filename)
+
+        # Executables are always rejected — return as a distinct type so the
+        # router can return 422 without attempting any content extraction.
+        if file_format == "executable":
+            return self._make(
+                "executable", 1.0, {"executable": 1.0}, file_format,
+                metadata={"filename": filename},
+            )
 
         # Images are trivially classified — no text to extract.
         if file_format == "image":

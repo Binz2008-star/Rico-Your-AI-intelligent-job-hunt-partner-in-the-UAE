@@ -1276,6 +1276,10 @@ async def rico_upload_cv(
             classification.file_format, request_ref,
         )
 
+        # Executables (EXE/DLL): always rejected — never process.
+        if classification.file_format == "executable":
+            raise HTTPException(status_code=422, detail="Executable files are not accepted")
+
         # Images: no text extraction possible — return classification immediately.
         if classification.file_format == "image":
             _metrics.record_request((time.time() - start_time) * 1000)

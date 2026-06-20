@@ -306,12 +306,16 @@ class TestRicoCVUploadRouteExists:
             client.cookies.clear()
         assert r.status_code == 401
 
-    def test_upload_cv_non_pdf_returns_422(self, client):
-        r = client.post(
-            f"/api/v1/rico/upload-cv?user_id={_PUBLIC_UPLOAD_ID}",
-            files={"file": ("resume.pdf", io.BytesIO(b"This is not a PDF"), "application/pdf")},
-        )
-        assert r.status_code == 422
+    def test_upload_cv_non_pdf_accepted_by_document_intelligence(self, client):
+        # Since CAREER-OS-06, non-PDF text files are accepted and classified
+        # rather than rejected with 422. A short plain-text file classifies as
+        # "unknown" and falls through to the CV pipeline (returning a preview).
+        with patch("src.services.chat_service.parse_cv", return_value=_CV_PARSED), _mock_cv_detector():
+            r = client.post(
+                f"/api/v1/rico/upload-cv?user_id={_PUBLIC_UPLOAD_ID}",
+                files={"file": ("resume.pdf", io.BytesIO(b"This is not a PDF"), "application/pdf")},
+            )
+        assert r.status_code == 200
 
     def test_upload_cv_empty_file_returns_422(self, client):
         r = client.post(
@@ -321,6 +325,8 @@ class TestRicoCVUploadRouteExists:
         assert r.status_code == 422
 
     def test_upload_cv_exe_disguised_as_pdf_returns_422(self, client):
+        # MZ magic bytes are detected by the Document Intelligence layer and
+        # rejected before any content extraction is attempted.
         exe_header = b"MZ\x90\x00" + b"\x00" * 60
         r = client.post(
             f"/api/v1/rico/upload-cv?user_id={_PUBLIC_UPLOAD_ID}",
