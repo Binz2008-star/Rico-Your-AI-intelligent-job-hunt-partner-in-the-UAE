@@ -201,38 +201,48 @@ class TestResolvePendingIntent:
     # ── Job search ─────────────────────────────────────────────────────────
 
     def test_job_search_signal_shall_i_search(self):
+        # P0 fix: _classified_role_search is now called instead of _answer_with_ai_fallback.
+        # Previously this was asserting AI fallback was called (the buggy behaviour).
         api = self._api_with_last_message("Shall I search for live UAE jobs for you?")
-        ai_resp = {"type": "job_list", "jobs": []}
-        api._answer_with_ai_fallback = MagicMock(return_value=ai_resp)
         profile = _make_profile(["Data Analyst"])
 
-        result = api._resolve_pending_intent("user1", "yes", profile)
+        with patch.object(api, "_classified_role_search",
+                          return_value={"type": "job_matches", "jobs": [], "message": "Searching..."}) as mock_search, \
+             patch.object(api, "_answer_with_ai_fallback") as mock_ai:
+            result = api._resolve_pending_intent("user1", "yes", profile)
 
-        assert result is ai_resp
-        call_kwargs = api._answer_with_ai_fallback.call_args.kwargs
-        assert "Data Analyst" in call_kwargs["message"]
+        mock_ai.assert_not_called()
+        mock_search.assert_called_once()
+        assert result is not None
+        assert result["type"] in ("job_matches", "job_list", "job_results")
 
     def test_job_search_signal_want_me_to_search(self):
+        # P0 fix: _classified_role_search is now called instead of _answer_with_ai_fallback.
         api = self._api_with_last_message("Want me to search for matching roles?")
-        ai_resp = {"type": "job_list", "jobs": []}
-        api._answer_with_ai_fallback = MagicMock(return_value=ai_resp)
         profile = _make_profile(["Product Manager"])
 
-        result = api._resolve_pending_intent("user1", "okay", profile)
-        assert result is ai_resp
+        with patch.object(api, "_classified_role_search",
+                          return_value={"type": "job_matches", "jobs": [], "message": "..."}) as mock_search, \
+             patch.object(api, "_answer_with_ai_fallback") as mock_ai:
+            result = api._resolve_pending_intent("user1", "okay", profile)
+
+        mock_ai.assert_not_called()
+        mock_search.assert_called_once()
+        assert result is not None
 
     def test_job_search_falls_back_to_my_target_role_when_no_roles(self):
+        # P0 fix: with no target roles, the resolver now returns a clarification asking
+        # for the role instead of forwarding to AI fallback (which generated "ببحث الآن...").
         api = self._api_with_last_message("Want me to search for live jobs?")
-        ai_resp = {"type": "job_list", "jobs": []}
-        api._answer_with_ai_fallback = MagicMock(return_value=ai_resp)
         profile = _make_profile([])
 
-        result = api._resolve_pending_intent("user1", "yes", profile)
+        with patch.object(api, "_answer_with_ai_fallback") as mock_ai:
+            result = api._resolve_pending_intent("user1", "yes", profile)
 
-        assert result is ai_resp
-        call_kwargs = api._answer_with_ai_fallback.call_args.kwargs
-        # No target roles in profile — fallback message should still be a search request
-        assert "job" in call_kwargs["message"].lower() or "role" in call_kwargs["message"].lower()
+        mock_ai.assert_not_called()
+        assert result is not None
+        assert result["type"] == "clarification"
+        assert not RicoChatAPI._is_promise_only_reply(result.get("message", ""))
 
     # ── Application angle ──────────────────────────────────────────────────
 
@@ -307,15 +317,21 @@ class TestHandleActiveUserPendingIntentFlow:
         assert result["type"] != "options"
 
     def test_affirmative_with_job_search_pending_returns_job_response(self):
-        """'نعم' after Rico offered job search → job-list type."""
-        ai_response = {"type": "job_list", "jobs": [{"title": "UX Designer"}]}
-        api, profile = self._api_with_setup("Want me to search for live UAE jobs for you?", ai_response)
+        """'نعم' after Rico offered job search → actual job search type (not AI fallback)."""
+        # P0 fix: _classified_role_search is now called, returning "job_matches" type.
+        # The old assertion was "job_list" which was the AI fallback mock type — incorrect.
+        api, profile = self._api_with_setup("Want me to search for live UAE jobs for you?",
+                                             {"type": "job_list", "jobs": []})
 
-        with patch.object(api, "_profile_value", side_effect=lambda p, k: getattr(p, k, None)):
+        with patch.object(api, "_profile_value", side_effect=lambda p, k: getattr(p, k, None)), \
+             patch.object(api, "_classified_role_search",
+                          return_value={"type": "job_matches", "jobs": [], "message": "Searching..."}), \
+             patch.object(api, "_answer_with_ai_fallback") as mock_ai:
             result = api._resolve_pending_intent("user1", "نعم", profile)
 
+        mock_ai.assert_not_called()
         assert result is not None
-        assert result["type"] == "job_list"
+        assert result["type"] in ("job_matches", "job_list", "job_results")
 
     def test_negative_reply_produces_clarification_via_is_negative(self):
         """Verify negative detection gates the clarification path in _handle_active_user."""
