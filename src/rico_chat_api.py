@@ -2962,8 +2962,11 @@ class RicoChatAPI:
         source: str,
         *,
         profile: Any = None,
+        runtime_result: Any = None,
     ) -> dict[str, Any]:
         """Finalize response with metadata."""
+        from src.services.agentic_ui_composer import compose
+        agentic_ui = compose(runtime_result)
         agent = self._get_openai_agent()
 
         # Get Jotform form IDs from environment
@@ -2975,6 +2978,7 @@ class RicoChatAPI:
         _active = _get_active_provider()
         return {
             **response,
+            "agentic_ui": agentic_ui,
             "response_source": response.get("response_source", source),
             "openai_available": self._bool_attr(agent, "openai_available", fallback="available"),
             "deepseek_available": self._bool_attr(agent, "deepseek_available"),
@@ -7835,17 +7839,21 @@ class RicoChatAPI:
         if intent == "apply_job":
             context = self._build_router_context(user_id, profile)
             routed = _route(message, user_id=user_id, context=context)
+            job_key = routed.tool_args.get("job_key", "")
+            result = agent_runtime.handle_action(
+                user_id=user_id, action="apply", job_key=job_key, source="chat",
+            )
             response = {
                 "type": "confirmation_required",
                 "intent": "apply_job",
-                "message": routed.confirmation_prompt or (
+                "message": result.message or routed.confirmation_prompt or (
                     "To confirm: mark this job as applied and track it. "
                     "Reply YES to confirm or CANCEL to abort."
                 ),
                 "tool_args": routed.tool_args,
             }
             self._append_chat(user_id, "assistant", response["message"])
-            return self._finalize(response, routed.source, profile=profile)
+            return self._finalize(response, routed.source, profile=profile, runtime_result=result)
 
         # Save target role — "save X as target role" / "set X as target role"
         if legacy_intent == "save_target_role" and intent_result.extracted_role:
@@ -7923,7 +7931,7 @@ class RicoChatAPI:
                     "verification_status": verification_status,
                 }
                 self._append_chat(user_id, "assistant", success_msg)
-                return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+                return self._finalize(response, self.SOURCE_KEYWORD, profile=profile, runtime_result=result)
 
             # No title/company from card — try recently discussed/interacted job before router.
             _recent_resolved = None
@@ -7969,7 +7977,7 @@ class RicoChatAPI:
                         "entities": {"title": title, "company": company},
                     }
                     self._append_chat(user_id, "assistant", success_msg)
-                    return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+                    return self._finalize(response, self.SOURCE_KEYWORD, profile=profile, runtime_result=result)
 
             # Could not identify a job from the card or recent context — fall back to the tool router.
             context = self._build_router_context(user_id, profile)
@@ -7986,7 +7994,7 @@ class RicoChatAPI:
                     "entities": routed.entities,
                 }
                 self._append_chat(user_id, "assistant", result.message)
-                return self._finalize(response, routed.source, profile=profile)
+                return self._finalize(response, routed.source, profile=profile, runtime_result=result)
 
         # Explain match
         if legacy_intent == "explain_match":
@@ -8003,7 +8011,7 @@ class RicoChatAPI:
                     "message": result.message,
                 }
                 self._append_chat(user_id, "assistant", result.message)
-                return self._finalize(response, routed.source, profile=profile)
+                return self._finalize(response, routed.source, profile=profile, runtime_result=result)
 
         # Draft message / cover letter
         if legacy_intent == "draft_message":
@@ -8045,7 +8053,7 @@ class RicoChatAPI:
                         "message": result.message,
                     }
                     self._append_chat(user_id, "assistant", result.message)
-                    return self._finalize(response, routed.source, profile=profile)
+                    return self._finalize(response, routed.source, profile=profile, runtime_result=result)
 
             self._log_document_draft_context_source("clarification_required", {})
             msg = self._cover_letter_clarification_message(

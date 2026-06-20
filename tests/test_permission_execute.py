@@ -7,15 +7,18 @@ Tests cover:
   - Valid approval request routes through agent_runtime
   - Permission ID is embedded in the audit source
   - User ID always comes from JWT, not body
-  - Unknown action returns ok=False (not 422 — runtime validates)
+  - Unknown action returns 422 (schema-layer block)
   - Missing required fields return 422
   - Response shape matches ActionResponse
   - Schema-level contract tests (pure Pydantic, no network)
+  - Permission ID security: fabricated / expired / one-time-use / wrong-action / wrong-user
 """
 from __future__ import annotations
 
 import os
 import sys
+import time
+import uuid
 
 import pytest
 
@@ -23,6 +26,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 os.environ.setdefault("ADMIN_EMAIL",    "admin@test.com")
 os.environ.setdefault("ADMIN_PASSWORD", "TestPass123")
 os.environ.setdefault("JWT_SECRET",     "x" * 32)
+
+_USER_ID = "perm-test@rico.ai"
 
 _JOB = {
     "id":       "job-perm-001",
@@ -36,6 +41,14 @@ _JOB = {
 _URL = "/api/v1/rico/actions/execute"
 
 
+def _perm(action: str = "why") -> str:
+    """Register a server-issued permission ID for _USER_ID and return it."""
+    import src.services.pending_permissions as pp
+    pid = f"test-{action}-{uuid.uuid4().hex[:8]}"
+    pp.register(pid, _USER_ID, action)
+    return pid
+
+
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 @pytest.fixture(scope="module")
@@ -44,7 +57,7 @@ def client():
     from src.api.app import app
     from src.api.auth import create_access_token
 
-    token = create_access_token({"sub": "perm-test@rico.ai"})
+    token = create_access_token({"sub": _USER_ID})
     tc = TestClient(app, raise_server_exceptions=False)
     tc.cookies.set("access_token", token)
     return tc
@@ -115,7 +128,7 @@ class TestPermissionExecuteAuth:
 
     def test_authenticated_reaches_endpoint(self, client):
         r = client.post(_URL, json={
-            "permission_id": "perm-001",
+            "permission_id": _perm("why"),
             "action": "why",
             "job": _JOB,
         })
@@ -123,12 +136,12 @@ class TestPermissionExecuteAuth:
 
     def test_user_id_comes_from_jwt_not_body(self, client):
         r = client.post(_URL, json={
-            "permission_id": "perm-001",
+            "permission_id": _perm("why"),
             "action": "why",
             "job": _JOB,
         })
         assert r.status_code == 200
-        assert r.json()["user_id"] == "perm-test@rico.ai"
+        assert r.json()["user_id"] == _USER_ID
 
 
 # ── Request validation ────────────────────────────────────────────────────────
@@ -152,7 +165,7 @@ class TestPermissionExecuteValidation:
 class TestPermissionExecuteResponseShape:
     def test_response_has_all_required_fields(self, client):
         r = client.post(_URL, json={
-            "permission_id": "perm-001",
+            "permission_id": _perm("why"),
             "action": "why",
             "job": _JOB,
         })
@@ -164,7 +177,7 @@ class TestPermissionExecuteResponseShape:
 
     def test_dry_run_is_always_false(self, client):
         r = client.post(_URL, json={
-            "permission_id": "perm-001",
+            "permission_id": _perm("why"),
             "action": "why",
             "job": _JOB,
         })
@@ -176,13 +189,14 @@ class TestPermissionExecuteResponseShape:
 class TestPermissionAuditSource:
     def test_permission_id_embedded_in_source(self, client):
         """Source field must contain permission_id so approvals are traceable."""
+        pid = _perm("why")
         r = client.post(_URL, json={
-            "permission_id": "perm-trace-123",
+            "permission_id": pid,
             "action": "why",
             "job": _JOB,
         })
         assert r.status_code == 200
-        assert "perm-trace-123" in r.json()["source"]
+        assert pid in r.json()["source"]
 
 
 # ── Action allowlist (schema-layer safety) ────────────────────────────────────
@@ -237,7 +251,7 @@ class TestExecuteActionAllowlist:
 class TestPermissionExecuteLive:
     def test_why_action_executes_successfully(self, client):
         r = client.post(_URL, json={
-            "permission_id": "perm-why-001",
+            "permission_id": _perm("why"),
             "action": "why",
             "job": _JOB,
         })
@@ -262,24 +276,90 @@ class TestPreApprovedCircuit:
         never the approval gate message.
         """
         r = client.post(_URL, json={
-            "permission_id": "perm-apply-001",
+            "permission_id": _perm("apply"),
             "action": "apply",
             "job": _JOB,
         })
         assert r.status_code == 200
         data = r.json()
-        # Must not block with approval_required
         assert "approval_required" not in data.get("message", "").lower().replace(" ", "_")
 
     def test_permission_id_in_source_for_apply(self, client):
         """Apply via execute endpoint records permission_id in the audit source."""
+        pid = _perm("apply")
         r = client.post(_URL, json={
-            "permission_id": "perm-apply-trace-999",
+            "permission_id": pid,
             "action": "apply",
             "job": _JOB,
         })
         assert r.status_code == 200
-        assert "perm-apply-trace-999" in r.json()["source"]
+        assert pid in r.json()["source"]
+
+
+# ── Permission ID security ────────────────────────────────────────────────────
+
+class TestPermissionIdSecurity:
+    """Verify that the permission ID store prevents forged, expired, replayed,
+    wrong-action, and cross-user approval requests."""
+
+    def test_fabricated_permission_id_returns_403(self, client):
+        """A permission_id never issued by the server must be rejected."""
+        r = client.post(_URL, json={
+            "permission_id": "totally-fake-id-not-issued",
+            "action": "why",
+            "job": _JOB,
+        })
+        assert r.status_code == 403
+
+    def test_expired_permission_id_returns_403(self, client):
+        """A permission_id whose TTL has elapsed must be rejected."""
+        import src.services.pending_permissions as pp
+        pid = f"test-expired-{uuid.uuid4().hex[:8]}"
+        pp.register(pid, _USER_ID, "why")
+        # Force-expire by setting expires_at in the past
+        with pp._lock:
+            pp._store[pid]["expires_at"] = time.monotonic() - 1
+        r = client.post(_URL, json={
+            "permission_id": pid,
+            "action": "why",
+            "job": _JOB,
+        })
+        assert r.status_code == 403
+
+    def test_permission_id_can_only_be_used_once(self, client):
+        """A valid permission_id is consumed on first use; replaying it returns 403."""
+        pid = _perm("why")
+        r1 = client.post(_URL, json={"permission_id": pid, "action": "why", "job": _JOB})
+        assert r1.status_code == 200
+        r2 = client.post(_URL, json={"permission_id": pid, "action": "why", "job": _JOB})
+        assert r2.status_code == 403
+
+    def test_wrong_action_for_permission_id_returns_403(self, client):
+        """A permission_id issued for 'why' cannot be used for 'save'."""
+        pid = _perm("why")
+        r = client.post(_URL, json={
+            "permission_id": pid,
+            "action": "save",
+            "job": _JOB,
+        })
+        assert r.status_code == 403
+
+    def test_other_user_cannot_use_permission_id(self):
+        """A permission_id issued for user A must be rejected when used by user B."""
+        import src.services.pending_permissions as pp
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+        from src.api.auth import create_access_token
+
+        pid = f"test-cross-user-{uuid.uuid4().hex[:8]}"
+        pp.register(pid, _USER_ID, "why")
+
+        other_token = create_access_token({"sub": "other-user@rico.ai"})
+        tc = TestClient(app, raise_server_exceptions=False)
+        tc.cookies.set("access_token", other_token)
+
+        r = tc.post(_URL, json={"permission_id": pid, "action": "why", "job": _JOB})
+        assert r.status_code == 403
 
 
 # ── permission_request injection (unit) ──────────────────────────────────────

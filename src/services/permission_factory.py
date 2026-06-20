@@ -38,7 +38,9 @@ def build_apply_permission_request(
     POST /api/v1/rico/actions/execute expects so the frontend can forward
     them directly.
     """
+    from src.services import pending_permissions
     pid = permission_id or _gen_id("perm-apply")
+    pending_permissions.register(pid, user_id, "apply")
     title = job.get("title", "Unknown role")
     company = job.get("company", "Unknown company")
     job_key = str(job.get("id") or job.get("job_key") or "")

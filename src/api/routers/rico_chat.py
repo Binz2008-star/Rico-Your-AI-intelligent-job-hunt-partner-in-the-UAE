@@ -1611,8 +1611,15 @@ def execute_permission_action(
     The `permission_id` is recorded in the audit source so approvals are traceable.
     Routes through the agent_runtime singleton; safety guardrails are always enforced.
     """
+    from src.services import pending_permissions
+    user_id = user["email"]
+    if not pending_permissions.validate_and_consume(req.permission_id, user_id, req.action):
+        raise HTTPException(
+            status_code=403,
+            detail="Permission request not found, expired, or already used.",
+        )
     result = agent_runtime.handle_action(
-        user_id=user["email"],
+        user_id=user_id,
         action=req.action,
         job_key=req.job_key,
         job=req.job,
