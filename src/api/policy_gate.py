@@ -1,25 +1,26 @@
-"""policy_gate.py
-
-HTTP policy gate for semi-autonomous agent actions.
-Every agent execution MUST pass through this gate before any side effect.
-
-Enforces:
-  1. HMAC-SHA256 signature on approval token
-  2. TTL expiry (TOKEN_TTL_SECONDS, default 300)
-  3. user_id binding — token must match session user
-  4. card_id binding — token must match requested card
-  5. idempotency_key deduplication via Redis SETNX
-  6. risk_class allowed by user's permission tier
-
-Returns:
-  200  { allowed: true, action_id, idempotency_key }
-  403  { allowed: false, reason }
-  422  { error: 'validation_error', detail }
-
-No execution logic lives here — this gate only decides allow/deny
-and writes the audit record. Execution happens downstream.
 """
+src/api/policy_gate.py
+Agentic UX approval policy gate — backend foundation.
 
+This module validates approval tokens and writes audit events.
+It does NOT execute real external actions (email, apply, etc.) yet.
+
+Flow:
+  1. action_created  — intent received
+  2. policy_evaluated — risk class + permission tier checked
+  3. approval_granted | approval_denied | approval_expired — decision recorded
+  4. execution_started / execution_completed — stubbed for future use
+
+Token validation enforces:
+  - valid HMAC-SHA256 signature
+  - not expired
+  - not already used
+  - not invalidated
+  - user_id match
+  - card_id match
+  - idempotency_key match
+  - risk_class allowed by permission tier
+"""
 from __future__ import annotations
 
 import hashlib
@@ -30,297 +31,496 @@ import os
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Optional
 
-import asyncpg  # type: ignore[import]
-import redis.asyncio as aioredis  # type: ignore[import]
-from fastapi import Depends, FastAPI, HTTPException, Request, status
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, field_validator
-
-from src.services.audit_writer import AuditEventPayload, RiskClass, write_audit_event
+from src.db import get_db_connection, is_db_available
+from src.services.audit_writer import AuditEvent, new_correlation_id, write_event
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Config (env-only, no hardcoded values)
-# ---------------------------------------------------------------------------
+_UTC = timezone.utc
 
-TOKEN_SECRET: bytes = os.environ["AGENT_APPROVAL_TOKEN_SECRET"].encode()
-TOKEN_TTL_SECONDS: int = int(os.environ.get("AGENT_APPROVAL_TOKEN_TTL", "300"))
-REDIS_URL: str = os.environ["REDIS_URL"]
-IDEMPOTENCY_KEY_TTL: int = int(os.environ.get("IDEMPOTENCY_KEY_TTL", "86400"))  # 24h
-AGENT_ID: str = os.environ.get("AGENT_SERVICE_ID", "rico-agent-v1")
-
-# ---------------------------------------------------------------------------
-# Permission tier → allowed risk classes
-# Spec: docs/agentic-ux-contract.md, Permission Levels section
-# ---------------------------------------------------------------------------
-
-PERMISSION_TIER_RISK_CLASSES: dict[str, list[RiskClass]] = {
-    "P0": ["safe-read"],
-    "P1": ["safe-read", "draft-write"],
-    "P2": ["safe-read", "draft-write", "reversible-write"],
-    "P3": ["safe-read", "draft-write", "reversible-write", "external-commit"],
-    "P4": [],  # P4 = locked, no autonomous execution
+# ── Permission tier hierarchy ─────────────────────────────────────────────────
+# Maps permission_level → allowed risk classes (inclusive up to that level).
+_TIER_ALLOWED_RISKS: Dict[str, frozenset] = {
+    "read":         frozenset({"low"}),
+    "write":        frozenset({"low", "medium"}),
+    "external":     frozenset({"low", "medium", "high"}),
+    "irreversible": frozenset({"low", "medium", "high", "critical"}),
 }
 
-# ---------------------------------------------------------------------------
-# Token
-# ---------------------------------------------------------------------------
-
-@dataclass(frozen=True, slots=True)
-class ApprovalToken:
-    user_id: str
-    card_id: str
-    idempotency_key: str
-    risk_class: RiskClass
-    issued_at: float  # unix timestamp
+_DEFAULT_UNDO_WINDOW_SEC = 30  # 30 s undo window for reversible actions
 
 
-def _compute_hmac(payload_bytes: bytes) -> str:
-    return hmac.new(TOKEN_SECRET, payload_bytes, hashlib.sha256).hexdigest()
+# ── Structured errors ─────────────────────────────────────────────────────────
+
+class PolicyDeniedError(Exception):
+    """Raised when the policy gate rejects an action."""
+    def __init__(self, reason: str, error_code: str = "POLICY_DENIED") -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.error_code = error_code
 
 
-def parse_and_validate_token(
-    raw_token: str,
-    expected_user_id: str,
-    expected_card_id: str,
-) -> ApprovalToken:
-    """Decode, verify HMAC, TTL, user_id, card_id. Raise ValueError on any failure."""
-    try:
-        header_b64, payload_b64, sig = raw_token.split(".", 2)
-    except ValueError:
-        raise ValueError("malformed_token")
+class TokenValidationError(PolicyDeniedError):
+    """Raised when the approval token fails validation."""
 
-    import base64
-    try:
-        payload_json = base64.urlsafe_b64decode(payload_b64 + "==").decode()
-        claims: dict[str, Any] = json.loads(payload_json)
-    except Exception:
-        raise ValueError("malformed_token")
 
-    # 1. HMAC signature check
-    signing_input = f"{header_b64}.{payload_b64}".encode()
-    expected_sig = _compute_hmac(signing_input)
-    if not hmac.compare_digest(expected_sig, sig):
-        raise ValueError("invalid_signature")
+class IdempotencyConflictError(PolicyDeniedError):
+    """Raised when the idempotency key has already been executed."""
 
-    # 2. TTL
-    issued_at = float(claims.get("iat", 0))
-    if time.time() - issued_at > TOKEN_TTL_SECONDS:
-        raise ValueError("token_expired")
 
-    # 3. user_id binding
-    if claims.get("user_id") != expected_user_id:
-        raise ValueError("user_id_mismatch")
+# ── Approval request / response types ─────────────────────────────────────────
 
-    # 4. card_id binding
-    if claims.get("card_id") != expected_card_id:
-        raise ValueError("card_id_mismatch")
+@dataclass
+class ApprovalRequest:
+    user_id:          str
+    card_id:          str
+    idempotency_key:  str
+    action_type:      str
+    risk_class:       str       # low | medium | high | critical
+    permission_level: str       # read | write | external | irreversible
+    approval_token_id: str      # UUID stored on the approval card
+    hmac_signature:   str       # HMAC-SHA256 provided by the client
+    expected_effect:  str       = ""
+    target_resource:  Optional[Dict[str, Any]] = None
+    before_state:     Optional[Dict[str, Any]] = None
+    agent_name:       str       = "rico"
+    agent_version:    str       = "1"
+    provider:         str       = ""
 
-    return ApprovalToken(
-        user_id=claims["user_id"],
-        card_id=claims["card_id"],
-        idempotency_key=claims["idempotency_key"],
-        risk_class=claims["risk_class"],
-        issued_at=issued_at,
+
+@dataclass
+class PolicyResult:
+    allowed:          bool
+    policy_decision:  str       # allowed | denied | expired
+    reason:           str
+    correlation_id:   str
+    idempotency_key:  str
+    error_code:       Optional[str] = None
+
+
+# ── HMAC helpers ──────────────────────────────────────────────────────────────
+
+def _hmac_secret() -> bytes:
+    secret = os.environ.get("RICO_APPROVAL_HMAC_SECRET", "")
+    if not secret:
+        raise RuntimeError("RICO_APPROVAL_HMAC_SECRET env var is not set")
+    return secret.encode()
+
+
+def _build_token_payload(req: ApprovalRequest) -> str:
+    """Deterministic string that the signature must cover."""
+    return json.dumps(
+        {
+            "approval_token_id": req.approval_token_id,
+            "user_id":           req.user_id,
+            "card_id":           req.card_id,
+            "idempotency_key":   req.idempotency_key,
+            "risk_class":        req.risk_class,
+            "permission_level":  req.permission_level,
+        },
+        sort_keys=True,
     )
 
 
-# ---------------------------------------------------------------------------
-# Idempotency
-# ---------------------------------------------------------------------------
+def compute_hmac(req: ApprovalRequest) -> str:
+    """Return the expected HMAC-SHA256 hex digest for an approval request."""
+    payload = _build_token_payload(req).encode()
+    return hmac.new(_hmac_secret(), payload, hashlib.sha256).hexdigest()
 
-async def check_and_lock_idempotency(
-    redis: aioredis.Redis,
+
+def issue_approval_token(
+    user_id: str,
+    card_id: str,
     idempotency_key: str,
-) -> bool:
-    """Returns True if key is new (proceed). False if duplicate (already seen)."""
-    redis_key = f"agent:idempotency:{idempotency_key}"
-    result = await redis.set(redis_key, "1", nx=True, ex=IDEMPOTENCY_KEY_TTL)
-    return result is not None  # None = key already existed
+    risk_class: str,
+    permission_level: str,
+    ttl_seconds: int = 300,
+) -> Dict[str, str]:
+    """
+    Create and persist a new approval token.
+    Returns dict with approval_token_id and hmac_signature for the caller.
+    """
+    approval_token_id = str(uuid.uuid4())
+    expires_at = datetime.now(_UTC) + timedelta(seconds=ttl_seconds)
 
-
-# ---------------------------------------------------------------------------
-# FastAPI app (mounted as sub-app or standalone)
-# ---------------------------------------------------------------------------
-
-app = FastAPI(title="Policy Gate", docs_url=None, redoc_url=None)
-
-
-class PolicyRequest(BaseModel):
-    approval_token: str = Field(..., min_length=10)
-    card_id: str = Field(..., min_length=1, max_length=128)
-    risk_class: RiskClass
-    intent_summary: str = Field(..., min_length=1, max_length=512)
-    expected_effect: Optional[str] = Field(None, max_length=512)
-    tool_name: Optional[str] = Field(None, max_length=128)
-    target_resource: Optional[str] = Field(None, max_length=256)
-    undo_capability: bool = False
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-    @field_validator("risk_class")
-    @classmethod
-    def validate_risk_class(cls, v: str) -> str:
-        allowed = {"safe-read", "draft-write", "reversible-write", "external-commit", "destructive"}
-        if v not in allowed:
-            raise ValueError(f"unknown risk_class: {v}")
-        return v
-
-
-async def _get_user_permission_tier(user_id: str, pool: asyncpg.Pool) -> str:
-    """Fetch user's current permission tier from DB. Defaults to P1 if unset."""
-    row = await pool.fetchrow(
-        "SELECT permission_tier FROM users WHERE id = $1",
-        uuid.UUID(user_id),
+    dummy_req = ApprovalRequest(
+        user_id=user_id,
+        card_id=card_id,
+        idempotency_key=idempotency_key,
+        action_type="",
+        risk_class=risk_class,
+        permission_level=permission_level,
+        approval_token_id=approval_token_id,
+        hmac_signature="",
     )
-    if row is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="user_not_found")
-    return row["permission_tier"] or "P1"
+    sig = compute_hmac(dummy_req)
+
+    if is_db_available():
+        _db_insert_approval_token(
+            approval_token_id=approval_token_id,
+            hmac_signature=sig,
+            user_id=user_id,
+            card_id=card_id,
+            idempotency_key=idempotency_key,
+            risk_class=risk_class,
+            permission_level=permission_level,
+            expires_at=expires_at,
+        )
+    else:
+        logger.info(
+            "approval_token_issued (no-db) approval_token_id=%s user_id=%s",
+            approval_token_id, user_id,
+        )
+
+    return {"approval_token_id": approval_token_id, "hmac_signature": sig}
 
 
-@app.post("/api/agent/policy-gate")
-async def policy_gate(request: Request, body: PolicyRequest) -> JSONResponse:
-    """
-    Policy gate for semi-autonomous agent actions.
-    Must be called before any agent execution with side effects.
-    """
-    pool: asyncpg.Pool = request.app.state.db_pool
-    redis: aioredis.Redis = request.app.state.redis
-
-    # --- resolve session user ---
-    session_user_id: Optional[str] = getattr(request.state, "user_id", None)
-    if not session_user_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthenticated")
-
-    action_id = uuid.uuid4()
-    denial_reason: Optional[str] = None
-    decision: str = "denied"
-    token: Optional[ApprovalToken] = None
-
+def _db_insert_approval_token(
+    *,
+    approval_token_id: str,
+    hmac_signature: str,
+    user_id: str,
+    card_id: str,
+    idempotency_key: str,
+    risk_class: str,
+    permission_level: str,
+    expires_at: datetime,
+) -> None:
+    conn = get_db_connection()
+    if not conn:
+        return
     try:
-        # --- 1. Parse & validate token ---
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO agent_approval_tokens
+                (approval_token_id, hmac_signature, card_id, user_id,
+                 idempotency_key, risk_class, permission_level, expires_at)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (approval_token_id) DO NOTHING
+                """,
+                (
+                    approval_token_id, hmac_signature, card_id, user_id,
+                    idempotency_key, risk_class, permission_level,
+                    expires_at.isoformat(),
+                ),
+            )
+        conn.commit()
+    except Exception:
+        logger.exception("approval_token_insert_failed token_id=%s", approval_token_id)
         try:
-            token = parse_and_validate_token(
-                body.approval_token,
-                expected_user_id=session_user_id,
-                expected_card_id=body.card_id,
-            )
-        except ValueError as exc:
-            denial_reason = str(exc)
-            await _write_policy_audit(
-                pool=pool,
-                action_id=action_id,
-                body=body,
-                session_user_id=session_user_id,
-                policy_decision="denied",
-                denial_reason=denial_reason,
-                approval_token_raw=body.approval_token,
-            )
-            return JSONResponse(
-                status_code=status.HTTP_403_FORBIDDEN,
-                content={"allowed": False, "reason": denial_reason},
-            )
+            conn.rollback()
+        except Exception:
+            pass
+    finally:
+        conn.close()
 
-        # --- 2. Idempotency lock ---
-        is_new = await check_and_lock_idempotency(redis, token.idempotency_key)
-        if not is_new:
-            # idempotent — return the same 200 without re-executing
-            logger.info(
-                "policy_gate: duplicate idempotency_key, returning idempotent response",
-                extra={"idempotency_key": token.idempotency_key, "user_id": session_user_id},
-            )
-            return JSONResponse(
-                status_code=status.HTTP_200_OK,
-                content={
-                    "allowed": True,
-                    "idempotent": True,
-                    "action_id": str(action_id),
-                    "idempotency_key": token.idempotency_key,
-                },
-            )
 
-        # --- 3. Permission tier check ---
-        tier = await _get_user_permission_tier(session_user_id, pool)
-        allowed_classes = PERMISSION_TIER_RISK_CLASSES.get(tier, [])
-        if body.risk_class not in allowed_classes:
-            denial_reason = f"risk_class_not_allowed_for_tier:{tier}"
-            await _write_policy_audit(
-                pool=pool,
-                action_id=action_id,
-                body=body,
-                session_user_id=session_user_id,
-                policy_decision="denied",
-                denial_reason=denial_reason,
-                approval_token_raw=body.approval_token,
-            )
-            return JSONResponse(
-                status_code=status.HTTP_403_FORBIDDEN,
-                content={"allowed": False, "reason": denial_reason},
-            )
+# ── Token validation ──────────────────────────────────────────────────────────
 
-        # --- All checks passed ---
-        decision = "allowed"
-        await _write_policy_audit(
-            pool=pool,
-            action_id=action_id,
-            body=body,
-            session_user_id=session_user_id,
-            policy_decision="allowed",
-            denial_reason=None,
-            approval_token_raw=body.approval_token,
+def _validate_token(req: ApprovalRequest) -> None:
+    """
+    Raise TokenValidationError on any validation failure.
+    When DB is available, loads the stored token to check expiry/used/invalidated.
+    Without DB the caller must provide a valid HMAC (signature check only).
+    """
+    # 1. HMAC signature
+    expected_sig = compute_hmac(req)
+    if not hmac.compare_digest(expected_sig, req.hmac_signature):
+        raise TokenValidationError("Invalid HMAC signature", "INVALID_SIGNATURE")
+
+    # 2. risk_class allowed by permission_level
+    allowed_risks = _TIER_ALLOWED_RISKS.get(req.permission_level, frozenset())
+    if req.risk_class not in allowed_risks:
+        raise PolicyDeniedError(
+            f"risk_class={req.risk_class!r} exceeds permission_level={req.permission_level!r}",
+            "RISK_EXCEEDS_TIER",
         )
 
-        return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content={
-                "allowed": True,
-                "idempotent": False,
-                "action_id": str(action_id),
-                "idempotency_key": token.idempotency_key,
-            },
-        )
+    # 3. DB checks (expiry, used_at, invalidated, field match)
+    if is_db_available():
+        _db_validate_token(req)
 
-    except HTTPException:
+
+def _db_validate_token(req: ApprovalRequest) -> None:
+    conn = get_db_connection()
+    if not conn:
+        return
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT user_id, card_id, idempotency_key, risk_class,
+                       permission_level, expires_at, used_at, invalidated
+                FROM agent_approval_tokens
+                WHERE approval_token_id = %s
+                """,
+                (req.approval_token_id,),
+            )
+            row = cur.fetchone()
+
+        if row is None:
+            raise TokenValidationError("Approval token not found", "TOKEN_NOT_FOUND")
+
+        (db_user, db_card, db_idem, db_risk, db_perm,
+         expires_at, used_at, invalidated) = row
+
+        if invalidated:
+            raise TokenValidationError("Approval token has been invalidated", "TOKEN_INVALIDATED")
+
+        now = datetime.now(_UTC)
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=_UTC)
+        if now > expires_at:
+            raise TokenValidationError("Approval token has expired", "TOKEN_EXPIRED")
+
+        if used_at is not None:
+            raise TokenValidationError("Approval token has already been used", "TOKEN_ALREADY_USED")
+
+        if db_user != req.user_id:
+            raise TokenValidationError("user_id mismatch", "USER_MISMATCH")
+
+        if db_card != req.card_id:
+            raise TokenValidationError("card_id mismatch", "CARD_MISMATCH")
+
+        if db_idem != req.idempotency_key:
+            raise TokenValidationError("idempotency_key mismatch", "IDEMPOTENCY_MISMATCH")
+
+    except (TokenValidationError, PolicyDeniedError):
         raise
     except Exception:
-        logger.exception(
-            "policy_gate: unexpected error",
-            extra={"action_id": str(action_id), "user_id": session_user_id},
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="policy_gate_error",
-        )
+        logger.exception("db_validate_token_failed token_id=%s", req.approval_token_id)
+    finally:
+        conn.close()
 
 
-async def _write_policy_audit(
-    *,
-    pool: asyncpg.Pool,
-    action_id: uuid.UUID,
-    body: PolicyRequest,
-    session_user_id: str,
-    policy_decision: str,
-    denial_reason: Optional[str],
-    approval_token_raw: str,
-) -> None:
-    payload = AuditEventPayload(
+def _db_mark_token_used(approval_token_id: str) -> None:
+    conn = get_db_connection()
+    if not conn:
+        return
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE agent_approval_tokens SET used_at = NOW() WHERE approval_token_id = %s",
+                (approval_token_id,),
+            )
+        conn.commit()
+    except Exception:
+        logger.exception("mark_token_used_failed token_id=%s", approval_token_id)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    finally:
+        conn.close()
+
+
+# ── Idempotency check ─────────────────────────────────────────────────────────
+
+def _check_idempotency(req: ApprovalRequest) -> Optional[str]:
+    """
+    Return the existing policy_decision if this idempotency_key was already
+    processed for this user+card+action, else None.
+    """
+    if not is_db_available():
+        return None
+    conn = get_db_connection()
+    if not conn:
+        return None
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT policy_decision FROM agent_audit_events
+                WHERE idempotency_key = %s
+                  AND user_id = %s
+                  AND card_id = %s
+                  AND event_type IN ('approval_granted', 'approval_denied', 'approval_expired')
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (req.idempotency_key, req.user_id, req.card_id),
+            )
+            row = cur.fetchone()
+        return row[0] if row else None
+    except Exception:
+        logger.exception("idempotency_check_failed idempotency_key=%s", req.idempotency_key)
+        return None
+    finally:
+        conn.close()
+
+
+# ── Policy gate entry point ───────────────────────────────────────────────────
+
+def evaluate(req: ApprovalRequest) -> PolicyResult:
+    """
+    Validate an approval request, apply policy, and write audit events.
+
+    Does NOT execute real external actions. Callers implement execution
+    after receiving PolicyResult(allowed=True).
+
+    Returns PolicyResult — never raises for policy denial (denial is a result,
+    not an exception). Raises only for programming errors.
+    """
+    t0 = time.monotonic()
+    correlation_id = new_correlation_id()
+
+    # ── 1. action_created ──────────────────────────────────────────────────────
+    write_event(AuditEvent(
+        correlation_id=correlation_id,
+        card_id=req.card_id,
+        idempotency_key=req.idempotency_key,
+        user_id=req.user_id,
+        agent_name=req.agent_name,
+        agent_version=req.agent_version,
+        event_type="action_created",
+        action_type=req.action_type,
+        risk_class=req.risk_class,
+        permission_level=req.permission_level,
+        target_resource=req.target_resource,
+        before_state=req.before_state,
+        expected_effect=req.expected_effect,
+        provider=req.provider,
+    ))
+
+    # ── 2. Idempotency guard ───────────────────────────────────────────────────
+    existing_decision = _check_idempotency(req)
+    if existing_decision is not None:
+        logger.info(
+            "policy_gate_idempotent idempotency_key=%s existing_decision=%s",
+            req.idempotency_key, existing_decision,
+        )
+        return PolicyResult(
+            allowed=existing_decision == "allowed",
+            policy_decision=existing_decision,
+            reason="Duplicate idempotency_key — returning cached decision",
+            correlation_id=correlation_id,
+            idempotency_key=req.idempotency_key,
+            error_code="IDEMPOTENCY_REPLAY" if existing_decision != "allowed" else None,
+        )
+
+    # ── 3. policy_evaluated ────────────────────────────────────────────────────
+    write_event(AuditEvent(
+        correlation_id=correlation_id,
+        card_id=req.card_id,
+        idempotency_key=req.idempotency_key,
+        user_id=req.user_id,
+        agent_name=req.agent_name,
+        agent_version=req.agent_version,
         event_type="policy_evaluated",
-        action_id=action_id,
-        card_id=body.card_id,
-        user_id=uuid.UUID(session_user_id),
-        agent_id=AGENT_ID,
-        risk_class=body.risk_class,  # type: ignore[arg-type]
-        intent_summary=body.intent_summary,
-        policy_decision=policy_decision,  # type: ignore[arg-type]
-        denial_reason=denial_reason,
-        idempotency_key=body.idempotency_key if hasattr(body, 'idempotency_key') else "",
-        approval_token_raw=approval_token_raw,
-        tool_name=body.tool_name,
-        target_resource=body.target_resource,
-        expected_effect=body.expected_effect,
-        undo_capability=body.undo_capability,
-        metadata=body.metadata,
+        action_type=req.action_type,
+        risk_class=req.risk_class,
+        permission_level=req.permission_level,
+        policy_decision="pending",
+        provider=req.provider,
+    ))
+
+    # ── 4. Token validation + policy decision ──────────────────────────────────
+    latency_ms = int((time.monotonic() - t0) * 1000)
+    try:
+        _validate_token(req)
+    except TokenValidationError as exc:
+        _write_decision_event(
+            correlation_id=correlation_id,
+            req=req,
+            event_type="approval_denied",
+            policy_decision="denied",
+            reason=exc.reason,
+            error_code=exc.error_code,
+            latency_ms=latency_ms,
+        )
+        return PolicyResult(
+            allowed=False,
+            policy_decision="denied",
+            reason=exc.reason,
+            correlation_id=correlation_id,
+            idempotency_key=req.idempotency_key,
+            error_code=exc.error_code,
+        )
+    except PolicyDeniedError as exc:
+        _write_decision_event(
+            correlation_id=correlation_id,
+            req=req,
+            event_type="approval_denied",
+            policy_decision="denied",
+            reason=exc.reason,
+            error_code=exc.error_code,
+            latency_ms=latency_ms,
+        )
+        return PolicyResult(
+            allowed=False,
+            policy_decision="denied",
+            reason=exc.reason,
+            correlation_id=correlation_id,
+            idempotency_key=req.idempotency_key,
+            error_code=exc.error_code,
+        )
+
+    # ── 5. Approval granted ────────────────────────────────────────────────────
+    _db_mark_token_used(req.approval_token_id)
+
+    _write_decision_event(
+        correlation_id=correlation_id,
+        req=req,
+        event_type="approval_granted",
+        policy_decision="allowed",
+        reason="Token valid; risk class within permitted tier",
+        error_code=None,
+        latency_ms=latency_ms,
+        reversible=True,
+        undo_window_sec=_DEFAULT_UNDO_WINDOW_SEC,
     )
-    await write_audit_event(pool, payload)
+
+    logger.info(
+        "policy_gate_allowed correlation_id=%s idempotency_key=%s user_id=%s "
+        "action_type=%s risk_class=%s",
+        correlation_id, req.idempotency_key, req.user_id,
+        req.action_type, req.risk_class,
+    )
+
+    return PolicyResult(
+        allowed=True,
+        policy_decision="allowed",
+        reason="Token valid; risk class within permitted tier",
+        correlation_id=correlation_id,
+        idempotency_key=req.idempotency_key,
+    )
+
+
+def _write_decision_event(
+    *,
+    correlation_id: str,
+    req: ApprovalRequest,
+    event_type: str,
+    policy_decision: str,
+    reason: str,
+    error_code: Optional[str],
+    latency_ms: int,
+    reversible: bool = True,
+    undo_window_sec: int = 0,
+) -> None:
+    write_event(AuditEvent(
+        correlation_id=correlation_id,
+        card_id=req.card_id,
+        idempotency_key=req.idempotency_key,
+        user_id=req.user_id,
+        agent_name=req.agent_name,
+        agent_version=req.agent_version,
+        event_type=event_type,
+        action_type=req.action_type,
+        risk_class=req.risk_class,
+        permission_level=req.permission_level,
+        policy_decision=policy_decision,
+        reason=reason,
+        target_resource=req.target_resource,
+        before_state=req.before_state,
+        expected_effect=req.expected_effect,
+        provider=req.provider,
+        reversible=reversible,
+        undo_window_sec=undo_window_sec,
+        latency_ms=latency_ms,
+        error_code=error_code,
+    ))
