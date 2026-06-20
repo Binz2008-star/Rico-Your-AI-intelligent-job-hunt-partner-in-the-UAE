@@ -25,3 +25,10 @@ class RemindersResponse(BaseModel):
     status: str
     interval_days: int
     marked_due: int = 0
+
+
+class ProfileNudgeResponse(BaseModel):
+    status: str
+    nudges_sent: int = 0
+    nudges_failed: int = 0
+    skipped: int = 0

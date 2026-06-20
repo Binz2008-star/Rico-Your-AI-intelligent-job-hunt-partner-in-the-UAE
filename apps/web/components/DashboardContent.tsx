@@ -1,6 +1,7 @@
 "use client";
 
 import { DashboardStats } from "@/components/DashboardStats";
+import { ProfileCompletionBanner } from "@/components/ProfileCompletionBanner";
 import { ProfileSummaryCard } from "@/components/ProfileSummaryCard";
 import { SavedSearchesList } from "@/components/SavedSearchesList";
 import { StatusCard } from "@/components/StatusCard";
@@ -13,6 +14,7 @@ export function DashboardContent() {
 
     return (
         <div className="flex flex-col gap-10">
+            <ProfileCompletionBanner />
             {/* Career Mission Header */}
             <section>
                 <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-text-tertiary">

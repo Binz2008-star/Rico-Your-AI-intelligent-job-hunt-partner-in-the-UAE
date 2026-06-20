@@ -995,6 +995,16 @@ export const translations = {
     profileSummaryYrs: "yrs",
     profileSummaryVisa: "Visa:",
 
+    // Profile Completion Nudge Banner
+    profileNudgeTitle: "Your profile is incomplete",
+    profileNudgeDesc: "A complete profile helps Rico match you to the right UAE jobs faster.",
+    profileNudgeCta: "Complete profile",
+    profileNudgeDismiss: "Dismiss",
+    profileNudgeMissingCv: "Upload your CV",
+    profileNudgeMissingRoles: "Add target roles",
+    profileNudgeMissingCities: "Add preferred cities",
+    profileNudgeComplete: "Profile complete",
+
     // JobCard
     jobCardStrongFit: "Strong fit",
     jobCardWorthChecking: "Worth checking",
@@ -2007,6 +2017,16 @@ export const translations = {
     profileSummaryExperience: "الخبرة:",
     profileSummaryYrs: "سنوات",
     profileSummaryVisa: "التأشيرة:",
+
+    // Profile Completion Nudge Banner
+    profileNudgeTitle: "ملفك الشخصي غير مكتمل",
+    profileNudgeDesc: "الملف الشخصي المكتمل يساعد ريكو على مطابقتك مع الوظائف المناسبة في الإمارات بشكل أسرع.",
+    profileNudgeCta: "أكمل الملف الشخصي",
+    profileNudgeDismiss: "تجاهل",
+    profileNudgeMissingCv: "ارفع سيرتك الذاتية",
+    profileNudgeMissingRoles: "أضف الوظائف المستهدفة",
+    profileNudgeMissingCities: "أضف المدن المفضلة",
+    profileNudgeComplete: "الملف الشخصي مكتمل",
 
     // JobCard
     jobCardStrongFit: "ملاءمة ممتازة",

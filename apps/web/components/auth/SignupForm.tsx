@@ -8,6 +8,7 @@ import { ApiError, register, resendVerification } from '@/lib/api';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useTranslation, type TranslationKey } from '@/lib/translations';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import React, { useState } from 'react';
 
 function mapSignupError(err: unknown): { messageKey: TranslationKey; showLoginLink: boolean } {
@@ -32,6 +33,7 @@ function mapSignupError(err: unknown): { messageKey: TranslationKey; showLoginLi
 }
 
 export function SignupForm() {
+    const router = useRouter();
     const { language } = useLanguage();
     const t = useTranslation(language);
     const [name, setName] = useState('');
@@ -55,6 +57,8 @@ export function SignupForm() {
             if (result.email_verification_required) {
                 setRegisteredEmail(result.email);
                 setVerificationSent(true);
+            } else {
+                router.push('/onboarding');
             }
         } catch (err) {
             if (process.env.NODE_ENV === 'development') {
