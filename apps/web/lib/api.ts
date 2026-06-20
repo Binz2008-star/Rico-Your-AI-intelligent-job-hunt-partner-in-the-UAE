@@ -853,8 +853,9 @@ export async function resetPassword(
     body: JSON.stringify({ token, new_password }),
   });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { detail?: string };
-    throw new Error(err.detail ?? `Reset failed: ${res.status}`);
+    const err = (await res.json().catch(() => ({}))) as { detail?: unknown };
+    const raw = extractDetail(err.detail, `Reset failed: ${res.status}`);
+    throw new Error(raw.replace(/^Value error,\s+/i, ""));
   }
   return res.json() as Promise<{ message: string }>;
 }
@@ -1214,12 +1215,9 @@ export async function register(
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { detail?: string };
-    throw new ApiError(
-      err.detail ?? `Registration failed: ${res.status}`,
-      res.status,
-      err,
-    );
+    const err = (await res.json().catch(() => ({}))) as { detail?: unknown; message?: string };
+    const raw = extractDetail(err.detail, err.message ?? `Registration failed: ${res.status}`);
+    throw new ApiError(raw.replace(/^Value error,\s+/i, ""), res.status, err);
   }
   return res.json() as Promise<{
     email: string;

@@ -6,30 +6,24 @@ import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { PageTransition, StaggerChildren } from '@/components/ui/PageTransition';
 import { ApiError, register, resendVerification } from '@/lib/api';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { useTranslation, type TranslationKey } from '@/lib/translations';
+import { useTranslation } from '@/lib/translations';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import React, { useState } from 'react';
 
-function mapSignupError(err: unknown): { messageKey: TranslationKey; showLoginLink: boolean } {
+function mapSignupError(
+    err: unknown,
+    texts: { alreadyRegistered: string; checkDetails: string; couldNotCreate: string },
+): { message: string; showLoginLink: boolean } {
     if (err instanceof ApiError) {
         if (err.statusCode === 409) {
-            return {
-                messageKey: 'emailAlreadyRegistered',
-                showLoginLink: true,
-            };
+            return { message: texts.alreadyRegistered, showLoginLink: true };
         }
         if (err.statusCode === 400 || err.statusCode === 422) {
-            return {
-                messageKey: 'checkDetails',
-                showLoginLink: false,
-            };
+            return { message: err.message || texts.checkDetails, showLoginLink: false };
         }
     }
-    return {
-        messageKey: 'couldNotCreateAccount',
-        showLoginLink: false,
-    };
+    return { message: texts.couldNotCreate, showLoginLink: false };
 }
 
 export function SignupForm() {
@@ -64,8 +58,12 @@ export function SignupForm() {
             if (process.env.NODE_ENV === 'development') {
                 console.error('[signup]', err);
             }
-            const mapped = mapSignupError(err);
-            setError(t(mapped.messageKey));
+            const mapped = mapSignupError(err, {
+                alreadyRegistered: t('emailAlreadyRegistered'),
+                checkDetails: t('checkDetails'),
+                couldNotCreate: t('couldNotCreateAccount'),
+            });
+            setError(mapped.message);
             setShowLoginLink(mapped.showLoginLink);
         } finally {
             setIsLoading(false);
@@ -201,6 +199,9 @@ export function SignupForm() {
                                 placeholder={t('passwordPlaceholder')}
                                 required
                             />
+                            <p className="mt-1.5 text-xs text-on-surface-variant">
+                                Min 8 characters · uppercase · lowercase · digit or symbol
+                            </p>
                         </div>
 
                         <button
