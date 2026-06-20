@@ -4,10 +4,12 @@ Sends a one-time follow-up email to users who:
   - Registered > 24 hours ago
   - Have never been sent a nudge (profile_nudge_sent_at IS NULL)
   - Still have an incomplete profile: CV missing OR target_roles empty OR preferred_cities empty
+  - Are NOT synthetic/test/internal recipients (see _is_synthetic_email)
 
 Invoked by the cron-guarded POST /api/v1/pipeline/profile-nudge endpoint.
 Requires migration 029 (profile_nudge_sent_at column on users).
 Idempotent: re-running never double-sends because sent_at is stamped before delivery.
+Synthetic recipients are also stamped so the cron never retries them.
 
 Schema facts:
   - users.email links to rico_users.external_user_id
@@ -18,12 +20,38 @@ Schema facts:
 from __future__ import annotations
 
 import logging
+import re
 from datetime import timedelta
 from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
 NUDGE_DELAY_HOURS = 24
+
+# ── Synthetic / internal recipient guard ──────────────────────────────────────
+
+_INTERNAL_DOMAIN = "ricohunt.com"
+
+# Matches local parts that are clearly test/dummy/seed/internal accounts.
+# user_\d+ covers auto-generated seats like user_1469, user_9000, etc.
+_SYNTHETIC_LOCAL_RE = re.compile(
+    r"^(?:"
+    r"(?:test(?:_user)?|dummy|demo|example|seed|fake)(?:[._+\-].*)?"
+    r"|user_\d+"
+    r")$",
+    re.IGNORECASE,
+)
+
+
+def _is_synthetic_email(email: str) -> bool:
+    """Return True for test/dummy/internal addresses that must never receive nudges."""
+    try:
+        local, domain = email.rsplit("@", 1)
+    except ValueError:
+        return True  # malformed — exclude
+    if domain.lower() == _INTERNAL_DOMAIN:
+        return True
+    return bool(_SYNTHETIC_LOCAL_RE.match(local))
 
 
 def _build_nudge_body(name: str | None, email: str, missing: list[str]) -> str:
@@ -115,6 +143,7 @@ def run_profile_nudge_sweep() -> Dict[str, Any]:
     sent = 0
     failed = 0
     skipped = 0
+    skipped_synthetic = 0
 
     for row in rows:
         user_id = row["user_id"]
@@ -124,6 +153,29 @@ def run_profile_nudge_sweep() -> Dict[str, Any]:
         cv_filename: str | None = row["cv_filename"]
         target_roles: list | None = row["target_roles"]
         preferred_cities: list | None = row["preferred_cities"]
+
+        # Synthetic/internal recipient guard — stamp and skip without sending.
+        # Logging uses domain only to avoid exposing local parts in logs.
+        if _is_synthetic_email(email):
+            skipped_synthetic += 1
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE users SET profile_nudge_sent_at = NOW() WHERE id = %s",
+                        (user_id,),
+                    )
+                conn.commit()
+                logger.info(
+                    "profile_nudge_sweep: skipped synthetic user_id=%s domain=%s",
+                    user_id, email.split("@")[-1],
+                )
+            except Exception as exc:
+                logger.warning(
+                    "profile_nudge_sweep: stamp-skip-synthetic failed user_id=%s: %s",
+                    user_id, exc,
+                )
+                conn.rollback()
+            continue
 
         missing: list[str] = []
         if not cv_filename:
@@ -181,4 +233,5 @@ def run_profile_nudge_sweep() -> Dict[str, Any]:
         "nudges_sent": sent,
         "nudges_failed": failed,
         "skipped": skipped,
+        "skipped_synthetic": skipped_synthetic,
     }
