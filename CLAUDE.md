@@ -12,6 +12,21 @@ For new Rico work sessions, start from `AI_WORKSPACE/START_HERE.md`.
 
 Use the AI workspace as the shared source of truth for tasks, decisions, handoffs, evaluations, and prompt contracts. Do not rely on chat memory when the repository already contains current workspace files.
 
+## Rico Operating Rules
+
+Before planning, coding, reviewing, merging, or verifying production, read `AI_WORKSPACE/OPERATING_RULES.md`.
+
+That file is the canonical operational checklist for:
+
+- GitHub PR audit and merge policy
+- Render backend deployment verification
+- Vercel frontend verification
+- Neon migration safety
+- production smoke testing
+- AI agent roles and status reporting
+
+If `CLAUDE.md`, `CURRENT_STATE.md`, `TASKS.md`, and live GitHub/deploy state disagree, stop and report the conflict instead of guessing.
+
 ## Current Live Stack
 
 - Frontend: Next.js 14 / TypeScript / Tailwind in `apps/web`
