@@ -217,6 +217,45 @@ def _safe_filename(name: str | None) -> str:
     return name.strip() or "upload"
 
 
+def _classification_response(classification: Any, filename: str) -> dict[str, Any]:
+    """Build the standard 'classified' response for non-CV document types."""
+    pct = int(classification.confidence * 100)
+    label = classification.display_label
+    # Top two types for display, sorted by score descending.
+    scores = classification.confidence_scores
+    ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    score_lines = "\n".join(
+        f"{'  '}{'·'} {_display_for_type(t)}: {int(s * 100)}%"
+        for t, s in ranked[:3]
+        if s > 0.05
+    )
+    msg = (
+        f"I detected this file as:\n\n"
+        f"**{label}** ({pct}%)\n\n"
+        f"{score_lines}\n\n"
+        "What would you like me to do with it?"
+    )
+    return {
+        "ok": True,
+        "status": "classified",
+        "filename": filename,
+        **classification.to_dict(),
+        "message": msg,
+    }
+
+
+def _display_for_type(doc_type: str) -> str:
+    _MAP = {
+        "cv": "Resume / CV", "job_description": "Job Description",
+        "cover_letter": "Cover Letter", "offer_letter": "Offer Letter",
+        "contract": "Employment Contract", "recruiter_email": "Recruiter Email",
+        "certificate": "Certificate / License", "identity_document": "Identity Document",
+        "company_profile": "Company Profile", "invoice": "Invoice",
+        "image": "Image", "unknown": "Document",
+    }
+    return _MAP.get(doc_type, doc_type.replace("_", " ").title())
+
+
 # Thin wrappers keep the router on one adapter path while preserving stable patch points.
 def get_profile(user_id: str):
     return profile_repo.get_profile(user_id)
@@ -1217,16 +1256,64 @@ async def rico_upload_cv(
             raise HTTPException(status_code=413, detail="File exceeds 10 MB limit")
         if not data:
             raise HTTPException(status_code=422, detail="Uploaded file is empty")
-        if not data.startswith(_PDF_MAGIC):
-            raise HTTPException(status_code=422, detail="Only PDF files are accepted")
 
         safe_name = _safe_filename(file.filename)
 
-        # Parse CV with defensive handling for dataclass vs dict return.
-        # parse_cv is synchronous and CPU/IO-bound (PDF parsing); run it in an
-        # executor so it does not block the event loop for other requests.
+        # ── Document Intelligence — classify BEFORE any pipeline ──────────────
+        # Every uploaded file is classified first. Only confirmed CVs enter the
+        # CV extraction pipeline. All other types return classification + actions.
+        from src.services.document_classifier import classify_document
+        loop = asyncio.get_event_loop()
+        classification = await loop.run_in_executor(
+            None, classify_document, data, safe_name
+        )
+        doc_type = classification.document_type
+        confidence = classification.confidence
+
+        logger.info(
+            "doc_classify user=%s filename=%s type=%s confidence=%.2f format=%s request_ref=%s",
+            resolved_user_id, safe_name, doc_type, confidence,
+            classification.file_format, request_ref,
+        )
+
+        # Images: no text extraction possible — return classification immediately.
+        if classification.file_format == "image":
+            _metrics.record_request((time.time() - start_time) * 1000)
+            return _classification_response(classification, safe_name)
+
+        # Identity documents: hard block — never echo content.
+        if doc_type == "identity_document":
+            _metrics.record_request((time.time() - start_time) * 1000)
+            logger.warning(
+                "doc_classify_blocked user=%s filename=%s type=%s request_ref=%s",
+                resolved_user_id, safe_name, doc_type, request_ref,
+            )
+            return {
+                "ok": False,
+                "status": "rejected",
+                "document_type": doc_type,
+                "message": (
+                    "This document appears to be a passport or identity document. "
+                    "For your security it was not saved and your profile was not changed. "
+                    "Please upload a CV or resume instead."
+                ),
+            }
+
+        # Non-CV documents with sufficient confidence → return classification + actions.
+        # CV types that also proceed through extraction: "cv", "cover_letter", "unknown"
+        _CV_PIPELINE_TYPES = {"cv", "cover_letter", "unknown"}
+        cv_score = classification.confidence_scores.get("cv", 0.0)
+        if doc_type not in _CV_PIPELINE_TYPES and confidence >= 0.18 and confidence > cv_score:
+            _metrics.record_request((time.time() - start_time) * 1000)
+            logger.info(
+                "doc_classify_routed user=%s filename=%s type=%s confidence=%.2f request_ref=%s",
+                resolved_user_id, safe_name, doc_type, confidence, request_ref,
+            )
+            return _classification_response(classification, safe_name)
+
+        # ── CV extraction pipeline ────────────────────────────────────────────
+        # Only reached for type=cv/cover_letter/unknown (or low-confidence non-CV).
         try:
-            loop = asyncio.get_event_loop()
             parsed_raw = await loop.run_in_executor(
                 None, chat_service.parse_cv, data, safe_name
             )
@@ -1240,81 +1327,52 @@ async def rico_upload_cv(
         except Exception as exc:
             logger.exception(
                 "cv_upload_parse_error ref=%s user=%s filename=%s bytes=%d error=%s",
-                request_ref,
-                resolved_user_id,
-                safe_name,
-                len(data),
-                str(exc),
+                request_ref, resolved_user_id, safe_name, len(data), str(exc),
             )
             return {
                 "ok": False,
                 "status": "error",
                 "error_ref": request_ref,
                 "message": (
-                    f"CV upload failed. Reference: {request_ref}. "
-                    "I could not read this PDF. Please try another text-based PDF under 10 MB."
+                    f"Upload failed. Reference: {request_ref}. "
+                    "I could not read this file. "
+                    "Please try a text-based PDF or Word document under 10 MB."
                 ),
             }
 
-        # document_type is set by CVParser.parse_bytes; default to "unknown" defensively.
-        doc_type = parsed.get("document_type", "unknown")
+        # Refined type from CVParser (may agree with or override the classifier).
+        cv_doc_type = parsed.get("document_type", "unknown")
+        # Trust classifier for non-cv types it already identified.
+        if doc_type not in ("unknown",) and cv_doc_type == "unknown":
+            cv_doc_type = doc_type
 
         logger.info(
             "cv_upload user=%s filename=%s doc_type=%s quality=%s chars=%d skills=%d request_ref=%s",
-            resolved_user_id,
-            safe_name,
-            doc_type,
+            resolved_user_id, safe_name, cv_doc_type,
             parsed.get("extraction_quality", "unknown"),
             parsed.get("extracted_chars", 0),
             len(parsed.get("skills", [])),
             request_ref,
         )
 
-        # Reject identity documents (passport, Emirates ID, national ID).
-        # Do NOT include parsed content in the response — sensitive identity data
-        # must never be echoed back through the API.
-        if doc_type == "identity_document":
-            _metrics.record_request((time.time() - start_time) * 1000)
-            logger.warning(
-                "cv_upload_rejected user=%s filename=%s doc_type=%s reason=identity_doc request_ref=%s",
-                resolved_user_id,
-                safe_name,
-                doc_type,
-                request_ref,
-            )
-            return {
-                "ok": False,
-                "status": "rejected",
-                "document_type": doc_type,
-                "message": (
-                    "This document appears to be a passport or identity document. "
-                    "For your security, it was not saved and your profile was not changed. "
-                    "Please upload a CV or resume instead."
-                ),
-            }
-
-        # Only reject confirmed company profiles — "unknown" passes through so
-        # sparse-but-valid CVs (few section headers) are not incorrectly rejected.
-        if doc_type == "company_profile":
+        # Company profile: route through classification instead of CV pipeline.
+        if cv_doc_type == "company_profile":
             _metrics.record_request((time.time() - start_time) * 1000)
             logger.warning(
                 "cv_upload_rejected user=%s filename=%s doc_type=%s reason=not_cv request_ref=%s",
-                resolved_user_id,
-                safe_name,
-                doc_type,
-                request_ref,
+                resolved_user_id, safe_name, cv_doc_type, request_ref,
             )
-            return {
-                "ok": False,
-                "status": "rejected",
-                "document_type": doc_type,
-                "message": (
-                    "This document looks like a company profile, not a personal CV/resume. "
-                    "I did not update your personal job profile. "
-                    "Please upload a personal CV or resume."
-                ),
-                "parsed": parsed,
-            }
+            # Build a classification response using the known type.
+            from src.services.document_classifier import _SUGGESTED_ACTIONS, _DISPLAY_LABELS, ClassificationResult
+            alt = ClassificationResult(
+                document_type="company_profile",
+                confidence=0.85,
+                confidence_scores={"company_profile": 0.85},
+                suggested_actions=_SUGGESTED_ACTIONS["company_profile"],
+                display_label=_DISPLAY_LABELS["company_profile"],
+                file_format=classification.file_format,
+            )
+            return _classification_response(alt, safe_name)
 
         # Build profile preview without auto-updating the permanent profile
         existing_profile = get_profile(resolved_user_id)
