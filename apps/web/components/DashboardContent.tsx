@@ -2,6 +2,7 @@
 
 import { DashboardStats } from "@/components/DashboardStats";
 import { ProfileCompletionBanner } from "@/components/ProfileCompletionBanner";
+import { ProfileReadinessCard } from "@/components/ProfileReadinessCard";
 import { ProfileSummaryCard } from "@/components/ProfileSummaryCard";
 import { SavedSearchesList } from "@/components/SavedSearchesList";
 import { StatusCard } from "@/components/StatusCard";
@@ -78,14 +79,7 @@ export function DashboardContent() {
                 </h2>
                 <div className="grid gap-4 sm:grid-cols-2">
                     <ProfileSummaryCard />
-                    <StatusCard title={t("dashboardProfileGapsTitle")} badge="placeholder" href="/profile">
-                        <p className="text-sm text-text-tertiary">
-                            {t("dashboardProfileGapsDesc")}
-                        </p>
-                        <span className="mt-3 inline-flex text-[12px] font-semibold text-gold">
-                            {t("dashboardProfileGapsCta")}
-                        </span>
-                    </StatusCard>
+                    <ProfileReadinessCard />
                 </div>
             </section>
 
