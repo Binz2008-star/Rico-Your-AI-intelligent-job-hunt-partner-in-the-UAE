@@ -17,6 +17,43 @@ Every new Rico work session must read, in order:
 
 If these files disagree, do not guess. Report the conflict and use GitHub `main`, deployed `/version`, and the relevant PR/commit as the source of truth.
 
+## AI Workspace Task Flow
+
+`AI_WORKSPACE/` is not a manual after-the-fact note area. It is the standard task control system for all Rico agents.
+
+Every non-trivial change must follow this flow:
+
+```text
+1. Read START_HERE.md and the latest handoff.
+2. Locate or create the task entry in TASKS.md.
+3. Confirm the task has: objective, branch, scope, out-of-scope files, acceptance criteria, verification, rollback.
+4. Record any architecture/product decision in DECISIONS.md before coding when the decision changes future work.
+5. Use one branch per task and one writer per branch.
+6. Open one scoped PR.
+7. Update the task with changed files, commands run, test results, CI/deploy status, risks, and rollback plan.
+8. After merge/deploy, add or update a handoff when the next agent needs to know the new state.
+9. Update START_HERE.md only when the latest handoff changes.
+```
+
+Required workspace updates by change type:
+
+| Change type | Required workspace update |
+|---|---|
+| New implementation task | `TASKS.md` entry before coding |
+| Architecture/product decision | `DECISIONS.md` before or inside the PR |
+| Cross-agent continuation or production rollout | New file under `AI_WORKSPACE/HANDOFFS/` |
+| New latest handoff | `START_HERE.md` latest handoff pointer |
+| PR with unusual verification, deploy status, or rollback details | Task handoff notes or handoff file |
+| Docs-only workspace sync | No runtime files; PR body must say docs-only |
+
+Rules:
+
+- Do not rely on chat history as the source of truth when the repo workspace has a task/decision/handoff file.
+- Do not start coding from a broad instruction without first reducing it to a task entry or confirming an existing task.
+- Do not merge a PR whose workspace status claims are stale or contradict the PR/deploy state.
+- Do not use `AI_WORKSPACE` to justify scope creep; it narrows scope, it does not expand it.
+- Small emergency fixes may be coded first, but the workspace must be updated in the same PR or the immediate follow-up docs PR.
+
 ## Agent Roles
 
 Use one role per pass. Do not mix planning, coding, reviewing, and deployment verification in one unstructured response.
@@ -54,6 +91,8 @@ Before recommending merge, verify:
 10. The PR body and workspace state do not contain stale claims.
 
 Do not merge if any blocker remains unresolved.
+
+Docs-only PRs may skip runtime tests only when changed files are limited to documentation/workspace files and no generated/runtime config changed.
 
 ## Merge Policy
 
