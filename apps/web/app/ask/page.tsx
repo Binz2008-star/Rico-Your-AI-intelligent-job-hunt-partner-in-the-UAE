@@ -15,7 +15,10 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { fetchMe } from "@/lib/api";
+import { buildAuthHref } from "@/lib/redirect";
 import { RicoAskInput } from "@/components/agentic/RicoAskInput";
 import { PromptChips } from "@/components/agentic/PromptChips";
 import { RicoThinkingCard } from "@/components/agentic/RicoThinkingCard";
@@ -109,6 +112,8 @@ function EmptyState({
 // ── Main page component ───────────────────────────────────────────────────────
 
 export default function AskPage() {
+  const router = useRouter();
+  const [authState, setAuthState] = useState<"checking" | "ready">("checking");
   const [input, setInput] = useState("");
   const [status, setStatus] = useState<AgentStatus>("idle");
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
@@ -118,6 +123,25 @@ export default function AskPage() {
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const hasAnswers = answers.length > 0;
+
+  // Auth guard — redirect to /login?next=/ask if not authenticated
+  useEffect(() => {
+    let cancelled = false;
+    fetchMe()
+      .then((me) => {
+        if (cancelled) return;
+        if (!me.authenticated) {
+          router.replace(buildAuthHref("/login", "/ask"));
+          return;
+        }
+        setAuthState("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        router.replace(buildAuthHref("/login", "/ask"));
+      });
+    return () => { cancelled = true; };
+  }, [router]);
 
   // Scroll to bottom after new answers
   useEffect(() => {
@@ -188,6 +212,19 @@ export default function AskPage() {
 
   const isThinking = status === "thinking" || status === "responding";
   const isDisabled = isThinking || status === "acting" || status === "waiting";
+
+  // Show minimal loader while session check is in flight
+  if (authState === "checking") {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center command-dark-lock">
+        <div className="relative w-10 h-10 flex items-center justify-center">
+          <div className="absolute inset-0 rounded-full bg-gold/8 animate-breathe" />
+          <div className="absolute inset-2 rounded-full bg-gold/12 animate-breathe [animation-delay:0.4s]" />
+          <span className="relative material-icons-round text-gold text-[20px]">auto_awesome</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="
