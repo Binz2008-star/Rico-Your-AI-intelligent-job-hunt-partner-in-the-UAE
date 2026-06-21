@@ -200,7 +200,8 @@ def list_active_users() -> List[User]:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, email, password_hash, role, is_active, created_at, last_login_at
+                SELECT id, email, password_hash, role, is_active, created_at, last_login_at,
+                       COALESCE(email_verified, TRUE)
                 FROM users
                 WHERE is_active = TRUE
                 ORDER BY id
@@ -216,6 +217,7 @@ def list_active_users() -> List[User]:
                 is_active=row[4],
                 created_at=row[5],
                 last_login_at=row[6],
+                email_verified=row[7],
             )
             for row in rows
         ]

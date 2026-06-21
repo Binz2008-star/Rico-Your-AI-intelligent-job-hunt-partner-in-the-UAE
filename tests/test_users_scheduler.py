@@ -136,8 +136,8 @@ class TestListActiveUsersStub:
         from src.repositories.users_repo import list_active_users
 
         rows = [
-            (1, "alice@rico.ai", "hash1", "user", True, None, None),
-            (2, "bob@rico.ai", "hash2", "admin", True, None, None),
+            (1, "alice@rico.ai", "hash1", "user", True, None, None, True),
+            (2, "bob@rico.ai", "hash2", "admin", True, None, None, True),
         ]
         conn = MagicMock()
         cur = MagicMock()

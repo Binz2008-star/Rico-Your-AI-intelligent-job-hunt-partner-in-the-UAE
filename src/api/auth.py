@@ -577,11 +577,6 @@ def register(
             getattr(user, "id", "unknown"),
         )
 
-    # Clear any existing session cookie so an old logged-in session cannot
-    # contaminate the new account before the user completes email verification
-    # and logs in with their new credentials.
-    response.delete_cookie(key=_COOKIE_NAME, **_cookie_delete_kwargs())
-
     logger.info("register_success email=%r", user.email)
     return RegisterResponse(
         email=user.email,
@@ -589,6 +584,7 @@ def register(
         created=True,
         email_verification_required=True,
     )
+
 
 
 @router.get("/verify-email", response_model=VerifyEmailResponse)
