@@ -55,7 +55,7 @@ The next foundation PR should align backend approval permission TTL to the user-
 Status: accepted
 Date: 2026-06-21
 Owner: Roben / Claude / ChatGPT
-Related task: PR #700, PR #701, PR #702
+Related task: PR #700, PR #701, PR #702, PR #703
 
 #### Context
 The GitHub Intelligence report proposed new approval-token and audit-event components. Code inspection showed Rico already has production foundations: `pending_permissions`, `permission_factory`, `/actions/execute`, `audit_repo`, `action_audit_log`, and deterministic match explanation logic.
@@ -71,6 +71,7 @@ Rico will harden and extend the existing CAREER-OS permission/audit path before 
 - [x] PR #700: bind approval permission to `job_key` and audit denials.
 - [x] PR #701: ensure `action_audit_log` writes commit and persist.
 - [x] PR #702: ensure application-attempt dedup writes commit and close connections.
+- [x] PR #703: ensure identity merge DB connection closes on all paths.
 - [ ] Update `docs/rico-agentic-vision-github-intelligence.md` so it reflects the real foundation instead of greenfield assumptions.
 - [ ] Decide later whether `action_audit_log` is enough or whether an additive append-only `agent_audit_events` stream is needed.
 
