@@ -92,7 +92,10 @@ Ship the hardening as small, focused PRs from current `main`, each independently
       merged hardening batch (#700–#704) is live in production. Note: the `/version.deployed_at`
       field reads `2026-05-23` — it is a static build-time constant, not the actual deploy time,
       so trust `commit` over `deployed_at`.
-- [ ] Merge #705 once pytest + playwright complete green (Vercel preview already Ready).
+- [x] Merged #705 (pytest + playwright green; squash commit `da452f6` on `main`). #704 closed
+      as superseded — the consolidated AI_WORKSPACE decision record already landed via #705.
+- [x] #705 Render deploy verified LIVE (2026-06-21): `/version.commit` = `da452f6`
+      (matches `main` HEAD); `/health` → 200. Approval-bypass fix is in production.
 
 ### DEC-20260618-001 — Close PR #601 as stale/superseded; merge docs PRs #608 and #566
 
