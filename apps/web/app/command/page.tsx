@@ -1216,7 +1216,7 @@ export default function CommandPage() {
                         role: "rico" as const,
                         text: result.message ?? `I detected this as: **${result.display_label ?? result.document_type}**\n\nWhat would you like me to do with it?`,
                         actions,
-                        agentic_ui: (result as Record<string, unknown>).agentic_ui as RicoAgenticUi | null | undefined,
+                        agentic_ui: (result as unknown as Record<string, unknown>).agentic_ui as RicoAgenticUi | null | undefined,
                     },
                 ]);
                 return;
