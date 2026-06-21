@@ -33,12 +33,16 @@ def run_action(
     `user_id` is always taken from the JWT — callers cannot spoof other users.
     `dry_run=true` logs intent but skips execution and audit.
     Unknown actions return 200 with ok=false (runtime validates).
+
+    SECURITY: The _approved sentinel must never be accepted from the client.
+    Only /actions/execute (which validates a permission_id) can set it.
     """
+    sanitized_job = {k: v for k, v in (req.job or {}).items() if k != "_approved"}
     result = agent_runtime.handle_action(
         user_id=user["email"],
         action=req.action,
         job_key=req.job_key,
-        job=req.job,
+        job=sanitized_job or None,
         source=req.source,
         dry_run=req.dry_run,
     )

@@ -243,6 +243,49 @@ class TestActionEndpointLiveExecution:
         assert result.ok is True
 
 
+# ── Security: approval bypass protection ─────────────────────────────────────
+
+class TestActionEndpointApprovalBypassProtection:
+    """Verify /actions/run strips the _approved sentinel to prevent approval bypass."""
+
+    def test_approved_sentinel_cannot_be_forged(self, client):
+        """A client cannot bypass approval by passing _approved=True to /actions/run.
+
+        The _approved sentinel is only injected by /actions/execute after validating
+        a permission_id. This test verifies that /actions/run strips any _approved
+        key from the client-provided job dict before reaching the runtime.
+        """
+        with patch("src.agent.runtime.log_action"), \
+             patch("src.agent.runtime.is_duplicate", return_value=False):
+            response = client.post(
+                _URL,
+                json={
+                    "action": "apply",
+                    "job": {
+                        **_JOB,
+                        "_approved": True,  # Attempt to forge the approval sentinel
+                    }
+                }
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # When approval is required and the _approved sentinel is stripped,
+        # apply_to_job should return approval_required status.
+        result_data = data.get("data", {})
+        status = result_data.get("status", "")
+
+        # Expected statuses when approval was not provided:
+        # - "approval_required" (if RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true)
+        # - "manual_required" (if RICO_ENABLE_AUTO_APPLY=false)
+        # - "error" (if something else failed)
+        # NOT a successful apply.
+        assert status in ("approval_required", "manual_required", "error"), \
+            f"Expected approval_required/manual_required/error, got: {status}. " \
+            f"This indicates the _approved sentinel was NOT stripped (security bug)."
+
+
 # ── job_key fallback ──────────────────────────────────────────────────────────
 
 class TestActionEndpointJobResolution:
