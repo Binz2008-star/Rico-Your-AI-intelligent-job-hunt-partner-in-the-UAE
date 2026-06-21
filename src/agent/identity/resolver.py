@@ -196,33 +196,25 @@ class IdentityResolver:
         If a guest session or telegram user later provides an email,
         merge their data under the email as the canonical ID.
         """
+        conn = get_db_connection()
+        if not conn:
+            return False
         try:
-            conn = get_db_connection()
-            if not conn:
-                return False
-
             with conn.cursor() as cur:
                 # Check for existing users with this email
                 cur.execute(
                     "SELECT id, external_user_id FROM rico_users WHERE email = %s",
                     (email.lower(),),
                 )
-                existing = cur.fetchone()
-
-                if existing:
-                    # User already exists with this email - no merge needed
-                    conn.close()
-                    return False
-
-                # Check for telegram users that might match this email
-                # This would require additional cross-reference tables
-                # For now, we'll skip automatic merging
-
-            conn.close()
+                # An existing user means no merge is needed. Telegram cross-reference
+                # merging would require additional tables, so it is skipped for now.
+                cur.fetchone()
             return False
         except Exception:
             logger.exception("identity_merge_failed canonical=%s email=%s", canonical_user_id, email)
             return False
+        finally:
+            conn.close()
 
     def link_identity(
         self,
