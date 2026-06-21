@@ -28,6 +28,89 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260621-002 — Harden existing `action_audit_log`; do not build parallel audit/approval systems
+
+Status: accepted
+Date: 2026-06-21
+Owner: Roben / Claude
+Related task: PR #708
+
+#### Context
+
+After PR #706 merged, the canonical Agentic Vision foundation is the existing action runtime,
+pending-permission system, and `action_audit_log`. PR #685 attempted a parallel audit and approval
+foundation (`agent_audit_events`, `agent_approval_tokens`, duplicate `audit_writer.py`, and
+parallel `policy_gate.py`), which creates duplicate-risk against the now-merged inventory guidance.
+
+The audit repository also still had request-time schema mutation: `write_audit_log()` checked
+`information_schema` and executed `ALTER TABLE action_audit_log ADD COLUMN ...` during normal
+request handling.
+
+#### Decision
+
+Proceed with PR #708 as a draft implementation candidate on branch
+`feat/action-audit-schema-hardening`.
+
+Allowed direction:
+
+- extend existing `action_audit_log`
+- move `event_type` and `data` additions into numbered migration 030
+- add database-level append-only protection where safe
+- update focused `audit_repo` tests
+- keep existing action runtime and pending-permission system
+
+Explicitly not allowed:
+
+- frontend or `/ask`
+- permission token format changes
+- `agent_approval_tokens`
+- duplicate HMAC approval infrastructure
+- duplicate `audit_writer.py`
+- parallel `policy_gate.py`
+- `agent_audit_events`
+- browser automation
+- CV tailoring
+- FitScorer
+
+Stale PR queue decision:
+
+- #685 closed as superseded / duplicate-risk
+- #695 closed as superseded by #706 and #707 workspace state
+- #699 closed as template/unclear not planned
+- #688 kept open only as preview/mock UX; do not merge, wire, or treat its 300-second timer as production truth
+- #697 kept as a separate small bugfix candidate; do not mix with audit-schema hardening
+
+#### Consequences
+
+- Positive: keeps audit hardening on Rico's canonical audit path and avoids a second approval/audit stack.
+- Positive: removes schema DDL from request-time repository code.
+- Trade-off: migration 030 must be reviewed and applied before deploying the repository change, because `write_audit_log()` no longer creates missing columns at runtime.
+- Trade-off: the append-only trigger intentionally blocks update/delete/truncate operations on `action_audit_log`; this is correct for audit integrity but requires explicit rollback approval if future maintenance needs mutation.
+
+#### Verification
+
+Implementation report for #708:
+
+- PR: #708 draft, open, unmerged
+- Head: `fb63a60a9ba0c35debdff2dfa734caf1c271a183`
+- Changed files: 4
+  - `migrations/030_action_audit_log_hardening.sql`
+  - `src/repositories/audit_repo.py`
+  - `tests/unit/test_action_audit_schema_migration.py`
+  - `tests/unit/test_write_audit_log.py`
+- Focused tests: 27 passed
+- Python compilation: passed
+- Git diff check: passed
+- GitHub pytest, Playwright, Vercel: passed
+
+#### Follow-up
+
+- [ ] Review migration 030 carefully before marking #708 ready.
+- [ ] Confirm no current code path updates/deletes/truncates `action_audit_log`.
+- [ ] Plan safe Neon/production migration rollout.
+- [ ] Apply migration 030 before deploying the repository change.
+- [ ] Keep #708 draft until migration rollout is explicitly approved.
+
 ### DEC-20260621-001 — Smallest-safe security hardening batch (#700–#705) merged to `main`
 
 Status: accepted

@@ -12,7 +12,7 @@ Rico mode. Start from AI_WORKSPACE/START_HERE.md.
 
 Before starting new Rico work, read the latest rollout handoff:
 
-1. `AI_WORKSPACE/HANDOFFS/2026-06-20-profile-nudge-render-rollout.md`
+1. `AI_WORKSPACE/HANDOFFS/2026-06-21-action-audit-schema-hardening.md`
 2. Then continue with the read order below.
 
 ## Read order
