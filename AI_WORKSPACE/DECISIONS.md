@@ -28,6 +28,70 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260621-001 — Smallest-safe security hardening batch (#700–#705) merged to `main`
+
+Status: accepted
+Date: 2026-06-21
+Owner: Roben / Claude
+Related task: TASK-20260621-001
+
+#### Context
+A codebase sweep surfaced a class of high-impact correctness and security gaps in the
+agent action / approval path:
+- The permission approval engine (CAREER-OS-03) issued `apply` permissions that were not
+  bound to a specific job, allowing a valid `permission_id` to be replayed against a
+  *different* job.
+- Permission denials were not audited.
+- Multiple DB writers inserted/upserted without `conn.commit()` in the psycopg2
+  non-autocommit environment, so the writes were silently rolled back. Only the in-memory
+  dedup/cache survived, which is why the data loss went unnoticed.
+- A connection-pool leak in identity merge left connections open on the exception path.
+- `/api/v1/actions/run` passed the client-provided `job` dict straight to the runtime
+  without stripping the `_approved` sentinel, letting a caller forge approval and bypass
+  `RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS`.
+
+Per the user directive, the chosen approach was the smallest safe fix first — harden in
+place through existing systems rather than building a parallel audit/approval framework.
+
+#### Decision
+Ship the hardening as small, focused PRs from current `main`, each independently testable:
+
+- **#700** — Bind `job_key` to issued `apply` permissions; reject replay against a different
+  job (mismatch does *not* consume the token, so the legitimate job can still approve). Audit
+  permission denials through the existing `audit_repo.log_action()` with
+  `result_status="denied"`, `failure_reason="permission_denied"`.
+- **#701** — Add the missing `conn.commit()` in `audit_repo._db_write` so `action_audit_log`
+  rows actually persist (regression-tested).
+- **#702** — Fix `_save_attempt` in `src/auto_apply.py` and `src/naukrigulf_apply.py` to
+  `commit()` after upsert and `close()` in `finally`.
+- **#703** — Acquire the connection before the `try` and `close()` in `finally` in
+  `agent/identity/resolver._attempt_identity_merge` (read-only, no commit) so the connection
+  is released on every path.
+- **#705** — Sanitize the `job` dict in `/actions/run` by stripping the `_approved` key; only
+  `/actions/execute` (which validates a `permission_id`) may inject the sentinel.
+- AI_WORKSPACE is standardized as the task-flow control system for all agents (reinforces
+  DEC-20260617-001).
+
+#### Consequences
+- Positive: closes a permission-replay vector and an approval-bypass vector; restores audit
+  and application-attempt persistence; eliminates two connection leaks. All changes are
+  backward compatible (unbound permissions still accept any job; empty key normalizes to
+  unbound). Render backend redeploy verified live.
+- Trade-off: job-key binding is stricter — any caller that previously relied on reusing a
+  permission across jobs will now be rejected (intended).
+
+#### Verification (2026-06-21)
+- Render: "Your service is live"; Uvicorn up on port 10000; `rico_db_init OK`;
+  `settings_migration OK`; `startup_check: critical tables present`;
+  `migration_ok label=028_performance_indexes`.
+- `/health` → 200; `/version` → 200 during deploy polling.
+- Warning (non-blocking): SkillNER not installed; did not block startup.
+
+#### Follow-up
+- [ ] Confirm exact deployed commit from `/version.commit` (response body was not captured in
+      the pasted deploy logs).
+- [ ] Merge #705 once pytest + playwright complete green (Vercel preview already Ready).
+
 ### DEC-20260618-001 — Close PR #601 as stale/superseded; merge docs PRs #608 and #566
 
 Status: accepted
