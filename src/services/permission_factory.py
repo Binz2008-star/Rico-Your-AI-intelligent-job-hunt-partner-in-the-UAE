@@ -40,10 +40,12 @@ def build_apply_permission_request(
     """
     from src.services import pending_permissions
     pid = permission_id or _gen_id("perm-apply")
-    pending_permissions.register(pid, user_id, "apply")
     title = job.get("title", "Unknown role")
     company = job.get("company", "Unknown company")
     job_key = str(job.get("id") or job.get("job_key") or "")
+    # Bind the permission to this exact job so it cannot be replayed against a
+    # different job within the same action. Empty key → job-agnostic (back-compat).
+    pending_permissions.register(pid, user_id, "apply", job_key=job_key or None)
 
     approve_action = RicoChatAction(
         id=_gen_id("approve"),
