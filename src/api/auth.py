@@ -561,8 +561,8 @@ def register(
                             (user.email, user.email),
                         )
                         row = cur.fetchone()
-                        if row and row.get("profile"):
-                            profile_data = row["profile"]
+                        if row and row[0]:
+                            profile_data = row[0]
                 except Exception:
                     logger.exception("register_profile_query_failed email=%s", email)
                 finally:

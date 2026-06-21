@@ -177,6 +177,19 @@ def _apply_performance_indexes() -> None:
     _apply_sql_migration("028_performance_indexes", sql)
 
 
+def _apply_audit_helper_tables() -> None:
+    sql_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "migrations", "031_audit_helper_tables.sql"
+    )
+    sql_path = os.path.normpath(sql_path)
+    if not os.path.exists(sql_path):
+        logger.warning("audit_helper_tables_migration not found at %s", sql_path)
+        return
+    with open(sql_path) as f:
+        sql = f.read()
+    _apply_sql_migration("031_audit_helper_tables", sql)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
@@ -195,6 +208,7 @@ async def lifespan(app: FastAPI):
 
     _check_critical_tables()
     _apply_performance_indexes()
+    _apply_audit_helper_tables()
     yield
 
 
