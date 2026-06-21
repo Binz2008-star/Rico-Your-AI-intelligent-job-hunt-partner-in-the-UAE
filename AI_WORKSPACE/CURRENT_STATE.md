@@ -1,20 +1,29 @@
 # Current State
 
-_Last updated: 2026-06-20 (sidebar retry verified + UI/UX audit backlog logged)_
+_Last updated: 2026-06-21 (action-audit hardening rolled out; migration drift triaged — #708/#710/#711)_
 
 ## Production baseline
 
-- **Repository main HEAD:** `2bc48981fea8368c337931cc00323cb66feba703`
-  (#661 duplicate upsert fix). Recent lineage:
-  `2bc489` (#661 duplicate upsert_matches CI fix) ←
-  `518a1a8` (#660 P0 context-loss bugs — 4 fixes) ←
-  `a4f038a` (#658 workspace sync) ←
-  `712be79` (#658 sidebar status retry) ←
-  `f89c555` (#657 BUG-05 public-chat loop).
-- **Production backend deployed SHA:** `f89c555aa969f75f99ee8b7d0296bb7582c272cd`
-  (BUG-05 — last confirmed Render deploy 2026-06-19T~19:15Z).
-  `518a1a8` / `2bc489` backend changes need a Manual Render Deploy to go live.
-- **Deployed to Vercel:** ✅ auto-deploying `2bc489` from main.
+- **Repository main HEAD:** `9078d77e2bd58e3354b360f743290df92d982dc8`
+  (#708 action_audit_log hardening). Recent lineage:
+  `9078d77` (#708 audit schema hardening + migration 030) ←
+  `d46603f` (#709 workspace: audit hardening state) ←
+  `12fb652` (#706 Agentic Vision codebase inventory) ←
+  `2bc489` (#661 duplicate upsert_matches CI fix).
+  (`552aa63` is a `[skip ci]` dashboard-data commit on top of `9078d77`.)
+- **Production backend deployed SHA:** `9078d77` (Render auto-deploy via `deploy-render.yml`;
+  verified live 2026-06-21 — `/version`==`9078d77`, `/health` ok).
+- **Deployed to Vercel:** ✅ auto-deploying from main.
+
+### Migration / DB state (2026-06-21)
+- Migration `030_action_audit_log_hardening.sql` — **applied + verified** in production Neon
+  (append-only trigger `tgtype=58`; INSERT works; UPDATE/DELETE/TRUNCATE rejected).
+- Migration `021_user_job_context_alt_url.sql` — **applied** (was drift; issue #710 closed).
+- **Drift remaining (issue #711, NOT applied):** `005` `pipeline_runs` table; `011`
+  `idx_rico_recommendations_user_job_unique`. Numbered migrations are applied manually (no
+  deploy-time runner) — systemic root cause.
+- Neon production password **rotated** 2026-06-21.
+- Full handoff: `AI_WORKSPACE/HANDOFFS/2026-06-21-action-audit-rollout-complete.md`.
 
 ## P0 Context-Loss Bugs — RESOLVED (2026-06-19, PR #660 + #661)
 

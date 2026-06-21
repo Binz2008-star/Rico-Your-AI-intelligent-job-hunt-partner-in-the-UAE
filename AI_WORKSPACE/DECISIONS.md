@@ -28,6 +28,40 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260621-003 — Action-audit hardening rolled out; migration drift surfaced and tracked
+
+Status: accepted
+Date: 2026-06-21
+Owner: Roben / Claude
+Related task: PR #708, issues #710, #711
+
+#### Context
+
+DEC-20260621-002 approved #708 as the draft implementation candidate for hardening the existing
+`action_audit_log` (migration 030). This decision records the completed rollout and the production
+migration drift it surfaced.
+
+#### Decision
+
+- Apply migration 030 to production Neon before deploying, then merge + deploy #708. Done:
+  #708 merged at `9078d77`, migration 030 applied + verified in production, backend live on `9078d77`.
+- Treat production migration drift as separate, gated cleanups — never bundled with #708:
+  - #710 (`021_user_job_context_alt_url.sql`) applied + closed.
+  - #711 (`005` `pipeline_runs`, `011` `rico_job_recommendations` unique index) logged, NOT applied
+    (verify-first; 011 deletes rows).
+
+#### Consequences
+
+- Positive: audit log is now DB-enforced append-only; request-time DDL removed from `write_audit_log()`.
+- Positive: a full `005`–`030` prod drift audit now exists and is repeatable.
+- Trade-off: numbered migrations are still applied manually (no deploy-time runner) — the systemic
+  root cause behind both 030's manual apply and the 021/005/011 drift.
+
+#### Follow-up
+- [ ] #711 — apply 005 (targeted) and 011 (verify-first) under explicit approval.
+- [ ] Add a migration runner / CI gate so prod schema can't silently fall behind `main`.
+
+
 ### DEC-20260621-002 — Harden existing `action_audit_log`; do not build parallel audit/approval systems
 
 Status: accepted
