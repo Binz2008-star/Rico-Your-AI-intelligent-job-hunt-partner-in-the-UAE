@@ -56,6 +56,51 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260621-029 — Settings page keywords tag input
+
+Status: done
+Owner: Claude
+Branch: `claude/rico-system-rules-afv7dx`
+Issue/PR: (PR to be opened)
+
+#### Objective
+Replace the comma-separated text inputs for `include_keywords` and `exclude_keywords` on the Settings page with the same chip/tag UX already used on the Profile page (`TagInputField` pattern).
+
+#### Context
+- Relevant files:
+  - `apps/web/app/settings/page.tsx`
+  - `apps/web/components/ui/KeywordTagInput.tsx` (new)
+  - `apps/web/lib/translations.ts`
+- Carry-over engineering backlog item: "Settings page keywords tag input (same UX as profile TagInputField)".
+
+#### Constraints
+- Frontend only — no backend, no DB, no auth changes.
+- No API contract changes — `include_keywords` / `exclude_keywords` continue to be sent as `string[]`.
+- Reuse existing design tokens/classes matching the profile TagInputField style.
+
+#### Acceptance criteria
+- [x] `include_keywords` field renders as a chip input (add via Enter/comma, remove via ×).
+- [x] `exclude_keywords` field renders as a chip input.
+- [x] Global "Save Settings" button sends arrays directly (no `splitKeywords()` conversion).
+- [x] Translations updated: `keywordsPlaceholder` simplified; `keywordTagHint` added (EN + AR).
+- [x] `npm run build` clean — no TypeScript errors.
+- [x] `saving` state disables chip inputs while the global save is in flight.
+
+#### Required verification
+- [x] `npm run build` — clean, `/settings` compiles to 7.05 kB.
+- [ ] Manual smoke: Settings page loads, chips render, add/remove works, Save updates backend.
+
+#### Handoff notes
+- Changed files:
+  - `apps/web/components/ui/KeywordTagInput.tsx` (new component)
+  - `apps/web/app/settings/page.tsx` (swap text inputs for KeywordTagInput; remove `splitKeywords`)
+  - `apps/web/lib/translations.ts` (add `keywordTagHint`; simplify `keywordsPlaceholder`)
+- Rollback plan: revert the three source files.
+- No DB migration, no backend changes.
+- `TagInputField` in `profile/page.tsx` is still defined inline there (unchanged); could be extracted to a shared component in a follow-up PR.
+
+---
+
 ### TASK-20260619-028 — UI/UX live-audit backlog (2026-06-19)
 
 Status: proposed (tracking task — spin each item into its own TASK-NNN when picked up)

@@ -4,6 +4,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { GuardrailWarnings } from "@/components/shared/GuardrailWarnings";
 import { StatusCard } from "@/components/StatusCard";
+import { KeywordTagInput } from "@/components/ui/KeywordTagInput";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
@@ -22,13 +23,6 @@ import type { SettingsResponse, TelegramStatusResponse } from "@/types";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-function splitKeywords(value: string): string[] {
-  return value
-    .split(",")
-    .map((k) => k.trim())
-    .filter(Boolean);
-}
-
 export default function SettingsPage() {
   const { user } = useAuth();
   const { toasts, toast } = useToast();
@@ -37,8 +31,8 @@ export default function SettingsPage() {
   const router = useRouter();
 
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
-  const [includeStr, setIncludeStr] = useState("");
-  const [excludeStr, setExcludeStr] = useState("");
+  const [includeTags, setIncludeTags] = useState<string[]>([]);
+  const [excludeTags, setExcludeTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<"auth" | "other" | null>(null);
@@ -63,8 +57,8 @@ export default function SettingsPage() {
     try {
       const response = await getSettings();
       setSettings(response);
-      setIncludeStr((response.include_keywords ?? []).join(", "));
-      setExcludeStr((response.exclude_keywords ?? []).join(", "));
+      setIncludeTags(response.include_keywords ?? []);
+      setExcludeTags(response.exclude_keywords ?? []);
       setError(null);
     } catch (err) {
       const is401 = err instanceof ApiError && err.statusCode === 401;
@@ -99,8 +93,8 @@ export default function SettingsPage() {
     setSaving(true);
     try {
       const updated = await updateSettings({
-        include_keywords: splitKeywords(includeStr),
-        exclude_keywords: splitKeywords(excludeStr),
+        include_keywords: includeTags,
+        exclude_keywords: excludeTags,
         min_score: settings.min_score,
         max_daily_applies: settings.max_daily_applies,
         telegram_chat_id: settings.telegram_chat_id,
@@ -109,8 +103,8 @@ export default function SettingsPage() {
         score_threshold_watch: settings.score_threshold_watch,
       });
       setSettings(updated);
-      setIncludeStr((updated.include_keywords ?? []).join(", "));
-      setExcludeStr((updated.exclude_keywords ?? []).join(", "));
+      setIncludeTags(updated.include_keywords ?? []);
+      setExcludeTags(updated.exclude_keywords ?? []);
       toast(t("settingsSaved"), "success");
     } catch (err) {
       const is401 = err instanceof ApiError && err.statusCode === 401;
@@ -177,37 +171,39 @@ export default function SettingsPage() {
             />
           ) : settings ? (
             <div className="flex flex-col gap-5">
-              <label className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5">
                 <span className="text-[12px] font-semibold text-text-secondary">
                   {t("includeKeywords")}
                 </span>
-                <input
-                  type="text"
-                  value={includeStr}
-                  onChange={(e) => setIncludeStr(e.target.value)}
+                <KeywordTagInput
+                  tags={includeTags}
+                  onChange={setIncludeTags}
                   placeholder={t("keywordsPlaceholder")}
-                  className={inputClass}
+                  hint={t("keywordTagHint")}
+                  disabled={saving}
+                  label={t("includeKeywords")}
                 />
                 <span className="text-[11px] text-text-tertiary">
                   {t("includeKeywordsHint")}
                 </span>
-              </label>
+              </div>
 
-              <label className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5">
                 <span className="text-[12px] font-semibold text-text-secondary">
                   {t("excludeKeywords")}
                 </span>
-                <input
-                  type="text"
-                  value={excludeStr}
-                  onChange={(e) => setExcludeStr(e.target.value)}
+                <KeywordTagInput
+                  tags={excludeTags}
+                  onChange={setExcludeTags}
                   placeholder={t("keywordsPlaceholder")}
-                  className={inputClass}
+                  hint={t("keywordTagHint")}
+                  disabled={saving}
+                  label={t("excludeKeywords")}
                 />
                 <span className="text-[11px] text-text-tertiary">
                   {t("excludeKeywordsHint")}
                 </span>
-              </label>
+              </div>
 
               <label className="flex flex-col gap-2">
                 <span className="flex items-center justify-between text-[12px] font-semibold text-text-secondary">
