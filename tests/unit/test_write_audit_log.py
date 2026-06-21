@@ -224,3 +224,80 @@ class TestWriteAuditLog:
         # The last call should be the INSERT with the timestamp
         last_call_args = insert_calls[-1][0]
         assert "2026-05-15T12:00:00" in str(last_call_args)
+
+
+class TestLogActionPersists:
+    """log_action() -> _db_write() must COMMIT, otherwise psycopg2 rolls back
+    the INSERT when the connection closes and the action audit trail (including
+    permission-denied records) is silently lost."""
+
+    def _log(self):
+        return {
+            "action_id": "abc123",
+            "action_type": "apply",
+            "user_email": "test@example.com",
+            "job_id": "job-1",
+            "job_title": "QHSE Manager",
+            "job_company": "ACME",
+            "timestamp": "2026-05-15T12:00:00",
+            "result_status": "success",
+            "result_message": "ok",
+            "duration_ms": 12,
+            "failure_reason": None,
+        }
+
+    @patch("src.repositories.audit_repo.is_db_available", return_value=True)
+    @patch("src.repositories.audit_repo.logger")
+    def test_commits_after_insert(self, mock_logger, mock_db_available):
+        """Without commit, the INSERT is discarded on close. Regression guard."""
+        from src.repositories.audit_repo import log_action
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+
+        with patch("src.repositories.audit_repo.get_db_connection", return_value=mock_conn):
+            log_action(self._log())
+
+        # INSERT issued AND committed AND connection closed
+        insert_calls = [str(c) for c in mock_cursor.execute.call_args_list]
+        assert any("INSERT INTO action_audit_log" in c for c in insert_calls)
+        mock_conn.commit.assert_called_once()
+        mock_conn.close.assert_called_once()
+
+    @patch("src.repositories.audit_repo.is_db_available", return_value=True)
+    @patch("src.repositories.audit_repo.logger")
+    def test_denied_record_is_committed(self, mock_logger, mock_db_available):
+        """A permission-denied audit row must persist just like a success row."""
+        from src.repositories.audit_repo import log_action
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+
+        denied = self._log()
+        denied["result_status"] = "denied"
+        denied["failure_reason"] = "permission_denied"
+
+        with patch("src.repositories.audit_repo.get_db_connection", return_value=mock_conn):
+            log_action(denied)
+
+        mock_conn.commit.assert_called_once()
+
+    @patch("src.repositories.audit_repo.is_db_available", return_value=True)
+    @patch("src.repositories.audit_repo.logger")
+    def test_no_commit_on_write_failure(self, mock_logger, mock_db_available):
+        """On INSERT failure the exception is logged and no commit is attempted."""
+        from src.repositories.audit_repo import log_action
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+        mock_cursor.execute.side_effect = Exception("DB error")
+
+        with patch("src.repositories.audit_repo.get_db_connection", return_value=mock_conn):
+            log_action(self._log())
+
+        mock_conn.commit.assert_not_called()
+        mock_logger.exception.assert_called_once()
+        mock_conn.close.assert_called_once()
