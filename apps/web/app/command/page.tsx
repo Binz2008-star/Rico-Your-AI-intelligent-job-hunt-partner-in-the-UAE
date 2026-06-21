@@ -8,6 +8,7 @@ import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, ProfileUpda
 import type { RicoAgenticUi, RicoChatAction, RicoProposedChange, RicoAttachmentAnalysis, ExecuteAllowedAction } from "@/lib/schemas";
 import { EXECUTE_ALLOWED_ACTIONS } from "@/lib/schemas";
 import { ChatActionsRow } from "@/components/ui/rico/ChatActionCard";
+import { RicoMarkdownContent } from "@/components/ui/rico/RicoMarkdownContent";
 import { PermissionRequestCard } from "@/components/ui/rico/PermissionRequestCard";
 import { ProposedChangeCard } from "@/components/ui/rico/ProposedChangeCard";
 import { AttachmentAnalysisCard } from "@/components/ui/rico/AttachmentAnalysisCard";
@@ -218,75 +219,6 @@ function parseHistoryContent(content: string, id: number): Partial<Message> {
     return { id, role: "rico", text: content };
 }
 
-// Splits inline text into markdown links, bold, italic, and bare URLs so each
-// can be rendered. Bare URLs and [label](url) links become clickable <a> tags
-// (the plain-text chat path previously rendered URLs as inert text).
-const INLINE_TOKEN_RE = /(\[[^\]]+\]\(https?:\/\/[^\s)]+\)|\*\*[^*]+\*\*|\*[^*]+\*|https?:\/\/[^\s<>()]+)/g;
-const MD_LINK_RE = /^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/;
-const LINK_CLASS = "text-gold underline underline-offset-2 hover:text-gold-hover break-words";
-
-function renderInline(text: string): React.ReactNode {
-    const parts = text.split(INLINE_TOKEN_RE);
-    return parts.map((part, i) => {
-        if (!part) return null;
-        const md = part.match(MD_LINK_RE);
-        if (md) {
-            return (
-                <a key={i} href={md[2]} target="_blank" rel="noopener noreferrer" className={LINK_CLASS}>
-                    {md[1]}
-                </a>
-            );
-        }
-        if (part.startsWith("**") && part.endsWith("**")) {
-            return <strong key={i} className="font-semibold text-rico-text">{part.slice(2, -2)}</strong>;
-        }
-        if (part.startsWith("*") && part.endsWith("*")) {
-            return <em key={i} className="italic">{part.slice(1, -1)}</em>;
-        }
-        if (/^https?:\/\//.test(part)) {
-            // Keep trailing sentence punctuation out of the link target.
-            const trail = part.match(/[.,;:!?]+$/);
-            const trailing = trail ? trail[0] : "";
-            const href = trailing ? part.slice(0, part.length - trailing.length) : part;
-            return (
-                <span key={i}>
-                    <a href={href} target="_blank" rel="noopener noreferrer" className={LINK_CLASS}>
-                        {href}
-                    </a>
-                    {trailing}
-                </span>
-            );
-        }
-        return part;
-    });
-}
-
-function renderMarkdown(text: string): React.ReactNode {
-    const lines = text.split("\n");
-    return lines.map((line, i) => {
-        if (line.startsWith("### ")) {
-            return <p key={i} className="font-semibold text-[13px] text-rico-text mt-2 mb-0.5">{renderInline(line.slice(4))}</p>;
-        }
-        if (line.startsWith("## ")) {
-            return <p key={i} className="font-semibold text-[14px] text-rico-text mt-3 mb-1">{renderInline(line.slice(3))}</p>;
-        }
-        if (line.startsWith("# ")) {
-            return <p key={i} className="font-bold text-[15px] text-rico-text mt-3 mb-1">{renderInline(line.slice(2))}</p>;
-        }
-        if (line.startsWith("- ") || line.startsWith("• ")) {
-            return (
-                <div key={i} className="flex gap-1.5 leading-relaxed">
-                    <span className="text-gold shrink-0 mt-0.5">•</span>
-                    <span>{renderInline(line.slice(2))}</span>
-                </div>
-            );
-        }
-        if (line.trim() === "") {
-            return <div key={i} className="h-1.5" />;
-        }
-        return <p key={i} className="leading-relaxed">{renderInline(line)}</p>;
-    });
-}
 
 function WorkingIndicator({ message }: { message: string }) {
     return (
@@ -1693,7 +1625,7 @@ export default function CommandPage() {
                                     {/* Message text */}
                                     {m.text && (
                                         m.role === "rico"
-                                            ? <div className="space-y-0.5 text-[13px]">{renderMarkdown(m.text)}</div>
+                                            ? <RicoMarkdownContent>{m.text!}</RicoMarkdownContent>
                                             : <div className="whitespace-pre-wrap">{m.text}</div>
                                     )}
 
