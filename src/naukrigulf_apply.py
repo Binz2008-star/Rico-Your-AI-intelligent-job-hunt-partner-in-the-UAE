@@ -1116,11 +1116,11 @@ class NaukriGulfApplyEngine:
     ) -> None:
         if not is_db_available():
             return
+        from src.db import get_db_connection
+        conn = get_db_connection()
+        if not conn:
+            return
         try:
-            from src.db import get_db_connection
-            conn = get_db_connection()
-            if not conn:
-                return
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -1134,8 +1134,11 @@ class NaukriGulfApplyEngine:
                     """,
                     (job_id, title, company, status, error),
                 )
+            conn.commit()
         except Exception as exc:
             logger.warning("db_save_failed error=%s", exc)
+        finally:
+            conn.close()
 
 
 # ── Pipeline entry point ──────────────────────────────────────────────────────
