@@ -1660,6 +1660,37 @@ async def rico_github_webhook(request: Request) -> dict[str, Any]:
 # ── CAREER-OS-03: Permission Engine execute endpoint ──────────────────────────
 
 
+def _audit_permission_denied(user_id: str, req: ExecutePermissionActionRequest) -> None:
+    """Record a denied permission-execute attempt in the action audit log.
+
+    A denial (forged / expired / replayed / user-action-job mismatch) is a
+    security-relevant signal. Logging it through the existing audit_repo keeps the
+    approval trail complete without introducing a parallel audit table. Best-effort —
+    never raises, never blocks the 403 response.
+    """
+    try:
+        from datetime import datetime, timezone
+
+        from src.repositories import audit_repo
+
+        job = req.job or {}
+        audit_repo.log_action({
+            "action_id":      req.permission_id,
+            "action_type":    req.action,
+            "user_email":     user_id,
+            "job_id":         req.job_key or str(job.get("id") or ""),
+            "job_title":      job.get("title"),
+            "job_company":    job.get("company"),
+            "timestamp":      datetime.now(timezone.utc).isoformat(),
+            "result_status":  "denied",
+            "result_message": "permission validation failed (not found, expired, used, or user/action/job mismatch)",
+            "duration_ms":    0,
+            "failure_reason": "permission_denied",
+        })
+    except Exception:
+        logger.debug("execute: permission-denied audit write failed", exc_info=True)
+
+
 @router.post("/actions/execute", response_model=ActionResponse)
 @limiter.limit(LIMIT_CHAT)
 def execute_permission_action(
@@ -1675,7 +1706,10 @@ def execute_permission_action(
     """
     from src.services import pending_permissions
     user_id = user["email"]
-    if not pending_permissions.validate_and_consume(req.permission_id, user_id, req.action):
+    if not pending_permissions.validate_and_consume(
+        req.permission_id, user_id, req.action, job_key=req.job_key
+    ):
+        _audit_permission_denied(user_id, req)
         raise HTTPException(
             status_code=403,
             detail="Permission request not found, expired, or already used.",

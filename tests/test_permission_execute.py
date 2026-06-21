@@ -49,6 +49,14 @@ def _perm(action: str = "why") -> str:
     return pid
 
 
+def _perm_bound(action: str, job_key: str) -> str:
+    """Register a permission for _USER_ID bound to a specific job_key."""
+    import src.services.pending_permissions as pp
+    pid = f"test-{action}-{uuid.uuid4().hex[:8]}"
+    pp.register(pid, _USER_ID, action, job_key=job_key)
+    return pid
+
+
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 @pytest.fixture(scope="module")
@@ -360,6 +368,83 @@ class TestPermissionIdSecurity:
 
         r = tc.post(_URL, json={"permission_id": pid, "action": "why", "job": _JOB})
         assert r.status_code == 403
+
+
+# ── Job-bound permission (replay-across-jobs guard) ───────────────────────────
+
+class TestPermissionJobBinding:
+    """A permission bound to a job at issuance must only execute against that job.
+
+    This closes the gap where an apply permission issued for job A could be replayed
+    with job B in the request body under the same (user, action) pair.
+    """
+
+    def test_bound_permission_matching_job_key_executes(self, client):
+        pid = _perm_bound("why", _JOB["id"])
+        r = client.post(_URL, json={
+            "permission_id": pid,
+            "action": "why",
+            "job_key": _JOB["id"],
+            "job": _JOB,
+        })
+        assert r.status_code == 200
+
+    def test_bound_permission_mismatched_job_key_returns_403(self, client):
+        pid = _perm_bound("why", _JOB["id"])
+        r = client.post(_URL, json={
+            "permission_id": pid,
+            "action": "why",
+            "job_key": "some-other-job-key",
+            "job": _JOB,
+        })
+        assert r.status_code == 403
+
+    def test_bound_permission_missing_job_key_returns_403(self, client):
+        pid = _perm_bound("why", _JOB["id"])
+        r = client.post(_URL, json={
+            "permission_id": pid,
+            "action": "why",
+            "job": _JOB,   # no job_key in body → defaults to ""
+        })
+        assert r.status_code == 403
+
+
+# ── Permission-denied audit trail ─────────────────────────────────────────────
+
+class TestPermissionDeniedAudit:
+    """A rejected execute attempt must leave an audit record via the existing
+    audit_repo — no parallel audit table."""
+
+    def test_denied_attempt_writes_denied_audit_record(self, client, monkeypatch):
+        captured: list = []
+        import src.repositories.audit_repo as ar
+        monkeypatch.setattr(ar, "log_action", lambda log: captured.append(log))
+
+        r = client.post(_URL, json={
+            "permission_id": "totally-fake-id-not-issued",
+            "action": "why",
+            "job": _JOB,
+        })
+        assert r.status_code == 403
+        assert len(captured) == 1
+        rec = captured[0]
+        assert rec["result_status"] == "denied"
+        assert rec["failure_reason"] == "permission_denied"
+        assert rec["action_type"] == "why"
+        assert rec["user_email"] == _USER_ID
+
+    def test_successful_execution_writes_no_denied_record(self, client, monkeypatch):
+        captured: list = []
+        import src.repositories.audit_repo as ar
+        monkeypatch.setattr(ar, "log_action", lambda log: captured.append(log))
+
+        r = client.post(_URL, json={
+            "permission_id": _perm("why"),
+            "action": "why",
+            "job": _JOB,
+        })
+        assert r.status_code == 200
+        assert all(rec.get("result_status") != "denied" for rec in captured)
 
 
 # ── permission_request injection (unit) ──────────────────────────────────────

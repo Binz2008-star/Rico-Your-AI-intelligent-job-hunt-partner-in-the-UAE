@@ -32,22 +32,35 @@ def _prune() -> None:
         del _store[k]
 
 
-def register(permission_id: str, user_id: str, action: str) -> None:
-    """Record a server-issued permission ID. Called by permission_factory when building the request."""
+def register(
+    permission_id: str, user_id: str, action: str, job_key: str | None = None
+) -> None:
+    """Record a server-issued permission ID. Called by permission_factory when building the request.
+
+    When ``job_key`` is provided, the permission is bound to that exact job: a later
+    validate_and_consume must present the same job_key or it is rejected. This stops a
+    permission issued for one job from being replayed against a different job within the
+    same action. Passing ``None`` (the default) leaves the permission job-agnostic, which
+    preserves the original behaviour for any caller that does not supply a key.
+    """
+    bound_job = str(job_key) if job_key else None
     with _lock:
         _prune()
         _store[permission_id] = {
             "user_id": user_id,
             "action": action,
+            "job_key": bound_job,
             "expires_at": time.monotonic() + _TTL_SECONDS,
         }
     logger.debug(
-        "pending_permission: registered id=%s user=%s action=%s ttl=%ds",
-        permission_id, user_id, action, _TTL_SECONDS,
+        "pending_permission: registered id=%s user=%s action=%s job_key=%s ttl=%ds",
+        permission_id, user_id, action, bound_job, _TTL_SECONDS,
     )
 
 
-def validate_and_consume(permission_id: str, user_id: str, action: str) -> bool:
+def validate_and_consume(
+    permission_id: str, user_id: str, action: str, job_key: str | None = None
+) -> bool:
     """
     Validate and one-time-consume a permission ID.
 
@@ -55,10 +68,15 @@ def validate_and_consume(permission_id: str, user_id: str, action: str) -> bool:
     - The id was issued by this server (not fabricated by the client)
     - It belongs to this exact user_id
     - It was issued for this exact action
+    - If the permission was bound to a job at registration, the same job_key is presented
     - It has not expired
     - It has not already been consumed
 
     Returns False (fail-closed) otherwise. The caller must raise 403.
+
+    A job mismatch does NOT consume the permission, so the legitimate job approval can
+    still be completed. All other rejection paths leave the entry as-is or remove it per
+    the original semantics.
     """
     with _lock:
         entry = _store.get(permission_id)
@@ -78,6 +96,13 @@ def validate_and_consume(permission_id: str, user_id: str, action: str) -> bool:
             logger.warning(
                 "pending_permission: action mismatch id=%s expected=%s got=%s",
                 permission_id, entry["action"], action,
+            )
+            return False
+        bound_job = entry.get("job_key")
+        if bound_job is not None and str(job_key or "") != bound_job:
+            logger.warning(
+                "pending_permission: job mismatch id=%s expected=%s got=%s",
+                permission_id, bound_job, job_key,
             )
             return False
         if entry["expires_at"] < time.monotonic():
