@@ -5,11 +5,12 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, ProfileUpdatePayload, RicoOption, UploadCVResponse } from "@/lib/api";
-import type { RicoAgenticUi, RicoChatAction, RicoProposedChange, ExecuteAllowedAction } from "@/lib/schemas";
+import type { RicoAgenticUi, RicoChatAction, RicoProposedChange, RicoAttachmentAnalysis, ExecuteAllowedAction } from "@/lib/schemas";
 import { EXECUTE_ALLOWED_ACTIONS } from "@/lib/schemas";
 import { ChatActionsRow } from "@/components/ui/rico/ChatActionCard";
 import { PermissionRequestCard } from "@/components/ui/rico/PermissionRequestCard";
 import { ProposedChangeCard } from "@/components/ui/rico/ProposedChangeCard";
+import { AttachmentAnalysisCard } from "@/components/ui/rico/AttachmentAnalysisCard";
 import { clearChatHistory, confirmCVProfile, executePermissionAction, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { buildAuthHref } from "@/lib/redirect";
@@ -1215,6 +1216,7 @@ export default function CommandPage() {
                         role: "rico" as const,
                         text: result.message ?? `I detected this as: **${result.display_label ?? result.document_type}**\n\nWhat would you like me to do with it?`,
                         actions,
+                        agentic_ui: (result as Record<string, unknown>).agentic_ui as RicoAgenticUi | null | undefined,
                     },
                 ]);
                 return;
@@ -1885,6 +1887,13 @@ export default function CommandPage() {
                                                 )
                                             }
                                             disabled={thinking}
+                                        />
+                                    )}
+                                    {!m.streaming &&
+                                        m.agentic_ui?.attachment_analysis &&
+                                        m.agentic_ui.attachment_analysis.length > 0 && (
+                                        <AttachmentAnalysisCard
+                                            analyses={m.agentic_ui.attachment_analysis as RicoAttachmentAnalysis[]}
                                         />
                                     )}
 
