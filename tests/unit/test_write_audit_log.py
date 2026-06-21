@@ -1,28 +1,27 @@
 """tests/unit/test_write_audit_log.py
 
-Unit tests for write_audit_log() in src/repositories/audit_repo.py
+Unit tests for write_audit_log() in src/repositories/audit_repo.py.
 Tests the compatibility wrapper for general audit logging (e.g., profile questions).
 """
-import pytest
-from unittest.mock import MagicMock, patch, call
-from datetime import datetime
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 
 
 class TestWriteAuditLog:
-    """write_audit_log() must handle DB availability and column migration gracefully."""
+    """write_audit_log() must insert events without request-time schema DDL."""
 
     @patch("src.repositories.audit_repo.is_db_available", return_value=False)
     @patch("src.repositories.audit_repo.logger")
     def test_logs_to_info_when_db_unavailable(self, mock_logger, mock_db_available):
         """When DB is unavailable, write_audit_log should log to info and return."""
         from src.repositories.audit_repo import write_audit_log
-        
+
         write_audit_log(
             user_id="test@example.com",
             event_type="profile_question",
-            data={"field_name": "experience"}
+            data={"field_name": "experience"},
         )
-        
+
         mock_logger.info.assert_called_once()
         args = mock_logger.info.call_args[0]
         assert "audit_log" in args[0]
@@ -32,105 +31,83 @@ class TestWriteAuditLog:
     @patch("src.repositories.audit_repo.is_db_available", return_value=True)
     @patch("src.repositories.audit_repo.get_db_connection", return_value=None)
     @patch("src.repositories.audit_repo.logger")
-    def test_returns_early_when_connection_fails(self, mock_logger, mock_get_conn, mock_db_available):
+    def test_returns_early_when_connection_fails(
+        self, mock_logger, mock_get_conn, mock_db_available
+    ):
         """When get_db_connection returns None, should return early."""
         from src.repositories.audit_repo import write_audit_log
-        
+
         write_audit_log(
             user_id="test@example.com",
             event_type="profile_question",
-            data={"field_name": "experience"}
+            data={"field_name": "experience"},
         )
-        
-        # Should not call logger.info since connection failed
+
         mock_logger.info.assert_not_called()
 
     @patch("src.repositories.audit_repo.is_db_available", return_value=True)
     @patch("src.repositories.audit_repo.logger")
-    def test_checks_and_adds_columns_if_missing(self, mock_logger, mock_db_available):
-        """write_audit_log should check for event_type and data columns and add them if missing."""
+    def test_inserts_without_runtime_schema_ddl(self, mock_logger, mock_db_available):
+        """Migration 030 owns event_type/data; request handling issues one INSERT."""
         from src.repositories.audit_repo import write_audit_log
-        
-        mock_conn = MagicMock()
-        mock_cursor = MagicMock()
-        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
-        mock_cursor.fetchall.return_value = []  # No columns exist
-        
-        with patch("src.repositories.audit_repo.get_db_connection", return_value=mock_conn):
-            write_audit_log(
-                user_id="test@example.com",
-                event_type="profile_question",
-                data={"field_name": "experience"}
-            )
-        
-        # Should have checked for columns
-        assert mock_cursor.execute.call_count >= 3  # Check + 2 ALTER TABLE + INSERT
 
-    @patch("src.repositories.audit_repo.is_db_available", return_value=True)
-    @patch("src.repositories.audit_repo.logger")
-    def test_skips_column_add_if_already_exists(self, mock_logger, mock_db_available):
-        """write_audit_log should not add columns if they already exist."""
-        from src.repositories.audit_repo import write_audit_log
-        
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
-        # Both columns already exist
-        mock_cursor.fetchall.return_value = [("event_type",), ("data",)]
-        
+
         with patch("src.repositories.audit_repo.get_db_connection", return_value=mock_conn):
             write_audit_log(
                 user_id="test@example.com",
                 event_type="profile_question",
-                data={"field_name": "experience"}
+                data={"field_name": "experience"},
             )
-        
-        # Should have checked for columns but not added them
-        execute_calls = [str(call) for call in mock_cursor.execute.call_args_list]
-        alter_calls = [c for c in execute_calls if "ALTER TABLE" in c]
-        assert len(alter_calls) == 0
+
+        assert mock_cursor.execute.call_count == 1
+        sql = mock_cursor.execute.call_args.args[0]
+        assert "INSERT INTO action_audit_log" in sql
+        assert "ALTER TABLE" not in sql
+        assert "information_schema" not in sql
 
     @patch("src.repositories.audit_repo.is_db_available", return_value=True)
     @patch("src.repositories.audit_repo.logger")
     def test_inserts_audit_log_entry(self, mock_logger, mock_db_available):
         """write_audit_log should insert the audit log entry with correct values."""
         from src.repositories.audit_repo import write_audit_log
-        
+
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
-        mock_cursor.fetchall.return_value = [("event_type",), ("data",)]
-        
+
         with patch("src.repositories.audit_repo.get_db_connection", return_value=mock_conn):
             write_audit_log(
                 user_id="test@example.com",
                 event_type="profile_question",
-                data={"field_name": "experience"}
+                data={"field_name": "experience"},
             )
-        
-        # Should have called INSERT
-        insert_calls = [str(call) for call in mock_cursor.execute.call_args_list]
-        assert any("INSERT INTO action_audit_log" in c for c in insert_calls)
+
+        sql, params = mock_cursor.execute.call_args.args
+        assert "INSERT INTO action_audit_log" in sql
+        assert params[2] == "test@example.com"
+        assert params[4] == "profile_question"
+        assert '"field_name": "experience"' in params[5]
 
     @patch("src.repositories.audit_repo.is_db_available", return_value=True)
     @patch("src.repositories.audit_repo.logger")
     def test_logs_success_on_successful_write(self, mock_logger, mock_db_available):
         """write_audit_log should log success on successful write."""
         from src.repositories.audit_repo import write_audit_log
-        
+
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
-        mock_cursor.fetchall.return_value = [("event_type",), ("data",)]
-        
+
         with patch("src.repositories.audit_repo.get_db_connection", return_value=mock_conn):
             write_audit_log(
                 user_id="test@example.com",
                 event_type="profile_question",
-                data={"field_name": "experience"}
+                data={"field_name": "experience"},
             )
-        
-        # Should log success
+
         success_calls = [call for call in mock_logger.info.call_args_list]
         assert any("audit_log_written" in str(call) for call in success_calls)
 
@@ -139,42 +116,41 @@ class TestWriteAuditLog:
     def test_logs_exception_on_write_failure(self, mock_logger, mock_db_available):
         """write_audit_log should log exception on write failure."""
         from src.repositories.audit_repo import write_audit_log
-        
+
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
         mock_cursor.execute.side_effect = Exception("DB error")
-        
+
         with patch("src.repositories.audit_repo.get_db_connection", return_value=mock_conn):
             write_audit_log(
                 user_id="test@example.com",
                 event_type="profile_question",
-                data={"field_name": "experience"}
+                data={"field_name": "experience"},
             )
-        
-        # Should log exception
+
         mock_logger.exception.assert_called_once()
         args = mock_logger.exception.call_args[0]
         assert "audit_log_write_failed" in args[0]
+        mock_conn.commit.assert_not_called()
 
     @patch("src.repositories.audit_repo.is_db_available", return_value=True)
     @patch("src.repositories.audit_repo.logger")
     def test_closes_connection_on_completion(self, mock_logger, mock_db_available):
         """write_audit_log should close connection after use."""
         from src.repositories.audit_repo import write_audit_log
-        
+
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
-        mock_cursor.fetchall.return_value = [("event_type",), ("data",)]
-        
+
         with patch("src.repositories.audit_repo.get_db_connection", return_value=mock_conn):
             write_audit_log(
                 user_id="test@example.com",
                 event_type="profile_question",
-                data={"field_name": "experience"}
+                data={"field_name": "experience"},
             )
-        
+
         mock_conn.close.assert_called_once()
 
     @patch("src.repositories.audit_repo.is_db_available", return_value=True)
@@ -182,19 +158,19 @@ class TestWriteAuditLog:
     def test_closes_connection_on_exception(self, mock_logger, mock_db_available):
         """write_audit_log should close connection even on exception."""
         from src.repositories.audit_repo import write_audit_log
-        
+
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
         mock_cursor.execute.side_effect = Exception("DB error")
-        
+
         with patch("src.repositories.audit_repo.get_db_connection", return_value=mock_conn):
             write_audit_log(
                 user_id="test@example.com",
                 event_type="profile_question",
-                data={"field_name": "experience"}
+                data={"field_name": "experience"},
             )
-        
+
         mock_conn.close.assert_called_once()
 
     @patch("src.repositories.audit_repo.is_db_available", return_value=True)
@@ -202,34 +178,60 @@ class TestWriteAuditLog:
     def test_uses_provided_timestamp(self, mock_logger, mock_db_available):
         """write_audit_log should use provided timestamp if given."""
         from src.repositories.audit_repo import write_audit_log
-        
+
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
-        mock_cursor.fetchall.return_value = [("event_type",), ("data",)]
-        
         test_timestamp = datetime(2026, 5, 15, 12, 0, 0)
-        
+
         with patch("src.repositories.audit_repo.get_db_connection", return_value=mock_conn):
             write_audit_log(
                 user_id="test@example.com",
                 event_type="profile_question",
                 data={"field_name": "experience"},
-                timestamp=test_timestamp
+                timestamp=test_timestamp,
             )
-        
-        # Should have used the provided timestamp
-        insert_calls = [call for call in mock_cursor.execute.call_args_list]
-        assert len(insert_calls) > 0
-        # The last call should be the INSERT with the timestamp
-        last_call_args = insert_calls[-1][0]
-        assert "2026-05-15T12:00:00" in str(last_call_args)
+
+        assert "2026-05-15T12:00:00" in str(mock_cursor.execute.call_args.args)
+
+
+class TestGetRecent:
+    """get_recent() must return the general event fields from migration 030."""
+
+    @patch("src.repositories.audit_repo.get_db_connection")
+    def test_returns_event_type_and_data(self, mock_get_conn):
+        from src.repositories.audit_repo import get_recent
+
+        timestamp = datetime(2026, 6, 21, 9, 0, tzinfo=timezone.utc)
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+        mock_cursor.fetchall.return_value = [
+            (
+                "",
+                "audit",
+                "test@example.com",
+                None,
+                timestamp,
+                "success",
+                0,
+                None,
+                "profile_question",
+                {"field_name": "experience"},
+            ),
+        ]
+        mock_get_conn.return_value = mock_conn
+
+        result = get_recent(limit=1)
+
+        assert result[0]["event_type"] == "profile_question"
+        assert result[0]["data"] == {"field_name": "experience"}
+        assert mock_cursor.execute.call_args.args[1] == (1,)
+        mock_conn.close.assert_called_once()
 
 
 class TestLogActionPersists:
-    """log_action() -> _db_write() must COMMIT, otherwise psycopg2 rolls back
-    the INSERT when the connection closes and the action audit trail (including
-    permission-denied records) is silently lost."""
+    """log_action() -> _db_write() must commit persisted audit rows."""
 
     def _log(self):
         return {
@@ -259,7 +261,6 @@ class TestLogActionPersists:
         with patch("src.repositories.audit_repo.get_db_connection", return_value=mock_conn):
             log_action(self._log())
 
-        # INSERT issued AND committed AND connection closed
         insert_calls = [str(c) for c in mock_cursor.execute.call_args_list]
         assert any("INSERT INTO action_audit_log" in c for c in insert_calls)
         mock_conn.commit.assert_called_once()

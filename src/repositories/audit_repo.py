@@ -173,7 +173,8 @@ def write_audit_log(
     Write a general audit log entry (e.g., profile questions).
 
     This is a compatibility wrapper for logging events that don't fit
-    the action_log schema (like profile_question events).
+    the action_log schema (like profile_question events). Migration 030 owns
+    the event_type/data columns; request handling never mutates the schema.
     """
     if timestamp is None:
         timestamp = datetime.now(_UTC)
@@ -184,24 +185,6 @@ def write_audit_log(
             return
         try:
             with conn.cursor() as cur:
-                # Check if table has event_type and data columns
-                cur.execute(
-                    """
-                    SELECT column_name
-                    FROM information_schema.columns
-                    WHERE table_name = 'action_audit_log'
-                    AND column_name IN ('event_type', 'data')
-                    """
-                )
-                existing_columns = [row[0] for row in cur.fetchall()]
-
-                # If table doesn't have these columns, add them
-                if 'event_type' not in existing_columns:
-                    cur.execute("ALTER TABLE action_audit_log ADD COLUMN event_type TEXT")
-                if 'data' not in existing_columns:
-                    cur.execute("ALTER TABLE action_audit_log ADD COLUMN data JSONB")
-
-                # Insert the audit log entry
                 import json
                 cur.execute(
                     """
@@ -249,7 +232,8 @@ def get_recent(limit: int = 20) -> list:
             cur.execute(
                 """
                 SELECT action_id, action_type, user_email, job_title,
-                       timestamp, result_status, duration_ms, failure_reason
+                       timestamp, result_status, duration_ms, failure_reason,
+                       event_type, data
                 FROM action_audit_log
                 ORDER BY timestamp DESC
                 LIMIT %s
@@ -259,9 +243,16 @@ def get_recent(limit: int = 20) -> list:
             rows = cur.fetchall()
         return [
             {
-                "action_id": r[0], "action_type": r[1], "user_email": r[2],
-                "job_title": r[3], "timestamp": r[4].isoformat() if r[4] else None,
-                "result_status": r[5], "duration_ms": r[6], "failure_reason": r[7],
+                "action_id": r[0],
+                "action_type": r[1],
+                "user_email": r[2],
+                "job_title": r[3],
+                "timestamp": r[4].isoformat() if r[4] else None,
+                "result_status": r[5],
+                "duration_ms": r[6],
+                "failure_reason": r[7],
+                "event_type": r[8],
+                "data": r[9] or {},
             }
             for r in rows
         ]
