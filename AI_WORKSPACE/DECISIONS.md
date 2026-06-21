@@ -28,6 +28,52 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260621-002 — Align approval TTL before wiring `/ask` to real execution
+
+Status: accepted
+Date: 2026-06-21
+Owner: Roben / Claude / ChatGPT
+Related task: next implementation PR
+
+#### Context
+PR #700 hardened permission binding and denial auditing. `/ask` presents a 300-second approval countdown, while the backend permission store currently uses a 900-second TTL.
+
+#### Decision
+The next foundation PR should align backend approval permission TTL to the user-facing 300-second approval window before `/ask` is wired to real backend execution.
+
+#### Consequences
+- Positive: user-facing expiry and server-side acceptance match; fewer confusing approval states.
+- Trade-off: shorter approval windows may require users to re-approve more often.
+
+#### Follow-up
+- [ ] Open `feat/permission-ttl-alignment` as a backend/tests-only PR.
+- [ ] Verify expired permissions fail after 300 seconds.
+- [ ] Keep PR free of DB migrations, frontend changes, and new parallel approval/audit systems.
+
+### DEC-20260621-001 — Extend existing CAREER-OS approval/audit systems instead of duplicating them
+
+Status: accepted
+Date: 2026-06-21
+Owner: Roben / Claude / ChatGPT
+Related task: PR #700, PR #701, PR #702
+
+#### Context
+The GitHub Intelligence report proposed new approval-token and audit-event components. Code inspection showed Rico already has production foundations: `pending_permissions`, `permission_factory`, `/actions/execute`, `audit_repo`, `action_audit_log`, and deterministic match explanation logic.
+
+#### Decision
+Rico will harden and extend the existing CAREER-OS permission/audit path before creating any new approval-token table, audit-event table, or policy-gate module. New parallel systems are rejected unless a focused audit proves the existing system cannot be safely extended.
+
+#### Consequences
+- Positive: avoids duplicate systems, reduces migration risk, and keeps production behavior reviewable.
+- Trade-off: future richer operational memory may still require an additive schema decision.
+
+#### Follow-up
+- [x] PR #700: bind approval permission to `job_key` and audit denials.
+- [x] PR #701: ensure `action_audit_log` writes commit and persist.
+- [x] PR #702: ensure application-attempt dedup writes commit and close connections.
+- [ ] Update `docs/rico-agentic-vision-github-intelligence.md` so it reflects the real foundation instead of greenfield assumptions.
+- [ ] Decide later whether `action_audit_log` is enough or whether an additive append-only `agent_audit_events` stream is needed.
+
 ### DEC-20260618-001 — Close PR #601 as stale/superseded; merge docs PRs #608 and #566
 
 Status: accepted
