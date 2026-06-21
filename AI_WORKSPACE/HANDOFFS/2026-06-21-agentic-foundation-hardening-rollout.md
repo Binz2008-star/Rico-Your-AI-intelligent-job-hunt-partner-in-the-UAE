@@ -86,6 +86,33 @@ Verification:
 - PR body records `python -m py_compile src/auto_apply.py src/naukrigulf_apply.py`.
 - Human update after merge: `pytest` green and `playwright` green.
 
+### PR #703 — Close identity merge DB connection on all paths
+
+Status: merged
+Merge commit: `d93bb25897082f1cf081b1e4edcdec50b2d0ec5f`
+
+Problem fixed:
+
+- `IdentityResolver._attempt_identity_merge()` acquired a DB connection inside the `try` block.
+- It closed the connection only on the two success paths.
+- If the `SELECT` raised, the exception handler logged and returned without closing the connection.
+
+What changed:
+
+- `src/agent/identity/resolver.py`
+- The connection is acquired before `try` and closed in `finally`.
+- The query remains read-only and behavior is unchanged.
+
+Verification:
+
+- PR body records `python -m py_compile src/agent/identity/resolver.py`.
+- Identity suite passed: 58 tests.
+- Human update after merge: `pytest` green and `playwright` green.
+
+Sweep result:
+
+- After PRs #701, #702, and #703, the `get_db_connection()` write/close audit across `src/` is reported clean: mutating call sites commit where needed and all reviewed call sites close in `finally`.
+
 ## Current architecture decision
 
 Do not implement a parallel HMAC approval-token table, parallel audit-event table, or duplicate policy gate unless a focused audit proves the existing systems cannot be extended.
