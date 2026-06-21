@@ -1,6 +1,6 @@
 # Current State
 
-_Last updated: 2026-06-21 (mobile UX + document-context fixes added to PR #717)_
+_Last updated: 2026-06-21 (PR #717 merged → main, SHA b37fa62)_
 
 ## Production baseline
 
@@ -15,7 +15,7 @@ _Last updated: 2026-06-21 (mobile UX + document-context fixes added to PR #717)_
   verified live 2026-06-21 — `/version`==`9078d77`, `/health` ok).
 - **Deployed to Vercel:** ✅ auto-deploying from main.
 
-## System Quality Audit — 2026-06-21 (PR #717, branch `claude/system-quality-audit-ikkamf`)
+## System Quality Audit — 2026-06-21 (PR #717 merged → main `b37fa62`)
 
 Full codebase audit covering auth, DB, repositories, services, migrations, and routers.
 CI green: pytest ✅ playwright ✅ Vercel ✅ Neon ✅. Draft PR #717 awaiting merge.

@@ -105,10 +105,10 @@ include a brief extract if available.
 
 ### TASK-20260621-029 — System quality audit: bug fixes and technical debt documentation
 
-Status: review
+Status: done
 Owner: Claude
-Branch: `claude/system-quality-audit-ikkamf`
-Issue/PR: #717 (draft, CI green — pytest ✅ playwright ✅ Vercel ✅)
+Branch: `claude/system-quality-audit-ikkamf` (merged → main `b37fa62`)
+Issue/PR: #717 (merged 2026-06-21)
 
 #### Objective
 Continuous codebase audit across auth, DB, repositories, services, migrations, and routers —
