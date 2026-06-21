@@ -25,6 +25,13 @@ _Last updated: 2026-06-21 (action-audit hardening rolled out; migration drift tr
 - Neon production password **rotated** 2026-06-21.
 - Full handoff: `AI_WORKSPACE/HANDOFFS/2026-06-21-action-audit-rollout-complete.md`.
 
+### Career OS roadmap — reconciled status (2026-06-21)
+Verified against live code: milestones **01–03, 05, 06, 07, 08 are built/shipped**; **CAREER-OS-04
+(universal intake / attachment analysis) is the only remaining end-to-end gap** (backend
+`document_classifier.py` exists but `attachment_analysis` is not populated into chat responses and
+has no frontend card). Details + evidence: `AI_WORKSPACE/HANDOFFS/2026-06-21-career-os-roadmap-status.md`.
+The roadmap handoff `2026-06-20-rico-career-os-roadmap.md` predates this build progress.
+
 ## P0 Context-Loss Bugs — RESOLVED (2026-06-19, PR #660 + #661)
 
 Four adversarial QA failures fixed and merged to main. Root cause: `RICO_MEMORY_BACKEND=postgres`
