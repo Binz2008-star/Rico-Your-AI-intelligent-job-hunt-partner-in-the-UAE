@@ -88,8 +88,10 @@ Ship the hardening as small, focused PRs from current `main`, each independently
 - Warning (non-blocking): SkillNER not installed; did not block startup.
 
 #### Follow-up
-- [ ] Confirm exact deployed commit from `/version.commit` (response body was not captured in
-      the pasted deploy logs).
+- [x] Confirmed deployed commit: `/version.commit` = `d93bb25` (current `main` HEAD), so the
+      merged hardening batch (#700–#704) is live in production. Note: the `/version.deployed_at`
+      field reads `2026-05-23` — it is a static build-time constant, not the actual deploy time,
+      so trust `commit` over `deployed_at`.
 - [ ] Merge #705 once pytest + playwright complete green (Vercel preview already Ready).
 
 ### DEC-20260618-001 — Close PR #601 as stale/superseded; merge docs PRs #608 and #566
