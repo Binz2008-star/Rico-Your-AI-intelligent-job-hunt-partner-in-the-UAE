@@ -1,6 +1,6 @@
 # Current State
 
-_Last updated: 2026-06-21 (system quality audit complete — PR #717 open, CI green)_
+_Last updated: 2026-06-21 (mobile UX + document-context fixes added to PR #717)_
 
 ## Production baseline
 
@@ -50,12 +50,25 @@ CI green: pytest ✅ playwright ✅ Vercel ✅ Neon ✅. Draft PR #717 awaiting 
 - Neon production password **rotated** 2026-06-21.
 - Full handoff: `AI_WORKSPACE/HANDOFFS/2026-06-21-action-audit-rollout-complete.md`.
 
+### Additional fixes — 2026-06-21 (same PR #717 branch)
+
+| Area | Fix |
+|---|---|
+| Mobile UX | Textarea `font-size` raised from 14px → 16px on mobile (`text-[16px] sm:text-sm`); prevents iOS Safari auto-zoom on input focus (`apps/web/app/command/page.tsx`) |
+| Document context | Upload route now stores `last_uploaded_document` (type, label, filename, confidence, actions) in user's `recent_context` session memory after successful classification — authenticated users only; try/except so upload never breaks (`src/api/routers/rico_chat.py`) |
+| Document meta-query | New `_UPLOAD_DOC_QUERY_RE` + `_get_recent_upload_document_reply` in `RicoChatAPI` handles explicit "what did I upload?" / "document type?" queries from session context without an AI call (`src/rico_chat_api.py`) |
+| Chat markdown | Replaced hand-rolled `renderMarkdown` in `/command` page with existing `RicoMarkdownContent` component — full GFM support (numbered lists, tables, links) |
+| Option routing | Added numeric choice routing (`_NUMBER_CHOICE_RE`); typing "3" now selects option 3 from a previous Rico menu |
+
+29 new tests in `tests/test_document_upload_context.py`. All 190 tests passing.
+
 ### Career OS roadmap — reconciled status (2026-06-21)
 Verified against live code: milestones **01–03, 05, 06, 07, 08 are built/shipped**; **CAREER-OS-04
-(universal intake / attachment analysis) is the only remaining end-to-end gap** (backend
-`document_classifier.py` exists but `attachment_analysis` is not populated into chat responses and
-has no frontend card). Details + evidence: `AI_WORKSPACE/HANDOFFS/2026-06-21-career-os-roadmap-status.md`.
-The roadmap handoff `2026-06-20-rico-career-os-roadmap.md` predates this build progress.
+(universal intake / attachment analysis) is partially addressed**: backend `document_classifier.py`
+exists and is wired into upload; `attachment_analysis` envelope returned on upload; session context
+now stores the last uploaded document type. Remaining gap: the document type context is NOT yet
+injected into Rico's AI prompt for subsequent chat turns about the document (TASK-030). Details:
+`AI_WORKSPACE/HANDOFFS/2026-06-21-career-os-roadmap-status.md`.
 
 ## P0 Context-Loss Bugs — RESOLVED (2026-06-19, PR #660 + #661)
 

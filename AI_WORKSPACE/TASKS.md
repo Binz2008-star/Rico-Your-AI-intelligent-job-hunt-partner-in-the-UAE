@@ -56,6 +56,53 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260621-030 — CAREER-OS-04 remaining gap: inject uploaded document context into Rico AI prompt
+
+Status: proposed
+Owner: unassigned
+Branch: —
+Issue/PR: —
+
+#### Objective
+When a user uploads a non-CV document (offer letter, contract, cover letter, etc.) and then chats
+about it, Rico currently has no access to the document type or content in its AI prompt. The upload
+route now stores `last_uploaded_document` in `recent_context` (fixed in PR #717), but the chat
+handler does not yet inject this into the AI system prompt or message context.
+
+#### Existing behavior after PR #717
+- Explicit meta-queries ("what did I upload?", "document type?") → answered from `recent_context`
+  without an AI call via `_get_recent_upload_document_reply`.
+- All other messages about the document (e.g. "can you review it?") → falls through to normal AI
+  routing with no document context injected.
+
+#### Required change
+In `rico_chat_api.py` `_process_message_inner` or the AI context builder, check for
+`last_uploaded_document` in `recent_context` and if the document is non-CV and recent (< 24h),
+inject a brief note into the system prompt / user context:
+```
+[Uploaded document: {label} ({filename}) — confidence {pct}%]
+```
+This lets the AI model answer "can you review it?", "summarize this offer letter" etc. with
+context about what was uploaded.
+
+For non-trivial document types (offer_letter, contract, cover_letter), also check whether the
+document content is available in the user's parsed files (via `user_documents` DB table) and
+include a brief extract if available.
+
+#### Constraints
+- Do not touch: the document classifier, the upload route, `_get_recent_upload_document_reply`
+- No migrations required
+- Must not break existing job-search or onboarding flows
+- Add regression tests for the injection path
+
+#### Acceptance criteria
+- [ ] User uploads a cover letter → types "can you review my cover letter?" → Rico responds
+  with content-aware review (not generic advice)
+- [ ] User uploads an offer letter → types "summarize it" → Rico summarizes using the document type
+- [ ] No regression in job-search or onboarding flows (all existing tests pass)
+
+---
+
 ### TASK-20260621-029 — System quality audit: bug fixes and technical debt documentation
 
 Status: review

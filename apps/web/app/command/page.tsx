@@ -1943,7 +1943,7 @@ export default function CommandPage() {
                                     : chatAudience === "checking"
                                         ? t("cmdPlaceholderChecking")
                                         : t("cmdPlaceholderReady")}
-                                className="max-h-[120px] w-full resize-none rounded-xl border-0 bg-transparent py-3 pe-12 ps-3 text-sm text-rico-text placeholder:text-text-muted outline-none transition-all"
+                                className="max-h-[120px] w-full resize-none rounded-xl border-0 bg-transparent py-3 pe-12 ps-3 text-[16px] sm:text-sm text-rico-text placeholder:text-text-muted outline-none transition-all"
                             />
                             <button
                                 type="button"
