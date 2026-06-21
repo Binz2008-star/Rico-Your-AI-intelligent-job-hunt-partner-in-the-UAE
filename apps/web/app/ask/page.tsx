@@ -249,6 +249,24 @@ export default function AskPage() {
         <RicoStatusDot status={status} />
       </header>
 
+      {/* Preview/Demo banner — Phase 1 prototype runs on mock data only */}
+      <div
+        role="status"
+        aria-live="polite"
+        className="
+          px-4 py-2
+          flex items-start gap-2
+          border-b border-gold/20 bg-gold/8
+          text-[12px] leading-snug text-text-primary
+        "
+      >
+        <span className="material-icons-round text-gold text-[16px] shrink-0">science</span>
+        <span>
+          <strong className="font-semibold">Preview mode</strong> — this page currently uses sample data.
+          No real jobs are searched, no applications are submitted, and nothing is sent externally.
+        </span>
+      </div>
+
       {/* Content area */}
       <main className="flex-1 flex flex-col">
         <AnimatePresence mode="wait">
