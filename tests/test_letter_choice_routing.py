@@ -34,7 +34,7 @@ os.environ.setdefault("ADMIN_EMAIL", "rico-test@example.com")
 os.environ.setdefault("ADMIN_PASSWORD", "ricopass123")
 os.environ.setdefault("JWT_SECRET", "ricosecret" + "x" * 21)
 
-from src.rico_chat_api import RicoChatAPI, _LETTER_CHOICE_RE
+from src.rico_chat_api import RicoChatAPI, _LETTER_CHOICE_RE, _NUMBER_CHOICE_RE
 
 USER = "bug02-test@example.com"
 
@@ -401,4 +401,187 @@ class TestEndToEndLetterChoice:
         choice_messages = [d for d in dispatched if d in ("draft cover letter", "open apply link")]
         assert not choice_messages, (
             f"Letter-choice resolver incorrectly fired for 'find me a job in Abu Dhabi': {dispatched}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# 5. _NUMBER_CHOICE_RE regex unit tests (numeric option routing)
+# ---------------------------------------------------------------------------
+
+class TestNumberChoiceRegex:
+
+    def test_1_matches(self):
+        assert _NUMBER_CHOICE_RE.match("1")
+
+    def test_2_matches(self):
+        assert _NUMBER_CHOICE_RE.match("2")
+
+    def test_3_matches(self):
+        assert _NUMBER_CHOICE_RE.match("3")
+
+    def test_4_matches(self):
+        assert _NUMBER_CHOICE_RE.match("4")
+
+    def test_digit_with_period_matches(self):
+        assert _NUMBER_CHOICE_RE.match("3.")
+
+    def test_digit_with_colon_matches(self):
+        assert _NUMBER_CHOICE_RE.match("2:")
+
+    def test_digit_with_trailing_space_matches(self):
+        assert _NUMBER_CHOICE_RE.match("1 ")
+
+    # Negative cases — must NOT match
+
+    def test_two_digit_30_does_not_match(self):
+        assert not _NUMBER_CHOICE_RE.match("30")
+
+    def test_sentence_with_number_does_not_match(self):
+        assert not _NUMBER_CHOICE_RE.match("3 years of experience")
+
+    def test_decimal_does_not_match(self):
+        assert not _NUMBER_CHOICE_RE.match("3.5")
+
+    def test_zero_does_not_match(self):
+        assert not _NUMBER_CHOICE_RE.match("0")
+
+    def test_letter_does_not_match(self):
+        assert not _NUMBER_CHOICE_RE.match("A")
+
+    def test_arabic_does_not_match(self):
+        assert not _NUMBER_CHOICE_RE.match("٣")
+
+
+# ---------------------------------------------------------------------------
+# 6. _resolve_letter_choice with numeric inputs (BUG: number→option routing)
+# ---------------------------------------------------------------------------
+
+class TestResolveNumberChoice:
+
+    def test_1_returns_first_option(self):
+        api = _api_with_options(SAMPLE_OPTIONS)
+        result = api._resolve_letter_choice(USER, "1")
+        assert result == SAMPLE_OPTIONS[0]["message"]
+
+    def test_2_returns_second_option(self):
+        api = _api_with_options(SAMPLE_OPTIONS)
+        result = api._resolve_letter_choice(USER, "2")
+        assert result == SAMPLE_OPTIONS[1]["message"]
+
+    def test_3_returns_third_option(self):
+        api = _api_with_options(SAMPLE_OPTIONS)
+        result = api._resolve_letter_choice(USER, "3")
+        assert result == SAMPLE_OPTIONS[2]["message"]
+
+    def test_4_returns_fourth_option(self):
+        api = _api_with_options(SAMPLE_OPTIONS)
+        result = api._resolve_letter_choice(USER, "4")
+        assert result == SAMPLE_OPTIONS[3]["message"]
+
+    def test_3_with_period_returns_third_option(self):
+        api = _api_with_options(SAMPLE_OPTIONS)
+        result = api._resolve_letter_choice(USER, "3.")
+        assert result == SAMPLE_OPTIONS[2]["message"]
+
+    def test_number_out_of_range_returns_none(self):
+        # Only 2 options stored, "4" (index 3) is out of range
+        api = _api_with_options(SAMPLE_OPTIONS[:2])
+        result = api._resolve_letter_choice(USER, "4")
+        assert result is None
+
+    def test_no_options_returns_none_for_number(self):
+        api = _make_api()
+        api.memory.get_context.return_value = {}
+        result = api._resolve_letter_choice(USER, "3")
+        assert result is None
+
+    def test_number_options_consumed_after_use(self):
+        """After resolving "3", a second call with "3" returns None (options cleared)."""
+        stored_ctx: dict = {"_pending_options": [
+            {"action": o.get("action", ""), "message": o.get("message", ""), "label": o.get("label", "")}
+            for o in SAMPLE_OPTIONS
+        ]}
+        api = _make_api()
+        _ctx_store: dict = {}
+
+        def _fake_get(user, key):
+            return _ctx_store.get(key)
+
+        def _fake_set(user, key, value):
+            _ctx_store[key] = value
+
+        api.memory.get_context.side_effect = _fake_get
+        api.memory.set_context.side_effect = _fake_set
+        _ctx_store["recent_context"] = stored_ctx
+
+        first = api._resolve_letter_choice(USER, "3")
+        assert first == SAMPLE_OPTIONS[2]["message"]
+
+        second = api._resolve_letter_choice(USER, "3")
+        assert second is None  # consumed
+
+    def test_30_not_treated_as_option(self):
+        """'30' must NOT trigger numeric choice routing."""
+        api = _api_with_options(SAMPLE_OPTIONS)
+        result = api._resolve_letter_choice(USER, "30")
+        assert result is None
+
+    def test_sentence_with_3_not_treated_as_option(self):
+        """'I have 3 years experience' must NOT trigger numeric choice routing."""
+        api = _api_with_options(SAMPLE_OPTIONS)
+        result = api._resolve_letter_choice(USER, "I have 3 years experience")
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# 7. End-to-end numeric choice routing (the mobile bug scenario)
+# ---------------------------------------------------------------------------
+
+class TestEndToEndNumberChoice:
+
+    def _run(self, api: RicoChatAPI, message: str) -> dict:
+        with (
+            patch.object(api, "_resolve_profile", return_value=_profile()),
+            patch.object(api, "_get_openai_agent", return_value=MagicMock(
+                openai_available=False, deepseek_available=False,
+                hf_available=False, provider_available=False, model=""
+            )),
+            patch("src.rico_env.get_ai_provider", return_value="none"),
+        ):
+            return api._handle_active_user(message=message, user_id=USER)
+
+    def test_3_dispatches_third_option_not_ai_fabrication(self):
+        """
+        Regression for mobile bug: user sees options 1/2/3/4, types "3",
+        Rico must route to the third option — not fabricate an AI response.
+        """
+        NEWS_OPTIONS = [
+            {"action": "uae_job_news",      "message": "show UAE job market news",          "label": "UAE Job Market News"},
+            {"action": "esg_news",          "message": "show ESG and sustainability news",  "label": "Environmental/ESG News"},
+            {"action": "rico_platform_news","message": "show Rico Hunt platform updates",   "label": "News from Rico Hunt"},
+            {"action": "industry_news",     "message": "show industry news for compliance", "label": "Industry-Specific News"},
+        ]
+        _ctx_store: dict = {"recent_context": {"_pending_options": [
+            {"action": o["action"], "message": o["message"], "label": o["label"]}
+            for o in NEWS_OPTIONS
+        ]}}
+
+        api = _make_api()
+        api.memory.get_context.side_effect = lambda u, k: _ctx_store.get(k)
+        api.memory.set_context.side_effect = lambda u, k, v: _ctx_store.update({k: v})
+
+        dispatched: list[str] = []
+        original_inner = api._handle_active_user_inner
+
+        def _spy(user_id, message):
+            dispatched.append(message)
+            return original_inner(user_id, message)
+
+        with patch.object(api, "_handle_active_user_inner", side_effect=_spy):
+            self._run(api, "3")
+
+        assert len(dispatched) >= 2, f"Expected re-dispatch, got: {dispatched}"
+        # Must dispatch the third option (Rico platform news), not CV or anything else
+        assert dispatched[1] == NEWS_OPTIONS[2]["message"], (
+            f"Expected '{NEWS_OPTIONS[2]['message']}' but got: {dispatched[1]!r}"
         )
