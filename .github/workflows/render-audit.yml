@@ -293,3 +293,67 @@ jobs:
           echo "Vercel proxy: https://ricohunt.com/proxy/* -> $BACKEND_URL/*"
           echo ""
           echo "Note: 'suspended (idle)' is normal for Starter plan — service wakes on first request."
+
+  verify_710:
+    name: Verify #710 -- user_job_context.alt_url (schema + upsert logs)
+    runs-on: ubuntu-latest
+    env:
+      RENDER_KEY: ${{ github.event.inputs.render_api_key || secrets.RENDER_API_KEY }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - name: DB -- alt_url column + recent user_job_context rows (bare SELECT, no EXPLAIN)
+        run: |
+          set +e
+          if [ -z "$DATABASE_URL" ]; then
+            echo "ERROR: DATABASE_URL secret is empty -- cannot query Neon."
+            exit 0
+          fi
+          echo "=== A) information_schema: does user_job_context.alt_url exist in production? ==="
+          psql "$DATABASE_URL" -c "SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns WHERE table_name='user_job_context' AND column_name='alt_url';"
+          echo "=== B) row count + latest searched_at ==="
+          psql "$DATABASE_URL" -c "SELECT count(*) AS total_rows, max(searched_at) AS latest_searched_at FROM user_job_context;"
+          echo "=== C) most recent 10 rows (truncated cols, includes alt_url) ==="
+          psql "$DATABASE_URL" -c "SELECT user_id, left(title,40) AS title, left(company,28) AS company, left(alt_url,36) AS alt_url, verification_status, searched_at FROM user_job_context ORDER BY searched_at DESC LIMIT 10;"
+          echo "=== D) exact #710 window: searched_at > NOW() - INTERVAL '1 hour' ==="
+          psql "$DATABASE_URL" -c "SELECT user_id, title, company, alt_url, verification_status, searched_at FROM user_job_context WHERE searched_at > NOW() - INTERVAL '1 hour' ORDER BY searched_at DESC;"
+
+      - name: Render -- scan app logs for upsert_failed / UndefinedColumn / alt_url (last 6h)
+        if: always()
+        run: |
+          set +e
+          if [ -z "$RENDER_KEY" ]; then
+            echo "ERROR: RENDER_API_KEY secret is empty -- cannot query Render logs."
+            exit 0
+          fi
+          OWNER_ID=$(curl -s -H "Authorization: Bearer $RENDER_KEY" "https://api.render.com/v1/owners?limit=10" | jq -r '.[0].owner.id // .[0].id // empty')
+          SVC_ID=$(curl -s -H "Authorization: Bearer $RENDER_KEY" "https://api.render.com/v1/services?limit=50" | jq -r '[.[] | (.service // .) | select(.name=="rico-job-automation-api") | .id][0] // empty')
+          START=$(date -u -d '6 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          echo "owner=$OWNER_ID  service=$SVC_ID  since=$START"
+          if [ -z "$SVC_ID" ] || [ -z "$OWNER_ID" ]; then
+            echo "ERROR: could not resolve owner/service id. Raw services payload (first 600 chars):"
+            curl -s -H "Authorization: Bearer $RENDER_KEY" "https://api.render.com/v1/services?limit=50" | head -c 600; echo
+            exit 0
+          fi
+          for TERM in user_job_context_repo_upsert_failed UndefinedColumn alt_url; do
+            echo ""
+            echo "===== Render logs text='$TERM' (last 6h) ====="
+            curl -s -G \
+              -H "Authorization: Bearer $RENDER_KEY" \
+              --data-urlencode "ownerId=$OWNER_ID" \
+              --data-urlencode "resource=$SVC_ID" \
+              --data-urlencode "startTime=$START" \
+              --data-urlencode "text=$TERM" \
+              --data-urlencode "limit=50" \
+              "https://api.render.com/v1/logs" > /tmp/logs.json
+            CNT=$(jq -r '((.logs // .) | if type=="array" then length else 0 end)' /tmp/logs.json 2>/dev/null)
+            if [ -z "$CNT" ]; then
+              echo "  (unexpected response, first 500 chars):"; head -c 500 /tmp/logs.json; echo
+            elif [ "$CNT" = "0" ]; then
+              echo "  0 matching lines"
+            else
+              echo "  $CNT matching line(s):"
+              jq -r '(.logs // .)[] | "  \(.timestamp)  \(.message)"' /tmp/logs.json 2>/dev/null | head -50
+            fi
+          done
+          echo ""
+          echo "PASS CONDITION for #710: 0 lines for user_job_context_repo_upsert_failed AND 0 for UndefinedColumn."
