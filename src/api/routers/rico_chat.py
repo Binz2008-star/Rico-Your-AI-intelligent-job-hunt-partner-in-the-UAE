@@ -235,13 +235,26 @@ def _classification_response(classification: Any, filename: str) -> dict[str, An
         f"{score_lines}\n\n"
         "What would you like me to do with it?"
     )
-    return {
+    # CAREER-OS-04: attach a first-class attachment_analysis envelope so the chat UI
+    # can render what the file is. Read-only description — never mutates profile/settings.
+    try:
+        from src.services.attachment_analysis_factory import build_attachment_analysis_dict
+        analysis = build_attachment_analysis_dict(classification, filename)
+        agentic_ui: dict[str, Any] | None = {"attachment_analysis": [analysis]}
+    except Exception:  # pragma: no cover - analysis is additive; never break upload
+        logger.exception("attachment_analysis_build_failed filename=%s", filename)
+        agentic_ui = None
+
+    response: dict[str, Any] = {
         "ok": True,
         "status": "classified",
         "filename": filename,
         **classification.to_dict(),
         "message": msg,
     }
+    if agentic_ui is not None:
+        response["agentic_ui"] = agentic_ui
+    return response
 
 
 def _display_for_type(doc_type: str) -> str:
