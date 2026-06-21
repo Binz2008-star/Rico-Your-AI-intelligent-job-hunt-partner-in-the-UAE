@@ -138,6 +138,7 @@ def _db_write(log: ActionLog) -> None:
                     log.get("failure_reason"),
                 ),
             )
+        conn.commit()
         logger.info(
             "action_audit action_id=%s type=%s user=%s status=%s duration_ms=%d",
             log.get("action_id", ""),
