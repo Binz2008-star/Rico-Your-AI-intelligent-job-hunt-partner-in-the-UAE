@@ -74,6 +74,9 @@ FOLLOWUP_BOUNDARY_PUNCT_RE = re.compile(r"^[\s\"'([{]+|[\s\"')\]}.,!?;:]+$")
 # Single-letter choice: exactly one letter A–D (upper or lower) with optional trailing
 # punctuation/whitespace.  "apple", "AB", "a b" do NOT match.
 _LETTER_CHOICE_RE = re.compile(r"^[A-Da-d][.:\s]*$")
+# Single-digit numeric choice: exactly one digit 1–9 with optional trailing
+# punctuation/whitespace.  "30", "3 years", "3.5" do NOT match.
+_NUMBER_CHOICE_RE = re.compile(r"^[1-9][.:\s]*$")
 PROFILE_LIST_SPLIT_RE = re.compile(r"[,;\n\r|]+")
 # Telegram username: @handle (5–32 chars, alphanumeric + underscore)
 TELEGRAM_HANDLE_RE = re.compile(r"^@[A-Za-z0-9_]{5,32}$")
@@ -5056,6 +5059,13 @@ class RicoChatAPI:
         if file_list_result is not None:
             return self._finalize(file_list_result, self.SOURCE_KEYWORD, profile=None)
 
+        # ── Recent-upload document meta-query ─────────────────────────────────
+        # "what did I upload?" / "what type is the document?" — answers from the
+        # session context (set by the upload route) without an AI call.
+        _doc_reply = self._get_recent_upload_document_reply(user_id, message)
+        if _doc_reply is not None:
+            return self._finalize(_doc_reply, self.SOURCE_KEYWORD, profile=None)
+
         completed = is_onboarding_complete(user_id)
 
         if completed:
@@ -9212,6 +9222,49 @@ class RicoChatAPI:
         except Exception:
             return {}
 
+    # ── Recent-upload document context (TASK-030) ────────────────────────────
+
+    _UPLOAD_DOC_QUERY_RE = re.compile(
+        r"\b(?:what(?:\s+(?:did|do)\s+i)?\s+upload(?:ed)?|"
+        r"what\s+(?:type|kind)\s+(?:is|of)\s+(?:the\s+)?(?:document|file)|"
+        r"(?:document|file)\s+(?:type|kind)|"
+        r"what\s+(?:is|was)\s+(?:the\s+)?(?:document|file)\s+(?:i\s+(?:just\s+)?)?upload(?:ed)?|"
+        r"the\s+(?:document|file)\s+(?:i\s+)?upload(?:ed)|"
+        r"(?:uploaded|just\s+sent)\s+(?:a\s+)?(?:document|file))\b",
+        re.IGNORECASE,
+    )
+
+    def _get_recent_upload_document_reply(self, user_id: str, message: str) -> dict[str, Any] | None:
+        """Return a document-context reply when the user explicitly asks about their last upload.
+
+        Only fires for unambiguous document-meta queries (e.g. 'what did I upload?').
+        Broader document analysis flows through the normal AI pipeline (TASK-030).
+        """
+        if not self._UPLOAD_DOC_QUERY_RE.search(message):
+            return None
+        try:
+            ctx = self._get_recent_context(user_id)
+            doc = ctx.get("last_uploaded_document")
+            if not doc:
+                return None
+            label = doc.get("display_label") or doc.get("document_type", "document").replace("_", " ").title()
+            filename = doc.get("filename") or "your file"
+            pct = int(round(doc.get("confidence", 0) * 100))
+            actions = doc.get("suggested_actions") or []
+            actions_str = ""
+            if actions:
+                labels = [a.get("label", str(a)) if isinstance(a, dict) else str(a) for a in actions[:4]]
+                actions_str = "\n\nHere's what I can help you with:\n" + "\n".join(f"- {lbl}" for lbl in labels)
+            reply = (
+                f"The last document you uploaded was **{filename}**, "
+                f"which I identified as a **{label}** ({pct}% confidence).{actions_str}\n\n"
+                "Would you like to do anything specific with it?"
+            )
+            self._append_chat(user_id, "assistant", reply)
+            return {"type": "document_context", "message": reply}
+        except Exception:
+            return None
+
     # ── Letter-choice resolver (BUG-02) ──────────────────────────────────────
 
     def _save_pending_options(self, user_id: str, options: list) -> None:
@@ -9280,20 +9333,24 @@ class RicoChatAPI:
         return {**result, "agentic_ui": updated_ui}
 
     def _resolve_letter_choice(self, user_id: str, message: str) -> str | None:
-        """Map a single-letter reply (A/B/C/D) to the nth pending option's message.
+        """Map a single-letter (A/B/C/D) or single-digit (1/2/3/4) reply to the
+        nth pending option's message.
 
         Returns the chosen option's message string, or None when:
-          - message is not exactly one letter A–D (case-insensitive),
+          - message is not exactly one letter A–D or digit 1–9,
           - no pending options are stored, or
           - the index is out of range.
 
-        Consuming the options list clears it so a second bare letter does not
+        Consuming the options list clears it so a second bare choice does not
         accidentally re-use the same menu.
         """
-        if not _LETTER_CHOICE_RE.match(message.strip()):
+        stripped = message.strip()
+        if _LETTER_CHOICE_RE.match(stripped):
+            idx = ord(stripped[0].upper()) - ord("A")   # A→0, B→1, C→2, D→3
+        elif _NUMBER_CHOICE_RE.match(stripped):
+            idx = int(stripped[0]) - 1   # "1"→0, "2"→1, "3"→2, …
+        else:
             return None
-        letter = message.strip()[0].upper()
-        idx = ord(letter) - ord("A")   # A→0, B→1, C→2, D→3
         try:
             ctx = self._get_recent_context(user_id)
             options: list = ctx.get("_pending_options") or []

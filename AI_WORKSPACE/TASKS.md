@@ -56,6 +56,115 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260621-030 — CAREER-OS-04 remaining gap: inject uploaded document context into Rico AI prompt
+
+Status: proposed
+Owner: unassigned
+Branch: —
+Issue/PR: —
+
+#### Objective
+When a user uploads a non-CV document (offer letter, contract, cover letter, etc.) and then chats
+about it, Rico currently has no access to the document type or content in its AI prompt. The upload
+route now stores `last_uploaded_document` in `recent_context` (fixed in PR #717), but the chat
+handler does not yet inject this into the AI system prompt or message context.
+
+#### Existing behavior after PR #717
+- Explicit meta-queries ("what did I upload?", "document type?") → answered from `recent_context`
+  without an AI call via `_get_recent_upload_document_reply`.
+- All other messages about the document (e.g. "can you review it?") → falls through to normal AI
+  routing with no document context injected.
+
+#### Required change
+In `rico_chat_api.py` `_process_message_inner` or the AI context builder, check for
+`last_uploaded_document` in `recent_context` and if the document is non-CV and recent (< 24h),
+inject a brief note into the system prompt / user context:
+```
+[Uploaded document: {label} ({filename}) — confidence {pct}%]
+```
+This lets the AI model answer "can you review it?", "summarize this offer letter" etc. with
+context about what was uploaded.
+
+For non-trivial document types (offer_letter, contract, cover_letter), also check whether the
+document content is available in the user's parsed files (via `user_documents` DB table) and
+include a brief extract if available.
+
+#### Constraints
+- Do not touch: the document classifier, the upload route, `_get_recent_upload_document_reply`
+- No migrations required
+- Must not break existing job-search or onboarding flows
+- Add regression tests for the injection path
+
+#### Acceptance criteria
+- [ ] User uploads a cover letter → types "can you review my cover letter?" → Rico responds
+  with content-aware review (not generic advice)
+- [ ] User uploads an offer letter → types "summarize it" → Rico summarizes using the document type
+- [ ] No regression in job-search or onboarding flows (all existing tests pass)
+
+---
+
+### TASK-20260621-029 — System quality audit: bug fixes and technical debt documentation
+
+Status: review
+Owner: Claude
+Branch: `claude/system-quality-audit-ikkamf`
+Issue/PR: #717 (draft, CI green — pytest ✅ playwright ✅ Vercel ✅)
+
+#### Objective
+Continuous codebase audit across auth, DB, repositories, services, migrations, and routers —
+fix small isolated bugs immediately, document larger issues for separate PRs.
+
+#### Bugs fixed (all in commit `3c11717`)
+
+1. **`src/repositories/users_repo.py`** — `list_active_users()` omitted `email_verified` from
+   SELECT; all User objects silently defaulted to `email_verified=True`. Fixed by adding
+   `COALESCE(email_verified, TRUE)` as column 8 and accessing as `row[7]`.
+
+2. **`src/repositories/audit_repo.py`** — `List` used in type annotations for
+   `log_profile_hydration` and `_db_write_profile_hydration` but not imported;
+   `typing.get_type_hints()` would raise `NameError`. Fixed by adding `List` to
+   `from typing import …`.
+
+3. **`src/api/auth.py`** — Duplicate `response.delete_cookie()` call in `register()`
+   (second call at lines 580-583 was dead code, identical to lines 482-485). Removed.
+
+4. **`tests/test_users_scheduler.py`** — Mock fixture rows were 7-element tuples; crashed with
+   `IndexError: tuple index out of range` after the `users_repo` fix added an 8th column.
+   Updated both rows to 8-element tuples.
+
+#### Issues documented (separate PRs required — do NOT touch without explicit scope)
+
+| # | Issue | File | Recommended action |
+|---|---|---|---|
+| D1 | Runtime DDL bypasses migration system | `audit_repo.py` | Move 3 table creates to numbered migrations |
+| D2 | `_DEDUP_CACHE` unbounded memory growth | `audit_repo.py` | Add periodic sweep or size cap in `_mem_seed` |
+| D3 | Safety regex over-breadth (`password`, `bypass`) | `rico_safety.py` | Narrow with word-boundary anchors + regression tests |
+| D4 | No password complexity enforcement | `src/api/auth.py` | Add length + complexity check at register and reset |
+| D5 | No JWT revocation after password reset | `src/api/auth.py` | Token blacklist or rotating JWT family ID |
+| D6 | `mark_webhook_event_processed` Optional[str] for UUID FK | `src/rico_db.py` | Validate UUID or change signature to Optional[UUID] |
+
+#### Acceptance criteria
+- [x] `list_active_users()` returns correct `email_verified` value from DB
+- [x] `audit_repo.py` imports `List` — no `NameError` from `get_type_hints()`
+- [x] No duplicate cookie deletion in `register()`
+- [x] Test fixture updated to 8-element tuples
+- [x] All CI checks green (pytest, playwright, Vercel, Neon)
+
+#### Required verification
+- [x] pytest ✅ (all 6 CI checks passed on PR #717)
+- [x] playwright ✅
+- [x] Vercel ✅ (DEPLOYED)
+- [x] No regressions vs main baseline
+
+#### Handoff notes
+- Changed files: `src/repositories/users_repo.py`, `src/repositories/audit_repo.py`,
+  `src/api/auth.py`, `tests/test_users_scheduler.py`, `AI_WORKSPACE/CURRENT_STATE.md`,
+  `AI_WORKSPACE/TASKS.md`, `AI_WORKSPACE/START_HERE.md`
+- Rollback plan: revert PR #717 — no DB schema changes, no migrations, no env changes.
+- Full detail: `AI_WORKSPACE/HANDOFFS/2026-06-21-system-quality-audit.md`
+
+---
+
 ### TASK-20260619-028 — UI/UX live-audit backlog (2026-06-19)
 
 Status: proposed (tracking task — spin each item into its own TASK-NNN when picked up)

@@ -18,7 +18,7 @@ import logging
 import time
 import threading
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.db import get_db_connection, is_db_available
 from src.models.action_log import ActionLog

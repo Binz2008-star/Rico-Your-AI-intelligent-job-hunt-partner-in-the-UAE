@@ -1,6 +1,6 @@
 # Current State
 
-_Last updated: 2026-06-21 (action-audit hardening rolled out; migration drift triaged — #708/#710/#711)_
+_Last updated: 2026-06-21 (mobile UX + document-context fixes added to PR #717)_
 
 ## Production baseline
 
@@ -15,6 +15,31 @@ _Last updated: 2026-06-21 (action-audit hardening rolled out; migration drift tr
   verified live 2026-06-21 — `/version`==`9078d77`, `/health` ok).
 - **Deployed to Vercel:** ✅ auto-deploying from main.
 
+## System Quality Audit — 2026-06-21 (PR #717, branch `claude/system-quality-audit-ikkamf`)
+
+Full codebase audit covering auth, DB, repositories, services, migrations, and routers.
+CI green: pytest ✅ playwright ✅ Vercel ✅ Neon ✅. Draft PR #717 awaiting merge.
+
+### Bugs fixed (commit `3c11717`)
+
+| File | Bug | Fix |
+|---|---|---|
+| `src/repositories/users_repo.py` | `list_active_users()` SELECT omitted `email_verified`; all returned User objects defaulted to `email_verified=True` regardless of DB state | Added `COALESCE(email_verified, TRUE)` as column 8; accessed as `row[7]` |
+| `src/repositories/audit_repo.py` | `List` used in function signatures (`log_profile_hydration`, `_db_write_profile_hydration`) but not imported; `typing.get_type_hints()` would raise `NameError` | Added `List` to `from typing import …` |
+| `src/api/auth.py` | Duplicate `response.delete_cookie()` call in `register()` (lines 580-583 were dead code, identical to lines 482-485) | Removed second call and its comment |
+| `tests/test_users_scheduler.py` | Mock fixture rows were 7-element tuples; crashed with `IndexError` after `users_repo` fix added 8th column | Updated both fixture rows to 8-element tuples (added `True` for `email_verified`) |
+
+### Issues documented (require separate PRs — do NOT fix without explicit scope)
+
+| Issue | Location | Risk | Recommended action |
+|---|---|---|---|
+| Runtime DDL bypasses migration system | `audit_repo.py`: `_db_write_learning_signal`, `_db_write_profile_hydration`, `_db_write_permission_check` create tables at runtime | Creates untracked tables (`learning_signals_audit`, `profile_hydration_audit`, `permission_check_audit`) outside Neon migration ledger; DDL in hot path blocks connections | Move to numbered migrations; remove runtime DDL |
+| Unbounded `_DEDUP_CACHE` memory growth | `audit_repo.py` module-level `_DEDUP_CACHE` dict | Entries only evicted on lookup; under continuous action logging the dict grows without bound | Add periodic sweep or cap size in `_mem_seed` |
+| Safety patterns too broad | `rico_safety.py`: `PRIVACY_RISK_PATTERNS` contains `r"password"`, `HARASSMENT_OR_ILLEGAL_PATTERNS` contains `r"bypass"` | Blocks legitimate queries ("how do I reset my password?", "bypass this section of my CV") | Narrow regexes with word-boundary and context anchors; add regression test suite |
+| No password complexity enforcement | `src/api/auth.py` `register()` and `reset_password()` | Users can set single-character passwords | Add length + complexity check at registration and reset |
+| No JWT revocation after password reset | `src/api/auth.py` | Old sessions remain valid after password change | Implement token blacklist or rotating JWT family ID |
+| `mark_webhook_event_processed` type mismatch | `src/rico_db.py` | Accepts `Optional[str]` for `user_id` but DB column is UUID FK; silent failure when non-UUID string passed | Add UUID validation or change signature to `Optional[UUID]` |
+
 ### Migration / DB state (2026-06-21)
 - Migration `030_action_audit_log_hardening.sql` — **applied + verified** in production Neon
   (append-only trigger `tgtype=58`; INSERT works; UPDATE/DELETE/TRUNCATE rejected).
@@ -25,12 +50,25 @@ _Last updated: 2026-06-21 (action-audit hardening rolled out; migration drift tr
 - Neon production password **rotated** 2026-06-21.
 - Full handoff: `AI_WORKSPACE/HANDOFFS/2026-06-21-action-audit-rollout-complete.md`.
 
+### Additional fixes — 2026-06-21 (same PR #717 branch)
+
+| Area | Fix |
+|---|---|
+| Mobile UX | Textarea `font-size` raised from 14px → 16px on mobile (`text-[16px] sm:text-sm`); prevents iOS Safari auto-zoom on input focus (`apps/web/app/command/page.tsx`) |
+| Document context | Upload route now stores `last_uploaded_document` (type, label, filename, confidence, actions) in user's `recent_context` session memory after successful classification — authenticated users only; try/except so upload never breaks (`src/api/routers/rico_chat.py`) |
+| Document meta-query | New `_UPLOAD_DOC_QUERY_RE` + `_get_recent_upload_document_reply` in `RicoChatAPI` handles explicit "what did I upload?" / "document type?" queries from session context without an AI call (`src/rico_chat_api.py`) |
+| Chat markdown | Replaced hand-rolled `renderMarkdown` in `/command` page with existing `RicoMarkdownContent` component — full GFM support (numbered lists, tables, links) |
+| Option routing | Added numeric choice routing (`_NUMBER_CHOICE_RE`); typing "3" now selects option 3 from a previous Rico menu |
+
+29 new tests in `tests/test_document_upload_context.py`. All 190 tests passing.
+
 ### Career OS roadmap — reconciled status (2026-06-21)
 Verified against live code: milestones **01–03, 05, 06, 07, 08 are built/shipped**; **CAREER-OS-04
-(universal intake / attachment analysis) is the only remaining end-to-end gap** (backend
-`document_classifier.py` exists but `attachment_analysis` is not populated into chat responses and
-has no frontend card). Details + evidence: `AI_WORKSPACE/HANDOFFS/2026-06-21-career-os-roadmap-status.md`.
-The roadmap handoff `2026-06-20-rico-career-os-roadmap.md` predates this build progress.
+(universal intake / attachment analysis) is partially addressed**: backend `document_classifier.py`
+exists and is wired into upload; `attachment_analysis` envelope returned on upload; session context
+now stores the last uploaded document type. Remaining gap: the document type context is NOT yet
+injected into Rico's AI prompt for subsequent chat turns about the document (TASK-030). Details:
+`AI_WORKSPACE/HANDOFFS/2026-06-21-career-os-roadmap-status.md`.
 
 ## P0 Context-Loss Bugs — RESOLVED (2026-06-19, PR #660 + #661)
 
@@ -353,7 +391,7 @@ string. Chat never progressed, ignored conversation history, and never routed to
 
 ## CI health
 
-- QA Tests (pytest + playwright): green on main (`e104135`).
+- QA Tests (pytest + playwright): green on main (`e104135`) and on PR #717 branch (`3c11717`).
 - followup-smoke.yml: 9/9 PASS on `26124ed` (run #2, 2026-06-19).
 - bug01-smoke.yml: **4/4 PASS** on `40636ba` (run #1, 2026-06-19). **Removed** after one-shot use.
 - Render deploy: **auto-deploys on every push to `main`** via `deploy-render.yml` (PR #686 added the
@@ -383,11 +421,15 @@ Do not start without explicit scope and branch assignment.
 
 ## Carry-over engineering backlog
 
-- JWT revocation after password reset (old sessions stay valid after reset)
+- **JWT revocation after password reset** — old sessions stay valid after reset (documented in #717 audit)
+- **Password complexity validation on register/reset** — no enforcement today (documented in #717 audit)
+- **Runtime DDL in `audit_repo.py`** — 3 tables created outside migration system; move to numbered migrations (documented in #717 audit)
+- **`_DEDUP_CACHE` unbounded growth** in `audit_repo.py` — only evicted on lookup (documented in #717 audit)
+- **Safety regex over-breadth** — `r"password"` and `r"bypass"` block legitimate user queries; needs narrowing + regression tests (documented in #717 audit)
+- **`mark_webhook_event_processed` type mismatch** in `rico_db.py` — `Optional[str]` for UUID FK (documented in #717 audit)
 - Per-user rate limiting on /apply endpoint
 - Race condition in guest→auth identity merge
 - Settings page keywords tag input (same UX as profile TagInputField)
-- Password complexity validation on register/reset
 
 ## Operating target
 

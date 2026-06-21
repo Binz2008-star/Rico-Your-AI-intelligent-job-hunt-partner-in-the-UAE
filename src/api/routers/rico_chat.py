@@ -1326,6 +1326,23 @@ async def rico_upload_cv(
                 "doc_classify_routed user=%s filename=%s type=%s confidence=%.2f request_ref=%s",
                 resolved_user_id, safe_name, doc_type, confidence, request_ref,
             )
+            # Store classification in session context so Rico can reference the
+            # uploaded document in subsequent chat turns (e.g. "can you review it?").
+            if not _is_valid_public_user_id(resolved_user_id):
+                try:
+                    from src.rico_memory import RicoMemoryStore
+                    _mem = RicoMemoryStore()
+                    _rctx = _mem.get_context(resolved_user_id, "recent_context") or {}
+                    _rctx["last_uploaded_document"] = {
+                        "document_type": doc_type,
+                        "display_label": classification.display_label,
+                        "filename": safe_name,
+                        "confidence": round(confidence, 3),
+                        "suggested_actions": list(classification.suggested_actions or []),
+                    }
+                    _mem.set_context(resolved_user_id, "recent_context", _rctx)
+                except Exception:
+                    pass
             return _classification_response(classification, safe_name)
 
         # ── CV extraction pipeline ────────────────────────────────────────────
@@ -1431,6 +1448,21 @@ async def rico_upload_cv(
             request_ref,
         )
 
+        if not _is_valid_public_user_id(resolved_user_id):
+            try:
+                from src.rico_memory import RicoMemoryStore
+                _mem = RicoMemoryStore()
+                _rctx = _mem.get_context(resolved_user_id, "recent_context") or {}
+                _rctx["last_uploaded_document"] = {
+                    "document_type": doc_type or "cv",
+                    "display_label": "Resume / CV",
+                    "filename": safe_name,
+                    "confidence": round(confidence, 3),
+                    "suggested_actions": [],
+                }
+                _mem.set_context(resolved_user_id, "recent_context", _rctx)
+            except Exception:
+                pass
         return {
             "ok": True,
             "status": "preview_ready",
