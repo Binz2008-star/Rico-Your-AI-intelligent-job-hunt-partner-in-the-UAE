@@ -1,0 +1,425 @@
+"""
+src/job_providers.py
+Provider orchestration for live job search.
+
+Background
+----------
+The RapidAPI JSearch BASIC subscription hit 100% of its monthly quota, which
+surfaced as rate-limited statuses, "Link unavailable", and dead-end job cards.
+This module adds a low-cost / free provider cascade in front of JSearch so the
+product keeps working (and stops burning quota) when one provider is degraded.
+
+Cascade (``search_jobs``)
+-------------------------
+1. Cache first (24h normalized cache — identical searches never hit the network).
+2. Internal recent/saved results (optional ``internal_lookup`` callback).
+3. Jooble       — if ``JOOBLE_API_KEY`` is set and the provider is healthy.
+4. Adzuna       — if ``ADZUNA_APP_ID`` + ``ADZUNA_APP_KEY`` are set (opt-in).
+5. JSearch      — if ``RAPIDAPI_KEY`` is set and the provider is healthy.
+6. Degraded     — empty result flagged so the chat layer shows a safe-fallback CTA
+                  instead of dead-end cards.
+
+Design rules
+------------
+* No API keys are hardcoded — every key is read from the environment.
+* Secrets are never logged (we log provider name, counts, status — never keys/URLs
+  that embed a key).
+* A provider that returns a quota / rate-limit / hard error is marked *degraded*
+  for a cooldown window so we stop hammering it and burning calls.
+* All providers return :class:`jsearch_client.FetchResult` so callers handle one
+  type. Never raises — failures degrade gracefully.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import os
+import time
+import urllib.error
+import urllib.request
+from threading import RLock
+from typing import Any, Callable, Dict, List, Optional
+
+from src.jsearch_client import FetchResult
+
+logger = logging.getLogger(__name__)
+
+# ── Tunables (env-overridable, no code change needed) ─────────────────────────
+# 24h shared result cache: identical (role, location) searches reuse results and
+# never call an external provider again within the TTL.
+_RESULT_CACHE_TTL_S = int(os.getenv("JOB_RESULT_CACHE_TTL_S", str(24 * 60 * 60)))
+# How long a provider stays "degraded" after a transient error / rate-limit.
+_DEGRADED_COOLDOWN_S = int(os.getenv("PROVIDER_DEGRADED_COOLDOWN_S", str(30 * 60)))
+# How long a provider stays "degraded" after a hard quota exhaustion (longer).
+_QUOTA_COOLDOWN_S = int(os.getenv("PROVIDER_QUOTA_COOLDOWN_S", str(6 * 60 * 60)))
+_HTTP_TIMEOUT_S = int(os.getenv("JOB_PROVIDER_TIMEOUT_S", "12"))
+
+_DEFAULT_UAE_LOCATION = "United Arab Emirates"
+
+# ── 24h normalized result cache ───────────────────────────────────────────────
+# key -> (expires_at_epoch, items)
+_result_cache: Dict[str, "tuple[float, List[Dict[str, Any]]]"] = {}
+_cache_lock = RLock()
+
+# ── Provider health registry ──────────────────────────────────────────────────
+# name -> {"degraded_until": epoch, "reason": str}
+_health: Dict[str, Dict[str, Any]] = {}
+_health_lock = RLock()
+
+
+# ── State management (also used by tests) ─────────────────────────────────────
+
+def clear_state() -> None:
+    """Drop the result cache and all provider-health state (test isolation)."""
+    with _cache_lock:
+        _result_cache.clear()
+    with _health_lock:
+        _health.clear()
+
+
+def _cache_key(role: str, location: str, country: str, context: str) -> str:
+    return "|".join([
+        (country or "ae").strip().lower(),
+        (role or "").strip().lower(),
+        (location or "").strip().lower(),
+        (context or "").strip().lower(),
+    ])
+
+
+def _cache_get(key: str) -> Optional[List[Dict[str, Any]]]:
+    with _cache_lock:
+        entry = _result_cache.get(key)
+        if not entry:
+            return None
+        expires_at, items = entry
+        if time.time() >= expires_at:
+            _result_cache.pop(key, None)
+            return None
+        return items
+
+
+def _cache_put(key: str, items: List[Dict[str, Any]]) -> None:
+    with _cache_lock:
+        _result_cache[key] = (time.time() + _RESULT_CACHE_TTL_S, items)
+
+
+def mark_degraded(provider: str, reason: str, cooldown_s: Optional[int] = None) -> None:
+    """Flag *provider* as degraded for a cooldown window so we stop calling it."""
+    cooldown = _QUOTA_COOLDOWN_S if reason == "quota" else _DEGRADED_COOLDOWN_S
+    if cooldown_s is not None:
+        cooldown = cooldown_s
+    with _health_lock:
+        _health[provider] = {
+            "degraded_until": time.time() + cooldown,
+            "reason": reason,
+        }
+    logger.warning(
+        "provider_degraded provider=%s reason=%s cooldown_s=%d",
+        provider, reason, cooldown,
+    )
+
+
+def is_degraded(provider: str) -> bool:
+    """True while *provider* is inside its degraded cooldown window."""
+    with _health_lock:
+        entry = _health.get(provider)
+        if not entry:
+            return False
+        if time.time() >= entry["degraded_until"]:
+            _health.pop(provider, None)
+            return False
+        return True
+
+
+def provider_health() -> Dict[str, Any]:
+    """Admin/health indicator: per-provider configuration + degraded state.
+
+    Safe to expose — reports only whether keys are *present* (never their values)
+    and the current degraded reason/seconds-remaining.
+    """
+    now = time.time()
+    out: Dict[str, Any] = {}
+    for name in ("jooble", "adzuna", "jsearch"):
+        with _health_lock:
+            entry = _health.get(name)
+        degraded = bool(entry and now < entry["degraded_until"])
+        out[name] = {
+            "configured": _provider_configured(name),
+            "degraded": degraded,
+            "reason": (entry or {}).get("reason") if degraded else None,
+            "cooldown_remaining_s": (
+                int(entry["degraded_until"] - now) if degraded else 0
+            ),
+        }
+    return out
+
+
+def _provider_configured(name: str) -> bool:
+    if name == "jooble":
+        return bool(os.getenv("JOOBLE_API_KEY", "").strip())
+    if name == "adzuna":
+        return bool(
+            os.getenv("ADZUNA_APP_ID", "").strip()
+            and os.getenv("ADZUNA_APP_KEY", "").strip()
+        )
+    if name == "jsearch":
+        return bool(os.getenv("RAPIDAPI_KEY", "").strip())
+    return False
+
+
+# ── Jooble client ─────────────────────────────────────────────────────────────
+
+def _normalize_jooble(item: Dict[str, Any]) -> Dict[str, Any]:
+    """Map a raw Jooble job into Rico's normalized job dict."""
+    link = str(item.get("link") or "").strip()
+    return {
+        "title":           str(item.get("title") or ""),
+        "company":         str(item.get("company") or ""),
+        "location":        str(item.get("location") or _DEFAULT_UAE_LOCATION),
+        "link":            link,
+        "apply_link":      link,
+        "alt_link":        "",
+        "description":     str(item.get("snippet") or ""),
+        "source":          "jooble",
+        "salary_string":   str(item.get("salary") or ""),
+        "employment_type": str(item.get("type") or ""),
+        "job_id":          str(item.get("id") or ""),
+    }
+
+
+def _jooble_search(role: str, location: str, *, page: int = 1) -> FetchResult:
+    """Query Jooble for *role* in *location*. Never raises.
+
+    Jooble's quota is small, so callers must front this with the cache. The key is
+    embedded in the URL path per Jooble's API contract — it is therefore NEVER
+    logged.
+    """
+    api_key = os.getenv("JOOBLE_API_KEY", "").strip()
+    if not api_key:
+        return FetchResult(error="no_api_key", provider="jooble")
+
+    url = f"https://jooble.org/api/{api_key}"
+    payload = json.dumps({
+        "keywords": role,
+        "location": location or _DEFAULT_UAE_LOCATION,
+        "page": str(page),
+    }).encode()
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT_S) as resp:
+            data = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:
+        code = getattr(exc, "code", 0)
+        rate_limited = code == 429
+        # 401/403 from Jooble == bad/expired key or quota → degrade hard.
+        quota = code in (401, 403)
+        reason = "quota" if quota else ("rate_limit" if rate_limited else "http_error")
+        mark_degraded("jooble", reason)
+        logger.warning("jooble_http_error status=%d role=%r", code, role)
+        return FetchResult(
+            error=f"http_{code}", provider="jooble",
+            rate_limited=rate_limited, quota_exhausted=quota,
+        )
+    except Exception as exc:  # network, JSON, timeout
+        mark_degraded("jooble", "error")
+        logger.warning("jooble_fetch_failed role=%r err=%s", role, type(exc).__name__)
+        return FetchResult(error=type(exc).__name__, provider="jooble")
+
+    raw_jobs = data.get("jobs") if isinstance(data, dict) else None
+    if not isinstance(raw_jobs, list):
+        raw_jobs = []
+    items = [_normalize_jooble(j) for j in raw_jobs if isinstance(j, dict)]
+    logger.info("jooble_fetch ok role=%r results=%d", role, len(items))
+    return FetchResult(items=items, provider="jooble")
+
+
+# ── Adzuna client (optional / opt-in) ─────────────────────────────────────────
+
+def _adzuna_enabled() -> bool:
+    """Adzuna is disabled unless BOTH credentials are present in the environment."""
+    return bool(
+        os.getenv("ADZUNA_APP_ID", "").strip()
+        and os.getenv("ADZUNA_APP_KEY", "").strip()
+    )
+
+
+def _normalize_adzuna(item: Dict[str, Any]) -> Dict[str, Any]:
+    """Map a raw Adzuna result into Rico's normalized job dict."""
+    company = ""
+    if isinstance(item.get("company"), dict):
+        company = str(item["company"].get("display_name") or "")
+    location = ""
+    if isinstance(item.get("location"), dict):
+        location = str(item["location"].get("display_name") or "")
+    link = str(item.get("redirect_url") or "").strip()
+    salary = ""
+    smin, smax = item.get("salary_min"), item.get("salary_max")
+    if smin or smax:
+        salary = f"{smin or ''}-{smax or ''}".strip("-")
+    return {
+        "title":           str(item.get("title") or ""),
+        "company":         company,
+        "location":        location or _DEFAULT_UAE_LOCATION,
+        "link":            link,
+        "apply_link":      link,
+        "alt_link":        "",
+        "description":     str(item.get("description") or ""),
+        "source":          "adzuna",
+        "salary_string":   salary,
+        "employment_type": str(item.get("contract_time") or ""),
+        "job_id":          str(item.get("id") or ""),
+    }
+
+
+def _adzuna_search(role: str, location: str, *, page: int = 1) -> FetchResult:
+    """Query Adzuna for *role* in *location*. Never raises.
+
+    Adzuna's country coverage does not currently include the UAE; this client is
+    provided as opt-in scaffolding (enabled only when both keys exist) and the
+    target country is configurable via ``ADZUNA_COUNTRY`` (default "gb").
+    """
+    app_id = os.getenv("ADZUNA_APP_ID", "").strip()
+    app_key = os.getenv("ADZUNA_APP_KEY", "").strip()
+    if not (app_id and app_key):
+        return FetchResult(error="no_api_key", provider="adzuna")
+
+    country = os.getenv("ADZUNA_COUNTRY", "gb").strip().lower()
+    from urllib.parse import urlencode, quote
+    params = urlencode({
+        "app_id": app_id,
+        "app_key": app_key,
+        "what": role,
+        "where": location or "",
+        "results_per_page": "20",
+        "content-type": "application/json",
+    })
+    url = f"https://api.adzuna.com/v1/api/jobs/{quote(country)}/search/{page}?{params}"
+    req = urllib.request.Request(url, headers={"Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT_S) as resp:
+            data = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:
+        code = getattr(exc, "code", 0)
+        rate_limited = code == 429
+        quota = code in (401, 403)
+        reason = "quota" if quota else ("rate_limit" if rate_limited else "http_error")
+        mark_degraded("adzuna", reason)
+        logger.warning("adzuna_http_error status=%d role=%r", code, role)
+        return FetchResult(
+            error=f"http_{code}", provider="adzuna",
+            rate_limited=rate_limited, quota_exhausted=quota,
+        )
+    except Exception as exc:
+        mark_degraded("adzuna", "error")
+        logger.warning("adzuna_fetch_failed role=%r err=%s", role, type(exc).__name__)
+        return FetchResult(error=type(exc).__name__, provider="adzuna")
+
+    raw = data.get("results") if isinstance(data, dict) else None
+    if not isinstance(raw, list):
+        raw = []
+    items = [_normalize_adzuna(j) for j in raw if isinstance(j, dict)]
+    logger.info("adzuna_fetch ok role=%r results=%d", role, len(items))
+    return FetchResult(items=items, provider="adzuna")
+
+
+# ── JSearch (existing client, wrapped) ────────────────────────────────────────
+
+def _jsearch_search(role: str, location: str, country: str) -> FetchResult:
+    from src import jsearch_client
+    query = f"{role} {location}".strip() if location else f"{role} UAE"
+    result = jsearch_client.search(query, country=country)
+    result.provider = "jsearch"
+    return result
+
+
+# ── Orchestrator ──────────────────────────────────────────────────────────────
+
+def search_jobs(
+    role: str,
+    location: str = "",
+    *,
+    country: str = "ae",
+    use_cache: bool = True,
+    internal_lookup: Optional[Callable[[], List[Dict[str, Any]]]] = None,
+    cache_context: str = "",
+) -> FetchResult:
+    """Run the provider cascade for *role* / *location* and return a FetchResult.
+
+    The cascade short-circuits at the first provider that yields results, caches
+    the normalized output for 24h, and degrades gracefully (never raises) when
+    every provider is unavailable.
+    """
+    role = (role or "").strip()
+    key = _cache_key(role, location, country, cache_context)
+
+    # 1. Cache first — identical searches never touch the network within the TTL.
+    if use_cache:
+        cached = _cache_get(key)
+        if cached is not None:
+            logger.info("provider_cache hit role=%r results=%d", role, len(cached))
+            return FetchResult(items=cached, cache_hit=True, provider="cache")
+
+    # 2. Internal recent/saved results (caller-supplied; e.g. recent matches).
+    if internal_lookup is not None:
+        try:
+            internal_items = internal_lookup() or []
+        except Exception as exc:
+            internal_items = []
+            logger.debug("internal_lookup failed err=%s", type(exc).__name__)
+        if internal_items:
+            logger.info("provider_internal hit role=%r results=%d", role, len(internal_items))
+            _cache_put(key, internal_items)
+            return FetchResult(items=internal_items, provider="internal")
+
+    aggregate_rate_limited = False
+    aggregate_quota = False
+
+    # 3-5. External providers in cost order: Jooble → Adzuna → JSearch.
+    def _consider(name: str, configured: bool, runner: Callable[[], FetchResult]) -> Optional[FetchResult]:
+        nonlocal aggregate_rate_limited, aggregate_quota
+        if not configured:
+            logger.debug("provider_skip provider=%s reason=not_configured", name)
+            return None
+        if is_degraded(name):
+            logger.info("provider_skip provider=%s reason=degraded", name)
+            return None
+        result = runner()
+        if result.rate_limited:
+            aggregate_rate_limited = True
+            mark_degraded(name, "rate_limit")
+        if result.quota_exhausted:
+            aggregate_quota = True
+            mark_degraded(name, "quota")
+        if result.items:
+            _cache_put(key, result.items)
+            logger.info("provider_hit provider=%s role=%r results=%d", name, role, len(result.items))
+            return result
+        return None
+
+    cascade = [
+        ("jooble", _provider_configured("jooble"), lambda: _jooble_search(role, location)),
+        ("adzuna", _adzuna_enabled(), lambda: _adzuna_search(role, location)),
+        ("jsearch", _provider_configured("jsearch"), lambda: _jsearch_search(role, location, country)),
+    ]
+    for name, configured, runner in cascade:
+        hit = _consider(name, configured, runner)
+        if hit is not None:
+            return hit
+
+    # 6. Degraded — every provider was skipped, degraded, or returned nothing.
+    logger.warning(
+        "provider_cascade_exhausted role=%r rate_limited=%s quota=%s",
+        role, aggregate_rate_limited, aggregate_quota,
+    )
+    return FetchResult(
+        items=[],
+        provider="none",
+        rate_limited=aggregate_rate_limited,
+        quota_exhausted=aggregate_quota,
+        error="all_providers_unavailable",
+    )
