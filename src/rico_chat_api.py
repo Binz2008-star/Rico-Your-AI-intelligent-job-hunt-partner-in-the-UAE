@@ -2784,42 +2784,29 @@ class RicoChatAPI:
             # No scorer ran — emit 0.0 as the canonical "no score" sentinel; frontend checks for 0.0 to hide badge.
             normalized_score = 0.0
 
-        # Preserve URL fields so the frontend can surface apply links and distinguish
-        # verified live postings from leads that still need a working apply URL.
-        # alt_link (job_google_link) is kept separately so the apply-fallback chain
-        # can offer an alternate link when the primary apply URL is unavailable.
-        apply_url = str(
-            m.get("job_apply_link") or m.get("apply_link") or m.get("link") or ""
-        ).strip()
-        alt_link = str(m.get("job_google_link") or m.get("alt_link") or "").strip()
-        source_url = str(
-            m.get("source_url") or alt_link or apply_url
-        ).strip()
+        # Canonical link resolution — the SINGLE source of truth for a job's apply
+        # link, shared with the "open the apply link for the Nth job" chat action so
+        # a card and the chat command can never disagree. ``usable_link`` is the one
+        # trusted URL the Apply button should use; when ``link_unavailable`` is True
+        # the frontend must render the fallback CTA instead of a dead-end Apply.
+        from src.services.job_link import resolve_job_link as _resolve_job_link
+        _lr = _resolve_job_link(m)
+        apply_url = _lr["apply_url"]
+        alt_link = _lr["alt_link"]
+        source_url = _lr["source_url"]
+        usable_link = _lr["usable_link"]
+        link_unavailable = _lr["link_unavailable"]
+        link_unavailable_reason = _lr["reason"]
+        verification_status = _lr["verification_status"]
 
-        # Classify source quality from domain patterns — no network call.
-        # Google Jobs links (jobs.google.com, google.com/search) are search
-        # intermediary pages, not direct apply URLs. Move them to alt_link so
-        # the frontend can offer them as a fallback, but don't present them as
-        # the primary "Apply" action.
+        # Clear an alt_link that is itself a Google search intermediary so the
+        # frontend falls through to the fallback CTA rather than surfacing it.
         try:
-            from src.services.source_quality import classify_url, is_google_intermediary, classify_company
-            if apply_url and is_google_intermediary(apply_url):
-                if not alt_link:
-                    alt_link = apply_url
-                apply_url = ""
-                verification_status = "google_intermediary"
-            else:
-                verification_status = classify_url(apply_url or source_url)
-            # source_url and alt_link must never be Google search intermediary pages.
-            # Clear both so the frontend falls through to "Link unavailable" instead
-            # of surfacing google.com/search?q=jobs as View Source or Alt link.
-            if source_url and is_google_intermediary(source_url):
-                source_url = ""
+            from src.services.source_quality import is_google_intermediary, classify_company
             if alt_link and is_google_intermediary(alt_link):
                 alt_link = ""
             company_quality = classify_company(str(m.get("company") or ""))
         except Exception:
-            verification_status = "needs_source_verification" if apply_url else "lead_needs_verification"
             company_quality = "ok"
 
         # Description snippet — first 350 chars of real job description for richer cards.
@@ -2840,6 +2827,11 @@ class RicoChatAPI:
             "apply_url": apply_url,
             "source_url": source_url,
             "alt_link": alt_link,
+            # Canonical link the Apply button should use. When empty, the card must
+            # render the fallback CTA instead of a dead-end Apply button.
+            "usable_link": usable_link,
+            "link_unavailable": link_unavailable,
+            "link_unavailable_reason": link_unavailable_reason,
             "verification_status": verification_status,
             "company_quality": company_quality,
             "actions": ["Prepare application", "Save", "Ask why", "Skip"],
@@ -2878,6 +2870,16 @@ class RicoChatAPI:
         why = m.get("rico_explanation")
         if why:
             result["why"] = str(why)
+
+        # No trusted apply link → attach safe fallback CTAs so the card never
+        # renders a dead-end Apply button.
+        if link_unavailable:
+            from src.services.job_link import build_link_fallback_cta
+            result["fallback_cta"] = build_link_fallback_cta(
+                title=result["title"],
+                company=result["company"],
+                location=str(m.get("location") or ""),
+            )
 
         return result
 
@@ -7965,6 +7967,18 @@ class RicoChatAPI:
 
         # Open apply link — show URL only; never triggers apply confirmation
         if legacy_intent == "open_apply_link":
+            # Ordinal form ("open the apply link for the first/Nth job") — resolve
+            # the job from recent search context and use the SAME canonical link
+            # field as the card, returning a safe fallback CTA when there is no
+            # usable link. Never raises the "missing required 'link' field" error.
+            _oal_entities = getattr(intent_result, "entities", None) or {}
+            _ordinal = _oal_entities.get("ordinal")
+            if _ordinal is not None:
+                return self._finalize(
+                    self._open_apply_link_by_ordinal(user_id, int(_ordinal), profile),
+                    self.SOURCE_KEYWORD, profile=profile,
+                )
+
             title = getattr(intent_result, "extracted_title", None) or ""
             company = getattr(intent_result, "extracted_company", None) or ""
             apply_url = None
@@ -8898,6 +8912,113 @@ class RicoChatAPI:
                 return ex.submit(_run).result(timeout=12)
         except Exception:
             return None
+
+    def _recent_search_matches(self, user_id: str) -> list[dict[str, Any]]:
+        """Return the user's recent search matches (session context, DB fallback).
+
+        Shared by the ordinal "open the apply link for the Nth job" resolver so it
+        sees the exact same ordered list the cards were rendered from.
+        """
+        try:
+            ctx = self._get_recent_context(user_id)
+            matches = ctx.get("recent_search_matches") or []
+            if matches:
+                return list(matches)
+        except Exception:
+            pass
+        try:
+            from src.repositories.user_job_context_repo import get_recent_matches as _grm
+            return list(_grm(user_id, limit=10, max_age_minutes=60) or [])
+        except Exception:
+            return []
+
+    def _apply_link_fallback_response(
+        self, user_id: str, title: str, company: str,
+        location: str = "", reason: str = "no_link",
+    ) -> dict[str, Any]:
+        """Safe fallback CTA when a job has no usable apply link.
+
+        Returned instead of ever surfacing "Job payload is missing required 'link'
+        field" to the user. Offers company-site / Google / LinkedIn search, copy,
+        and save-to-pipeline — all plain search links, never scraped.
+        """
+        from src.services.job_link import build_link_fallback_cta
+
+        label = f"**{title}**" + (f" at **{company}**" if company else "")
+        if reason == "expired":
+            lead = f"The apply link for {label} appears to be expired."
+        elif reason == "google_intermediary_only":
+            lead = f"I only have a search link for {label}, not a direct apply page."
+        else:
+            lead = f"I don't have a verified apply link for {label} yet."
+        msg = f"{lead} Here are safe ways to apply:"
+
+        response = {
+            "type": "open_apply_link",
+            "intent": "open_apply_link",
+            "message": msg,
+            "apply_url": None,
+            "usable_link": "",
+            "link_unavailable": True,
+            "link_unavailable_reason": reason,
+            "options": build_link_fallback_cta(title, company, location),
+            "next_action": "apply_link_fallback",
+        }
+        self._append_chat(user_id, "assistant", msg)
+        return response
+
+    def _open_apply_link_by_ordinal(
+        self, user_id: str, ordinal: int, profile: Any,
+    ) -> dict[str, Any]:
+        """Resolve "open the apply link for the first/Nth/last job" from recent
+        search context and open it via the canonical link field.
+
+        Never raises a missing-link error: when there is no usable link it returns
+        the safe fallback CTA.
+        """
+        from src.services.job_link import resolve_job_link
+
+        matches = self._recent_search_matches(user_id)
+        if not matches:
+            msg = (
+                "I don't have a recent job list to open yet. Search for a role first, "
+                "then say 'open the apply link for the first job'."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "open_apply_link", "intent": "open_apply_link",
+                "message": msg, "apply_url": None,
+            }
+
+        idx = len(matches) - 1 if ordinal == -1 else ordinal - 1
+        if idx < 0 or idx >= len(matches):
+            n = len(matches)
+            msg = (
+                f"You have {n} job{'s' if n != 1 else ''} in your recent list. "
+                f"Pick a number between 1 and {n}."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "open_apply_link", "intent": "open_apply_link",
+                "message": msg, "apply_url": None,
+            }
+
+        job = matches[idx]
+        title = str(job.get("title") or "")
+        company = str(job.get("company") or "")
+        link = resolve_job_link(job)
+
+        if not link["link_unavailable"] and link["usable_link"]:
+            return self._handle_open_apply_link_path(
+                user_id=user_id, title=title, company=company,
+                apply_url=link["usable_link"], profile=profile,
+            )
+
+        return self._apply_link_fallback_response(
+            user_id, title, company,
+            location=str(job.get("location") or ""),
+            reason=link["reason"],
+        )
 
     def _handle_open_apply_link_path(
         self,

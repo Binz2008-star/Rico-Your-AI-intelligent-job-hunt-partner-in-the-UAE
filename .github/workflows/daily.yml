@@ -197,16 +197,17 @@ jobs:
               print(r.status.value, '|', r.title[:60], '|', r.company[:30])
           "
 
-      - name: Notify session missing
+      - name: Notify session missing (admin/dev channel only)
         if: steps.session_check.outcome == 'failure'
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Operator alert — route to ADMIN/DEV chat only, never the user chat.
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_ADMIN_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+          ADMIN_TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_ADMIN_CHAT_ID || secrets.TELEGRAM_DEV_CHAT_ID }}
         run: |
           python -c "
           import os, requests
           token   = os.getenv('TELEGRAM_BOT_TOKEN','')
-          chat_id = os.getenv('TELEGRAM_CHAT_ID','')
+          chat_id = os.getenv('ADMIN_TELEGRAM_CHAT_ID','')
           if token and chat_id:
               requests.post(
                   f'https://api.telegram.org/bot{token}/sendMessage',
@@ -214,6 +215,8 @@ jobs:
                         'text': '⚠️ NaukriGulf: session missing on self-hosted runner — log in manually then re-run.'},
                   timeout=10,
               )
+          else:
+              print('admin telegram chat not configured; skipping operator alert (no user fallback)')
           "
 
   # ── Job 4: Indeed Apply — self-hosted runner ────────────────────────────────
@@ -273,16 +276,17 @@ jobs:
         run: |
           python scripts/run_indeed_apply.py --max 1
 
-      - name: Notify Indeed session missing
+      - name: Notify Indeed session missing (admin/dev channel only)
         if: steps.indeed_session_check.outcome == 'failure'
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Operator alert — route to ADMIN/DEV chat only, never the user chat.
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_ADMIN_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+          ADMIN_TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_ADMIN_CHAT_ID || secrets.TELEGRAM_DEV_CHAT_ID }}
         run: |
           python -c "
           import os, requests
           token   = os.getenv('TELEGRAM_BOT_TOKEN','')
-          chat_id = os.getenv('TELEGRAM_CHAT_ID','')
+          chat_id = os.getenv('ADMIN_TELEGRAM_CHAT_ID','')
           if token and chat_id:
               requests.post(
                   f'https://api.telegram.org/bot{token}/sendMessage',
@@ -290,4 +294,6 @@ jobs:
                         'text': '⚠️ Indeed: session missing on self-hosted runner — log in manually then re-run.'},
                   timeout=10,
               )
+          else:
+              print('admin telegram chat not configured; skipping operator alert (no user fallback)')
           "
