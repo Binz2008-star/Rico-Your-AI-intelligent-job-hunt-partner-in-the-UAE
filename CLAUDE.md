@@ -235,8 +235,17 @@ HF_TOKEN=
 JSEARCH_API_KEY=
 RAPIDAPI_KEY=
 
+# User-facing bot/chat — job & career notifications only
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
+
+# Admin/dev channel — technical notifications only (CI, deploy, errors,
+# provider quota). admin_* alerts route here and never fall back to the user
+# chat; if unset, admin alerts are logged and dropped. See
+# src/services/notification_router.py.
+TELEGRAM_ADMIN_CHAT_ID=
+TELEGRAM_DEV_CHAT_ID=
+TELEGRAM_ADMIN_BOT_TOKEN=
 
 JOTFORM_API_KEY=
 JOTFORM_FORM_ID=
@@ -323,6 +332,24 @@ Migration is complete. `apps/web/lib/client.ts` has been deleted. All API calls 
 
 - `src/rico_safety.py` guardrails are non-negotiable. Do not add routes or tool calls that bypass safety checks.
 - High-impact actions (apply, send message, mutate preferences) require explicit user confirmation when approval mode is enabled.
+
+## Telegram Notification Audience Rules
+
+Telegram notifications are split by audience in `src/services/notification_router.py`.
+
+- User-facing chat (`TELEGRAM_CHAT_ID` / per-user `telegram_chat_id`) is for
+  job/career notifications ONLY: `user_job`, `user_account`.
+- Admin/dev chat (`TELEGRAM_ADMIN_CHAT_ID` → `TELEGRAM_DEV_CHAT_ID`) is for
+  technical alerts ONLY: `admin_ci`, `admin_deploy`, `admin_error`, `admin_provider`
+  (CI/test status, deploy status, errors/logs, AI-provider quota/health).
+- `admin_*` notifications MUST NEVER be delivered to a user chat. If no
+  admin/dev channel is configured, admin alerts are logged and dropped — never
+  redirected to the user chat. Use `send_admin_notification()` /
+  `send_notification(..., notification_type=...)`; do not send technical alerts
+  through `send_telegram_message()`/`send_telegram_to_user()` directly.
+- GitHub Actions admin alerts (`error-notifications.yml`, runner/session and
+  apply-ops alerts in `daily.yml` / `manual-naukrigulf-apply.yml`) target the
+  admin/dev secret and are skipped when it is unset.
 
 ## Full Architecture Reference
 
