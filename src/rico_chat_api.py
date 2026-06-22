@@ -4513,21 +4513,24 @@ class RicoChatAPI:
 
     @staticmethod
     def _search_jsearch_meta(role: str, location: str = "") -> Any:
-        """Query JSearch for live UAE jobs matching *role*, with cache + retry.
+        """Query live UAE jobs for *role* via the provider cascade (cache → Jooble
+        → Adzuna → JSearch → degraded), with cache + retry + quota protection.
 
         When *location* is given the query targets that specific UAE city instead of
         the generic "UAE" suffix, producing sharper results for city-constrained searches.
 
         Returns a ``jsearch_client.FetchResult`` so the caller can tell a genuine
-        empty result apart from a rate-limited source. Never raises.
+        empty result apart from a rate-limited / quota-exhausted source. Never raises.
+        The method name is retained for backward compatibility with existing callers
+        and tests; it now routes through ``src.job_providers``.
         """
-        from src import jsearch_client
+        from src import job_providers
 
-        query = f"{role} {location}".strip() if location else f"{role} UAE"
-        result = jsearch_client.search(query)
+        result = job_providers.search_jobs(role, location)
         logger.info(
-            "jsearch_direct role=%r location=%r results=%d cache_hit=%s rate_limited=%s",
-            role, location or "UAE", len(result.items), result.cache_hit, result.rate_limited,
+            "provider_search role=%r location=%r provider=%s results=%d cache_hit=%s rate_limited=%s quota=%s",
+            role, location or "UAE", result.provider, len(result.items),
+            result.cache_hit, result.rate_limited, getattr(result, "quota_exhausted", False),
         )
         return result
 
@@ -4535,6 +4538,80 @@ class RicoChatAPI:
     def _search_jsearch_direct(role: str) -> list[dict[str, Any]]:
         """Backward-compatible list wrapper around :meth:`_search_jsearch_meta`."""
         return RicoChatAPI._search_jsearch_meta(role).items
+
+    def _provider_degraded_response(
+        self, user_id: str, role: str, *,
+        location: str = "",
+        quota_exhausted: bool = False,
+        rate_limited: bool = False,
+    ) -> dict[str, Any]:
+        """Build a safe fallback response when every job provider is degraded.
+
+        Renders actionable CTAs (try later, search company site, Google/LinkedIn
+        search, copy, save) rather than a dead-end "no results" / broken-link card.
+        The external links are plain *search* URLs — Rico never scrapes them.
+        """
+        from urllib.parse import quote_plus
+
+        loc = location or "UAE"
+        google_url = f"https://www.google.com/search?q={quote_plus(f'{role} {loc} jobs')}"
+        linkedin_url = (
+            "https://www.linkedin.com/jobs/search/?"
+            f"keywords={quote_plus(role)}&location={quote_plus(loc)}"
+        )
+
+        if quota_exhausted:
+            provider_state = "quota_exhausted"
+            message = (
+                f"Live job providers have reached their search quota for now, so I can't pull "
+                f"fresh **{role}** listings this minute. Here are safe ways to keep moving:"
+            )
+        elif rate_limited:
+            provider_state = "rate_limited"
+            message = (
+                f"The job source is temporarily rate-limited, so fresh **{role}** results aren't "
+                f"available right now. Try again shortly, or use one of these:"
+            )
+        else:
+            provider_state = "unavailable"
+            message = (
+                f"I couldn't reach a live job source for **{role}** right now. "
+                f"Here are safe ways to keep moving:"
+            )
+
+        options = [
+            {"action": "retry_search", "label": "Try again later", "role": role, "location": location},
+            {"action": "open_url", "label": "Search on Google", "url": google_url},
+            {"action": "open_url", "label": "Search on LinkedIn", "url": linkedin_url},
+            {"action": "search_company_site", "label": "Search a company career site", "role": role},
+            {"action": "copy_text", "label": "Copy role title", "text": role},
+            {"action": "save_role_search", "label": "Save this role search", "role": role, "location": location},
+        ]
+
+        response = {
+            "type": "provider_degraded",
+            "intent": "search_jobs",
+            "message": message,
+            "matches": [],
+            "result_count": 0,
+            "degraded": True,
+            "provider_state": provider_state,
+            "options": options,
+            "links": {"google": google_url, "linkedin": linkedin_url},
+            "next_action": "provider_degraded_fallback",
+        }
+
+        # Arm a pending search so a later "try again" re-runs this exact role once
+        # quota recovers, without the user retyping it.
+        try:
+            self._store_pending_job_search(
+                user_id, role=role, location=location, query_type="provider_degraded",
+            )
+        except Exception:
+            pass
+
+        self._append_chat(user_id, "assistant", message)
+        return response
 
     def _target_role_search_response(
         self, user_id: str, role: str, profile: Any,
@@ -4560,9 +4637,12 @@ class RicoChatAPI:
         operation = self._begin_job_search_operation(user_id, search_role)
         operation_id = str(operation["operation_id"])
 
-        # Primary path: live JSearch query for the exact requested role.
-        # Falls back to the legacy scraper pipeline only when JSearch is unavailable.
+        # Primary path: provider-cascade query for the exact requested role.
+        # Falls back to the legacy scraper pipeline only when providers are empty.
         rate_limited = False
+        quota_exhausted = False
+        fetch_provider = ""
+        fetch_error = ""
         import time as _time
         _search_start = _time.monotonic()
         try:
@@ -4575,10 +4655,14 @@ class RicoChatAPI:
             )
             all_matches = fetch.items
             rate_limited = fetch.rate_limited
+            quota_exhausted = getattr(fetch, "quota_exhausted", False)
+            fetch_provider = getattr(fetch, "provider", "")
+            fetch_error = getattr(fetch, "error", "") or ""
             _search_elapsed = _time.monotonic() - _search_start
             logger.info(
-                "job_search: role=%r results=%d rate_limited=%s elapsed=%.2fs op=%s",
-                search_role, len(all_matches), rate_limited, _search_elapsed, operation_id,
+                "job_search: role=%r results=%d provider=%s rate_limited=%s quota=%s elapsed=%.2fs op=%s",
+                search_role, len(all_matches), fetch_provider, rate_limited,
+                quota_exhausted, _search_elapsed, operation_id,
             )
             if not all_matches:
                 search_profile = (
@@ -4601,6 +4685,29 @@ class RicoChatAPI:
             )
             self._append_chat(user_id, "assistant", _graceful_msg)
             return {"type": "search_error", "message": _graceful_msg, "intent": "job_search_explicit"}
+
+        # Degraded-provider guard: when no live results AND a *configured* provider
+        # is quota-exhausted / rate-limited / failing, show a safe fallback CTA
+        # instead of an empty/dead-end "results" card. When no providers are
+        # configured at all (e.g. local/test env → error "no_providers_configured")
+        # we deliberately fall through to the existing empty-results handling so
+        # behaviour is unchanged.
+        _provider_failed = (
+            quota_exhausted
+            or rate_limited
+            or fetch_error == "all_providers_unavailable"
+        )
+        if not all_matches and _provider_failed:
+            try:
+                mark_completed(user_id, operation_id, 0)
+            except Exception:
+                pass
+            return self._provider_degraded_response(
+                user_id, normalized_role or search_role,
+                location=location,
+                quota_exhausted=quota_exhausted,
+                rate_limited=rate_limited,
+            )
 
         # Filter out already-applied jobs
         try:
