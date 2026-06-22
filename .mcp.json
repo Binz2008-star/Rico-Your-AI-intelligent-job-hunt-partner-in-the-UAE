@@ -1,5 +1,9 @@
 {
   "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp"]
+    },
     "vercel": {
       "type": "http",
       "url": "https://mcp.vercel.com"
