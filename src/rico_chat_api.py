@@ -2079,6 +2079,25 @@ class RicoChatAPI:
         ]
 
     @staticmethod
+    def _filter_excluded_roles(roles: list[Any], excluded: list[str]) -> list[Any]:
+        """Drop any role that matches an excluded term (case-insensitive, whole-word
+        or substring), so a "do not search …" guard is never violated.
+
+        e.g. excluded "Backend" removes "Backend Developer"; "Software Engineer"
+        removes "Senior Software Engineer".
+        """
+        _excl = [e.strip().lower() for e in excluded if e and e.strip()]
+        if not _excl:
+            return list(roles)
+        kept: list[Any] = []
+        for r in roles:
+            rl = str(r).strip().lower()
+            if any(e in rl or rl in e for e in _excl):
+                continue
+            kept.append(r)
+        return kept
+
+    @staticmethod
     def _looks_like_bare_target_role(message: str) -> bool:
         """Accept only short noun-phrase job titles, not questions or commands."""
         text = (message or "").strip()
@@ -7235,18 +7254,34 @@ class RicoChatAPI:
             target_roles = self._effective_target_roles(
                 self._as_list(self._profile_value(profile, "target_roles"))
             )
+            # Honour a "do not search …" exclusion guard carried on the intent
+            # ("find jobs based on my CV, but do not search Software Engineer, …"):
+            # filter excluded roles out of the candidates so they are never searched
+            # or suggested, and persist the guard for this session.
+            _pm_excluded = [
+                str(e).strip()
+                for e in ((getattr(intent_result, "entities", None) or {}).get("excluded_roles") or [])
+                if str(e).strip()
+            ]
+            if _pm_excluded:
+                target_roles = self._filter_excluded_roles(target_roles, _pm_excluded)
+                try:
+                    _pm_ctx = self._get_recent_context(user_id)
+                    _pm_ctx["excluded_roles"] = _pm_excluded
+                    self._store_recent_context(user_id, _pm_ctx)
+                except Exception:
+                    pass
             logger.info(
-                "rico_profile_match_search user=%s target_roles=%s has_cv=%s",
-                user_id, target_roles, has_cv,
+                "rico_profile_match_search user=%s target_roles=%s excluded=%s has_cv=%s",
+                user_id, target_roles, _pm_excluded, has_cv,
             )
             role = target_roles[0] if target_roles else "your profile"
-            return self._finalize(
-                self._target_role_search_response(
-                    user_id, role, profile, from_saved_profile=bool(target_roles)
-                ),
-                self.SOURCE_KEYWORD,
-                profile=profile,
+            _pm_response = self._target_role_search_response(
+                user_id, role, profile, from_saved_profile=bool(target_roles)
             )
+            if _pm_excluded:
+                _pm_response["excluded_roles"] = _pm_excluded
+            return self._finalize(_pm_response, self.SOURCE_KEYWORD, profile=profile)
 
         # Profile update — route BEFORE role-change fallback
         if legacy_intent == "profile_update":

@@ -760,6 +760,59 @@ _MULTI_ROLE_LEAD_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Strips a leading "<≤3 filler words> jobs/roles for " introduction left after the
+# search verb, so "search UAE jobs for HSE Manager and QHSE Manager" parses the
+# list as [HSE Manager, QHSE Manager] instead of dropping the first item (whose
+# "jobs for" prefix would otherwise be rejected by the non-role-word guard).
+_MULTI_ROLE_JOBS_FOR_RE = re.compile(
+    r"^\s*(?:\w+\s+){0,3}?(?:jobs?|roles?|positions?|openings?|vacancies?)\s+for\s+",
+    re.IGNORECASE,
+)
+
+# Trailing politeness / urgency qualifiers that are not part of a role title:
+# "Technical Product Owner only" -> "Technical Product Owner".
+_ROLE_TRAILING_QUALIFIERS = frozenset({
+    "only", "please", "pls", "plz", "now", "today", "asap", "thanks", "thx",
+    "here", "kindly", "urgently", "urgent", "immediately", "soon",
+})
+
+
+def _strip_role_qualifiers(role: Optional[str]) -> Optional[str]:
+    """Drop trailing politeness/urgency qualifier words from an extracted role."""
+    if not role:
+        return role
+    words = role.strip().split()
+    while words and words[-1].lower().strip(".,!?") in _ROLE_TRAILING_QUALIFIERS:
+        words.pop()
+    return " ".join(words) if words else role
+
+
+# Descriptive category → concrete allowed roles (T6). Keeps Rico on safe
+# product/management titles instead of guessing literal words like "product".
+_CATEGORY_PRODUCT_TECH_MGMT_ROLES = [
+    "Technical Product Owner", "Product Owner", "Technical Project Manager",
+    "Digital Transformation Manager", "Operations Technology Manager",
+]
+_CATEGORY_RE = re.compile(
+    r"\bproduct\s*(?:and|&|/|\+)\s*technical\s+management\b"
+    r"|\btechnical\s*(?:and|&|/|\+)\s*product\s+management\b",
+    re.IGNORECASE,
+)
+# "not coding jobs" exclusion shorthand → concrete engineering roles to exclude.
+_CODING_EXCLUSION_ROLES = [
+    "Software Engineer", "Full Stack", "Backend", "Golang", "Machine Learning",
+]
+_NOT_CODING_RE = re.compile(
+    r"\b(?:not|no|without|avoid|exclude|skip|except)\s+coding\b|\bnon[- ]?coding\b",
+    re.IGNORECASE,
+)
+# Reference to the user's CV / profile as the search basis (T5).
+_CV_PROFILE_REF_RE = re.compile(
+    r"\b(?:my\s+cv|my\s+resume|my\s+profile|based\s+on\s+my|match(?:es|ing)?\s+my|"
+    r"from\s+my\s+(?:cv|resume|profile)|for\s+me)\b",
+    re.IGNORECASE,
+)
+
 # Opener of the negative-constraint clause — everything after it is an EXCLUSION
 # list. Kept narrow so ordinary prose ("not sure", "no thanks") never trips it.
 _EXCLUSION_OPENER_RE = re.compile(
@@ -890,8 +943,10 @@ def extract_role_list(text: str) -> tuple[list[str], list[str]]:
     if opener:
         positive_segment = text[: opener.start()]
         excluded_segment = text[opener.end():]
-    # Remove the leading search verb so it is not parsed as the first role.
+    # Remove the leading search verb, then any "<loc> jobs/roles for" introduction
+    # ("UAE jobs for HSE Manager and QHSE Manager" -> "HSE Manager and QHSE Manager").
     positive_segment = _MULTI_ROLE_LEAD_RE.sub("", positive_segment, count=1)
+    positive_segment = _MULTI_ROLE_JOBS_FOR_RE.sub("", positive_segment, count=1)
     target_roles = _split_role_phrase(positive_segment)
     excluded_roles = _split_role_phrase(excluded_segment)
     return target_roles, excluded_roles
@@ -1607,6 +1662,32 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         return IntentResult("application_tracking", 0.8, "regex")
 
     # ── 4. Job search patterns ───────────────────────────────────────────
+    # 4a-0. Descriptive category → concrete allowed roles ("I want product and
+    # technical management jobs, not coding jobs"). Mapped before the generic
+    # multi-role parser, which would otherwise treat "product"/"coding" as roles.
+    if _CATEGORY_RE.search(text):
+        _cat_roles = list(_CATEGORY_PRODUCT_TECH_MGMT_ROLES)
+        _cat_excl = (
+            list(_CODING_EXCLUSION_ROLES) if _NOT_CODING_RE.search(text)
+            else extract_role_list(text)[1]
+        )
+        return IntentResult(
+            "job_search_multi_role", 0.9, "regex",
+            extracted_role=_cat_roles[0],
+            entities={"roles": _cat_roles, "excluded_roles": _cat_excl, "category": True},
+        )
+
+    # 4a-1. CV/profile-based search with exclusions but no explicit positive role
+    # ("find jobs based on my CV, but do not search Software Engineer, ..."). Route
+    # to profile-match carrying the exclusion guard so excluded roles are never
+    # searched or suggested.
+    _cv_pos, _cv_excl = extract_role_list(text)
+    if _cv_excl and not _cv_pos and _CV_PROFILE_REF_RE.search(text):
+        return IntentResult(
+            "job_search_profile_match", 0.9, "regex",
+            entities={"excluded_roles": _cv_excl},
+        )
+
     # 4a. Multi-role search list — "search for A, B and C roles in UAE, do not
     # search X, Y". A single comma/and-separated request for several target roles
     # (with optional negative constraints). Must run before role_change and
@@ -1686,6 +1767,8 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         extracted_role = for_role_m.group(1).strip() if for_role_m else None
         if not extracted_role:
             extracted_role = _extract_role_before_noun(text)
+        # Strip trailing politeness/urgency qualifiers ("... Owner only" -> "... Owner").
+        extracted_role = _strip_role_qualifiers(extracted_role)
         # Extract location and employment_type entities for richer search queries.
         _search_entities: dict = {}
         _city_m = _UAE_CITY_EXTRACT_RE.search(text)
