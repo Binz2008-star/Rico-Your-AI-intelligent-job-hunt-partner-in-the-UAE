@@ -86,11 +86,18 @@ class TestJobTools:
         assert result.success is False
         assert "DB down" in (result.error or "")
 
-    def test_apply_job_missing_link_returns_failure(self):
+    def test_apply_job_missing_link_returns_manual_fallback(self):
+        # A job with no usable apply link must NOT throw the old
+        # "missing required 'link' field" error. It returns a user-safe manual
+        # fallback CTA so callers show next steps, never "Action failed".
         from src.agent.tools.job_tools import apply_job
         result = apply_job({"title": "HSE Manager", "company": "ACME"})
-        assert result.success is False
-        assert "link" in (result.error or "").lower()
+        assert result.success is True
+        assert result.data.get("status") == "manual_required"
+        assert result.data.get("fallback") is True
+        msg = (result.data.get("message") or "")
+        assert "missing required 'link'" not in msg.lower()
+        assert "HSE Manager" in msg
 
     def test_apply_job_delegates_to_service(self):
         from src.agent.tools.job_tools import apply_job
@@ -437,7 +444,9 @@ class TestAgentChatEndpoint:
         assert body["success"] is False
         assert "hack_the_planet" in body["message"].lower() or "unknown" in body["message"].lower()
 
-    def test_apply_action_missing_link_returns_error(self, client):
+    def test_apply_action_missing_link_returns_manual_fallback(self, client):
+        # Missing-link apply now degrades to a manual CTA (success True) instead
+        # of surfacing a raw "missing required 'link' field" error to the user.
         job = {"title": "Intern", "company": "Corp"}  # no link
         r = client.post("/api/v1/agent/chat", json={
             "message": "Apply",
@@ -445,7 +454,8 @@ class TestAgentChatEndpoint:
         })
         assert r.status_code == 200
         body = r.json()
-        assert body["success"] is False
+        assert body["success"] is True
+        assert "missing required 'link'" not in body["message"].lower()
 
     def test_malformed_json_returns_422(self, client):
         import json

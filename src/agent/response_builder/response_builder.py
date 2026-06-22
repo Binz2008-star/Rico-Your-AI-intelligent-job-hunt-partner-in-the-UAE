@@ -186,6 +186,10 @@ def _apply_response(
         message = f"You have already applied to **{title}**."
     elif status == "unsupported":
         message = f"No automation engine supports this source. {msg}"
+    elif status == "manual_required":
+        # No usable apply link / automation off — surface the manual CTA verbatim
+        # so the user gets a next step instead of a generic "attempt" line.
+        message = msg or f"Manual apply needed for **{title}**."
     else:
         message = f"Application attempt for **{title}**: {msg or status}"
 

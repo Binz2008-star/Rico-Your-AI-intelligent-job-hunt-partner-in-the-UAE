@@ -68,13 +68,37 @@ def apply_job(job: Dict[str, Any]) -> ToolExecutionResult:
     after the user explicitly approved via the PermissionRequestCard), the approval gate
     in apply_to_job is bypassed. All other callers receive approval_required so Rico can
     never auto-apply without explicit user confirmation.
+
+    The apply URL is resolved through the canonical link resolver, which accepts
+    any known alias (link / apply_url / apply_link / job_apply_link / source_url /
+    job_google_link / alt_url / alt_link). When no usable link exists Rico returns
+    a user-safe manual fallback instead of the old hard error so the caller can
+    show a CTA rather than "Action failed: ... missing required 'link' field".
     """
-    if not job.get("link"):
-        return ToolExecutionResult(
-            success=False,
-            tool_name="apply_job",
-            error="Job payload is missing required 'link' field",
+    from src.rico_link_resolver import resolve_job_link
+
+    resolved_link = resolve_job_link(job)
+    if not resolved_link:
+        title = (str(job.get("title") or "").strip() or "this role")
+        company = str(job.get("company") or "").strip()
+        where = f" at {company}" if company else ""
+        return _timed(
+            "apply_job",
+            True,
+            {
+                "status": "manual_required",
+                "fallback": True,
+                "apply_url": "",
+                "message": (
+                    f"I don't have a verified apply link for {title}{where} yet. "
+                    "Run a fresh search to refresh the listing, or apply directly "
+                    "on the company website or LinkedIn."
+                ),
+            },
+            0,
         )
+    # Canonicalise: downstream apply engines and the idempotency key read job['link'].
+    job = {**job, "link": resolved_link}
     from src.services.apply_service import apply_to_job
     start = time.monotonic()
     pre_approved = bool(job.get("_approved", False))

@@ -2837,6 +2837,11 @@ class RicoChatAPI:
             "title": str(m.get("title") or "Untitled role"),
             "company": str(m.get("company") or "Unknown company"),
             "score": normalized_score,
+            # Canonical apply link the frontend echoes back on Apply (and the
+            # idempotency key reads). Prefer the verified direct apply URL, then
+            # the source listing. alt_link (a Google Jobs intermediary) is kept
+            # separate so it is never presented as the primary apply link.
+            "link": apply_url or source_url,
             "apply_url": apply_url,
             "source_url": source_url,
             "alt_link": alt_link,
@@ -7873,7 +7878,7 @@ class RicoChatAPI:
                     for m in ctx.get("recent_search_matches", []):
                         if (title.lower() in (m.get("title") or "").lower() and
                                 company.lower() in (m.get("company") or "").lower()):
-                            url = (m.get("apply_url") or m.get("link") or "").strip()
+                            url = (m.get("apply_url") or m.get("link") or m.get("source_url") or "").strip()
                             if url:
                                 apply_url = url
                                 break  # Found a live URL — stop scanning
@@ -8477,7 +8482,12 @@ class RicoChatAPI:
                     "location": m.get("location", ""),
                     "apply_url": m.get("apply_url", ""),
                     "source_url": m.get("source_url", ""),
-                    "link": m.get("apply_url", ""),
+                    "alt_link": m.get("alt_link", ""),
+                    # Canonical apply link — already resolved by _format_match
+                    # (apply_url → source_url). Carried explicitly so ordinal
+                    # follow-ups ("apply to the first job") never rebuild a job
+                    # dict that is missing its 'link' field.
+                    "link": m.get("link") or m.get("apply_url") or m.get("source_url") or "",
                     "verification_status": m.get("verification_status", "lead_needs_verification"),
                     # Extended fields for "tell me more about that job"
                     "employment_type": m.get("employment_type", ""),

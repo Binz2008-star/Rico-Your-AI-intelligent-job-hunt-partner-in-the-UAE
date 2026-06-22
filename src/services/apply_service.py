@@ -56,29 +56,16 @@ def _clean_apply_error(exc: Exception) -> Dict[str, str]:
 
 
 def _resolve_apply_link(job: Dict[str, Any]) -> str:
-    """Pick the best known apply URL from normalized and raw job payloads."""
-    for key in (
-        "link",
-        "apply_url",
-        "apply_link",
-        "job_apply_link",
-        "url",
-        "job_url",
-        "alt_link",
-        "source_url",
-    ):
-        value = str(job.get(key) or "").strip()
-        if value:
-            return value
+    """Pick the best known apply URL from normalized and raw job payloads.
 
-    for nested_key in ("job", "job_data"):
-        nested = job.get(nested_key)
-        if isinstance(nested, dict):
-            value = _resolve_apply_link(nested)
-            if value:
-                return value
+    Delegates to the canonical resolver so apply_service, the apply_job tool,
+    job-card rendering and recent-search storage all normalize the same set of
+    aliases (link / apply_url / apply_link / job_apply_link / source_url /
+    job_google_link / alt_url / alt_link, plus nested job/job_data).
+    """
+    from src.rico_link_resolver import resolve_job_link
 
-    return ""
+    return resolve_job_link(job)
 
 
 _AUTO_APPLY_DISABLED_STATUSES = {"no_result", "disabled", "unsupported"}
