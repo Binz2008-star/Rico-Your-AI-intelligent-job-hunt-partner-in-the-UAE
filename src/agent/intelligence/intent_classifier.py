@@ -710,6 +710,160 @@ _ROLE_PREFIX_STOPWORDS = frozenset({
     "only", "filter", "exclude", "include", "no", "not", "without", "remove",
 })
 
+# ── Multi-role search-list parsing ────────────────────────────────────────────
+# Users routinely request several target roles in one message:
+#   "Search for Technical Product Owner, Product Owner, Technical Project Manager
+#    and Operations Technology Manager roles in UAE. Do not search Software
+#    Engineer, Backend, Golang or Machine Learning roles unless I ask for coding."
+# The single-role extractors above treat the whole comma list as one unknown
+# role, so the chat layer replied "I do not recognize '<the whole list>' as a job
+# role". extract_role_list() splits the list into individual target roles and a
+# trailing negative-constraint ("do not search …") clause of excluded roles.
+
+# Leading search verb removed from the positive segment ("Search for A, B …").
+_MULTI_ROLE_LEAD_RE = re.compile(
+    r"^\s*(?:please\s+)?(?:search|searching|look|looking|find|finding|show|get|"
+    r"fetch|give|list|browse)\w*(?:\s+(?:me|for|up))*\s+",
+    re.IGNORECASE,
+)
+
+# Opener of the negative-constraint clause — everything after it is an EXCLUSION
+# list. Kept narrow so ordinary prose ("not sure", "no thanks") never trips it.
+_EXCLUSION_OPENER_RE = re.compile(
+    r"\b(?:do\s*n['’]?t|do\s+not|never|please\s+do\s+not|please\s+do\s*n['’]?t)\s+"
+    r"(?:search|include|show|fetch|return|look\s+for|want|consider|send|pull)\b"
+    r"|\b(?:excluding|exclude|avoid|skip)\b",
+    re.IGNORECASE,
+)
+
+# Subordinate clause that qualifies (but is not part of) a role list — dropped
+# before splitting, e.g. "… roles unless I explicitly ask for coding jobs".
+_ROLE_LIST_TAIL_CLAUSE_RE = re.compile(
+    r"\b(?:unless|except|if|when|whenever|because|since|but|while|so\s+that)\b",
+    re.IGNORECASE,
+)
+
+# Trailing job-noun / location qualifier stripped from a captured role token:
+#   "Operations Technology Manager roles in UAE" -> "Operations Technology Manager"
+_ROLE_TOKEN_TAIL_RE = re.compile(
+    r"\s*\b(?:jobs?|roles?|positions?|openings?|vacancies?|work)?\b"
+    r"\s*\bin\s+[A-Za-z'’ .\-]+$"
+    r"|\s*\b(?:jobs?|roles?|positions?|openings?|vacancies?|work)\s*$",
+    re.IGNORECASE,
+)
+
+# Connectors a role list is split on: commas, semicolons, slashes, ampersands,
+# and the words "and" / "or".
+_ROLE_LIST_SPLIT_RE = re.compile(r"\s*(?:,|;|/|&|\band\b|\bor\b|\bplus\b)\s*", re.IGNORECASE)
+
+# Leading filler dropped from a single role token. Reuses the role-prefix
+# stopwords plus list-specific qualifiers ("pure Software Engineer" -> "Software
+# Engineer").
+_ROLE_TOKEN_LEAD_STOPWORDS = _ROLE_PREFIX_STOPWORDS | frozenset({
+    "pure", "purely", "strictly", "such", "as", "like", "also", "plus",
+})
+
+_ROLE_TOKEN_TRAILING_NOUNS = frozenset({
+    "jobs", "job", "roles", "role", "positions", "position",
+    "openings", "opening", "vacancies", "vacancy", "work",
+})
+
+# English location words — a token made up entirely of these is a place, not a role.
+_ENGLISH_LOCATION_WORDS = frozenset({
+    "uae", "u.a.e", "dubai", "abu", "dhabi", "sharjah", "ajman", "ras",
+    "al", "khaimah", "fujairah", "ain", "umm", "quwain", "emirates",
+    "united", "arab", "gulf", "gcc",
+})
+
+# Words that never appear inside a real role title — their presence means the
+# captured token is prose, not a role (e.g. "UAE jobs that match my CV"). Used to
+# reject false-positive list items so the multi-role path only fires on genuine
+# role lists. Job nouns are included because a real title never carries them once
+# the trailing qualifier has been stripped.
+_NON_ROLE_WORDS = frozenset({
+    "that", "which", "match", "matches", "matching", "suit", "suits", "fit",
+    "fits", "based", "my", "me", "mine", "our", "your", "their", "his", "her",
+    "i", "we", "you", "they", "cv", "resume", "profile", "experience",
+    "please", "kindly", "best", "with", "apply", "applying",
+    "jobs", "job", "roles", "role", "positions", "position", "openings",
+    "opening", "vacancies", "vacancy", "work", "anything", "something",
+})
+
+
+def _clean_role_token(token: str) -> Optional[str]:
+    """Normalise one role-list item to a bare role title, or None if it is not one.
+
+    Strips a trailing "roles/jobs in <location>" qualifier, leading command/filler
+    words ("pure", "search for", …) and trailing job nouns, then validates the
+    remainder is a 1–6 word phrase containing letters, not a pure location, and
+    free of prose/filler words that never appear inside a real role title.
+    """
+    t = (token or "").strip().strip(".!?;:").strip()
+    if not t:
+        return None
+    # Iteratively peel a trailing "roles/jobs in <location>" / bare job-noun tail.
+    prev = None
+    while prev != t:
+        prev = t
+        t = _ROLE_TOKEN_TAIL_RE.sub("", t).strip().strip(".!?;:").strip()
+    words = [w for w in t.split() if w]
+    while words and words[0].lower() in _ROLE_TOKEN_LEAD_STOPWORDS:
+        words.pop(0)
+    while words and words[-1].lower().strip(".") in _ROLE_TOKEN_TRAILING_NOUNS:
+        words.pop()
+    if not words or not (1 <= len(words) <= _MAX_WORD_COUNT_FOR_ROLE):
+        return None
+    role = " ".join(words)
+    if not re.search(r"[A-Za-z]", role):
+        return None
+    if all(w.lower().strip(".") in _ENGLISH_LOCATION_WORDS for w in words):
+        return None
+    # Any prose/filler word inside the phrase means this is not a clean role title.
+    if any(w.lower().strip(".") in _NON_ROLE_WORDS for w in words):
+        return None
+    return role
+
+
+def _split_role_phrase(segment: str) -> list[str]:
+    """Split a comma/and-separated role segment into de-duplicated role titles."""
+    if not segment:
+        return []
+    # Drop a trailing subordinate clause that is not part of the list itself.
+    segment = _ROLE_LIST_TAIL_CLAUSE_RE.split(segment, maxsplit=1)[0]
+    roles: list[str] = []
+    seen: set[str] = set()
+    for part in _ROLE_LIST_SPLIT_RE.split(segment):
+        role = _clean_role_token(part)
+        if role and role.lower() not in seen:
+            seen.add(role.lower())
+            roles.append(role)
+    return roles
+
+
+def extract_role_list(text: str) -> tuple[list[str], list[str]]:
+    """Parse a multi-role search request into ``(target_roles, excluded_roles)``.
+
+    Handles comma- and "and"/"or"-separated lists, strips trailing
+    "roles in UAE" / "jobs in Dubai" qualifiers, and preserves a trailing
+    negative-constraint clause ("do not search X, Y …") as the exclusion list.
+    Returns two (possibly empty) lists; callers decide whether the positive list
+    is long enough to treat the message as a multi-role search.
+    """
+    if not text:
+        return [], []
+    positive_segment = text
+    excluded_segment = ""
+    opener = _EXCLUSION_OPENER_RE.search(text)
+    if opener:
+        positive_segment = text[: opener.start()]
+        excluded_segment = text[opener.end():]
+    # Remove the leading search verb so it is not parsed as the first role.
+    positive_segment = _MULTI_ROLE_LEAD_RE.sub("", positive_segment, count=1)
+    target_roles = _split_role_phrase(positive_segment)
+    excluded_roles = _split_role_phrase(excluded_segment)
+    return target_roles, excluded_roles
+
+
 # Matches job-card action messages sent from RicoJobMatchCard:
 #   "{action} — {title} at {company}"
 # Must be checked BEFORE generic apply/save patterns.
@@ -1405,6 +1559,32 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         return IntentResult("application_tracking", 0.8, "regex")
 
     # ── 4. Job search patterns ───────────────────────────────────────────
+    # 4a. Multi-role search list — "search for A, B and C roles in UAE, do not
+    # search X, Y". A single comma/and-separated request for several target roles
+    # (with optional negative constraints). Must run before role_change and
+    # job_search_explicit so the whole list is not captured as one unknown role
+    # ("I do not recognize '<the whole list>' as a job role"). Gated on a search
+    # verb + an explicit job noun so ordinary prose never triggers it.
+    if (
+        (_ROLE_CHANGE_RE.match(text) or _JOB_SEARCH_EXPLICIT_RE.search(text))
+        and re.search(r"\b(?:jobs?|roles?|positions?|openings?|vacancies?)\b", text, re.IGNORECASE)
+    ):
+        _ml_roles, _ml_excluded = extract_role_list(text)
+        if len(_ml_roles) >= 2:
+            _ml_entities: dict = {"roles": _ml_roles, "excluded_roles": _ml_excluded}
+            _ml_city = _UAE_CITY_EXTRACT_RE.search(text)
+            # "UAE" is the default search scope, not a city constraint — skip it.
+            if _ml_city and _ml_city.group(1).strip().lower() != "uae":
+                _ml_entities["location"] = _ml_city.group(1).strip().title()
+            _ml_emp = _EMPLOYMENT_TYPE_EXTRACT_RE.search(text)
+            if _ml_emp:
+                _ml_entities["employment_type"] = _ml_emp.group(1).lower()
+            return IntentResult(
+                "job_search_multi_role", 0.9, "regex",
+                extracted_role=_ml_roles[0],
+                entities=_ml_entities,
+            )
+
     # Source-filter and compound-refinement checks must precede _JOB_SEARCH_EXPLICIT_RE
     # so filter tokens ("exclude", "only", "no contract") are never misclassified as roles.
     if _SOURCE_FILTER_RE.search(text):
