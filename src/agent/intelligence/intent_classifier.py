@@ -676,6 +676,39 @@ _SAVE_JOB_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Ordinal save: "save the first/second/Nth/last job to my pipeline". Emits
+# save_job with an ordinal entity so the handler resolves the job from the recent
+# search results — mirrors the ordinal open-apply-link path.
+_SAVE_JOB_ORDINAL_RE = re.compile(
+    r"\b(?:save|bookmark|keep|shortlist|add)\b\s+(?:the\s+)?"
+    r"(?:"
+    # "save job 2" / "save job number 2" / "save job #2"  (noun before number)
+    r"job\s+(?:number\s+|#)?(?P<ord_after>\d{1,2})"
+    r"|"
+    # "save the second job" / "save the 2nd one"  (ordinal before noun)
+    r"(?P<ord>first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last|\d{1,2})"
+    r"(?:st|nd|rd|th)?\s*(?:job|role|position|result|listing|one)"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# Arabic ordinal save: "احفظ أول وظيفة" / "احفظ ثاني وظيفة بالبايبلاين".
+# Verb (احفظ/خزن/اضف) + Arabic ordinal token (around the job noun وظيفة).
+_SAVE_JOB_ORDINAL_AR_RE = re.compile(
+    r"(?:احفظ|احفظي|خزن|خزّن|اضف|أضف|ضيف)\b[^\n]{0,20}?"
+    r"(?P<aord>اول|أول|الاولى|الأولى|الاولي|ثاني|ثانيه|ثانية|الثاني|الثانيه|الثانية|"
+    r"ثالث|ثالثه|ثالثة|الثالثة|رابع|رابعة|خامس|خامسة|اخر|آخر|الاخير|الأخير|الاخيره|الأخيرة)",
+    re.UNICODE,
+)
+
+_ARABIC_ORDINAL_TO_INT = {
+    "اول": 1, "أول": 1, "الاولى": 1, "الأولى": 1, "الاولي": 1,
+    "ثاني": 2, "ثانيه": 2, "ثانية": 2, "الثاني": 2, "الثانيه": 2, "الثانية": 2,
+    "ثالث": 3, "ثالثه": 3, "ثالثة": 3, "الثالثة": 3,
+    "رابع": 4, "رابعة": 4, "خامس": 5, "خامسة": 5,
+    "اخر": -1, "آخر": -1, "الاخير": -1, "الأخير": -1, "الاخيره": -1, "الأخيرة": -1,
+}
+
 # Extracts explicit role name from "find/search … jobs for <role>" patterns.
 # Checked alongside _JOB_SEARCH_EXPLICIT_RE to attach extracted_role.
 _JOB_SEARCH_FOR_ROLE_RE = re.compile(
@@ -1497,6 +1530,21 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
             "save_target_role", 0.95, "regex",
             extracted_role=save_role_match.group(1).strip(),
         )
+
+    # Ordinal save ("save the second job to my pipeline" / "احفظ ثاني وظيفة")
+    # must be detected before the plain save pattern so the handler can resolve
+    # the Nth job from recent search results.
+    _save_ord_m = _SAVE_JOB_ORDINAL_RE.search(text)
+    if _save_ord_m:
+        _save_ord = _parse_ordinal(_save_ord_m.group("ord") or _save_ord_m.group("ord_after"))
+        if _save_ord is not None:
+            return IntentResult("save_job", 0.95, "regex", entities={"ordinal": _save_ord})
+    if has_arabic:
+        _save_ord_ar = _SAVE_JOB_ORDINAL_AR_RE.search(text)
+        if _save_ord_ar:
+            _save_ord = _ARABIC_ORDINAL_TO_INT.get(_save_ord_ar.group("aord"))
+            if _save_ord is not None:
+                return IntentResult("save_job", 0.95, "regex", entities={"ordinal": _save_ord})
 
     if _SAVE_JOB_RE.search(text):
         return IntentResult("save_job", 0.95, "regex")
