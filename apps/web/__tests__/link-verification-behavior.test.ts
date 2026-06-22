@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LinkVerificationResult } from "@/lib/api";
 
-const mockVerifyLink = vi.fn<[string], Promise<LinkVerificationResult>>();
-const mockVerifyLinkBatch = vi.fn<[string[]], Promise<Record<string, LinkVerificationResult>>>();
+const mockVerifyLink = vi.fn<(url: string) => Promise<LinkVerificationResult>>();
+const mockVerifyLinkBatch = vi.fn<(urls: string[]) => Promise<Record<string, LinkVerificationResult>>>();
 
 vi.mock("@/lib/api", () => ({
   verifyLink: (...args: [string]) => mockVerifyLink(...args),

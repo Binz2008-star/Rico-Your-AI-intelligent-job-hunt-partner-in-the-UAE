@@ -52,47 +52,70 @@ def read(user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
 
 
 def upsert(data: Dict[str, Any], user_id: Optional[str] = None) -> None:
-    """Insert or update the settings row for the given user."""
+    """Insert or update the settings row for the given user.
+
+    Only columns present in *data* are written; absent keys are left as-is.
+    Array columns use explicit TEXT[] casts to avoid psycopg2 empty-list
+    type-inference failures.
+    """
     conn = get_db_connection()
     if not conn:
         return
+
+    # Map Python key → (SQL column, SQL cast expression)
+    _ARRAY_COLS = {"include_keywords", "exclude_keywords", "blocked_companies"}
+    _INT_COLS   = {"min_score", "max_daily_applies", "score_threshold_apply", "score_threshold_watch"}
+    _TEXT_COLS  = {"telegram_chat_id"}
+    _ALL_COLS   = _ARRAY_COLS | _INT_COLS | _TEXT_COLS
+
+    # Build lists of (column, sql_fragment, value) for fields present in data
+    fields: list = []
+    for key in _ALL_COLS:
+        if key not in data:
+            continue
+        val = data[key]
+        if key in _ARRAY_COLS:
+            # Convert Python list → PostgreSQL text[] literal so psycopg2
+            # never has to infer the element type of an empty list.
+            if val is None:
+                pg_val = None
+                cast = "%s::TEXT[]"
+            else:
+                pg_val = "{" + ",".join(
+                    '"' + str(v).replace("\\", "\\\\").replace('"', '\\"') + '"'
+                    for v in val
+                ) + "}"
+                cast = "%s::TEXT[]"
+        else:
+            pg_val = val
+            cast = "%s"
+        fields.append((key, cast, pg_val))
+
+    if not fields:
+        return
+
+    col_names = ", ".join(f[0] for f in fields)
+    col_casts = ", ".join(f[1] for f in fields)
+    col_vals  = [f[2] for f in fields]
+
+    update_set = ", ".join(
+        f"{f[0]} = EXCLUDED.{f[0]}" for f in fields
+    )
+
+    sql = f"""
+        INSERT INTO settings (user_id, {col_names}, updated_at)
+        VALUES (%s, {col_casts}, NOW())
+        ON CONFLICT (user_id) DO UPDATE SET
+            {update_set},
+            updated_at = NOW()
+    """
+
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO settings (
-                    user_id, include_keywords, exclude_keywords,
-                    min_score, max_daily_applies, telegram_chat_id,
-                    score_threshold_apply, score_threshold_watch,
-                    blocked_companies, updated_at
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                ON CONFLICT (user_id) DO UPDATE SET
-                    include_keywords       = COALESCE(EXCLUDED.include_keywords,       settings.include_keywords),
-                    exclude_keywords       = COALESCE(EXCLUDED.exclude_keywords,       settings.exclude_keywords),
-                    min_score              = COALESCE(EXCLUDED.min_score,              settings.min_score),
-                    max_daily_applies      = COALESCE(EXCLUDED.max_daily_applies,      settings.max_daily_applies),
-                    telegram_chat_id       = COALESCE(EXCLUDED.telegram_chat_id,       settings.telegram_chat_id),
-                    score_threshold_apply  = COALESCE(EXCLUDED.score_threshold_apply,  settings.score_threshold_apply),
-                    score_threshold_watch  = COALESCE(EXCLUDED.score_threshold_watch,  settings.score_threshold_watch),
-                    blocked_companies      = COALESCE(EXCLUDED.blocked_companies,      settings.blocked_companies),
-                    updated_at             = NOW()
-                """,
-                (
-                    user_id or "default",
-                    data.get("include_keywords"),
-                    data.get("exclude_keywords"),
-                    data.get("min_score"),
-                    data.get("max_daily_applies"),
-                    data.get("telegram_chat_id"),
-                    data.get("score_threshold_apply"),
-                    data.get("score_threshold_watch"),
-                    data.get("blocked_companies"),
-                ),
-            )
+            cur.execute(sql, [user_id or "default"] + col_vals)
         conn.commit()
     except Exception:
-        logger.exception("settings_repo_upsert_failed")
+        logger.exception("settings_repo_upsert_failed user_id=%s data_keys=%s", user_id, list(data.keys()))
         rollback = getattr(conn, "rollback", None)
         if callable(rollback):
             try:
