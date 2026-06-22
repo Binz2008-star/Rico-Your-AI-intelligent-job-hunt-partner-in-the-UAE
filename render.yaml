@@ -119,9 +119,6 @@ services:
         value: "https://ricohunt.com"
       - key: RESET_BASE_URL
         value: "https://ricohunt.com"
-      - key: DEPLOYED_AT
-        value: "2026-05-23T15:21:00Z"
-
       # ── Cookies / CORS ────────────────────────────────────────────────────────
       - key: COOKIE_SECURE
         value: "true"

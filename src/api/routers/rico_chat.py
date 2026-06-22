@@ -65,7 +65,6 @@ from src.rico_openai_runtime import call_openai_minimal
 from src.schemas.actions import ActionRequest, ActionResponse, ExecutePermissionActionRequest
 from src.schemas.chat import RicoChatResponse, RicoSessionContext
 from src.services import chat_service
-from src.agent.responses.schema import build_error_response
 
 logger = logging.getLogger(__name__)
 _UTC = timezone.utc
@@ -80,7 +79,7 @@ router = APIRouter(prefix="/api/v1/rico", tags=["rico"])
 
 def _is_production() -> bool:
     """Check if running in production environment."""
-    return (os.getenv("APP_ENV") or os.getenv("ENV") or "").strip().lower() in {
+    return (os.getenv("RICO_ENV") or os.getenv("APP_ENV") or os.getenv("ENV") or "").strip().lower() in {
         "prod",
         "production",
     }
@@ -294,9 +293,6 @@ def mark_onboarding_complete(user_id: str) -> None:
     onboarding_repo.mark_onboarding_complete(user_id)
 
 
-def _is_valid_public_user_id(value: str) -> bool:
-    """Validate that a user_id matches the expected guest session format."""
-    return is_valid_public_user_id(value)
 
 
 def _resolve_upload_user_id(
@@ -320,7 +316,7 @@ def _resolve_upload_user_id(
     if not user_id:
         raise HTTPException(status_code=422, detail="user_id is required")
 
-    if not _is_valid_public_user_id(user_id):
+    if not is_valid_public_user_id(user_id):
         raise HTTPException(
             status_code=401,
             detail="Authentication or valid public session required"
@@ -1259,7 +1255,7 @@ async def rico_upload_cv(
 
     # Enforce per-plan CV quota for authenticated users.
     # Guest/public sessions (public:*) are exempt — they have no plan record.
-    if not _is_valid_public_user_id(resolved_user_id):
+    if not is_valid_public_user_id(resolved_user_id):
         from src.services.subscription_gating import enforce_document_quota
         enforce_document_quota(resolved_user_id, "cv")
 
@@ -1328,7 +1324,7 @@ async def rico_upload_cv(
             )
             # Store classification in session context so Rico can reference the
             # uploaded document in subsequent chat turns (e.g. "can you review it?").
-            if not _is_valid_public_user_id(resolved_user_id):
+            if not is_valid_public_user_id(resolved_user_id):
                 try:
                     from src.rico_memory import RicoMemoryStore
                     _mem = RicoMemoryStore()
@@ -1448,7 +1444,7 @@ async def rico_upload_cv(
             request_ref,
         )
 
-        if not _is_valid_public_user_id(resolved_user_id):
+        if not is_valid_public_user_id(resolved_user_id):
             try:
                 from src.rico_memory import RicoMemoryStore
                 _mem = RicoMemoryStore()
