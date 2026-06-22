@@ -4640,6 +4640,7 @@ class RicoChatAPI:
         rate_limited = False
         quota_exhausted = False
         fetch_provider = ""
+        fetch_error = ""
         import time as _time
         _search_start = _time.monotonic()
         try:
@@ -4654,6 +4655,7 @@ class RicoChatAPI:
             rate_limited = fetch.rate_limited
             quota_exhausted = getattr(fetch, "quota_exhausted", False)
             fetch_provider = getattr(fetch, "provider", "")
+            fetch_error = getattr(fetch, "error", "") or ""
             _search_elapsed = _time.monotonic() - _search_start
             logger.info(
                 "job_search: role=%r results=%d provider=%s rate_limited=%s quota=%s elapsed=%.2fs op=%s",
@@ -4682,10 +4684,18 @@ class RicoChatAPI:
             self._append_chat(user_id, "assistant", _graceful_msg)
             return {"type": "search_error", "message": _graceful_msg, "intent": "job_search_explicit"}
 
-        # Degraded-provider guard: when no live results AND the provider cascade is
-        # quota-exhausted / rate-limited / fully unavailable, show a safe fallback
-        # CTA instead of rendering an empty/dead-end "results" card.
-        if not all_matches and (quota_exhausted or rate_limited or fetch_provider == "none"):
+        # Degraded-provider guard: when no live results AND a *configured* provider
+        # is quota-exhausted / rate-limited / failing, show a safe fallback CTA
+        # instead of an empty/dead-end "results" card. When no providers are
+        # configured at all (e.g. local/test env → error "no_providers_configured")
+        # we deliberately fall through to the existing empty-results handling so
+        # behaviour is unchanged.
+        _provider_failed = (
+            quota_exhausted
+            or rate_limited
+            or fetch_error == "all_providers_unavailable"
+        )
+        if not all_matches and _provider_failed:
             try:
                 mark_completed(user_id, operation_id, 0)
             except Exception:

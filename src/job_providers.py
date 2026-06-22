@@ -406,20 +406,28 @@ def search_jobs(
         ("adzuna", _adzuna_enabled(), lambda: _adzuna_search(role, location)),
         ("jsearch", _provider_configured("jsearch"), lambda: _jsearch_search(role, location, country)),
     ]
+    # Whether any provider is configured at all. This separates a genuinely
+    # *degraded* deployment (keys present but providers failing / quota-spent)
+    # from one where no provider keys are set (e.g. local/test env). Only the
+    # former should surface degraded-provider UX; the latter falls through to the
+    # caller's existing empty/legacy handling so behaviour is unchanged.
+    configured_any = any(configured for _, configured, _ in cascade)
+
     for name, configured, runner in cascade:
         hit = _consider(name, configured, runner)
         if hit is not None:
             return hit
 
-    # 6. Degraded — every provider was skipped, degraded, or returned nothing.
+    # 6. Degraded — every configured provider was skipped, degraded, or empty.
+    error = "all_providers_unavailable" if configured_any else "no_providers_configured"
     logger.warning(
-        "provider_cascade_exhausted role=%r rate_limited=%s quota=%s",
-        role, aggregate_rate_limited, aggregate_quota,
+        "provider_cascade_exhausted role=%r configured_any=%s rate_limited=%s quota=%s",
+        role, configured_any, aggregate_rate_limited, aggregate_quota,
     )
     return FetchResult(
         items=[],
         provider="none",
         rate_limited=aggregate_rate_limited,
         quota_exhausted=aggregate_quota,
-        error="all_providers_unavailable",
+        error=error,
     )

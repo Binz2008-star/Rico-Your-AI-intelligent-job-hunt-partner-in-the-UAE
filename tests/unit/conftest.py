@@ -12,6 +12,28 @@ from unittest.mock import MagicMock, patch
 
 
 @pytest.fixture(autouse=True)
+def _reset_job_provider_state():
+    """Clear the process-local job-provider cache + health between unit tests.
+
+    ``src.job_providers`` keeps a module-level 24h result cache and a provider
+    health registry. Without resetting them, results from one test (e.g. a mocked
+    job search) leak into the next via the cache, making search-path tests
+    non-deterministic. Cleared before AND after each test for isolation.
+    """
+    try:
+        from src import job_providers
+        job_providers.clear_state()
+    except Exception:
+        pass
+    yield
+    try:
+        from src import job_providers
+        job_providers.clear_state()
+    except Exception:
+        pass
+
+
+@pytest.fixture(autouse=True)
 def mock_rico_dependencies(monkeypatch):
     """
     Patch all external I/O that RicoChatAPI.__init__ and its methods touch.

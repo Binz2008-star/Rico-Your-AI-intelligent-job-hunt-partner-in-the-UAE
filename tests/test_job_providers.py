@@ -305,11 +305,30 @@ def test_adzuna_skipped_in_cascade_when_disabled(monkeypatch):
 
 # ── Degraded fallback result ──────────────────────────────────────────────────
 
-def test_all_providers_unavailable_returns_degraded():
-    # No env vars configured at all.
+def test_no_providers_configured_returns_no_providers_configured():
+    # No env vars configured at all → distinct from a degraded deployment so the
+    # chat layer can fall through to its normal empty-results handling.
     res = jp.search_jobs("PO", "UAE")
     assert res.provider == "none"
     assert res.items == []
+    assert res.error == "no_providers_configured"
+
+
+def test_configured_but_all_failing_returns_all_providers_unavailable(monkeypatch):
+    # A provider IS configured but every attempt fails → genuine degraded state.
+    monkeypatch.setenv("RAPIDAPI_KEY", "y")
+    monkeypatch.setattr(jp, "_jsearch_search", lambda *a, **k: FetchResult(items=[], provider="jsearch"))
+    res = jp.search_jobs("PO", "UAE")
+    assert res.provider == "none"
+    assert res.error == "all_providers_unavailable"
+
+
+def test_configured_but_degraded_returns_all_providers_unavailable(monkeypatch):
+    # JSearch configured but in quota cooldown → still a degraded deployment.
+    monkeypatch.setenv("RAPIDAPI_KEY", "y")
+    jp.mark_degraded("jsearch", "quota")
+    res = jp.search_jobs("PO", "UAE")
+    assert res.provider == "none"
     assert res.error == "all_providers_unavailable"
 
 
