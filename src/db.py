@@ -128,6 +128,10 @@ def init_db():
                 ALTER TABLE settings
                 ADD COLUMN IF NOT EXISTS score_threshold_watch INTEGER DEFAULT 50
             """)
+            cursor.execute("""
+                ALTER TABLE settings
+                ADD COLUMN IF NOT EXISTS blocked_companies TEXT[] DEFAULT '{}'
+            """)
 
             # Add link verification columns to jobs table
             cursor.execute("""
