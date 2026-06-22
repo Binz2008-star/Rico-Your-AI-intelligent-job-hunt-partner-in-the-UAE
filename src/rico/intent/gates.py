@@ -104,6 +104,31 @@ def _is_arabic_job_request(text: str) -> bool:
     return bool(_ARABIC_JOB_REQUEST_RE.search(text))
 
 
+# Broader listing-request pattern: catches "show me real job listings", "can you find me
+# some openings?", "do you have any PM roles?" — things _DIRECT_JOB_REQUEST_RE misses
+# because they have adjectives ("real", "any", "some") between the verb and the noun.
+_LISTING_REQUEST_RE: Final[re.Pattern[str]] = re.compile(
+    r"\b(?:show|find|get|search|list|give|have\s+you\s+got|do\s+you\s+have)\b"
+    r"(?:\s+\w+){0,4}\s+(?:jobs?|roles?|openings?|positions?|vacancies?|listings?|matches?)\b"
+    r"|\b(?:jobs?|roles?|openings?|positions?|listings?)\s+(?:in|for|at)\b",
+    re.IGNORECASE,
+)
+
+
+def is_explicit_job_listing_request(message: str) -> bool:
+    """Return True when message is asking to be shown actual job listings.
+
+    Catches both imperative commands and broader conversational requests so that
+    public/no-profile sessions can be intercepted before the AI fabricates listings.
+    """
+    lowered = (message or "").lower()
+    return (
+        bool(_DIRECT_JOB_REQUEST_RE.search(lowered))
+        or bool(_LISTING_REQUEST_RE.search(lowered))
+        or bool(_ARABIC_JOB_REQUEST_RE.search(message or ""))
+    )
+
+
 def is_open_ended_question(message: str) -> tuple[bool, str]:
     """
     Decide whether a message must route to the conversational AI handler.

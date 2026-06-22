@@ -131,6 +131,14 @@ def send_message(
     profile = get_profile(ctx.user_id)
     profile_present = profile is not None
 
+    # ── Guard: public/no-profile sessions must never reach the AI for job-listing
+    # requests — the AI has no search tools in this context and will hallucinate
+    # company names, roles, and requirements from training data.
+    if profile is None and not ctx.can_persist_profile:
+        from src.rico.intent.gates import is_explicit_job_listing_request
+        if is_explicit_job_listing_request(message):
+            return _public_job_search_cta()
+
     # ── Existing routing unchanged ────────────────────────────────────────────
     decision = _intent_router.route(
         message=message,
@@ -164,6 +172,30 @@ def send_message(
             result["messages_limit"] = gate.limit
 
     return result
+
+
+def _public_job_search_cta() -> Dict[str, Any]:
+    """Deterministic CTA returned when a public/no-profile user requests job listings.
+
+    The AI path has no search tools and would hallucinate listings — this short-circuits
+    before any model call is made.
+    """
+    return {
+        "message": (
+            "I can only show you **verified, real-time UAE job listings** — not generated ones.\n\n"
+            "To search for live jobs matched to your profile:\n"
+            "1. **Upload your CV** using the Upload CV button above, or\n"
+            "2. **[Sign up at ricohunt.com](https://ricohunt.com)** for a free account\n\n"
+            "Once I know your background I'll match you with real openings from UAE job boards "
+            "and score each one for you."
+        ),
+        "type": "onboarding_cta",
+        "intent": "job_search",
+        "matches": [],
+        "options": [],
+        "success": True,
+        "response_source": "deterministic",
+    }
 
 
 def _unsupported_tool_response(policy: Any) -> Dict[str, Any]:
