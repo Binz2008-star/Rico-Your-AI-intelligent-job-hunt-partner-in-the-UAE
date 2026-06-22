@@ -2097,6 +2097,145 @@ class RicoChatAPI:
             kept.append(r)
         return kept
 
+    def _role_is_cv_aligned(self, profile: Any, role: str) -> bool:
+        """True when *role* matches the user's CV-derived role suggestions.
+
+        Used to spot a stale saved target_role (e.g. a leftover "Software Engineer"
+        from an old onboarding) that no longer reflects the uploaded CV. Falls back
+        to True (treat as valid) whenever alignment cannot be determined, so a data
+        gap never blocks a legitimate search.
+        """
+        rl = (role or "").strip().lower()
+        if not rl:
+            return False
+        try:
+            suggestions = self._generate_role_suggestions(
+                self._as_list(self._profile_value(profile, "skills")),
+                self._as_list(self._profile_value(profile, "certifications")),
+                self._profile_value(profile, "years_experience"),
+                self._as_list(self._profile_value(profile, "industries")),
+                self._profile_value(profile, "current_role"),
+            )
+        except Exception:
+            return True
+        if not suggestions:
+            return True
+        for s in suggestions:
+            sl = str((s or {}).get("label") or "").strip().lower()
+            if sl and (rl == sl or rl in sl or sl in rl):
+                return True
+        return False
+
+    # Coarse career-family buckets, used ONLY to tell genuinely different tracks
+    # apart (software vs environmental/HSE) — not to finely classify roles. Roles
+    # in one bucket are treated as a single track; 2+ buckets = real ambiguity.
+    _FAMILY_TERMS: "tuple[tuple[str, tuple[str, ...]], ...]" = (
+        ("env_hse", ("environment", "sustainability", "esg", "hse", "qhse", "ehs",
+                     "hsse", "safety", "nebosh", "iso 14001", "iso14001",
+                     "occupational health")),
+        ("software", ("software", "developer", "back end", "backend", "front end",
+                      "frontend", "full stack", "full-stack", "fullstack",
+                      "web develop", "mobile develop", "devops", "sre",
+                      "data scien", "data engineer", "machine learning",
+                      "ml engineer", "ai engineer", "golang", "programmer",
+                      "android", "ios ", "qa engineer", "sdet")),
+    )
+    _FAMILY_GENERIC_WORDS = frozenset({
+        "manager", "officer", "engineer", "specialist", "lead", "coordinator",
+        "director", "analyst", "consultant", "advisor", "executive", "head",
+        "associate", "vp", "president", "senior", "junior", "assistant",
+        "supervisor", "of", "and", "the", "for",
+    })
+
+    def _role_family(self, role: str) -> str:
+        """Coarse career-family bucket for *role* (env_hse / software / subject word)."""
+        rl = " " + (role or "").strip().lower() + " "
+        for fam, terms in self._FAMILY_TERMS:
+            if any(t in rl for t in terms):
+                return fam
+        # Otherwise bucket by the first meaningful (non-generic) subject word so
+        # "Marketing Manager"/"Marketing Lead" group together but differ from "Sales".
+        for w in re.findall(r"[a-z][a-z+&]+", rl):
+            if w not in self._FAMILY_GENERIC_WORDS and len(w) > 2:
+                return w
+        return "general"
+
+    def _resolve_profile_search_role(
+        self, profile: Any, excluded_roles: Optional[list[str]] = None
+    ) -> "tuple[Optional[str], list[str], str]":
+        """Pick which role a 'match my profile' search should target.
+
+        Returns (role, candidates, status):
+          - "single"    → one career track; search candidates[0].
+          - "ambiguous" → candidates span 2+ distinct families (e.g. software AND
+                          environmental); ask the user to choose from *candidates*.
+          - "stale"     → single-track but candidates[0] no longer matches the CV
+                          (a leftover role such as "Software Engineer" on an
+                          environmental CV); confirm with CV-derived suggestions.
+          - "none"      → no usable saved role left.
+
+        Ambiguity is judged by role FAMILY, never raw count: a coherent multi-role
+        profile (Environmental / Sustainability / ESG …) is one track and searches
+        its primary role; only genuinely different tracks force a choice.
+        """
+        roles = self._effective_target_roles(
+            self._as_list(self._profile_value(profile, "target_roles"))
+        )
+        if excluded_roles:
+            roles = self._filter_excluded_roles(roles, excluded_roles)
+        candidates: list[str] = []
+        seen: set[str] = set()
+        for r in roles:
+            raw = str(r).strip()
+            if not raw:
+                continue
+            # De-duplicate by canonical form (so "PM" and "Product Manager" collapse
+            # to one track) but keep the user's ORIGINAL text — the search layer
+            # normalizes downstream, and tests/UX expect the saved wording preserved.
+            try:
+                key = (normalize_role(raw) or raw).lower()
+            except Exception:
+                key = raw.lower()
+            if key not in seen:
+                seen.add(key)
+                candidates.append(raw)
+        if not candidates:
+            return (None, [], "none")
+        if len({self._role_family(c) for c in candidates}) >= 2:
+            return (None, candidates, "ambiguous")
+        role = candidates[0]
+        if self._has_cv_profile(profile) and not self._role_is_cv_aligned(profile, role):
+            return (role, candidates, "stale")
+        return (role, candidates, "single")
+
+    def _profile_role_choice_response(
+        self, candidates: list[str], message: str = ""
+    ) -> dict[str, Any]:
+        """Clarification asking which career track to match (2+ distinct families)."""
+        arabic = self._is_arabic_text(message)
+        shortlist = candidates[:6]
+        options = [
+            {"action": "search_role", "label": r, "message": f"search {r} jobs in UAE"}
+            for r in shortlist
+        ]
+        if arabic:
+            msg = (
+                "ملفك يشمل أكثر من مسار وظيفي. أي مسار تريد أن أطابقه مع وظائف الإمارات؟\n"
+                + "\n".join(f"• {r}" for r in shortlist)
+            )
+        else:
+            msg = (
+                "Your profile spans more than one career track. Which one should I "
+                "match against UAE jobs?\n"
+                + "\n".join(f"• {r}" for r in shortlist)
+            )
+        return {
+            "type": "clarification",
+            "message": msg,
+            "options": options,
+            "next_action": "select_role_to_search",
+        }
+
     @staticmethod
     def _looks_like_bare_target_role(message: str) -> bool:
         """Accept only short noun-phrase job titles, not questions or commands."""
@@ -5014,12 +5153,24 @@ class RicoChatAPI:
         else:
             base_message = f"Got it — I will target {normalized_role} roles{city_text}{basis_text}."
 
-        if role_intelligence_data and role_intelligence_data.get("fit_score", 1.0) < 0.6:
-            adjacent = role_intelligence_data.get("adjacent_roles", [])
-            role_names = [r["role"] for r in adjacent[:3]]
-            base_message += f" Your CV is also strong for {', '.join(role_names)} roles. I'll search those too if needed."
+        # Adjacent roles are an OPT-IN offer, never a silent substitution. We always
+        # searched the exact requested role (normalized_role); related roles such as
+        # "Environmental Officer" for "Environmental Manager" are only ever proposed
+        # as a question the user must accept — Rico never broadens on its own.
+        _adjacent = (role_intelligence_data or {}).get("adjacent_roles", []) if role_intelligence_data else []
+        _adjacent_names = [r["role"] for r in _adjacent[:3] if r.get("role")]
+        if not top_matches and _adjacent_names:
+            base_message += (
+                f" I searched **{normalized_role}** specifically and didn't find live matches. "
+                f"Want me to also look at {', '.join(_adjacent_names)}?"
+            )
         elif not top_matches:
             base_message += " I couldn't retrieve live jobs right now. I can still suggest target searches based on your CV — or try again later."
+        elif _adjacent_names:
+            base_message += (
+                f" These are **{normalized_role}** roles. If you'd like, I can also look at "
+                f"{', '.join(_adjacent_names)} — just say the word."
+            )
 
         return prefix + base_message
 
@@ -7275,9 +7426,28 @@ class RicoChatAPI:
                 "rico_profile_match_search user=%s target_roles=%s excluded=%s has_cv=%s",
                 user_id, target_roles, _pm_excluded, has_cv,
             )
-            role = target_roles[0] if target_roles else "your profile"
+            # Never blindly search target_roles[0] — it may be one of several saved
+            # tracks, or a stale role that no longer matches the CV. Resolve the
+            # single CV-aligned role, or ask the user to choose first.
+            _pm_role, _pm_candidates, _pm_status = self._resolve_profile_search_role(
+                profile, excluded_roles=_pm_excluded
+            )
+            if _pm_status == "ambiguous":
+                _pm_choice = self._profile_role_choice_response(_pm_candidates, message)
+                self._append_chat(user_id, "assistant", _pm_choice["message"])
+                return self._finalize(_pm_choice, self.SOURCE_KEYWORD, profile=profile)
+            if _pm_status in ("none", "stale"):
+                # Stale saved role (no longer matches the CV) or nothing left after
+                # exclusions → surface CV-aligned suggestions and let the user choose,
+                # instead of silently searching a stale/irrelevant target_role.
+                _pm_sugg = self._handle_profile_role_suggestions(profile, message)
+                if _pm_status == "stale" and _pm_role:
+                    _pm_sugg = {**_pm_sugg, "stale_target_role": _pm_role}
+                self._append_chat(user_id, "assistant", _pm_sugg.get("message", ""))
+                return self._finalize(_pm_sugg, self.SOURCE_KEYWORD, profile=profile)
+            # status == "single": exactly one CV-aligned saved role → search it.
             _pm_response = self._target_role_search_response(
-                user_id, role, profile, from_saved_profile=bool(target_roles)
+                user_id, _pm_role, profile, from_saved_profile=True
             )
             if _pm_excluded:
                 _pm_response["excluded_roles"] = _pm_excluded
@@ -16709,10 +16879,23 @@ class RicoChatAPI:
         role_tokens = role_text.strip().lower().split()
         _loc_fillers = {"jobs", "job", "roles", "role", "in", "the", "a", "an", "for"}
         if role_tokens and all(t in _LOCATION_TERMS or t in _loc_fillers for t in role_tokens):
-            saved_roles = self._as_list(self._profile_value(profile, "target_roles"))
-            if saved_roles:
+            # A location-only "role" means a profile-based search (e.g. "find UAE
+            # jobs that match my profile" extracts "UAE" as the role). Resolve the
+            # profile role properly — never blindly search saved target_roles[0].
+            _lg_role, _lg_candidates, _lg_status = self._resolve_profile_search_role(profile)
+            if _lg_status == "ambiguous":
+                _lg_choice = self._profile_role_choice_response(_lg_candidates, role_text)
+                self._append_chat(user_id, "assistant", _lg_choice["message"])
+                return _lg_choice
+            if _lg_status == "stale":
+                _lg_sugg = self._handle_profile_role_suggestions(profile, role_text)
+                if _lg_role:
+                    _lg_sugg = {**_lg_sugg, "stale_target_role": _lg_role}
+                self._append_chat(user_id, "assistant", _lg_sugg.get("message", ""))
+                return _lg_sugg
+            if _lg_status == "single":
                 return self._target_role_search_response(
-                    user_id, str(saved_roles[0]), profile,
+                    user_id, _lg_role, profile,
                     location=location, employment_type_filter=employment_type_filter,
                 )
             response = {
