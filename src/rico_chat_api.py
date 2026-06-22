@@ -23,6 +23,8 @@ from src.agent.intelligence.intent_classifier import (
     classify_intent,
     _LEGACY_INTENT_MAP,
     _map_intent_to_legacy,
+    _OPEN_APPLY_LINK_RE,
+    _OPEN_APPLY_LINK_ORDINAL_RE,
 )
 from src.agent.intelligence.normalizer import normalize_role
 from src.agent.intelligence.recommender import recommend_adjacent_roles
@@ -5933,9 +5935,21 @@ class RicoChatAPI:
         # returning match[0] before the ordinal gate fires.
         # Comparison queries ("compare job 1 and job 2") also trigger _ORDINAL_JOB_RE
         # via "job 1" — skip here so _JOB_COMPARE_RE can handle them downstream.
+        # Apply-link requests ("open the apply link for the second job") also contain
+        # an ordinal ("second job") but must NOT be treated as a job-detail lookup —
+        # they belong to the open_apply_link handler. Skip the gate for them so the
+        # ordinal apply-link works for every position, not just "first".
         _jd_detail_match = _JOB_DETAIL_RE.search(message)
         _jd_ordinal_match = _ORDINAL_JOB_RE.search(message)
-        if (_jd_detail_match or _jd_ordinal_match) and not _JOB_COMPARE_RE.search(message):
+        _jd_is_apply_link = bool(
+            _OPEN_APPLY_LINK_ORDINAL_RE.search(message)
+            or _OPEN_APPLY_LINK_RE.search(message)
+        )
+        if (
+            (_jd_detail_match or _jd_ordinal_match)
+            and not _JOB_COMPARE_RE.search(message)
+            and not _jd_is_apply_link
+        ):
             _ord_hint = ""
             if _jd_ordinal_match:
                 _ord_hint = (
