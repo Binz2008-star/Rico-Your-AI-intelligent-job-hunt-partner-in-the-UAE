@@ -25,6 +25,8 @@ from src.agent.intelligence.intent_classifier import (
     _map_intent_to_legacy,
     _OPEN_APPLY_LINK_RE,
     _OPEN_APPLY_LINK_ORDINAL_RE,
+    _SAVE_JOB_ORDINAL_RE,
+    _SAVE_JOB_ORDINAL_AR_RE,
 )
 from src.agent.intelligence.normalizer import normalize_role
 from src.agent.intelligence.recommender import recommend_adjacent_roles
@@ -5939,16 +5941,23 @@ class RicoChatAPI:
         # an ordinal ("second job") but must NOT be treated as a job-detail lookup —
         # they belong to the open_apply_link handler. Skip the gate for them so the
         # ordinal apply-link works for every position, not just "first".
+        # Save requests ("save the second job to my pipeline") also contain an
+        # ordinal but belong to the save_job handler — skip the gate for them too.
         _jd_detail_match = _JOB_DETAIL_RE.search(message)
         _jd_ordinal_match = _ORDINAL_JOB_RE.search(message)
         _jd_is_apply_link = bool(
             _OPEN_APPLY_LINK_ORDINAL_RE.search(message)
             or _OPEN_APPLY_LINK_RE.search(message)
         )
+        _jd_is_save = bool(
+            _SAVE_JOB_ORDINAL_RE.search(message)
+            or _SAVE_JOB_ORDINAL_AR_RE.search(message)
+        )
         if (
             (_jd_detail_match or _jd_ordinal_match)
             and not _JOB_COMPARE_RE.search(message)
             and not _jd_is_apply_link
+            and not _jd_is_save
         ):
             _ord_hint = ""
             if _jd_ordinal_match:
@@ -8301,6 +8310,17 @@ class RicoChatAPI:
 
         # Save job
         if legacy_intent == "save_job":
+            # Ordinal save ("save the second job to my pipeline" / "احفظ ثاني وظيفة")
+            # — resolve the Nth job from recent search results and persist it,
+            # confirming only after persistence succeeds.
+            _save_entities = getattr(intent_result, "entities", None) or {}
+            _save_ordinal = _save_entities.get("ordinal")
+            if _save_ordinal is not None:
+                return self._finalize(
+                    self._save_job_by_ordinal(user_id, int(_save_ordinal), profile),
+                    self.SOURCE_KEYWORD, profile=profile,
+                )
+
             # "Save — {title} at {company}" comes from a Rico-generated job card.
             # Resolve the job from recent results / persisted context so the user
             # is never asked for a URL to save something Rico itself produced.
@@ -9003,6 +9023,90 @@ class RicoChatAPI:
         }
         self._append_chat(user_id, "assistant", msg)
         return response
+
+    def _save_job_by_ordinal(
+        self, user_id: str, ordinal: int, profile: Any,
+    ) -> dict[str, Any]:
+        """Save the first/second/Nth/last job from recent search results to the
+        user's pipeline.
+
+        - Resolves the job from ``recent_search_matches`` (the same ordered list
+          the cards were rendered from), using the canonical link fields.
+        - Persists via ``agent_runtime.handle_action(action="save")``.
+        - Confirms ONLY after persistence succeeds; if it fails, says it could not
+          be saved (never a false success).
+        - If there is no recent search context, asks which job instead of
+          pretending success.
+        """
+        from src.services.job_link import resolve_job_link
+
+        matches = self._recent_search_matches(user_id)
+        if not matches:
+            msg = (
+                "I don't have a recent job list to save from yet. Search for a role first, "
+                "then say 'save the first job to my pipeline'."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "intent": "save_job", "message": msg}
+
+        idx = len(matches) - 1 if ordinal == -1 else ordinal - 1
+        if idx < 0 or idx >= len(matches):
+            n = len(matches)
+            msg = (
+                f"You have {n} job{'s' if n != 1 else ''} in your recent list. "
+                f"Which one should I save? Pick a number between 1 and {n}."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "intent": "save_job", "message": msg}
+
+        job = matches[idx]
+        title = str(job.get("title") or "").strip()
+        company = str(job.get("company") or "").strip()
+        if not title:
+            msg = "I couldn't read that job's details to save it. Try 'save <title> at <company>'."
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "intent": "save_job", "message": msg}
+
+        link = resolve_job_link(job)
+        job_dict = {
+            "title": title,
+            "company": company,
+            "apply_url": link["apply_url"],
+            "source_url": link["source_url"],
+            "alt_url": link["alt_link"],
+            "verification_status": link["verification_status"],
+        }
+        job_key = self._derive_lifecycle_job_key(title, company)
+        try:
+            result = agent_runtime.handle_action(
+                user_id=user_id, action="save", job=job_dict, job_key=job_key, source="chat",
+            )
+        except Exception as exc:
+            logger.warning("rico_chat: ordinal save failed user=%s title=%s err=%s",
+                           user_id, title, type(exc).__name__)
+            result = None
+
+        _label = f"**{title}**" + (f" at **{company}**" if company else "")
+        if result is not None and getattr(result, "ok", False):
+            msg = f"Saved {_label} to your pipeline. You'll find it in your tracked jobs."
+            response = {
+                "type": "save_job", "intent": "save_job", "message": msg,
+                "entities": {"title": title, "company": company},
+                "verification_status": link["verification_status"],
+            }
+            self._append_chat(user_id, "assistant", msg)
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile, runtime_result=result)
+
+        # Persistence failed — do NOT claim success.
+        msg = (
+            f"I couldn't save {_label} to your pipeline right now. Please try again in a moment, "
+            "or open your Applications tab to add it manually."
+        )
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "save_job_error", "intent": "save_job", "message": msg,
+            "entities": {"title": title, "company": company},
+        }
 
     def _open_apply_link_by_ordinal(
         self, user_id: str, ordinal: int, profile: Any,
