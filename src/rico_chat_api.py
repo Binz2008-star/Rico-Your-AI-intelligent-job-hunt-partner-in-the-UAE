@@ -7218,6 +7218,29 @@ class RicoChatAPI:
                 ),
             )
 
+        # Multi-role search list — "search for A, B and C roles, do not search X, Y".
+        # Recognise every requested role, persist the exclusion guard for this
+        # session, then search the primary (first) role now while offering the rest
+        # as one-tap alternatives. Without this the whole comma list reaches
+        # _classified_role_search as a single token and is rejected as unknown.
+        if legacy_intent == "job_search_multi_role":
+            _ml_entities = getattr(intent_result, "entities", None) or {}
+            _ml_roles = [str(r).strip() for r in (_ml_entities.get("roles") or []) if str(r).strip()]
+            _ml_excluded = [str(r).strip() for r in (_ml_entities.get("excluded_roles") or []) if str(r).strip()]
+            _ml_location = _ml_entities.get("location", "")
+            _ml_emp_type = _ml_entities.get("employment_type", "")
+            if _ml_roles:
+                return self._finalize(
+                    self._multi_role_search_response(
+                        user_id, _ml_roles, profile,
+                        excluded_roles=_ml_excluded,
+                        location=_ml_location,
+                        employment_type_filter=_ml_emp_type,
+                    ),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
+
         # Role change — extract role and classify
         if legacy_intent == "role_change" and intent_result.extracted_role:
             return self._finalize(
@@ -16208,6 +16231,84 @@ class RicoChatAPI:
             for r in result.get("roles", [])
         ]
 
+    def _multi_role_search_response(
+        self, user_id: str, roles: list[str], profile: Any,
+        excluded_roles: list[str] | None = None,
+        location: str = "", employment_type_filter: str = "",
+    ) -> dict[str, Any]:
+        """Handle a multi-role search request (e.g. "search for A, B and C roles").
+
+        Recognises every requested role, persists the recognised list + the
+        "do not search …" exclusion guard for this session, then searches the
+        primary (first) role immediately and offers the remaining roles as
+        one-tap alternatives so the user can re-prioritise. JSearch accepts one
+        role per query, so the rest are queued rather than fanned out in a single
+        turn — this satisfies both "search sequentially" and "ask which to
+        prioritise" without an extra round-trip before the first results.
+        """
+        excluded_roles = [r for r in (excluded_roles or []) if r]
+        roles = [r for r in roles if r]
+        if not roles:
+            # Defensive: should never happen (caller gates on roles), but never
+            # fall through to an unknown-role error for an empty list.
+            return self._classified_role_search(
+                user_id, "", profile,
+                location=location, employment_type_filter=employment_type_filter,
+            )
+
+        primary = roles[0]
+        alternates = roles[1:]
+
+        # Persist recognised roles + exclusion guard so a follow-up selection
+        # searches directly (bypassing taxonomy rejection) and so future searches
+        # this session can honour the "do not search …" constraint.
+        try:
+            ctx = self._get_recent_context(user_id)
+            ctx["multi_role_candidates"] = roles
+            ctx["excluded_roles"] = excluded_roles
+            ctx["recent_search_role"] = primary
+            self._store_recent_context(user_id, ctx)
+        except Exception:
+            pass
+
+        response = self._target_role_search_response(
+            user_id, primary, profile,
+            location=location, employment_type_filter=employment_type_filter,
+        )
+
+        # Prepend a recognition line so the user can see every role was understood
+        # (not rejected), then surface the alternates as quick re-prioritise options.
+        recognised = ", ".join(roles)
+        preamble = (
+            f"I recognised {len(roles)} target roles: {recognised}."
+        )
+        if excluded_roles:
+            preamble += (
+                f" I'll keep out {', '.join(excluded_roles)} unless you ask for coding jobs."
+            )
+        if alternates:
+            preamble += (
+                f" Starting with **{primary}** — tap another role below to prioritise it instead."
+            )
+        else:
+            preamble += f" Searching **{primary}**."
+
+        base_msg = (response.get("message") or "").strip()
+        response["message"] = f"{preamble}\n\n{base_msg}".strip() if base_msg else preamble
+        response["recognized_roles"] = roles
+        response["excluded_roles"] = excluded_roles
+        response["primary_role"] = primary
+
+        if alternates:
+            alt_options = [{"action": r, "label": f"Search {r}"} for r in alternates]
+            existing_options = response.get("options") or []
+            response["options"] = alt_options + existing_options
+            response.setdefault("next_action", "select_role_to_search")
+
+        # Note: _target_role_search_response already recorded the assistant turn;
+        # do not append again here or the turn is duplicated in chat history.
+        return response
+
     def _classified_role_search(
         self, user_id: str, role_text: str, profile: Any,
         location: str = "", employment_type_filter: str = "",
@@ -16268,6 +16369,24 @@ class RicoChatAPI:
         # Roles already in the user's target_roles are always profile_relevant.
         target_roles = self._as_list(self._profile_value(profile, "target_roles"))
         role_lower = role_text.strip().lower()
+
+        # Multi-role list candidates from a prior "search for A, B and C" turn are
+        # explicit user-requested roles — when the user later taps/repeats one of
+        # them, search directly without taxonomy gating so it is never bounced back
+        # as "I do not recognize '<role>'".
+        try:
+            _mrc = {
+                str(r).strip().lower()
+                for r in (self._get_recent_context(user_id).get("multi_role_candidates") or [])
+            }
+            if role_lower in _mrc:
+                return self._target_role_search_response(
+                    user_id, role_text.strip(), profile,
+                    location=location, employment_type_filter=employment_type_filter,
+                )
+        except Exception:
+            pass
+
         if self._is_broad_manager_role(role_text):
             return self._broad_manager_clarification(user_id)
 
