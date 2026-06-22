@@ -12,10 +12,11 @@ Rico mode. Start from AI_WORKSPACE/START_HERE.md.
 
 Before starting new Rico work, read the latest rollout handoff:
 
-1. `AI_WORKSPACE/HANDOFFS/2026-06-21-system-quality-audit.md` (codebase audit — bugs fixed, tech debt documented)
-2. `AI_WORKSPACE/HANDOFFS/2026-06-21-career-os-roadmap-status.md` (which Career OS milestones are actually built)
-3. `AI_WORKSPACE/HANDOFFS/2026-06-21-action-audit-rollout-complete.md`
-4. Then continue with the read order below.
+1. `AI_WORKSPACE/HANDOFFS/2026-06-22-job-flow-stabilization.md` (latest — PRs #727/#724/#723 merged + deployed; remaining PR B/C/D for Tests 1–9)
+2. `AI_WORKSPACE/HANDOFFS/2026-06-21-system-quality-audit.md` (codebase audit — bugs fixed, tech debt documented)
+3. `AI_WORKSPACE/HANDOFFS/2026-06-21-career-os-roadmap-status.md` (which Career OS milestones are actually built)
+4. `AI_WORKSPACE/HANDOFFS/2026-06-21-action-audit-rollout-complete.md`
+5. Then continue with the read order below.
 
 ## Read order
 

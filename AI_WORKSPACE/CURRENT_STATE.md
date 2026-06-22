@@ -1,19 +1,64 @@
 # Current State
 
-_Last updated: 2026-06-21 (mobile UX + document-context fixes added to PR #717)_
+_Last updated: 2026-06-22 (job-flow stabilization — PRs #727, #724, #723 merged + deployed)_
 
 ## Production baseline
 
-- **Repository main HEAD:** `9078d77e2bd58e3354b360f743290df92d982dc8`
-  (#708 action_audit_log hardening). Recent lineage:
-  `9078d77` (#708 audit schema hardening + migration 030) ←
-  `d46603f` (#709 workspace: audit hardening state) ←
-  `12fb652` (#706 Agentic Vision codebase inventory) ←
-  `2bc489` (#661 duplicate upsert_matches CI fix).
-  (`552aa63` is a `[skip ci]` dashboard-data commit on top of `9078d77`.)
-- **Production backend deployed SHA:** `9078d77` (Render auto-deploy via `deploy-render.yml`;
-  verified live 2026-06-21 — `/version`==`9078d77`, `/health` ok).
-- **Deployed to Vercel:** ✅ auto-deploying from main.
+- **Repository main HEAD:** `713ea7528b0ff6f6ccd9e2c3adf3ee51be7d8479`
+  (#723 multi-role parsing). Recent lineage (job-flow stabilization train):
+  `713ea75` (#723 multi-role job-search parsing) ←
+  `5fe9171` (#724 provider cascade + degraded job-card UX) ←
+  `e1d87fc` (#727 P0 job-card apply-link integrity) ←
+  `effe82e` (`[skip ci]` dashboard) ← `8df894e` (#719 site audit).
+- **Production backend deployed SHA:** `713ea75` (#723) — and the intermediate `e1d87fc` (#727)
+  and `5fe9171` (#724) — **all verified live** via the `Deploy Render Backend` workflow (polls
+  `/version`==merge SHA + `/health` 200 on a GitHub runner, which can reach Render). Latest run
+  `27960400407` success: `/version`==`713ea75`, `/health` ok.
+- **Deployed to Vercel:** ✅ auto-deploying from main (production builds confirmed READY for
+  each merge SHA).
+
+## Job-flow stabilization — 2026-06-22 (PRs #727 → #724 → #723, merged in priority order)
+
+Moved Rico from "many job-flow failures" to a stable live job-search flow. Each PR was kept
+focused (one bug category), CI-green, scope-clean, and merged one-at-a-time with the Render
+deploy confirmed before the next merge. **No #712 DB-migration work, no scraping, 0 external
+provider quota burned (all tests mocked).**
+
+| PR | Category | Merge SHA | Deploy | Tests |
+|---|---|---|---|---|
+| **#727** | P0 — job-card apply-link integrity + "open the Nth job" chat action | `e1d87fc` | ✅ `/version` match + `/health` 200 | 17 new (`test_job_card_apply_link_integrity.py`) |
+| **#724** | P1 — low-cost provider cascade (Jooble/Adzuna) + quota fallback + degraded UX | `5fe9171` | ✅ `/version` match + `/health` 200 | 26 new (`test_job_providers.py`, `test_provider_degraded_ux.py`) |
+| **#723** | P1 — multi-role job-search parsing (`extract_role_list`, `job_search_multi_role`) | `713ea75` | ✅ `/version` match + `/health` 200 | 21 new (`test_multi_role_search_*.py`) |
+
+**Key additions now in production:**
+- `src/services/job_link.py` — canonical `resolve_job_link()` (`usable_link` + `link_unavailable`/`reason`) shared by job cards and the open-apply chat action; `build_link_fallback_cta()`. `apply_job` no longer raises "missing required 'link' field".
+- `src/job_providers.py` — cascade: cache(24h) → internal → Jooble → Adzuna → JSearch → degraded CTA; provider-health/quota cooldowns; `/health` exposes a `job_providers` indicator (configured/degraded only, never secrets).
+- `extract_role_list()` + `job_search_multi_role` intent — comma/`and`-separated role lists and `do not search …` exclusions parsed instead of "I do not recognize …".
+
+**Provider env (set in Render by owner; presence-only via `/health`):** `JOOBLE_API_KEY`,
+`ADZUNA_APP_ID`+`ADZUNA_APP_KEY` (Adzuna opt-in), `RAPIDAPI_KEY`. No keys hardcoded/committed/logged.
+
+### Production Tests 1–9 — status after this train
+| Test | Bug | Status |
+|---|---|---|
+| T9 | "open apply link for first job" → missing-link error | ✅ **fixed (#727, live)** |
+| T4 | 3-role comma list as one role | ✅ **fixed (#723, live)** |
+| T2 | "Technical Product Owner **only**" qualifier | 🔴 open → **PR D** |
+| T3 | "HSE Manager **and** QHSE Manager" (jobs-for-A-and-B order) | 🟡 partial → **PR D** |
+| T5 | CV-based search + `do not search …` exclusions | 🔴 open → **PR D** |
+| T6 | category mapping "product/technical management" + "not coding" | 🔴 open → **PR D** |
+| T1 | "strongest CV profile" ignored; stale target_role | 🔴 open → **PR C** |
+| T7 | role substitution w/o consent + auth/CV context loss + weak location | 🔴 open → **PR C** (location → A, done) |
+| T8 | "save the second job to pipeline" not wired to recent context | 🔴 open → **PR B** |
+
+### Next focused PRs (not started — keep one bug-category each)
+- **PR B / P1** — save the Nth job to pipeline from recent search context (T8).
+- **PR C / P1** — strongest-CV/profile selection + auth/CV context retention + no silent role substitution (T1, T7).
+- **PR D / P1** — role-parsing edge cases: `only`, `jobs for A and B`, CV-based exclusions, category mapping, `not coding` (T2, T3, T5, T6); builds on #723.
+
+### Duplicate/parallel PRs to reconcile (from other sessions — flagged, untouched)
+- **#726** `claude/friendly-goodall-w1bm97` — alternate apply-link resolver (`src/rico_link_resolver.py`); **superseded by #727** → recommend close.
+- **#722** `claude/epic-maxwell-epbub8` — degraded job-card fallback CTAs (`lib/job-fallback.ts`); overlaps #724/#727 → recommend close or rebase.
 
 ## System Quality Audit — 2026-06-21 (PR #717, branch `claude/system-quality-audit-ikkamf`)
 
