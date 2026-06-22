@@ -89,19 +89,21 @@ jobs:
               print(r.status.value, '|', r.title[:60], '|', r.company[:30])
           "
 
-      - name: Notify result
+      - name: Notify result (admin/dev channel only)
         if: always()
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Operator/ops result — route to ADMIN/DEV chat only, never the user chat.
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_ADMIN_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+          ADMIN_TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_ADMIN_CHAT_ID || secrets.TELEGRAM_DEV_CHAT_ID }}
         run: |
           python -c "
           import os, requests
           token   = os.getenv('TELEGRAM_BOT_TOKEN', '')
-          chat_id = os.getenv('TELEGRAM_CHAT_ID', '')
+          chat_id = os.getenv('ADMIN_TELEGRAM_CHAT_ID', '')
           outcome = '${{ steps.session_check.outcome }}'
           job_outcome = '${{ job.status }}'
           if not (token and chat_id):
+              print('admin telegram chat not configured; skipping operator alert (no user fallback)')
               exit(0)
           if outcome != 'success':
               text = '⚠️ NaukriGulf apply skipped — no session on self-hosted runner. Log in and re-run.'

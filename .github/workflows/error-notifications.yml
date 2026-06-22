@@ -11,7 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PAGERDUTY_CONFIGURED: ${{ secrets.PAGERDUTY_INTEGRATION_KEY != '' }}
-      TELEGRAM_CONFIGURED: ${{ secrets.TELEGRAM_CHAT_ID != '' && secrets.TELEGRAM_BOT_TOKEN != '' }}
+      # Admin/dev alerts go to the ADMIN/DEV chat ONLY — never the user-facing
+      # TELEGRAM_CHAT_ID. If no admin/dev chat is configured the Telegram step
+      # is skipped (admin alerts must not fall back to a user chat).
+      ADMIN_TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_ADMIN_CHAT_ID || secrets.TELEGRAM_DEV_CHAT_ID }}
+      ADMIN_TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_ADMIN_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CONFIGURED: ${{ (secrets.TELEGRAM_ADMIN_CHAT_ID != '' || secrets.TELEGRAM_DEV_CHAT_ID != '') && (secrets.TELEGRAM_ADMIN_BOT_TOKEN != '' || secrets.TELEGRAM_BOT_TOKEN != '') }}
       DISCORD_CONFIGURED: ${{ secrets.DISCORD_WEBHOOK_URL != '' }}
 
     steps:
@@ -70,12 +75,12 @@ jobs:
             -H "Content-Type: application/json" \
             -d "$PAYLOAD"
 
-      - name: Send Telegram Alert
+      - name: Send Telegram Alert (admin/dev channel only)
         if: ${{ github.event.workflow_run.conclusion == 'failure' && env.TELEGRAM_CONFIGURED == 'true' }}
         uses: appleboy/telegram-action@221e6b684967abe813051ee4a37dd61770a83ad3  # v1.0.1
         with:
-          to: ${{ secrets.TELEGRAM_CHAT_ID }}
-          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          to: ${{ env.ADMIN_TELEGRAM_CHAT_ID }}
+          token: ${{ env.ADMIN_TELEGRAM_BOT_TOKEN }}
           format: markdown
           message: |
             🚨 **Workflow Failed!**
