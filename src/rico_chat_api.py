@@ -16860,6 +16860,47 @@ class RicoChatAPI:
         # do not append again here or the turn is duplicated in chat history.
         return response
 
+    # Occupational head-nouns that mark a phrase as a real job title even when it
+    # is absent from the taxonomy. Mirrors the leniency of multi-role parsing so a
+    # single explicit title like "Technical Product Owner" is searched, not bounced.
+    _ROLE_HEAD_NOUNS = frozenset({
+        "owner", "manager", "director", "officer", "lead", "specialist",
+        "consultant", "advisor", "adviser", "coordinator", "executive", "head",
+        "analyst", "engineer", "associate", "president", "architect", "designer",
+        "developer", "administrator", "supervisor", "controller", "planner",
+        "strategist", "scientist", "technician", "representative", "auditor",
+        "accountant", "partner", "agent", "buyer", "surveyor", "estimator",
+        "recruiter", "nurse", "teacher", "trainer", "chef", "pilot", "secretary",
+        "generalist", "expert", "principal",
+    })
+    # Prose/filler words that never sit inside a real job title — their presence
+    # means the phrase is not an explicit role (mirrors the multi-role guard).
+    _NON_TITLE_WORDS = frozenset({
+        "my", "your", "our", "their", "his", "her", "me", "i", "we", "you",
+        "cv", "resume", "profile", "experience", "that", "which", "match",
+        "matching", "based", "jobs", "job", "roles", "role", "position",
+        "positions", "please", "kindly", "anything", "something", "best",
+    })
+
+    def _is_explicit_job_title(self, role_text: str) -> bool:
+        """True when *role_text* is a plausible multi-word job title ending in a
+        known occupational noun (e.g. "Technical Product Owner").
+
+        Lets a single explicit title be searched directly instead of being bounced
+        as "I do not recognize ...", matching how multi-role parsing already
+        accepts the same titles — while still rejecting bare domain words like
+        "software" or prose like "my cv".
+        """
+        words = [w.strip(".,!?;:").lower() for w in (role_text or "").split()]
+        words = [w for w in words if w]
+        if not (2 <= len(words) <= 5):
+            return False
+        if any(w in self._NON_TITLE_WORDS for w in words):
+            return False
+        if any(ch.isdigit() for w in words for ch in w):
+            return False
+        return words[-1] in self._ROLE_HEAD_NOUNS
+
     def _classified_role_search(
         self, user_id: str, role_text: str, profile: Any,
         location: str = "", employment_type_filter: str = "",
@@ -17029,6 +17070,16 @@ class RicoChatAPI:
                 )
         except Exception:
             pass
+
+        # Multi-role parsing accepts any plausible job title without taxonomy
+        # gating; mirror that for a single explicit title so "Technical Product
+        # Owner" searches directly instead of bouncing back as "I do not recognize
+        # ..." and falling back to a stale saved target_role (e.g. "Developer").
+        if self._is_explicit_job_title(role_text):
+            return self._target_role_search_response(
+                user_id, role_text.strip(), profile,
+                location=location, employment_type_filter=employment_type_filter,
+            )
 
         target_roles = self._as_list(self._profile_value(profile, "target_roles"))
         suggestion = ""

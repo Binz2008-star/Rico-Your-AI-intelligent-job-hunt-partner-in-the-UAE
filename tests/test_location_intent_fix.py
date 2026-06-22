@@ -103,6 +103,13 @@ class TestClassifiedRoleSearchLocationGuard(unittest.TestCase):
         api._SELF_REF_ROLE_RE = RicoChatAPI._SELF_REF_ROLE_RE
         api._is_broad_manager_role = RicoChatAPI._is_broad_manager_role
         api._broad_manager_clarification = MagicMock(return_value={"type": "clarification"})
+        # The location guard resolves the profile role via _resolve_profile_search_role
+        # (added with the profile-context role-selection work). Stub it on the mock so
+        # a location-only query maps to the saved primary role (single) or asks for a
+        # role (none) — mirroring the real resolver for this test's scope.
+        api._resolve_profile_search_role = lambda p, excluded_roles=None: (
+            (saved_roles[0], list(saved_roles), "single") if saved_roles else (None, [], "none")
+        )
 
         # Profile has saved target roles → should search
         if saved_roles:
