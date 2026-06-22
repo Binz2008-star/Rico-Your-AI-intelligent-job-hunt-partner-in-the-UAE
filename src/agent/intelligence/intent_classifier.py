@@ -897,6 +897,41 @@ _OPEN_APPLY_LINK_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Ordinal open-apply-link: "open the apply link for the first/second/Nth job",
+# "open apply link for job 2", "show the apply link for the last one". Must be
+# matched before _APPLY_JOB_RE so an ordinal link request is never mis-routed to
+# apply_job (which then fails with "missing required 'link' field"). The "the"
+# between open/apply that _OPEN_APPLY_LINK_RE omits is allowed here.
+_OPEN_APPLY_LINK_ORDINAL_RE = re.compile(
+    r"\b(?:open|show|give|send|share|get)\b(?:\s+me)?\s+(?:the\s+)?(?:apply\s+)?"
+    r"(?:link|url|apply\s+link|application\s+link)\s+(?:for|to|of)\s+"
+    r"(?:the\s+)?(?:job\s+(?:number\s+|#)?)?"
+    r"(?P<ord>first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last|\d{1,2})"
+    r"(?:st|nd|rd|th)?\s*(?:job|role|position|result|listing|one)?\b",
+    re.IGNORECASE,
+)
+
+_ORDINAL_WORD_TO_INT = {
+    "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5,
+    "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10,
+}
+
+
+def _parse_ordinal(token: str) -> Optional[int]:
+    """Return a 1-based index for an ordinal token ("first"→1, "3"→3, "last"→-1)."""
+    if not token:
+        return None
+    t = token.strip().lower()
+    if t == "last":
+        return -1
+    if t in _ORDINAL_WORD_TO_INT:
+        return _ORDINAL_WORD_TO_INT[t]
+    if t.isdigit():
+        n = int(t)
+        return n if n >= 1 else None
+    return None
+
+
 _APPLY_JOB_RE = re.compile(
     r"\b(apply|apply to|apply for|submit|send application)\b",
     re.IGNORECASE,
@@ -1417,6 +1452,17 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
             action="require_explicit_consent",
             target_route="/jobs",
         )
+
+    # Ordinal open-apply-link ("open the apply link for the first job") must be
+    # caught before the title/company form and before generic apply_job.
+    om = _OPEN_APPLY_LINK_ORDINAL_RE.search(text)
+    if om:
+        _ordinal = _parse_ordinal(om.group("ord"))
+        if _ordinal is not None:
+            return IntentResult(
+                "open_apply_link", 0.95, "regex",
+                entities={"ordinal": _ordinal},
+            )
 
     # Free-text open-apply-link must be caught before generic apply_job.
     m = _OPEN_APPLY_LINK_RE.search(text)

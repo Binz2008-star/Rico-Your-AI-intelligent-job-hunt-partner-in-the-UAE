@@ -151,12 +151,22 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
 
     const companyIdentity = useMemo(() => getCompanyIdentity(job.company), [job.company]);
     const isBusy = Boolean(localAction || isSubmitting);
+    // Canonical link gate: prefer the backend's usable_link / link_unavailable
+    // signal; fall back to inspecting the URL fields for older responses. When
+    // there is no trusted link we must NOT render a dead-end "Apply" button.
+    const linkUnavailable =
+        typeof job.link_unavailable === "boolean"
+            ? job.link_unavailable
+            : !(hasUsableUrl(job.usable_link) || hasUsableUrl(job.apply_url) || hasUsableUrl(job.source_url));
+    const fallbackSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(
+        [job.title, job.company, job.location, "careers"].filter(Boolean).join(" "),
+    )}`;
     const isLive =
         job.verification_status === "live"
             ? true
             : job.verification_status === "lead_needs_verification"
                 ? false
-                : hasUsableUrl(job.apply_url) || hasUsableUrl(job.source_url);
+                : hasUsableUrl(job.usable_link) || hasUsableUrl(job.apply_url) || hasUsableUrl(job.source_url);
     const verificationBadge = isLive
         ? {
             label: t("jobCardLiveBadge"),
@@ -278,15 +288,30 @@ export function JobCard({ job, onAction, isSubmitting, className }: JobCardProps
                 </div>
             ) : !isDone ? (
                 <div className="relative z-10 mt-5 flex gap-2 border-t rico-divider pt-4">
-                    <Button
-                        variant="teal"
-                        size="sm"
-                        loading={localAction === "apply" || isSubmitting}
-                        onClick={() => handleActionClick("apply")}
-                        className="flex-1"
-                    >
-                        {t("jobCardApplyNow")}
-                    </Button>
+                    {linkUnavailable ? (
+                        // No trusted apply link — render a safe fallback search CTA
+                        // instead of a dead-end Apply button (P0: never link to nothing).
+                        <a
+                            href={fallbackSearchUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1"
+                        >
+                            <Button variant="outline" size="sm" className="w-full">
+                                {t("jobCardSearchThisJob")}
+                            </Button>
+                        </a>
+                    ) : (
+                        <Button
+                            variant="teal"
+                            size="sm"
+                            loading={localAction === "apply" || isSubmitting}
+                            onClick={() => handleActionClick("apply")}
+                            className="flex-1"
+                        >
+                            {t("jobCardApplyNow")}
+                        </Button>
+                    )}
                     <Button
                         variant="ghost"
                         size="sm"

@@ -296,8 +296,19 @@ app.include_router(apply_queue_router)
 @app.get("/health")
 @app.head("/health")
 def health_check() -> Dict[str, Any]:
-    """Health check endpoint for load balancers and monitoring."""
-    return {"status": "ok", "service": "Job Automation Platform API"}
+    """Health check endpoint for load balancers and monitoring.
+
+    Includes a job-provider health indicator (configured/degraded only — never
+    secret values) so quota/rate-limit issues are observable without log diving.
+    """
+    payload: Dict[str, Any] = {"status": "ok", "service": "Job Automation Platform API"}
+    try:
+        from src import job_providers
+        payload["job_providers"] = job_providers.provider_health()
+    except Exception:
+        # Health must never fail because of the provider indicator.
+        pass
+    return payload
 
 
 @app.get("/version")
