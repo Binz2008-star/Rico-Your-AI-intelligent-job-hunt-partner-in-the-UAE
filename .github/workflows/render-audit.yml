@@ -315,7 +315,7 @@ jobs:
           echo "=== C) most recent 10 rows (truncated cols, includes alt_url) ==="
           psql "$DATABASE_URL" -c "SELECT user_id, left(title,40) AS title, left(company,28) AS company, left(alt_url,36) AS alt_url, verification_status, searched_at FROM user_job_context ORDER BY searched_at DESC LIMIT 10;"
           echo "=== D) exact #710 window: searched_at > NOW() - INTERVAL '1 hour' ==="
-          psql "$DATABASE_URL" -c "SELECT user_id, title, company, alt_url, verification_status, searched_at FROM user_job_context WHERE searched_at > NOW() - INTERVAL '1 hour' ORDER BY searched_at DESC;"
+          psql "$DATABASE_URL" -c "SELECT user_id, left(title,28) AS title, left(company,18) AS company, left(apply_url,30) AS apply_url, left(source_url,30) AS source_url, left(alt_url,26) AS alt_url, verification_status, searched_at FROM user_job_context WHERE searched_at > NOW() - INTERVAL '1 hour' ORDER BY searched_at DESC;"
 
       - name: Render -- scan app logs for upsert_failed / UndefinedColumn / alt_url (last 6h)
         if: always()
@@ -327,7 +327,7 @@ jobs:
           fi
           OWNER_ID=$(curl -s -H "Authorization: Bearer $RENDER_KEY" "https://api.render.com/v1/owners?limit=10" | jq -r '.[0].owner.id // .[0].id // empty')
           SVC_ID=$(curl -s -H "Authorization: Bearer $RENDER_KEY" "https://api.render.com/v1/services?limit=50" | jq -r '[.[] | (.service // .) | select(.name=="rico-job-automation-api") | .id][0] // empty')
-          START=$(date -u -d '6 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          START=$(date -u -d '45 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
           echo "owner=$OWNER_ID  service=$SVC_ID  since=$START"
           if [ -z "$SVC_ID" ] || [ -z "$OWNER_ID" ]; then
             echo "ERROR: could not resolve owner/service id. Raw services payload (first 600 chars):"
