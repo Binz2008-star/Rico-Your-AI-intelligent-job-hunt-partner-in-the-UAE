@@ -29,6 +29,14 @@ Environment:
                       (default: Qwen/Qwen2.5-VL-7B-Instruct)
   HF_OCR_MODEL     -- serverless image-to-text model id
                       (default: microsoft/trocr-base-printed)
+  RICO_ENABLE_VISION  -- master off-switch (default ``true``). Set to ``false``
+                      to disable image reading instantly without a deploy (e.g.
+                      if HF credits run out); uploads then fall back to the
+                      format-only image response.
+
+Cost guards: one extraction attempt per upload (no retries → no retry storm),
+a hard request timeout, a max image-size cap, graceful ``None`` on any
+quota/billing/provider error, and the ``RICO_ENABLE_VISION`` kill switch.
 """
 from __future__ import annotations
 
@@ -85,9 +93,19 @@ def _mime(data: bytes) -> str:
     return "image/png"
 
 
+def _vision_enabled() -> bool:
+    """``False`` only when an operator has explicitly switched vision off.
+
+    ``RICO_ENABLE_VISION`` defaults to on; setting it to ``false``/``0``/``no``/
+    ``off`` is the instant, no-deploy kill switch (e.g. when HF credits run out).
+    """
+    flag = os.getenv("RICO_ENABLE_VISION", "true").strip().lower()
+    return flag not in ("0", "false", "no", "off")
+
+
 def is_available() -> bool:
-    """True when an HF token is configured (a model can be called)."""
-    return bool(_token())
+    """True when image reading is enabled and an HF token is configured."""
+    return _vision_enabled() and bool(_token())
 
 
 def _extract_via_vlm(data: bytes, token: str, mime: str) -> Optional[str]:
@@ -185,6 +203,9 @@ def extract_text_from_image(data: bytes, filename: str = "") -> Optional[str]:
     oversized, or no path yields usable text — so the caller falls back to the
     format-only image response.
     """
+    if not _vision_enabled():
+        logger.debug("image_extract: disabled via RICO_ENABLE_VISION")
+        return None
     token = _token()
     if not token:
         logger.debug("image_extract: no HF token configured")

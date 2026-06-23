@@ -25,6 +25,17 @@ def test_no_token_returns_none(monkeypatch):
     assert ie.extract_text_from_image(_PNG, "x.png") is None
 
 
+def test_disabled_via_env_kill_switch(monkeypatch):
+    # RICO_ENABLE_VISION=false → no network call at all, graceful None, even with
+    # a token present. The instant, no-deploy off switch (cost guard).
+    monkeypatch.setenv("HF_TOKEN", "hf_test")
+    monkeypatch.setenv("RICO_ENABLE_VISION", "false")
+    assert ie.is_available() is False
+    with patch("src.services.image_extractor.requests.post") as post:
+        assert ie.extract_text_from_image(_PNG, "x.png") is None
+    assert post.call_count == 0
+
+
 def test_empty_and_oversized_return_none(monkeypatch):
     monkeypatch.setenv("HF_TOKEN", "hf_test")
     assert ie.extract_text_from_image(b"", "x.png") is None
