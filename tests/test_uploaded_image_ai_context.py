@@ -72,3 +72,57 @@ def test_type_falls_back_to_document_type():
     api = _api()
     ctx = _ctx_with(api, {"last_uploaded_document": {"document_type": "contract", "extracted_text": "This agreement..."}})
     assert ctx["last_uploaded_document"]["type"] == "contract"
+
+
+# ── _handle_uploaded_document_followup — never hijacked into a CV draft ────────
+
+def _followup(api, message, recent_context):
+    with (
+        patch.object(api, "_get_recent_context", return_value=recent_context),
+        patch.object(api, "_append_chat", lambda *a, **k: None),
+        patch.object(api, "_resolve_profile", return_value=None),
+    ):
+        return api._handle_uploaded_document_followup("u-img", message, None)
+
+
+def test_followup_ignores_non_action_message():
+    assert _followup(_api(), "Find me Developer jobs", {"last_uploaded_document": {"extracted_text": "x"}}) is None
+
+
+def test_followup_none_when_no_recent_upload():
+    assert _followup(_api(), "Describe what's in this image.", {}) is None
+
+
+def test_followup_honest_when_no_text_never_cv_draft():
+    """Image recognised but unreadable → honest message, NOT a CV draft."""
+    res = _followup(_api(), "Describe what's in this image.",
+                    {"last_uploaded_document": {"filename": "IMG.jpeg", "display_label": "Image"}})
+    assert res is not None
+    assert res["type"] == "document_context"
+    msg = res["message"].lower()
+    assert "couldn't read" in msg or "clear text" in msg
+    assert "cv draft" not in msg and "here is your cv" not in msg
+
+
+def test_followup_with_transcript_answers_from_text():
+    api = _api()
+    captured = {}
+
+    def _fake_ai(user_id, message, profile, *, save_user_message, language=None, prompt_override=None):
+        captured["override"] = prompt_override
+        captured["message"] = message
+        return {"type": "ai", "message": "It's a WhatsApp chat about a pizza shop.", "success": True}
+
+    with (
+        patch.object(api, "_get_recent_context", return_value={
+            "last_uploaded_document": {"filename": "IMG.jpeg", "display_label": "Image",
+                                       "extracted_text": "Yalla Pizza. باقي عليك 780 درهم."}}),
+        patch.object(api, "_resolve_profile", return_value=None),
+        patch.object(api, "_answer_with_ai_fallback", side_effect=_fake_ai),
+    ):
+        res = api._handle_uploaded_document_followup("u-img", "Describe what's in this image.", None)
+
+    assert res["message"] == "It's a WhatsApp chat about a pizza shop."
+    # The transcript is embedded in the AI prompt, while history keeps the original message.
+    assert "Yalla Pizza" in captured["override"]
+    assert captured["message"] == "Describe what's in this image."
