@@ -1312,6 +1312,42 @@ async def rico_upload_cv(
                 ),
             }
 
+        # No-text / image-only documents: a screenshot or scan exported as a PDF,
+        # or an otherwise empty/unreadable file. There is no extractable text, so the
+        # CV parser would only emit a misleading "poor quality" CV preview (#674
+        # residual). Return a clear needs-text response — never the CV pipeline.
+        # (OCR/vision for these is handled separately and is out of scope here.)
+        _NEAR_EMPTY_CHARS = 25
+        _NO_TEXT_MIN_BYTES = 1024
+        extracted_chars = int(classification.metadata.get("chars", 0) or 0)
+        text_bearing_format = classification.file_format in ("pdf", "doc", "docx", "text")
+        if text_bearing_format and len(data) >= _NO_TEXT_MIN_BYTES and (
+            doc_type == "no_text"
+            or (doc_type == "unknown" and confidence <= 0.0 and extracted_chars < _NEAR_EMPTY_CHARS)
+        ):
+            _metrics.record_request((time.time() - start_time) * 1000)
+            logger.info(
+                "doc_classify_no_text user=%s filename=%s format=%s chars=%d request_ref=%s",
+                resolved_user_id, safe_name, classification.file_format,
+                extracted_chars, request_ref,
+            )
+            return {
+                "ok": True,
+                "status": "classified",
+                "document_type": "no_text",
+                "file_format": classification.file_format,
+                "filename": safe_name,
+                "confidence": round(confidence, 3),
+                "suggested_actions": [],
+                "display_label": "Unreadable / Image-only Document",
+                "message": (
+                    "I couldn't find any readable text in this file. It looks like a "
+                    "scan, photo, or screenshot saved as a PDF rather than a text "
+                    "document. I can read text-based PDFs and Word files — if this is "
+                    "your CV, please upload a text-based version."
+                ),
+            }
+
         # Non-CV documents with sufficient confidence → return classification + actions.
         # CV types that also proceed through extraction: "cv", "cover_letter", "unknown"
         _CV_PIPELINE_TYPES = {"cv", "cover_letter", "unknown"}
