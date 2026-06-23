@@ -1,0 +1,35 @@
+name: HF Vision Probe (one-shot)
+
+# THROWAWAY diagnostic for PR #736. Runs ONE tiny synthetic screenshot through
+# the production path (HF vision model -> serverless OCR fallback) on this repo's
+# HF_TOKEN and prints a status-only report (no token, no image, no transcript).
+# Not on the PR branch and not wired into the app. Safe to delete after.
+on:
+  push:
+    branches: [chore/hf-vision-probe]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hf-vision-probe
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install probe deps
+        run: pip install --quiet requests pillow
+      - name: Probe HF vision + serverless OCR (one tiny image)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          # Optional overrides; defaults match src/services/image_extractor.py.
+          HF_VISION_MODEL: ${{ vars.HF_VISION_MODEL }}
+          HF_OCR_MODEL: ${{ vars.HF_OCR_MODEL }}
+        run: python scripts/hf_vision_probe.py
