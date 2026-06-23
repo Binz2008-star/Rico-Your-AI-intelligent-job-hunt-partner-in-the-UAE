@@ -1318,9 +1318,10 @@ async def rico_upload_cv(
         # residual). Return a clear needs-text response — never the CV pipeline.
         # (OCR/vision for these is handled separately and is out of scope here.)
         _NEAR_EMPTY_CHARS = 25
+        _NO_TEXT_MIN_BYTES = 1024
         extracted_chars = int(classification.metadata.get("chars", 0) or 0)
         text_bearing_format = classification.file_format in ("pdf", "doc", "docx", "text")
-        if text_bearing_format and (
+        if text_bearing_format and len(data) >= _NO_TEXT_MIN_BYTES and (
             doc_type == "no_text"
             or (doc_type == "unknown" and confidence <= 0.0 and extracted_chars < _NEAR_EMPTY_CHARS)
         ):

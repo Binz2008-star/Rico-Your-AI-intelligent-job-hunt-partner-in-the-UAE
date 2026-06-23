@@ -7,13 +7,18 @@ a screenshot or scan exported as a PDF has no text layer, so the classifier scor
 "poor quality" CV preview.
 
 Fix (branch fix/no-text-pdf-avoid-cv-pipeline):
-  * classifier tags a text-bearing file whose extracted text is near-empty as ``no_text``;
+  * classifier tags a *substantial* text-bearing file whose extracted text is near-empty
+    as ``no_text`` (a real screenshot/scan carries image data and is at least ~1 KB);
   * the /upload-cv router returns a clear needs-text response for ``no_text`` (and any
     defensive ``unknown`` near-empty) instead of entering CV extraction.
 
+A real image-only PDF is large (image data) but yields an EMPTY text layer; a tiny
+``%PDF`` stub is left to flow through the normal pipeline (so existing route/security
+tests that post stub PDFs and mock the parser are unaffected).
+
 In production, PDF text is extracted with PyMuPDF (``fitz``), which returns an EMPTY
-string for an image-only PDF (no text layer). ``fitz`` is not installed in CI, so these
-tests simulate that production behaviour by patching ``_extract_pdf`` to return "".
+string for an image-only PDF. ``fitz`` is not installed in CI, so these tests simulate
+that production behaviour by patching ``_extract_pdf`` to return "".
 
 Scope: routing only. No OCR, no HF vision, no application-evidence workflow (separate work,
 incl. PR #736).
@@ -39,6 +44,11 @@ _PUBLIC_UID = "public:web-notext12345"
 _ip_seq = itertools.count(1)
 
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+# A real screenshot/scan exported as a PDF: substantial image data, no text layer.
+_BIG_NO_TEXT_PDF = b"%PDF-1.4\n" + b"\x00" * 4096
+# A tiny stub PDF (the kind existing route/security tests post while mocking parse_cv).
+_TINY_STUB_PDF = b"%PDF-1.4"
 
 _CV_TEXT = (
     "Jane Doe. Professional Summary: Senior product leader seeking a new role. "
@@ -84,22 +94,22 @@ def _empty_pdf_text():
 class TestClassifierNoText:
 
     def test_image_only_pdf_no_text_layer_is_no_text(self):
-        """A PDF whose text layer is empty (image-only / scan) → document_type=no_text."""
+        """A substantial PDF whose text layer is empty (image-only / scan) → no_text."""
         with _empty_pdf_text():
-            r = classify_document(b"%PDF-1.4\n<binary image stream>", "job_screenshot.pdf")
+            r = classify_document(_BIG_NO_TEXT_PDF, "job_screenshot.pdf")
         assert r.document_type == "no_text"
         assert r.file_format == "pdf"
         assert r.confidence > 0  # a confident "no readable text" determination
 
-    def test_empty_pdf_is_no_text(self):
-        """An essentially empty PDF (header only) → no_text, never CV."""
+    def test_tiny_stub_pdf_is_not_no_text(self):
+        """A tiny %PDF stub is NOT a real image document — must flow to the pipeline."""
         with _no_fitz():
-            r = classify_document(b"%PDF-1.4\n", "empty.pdf")
-        assert r.document_type == "no_text"
+            r = classify_document(_TINY_STUB_PDF, "stub.pdf")
+        assert r.document_type != "no_text"
 
     def test_no_text_offers_no_actions(self):
         with _empty_pdf_text():
-            r = classify_document(b"%PDF-1.4\n....", "scan.pdf")
+            r = classify_document(_BIG_NO_TEXT_PDF, "scan.pdf")
         assert r.suggested_actions == []
 
     def test_real_text_cv_pdf_is_not_no_text(self):
@@ -141,7 +151,7 @@ class TestUploadNoTextRouting:
         with _empty_pdf_text(), patch("src.services.chat_service.parse_cv", parse_mock):
             r = client.post(
                 f"/api/v1/rico/upload-cv?user_id={_PUBLIC_UID}",
-                files={"file": ("job_screenshot.pdf", io.BytesIO(b"%PDF-1.4\n<img>"), "application/pdf")},
+                files={"file": ("job_screenshot.pdf", io.BytesIO(_BIG_NO_TEXT_PDF), "application/pdf")},
             )
         assert r.status_code == 200, r.text
         body = r.json()
@@ -154,7 +164,7 @@ class TestUploadNoTextRouting:
         with _empty_pdf_text():
             r = client.post(
                 f"/api/v1/rico/upload-cv?user_id={_PUBLIC_UID}",
-                files={"file": ("scan.pdf", io.BytesIO(b"%PDF-1.4\n<img>"), "application/pdf")},
+                files={"file": ("scan.pdf", io.BytesIO(_BIG_NO_TEXT_PDF), "application/pdf")},
             )
         body = r.json()
         msg = (body.get("message") or "").lower()
@@ -164,19 +174,38 @@ class TestUploadNoTextRouting:
         assert "preview" not in body
         assert "saved your cv" not in msg and "your resume has been" not in msg
 
-    def test_empty_pdf_no_cv_preview(self, client):
-        """Acceptance 2: empty/no-text PDF must not show a CV preview."""
+    def test_no_text_pdf_no_cv_preview(self, client):
+        """Acceptance 2: a no-text PDF must not show a CV preview."""
         parse_mock = MagicMock(return_value=_CV_PARSE_RESULT)
-        with _no_fitz(), patch("src.services.chat_service.parse_cv", parse_mock):
+        with _empty_pdf_text(), patch("src.services.chat_service.parse_cv", parse_mock):
             r = client.post(
                 f"/api/v1/rico/upload-cv?user_id={_PUBLIC_UID}",
-                files={"file": ("empty.pdf", io.BytesIO(b"%PDF-1.4\n"), "application/pdf")},
+                files={"file": ("scan.pdf", io.BytesIO(_BIG_NO_TEXT_PDF), "application/pdf")},
             )
         body = r.json()
         assert body["status"] == "classified"
         assert body["document_type"] == "no_text"
         assert "preview" not in body
         parse_mock.assert_not_called()
+
+    def test_tiny_stub_pdf_still_enters_cv_pipeline(self, client):
+        """A tiny %PDF stub (no real image data) still flows to the CV pipeline —
+        existing route/security tests that post stubs and mock parse_cv are unaffected."""
+        parse_mock = MagicMock(return_value=_CV_PARSE_RESULT)
+        with (
+            _no_fitz(),
+            patch("src.services.chat_service.parse_cv", parse_mock),
+            patch("src.api.routers.rico_chat.get_profile", return_value=None),
+            patch("src.services.cv_quality_warnings.build_cv_quality_warnings", return_value=[]),
+        ):
+            r = client.post(
+                f"/api/v1/rico/upload-cv?user_id={_PUBLIC_UID}",
+                files={"file": ("stub.pdf", io.BytesIO(_TINY_STUB_PDF), "application/pdf")},
+            )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["status"] == "preview_ready", body
+        parse_mock.assert_called_once()
 
     def test_real_cv_pdf_still_preview_ready(self, client):
         """Acceptance 4: a real text CV PDF still enters CV extraction (preview_ready)."""

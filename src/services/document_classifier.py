@@ -36,6 +36,13 @@ _WEBP_MARKER = b"WEBP"
 # from the CV pipeline. (OCR/vision for these is handled separately, out of scope.)
 _MIN_TEXT_CHARS = 25
 
+# Minimum raw byte size for a near-empty file to be treated as a real "no_text"
+# document (a screenshot / scan exported as a PDF carries image data and is at
+# least several KB). Below this, a near-empty file is a tiny stub or corrupt
+# upload, not a real image-only document — it is left to flow through the normal
+# pipeline rather than being labelled no_text.
+_MIN_DOC_BYTES = 1024
+
 
 def detect_format(data: bytes, filename: str = "") -> str:
     """Return a format slug based on magic bytes, with filename extension as tiebreaker."""
@@ -340,12 +347,13 @@ class DocumentClassifier:
 
         text = self._extract_text(data, file_format)
 
-        # No-text / image-only documents: a screenshot or scan exported as a PDF,
-        # or an otherwise empty/unreadable file. There is no text layer to classify
-        # or extract, so the CV parser would only produce a misleading "poor
-        # quality" CV preview (#674 residual). Tag distinctly so the router never
-        # routes these into CV extraction.
-        if len(text.strip()) < _MIN_TEXT_CHARS:
+        # No-text / image-only documents: a screenshot or scan exported as a PDF.
+        # There is no text layer to classify or extract, so the CV parser would only
+        # produce a misleading "poor quality" CV preview (#674 residual). Tag these
+        # distinctly so the router never routes them into CV extraction. Only real
+        # documents (>= _MIN_DOC_BYTES of image data) qualify — tiny stubs / corrupt
+        # uploads are left to the normal pipeline.
+        if len(text.strip()) < _MIN_TEXT_CHARS and len(data) >= _MIN_DOC_BYTES:
             return self._make(
                 "no_text", 0.9, {"no_text": 0.9}, file_format,
                 metadata={"chars": len(text)},
