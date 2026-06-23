@@ -28,6 +28,14 @@ _MAGIC_TABLE: list[tuple[bytes, str]] = [
 _WEBP_RIFF   = b"RIFF"
 _WEBP_MARKER = b"WEBP"
 
+# Minimum extractable characters for a text-bearing document (PDF / Word / text)
+# to be classified by content. Below this, the file has no usable text layer —
+# e.g. a screenshot or scan exported as a PDF, or an empty file — and must NOT be
+# pushed through CV extraction (it would only yield a misleading "poor quality"
+# CV preview). Such files are tagged "no_text" so the router can route them away
+# from the CV pipeline. (OCR/vision for these is handled separately, out of scope.)
+_MIN_TEXT_CHARS = 25
+
 
 def detect_format(data: bytes, filename: str = "") -> str:
     """Return a format slug based on magic bytes, with filename extension as tiebreaker."""
@@ -170,6 +178,7 @@ _DISPLAY_LABELS: dict[str, str] = {
     "company_profile":   "Company Profile",
     "invoice":           "Invoice",
     "image":             "Image",
+    "no_text":           "Unreadable / Image-only Document",
     "unknown":           "Document",
 }
 
@@ -231,6 +240,7 @@ _SUGGESTED_ACTIONS: dict[str, list[dict[str, str]]] = {
          "message": "Extract the issuer, issue date, and expiry from this certificate."},
     ],
     "identity_document": [],  # Blocked for security — no actions offered
+    "no_text": [],            # No readable text — router returns a needs-text message
     "company_profile": [
         {"label": "Summarize",              "kind": "chat_continue",
          "message": "Summarize this company profile."},
@@ -329,6 +339,18 @@ class DocumentClassifier:
             )
 
         text = self._extract_text(data, file_format)
+
+        # No-text / image-only documents: a screenshot or scan exported as a PDF,
+        # or an otherwise empty/unreadable file. There is no text layer to classify
+        # or extract, so the CV parser would only produce a misleading "poor
+        # quality" CV preview (#674 residual). Tag distinctly so the router never
+        # routes these into CV extraction.
+        if len(text.strip()) < _MIN_TEXT_CHARS:
+            return self._make(
+                "no_text", 0.9, {"no_text": 0.9}, file_format,
+                metadata={"chars": len(text)},
+            )
+
         return self._classify_text(text, file_format, filename)
 
     # ── Text extraction ───────────────────────────────────────────

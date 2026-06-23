@@ -48,9 +48,15 @@ def test_cv_upload_runs_parser_in_executor(monkeypatch):
     monkeypatch.setattr("src.api.routers.rico_chat.get_profile", lambda uid: None)
 
     client = TestClient(app)
+    # A text-bearing CV body so document classification routes it into the CV
+    # pipeline (an empty/no-text PDF is now classified "no_text" and skips parsing).
+    _cv_body = (
+        b"%PDF-1.4\nProfessional Summary: experienced engineer. "
+        b"Work Experience: Software Engineer. Education: BSc. Skills: python, sql."
+    )
     resp = client.post(
         "/api/v1/rico/upload-cv?user_id=public:web-upload12345",
-        files={"file": ("cv.pdf", io.BytesIO(b"%PDF-1.4 fake cv"), "application/pdf")},
+        files={"file": ("cv.pdf", io.BytesIO(_cv_body), "application/pdf")},
     )
 
     # Response shape/contract preserved.
