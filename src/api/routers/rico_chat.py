@@ -1333,8 +1333,55 @@ async def rico_upload_cv(
         if classification.file_format == "executable":
             raise HTTPException(status_code=422, detail="Executable files are not accepted")
 
-        # Images: no text extraction possible — return classification immediately.
+        # Images: try a vision-model transcription so a job-posting / recruiter
+        # screenshot becomes readable, then re-classify the extracted text (a job
+        # screenshot → job_description with real actions). Falls back to the
+        # format-only image response when no vision model is configured or it
+        # returns nothing — the upload is never blocked.
         if classification.file_format == "image":
+            from src.services.image_extractor import extract_text_from_image
+            extracted = await loop.run_in_executor(
+                None, extract_text_from_image, data, safe_name
+            )
+            if extracted and len(extracted.strip()) >= 20:
+                text_classification = await loop.run_in_executor(
+                    None, classify_document, extracted.encode("utf-8"), "image-text.txt"
+                )
+                # Remember the transcription so follow-up chat ("save as target
+                # job", "score against my CV") can reference the screenshot.
+                if not is_valid_public_user_id(resolved_user_id):
+                    try:
+                        from src.rico_memory import RicoMemoryStore
+                        _mem = RicoMemoryStore()
+                        _rctx = _mem.get_context(resolved_user_id, "recent_context") or {}
+                        _rctx["last_uploaded_document"] = {
+                            "document_type": text_classification.document_type,
+                            "display_label": text_classification.display_label,
+                            "filename": safe_name,
+                            "source": "image",
+                            "extracted_text": extracted[:4000],
+                            "suggested_actions": list(text_classification.suggested_actions or []),
+                        }
+                        _mem.set_context(resolved_user_id, "recent_context", _rctx)
+                    except Exception:
+                        pass
+                _metrics.record_request((time.time() - start_time) * 1000)
+                logger.info(
+                    "doc_image_extracted user=%s filename=%s type=%s chars=%d request_ref=%s",
+                    resolved_user_id, safe_name, text_classification.document_type,
+                    len(extracted), request_ref,
+                )
+                resp = _classification_response(text_classification, safe_name)
+                preview = extracted.strip()
+                if len(preview) > 600:
+                    preview = preview[:600].rsplit(" ", 1)[0] + "…"
+                resp["message"] = (
+                    f"I read your image — it looks like a **{text_classification.display_label}**. "
+                    f"Here's what I found:\n\n{preview}\n\nWhat would you like me to do with it?"
+                )
+                resp["extracted_text"] = extracted[:4000]
+                resp["source"] = "image"
+                return resp
             _metrics.record_request((time.time() - start_time) * 1000)
             return _classification_response(classification, safe_name)
 
