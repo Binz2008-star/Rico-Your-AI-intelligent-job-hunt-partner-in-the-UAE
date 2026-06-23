@@ -1,6 +1,6 @@
 "use client";
 
-import { fetchMe, submitOnboarding, uploadCV, type OnboardingPayload, type ParsedCV } from "@/lib/api";
+import { ApiError, fetchMe, submitOnboarding, uploadCV, type OnboardingPayload, type ParsedCV } from "@/lib/api";
 import { buildAuthHref } from "@/lib/redirect";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTranslation, type TranslationKey } from "@/lib/translations";
@@ -217,7 +217,11 @@ export default function OnboardingPage() {
         router.replace(loginHref);
         return;
       }
-      setErrorMsg(err instanceof Error ? err.message : t("onboardingErrUpload"));
+      if (err instanceof ApiError && err.statusCode === 413) {
+        setErrorMsg(t("cmdCvTooLarge"));   // file too large — localized size message
+      } else {
+        setErrorMsg(err instanceof Error ? err.message : t("onboardingErrUpload"));
+      }
       setPageState("upload");
     }
   }, [loginHref, router, t]);

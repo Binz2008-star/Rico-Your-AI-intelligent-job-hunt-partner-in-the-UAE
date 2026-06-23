@@ -12,7 +12,7 @@ import { RicoMarkdownContent } from "@/components/ui/rico/RicoMarkdownContent";
 import { PermissionRequestCard } from "@/components/ui/rico/PermissionRequestCard";
 import { ProposedChangeCard } from "@/components/ui/rico/ProposedChangeCard";
 import { AttachmentAnalysisCard } from "@/components/ui/rico/AttachmentAnalysisCard";
-import { clearChatHistory, confirmCVProfile, executePermissionAction, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
+import { ApiError, clearChatHistory, confirmCVProfile, executePermissionAction, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { buildAuthHref } from "@/lib/redirect";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
@@ -1209,9 +1209,13 @@ export default function CommandPage() {
                 }
                 setMessages((prev) => [...prev, { id: nextId(), role: "rico", text }]);
             }
-        } catch {
-            setUploadError(t("uploadError"));
-            setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: t("cmdCvUploadErr") }]);
+        } catch (err) {
+            // A 413 means the file was too large — show the friendly size message,
+            // never the generic "could not process your CV" (the size is the real reason).
+            const tooLarge = err instanceof ApiError && err.statusCode === 413;
+            const msgKey = tooLarge ? "cmdCvTooLarge" : "cmdCvUploadErr";
+            setUploadError(t(msgKey));
+            setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: t(msgKey) }]);
         } finally {
             setThinking(false);
             setOperationState(null);
