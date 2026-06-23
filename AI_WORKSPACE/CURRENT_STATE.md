@@ -1,13 +1,13 @@
 # Current State
 
-_Last updated: 2026-06-22 (job-flow stabilization complete through PR #730; only PR C remains)_
+_Last updated: 2026-06-23 (job-flow stabilization complete through #735; attachment/document-routing fix #737 merged + deploy-verified; HF vision #736 reviewed, not merged)_
 
 ## Production baseline
 
-- **Repository main HEAD / production backend SHA:** `38fbf5da19975df6f7d3d21168b137741d502e6d` (#730 PR D role-parsing edge cases).
-- **Production deploy verification:** `/version` matched `38fbf5da19975df6f7d3d21168b137741d502e6d`; `/health` returned 200; `Deploy Render Backend` and `Deploy to Production` workflows completed successfully for the merge SHA.
-- **Vercel:** production/root/proxy healthy by deploy verification report.
-- **Render logs:** direct Render MCP log scan was unavailable/unauthorized in the session; no error signals were observed from health checks or deploy workflows.
+- **Repository main HEAD / production backend SHA:** `e214178a01527632d2ae34f832826fdea81553e5` (#737 — no-text/image-only PDFs kept out of the CV pipeline).
+- **Production deploy verification:** `Deploy Render Backend` polled `/version` and confirmed the transition `96f415a → e214178` ("Render is now serving e214178a0152"); `/health` returned **200** (`status: ok`, all job providers `configured:true, degraded:false`); `Deploy to Production` + `Deploy Render Backend` workflows both succeeded for the merge SHA.
+- **Vercel:** production/root/proxy healthy by deploy verification.
+- **Render logs:** direct Render MCP log scan unavailable in-session; no error signals observed from `/health` or deploy workflows.
 
 ## Job-flow stabilization — 2026-06-22 complete
 
@@ -58,41 +58,43 @@ No provider keys are hardcoded, committed, or logged.
 | T6 | category mapping `product/technical management` + `not coding` | ✅ fixed live (#730) |
 | T8 | `save the second job to pipeline` not wired to recent context | ✅ fixed live (#729) |
 | T9 | open apply link → missing-link error | ✅ fixed live (#727 + #728) |
-| T1 | strongest CV profile ignored; stale `target_role` | 🔴 open → **PR C** |
-| T7 | silent role substitution + auth/CV context loss + weak location | 🔴 open → **PR C** |
+| T1 | strongest CV profile ignored; stale `target_role` | ✅ fixed live (#731 PR C) |
+| T7 | silent role substitution + auth/CV context loss + weak location | ✅ fixed live (#731 PR C) |
 
-## Remaining next PR
+## Merge train after #730 (all live on `main`)
 
-### PR C — profile/context role selection (not started yet)
+| PR | What | Merge SHA | Status |
+|---|---|---:|---|
+| **#731** | PR C — profile-context role selection (T1 & T7): no silent stale/ambiguous search; ambiguity by role-family not raw count; raw role text preserved | `9a9070c` | ✅ merged + deployed |
+| **#733** | Investigation/test-only — production-equivalent live-path tests for T2–T6 role parsing | `ab170e2` | ✅ merged |
+| **#734** | Career-memory identity resolution fix | `5944d72` | ✅ merged |
+| **#735** | Single-role parsing accepts explicit titles like "Technical Product Owner" (live recheck found single-role rejected what multi-role accepted) | `96f415a` | ✅ merged + deployed |
+| **#737** | Attachment/document routing — keep no-text/image-only PDFs out of the CV pipeline (#674 residual, Finding 1) | `e214178` | ✅ merged + deploy-verified |
 
-Branch recommendation: `fix/profile-context-role-selection`
+> Note: `fix/single-role-taxonomy-rejection` was an independent duplicate of the #735 fix built in another session — **abandoned** (not merged). Do not revive it.
 
-Scope:
+## Attachment / Document Intelligence routing — 2026-06-23
 
-- T1: `Find UAE jobs that match my strongest CV profile.`
-  - Do not blindly use stale `target_role` such as Software Engineer.
-  - Use the strongest confirmed active CV/profile signal.
-  - Ask the user to choose if multiple profile tracks are ambiguous.
+- **Audit:** `AI_WORKSPACE/audits/attachment-document-routing-post-674-677.md` (Findings 1–5). #677 shipped native-image classification on `/command`; the audit found the residual gaps.
+- **#737 (Finding 1, merged):** a screenshot/scan exported as a PDF (image-only PDF, no text layer) used to fall through `unknown@0.0` into CV extraction → misleading "poor quality" CV preview. The classifier now tags a *substantial* (`>= _MIN_DOC_BYTES`, 1 KB) text-bearing file with near-empty text (`< _MIN_TEXT_CHARS`, 25) as `no_text`; `/upload-cv` returns a clear needs-text response (`status="classified"`, `document_type="no_text"`) before the CV pipeline. Tiny stub PDFs still flow normally; native images unchanged; real text CVs unchanged. Tests: `tests/test_no_text_pdf_routing.py`.
+- **Open findings (not yet scoped):** Finding 2 (native image OCR/vision ingestion — that's #736), Finding 3 (no application-evidence destination), Finding 4 (`onboarding`/`upload` surfaces don't honor `status="classified"`), Finding 5 (dead `CV_THRESHOLD`; stale `CLAUDE.md` `/chat` reference).
 
-- T7: `Search UAE jobs for Environmental Manager.`
-  - Do not silently substitute Environmental Manager with Environmental Officer.
-  - Ask permission before broadening if exact role is unavailable.
-  - Preserve authenticated user/CV/session context.
-  - Do not ask a logged-in Pro user with uploaded CV to sign up or upload again.
-  - Keep location UAE-focused with safe preference for UAE/Ajman/Dubai/Sharjah/Abu Dhabi.
+## #736 — HF vision image extraction (reviewed, NOT merged)
 
-Hard guardrails:
+Branch `feat/vision-image-extraction`, head `40266cd`, Draft. Implements Finding 2 (read job-screenshot images via a Hugging Face vision model + serverless OCR fallback; HF only, no OpenAI). Review verdict: well-tested, correctly scoped (backend-only, no secret/content logging, sensible timeout/size/fallback guards). **Blocking before merge:**
 
-- No auth rewrite.
-- No billing changes.
-- No DB migration.
-- No #712 work.
-- No landing-page work.
-- No provider scraping.
-- No repeated real provider searches.
-- Use mocks/fixtures only in tests.
-- Keep `src/services/job_link.py` as the only canonical resolver.
-- Do not reintroduce `src/rico_link_resolver.py`.
+1. 🔴 **Stale base** — #736's green CI ran on `96f415a`, before #737. Must rebase onto `e214178` (both edit the `/upload-cv` image/classification region) and re-run.
+2. 🟠 Default serverless OCR fallback `microsoft/trocr-base-printed` is single-line — unsuitable for multi-line screenshots; pick a better fallback or disable by default.
+3. 🟠 Verify `HF_VISION_MODEL` (`Qwen/Qwen2.5-VL-7B-Instruct`) is actually enabled on the production `HF_TOKEN` via **one** live availability call on the preview before merge.
+4. 🟡 ~70s worst-case latency (2× 35s HF calls); no hard per-user cost cap (only `LIMIT_UPLOAD`).
+
+Keep #736 and #737 separate. Do not merge #736 without clearing the above.
+
+## Standing guardrails for this work-stream
+
+- No auth rewrite, no billing changes, no DB migration, no #712 work, no landing-page work, no provider scraping, no repeated real provider searches.
+- Use mocks/fixtures only in tests; no live OpenAI/HF/JSearch/Telegram/Jotform calls in unit tests.
+- Keep `src/services/job_link.py` as the only canonical apply-link resolver; do not reintroduce `src/rico_link_resolver.py`.
 
 ## Superseded / duplicate PRs
 
@@ -106,10 +108,10 @@ Hard guardrails:
 - **Migration `030_action_audit_log_hardening.sql`:** applied + verified in production Neon on 2026-06-21.
 - **Migration `021_user_job_context_alt_url.sql`:** applied; issue #710 closed.
 - **Issue #711 drift:** `005 pipeline_runs` and `011 idx_rico_recommendations_user_job_unique` remain not applied unless separately approved.
-- **Canonical handoff:** `AI_WORKSPACE/HANDOFFS/2026-06-22-job-flow-stabilization-complete.md`.
+- **Canonical handoffs:** `AI_WORKSPACE/HANDOFFS/2026-06-22-job-flow-stabilization-complete.md` (job-flow train through #730), `AI_WORKSPACE/HANDOFFS/2026-06-23-attachment-document-routing.md` (document routing #737 + #736 review).
 
 ## Recommended next command
 
 ```text
-Rico mode. Start PR C only from clean current origin/main. First do read-only mapping of current CV/profile selection, target_role loading, auth/CV context loss, and role substitution. Report the smallest safe implementation plan before large edits. Branch: fix/profile-context-role-selection.
+Rico mode. Decide on #736 (HF vision image extraction): if proceeding, rebase feat/vision-image-extraction onto current origin/main (e214178), re-run its mocked tests, replace/disable the trocr serverless fallback, and confirm HF_VISION_MODEL availability with one live preview call before any merge. Keep #736 separate from #737. Do not merge without clearing the 4 review findings in CURRENT_STATE.
 ```
