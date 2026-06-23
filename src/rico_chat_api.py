@@ -226,6 +226,46 @@ _PLACEHOLDER_ROLE_VALUES: frozenset[str] = frozenset({
     "not specified", "tbd", "n/a",
 })
 
+# Head nouns that mark a well-formed, explicit job title. When a single-role
+# request like "Technical Product Owner" is not in the CV taxonomy, the 3-tier
+# classifier returns "unknown" and we used to bounce it back as "I do not
+# recognize '<role>'" + a stale CV fallback ("Developer"). Multi-role parsing
+# never had this problem because it searches the requested roles directly. To
+# keep single-role parity, a request whose last word is a recognised job head
+# noun (and is a multi-word, sane-length title) is searched directly instead of
+# being rejected. Single-token nonsense ("XYZNonsenseRole") has no head noun and
+# is still correctly rejected.
+_ROLE_HEAD_NOUNS: frozenset[str] = frozenset({
+    "owner", "manager", "lead", "leader", "director", "officer", "engineer",
+    "developer", "analyst", "specialist", "consultant", "coordinator",
+    "administrator", "supervisor", "architect", "designer", "scientist",
+    "executive", "head", "chief", "president", "controller", "accountant",
+    "advisor", "adviser", "strategist", "planner", "technician", "agent",
+    "representative", "associate", "assistant", "expert", "professional",
+    "auditor", "inspector", "instructor", "trainer", "recruiter", "buyer",
+    "estimator", "surveyor", "nurse", "doctor", "pharmacist", "teacher",
+    "operator", "foreman", "superintendent", "partner", "principal",
+})
+
+
+def _looks_like_valid_role_title(role: str) -> bool:
+    """True when ``role`` reads like a real, explicit job title.
+
+    Heuristic (intentionally conservative): the title has 2–6 words, every word
+    is alphabetic (allowing internal '/'/'-'), and the final word is a known job
+    head noun. This accepts "Technical Product Owner", "QHSE Manager",
+    "Solutions Architect" while rejecting single tokens and free-form gibberish.
+    """
+    if not role:
+        return False
+    words = role.strip().split()
+    if not (2 <= len(words) <= 6):
+        return False
+    for w in words:
+        if not w.replace("-", "").replace("/", "").isalpha():
+            return False
+    return words[-1].strip("-/").lower() in _ROLE_HEAD_NOUNS
+
 # Settings / notification commands ("enable telegram notifications", "turn off
 # email alerts", "disable reminders"). These are not job roles and not job
 # searches — route them to Settings guidance instead of role classification.
@@ -17029,6 +17069,18 @@ class RicoChatAPI:
                 )
         except Exception:
             pass
+
+        # Explicit, well-formed title the taxonomy simply doesn't know yet
+        # (e.g. "Technical Product Owner"). The user asked for it by name, so
+        # search it directly — exactly like multi-role parsing does — instead of
+        # bouncing it back as "I do not recognize" and falling back to a stale
+        # CV role ("Developer"). Single-token gibberish has no job head noun and
+        # still falls through to the rejection below.
+        if _looks_like_valid_role_title(role_text):
+            return self._target_role_search_response(
+                user_id, role_text.strip(), profile,
+                location=location, employment_type_filter=employment_type_filter,
+            )
 
         target_roles = self._as_list(self._profile_value(profile, "target_roles"))
         suggestion = ""
