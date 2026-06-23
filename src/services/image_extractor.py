@@ -1,22 +1,34 @@
 """
 src/services/image_extractor.py
-Vision-model image → text extraction for Rico (CAREER-OS-06 extension).
+Image -> text extraction for Rico (CAREER-OS-06 extension).
 
 Reads the text content of an uploaded image (a job-posting screenshot, a
 recruiter-message screenshot, or a photographed career document) so Rico can
 understand it instead of only recognising "this is an image".
 
-Uses the Hugging Face Inference Router's OpenAI-compatible chat-completions
-endpoint with a vision-language model — the SAME host + token as
-``src/rico_hf_client.py``, so there is no OpenAI dependency. Never raises:
-returns ``None`` on any failure (missing token, model unavailable, timeout,
-oversized image, empty result), so callers degrade gracefully to the existing
-format-only image response.
+Free + zero-dependency by design. Render runs Rico on the *native* python
+runtime (no apt, ~512MB), so a local OCR engine is not an option: Tesseract
+needs a system binary and RapidOCR/onnxruntime needs ``libGL`` — neither is
+installable there. Instead this calls Hugging Face (the SAME host + token as
+``src/rico_hf_client.py``, so there is no OpenAI dependency and no extra pip
+package), trying two free mechanisms in order:
+
+  1. A vision-language model via the HF Inference Router's OpenAI-compatible
+     chat endpoint (``HF_VISION_MODEL``). Best quality. Active once a (free)
+     Inference Provider is enabled on the HF account.
+  2. A serverless ``hf-inference`` image-to-text/OCR model (``HF_OCR_MODEL``).
+     Works with no provider enabled, so it covers the zero-config case.
+
+Never raises: returns ``None`` on any failure (missing token, model
+unavailable, timeout, oversized image, empty result), so callers degrade
+gracefully to the existing format-only image response.
 
 Environment:
   HF_API_TOKEN / HF_TOKEN / HF_API_KEY / HUGGINGFACE_API_KEY  -- token (any of)
-  HF_VISION_MODEL  -- vision-language model id
+  HF_VISION_MODEL  -- vision-language model id for the chat endpoint
                       (default: Qwen/Qwen2.5-VL-7B-Instruct)
+  HF_OCR_MODEL     -- serverless image-to-text model id
+                      (default: microsoft/trocr-base-printed)
 """
 from __future__ import annotations
 
@@ -30,7 +42,9 @@ import requests
 logger = logging.getLogger(__name__)
 
 _HF_ROUTER_CHAT = "https://router.huggingface.co/v1/chat/completions"
+_HF_ROUTER_SERVERLESS = "https://router.huggingface.co/hf-inference/models/"
 _DEFAULT_VISION_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
+_DEFAULT_OCR_MODEL = "microsoft/trocr-base-printed"
 _REQUEST_TIMEOUT = 35
 # Screenshots are far smaller than this; the cap just guards the base64 payload.
 _MAX_IMAGE_BYTES = 6 * 1024 * 1024
@@ -72,26 +86,20 @@ def _mime(data: bytes) -> str:
 
 
 def is_available() -> bool:
-    """True when an HF token is configured (a vision model can be called)."""
+    """True when an HF token is configured (a model can be called)."""
     return bool(_token())
 
 
-def extract_text_from_image(data: bytes, filename: str = "") -> Optional[str]:
-    """Return text read from an image via the HF vision model, or ``None``.
+def _extract_via_vlm(data: bytes, token: str, mime: str) -> Optional[str]:
+    """Best-quality path: a vision-language model via the chat endpoint.
 
-    Never raises. Returns ``None`` when no token is configured, the image is
-    empty or oversized, the model is unavailable/rate-limited, or the response
-    carries no usable text — so the caller falls back to the format-only path.
+    Returns ``None`` (not an error) when no Inference Provider is enabled for
+    the account — that is the common free-tier case — so the caller falls
+    through to the serverless OCR path.
     """
-    token = _token()
-    if not token:
-        logger.debug("image_extract: no HF token configured")
+    model = os.getenv("HF_VISION_MODEL", _DEFAULT_VISION_MODEL).strip()
+    if not model:
         return None
-    if not data or len(data) > _MAX_IMAGE_BYTES:
-        logger.debug("image_extract: empty or oversized image bytes=%d", len(data or b""))
-        return None
-
-    model = os.getenv("HF_VISION_MODEL", _DEFAULT_VISION_MODEL)
     b64 = base64.b64encode(data).decode("ascii")
     payload = {
         "model": model,
@@ -102,7 +110,7 @@ def extract_text_from_image(data: bytes, filename: str = "") -> Optional[str]:
                     {"type": "text", "text": _PROMPT},
                     {
                         "type": "image_url",
-                        "image_url": {"url": f"data:{_mime(data)};base64,{b64}"},
+                        "image_url": {"url": f"data:{mime};base64,{b64}"},
                     },
                 ],
             }
@@ -110,7 +118,6 @@ def extract_text_from_image(data: bytes, filename: str = "") -> Optional[str]:
         "max_tokens": 800,
         "temperature": 0,
     }
-
     try:
         resp = requests.post(
             _HF_ROUTER_CHAT,
@@ -119,7 +126,7 @@ def extract_text_from_image(data: bytes, filename: str = "") -> Optional[str]:
             timeout=_REQUEST_TIMEOUT,
         )
         if resp.status_code != 200:
-            logger.debug("image_extract: non_ok status=%s model=%s", resp.status_code, model)
+            logger.debug("image_extract.vlm: non_ok status=%s model=%s", resp.status_code, model)
             return None
         body = resp.json()
         content = (
@@ -135,5 +142,59 @@ def extract_text_from_image(data: bytes, filename: str = "") -> Optional[str]:
         text = (content or "").strip()
         return text or None
     except Exception as exc:  # network error, JSON error, shape mismatch — all soft
-        logger.debug("image_extract: error=%s model=%s", exc, model)
+        logger.debug("image_extract.vlm: error=%s model=%s", exc, model)
         return None
+
+
+def _extract_via_serverless_ocr(data: bytes, token: str, mime: str) -> Optional[str]:
+    """Zero-config free path: a serverless ``hf-inference`` image-to-text model.
+
+    Works without enabling an Inference Provider, so it covers HF accounts that
+    have only a token. Posts the raw image bytes (the HF image-task contract)
+    and reads the ``generated_text`` field. Returns ``None`` on any failure.
+    """
+    model = os.getenv("HF_OCR_MODEL", _DEFAULT_OCR_MODEL).strip()
+    if not model:
+        return None
+    try:
+        resp = requests.post(
+            _HF_ROUTER_SERVERLESS + model,
+            data=data,
+            headers={"Authorization": "Bearer " + token, "Content-Type": mime},
+            timeout=_REQUEST_TIMEOUT,
+        )
+        if resp.status_code != 200:
+            logger.debug("image_extract.ocr: non_ok status=%s model=%s", resp.status_code, model)
+            return None
+        body = resp.json()
+        # image-to-text → [{"generated_text": "..."}]; tolerate a bare dict too.
+        item = body[0] if isinstance(body, list) and body else body
+        text = (item.get("generated_text", "") if isinstance(item, dict) else "").strip()
+        return text or None
+    except Exception as exc:  # network error, JSON error, shape mismatch — all soft
+        logger.debug("image_extract.ocr: error=%s model=%s", exc, model)
+        return None
+
+
+def extract_text_from_image(data: bytes, filename: str = "") -> Optional[str]:
+    """Return text read from an image via a free HF model, or ``None``.
+
+    Tries the vision-language model first (best quality) and falls back to a
+    serverless OCR model (works with no Inference Provider enabled). Never
+    raises. Returns ``None`` when no token is configured, the image is empty or
+    oversized, or no path yields usable text — so the caller falls back to the
+    format-only image response.
+    """
+    token = _token()
+    if not token:
+        logger.debug("image_extract: no HF token configured")
+        return None
+    if not data or len(data) > _MAX_IMAGE_BYTES:
+        logger.debug("image_extract: empty or oversized image bytes=%d", len(data or b""))
+        return None
+
+    mime = _mime(data)
+    text = _extract_via_vlm(data, token, mime)
+    if text:
+        return text
+    return _extract_via_serverless_ocr(data, token, mime)

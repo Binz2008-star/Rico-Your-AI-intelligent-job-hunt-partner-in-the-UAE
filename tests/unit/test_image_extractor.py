@@ -88,3 +88,49 @@ def test_mime_detection():
     assert ie._mime(b"GIF89a") == "image/gif"
     assert ie._mime(b"BM\x00\x00") == "image/bmp"
     assert ie._mime(b"RIFF\x00\x00\x00\x00WEBP") == "image/webp"
+
+
+def test_serverless_ocr_fallback_when_vlm_unavailable(monkeypatch):
+    # Free account with no Inference Provider enabled → VLM 400 → serverless OCR.
+    monkeypatch.setenv("HF_TOKEN", "hf_test")
+    vlm = MagicMock(status_code=400)  # "model not supported by any provider you have enabled"
+    ocr = MagicMock(status_code=200)
+    ocr.json.return_value = [{"generated_text": "  Crypto.com Product Design Manager Dubai  "}]
+    with patch("src.services.image_extractor.requests.post", side_effect=[vlm, ocr]) as post:
+        out = ie.extract_text_from_image(_PNG, "job.png")
+
+    assert out == "Crypto.com Product Design Manager Dubai"
+    assert post.call_count == 2
+    # Second call is the serverless hf-inference endpoint with the raw image bytes.
+    second = post.call_args_list[1]
+    assert "hf-inference/models/" in second.args[0]
+    assert second.kwargs["data"] == _PNG
+    assert second.kwargs["headers"]["Content-Type"] == "image/png"
+
+
+def test_serverless_ocr_accepts_bare_dict_shape(monkeypatch):
+    monkeypatch.setenv("HF_TOKEN", "hf_test")
+    vlm = MagicMock(status_code=503)
+    ocr = MagicMock(status_code=200)
+    ocr.json.return_value = {"generated_text": "Hello OCR"}
+    with patch("src.services.image_extractor.requests.post", side_effect=[vlm, ocr]):
+        assert ie.extract_text_from_image(_PNG, "x.png") == "Hello OCR"
+
+
+def test_serverless_ocr_empty_returns_none(monkeypatch):
+    monkeypatch.setenv("HF_TOKEN", "hf_test")
+    vlm = MagicMock(status_code=400)
+    ocr = MagicMock(status_code=200)
+    ocr.json.return_value = [{"generated_text": "   "}]
+    with patch("src.services.image_extractor.requests.post", side_effect=[vlm, ocr]):
+        assert ie.extract_text_from_image(_PNG, "x.png") is None
+
+
+def test_serverless_ocr_disabled_when_model_blank(monkeypatch):
+    # Operator can pin HF_OCR_MODEL="" to disable the OCR fallback entirely.
+    monkeypatch.setenv("HF_TOKEN", "hf_test")
+    monkeypatch.setenv("HF_OCR_MODEL", "")
+    vlm = MagicMock(status_code=400)
+    with patch("src.services.image_extractor.requests.post", side_effect=[vlm]) as post:
+        assert ie.extract_text_from_image(_PNG, "x.png") is None
+    assert post.call_count == 1  # only the VLM attempt, no serverless call
