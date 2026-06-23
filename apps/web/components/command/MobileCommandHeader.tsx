@@ -219,10 +219,11 @@ export function MobileCommandHeader({
     return (
         <>
             <header
-                className="relative z-10 border-b border-border-subtle bg-background/80 backdrop-blur-sm"
+                className="relative z-10 min-h-[53px] border-b border-border-subtle bg-background/80 backdrop-blur-sm"
                 dir={isRTL ? "rtl" : "ltr"}
+                data-testid="command-mobile-header"
             >
-              <div className="relative mx-auto flex w-full max-w-5xl items-center px-3 py-2.5 sm:px-5 lg:px-7">
+              <div className="relative mx-auto flex h-[53px] w-full max-w-5xl items-center px-3 sm:px-5 lg:px-7">
                 {/* Left: hamburger */}
                 <div className="flex items-center" style={{ minWidth: 80 }}>
                     {chatAudience === "checking" ? (
@@ -248,7 +249,7 @@ export function MobileCommandHeader({
                 </div>
 
                 {/* Center: brand */}
-                <div className="absolute inset-x-0 flex justify-center pointer-events-none">
+                <div className="absolute inset-x-0 flex justify-center pointer-events-none" data-testid="command-mobile-brand">
                     <Link
                         href="/"
                         className="pointer-events-auto flex items-center gap-1.5 text-text-primary font-black text-[15px] tracking-tight"
@@ -283,8 +284,9 @@ export function MobileCommandHeader({
                         {language === "ar" ? "EN" : "AR"}
                     </button>
 
-                    {chatAudience === "authenticated" && (
-                        <>
+                    <div className="flex h-8 w-[6.75rem] shrink-0 items-center justify-end" data-testid="command-mobile-auth-slot">
+                        {chatAudience === "authenticated" && (
+                            <div className="flex items-center justify-end gap-1">
                             {/* New chat */}
                             <button
                                 type="button"
@@ -340,34 +342,35 @@ export function MobileCommandHeader({
                                     </div>
                                 )}
                             </div>
-                        </>
-                    )}
+                            </div>
+                        )}
 
-                    {/* Public: compact sign in + sign up */}
-                    {chatAudience === "public" && (
-                        <div className="flex items-center gap-1.5">
-                            <Link
-                                href={loginHref}
-                                className="px-2 text-[12px] text-text-muted transition-colors hover:text-text-primary"
-                            >
-                                {t("signIn")}
-                            </Link>
-                            <Link
-                                href={signupHref}
-                                className="text-[11px] px-2.5 py-1.5 rounded-lg bg-gold text-[#0a0a1a] hover:bg-gold-hover transition-colors font-semibold whitespace-nowrap"
-                            >
-                                {t("signUp")}
-                            </Link>
-                        </div>
-                    )}
+                        {/* Public: compact sign in + sign up */}
+                        {chatAudience === "public" && (
+                            <div className="flex w-full items-center justify-end gap-1.5">
+                                <Link
+                                    href={loginHref}
+                                    className="px-1 text-[12px] text-text-muted transition-colors hover:text-text-primary"
+                                >
+                                    {t("signIn")}
+                                </Link>
+                                <Link
+                                    href={signupHref}
+                                    className="whitespace-nowrap rounded-lg bg-gold px-2 py-1.5 text-[11px] font-semibold text-[#0a0a1a] transition-colors hover:bg-gold-hover"
+                                >
+                                    {t("signUp")}
+                                </Link>
+                            </div>
+                        )}
 
-                    {/* Checking skeleton */}
-                    {chatAudience === "checking" && (
-                        <span
-                            aria-hidden="true"
-                            className="h-8 w-16 rounded-lg bg-surface/60 border border-border-subtle animate-pulse motion-reduce:animate-none"
-                        />
-                    )}
+                        {/* Checking skeleton fills the same slot as resolved actions. */}
+                        {chatAudience === "checking" && (
+                            <span
+                                aria-hidden="true"
+                                className="h-8 w-full rounded-lg border border-border-subtle bg-surface/60 animate-pulse motion-reduce:animate-none"
+                            />
+                        )}
+                    </div>
                 </div>
               </div>
             </header>

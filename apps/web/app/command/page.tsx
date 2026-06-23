@@ -265,7 +265,7 @@ function CvReadyOnboardingPanel({
     const { language } = useLanguage();
     const t = useTranslation(language);
     return (
-        <div className="pb-4 animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none">
+        <div className="pb-4 animate-in fade-in motion-reduce:animate-none">
             <div className="relative overflow-hidden rounded-2xl border border-border-subtle/70 bg-surface-elevated/60 p-5 backdrop-blur-sm sm:p-6">
                 {/* Pulse-style ambient glow */}
                 <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-gold/[0.08] blur-2xl" aria-hidden="true" />
@@ -679,6 +679,7 @@ export default function CommandPage() {
     // "pending" = history not yet checked; "has_history" = history loaded; "empty" = no history
     const [historyState, setHistoryState] = useState<"pending" | "has_history" | "empty">("pending");
     const [messagesRemaining, setMessagesRemaining] = useState<number | null>(null);
+    const [initialContentReady, setInitialContentReady] = useState(false);
 
     // True when the latest Rico message has an unresolved permission request — blocks new input.
     const hasPendingPermission = messages.some(
@@ -777,6 +778,7 @@ export default function CommandPage() {
                     setMessages(mappedMessages);
                     promptSentRef.current = true;
                     setHistoryState("has_history");
+                    setInitialContentReady(true);
                     return;
                 }
             } catch {
@@ -1066,22 +1068,29 @@ export default function CommandPage() {
 
         const timeoutId = window.setTimeout(() => {
             if (prompt) {
+                setInitialContentReady(true);
                 void sendMessage(prompt);
                 return;
             }
             if (cvReady) {
                 // CvReadyOnboardingPanel renders instead of a static message.
+                setInitialContentReady(true);
                 return;
             }
             if (chatAudience === "authenticated") {
                 // History exists — messages already set; no welcome needed.
-                if (historyState === "has_history") return;
+                if (historyState === "has_history") {
+                    setInitialContentReady(true);
+                    return;
+                }
                 const msg = buildWelcomeMessage(language, userName);
                 welcomeMessageRef.current = msg;
                 setMessages([{ id: 1, role: "rico", text: msg }]);
+                setInitialContentReady(true);
                 return;
             }
             setMessages([{ id: 1, role: "rico", text: t("cmdWelcomePublic") }]);
+            setInitialContentReady(true);
         }, 0);
         return () => window.clearTimeout(timeoutId);
     }, [chatAudience, historyState, cvReady, prompt, sendMessage, t, language, userName]);
@@ -1458,16 +1467,19 @@ export default function CommandPage() {
             />
 
             <main id="command-main" className="relative z-10 mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col px-2 sm:px-4 lg:px-6">
-                {/* Cold-start banner — amber, shown when any request exceeds ~5 s */}
-                {slowHint && thinking && (
-                    <div
-                        role="status"
-                        className="mx-2 mb-1 mt-2 flex items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-[11px] font-medium text-amber-300 animate-in fade-in slide-in-from-top-1 motion-reduce:animate-none sm:mx-4"
-                    >
-                        <span aria-hidden="true">⚡</span>
-                        {t("cmdWorkingSlowHint")}
-                    </div>
-                )}
+                {/* The cold-start banner stays mounted and overlays the message pane,
+                    so its delayed appearance cannot resize the pane or composer. */}
+                <div
+                    role="status"
+                    aria-hidden={!(slowHint && thinking)}
+                    data-testid="command-slow-banner"
+                    className={`pointer-events-none absolute inset-x-0 top-0 z-20 mx-2 mt-2 flex min-h-9 items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-[11px] font-medium text-amber-300 shadow-lg shadow-background/40 transition-opacity duration-200 sm:mx-4 ${
+                        slowHint && thinking ? "visible opacity-100" : "invisible opacity-0"
+                    }`}
+                >
+                    <span aria-hidden="true">⚡</span>
+                    {t("cmdWorkingSlowHint")}
+                </div>
 
                 {/* Messages Container */}
                 <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 py-5 space-y-4 scroll-pb-32 sm:px-4 sm:py-7" role="log" aria-live="polite" aria-atomic="false" aria-label="Chat messages">
@@ -1515,7 +1527,7 @@ export default function CommandPage() {
                     )}
 
                     {/* CV-ready onboarding panel — Pulse-style glass card with action chips */}
-                    {cvReady && messages.length === 0 && chatAudience !== "checking" && !thinking && (
+                    {initialContentReady && cvReady && messages.length === 0 && chatAudience !== "checking" && !thinking && (
                         <CvReadyOnboardingPanel
                             onAction={(prompt, label) => sendMessage(prompt, label)}
                             disabled={thinking}
@@ -1523,8 +1535,8 @@ export default function CommandPage() {
                     )}
 
                     {/* Welcome hero + quick start chips */}
-                    {messages.length === 0 && !thinking && !cvReady && (
-                        <div className="flex flex-col items-center gap-5 pb-4 pt-6 sm:pt-10 animate-in fade-in slide-in-from-bottom-3 motion-reduce:animate-none">
+                    {initialContentReady && messages.length === 0 && !thinking && !cvReady && (
+                        <div className="flex flex-col items-center gap-5 pb-4 pt-6 sm:pt-10 animate-in fade-in motion-reduce:animate-none">
                             {/* Hero */}
                             <div className="flex flex-col items-center gap-3 text-center">
                                 <div className="rico-orb !w-12 !h-12 !text-[18px]" aria-hidden="true"><span>R</span></div>
@@ -1596,7 +1608,7 @@ export default function CommandPage() {
                             <div
                                 key={m.id}
                                 dir="ltr"
-                                className={`flex animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none ${m.role === "user" ? "justify-end items-end" : "justify-start items-start gap-2.5"} ${isFirstInGroup ? "mt-4" : "mt-1"}`}
+                                className={`flex min-h-6 animate-in fade-in motion-reduce:animate-none ${m.role === "user" ? "justify-end items-end" : "justify-start items-start gap-2.5"} ${isFirstInGroup ? "mt-4" : "mt-1"}`}
                             >
                                 {m.role === "rico" && (
                                     <div
@@ -1865,7 +1877,7 @@ export default function CommandPage() {
                     })}
 
                     {thinking && (
-                        <div className="flex flex-col gap-2">
+                        <div className="flex min-h-12 flex-col gap-2">
                             <WorkingIndicator message={operationState?.message ?? t("cmdWorking")} />
                             {operationState?.state === "searching" && (
                                 <SearchElapsedTimer t={t} />
@@ -1879,37 +1891,43 @@ export default function CommandPage() {
                 {/* Input bar — shrink-0 flex child keeps it below the scroll area;
                     safe-area padding covers iOS home indicator. */}
                 <div className={`shrink-0 px-2 pt-3 sm:px-4 ${chatAudience === "authenticated" ? "pb-[calc(56px+1rem+env(safe-area-inset-bottom))] md:pb-[calc(1rem+env(safe-area-inset-bottom))]" : "pb-[calc(1rem+env(safe-area-inset-bottom))]"}`}>
-                    {chatAudience === "public" && messages.filter((m) => m.role === "rico").length >= 2 && (
-                        <div className="mb-2 flex items-center justify-between gap-3 px-1">
-                            <p className="text-[11px] text-text-muted">{t("cmdSignUpCta")}</p>
-                            <Link
-                                href={COMMAND_SIGNUP_HREF}
-                                className="text-[11px] px-3 py-1 rounded-lg bg-gold/10 border border-gold/25 text-gold hover:bg-gold/18 transition-colors shrink-0 font-medium cursor-pointer"
-                            >
-                                {t("cmdSignUpFree")}
-                            </Link>
+                    {/* Dynamic notices use an always-present slot, preventing quota,
+                        upload, or sign-up messages from moving the composer. */}
+                    <div className="relative min-h-10" aria-live="polite">
+                        <div className="absolute inset-x-0 bottom-2 space-y-2">
+                            {chatAudience === "public" && messages.filter((m) => m.role === "rico").length >= 2 && (
+                                <div className="flex items-center justify-between gap-3 px-1">
+                                    <p className="text-[11px] text-text-muted">{t("cmdSignUpCta")}</p>
+                                    <Link
+                                        href={COMMAND_SIGNUP_HREF}
+                                        className="text-[11px] px-3 py-1 rounded-lg bg-gold/10 border border-gold/25 text-gold hover:bg-gold/18 transition-colors shrink-0 font-medium cursor-pointer"
+                                    >
+                                        {t("cmdSignUpFree")}
+                                    </Link>
+                                </div>
+                            )}
+                            {uploadError && (
+                                <p className="text-center text-[11px] text-rico-red" role="alert">{uploadError}</p>
+                            )}
+                            {messagesRemaining !== null && messagesRemaining <= 10 && chatAudience === "authenticated" && (
+                                <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/25 bg-amber-500/8 px-3 py-2" role="status">
+                                    <p className="text-[11px] text-amber-400">
+                                        {messagesRemaining === 0
+                                            ? t("cmdMsgLimitReached")
+                                            : messagesRemaining === 1
+                                                ? t("cmdMsgLimitOne")
+                                                : t("cmdMsgLimitFew").replace("{n}", String(messagesRemaining))}
+                                    </p>
+                                    <Link
+                                        href="/subscription"
+                                        className="shrink-0 text-[11px] font-medium text-amber-400 underline underline-offset-2 hover:text-amber-300 transition-colors"
+                                    >
+                                        {t("cmdUpgrade")}
+                                    </Link>
+                                </div>
+                            )}
                         </div>
-                    )}
-                    {uploadError && (
-                        <p className="text-[11px] text-rico-red mb-2 text-center" role="alert">{uploadError}</p>
-                    )}
-                    {messagesRemaining !== null && messagesRemaining <= 10 && chatAudience === "authenticated" && (
-                        <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-amber-500/25 bg-amber-500/8 px-3 py-2" role="status" aria-live="polite">
-                            <p className="text-[11px] text-amber-400">
-                                {messagesRemaining === 0
-                                    ? t("cmdMsgLimitReached")
-                                    : messagesRemaining === 1
-                                        ? t("cmdMsgLimitOne")
-                                        : t("cmdMsgLimitFew").replace("{n}", String(messagesRemaining))}
-                            </p>
-                            <Link
-                                href="/subscription"
-                                className="shrink-0 text-[11px] font-medium text-amber-400 underline underline-offset-2 hover:text-amber-300 transition-colors"
-                            >
-                                {t("cmdUpgrade")}
-                            </Link>
-                        </div>
-                    )}
+                    </div>
                     <div className="flex items-end gap-2 rounded-2xl border border-border-soft bg-surface-elevated/95 p-1.5 shadow-xl shadow-black/10 backdrop-blur-md transition-[border-color,box-shadow] focus-within:border-gold/30 focus-within:shadow-[0_0_0_3px_rgba(245,166,35,0.07),0_8px_32px_rgba(0,0,0,0.12)]">
                         {/* CV upload button — label triggers the hidden file input natively,
                             avoiding the programmatic .click() which some mobile browsers block. */}
@@ -1966,7 +1984,7 @@ export default function CommandPage() {
                             </button>
                         </div>
                     </div>
-                    <p id="command-input-hint" className="text-center text-[10px] text-text-muted mt-2 opacity-40">
+                    <p id="command-input-hint" className="mt-2 min-h-4 text-center text-[10px] text-text-secondary">
                         {t("cmdHint")}
                     </p>
                 </div>
