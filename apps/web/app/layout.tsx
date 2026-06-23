@@ -1,5 +1,6 @@
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, Inter, Space_Grotesk } from "next/font/google";
@@ -9,6 +10,10 @@ import "./globals.css";
 // light-mode user never sees a dark flash (and vice-versa). Mirrors ThemeContext:
 // default "dark", "system" honoured only if explicitly chosen. Kept tiny + inline.
 const themeInitScript = `(function(){try{var t=localStorage.getItem("rico-theme");var m=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";var r=(t==="light"||t==="dark")?t:(t==="system"?m:"dark");var e=document.documentElement;e.classList.remove("dark","light");e.classList.add(r);e.setAttribute("data-theme",r);}catch(_){}})();`;
+
+// Service worker registration: only in production and only once. Keeps PWA
+// install criteria satisfied (navigator.serviceWorker + manifest + HTTPS).
+const swRegScript = `(function(){if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(function(){});})}})();`;
 
 // No-flash language script: mirrors LanguageContext — sets lang/dir on <html> before
 // React hydrates so Arabic users never see an LTR flash on page load or refresh.
@@ -45,6 +50,15 @@ export const metadata: Metadata = {
     title: "Rico Hunt — Your AI Job-Hunt Partner in the UAE",
     description: "Your AI job-hunt partner in the UAE. Upload your CV and Rico finds matching jobs, tracks your applications, and guides your next move — in English and Arabic.",
     alternates: { canonical: "/" },
+    icons: {
+        icon: [
+            { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+            { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+        ],
+        apple: [
+            { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+        ],
+    },
     openGraph: {
         title: "Rico Hunt — Your AI Job-Hunt Partner in the UAE",
         description: "Upload your CV. Rico finds matching UAE jobs, tracks your applications, and guides your next move — in English and Arabic.",
@@ -73,6 +87,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <head>
                 <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
                 <script dangerouslySetInnerHTML={{ __html: langInitScript }} />
+                <script dangerouslySetInnerHTML={{ __html: swRegScript }} />
+                <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
                 <link
                     rel="stylesheet"
                     href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
@@ -80,6 +96,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </head>
             <body className={`${spaceGrotesk.variable} ${inter.variable} ${ibmPlexMono.variable} antialiased bg-background text-text-primary font-body overflow-x-hidden`}>
                 <ThemeProvider><LanguageProvider>{children}</LanguageProvider></ThemeProvider>
+                <PWAInstallPrompt />
                 <Analytics />
             </body>
         </html>

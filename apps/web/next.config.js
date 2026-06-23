@@ -16,7 +16,8 @@ const csp = [
     "default-src 'self'",
     // theme-init hash: sha256-e3jHsOXxdXVtROmxFsrXZluLXMJZalSnzegpELleX6Y=
     // lang-init hash:  sha256-y0eJobwms3FTv51+hvoyq6L38bxbY6yjgcfFsbD/Hmk=
-    "script-src 'self' 'unsafe-inline' 'sha256-e3jHsOXxdXVtROmxFsrXZluLXMJZalSnzegpELleX6Y=' 'sha256-y0eJobwms3FTv51+hvoyq6L38bxbY6yjgcfFsbD/Hmk=' https://va.vercel-scripts.com",
+    // sw-reg hash:     sha256-BIVLoGpeuFjBbH5tBRbsEYTVAT2wak0D4JnEr6X2tdY=
+    "script-src 'self' 'unsafe-inline' 'sha256-e3jHsOXxdXVtROmxFsrXZluLXMJZalSnzegpELleX6Y=' 'sha256-y0eJobwms3FTv51+hvoyq6L38bxbY6yjgcfFsbD/Hmk=' 'sha256-BIVLoGpeuFjBbH5tBRbsEYTVAT2wak0D4JnEr6X2tdY=' https://va.vercel-scripts.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob: https:",

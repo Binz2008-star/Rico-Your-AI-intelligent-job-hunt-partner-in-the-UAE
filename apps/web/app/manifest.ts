@@ -3,7 +3,7 @@ import { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Rico Hunt",
-    short_name: "Rico Hunt",
+    short_name: "Rico",
     description: "Your AI job-hunt partner in the UAE. Upload your CV and Rico finds matching jobs, tracks your applications, and guides your next move.",
     start_url: "/command",
     scope: "/",
@@ -11,6 +11,7 @@ export default function manifest(): MetadataRoute.Manifest {
     orientation: "portrait",
     theme_color: "#0a0a1a",
     background_color: "#0a0a1a",
+    categories: ["productivity", "business"],
     icons: [
       {
         src: "/icons/icon-192.png",
@@ -35,6 +36,13 @@ export default function manifest(): MetadataRoute.Manifest {
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",
+      },
+    ],
+    screenshots: [
+      {
+        src: "/icons/icon-512.png",
+        sizes: "512x512",
+        type: "image/png",
       },
     ],
   };

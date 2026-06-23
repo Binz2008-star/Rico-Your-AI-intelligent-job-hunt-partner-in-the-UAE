@@ -1,4 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="6" fill="#4f46e5"/>
-  <text x="16" y="22" font-family="system-ui,sans-serif" font-size="18" font-weight="bold" fill="white" text-anchor="middle">R</text>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#16120A"/>
+      <stop offset="1" stop-color="#1C1407"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFF2B8"/>
+      <stop offset="0.4" stop-color="#E7B84B"/>
+      <stop offset="1" stop-color="#FFD66D"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="url(#bg)"/>
+  <rect x="1" y="1" width="30" height="30" rx="6" fill="none" stroke="#7A520F" stroke-opacity="0.5" stroke-width="0.5"/>
+  <!-- Compact R lettermark -->
+  <path fill="url(#gold)" d="M9 8 H18.5 C22.5 8 25 10.2 25 13.7 C25 16.6 23.3 18.5 20.4 19.4 L25.2 26 H21 L16.8 20.1 H13.5 V26 H9 Z M13.5 11.5 V16.7 H17.8 C19.4 16.7 20.5 15.7 20.5 14.1 C20.5 12.5 19.4 11.5 17.8 11.5 Z"/>
 </svg>
