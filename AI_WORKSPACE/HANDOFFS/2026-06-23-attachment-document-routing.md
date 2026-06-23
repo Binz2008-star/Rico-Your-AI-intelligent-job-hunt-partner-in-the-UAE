@@ -83,6 +83,31 @@ pytest tests/test_rico_routes.py tests/test_upload_document_intelligence.py \
 ## Reviewer Notes
 
 - Scope respected: yes (#737 4 files within allowed set; #736 not touched).
-- Follow-up tasks: decide #736 (rebase + 3 findings); audit Findings 3–5 (application-evidence
-  destination, onboarding/upload surfaces honoring `status="classified"`, dead `CV_THRESHOLD` +
-  stale `CLAUDE.md` `/chat` note) remain unscheduled.
+- Follow-up tasks: audit Findings 3–5 (application-evidence destination, onboarding/upload surfaces
+  honoring `status="classified"`, dead `CV_THRESHOLD` + stale `CLAUDE.md` `/chat` note) remain
+  unscheduled.
+
+---
+
+## Update — 2026-06-23 (later)
+
+### #738 — upload size limits (merged + deploy-verified, `115adde`)
+New production bug: valid CV PDFs (images/design) rejected with the misleading "Could not process your
+CV … under 10 MB". Fix: per-kind caps from the magic-byte format **before** parsing — documents 25 MB,
+images 10 MB, hard cap retained; coarse pre-read guard; 413 with a friendly type-aware message (never
+CV-blaming / never "retry"). Frontend: new `cmdCvTooLarge` (AR + EN), de-sized `cmdCvUploadErr`,
+onboarding hint 25 MB, and `/command` + `/onboarding` map 413 → localized message. `files.py` doc cap
+also 25 MB. Files: `src/api/routers/rico_chat.py`, `files.py`, `apps/web/lib/translations.ts`,
+`apps/web/app/command/page.tsx`, `apps/web/app/onboarding/page.tsx`, `tests/test_upload_size_limits.py`,
+`apps/web/__tests__/cv-upload-size-message.test.ts`. Deploy verified (`/version == 115adde`, `/health`
+200).
+
+### #736 — image reading reworked (Draft, parked, `b70389b`)
+Decision taken to close it on free infra: VLM via OpenAI-compatible chat is now provider-agnostic —
+**OpenRouter** (`OPENROUTER_API_KEY`, free `:free` models) preferred → HF-independent, else **HF**
+(`HF_TOKEN`, Qwen2.5-VL); the weak single-line `trocr` fallback was **replaced with OCR.space**
+(`OCRSPACE_API_KEY`). Rebased onto current `main`; 16 mocked tests pass; never blocks uploads. Two of
+three review findings now resolved in code (stale base, weak fallback). **Only blocker: one live
+model-availability check on the preview with a real key — owner must set ONE free key on Render
+(OPENROUTER_API_KEY / enable a free HF Inference Provider / OCRSPACE_API_KEY).** Then verify + mark
+ready + merge. Keep separate from #737/#738; no live probes until a key is set.
