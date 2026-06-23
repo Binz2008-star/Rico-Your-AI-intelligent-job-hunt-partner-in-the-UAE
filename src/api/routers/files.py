@@ -38,7 +38,7 @@ _db = RicoDB()
 
 _UNSAFE_CHARS_RE = re.compile(r"[<>\"';\x00-\x1f\x7f]")
 _PDF_MAGIC = b"%PDF"
-_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+_MAX_BYTES = 25 * 1024 * 1024  # 25 MB — documents (PDF) carry fonts + page images
 _ALLOWED_DOC_TYPES = {"cv", "cover_letter", "other"}
 
 
@@ -187,9 +187,25 @@ async def upload_file(
     # Enforce document storage quota before reading the file body
     enforce_document_quota(user_id, doc_type)
 
+    declared_size = getattr(file, "size", None)
+    if isinstance(declared_size, int) and declared_size > _MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                "This file is too large. You can upload documents up to 25MB. "
+                "If your file is larger, please compress it or upload a lighter PDF version."
+            ),
+        )
+
     data = await file.read()
     if len(data) > _MAX_BYTES:
-        raise HTTPException(status_code=413, detail="File exceeds 10 MB limit")
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                "This file is too large. You can upload documents up to 25MB. "
+                "If your file is larger, please compress it or upload a lighter PDF version."
+            ),
+        )
     if not data:
         raise HTTPException(status_code=422, detail="Uploaded file is empty")
     if not data.startswith(_PDF_MAGIC):

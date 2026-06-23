@@ -72,7 +72,32 @@ _UTC = timezone.utc
 # Constants
 _UNSAFE_CHARS_RE = re.compile("[<>\"';\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]")
 _PDF_MAGIC = b"%PDF"
-_MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+# Upload size limits, by file kind. Documents (CV/cover-letter/etc.) can carry
+# embedded fonts and high-res page images, so they get a generous cap; image
+# screenshots are smaller by nature. Both keep a hard safety cap — never unlimited.
+_MAX_DOC_BYTES = 25 * 1024 * 1024     # 25 MB — PDF / DOC / DOCX / TXT documents
+_MAX_IMAGE_BYTES = 10 * 1024 * 1024   # 10 MB — PNG / JPG / WebP / GIF / BMP images
+_MAX_UPLOAD_BYTES = _MAX_DOC_BYTES    # coarse hard cap; nothing may exceed this
+_MB = 1024 * 1024
+
+
+def _upload_limit_for(file_format: str) -> int:
+    """Per-kind size cap in bytes for an uploaded file (by magic-byte format)."""
+    return _MAX_IMAGE_BYTES if file_format == "image" else _MAX_DOC_BYTES
+
+
+def _too_large_message(limit_bytes: int, is_image: bool) -> str:
+    """User-friendly (non-technical) oversize message; never blames CV parsing."""
+    mb = limit_bytes // _MB
+    if is_image:
+        return (
+            f"This image is too large. You can upload screenshots up to {mb}MB. "
+            "Please take a smaller screenshot or compress the image."
+        )
+    return (
+        f"This file is too large. You can upload CV documents up to {mb}MB. "
+        "If your file is larger, please compress it or upload a lighter PDF version."
+    )
 
 router = APIRouter(prefix="/api/v1/rico", tags=["rico"])
 
@@ -1260,18 +1285,37 @@ async def rico_upload_cv(
         enforce_document_quota(resolved_user_id, "cv")
 
     try:
+        # Reject clearly-oversized files BEFORE reading the whole body into memory,
+        # using the multipart-declared size when available (coarse hard cap).
+        declared_size = getattr(file, "size", None)
+        if isinstance(declared_size, int) and declared_size > _MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=_too_large_message(_MAX_DOC_BYTES, is_image=False),
+            )
+
         data = await file.read()
-        if len(data) > _MAX_UPLOAD_BYTES:
-            raise HTTPException(status_code=413, detail="File exceeds 10 MB limit")
         if not data:
             raise HTTPException(status_code=422, detail="Uploaded file is empty")
 
         safe_name = _safe_filename(file.filename)
 
+        # Per-kind size cap, enforced from the real magic-byte format BEFORE any
+        # parsing/classification — documents (25 MB) vs images (10 MB). Oversized
+        # uploads are rejected here with a user-friendly message, never blamed on
+        # CV parsing and never asking the user to pointlessly retry.
+        from src.services.document_classifier import classify_document, detect_format
+        upload_format = detect_format(data, safe_name)
+        size_limit = _upload_limit_for(upload_format)
+        if len(data) > size_limit:
+            raise HTTPException(
+                status_code=413,
+                detail=_too_large_message(size_limit, is_image=upload_format == "image"),
+            )
+
         # ── Document Intelligence — classify BEFORE any pipeline ──────────────
         # Every uploaded file is classified first. Only confirmed CVs enter the
         # CV extraction pipeline. All other types return classification + actions.
-        from src.services.document_classifier import classify_document
         loop = asyncio.get_event_loop()
         classification = await loop.run_in_executor(
             None, classify_document, data, safe_name
@@ -1402,7 +1446,7 @@ async def rico_upload_cv(
                 "message": (
                     f"Upload failed. Reference: {request_ref}. "
                     "I could not read this file. "
-                    "Please try a text-based PDF or Word document under 10 MB."
+                    "Please try a text-based PDF or Word document under 25 MB."
                 ),
             }
 
