@@ -1934,6 +1934,25 @@ class RicoChatAPI:
             except Exception:
                 pass
 
+            # Inject the transcript of the most recently uploaded image/document
+            # (set by the upload route after vision/OCR extraction). Without this,
+            # follow-up actions like "Summarize this document" / "Extract key
+            # information" reach the AI with no document text and answer
+            # inaccurately. Injected early (before the long conversation history) so
+            # it survives context truncation.
+            try:
+                _recent = self._get_recent_context(user_id)
+                _last_doc = _recent.get("last_uploaded_document") if isinstance(_recent, dict) else None
+                _doc_text = (_last_doc or {}).get("extracted_text")
+                if _doc_text:
+                    ctx["last_uploaded_document"] = {
+                        "filename": _last_doc.get("filename"),
+                        "type": _last_doc.get("display_label") or _last_doc.get("document_type"),
+                        "transcribed_text": str(_doc_text)[:4000],
+                    }
+            except Exception:
+                pass
+
             try:
                 recent = self._get_recent_messages(user_id, limit=8)
                 if recent:
