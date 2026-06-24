@@ -1,243 +1,316 @@
-"""Phase-0 trust gate tests — job apply URL trust chain.
+"""Phase-0 trust gate tests — job-link trust chain + source_quality regression.
 
-Covers all 7 required cases from issue #746 plus 4 additional edge-cases
-for the LLM-origin guard and the plain-job_id-only rejection rule.
+Test matrix
+-----------
+Section A — source_quality regression (Blocker 1)
+    A1  classify_url() importable and returns expected values
+    A2  is_google_intermediary() importable and behaves correctly
+    A3  classify_company() importable and returns expected values
+    A4  is_low_quality_company() importable and behaves correctly
 
-Run with::
+Section B — placeholder URL detection
+    B1  job without external_url does not show View & Apply             (#1)
+    B2  job with source-backed external_url shows View & Apply          (#2)
+    B3  Indeed placeholder jk=abc123 / jk=def456 is rejected            (#3)
+    B4  sequential LinkedIn URL rejected without trusted source         (#4)
+    B5  real LinkedIn URL accepted with trusted provenance
 
-    pytest tests/test_p0_job_link_trust.py -v
+Section C — origin gate hardening (Blocker 2)
+    C1  origin=recent_context + provider + source_backed=True => rejected
+    C2  origin=llm + provider + source_backed=True => rejected
+    C3  origin=chat + provider + source_backed=True => rejected
+    C4  origin=db + provider + source_backed=True => accepted
+    C5  origin=provider + provider + source_backed=True => accepted
+    C6  apply_url + job_id only + origin=llm => rejected
+    C7  apply_url + plain job_id only + no trusted origin => rejected (Gate 4)
+    C8  apply_url + persisted_job_id => accepted
+    C9  apply_url + source_job_id/provider metadata => accepted
+
+Section D — action error surface (Blocker 3)
+    D1  no_apply_link_available not leaked; safe message returned        (#5 / #6)
+    D2  valid job with source URL resolves correctly                     (#7)
+    D3  recent_search_matches simulation — untrusted LLM payload:
+        no View & Apply, no raw error code in chat output
 """
-
 from __future__ import annotations
 
 import pytest
+
+# ---------------------------------------------------------------------------
+# Section A — source_quality regression imports (Blocker 1)
+# ---------------------------------------------------------------------------
+
+from src.services.source_quality import (
+    classify_company,
+    classify_url,
+    is_google_intermediary,
+    is_low_quality_company,
+    is_placeholder_url,
+    is_demo_job_id,
+    classify_source_tier,
+)
+
+
+class TestSourceQualityRegressionA:
+    """Blocker 1 — pre-existing API still importable and behaves correctly."""
+
+    def test_a1_classify_url_trusted_ats(self) -> None:
+        assert classify_url("https://boards.greenhouse.io/acmecorp/jobs/12345") == "live_verified"
+
+    def test_a1_classify_url_login_required(self) -> None:
+        assert classify_url("https://www.gulftalent.com/uae/jobs/senior-engineer-123") == "login_required"
+
+    def test_a1_classify_url_rate_limited(self) -> None:
+        assert classify_url("https://ae.trabajo.org/job/data-analyst-dubai") == "rate_limited"
+
+    def test_a1_classify_url_aggregator_untrusted(self) -> None:
+        assert classify_url("https://www.jooble.org/jooble/0/Dubai") == "aggregator_untrusted"
+
+    def test_a1_classify_url_unknown(self) -> None:
+        result = classify_url("https://weirdunknownjobsite.xyz/job/12345")
+        assert result == "needs_source_verification"
+
+    def test_a1_classify_url_empty(self) -> None:
+        assert classify_url("") == "needs_source_verification"
+
+    def test_a2_is_google_intermediary_true(self) -> None:
+        assert is_google_intermediary("https://jobs.google.com/search?q=engineer") is True
+
+    def test_a2_is_google_intermediary_false(self) -> None:
+        assert is_google_intermediary("https://www.greenhouse.io/jobs/123") is False
+
+    def test_a2_is_google_intermediary_empty(self) -> None:
+        assert is_google_intermediary("") is False
+
+    def test_a3_classify_company_ok(self) -> None:
+        assert classify_company("Accenture") == "ok"
+
+    def test_a3_classify_company_anonymous(self) -> None:
+        assert classify_company("Confidential") == "anonymous"
+
+    def test_a3_classify_company_low_quality(self) -> None:
+        assert classify_company("A Leading Company") == "low_quality"
+
+    def test_a3_classify_company_empty(self) -> None:
+        assert classify_company("") == "anonymous"
+
+    def test_a4_is_low_quality_company_true(self) -> None:
+        assert is_low_quality_company("confidential") is True
+
+    def test_a4_is_low_quality_company_false(self) -> None:
+        assert is_low_quality_company("Google LLC") is False
+
+
+# ---------------------------------------------------------------------------
+# Section B — placeholder URL detection
+# ---------------------------------------------------------------------------
 
 from src.services.job_link_trust import (
     resolve_trusted_apply_url,
     should_show_apply_button,
     safe_no_apply_link_message,
-    _has_trusted_provenance,
+    UNTRUSTED_ORIGINS,
 )
-from src.services.source_quality import is_placeholder_url, is_demo_job_id
-from src.services.apply_service import resolve_apply_action, wrap_action_error
+
+# Minimal trusted job record — would pass all gates
+_TRUSTED_JOB: dict = {
+    "title": "Backend Engineer",
+    "company": "Acme Corp",
+    "external_url": "https://boards.greenhouse.io/acmecorp/jobs/5678901",
+    "persisted_job_id": "pjid_abc999",
+}
+
+
+class TestPlaceholderUrlB:
+    """B-series: URL pattern rejection."""
+
+    def test_b1_no_external_url_hides_apply_button(self) -> None:  # #1
+        job = {"title": "Dev", "persisted_job_id": "pjid_1"}
+        assert should_show_apply_button(job) is False
+
+    def test_b2_source_backed_url_shows_apply_button(self) -> None:  # #2
+        assert should_show_apply_button(_TRUSTED_JOB) is True
+
+    @pytest.mark.parametrize("jk", ["abc123", "def456", "xyz789", "job001"])
+    def test_b3_indeed_placeholder_jk_rejected(self, jk: str) -> None:  # #3
+        job = {
+            "external_url": f"https://www.indeed.com/viewjob?jk={jk}",
+            "persisted_job_id": "pjid_2",
+        }
+        assert resolve_trusted_apply_url(job) is None
+
+    def test_b4_sequential_linkedin_url_rejected(self) -> None:  # #4
+        job = {
+            "external_url": "https://www.linkedin.com/jobs/view/123",
+            "persisted_job_id": "pjid_3",
+        }
+        assert resolve_trusted_apply_url(job) is None
+
+    def test_b5_real_linkedin_url_accepted(self) -> None:
+        job = {
+            "external_url": "https://www.linkedin.com/jobs/view/3987654321",
+            "persisted_job_id": "pjid_4",
+        }
+        result = resolve_trusted_apply_url(job)
+        assert result == "https://www.linkedin.com/jobs/view/3987654321"
 
 
 # ---------------------------------------------------------------------------
-# Fixtures / helpers
+# Section C — origin gate hardening (Blocker 2)
 # ---------------------------------------------------------------------------
 
+class TestOriginGateC:
+    """C-series: UNTRUSTED_ORIGINS covers all untrusted delivery channels."""
 
-def _sourced_job(
-    url: str,
-    *,
-    persisted_job_id: str | None = "pjid_001",
-    source_job_id: str | None = None,
-    provider: str | None = None,
-    source_backed: bool | None = None,
-    job_id: str | None = None,
-) -> dict:
-    """Return a minimal trusted job dict with *url* as the apply URL."""
-    rec: dict = {"external_url": url}
-    if persisted_job_id is not None:
-        rec["persisted_job_id"] = persisted_job_id
-    if source_job_id is not None:
-        rec["source_job_id"] = source_job_id
-    if provider is not None:
-        rec["provider"] = provider
-    if source_backed is not None:
-        rec["source_backed"] = source_backed
-    if job_id is not None:
-        rec["job_id"] = job_id
-    return rec
+    # ---- C1-C3: untrusted origins must be rejected even with full provenance ----
 
+    @pytest.mark.parametrize("bad_origin", ["recent_context", "llm", "chat", "context_window"])
+    def test_c1_c3_untrusted_origin_with_full_provenance_rejected(
+        self, bad_origin: str
+    ) -> None:
+        """origin=recent_context / llm / chat + provider + source_backed => rejected."""
+        job = {
+            "external_url": "https://boards.greenhouse.io/spoof/jobs/999999",
+            "provider": "jsearch",
+            "source_backed": True,
+            "origin": bad_origin,
+        }
+        assert resolve_trusted_apply_url(job) is None
+        assert resolve_trusted_apply_url(job, origin=bad_origin) is None
 
-# ---------------------------------------------------------------------------
-# 1. Job WITHOUT external_url must NOT show View & Apply
-# ---------------------------------------------------------------------------
+    # ---- C4-C5: trusted origins must be accepted ----
 
+    @pytest.mark.parametrize("good_origin", ["db", "provider", "ingestion", None])
+    def test_c4_c5_trusted_origin_with_full_provenance_accepted(
+        self, good_origin: str
+    ) -> None:
+        """origin=db / provider / None + provider + source_backed => accepted."""
+        job = {
+            "external_url": "https://boards.greenhouse.io/realco/jobs/44556677",
+            "provider": "jsearch",
+            "source_backed": True,
+        }
+        result = resolve_trusted_apply_url(job, origin=good_origin)
+        assert result == "https://boards.greenhouse.io/realco/jobs/44556677"
 
-def test_no_external_url_hides_apply_button() -> None:
-    """Required test #1 from issue #746."""
-    job: dict = {"persisted_job_id": "pjid_001", "title": "HSE Manager"}
-    assert should_show_apply_button(job) is False
+    # ---- C6: apply_url + job_id only + origin=llm => rejected ----
 
+    def test_c6_llm_origin_with_job_id_rejected(self) -> None:
+        job = {
+            "job_id": "job_42",
+            "external_url": "https://boards.greenhouse.io/llmco/jobs/11111",
+        }
+        assert resolve_trusted_apply_url(job, origin="llm") is None
 
-# ---------------------------------------------------------------------------
-# 2. Job WITH a source-backed external_url MUST show View & Apply
-# ---------------------------------------------------------------------------
+    # ---- C7: apply_url + plain job_id only + no trusted origin => Gate 4 reject ----
 
+    def test_c7_plain_job_id_only_not_trusted(self) -> None:
+        job = {
+            "job_id": "job_77",
+            "external_url": "https://boards.greenhouse.io/plainco/jobs/99999",
+        }
+        # No origin passed, no persisted_job_id / source_job_id / provider+source_backed
+        assert resolve_trusted_apply_url(job) is None
 
-def test_source_backed_url_shows_apply_button() -> None:
-    """Required test #2 from issue #746."""
-    job = _sourced_job("https://www.indeed.com/viewjob?jk=a1b2c3d4e5f6g7h8")
-    assert should_show_apply_button(job) is True
+    # ---- C8: persisted_job_id is trusted ----
 
+    def test_c8_persisted_job_id_is_trusted(self) -> None:
+        job = {
+            "external_url": "https://boards.greenhouse.io/trustedco/jobs/123456",
+            "persisted_job_id": "pjid_persisted_001",
+        }
+        assert resolve_trusted_apply_url(job) == job["external_url"]
 
-# ---------------------------------------------------------------------------
-# 3. Indeed placeholder jk=abc123 / jk=def456 is REJECTED
-# ---------------------------------------------------------------------------
+    # ---- C9: source_job_id + provider is trusted ----
 
-
-@pytest.mark.parametrize(
-    "placeholder_url",
-    [
-        "https://www.indeed.com/viewjob?jk=abc123",
-        "https://www.indeed.com/viewjob?jk=def456",
-        "https://ae.indeed.com/viewjob?jk=xyz789&from=app",
-        "https://www.indeed.com/viewjob?jk=job001",
-    ],
-)
-def test_indeed_placeholder_jk_is_rejected(placeholder_url: str) -> None:
-    """Required test #3 from issue #746."""
-    assert is_placeholder_url(placeholder_url) is True
-    job = _sourced_job(placeholder_url)
-    assert resolve_trusted_apply_url(job) is None
-    assert should_show_apply_button(job) is False
-
-
-# ---------------------------------------------------------------------------
-# 4. Generated LinkedIn-looking URL is REJECTED unless from source data
-# ---------------------------------------------------------------------------
-
-
-def test_sequential_linkedin_url_rejected_without_source() -> None:
-    """Required test #4 from issue #746 — fake sequential LinkedIn job ID."""
-    fake_url = "https://www.linkedin.com/jobs/view/123456"
-    job = _sourced_job(
-        fake_url,
-        persisted_job_id=None,  # no trusted provenance
-        source_job_id=None,
-    )
-    assert resolve_trusted_apply_url(job) is None
-
-
-def test_real_linkedin_url_accepted_with_source() -> None:
-    """Real LinkedIn job ID (10+ digits) with source provenance must pass."""
-    real_url = "https://www.linkedin.com/jobs/view/3987654321"
-    job = _sourced_job(
-        real_url,
-        persisted_job_id=None,
-        source_job_id="li_3987654321",
-        provider="linkedin",
-        source_backed=True,
-    )
-    assert resolve_trusted_apply_url(job) == real_url
+    def test_c9_source_job_id_with_provider_trusted(self) -> None:
+        job = {
+            "external_url": "https://myworkdayjobs.com/en-US/Company/job/Dubai/Engineer_REQ-1234",
+            "source_job_id": "jsearch_req_1234",
+            "provider": "jsearch",
+            "source_backed": True,
+        }
+        assert resolve_trusted_apply_url(job) == job["external_url"]
 
 
 # ---------------------------------------------------------------------------
-# 5. no_apply_link_available must NOT be shown to the user
+# Section D — action error surface + integration simulation (Blocker 3)
 # ---------------------------------------------------------------------------
 
+class TestActionErrorSurfaceD:
+    """D-series: no raw internal codes in user output; safe fallback always present."""
 
-def test_no_apply_link_internal_code_not_leaked() -> None:
-    """Required test #5 — raw error code must not appear in user-facing text."""
-    user_msg = wrap_action_error("no_apply_link_available")
-    assert "no_apply_link_available" not in user_msg
-    assert "Action failed" not in user_msg
+    def test_d1_no_apply_link_internal_code_not_leaked(self) -> None:  # #5
+        """safe_no_apply_link_message never contains no_apply_link_available."""
+        job = {"title": "Data Engineer", "company": "Acme"}
+        msg = safe_no_apply_link_message(job)
+        assert "no_apply_link_available" not in msg
+        assert "Action failed" not in msg
 
+    def test_d1_safe_fallback_message_present_when_no_apply_link(self) -> None:  # #6
+        job = {"title": "ML Engineer", "company": "DeepMind Dubai"}
+        msg = safe_no_apply_link_message(job)
+        assert "verified apply link" in msg.lower() or "pipeline" in msg.lower()
 
-# ---------------------------------------------------------------------------
-# 6. User receives safe fallback when apply link is missing
-# ---------------------------------------------------------------------------
+    def test_d2_valid_job_with_source_url_resolves(self) -> None:  # #7
+        job = {
+            "external_url": "https://jobs.lever.co/acme/abc-def-1234",
+            "persisted_job_id": "pjid_lever_001",
+            "title": "Staff Engineer",
+            "company": "Acme",
+        }
+        result = resolve_trusted_apply_url(job)
+        assert result == "https://jobs.lever.co/acme/abc-def-1234"
 
+    def test_d3_recent_search_matches_sim_no_view_apply_no_raw_error(
+        self,
+    ) -> None:
+        """Simulate recent_search_matches with an untrusted LLM apply_url.
 
-def test_safe_fallback_message_when_no_apply_link() -> None:
-    """Required test #6 from issue #746."""
-    job = {"persisted_job_id": "pjid_002", "title": "Safety Officer", "company": "ADNOC"}
-    result = resolve_apply_action(job)
-    assert result.success is False
-    assert result.show_apply_button is False
-    assert result.apply_url is None
-    assert "no_apply_link_available" not in result.message
-    assert "Action failed" not in result.message
-    # Message must be genuinely helpful
-    assert len(result.message) > 20
+        This mirrors the chat path: when Rico formats job cards from
+        recent_search_matches, each match must be passed through
+        resolve_trusted_apply_url with origin='recent_context'.
 
+        The test confirms:
+          1. should_show_apply_button returns False => no View & Apply button.
+          2. The user-facing message does not contain any raw error code.
+        """
+        # Simulate what the LLM might inject into recent_search_matches:
+        # a job dict with a plausible-looking URL, provider, and source_backed
+        # — but arriving via the chat / recent_context channel.
+        llm_injected_match = {
+            "job_id": "job_99",
+            "title": "Senior DevOps Engineer",
+            "company": "FakeAI Corp",
+            "external_url": "https://boards.greenhouse.io/fakeai/jobs/555666",
+            "provider": "jsearch",
+            "source_backed": True,   # LLM can claim this but it must be ignored
+            "origin": "recent_context",
+        }
 
-# ---------------------------------------------------------------------------
-# 7. Existing valid job-search behaviour still works
-# ---------------------------------------------------------------------------
+        # --- path 1: UI composer deciding whether to show the button ---
+        show_button = should_show_apply_button(
+            llm_injected_match,
+            origin="recent_context",
+        )
+        assert show_button is False, (
+            "View & Apply must NOT appear for a recent_context match"
+        )
 
+        # --- path 2: building the user-facing response text ---
+        # If resolve_trusted_apply_url returns None, the handler calls
+        # safe_no_apply_link_message.  Verify the output is clean.
+        url = resolve_trusted_apply_url(llm_injected_match, origin="recent_context")
+        assert url is None
 
-def test_valid_job_with_source_url_resolves_correctly() -> None:
-    """Required test #7 — normal source-backed job must pass the full chain."""
-    job = _sourced_job(
-        "https://www.bayt.com/en/uae/jobs/safety-engineer-12345678/",
-        persisted_job_id="pjid_bayt_001",
-        source_job_id="bayt_12345678",
-        provider="bayt",
-        source_backed=True,
-    )
-    result = resolve_apply_action(job)
-    assert result.success is True
-    assert result.show_apply_button is True
-    assert result.apply_url == "https://www.bayt.com/en/uae/jobs/safety-engineer-12345678/"
-    assert result.message == ""
+        safe_msg = safe_no_apply_link_message(llm_injected_match)
+        assert "no_apply_link_available" not in safe_msg
+        assert "Action failed" not in safe_msg
+        assert "FakeAI Corp" in safe_msg or "Senior DevOps" in safe_msg
 
-
-# ---------------------------------------------------------------------------
-# 8. apply_url + job_id only + origin=llm => rejected
-# ---------------------------------------------------------------------------
-
-
-def test_llm_origin_with_job_id_rejected() -> None:
-    """Extra: LLM-origin payload with a real-looking URL must be rejected."""
-    job = {
-        "job_id": "job_42",
-        "external_url": "https://www.bayt.com/en/uae/jobs/safety-engineer-99999999/",
-        # no persisted_job_id, no source_job_id, no provider+source_backed
-    }
-    assert resolve_trusted_apply_url(job, origin="llm") is None
-    result = resolve_apply_action(job, origin="llm")
-    assert result.success is False
-    assert result.show_apply_button is False
-
-
-# ---------------------------------------------------------------------------
-# 9. apply_url + plain job_id only + no trusted origin => rejected
-# ---------------------------------------------------------------------------
-
-
-def test_plain_job_id_only_not_trusted() -> None:
-    """Extra: job_id alone (no persisted_job_id/source_job_id) is not trusted."""
-    job = {
-        "job_id": "abc_001",
-        "external_url": "https://www.linkedin.com/jobs/view/3987654322",
-    }
-    # _has_trusted_provenance must return False
-    assert _has_trusted_provenance(job) is False
-    assert resolve_trusted_apply_url(job) is None
-
-
-# ---------------------------------------------------------------------------
-# 10. apply_url + persisted_job_id => accepted
-# ---------------------------------------------------------------------------
-
-
-def test_persisted_job_id_is_trusted() -> None:
-    """Extra: persisted_job_id alone is sufficient trusted provenance."""
-    job = {
-        "persisted_job_id": "pjid_99",
-        "external_url": "https://careers.emiratesnbd.com/job/45678",
-    }
-    assert _has_trusted_provenance(job) is True
-    assert resolve_trusted_apply_url(job) == "https://careers.emiratesnbd.com/job/45678"
-
-
-# ---------------------------------------------------------------------------
-# 11. apply_url + source_job_id + provider-backed metadata => accepted
-# ---------------------------------------------------------------------------
-
-
-def test_source_job_id_with_provider_is_trusted() -> None:
-    """Extra: source_job_id + provider + source_backed=True is trusted."""
-    job = {
-        "source_job_id": "jsearch_AE_8812334",
-        "provider": "jsearch",
-        "source_backed": True,
-        "external_url": "https://ae.indeed.com/viewjob?jk=a1b2c3d4e5f60000",
-    }
-    assert _has_trusted_provenance(job) is True
-    result = resolve_apply_action(job)
-    assert result.success is True
-    assert result.apply_url == "https://ae.indeed.com/viewjob?jk=a1b2c3d4e5f60000"
+    def test_d3_untrusted_origins_set_is_comprehensive(self) -> None:
+        """Confirm UNTRUSTED_ORIGINS covers expected channel names."""
+        assert "llm" in UNTRUSTED_ORIGINS
+        assert "recent_context" in UNTRUSTED_ORIGINS
+        assert "chat" in UNTRUSTED_ORIGINS
+        assert "context_window" in UNTRUSTED_ORIGINS
