@@ -29,6 +29,7 @@ def _ctx_with(api, recent_context):
         patch.object(api, "_get_recent_messages", return_value=[]),
         patch.object(api, "_recent_jobs_summary", return_value=None),
         patch.object(api, "_get_recent_context", return_value=recent_context),
+        patch("src.repositories.uploaded_document_repo.get_last_uploaded_document", return_value=None),
     ):
         return api._build_openai_context(None, user_id="u-img")
 
@@ -76,9 +77,12 @@ def test_type_falls_back_to_document_type():
 
 # ── _handle_uploaded_document_followup — never hijacked into a CV draft ────────
 
-def _followup(api, message, recent_context):
+def _followup(api, message, recent_context, durable=None):
+    """Drive the handler with the ephemeral recent_context and the durable store
+    both controlled (durable defaults to None → simulates postgres mode empty)."""
     with (
         patch.object(api, "_get_recent_context", return_value=recent_context),
+        patch("src.repositories.uploaded_document_repo.get_last_uploaded_document", return_value=durable),
         patch.object(api, "_append_chat", lambda *a, **k: None),
         patch.object(api, "_resolve_profile", return_value=None),
     ):
@@ -89,18 +93,14 @@ def test_followup_ignores_non_action_message():
     assert _followup(_api(), "Find me Developer jobs", {"last_uploaded_document": {"extracted_text": "x"}}) is None
 
 
-def test_followup_none_when_no_recent_upload():
-    assert _followup(_api(), "Describe what's in this image.", {}) is None
-
-
-def test_followup_honest_when_no_text_never_cv_draft():
-    """Image recognised but unreadable → honest message, NOT a CV draft."""
-    res = _followup(_api(), "Describe what's in this image.",
-                    {"last_uploaded_document": {"filename": "IMG.jpeg", "display_label": "Image"}})
+def test_followup_honest_when_no_document_never_hijack():
+    """A document action with no transcript on record → honest message, never a CV
+    draft and never None (which would risk the CV-builder hijack)."""
+    res = _followup(_api(), "Describe what's in this image.", {})
     assert res is not None
     assert res["type"] == "document_context"
     msg = res["message"].lower()
-    assert "couldn't read" in msg or "clear text" in msg
+    assert "readable document" in msg or "upload" in msg
     assert "cv draft" not in msg and "here is your cv" not in msg
 
 

@@ -1349,6 +1349,23 @@ async def rico_upload_cv(
                 )
                 # Remember the transcription so follow-up chat ("save as target
                 # job", "score against my CV") can reference the screenshot.
+                # Durable store first — survives Render restarts, multiple
+                # instances, and RICO_MEMORY_BACKEND=postgres (where the JSON
+                # memory store below is a no-op). Keyed by the resolved user /
+                # public-session id, so authenticated and public sessions both work.
+                try:
+                    from src.repositories.uploaded_document_repo import set_last_uploaded_document
+                    set_last_uploaded_document(
+                        resolved_user_id,
+                        extracted_text=extracted[:4000],
+                        filename=safe_name,
+                        document_type=text_classification.document_type,
+                        display_label=text_classification.display_label,
+                        source="image",
+                        request_ref=request_ref,
+                    )
+                except Exception:
+                    pass
                 if not is_valid_public_user_id(resolved_user_id):
                     try:
                         from src.rico_memory import RicoMemoryStore
