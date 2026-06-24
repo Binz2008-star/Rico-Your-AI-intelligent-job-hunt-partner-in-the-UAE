@@ -1,13 +1,13 @@
 # Current State
 
-_Last updated: 2026-06-23 (job-flow stable through #735; #737 no_text + #738 size limits + #736 image reading + #739 image/document follow-up handling all merged & live; OCRSPACE_API_KEY set on Render as the reliable OCR backstop)_
+_Last updated: 2026-06-24 (image-reading chain complete & live through #741; durable transcript store fixes the postgres-mode follow-up bug; pending owner re-test of the screenshot follow-up)_
 
 ## Production baseline
 
-- **Repository main HEAD / production backend SHA:** `f202a86fcba2c66b953256e4ec0ca71744f9f91f` (#739 — image/document action requests answered from transcript; no CV-draft hijack).
-- **Production deploy verification:** `Deploy Render Backend` + `Deploy to Production` both succeeded for `f202a86` (`/version` match + `/health` 200). #736 `a7e294b`, #738 `115adde`, #737 `e214178` were deploy-verified in sequence.
-- **Image reading reliability:** `OCRSPACE_API_KEY` configured on Render (owner) as a dependable free OCR backstop behind the (rate-limited) free vision model — image text extraction should now be consistent.
-- **Vercel:** production/root/proxy healthy by deploy verification.
+- **Repository main HEAD / production backend SHA:** `7e0b9ec3a3f88b834e9bc19131457a296f9ac1df` (#741 — durable uploaded-document transcript store, postgres-safe).
+- **Production deploy verification:** `Deploy Render Backend` + `Deploy to Production` both succeeded for `7e0b9ec` (`/version` match + `/health` 200; clean startup ⇒ lifespan migration runner did not crash). Prior deploys verified in sequence: #739 `f202a86`, #736 `a7e294b`, #738 `115adde`, #737 `e214178`.
+- **Migration 032 (`uploaded_document_context`):** auto-applied on startup via the app.py lifespan runner (idempotent `CREATE TABLE/INDEX IF NOT EXISTS`), targeting the exact branch the production `DATABASE_URL` uses. Direct confirmation of the `migration_ok` log line / table existence needs Render-log or Neon access (unavailable in-session) — the owner re-test is the end-to-end proof.
+- **Image reading reliability:** `OCRSPACE_API_KEY` set on Render as a dependable free OCR backstop behind the (rate-limited) free vision model (OpenRouter/HF).
 - **Render logs:** direct Render MCP log scan unavailable in-session; no error signals from `/health` or deploy workflows.
 
 ## Job-flow stabilization — 2026-06-22 complete
@@ -72,7 +72,9 @@ No provider keys are hardcoded, committed, or logged.
 | **#735** | Single-role parsing accepts explicit titles like "Technical Product Owner" (live recheck found single-role rejected what multi-role accepted) | `96f415a` | ✅ merged + deployed |
 | **#737** | Attachment/document routing — keep no-text/image-only PDFs out of the CV pipeline (#674 residual, Finding 1) | `e214178` | ✅ merged + deploy-verified |
 | **#738** | Upload size limits — 25 MB docs / 10 MB images, per-kind cap enforced before parsing, friendly type-aware AR/EN oversize messages (fixes the misleading "under 10 MB" CV rejection) | `115adde` | ✅ merged + deploy-verified |
-| **#736** | Image reading (Finding 2) — job-screenshot images transcribed via free VLM (OpenRouter/HF) + OCR.space fallback, re-classified to a readable `classified` response; graceful (never blocks uploads) | `a7e294b` | ✅ merged + deploy-verified (owner key set; live smoke test pending) |
+| **#736** | Image reading (Finding 2) — job-screenshot images transcribed via free VLM (OpenRouter/HF) + OCR.space fallback, re-classified to a readable `classified` response; graceful (never blocks uploads) | `a7e294b` | ✅ merged + deploy-verified |
+| **#739** | Image/document action follow-up — buttons (Describe/Extract/Summarize) answer from the stored transcript via an early interceptor (no CV-draft hijack); transcript injected into AI context for typed questions | `f202a86` | ✅ merged + deploy-verified |
+| **#741** | Durable transcript store (`uploaded_document_context` table + repo) — fixes the postgres-mode bug where the OCR transcript was saved only to the no-op `RicoMemoryStore`; follow-ups now read durably; migration 032 auto-applies on startup | `7e0b9ec` | ✅ merged + deploy-verified (owner re-test pending) |
 
 > Note: `fix/single-role-taxonomy-rejection` was an independent duplicate of the #735 fix built in another session — **abandoned** (not merged). Do not revive it.
 
@@ -81,24 +83,16 @@ No provider keys are hardcoded, committed, or logged.
 - **Audit:** `AI_WORKSPACE/audits/attachment-document-routing-post-674-677.md` (Findings 1–5). #677 shipped native-image classification on `/command`; the audit found the residual gaps.
 - **#737 (Finding 1, merged):** a screenshot/scan exported as a PDF (image-only PDF, no text layer) used to fall through `unknown@0.0` into CV extraction → misleading "poor quality" CV preview. The classifier now tags a *substantial* (`>= _MIN_DOC_BYTES`, 1 KB) text-bearing file with near-empty text (`< _MIN_TEXT_CHARS`, 25) as `no_text`; `/upload-cv` returns a clear needs-text response (`status="classified"`, `document_type="no_text"`) before the CV pipeline. Tiny stub PDFs still flow normally; native images unchanged; real text CVs unchanged. Tests: `tests/test_no_text_pdf_routing.py`.
 - **#738 (upload size, merged):** documents 25 MB / images 10 MB, per-kind cap enforced from magic-byte format **before** parsing; friendly type-aware oversize message (413) replacing "exceeds 10 MB"; `/command` + `/onboarding` map 413 → localized `cmdCvTooLarge` (AR/EN); `files.py` doc cap also 25 MB. Tests: `tests/test_upload_size_limits.py`, `apps/web/__tests__/cv-upload-size-message.test.ts`.
-- **Open findings (not yet scoped):** Finding 3 (no application-evidence destination), Finding 4 (`onboarding`/`upload` surfaces still don't honor `status="classified"` for non-CV docs/images — #738 only added 413 size handling there), Finding 5 (dead `CV_THRESHOLD`; stale `CLAUDE.md` `/chat` reference). Finding 2 = #736 below.
+- **Open findings (NEXT work):** **Finding 3** — no application-evidence destination (read screenshot → "Save as target job" / "Score against my CV" not wired end-to-end; this is the owner's "link A↔B without buttons" ask). **Finding 4** — `onboarding`/`upload` surfaces still don't honor `status="classified"` for non-CV docs/images (#738 only added 413 size handling). **Finding 5** — dead `CV_THRESHOLD`; stale `CLAUDE.md` `/chat` reference (trivial cleanup).
 
-## #736 — image reading (Finding 2): MERGED + LIVE (`a7e294b`)
+## Image-reading chain (Finding 2) — COMPLETE & LIVE
 
-Merged and deploy-verified. Reads job-screenshot images → re-classifies the transcript → readable `classified` response. Backend-only, free, no OpenAI, no local OCR binaries (Render native runtime can't install Tesseract/RapidOCR). Never raises → falls back to format-only image response, so it's safe even if the model is unreachable. Owner has set an API key on Render (env-updated redeploy observed). **Remaining:** one live screenshot smoke test in `/command` by the owner (sandbox can't reach `onrender.com`) — success = Rico replies "I read your image …" with action buttons; failure = plain "Image" (then tune key/model, no breakage).
+`#736 → #739 → #741`, all merged + deploy-verified. Flow: upload image → free VLM (OpenRouter/HF) or **OCR.space** fallback transcribes it → re-classify transcript → readable `classified` response. Follow-up buttons (Describe/Extract/Summarize) and typed questions ("what do you think of this job?") answer from the transcript; **never** a CV-draft hijack; honest "no readable document" when nothing was read.
 
-**Provider chain (env-gated, all free):**
-1. Vision-language model via OpenAI-compatible chat — **OpenRouter** (`OPENROUTER_API_KEY`, default `meta-llama/llama-3.2-11b-vision-instruct:free`) preferred → HF-independent; else **HF Inference Router** (`HF_TOKEN`, `Qwen/Qwen2.5-VL-7B-Instruct`).
-2. **OCR.space** fallback (`OCRSPACE_API_KEY`) — replaced the single-line `trocr` model.
-
-**Review findings status:** ✅ stale base (rebased onto current `main`), ✅ weak `trocr` fallback (replaced with OCR.space). ⏳ remaining: **one live model-availability check on the preview** with a real key — the only blocker, and it needs the owner to set a key. (🟡 minor: ~70 s worst-case latency if VLM cold then OCR; no per-user vision cost cap beyond `LIMIT_UPLOAD`.)
-
-**To activate (owner picks ONE free path, sets the key on Render):**
-- OpenRouter (no HF dependency): `OPENROUTER_API_KEY` (+ optional `OPENROUTER_VISION_MODEL`).
-- HF (no new account): enable a free HF Inference Provider on the existing `HF_TOKEN`.
-- OCR-only fallback: `OCRSPACE_API_KEY` (free key).
-
-Then one live availability check, then it can be marked ready/merged. Tests (mocked HTTP, no quota): `tests/unit/test_image_extractor.py`, `tests/unit/test_upload_image_vision.py`. Keep #736 separate from #737/#738.
+- **Durability (#741):** the transcript is persisted in the durable `uploaded_document_context` table (migration 032, auto-applied on startup) — fixes the prod bug where it was saved only to the `RICO_MEMORY_BACKEND=postgres`-disabled `RicoMemoryStore`. Read path: `_get_last_uploaded_document` (ephemeral fast-path → durable DB), used by `_handle_uploaded_document_followup` and `_build_openai_context`. Keyed by resolved `user_id` (email / `public:web-*`), one row per user, 180-min freshness window.
+- **Provider env (owner-set on Render):** `OCRSPACE_API_KEY` set (reliable OCR backstop); optional `OPENROUTER_API_KEY` / `OPENROUTER_VISION_MODEL` or a free HF Inference Provider on `HF_TOKEN`.
+- **Pending:** owner re-test in `/command` (upload job screenshot → buttons + typed Qs answer from the text). Sandbox can't reach `onrender.com` / Neon, so the re-test is the end-to-end proof of migration 032 + the durable store.
+- **Tests:** `tests/test_uploaded_document_durable_context.py`, `tests/test_uploaded_image_ai_context.py`, `tests/unit/test_image_extractor.py`, `tests/unit/test_upload_image_vision.py`.
 
 ## Standing guardrails for this work-stream
 
@@ -120,8 +114,34 @@ Then one live availability check, then it can be marked ready/merged. Tests (moc
 - **Issue #711 drift:** `005 pipeline_runs` and `011 idx_rico_recommendations_user_job_unique` remain not applied unless separately approved.
 - **Canonical handoffs:** `AI_WORKSPACE/HANDOFFS/2026-06-22-job-flow-stabilization-complete.md` (job-flow train through #730), `AI_WORKSPACE/HANDOFFS/2026-06-23-attachment-document-routing.md` (document routing #737 + #736 review).
 
+## Open PRs — triage (6, all stale / pre-session 2026-06-20..22)
+
+| PR | What | Recommendation |
+|---|---|---|
+| **#722** | degraded job-card fallback CTAs | **Close** — overlaps merged #724/#727 |
+| **#713** | CI read-only `verify_710` audit job (Draft) | **Close** — #710 verified/closed; diagnostic obsolete |
+| **#698** | docs: agentic vision (Draft, docs only) | keep as reference or close; no runtime code |
+| **#697** | reject "تمام" as a city value | **Salvage** — real small bug; rebase + ship |
+| **#691** | frontend onboarding checklist + help icon | review; needs rebase + `npm run build` |
+| **#688** | frontend `/ask` agentic UX (mock data) | review/park; bigger, mock-only |
+
+## Open issues — highlights (29 total)
+
+- **#732 — Rico over-commits to "Developer" without evidence.** HIGH value, owner-facing: profiles show `Target Roles: Developer` despite the real profile (Technical Product Owner / Operations Manager). Career guidance should be CV-evidence-based.
+- **#721 / #722** — degraded job-card actionability (empty `alt_url`).
+- **#712 / #711** — migration drift (`005 pipeline_runs`, `011` indexes missing) — still open, separate.
+- Older epics/backlog (#654, #618, #531, #356, #355, #354, #353, #352, #294, #263, #213, #198, #196, #187, #179, #147, #140, #138, #127, #118, #105, #99, #96) — not urgent.
+
+## Forward plan (prioritized, 2026-06-24)
+
+1. **Now (owner):** re-test #741 in `/command` — upload job screenshot → buttons + typed Qs answer from the text; never "no file"; never a CV draft. Gates everything image-related.
+2. **Next build (recommended): #732** — stop the unevidenced "Developer" target-role push; base guidance on actual CV signals. Owner hits this every session.
+3. **Then: Finding 3** — wire read-screenshot → "Save as target job" / "Score against my CV" end-to-end (the "link A↔B without buttons" ask).
+4. **Cleanup pass:** close stale PRs #722/#713, salvage #697; Finding 5 (dead `CV_THRESHOLD`, stale `CLAUDE.md` `/chat` note).
+5. **Backlog:** #721 degraded cards, #712 migration drift, Finding 4 (onboarding/upload honor `classified`), older epics.
+
 ## Recommended next command
 
 ```text
-Rico mode. #736 (image reading) is LIVE on production (a7e294b) with the owner's key set. Pending: owner uploads a real job-screenshot in /command and confirms Rico reads it ("I read your image …" + action buttons). If it still shows plain "Image", tune the key/model (OPENROUTER_VISION_MODEL or enable an HF Inference Provider) — graceful, no breakage. Then attachment/document-routing audit Findings 3–5 remain open: application-evidence destination, onboarding/upload surfaces honoring status="classified", dead CV_THRESHOLD + stale CLAUDE.md /chat note.
+Rico mode. Production is 7e0b9ec (#741, durable transcript store) — image-reading chain #736→#739→#741 is live. First confirm the owner re-test of the screenshot follow-up. Then the recommended next build is issue #732 (Rico over-commits to Developer without CV evidence): make career guidance evidence-based, no silent target_role=Developer push. Keep backend-focused, mocks-only tests, no provider/frontend scope creep. After that, Finding 3 (application-evidence destination) completes the screenshot loop.
 ```
