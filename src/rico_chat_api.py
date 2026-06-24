@@ -2138,6 +2138,13 @@ class RicoChatAPI:
         from an old onboarding) that no longer reflects the uploaded CV. Falls back
         to True (treat as valid) whenever alignment cannot be determined, so a data
         gap never blocks a legitimate search.
+
+        Exception (#732): a coding/software target ("Developer", "Software
+        Engineer") is a strong, specific claim. When the CV yields NO role
+        evidence at all, we must not silently assert it — return False so the
+        caller routes to CV-aligned suggestions/clarification instead of pushing
+        an unevidenced "Developer". Non-coding tracks keep the lenient fallback
+        so an ordinary data gap never blocks a legitimate search.
         """
         rl = (role or "").strip().lower()
         if not rl:
@@ -2153,7 +2160,10 @@ class RicoChatAPI:
         except Exception:
             return True
         if not suggestions:
-            return True
+            # No CV-derived evidence. Stay lenient for most tracks, but treat an
+            # unevidenced software/coding target as NOT aligned (→ "stale") so
+            # Rico never over-commits to "Developer" without coding evidence.
+            return self._role_family(role) != "software"
         for s in suggestions:
             sl = str((s or {}).get("label") or "").strip().lower()
             if sl and (rl == sl or rl in sl or sl in rl):
