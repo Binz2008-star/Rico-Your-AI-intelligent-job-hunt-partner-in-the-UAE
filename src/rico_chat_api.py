@@ -9971,6 +9971,35 @@ class RicoChatAPI:
         except Exception:
             return None
 
+    @staticmethod
+    def is_document_action_message(message: str) -> bool:
+        """True when *message* is an uploaded-image/document action — describe /
+        extract / summarize / read this document. Cheap (regex only); used by the
+        chat service to detect document follow-ups before the AI/legacy split."""
+        return bool(_DOC_FOLLOWUP_RE.search(message or ""))
+
+    def handle_document_action(
+        self, user_id: str, message: str, language: str | None = None
+    ) -> dict[str, Any] | None:
+        """Public entry point for the document-read path.
+
+        Answers a document action ("summarize this document", "extract key
+        information", "describe this image") from the stored transcript, but only
+        when a FRESH uploaded document is on record for the user. Returns None when
+        the message is not a document action, or when no fresh transcript exists,
+        so the caller's normal routing proceeds unchanged.
+
+        Invoked by chat_service BEFORE the AI/legacy intent split so summarize and
+        extract always take the same deterministic document path — neither can be
+        misrouted into the public job-listing CTA or an AI reply that never
+        received the transcript.
+        """
+        if not self.is_document_action_message(message):
+            return None
+        if not self._get_last_uploaded_document(user_id):
+            return None
+        return self._handle_uploaded_document_followup(user_id, message, language)
+
     def _handle_uploaded_document_followup(
         self, user_id: str, message: str, language: str | None = None
     ) -> dict[str, Any] | None:
