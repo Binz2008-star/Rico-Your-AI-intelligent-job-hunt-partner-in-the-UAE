@@ -1,227 +1,190 @@
+"""Apply-link service — safe error wrapping for Phase-0 trust gate.
+
+This module wraps the low-level apply-link resolution and action handling
+so that:
+
+* Internal error codes (e.g. ``no_apply_link_available``) are NEVER
+  returned to the chat layer or surfaced to the user.
+* Every error path returns a :class:`ApplyLinkResult` with a user-safe
+  ``message`` and a ``show_apply_button`` boolean.
+* Server-side structured logging captures the internal code for ops.
+
+All callers in ``rico_chat_api.py`` that previously returned raw error
+codes must be updated to go through :func:`resolve_apply_action` instead.
 """
-src/services/apply_service.py
-Delegates browser-automation apply requests to the correct engine.
-Routes call apply_to_job() — never import engine modules directly.
-"""
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
+from dataclasses import dataclass, field
+from typing import Any, Optional
 
-from src.rico_env import env_bool
+from src.services.job_link_trust import (
+    resolve_trusted_apply_url,
+    safe_no_apply_link_message,
+    should_show_apply_button,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def _approval_required() -> bool:
-    """Whether applications need explicit user approval before Rico submits them.
+# ---------------------------------------------------------------------------
+# Result type
+# ---------------------------------------------------------------------------
 
-    Defaults to True (safe) so a missing or blank env var can never silently enable
-    auto-submission. Set RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=false to disable.
+
+@dataclass(frozen=True, slots=True)
+class ApplyLinkResult:
+    """Outcome of an apply-link resolution or action attempt."""
+
+    success: bool
+    """True when a trusted apply URL was resolved and the action can proceed."""
+
+    apply_url: Optional[str]
+    """Verified, source-backed apply URL.  None when *success* is False."""
+
+    show_apply_button: bool
+    """Whether the UI should render a 'View & Apply' button."""
+
+    message: str
+    """User-safe chat message.  Never contains internal error codes."""
+
+    internal_code: str = field(default="", compare=False)
+    """Internal error code for server-side logging ONLY.  Never sent to user."""
+
+
+# ---------------------------------------------------------------------------
+# Internal safe messages
+# ---------------------------------------------------------------------------
+
+# Mapping of internal error codes → user-safe messages.
+# Extend this dict when new internal codes are introduced; the fallback
+# ``_GENERIC_SAFE_MESSAGE`` is always returned for unknown codes.
+_SAFE_MESSAGES: dict[str, str] = {
+    "no_apply_link_available": (
+        "I don't have a verified apply link for this job yet. "
+        "I can save it to your pipeline or help you search the company career page."
+    ),
+    "apply_url_untrusted": (
+        "I couldn't verify the apply link for this job. "
+        "I can save it to your pipeline or help you find the official application page."
+    ),
+    "apply_url_placeholder": (
+        "The apply link for this job doesn't look right. "
+        "I can save the job to your pipeline while you verify the link directly."
+    ),
+    "job_not_found": (
+        "I couldn't find this job in my records. "
+        "Try searching again or let me know the company name."
+    ),
+    "action_timeout": (
+        "The action took too long to complete. Please try again in a moment."
+    ),
+}
+
+_GENERIC_SAFE_MESSAGE = (
+    "Something went wrong with that action. Please try again or let me know how I can help."
+)
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
+def resolve_apply_action(
+    job: dict[str, Any],
+    *,
+    origin: Optional[str] = None,
+) -> ApplyLinkResult:
+    """Resolve the apply action for *job* through the full trust gate.
+
+    Parameters
+    ----------
+    job:
+        Job dict from the DB / ingestion layer.  Must NOT be raw LLM output
+        unless ``origin='llm'`` is passed (which causes immediate rejection).
+    origin:
+        Pass ``'llm'`` when the dict was synthesised by the language model.
+
+    Returns
+    -------
+    ApplyLinkResult
+        Always returns a result; never raises.  Check ``.success`` to decide
+        whether to show the apply button or the safe fallback message.
     """
-    return env_bool("RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS", True)
+    trusted_url = resolve_trusted_apply_url(job, origin=origin)
 
-
-def _is_browser_unavailable(exc: Exception) -> bool:
-    """Detect Playwright / browser-launch errors that should surface as 'manual_required'."""
-    msg = str(exc).lower()
-    return any(
-        phrase in msg
-        for phrase in (
-            "playwright install",
-            "browser type",
-            "chromium",
-            "executable",
-            "browser not found",
-            "executable doesn't exist",
-            "browser.launch",
-            "failed to launch",
+    if trusted_url:
+        return ApplyLinkResult(
+            success=True,
+            apply_url=trusted_url,
+            show_apply_button=True,
+            message="",
         )
+
+    # Determine which internal code applies for server-side logging.
+    raw_url = (
+        job.get("external_url")
+        or job.get("alt_url")
+        or job.get("source_url")
+    )
+    if not raw_url:
+        internal_code = "no_apply_link_available"
+    elif origin == "llm":
+        internal_code = "apply_url_untrusted"
+    else:
+        from src.services.source_quality import is_placeholder_url  # avoid circular at module level
+        internal_code = (
+            "apply_url_placeholder" if is_placeholder_url(raw_url) else "apply_url_untrusted"
+        )
+
+    logger.warning(
+        "apply_service: %s job_id=%s persisted_job_id=%s source_job_id=%s",
+        internal_code,
+        job.get("job_id"),
+        job.get("persisted_job_id"),
+        job.get("source_job_id"),
+    )
+
+    safe_msg = _SAFE_MESSAGES.get(internal_code) or safe_no_apply_link_message(job)
+
+    return ApplyLinkResult(
+        success=False,
+        apply_url=None,
+        show_apply_button=False,
+        message=safe_msg,
+        internal_code=internal_code,
     )
 
 
-def _clean_apply_error(exc: Exception) -> Dict[str, str]:
-    """Return a user-facing message. Log raw technical detail server-side only."""
-    if _is_browser_unavailable(exc):
-        logger.warning("browser_unavailable: %s", exc)
-        return {
-            "status": "manual_required",
-            "message": "Manual apply required. Browser automation is unavailable for this job.",
-        }
-    logger.exception("apply_failed")
-    return {
-        "status": "error",
-        "message": "Application failed. Please try again or apply manually.",
-    }
+def wrap_action_error(
+    internal_code: str,
+    job: Optional[dict[str, Any]] = None,
+) -> str:
+    """Return a user-safe message for any internal action error code.
 
+    Use this in ``rico_chat_api.py`` action handlers that currently return
+    the raw ``internal_code`` string to the chat layer.
 
-def _resolve_apply_link(job: Dict[str, Any]) -> str:
-    """Pick the best known apply URL from normalized and raw job payloads."""
-    for key in (
-        "link",
-        "apply_url",
-        "apply_link",
-        "job_apply_link",
-        "url",
-        "job_url",
-        "alt_link",
-        "source_url",
-    ):
-        value = str(job.get(key) or "").strip()
-        if value:
-            return value
+    Parameters
+    ----------
+    internal_code:
+        The raw internal error string, e.g. ``'no_apply_link_available'``.
+    job:
+        Optional job dict for richer context in the fallback message.
 
-    for nested_key in ("job", "job_data"):
-        nested = job.get(nested_key)
-        if isinstance(nested, dict):
-            value = _resolve_apply_link(nested)
-            if value:
-                return value
-
-    return ""
-
-
-_AUTO_APPLY_DISABLED_STATUSES = {"no_result", "disabled", "unsupported"}
-
-
-def _auto_apply_globally_enabled() -> bool:
-    return env_bool("RICO_ENABLE_AUTO_APPLY", False)
-
-
-def _manual_required_response(job: Dict[str, Any]) -> Dict[str, str]:
-    """User-safe response when automation cannot run for any reason."""
-    link = _resolve_apply_link(job)
-    msg = "Automated apply is not currently enabled."
-    if link:
-        msg += f" You can apply manually here: {link}"
-    return {"status": "manual_required", "message": msg, "apply_url": link}
-
-
-def _enforce_automation_allowed(user_id: str) -> None:
-    """Raise HTTP 402 if the user's plan does not include application automation.
-
-    Only called when RICO_ENABLE_AUTO_APPLY=true. Never called when the global
-    flag is off — we return manual_required instead of an upgrade prompt for a
-    feature that cannot actually run.
+    Returns
+    -------
+    str
+        A user-safe message that never contains the internal code.
     """
-    from fastapi import HTTPException
-    from src.subscription_plans import resolve_effective_user_plan
-
-    resolved = resolve_effective_user_plan(user_id)
-    if not resolved.subscription.entitlements.application_automation_enabled:
-        plan = resolved.subscription.plan.value
-        raise HTTPException(
-            status_code=402,
-            detail={
-                "type": "subscription_limit",
-                "intent": "subscription_limit",
-                "message": (
-                    f"Automated applications are not available on the {plan.title()} plan. "
-                    "Upgrade to Premium to enable this feature."
-                ),
-                "response_source": "subscription_gate",
-                "feature": "application_automation",
-                "plan": plan,
-                "next_action": "upgrade_subscription",
-                "options": [
-                    {"action": "upgrade_subscription", "label": "View plans", "message": "upgrade plan"},
-                    {"action": "subscription_status", "label": "Check current plan", "message": "what is my plan?"},
-                ],
-            },
-        )
-
-
-def apply_to_job(job: Dict[str, Any], *, approved: bool = False, user_id: str | None = None) -> Dict[str, str]:
-    """
-    Trigger automated application for a job.
-    Returns: {"status": str, "message": str, "job_id": str (optional)}
-
-    Order of gates:
-    1. Approval guard — agent paths cannot auto-submit without explicit user approval.
-    2. Global flag (RICO_ENABLE_AUTO_APPLY) — if false, return manual_required for ALL
-       users regardless of plan. No upgrade prompt is shown for a feature that cannot run.
-    3. Subscription entitlement — only checked when the global flag is on; Free/Pro get 402.
-    4. Engine routing — Premium users reach the actual apply engines.
-    """
-    resolved_link = _resolve_apply_link(job)
-
-    if _approval_required() and not approved:
-        logger.warning(
-            "apply_blocked_pending_approval link=%s", resolved_link[:120]
-        )
-        return {
-            "status": "approval_required",
-            "message": "This application needs your explicit approval before Rico can submit it.",
-        }
-
-    if not _auto_apply_globally_enabled():
-        logger.info("auto_apply_globally_disabled user=%s", user_id or "anonymous")
-        return _manual_required_response(job)
-
-    if user_id:
-        _enforce_automation_allowed(user_id)
-
-    link = resolved_link.lower()
-
-    if not link:
-        return {"status": "error", "message": "Job is missing a link"}
-
-    job = {**job, "link": resolved_link}
-
-    if "naukrigulf.com" in link:
-        return _normalize_engine_result(_apply_naukrigulf(job), job)
-
-    if "indeed.com" in link:
-        return _normalize_engine_result(_apply_indeed(job), job)
-
-    # LinkedIn and all other sources: no active engine
-    return _manual_required_response(job)
-
-
-
-def _normalize_engine_result(result: Dict[str, str], job: Dict[str, Any]) -> Dict[str, str]:
-    """Convert opaque engine-disabled statuses into a user-safe manual_required response."""
-    if result.get("status") in _AUTO_APPLY_DISABLED_STATUSES:
-        logger.info("engine_not_active status=%s", result.get("status"))
-        return _manual_required_response(job)
-    return result
-
-
-def _apply_naukrigulf(job: Dict[str, Any]) -> Dict[str, str]:
-    try:
-        from src.naukrigulf_apply import run_naukrigulf_apply
-
-        results = run_naukrigulf_apply(jobs=[job], max_applies=1)
-        if not results:
-            return {"status": "no_result", "message": "Apply engine returned no result"}
-
-        result = results[0]
-        return {
-            "status": result.status.value,
-            "message": result.message or f"Applied to {job.get('title', 'Unknown')}",
-            "job_id": result.job_id or "",
-        }
-    except Exception as exc:
-        return _clean_apply_error(exc)
-
-
-def _apply_indeed(job: Dict[str, Any]) -> Dict[str, str]:
-    try:
-        from src.indeed_apply import IndeedApplyEngine
-
-        with IndeedApplyEngine() as engine:
-            result = engine.apply_one(job)
-        return {
-            "status": result.status.value,
-            "message": result.message,
-            "job_id": result.job_id,
-        }
-    except Exception as exc:
-        error = _clean_apply_error(exc)
-        if error.get("status") == "error":
-            error = {
-                **error,
-                "message": str(exc) or error["message"],
-                "method": "indeed",
-            }
-        return error
+    if internal_code in _SAFE_MESSAGES:
+        return _SAFE_MESSAGES[internal_code]
+    if job:
+        return safe_no_apply_link_message(job)
+    logger.error(
+        "apply_service.wrap_action_error: unknown code '%s' – using generic message",
+        internal_code,
+    )
+    return _GENERIC_SAFE_MESSAGE

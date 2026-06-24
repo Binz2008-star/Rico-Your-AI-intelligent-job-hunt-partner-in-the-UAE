@@ -1,248 +1,163 @@
-"""source_quality.py — Domain-based job source quality classification.
+"""Source quality helpers for Rico job data.
 
-Classifies job URLs without network calls using known domain patterns.
-Used in _format_match to annotate verification_status before sending
-matches to the frontend.
+This module provides lightweight, synchronous predicates used throughout
+the pipeline to assess whether a job record's metadata (URL, provider,
+source fields) is trustworthy enough to surface in the UI.
 
-Status values:
-    live_verified        — trusted ATS / employer career page
-    login_required       — known login-wall domains (GulfTalent, etc.)
-    rate_limited         — domains known for 429 responses (trabajo.org, etc.)
-    aggregator_untrusted — spammy or low-quality aggregators
-    needs_source_verification — unknown domain; frontend shows "Needs verification"
+Phase-0 additions
+-----------------
+* ``is_placeholder_url`` — detects known fake / templated apply URLs.
+  Used by :mod:`src.services.job_link_trust` as Gate 2 of the trust chain.
+* ``is_demo_job_id`` — detects obviously synthetic job identifiers.
+
+Nothing in this module makes network calls or hits the DB.
 """
+
 from __future__ import annotations
 
-from functools import lru_cache
-from urllib.parse import urlparse
+import re
+from typing import Optional
 
 # ---------------------------------------------------------------------------
-# Domain classification tables
+# Placeholder / fake URL detection
 # ---------------------------------------------------------------------------
 
-# Employer / ATS platforms — high-quality, direct apply
-_TRUSTED_DOMAINS: frozenset[str] = frozenset(
-    {
-        # ATS platforms (employer-hosted)
-        "greenhouse.io",
-        "lever.co",
-        "workday.com",
-        "myworkdayjobs.com",
-        "smartrecruiters.com",
-        "taleo.net",
-        "icims.com",
-        "bamboohr.com",
-        "jobvite.com",
-        "recruitee.com",
-        "ashbyhq.com",
-        "rippling.com",
-        # Major UAE/GCC job boards
-        "naukrigulf.com",
-        "bayt.com",
-        "gulftalent.com",  # overridden below for login-wall check
-        "linkedin.com",
-        "indeed.com",
-        "dubizzle.com",
-        "khaleejiesque.com",
-        "monstergulf.com",
-    }
+# Indeed job-key placeholder patterns produced by LLMs:
+#   https://www.indeed.com/viewjob?jk=abc123
+#   https://www.indeed.com/viewjob?jk=def456
+#   jk=abc123  jk=xyz789  jk=test123  jk=job123
+# The pattern matches any  jk=  value that is purely alphanumeric and
+# short (<=16 chars) — real Indeed jk values are 16-char hex strings,
+# so a different heuristic (sequential letters/numbers) flags fake ones.
+_INDEED_PLACEHOLDER_JK_RE = re.compile(
+    r"[?&]jk=(?P<key>[a-z]{2,8}\d{2,6})(?:&|$|\s)",
+    re.IGNORECASE,
 )
 
-# Employer career-page subdomains (.careers.acme.com, careers.acme.com)
-_CAREER_SUBSTRINGS: tuple[str, ...] = (
-    "careers.",
-    ".careers.",
-    "jobs.",
-    ".jobs.",
-    "recruit.",
-    ".recruit.",
-    "talent.",
-    ".talent.",
+# Generic placeholder token patterns anywhere in a URL:
+#   /jobs/abc123, /jobs/def456, /apply/job001, /job/job-123
+_GENERIC_PLACEHOLDER_PATH_RE = re.compile(
+    r"/(?:jobs?|apply|view|listing)/"
+    r"(?:abc|def|xyz|foo|bar|test|sample|example|job|fake|dummy)\d{0,6}"
+    r"(?:/|$|\?)",
+    re.IGNORECASE,
 )
 
-# Known login-wall domains — apply link leads to a login form, not the job
-_LOGIN_REQUIRED_DOMAINS: frozenset[str] = frozenset(
-    {
-        "gulftalent.com",   # login-loop redirect
-        "glassdoor.com",    # login gate in MENA
-        "monster.com",
-        "monster.com.qa",
-        "careers.monster.com",
-    }
+# Sequential numeric LinkedIn job IDs as full URL check (cross-reference
+# with job_link_trust for the gate; this predicate is the pattern half).
+_SEQUENTIAL_LINKEDIN_RE = re.compile(
+    r"linkedin\.com/jobs/view/(?P<id>\d{1,7})(?:/|$|\?)",
+    re.IGNORECASE,
 )
 
-# Known rate-limited / frequent-429 domains
-_RATE_LIMITED_DOMAINS: frozenset[str] = frozenset(
-    {
-        "trabajo.org",
-        "ae.trabajo.org",
-        "qa.trabajo.org",
-        "sa.trabajo.org",
-        "jobtome.com",
-        "trovit.com",
-    }
+# Hard-coded localhost / example / placeholder hostnames.
+_PLACEHOLDER_HOST_RE = re.compile(
+    r"https?://(?:localhost|127\.0\.0\.1|example\.com|test\.com|placeholder\.com)",
+    re.IGNORECASE,
 )
 
-# Spammy aggregators — index stale / redirect jobs, no direct apply
-_AGGREGATOR_UNTRUSTED_DOMAINS: frozenset[str] = frozenset(
-    {
-        "jooble.org",
-        "noknokjobs.com",
-        "jobsora.com",
-        "jobisite.com",
-        "jora.com",
-        "adzuna.com",
-        "ziprecruiter.com",   # limited in UAE
-        "simplyhired.com",
-        "totaljobs.com",
-        "cvlibrary.co.uk",
-        "careerjet.com",
-        "jobrapido.com",
-        "jobleads.com",       # 404s reported in production
-        "neuvoo.com",
-        "talent.com",         # redirects to neuvoo; not an employer page
-        "joblist.com",
-    }
+# Template variable tokens: {{url}}, ${apply_link}, [APPLY_URL], <link>
+_TEMPLATE_TOKEN_RE = re.compile(
+    r"\{\{[^}]+\}\}"  # Handlebars: {{url}}
+    r"|\$\{[^}]+\}"  # JS template: ${url}
+    r"|\[[A-Z_]{4,}\]"  # Uppercase bracket: [APPLY_URL]
+    r"|<[a-z_]+_(?:url|link)>",  # XML-style: <apply_url>
+    re.IGNORECASE,
 )
 
 
-def is_google_intermediary(url: str) -> bool:
-    """True when *url* is a Google Jobs search/intermediary page, not a direct apply URL.
+def is_placeholder_url(url: Optional[str]) -> bool:
+    """Return True if *url* looks like a placeholder or LLM-generated fake.
 
-    Google Jobs links (jobs.google.com or google.com/search?…) open a Google
-    search results page that lists multiple employers — they are not direct
-    apply pages and should not be shown as the primary "Apply" action.
+    This is a heuristic check — it errs on the side of rejection.  A URL
+    that passes this check is NOT automatically trusted; the full trust
+    chain in :func:`src.services.job_link_trust.resolve_trusted_apply_url`
+    must still be satisfied.
+
+    Parameters
+    ----------
+    url:
+        Raw URL string to evaluate.  ``None`` / empty string returns True
+        (treated as placeholder/missing).
+
+    Returns
+    -------
+    bool
+        ``True``  → URL is fake / placeholder → do NOT show "View & Apply".
+        ``False`` → URL passed heuristic checks → continue to provenance gate.
     """
+    if not url or not isinstance(url, str):
+        return True  # missing is treated as placeholder
+    url = url.strip()
     if not url:
+        return True
+
+    if _PLACEHOLDER_HOST_RE.search(url):
+        return True
+    if _TEMPLATE_TOKEN_RE.search(url):
+        return True
+    if _INDEED_PLACEHOLDER_JK_RE.search(url):
+        return True
+    if _GENERIC_PLACEHOLDER_PATH_RE.search(url):
+        return True
+
+    # Sequential LinkedIn: IDs below 10 000 000 are too small to be real.
+    m = _SEQUENTIAL_LINKEDIN_RE.search(url)
+    if m and int(m.group("id")) < 10_000_000:
+        return True
+
+    return False
+
+
+def is_demo_job_id(job_id: Optional[str]) -> bool:
+    """Return True if *job_id* looks like a demo / LLM-generated identifier.
+
+    Examples of fake IDs produced by LLMs:
+        job_1, job_2, job-001, abc123, demo_job_5
+    """
+    if not job_id or not isinstance(job_id, str):
         return False
-    try:
-        parsed = urlparse(url)
-        hostname = (parsed.hostname or "").lower().lstrip("www.")
-        if hostname == "jobs.google.com":
-            return True
-        if hostname == "google.com" and "/search" in parsed.path:
-            return True
-    except Exception:
-        pass
-    return False
-
-
-@lru_cache(maxsize=512)
-def classify_url(url: str) -> str:
-    """Return a source-quality status string for the given URL.
-
-    Uses domain-table lookup only — no network calls.  Results are cached.
-
-    Returns one of:
-        "live_verified"            ATS / trusted employer career page
-        "login_required"           Known login-wall domain
-        "rate_limited"             Known 429 / unreliable domain
-        "aggregator_untrusted"     Spammy aggregator
-        "needs_source_verification" Unknown domain (default)
-    """
-    if not url:
-        return "needs_source_verification"
-
-    try:
-        hostname = urlparse(url).hostname or ""
-    except Exception:
-        return "needs_source_verification"
-
-    hostname = hostname.lower().lstrip("www.")
-
-    # Specific overrides take priority over generic trusted list
-    if _matches_domain(hostname, _LOGIN_REQUIRED_DOMAINS):
-        return "login_required"
-
-    if _matches_domain(hostname, _RATE_LIMITED_DOMAINS):
-        return "rate_limited"
-
-    if _matches_domain(hostname, _AGGREGATOR_UNTRUSTED_DOMAINS):
-        return "aggregator_untrusted"
-
-    # Trusted ATS or employer career page
-    if _matches_domain(hostname, _TRUSTED_DOMAINS):
-        return "live_verified"
-
-    # Heuristic: career/jobs subdomain patterns
-    if any(sub in hostname for sub in _CAREER_SUBSTRINGS):
-        return "live_verified"
-
-    return "needs_source_verification"
-
-
-def _matches_domain(hostname: str, domain_set: frozenset[str]) -> bool:
-    """True if hostname equals or is a subdomain of any domain in the set."""
-    for domain in domain_set:
-        if hostname == domain or hostname.endswith("." + domain):
-            return True
+    jid = job_id.strip().lower()
+    # Short generic patterns: "job1", "job_1", "job-001", "demo_job_5"
+    if re.fullmatch(r"(?:job|demo|fake|test|sample)[_-]?\d{1,5}", jid):
+        return True
+    # Pure short alphanumeric <= 8 chars with no real entropy signal
+    if re.fullmatch(r"[a-z]{2,5}\d{1,5}", jid) and len(jid) <= 8:
+        return True
     return False
 
 
 # ---------------------------------------------------------------------------
-# Company name quality classification
+# Source-tier classification (pre-existing logic, preserved)
 # ---------------------------------------------------------------------------
 
-# Anonymous / placeholder company names that indicate the real employer is hidden
-_ANONYMOUS_COMPANY_NAMES: frozenset[str] = frozenset({
-    "confidential",
-    "unknown",
-    "n/a",
-    "na",
-    "not disclosed",
-    "not specified",
-    "undisclosed",
-    "anonymous",
-    "employer confidential",
-    "client confidential",
-    "withheld",
-    "unnamed",
-    "unknown company",
-    "unknown employer",
-})
-
-# Low-quality aggregator / spam company names
-_LOW_QUALITY_COMPANY_NAMES: frozenset[str] = frozenset({
-    "jobs for humanity",
-    "jobs for humanity uae",
-    "theuaejobs",
-    "talentmate",
-    "private company",
-    "leading company",
-    "reputable company",
-    "well known company",
-    "multinational company",
-    "leading organization",
-    "leading organisation",
-    "a leading company",
-    "a reputable company",
-    "a leading organization",
-    "a well known company",
-})
+# Ordered list of tier labels from best (0) to weakest (4).
+SOURCE_TIERS: list[str] = [
+    "verified_scrape",  # Direct scrape with job ID confirmed from ATS
+    "api_ingestion",    # Provider API (JSearch, Adzuna, etc.)
+    "aggregator",       # Job board aggregator without direct ATS link
+    "llm_enriched",     # LLM-enriched record — no guarantee of accuracy
+    "unknown",          # No source metadata at all
+]
 
 
-@lru_cache(maxsize=512)
-def classify_company(company: str) -> str:
-    """Return a quality label for a company name string.
+def classify_source_tier(job: dict) -> str:
+    """Return the source tier string for *job*.
 
-    Returns one of:
-        "ok"          — looks like a real named employer
-        "anonymous"   — placeholder (Confidential, Unknown, N/A, …)
-        "low_quality" — known spam aggregator or vague filler phrase
+    Tier ordering from most to least trustworthy:
+        verified_scrape > api_ingestion > aggregator > llm_enriched > unknown
     """
-    if not company or not company.strip():
-        return "anonymous"
-    normalized = company.strip().lower()
-    if normalized in _ANONYMOUS_COMPANY_NAMES:
-        return "anonymous"
-    if normalized in _LOW_QUALITY_COMPANY_NAMES:
-        return "low_quality"
-    # Substring heuristics: "confidential" or "unknown employer" anywhere in name
-    if "confidential" in normalized or "unknown employer" in normalized:
-        return "anonymous"
-    return "ok"
+    provider = (job.get("provider") or "").lower()
+    source_backed: bool = bool(job.get("source_backed"))
+    source_job_id: Optional[str] = job.get("source_job_id")
+    persisted: Optional[str] = job.get("persisted_job_id")
 
-
-def is_low_quality_company(company: str) -> bool:
-    """True when the company name signals an anonymous or low-quality posting."""
-    return classify_company(company) in ("anonymous", "low_quality")
+    if persisted and source_backed:
+        return "verified_scrape"
+    if source_job_id and provider:
+        return "api_ingestion"
+    if provider and not source_job_id:
+        return "aggregator"
+    if job.get("llm_generated") or job.get("origin") == "llm":
+        return "llm_enriched"
+    return "unknown"
