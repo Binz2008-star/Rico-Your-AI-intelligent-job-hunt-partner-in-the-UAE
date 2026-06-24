@@ -1951,14 +1951,13 @@ class RicoChatAPI:
                 pass
 
             # Inject the transcript of the most recently uploaded image/document
-            # (set by the upload route after vision/OCR extraction). Without this,
-            # follow-up actions like "Summarize this document" / "Extract key
-            # information" reach the AI with no document text and answer
-            # inaccurately. Injected early (before the long conversation history) so
-            # it survives context truncation.
+            # (set by the upload route after vision/OCR extraction) — read from the
+            # durable store so it survives RICO_MEMORY_BACKEND=postgres / restarts /
+            # multiple instances. Without this, typed follow-ups like "what do you
+            # think of this job?" reach the AI with no document text. Injected early
+            # (before the long conversation history) so it survives truncation.
             try:
-                _recent = self._get_recent_context(user_id)
-                _last_doc = _recent.get("last_uploaded_document") if isinstance(_recent, dict) else None
+                _last_doc = self._get_last_uploaded_document(user_id)
                 _doc_text = (_last_doc or {}).get("extracted_text")
                 if _doc_text:
                     ctx["last_uploaded_document"] = {
@@ -9848,6 +9847,31 @@ class RicoChatAPI:
         except Exception:
             return {}
 
+    def _get_last_uploaded_document(self, user_id: str) -> dict[str, Any] | None:
+        """Return the latest uploaded image/document transcript for a user.
+
+        Tries the in-process recent_context fast-path first (works in json/local
+        mode), then the durable DB store. The durable store is essential in
+        production: ``RicoMemoryStore`` is a no-op under
+        ``RICO_MEMORY_BACKEND=postgres`` and is wiped by restarts / multiple
+        instances, so the transcript saved at upload time only survives in the DB.
+        Returns ``None`` when no transcript with text is on record.
+        """
+        try:
+            doc = (self._get_recent_context(user_id) or {}).get("last_uploaded_document")
+            if isinstance(doc, dict) and str(doc.get("extracted_text") or "").strip():
+                return doc
+        except Exception:
+            pass
+        try:
+            from src.repositories.uploaded_document_repo import get_last_uploaded_document
+            durable = get_last_uploaded_document(user_id)
+            if isinstance(durable, dict) and str(durable.get("extracted_text") or "").strip():
+                return durable
+        except Exception:
+            pass
+        return None
+
     # ── Recent-upload document context (TASK-030) ────────────────────────────
 
     _UPLOAD_DOC_QUERY_RE = re.compile(
@@ -9898,36 +9922,29 @@ class RicoChatAPI:
         information", "summarize this document") from the stored transcript.
 
         Runs BEFORE onboarding / CV-builder / AI routing so these requests can
-        never be hijacked into a CV draft. Returns ``None`` when the message is
-        not such a request, or when there is no recent uploaded document in
-        context (so normal routing handles it).
+        never be hijacked into a CV draft. The transcript is read from the durable
+        store (survives ``RICO_MEMORY_BACKEND=postgres`` / restarts / multiple
+        instances). Returns ``None`` only when the message is not such a request,
+        so normal routing handles non-document chat.
         """
         if not _DOC_FOLLOWUP_RE.search(message or ""):
             return None
-        try:
-            ctx = self._get_recent_context(user_id)
-        except Exception:
-            ctx = {}
-        doc = ctx.get("last_uploaded_document") if isinstance(ctx, dict) else None
-        if not isinstance(doc, dict):
-            return None  # no recent upload — let normal routing handle it
 
-        text = str(doc.get("extracted_text") or "").strip()
-        label = str(doc.get("display_label") or doc.get("document_type") or "document")
+        doc = self._get_last_uploaded_document(user_id)
+        text = str((doc or {}).get("extracted_text") or "").strip() if doc else ""
+        label = str((doc or {}).get("display_label") or (doc or {}).get("document_type") or "document")
         _is_ar = (language == "ar") or bool(re.search(r"[؀-ۿ]", message or ""))
 
         if not text:
-            # The file was recognised but no usable text could be read from it.
-            # Be honest — never fabricate a CV or act on stale content.
+            # A document action with no readable transcript on record. Be honest —
+            # never hijack into a CV draft, never claim to have read something.
             reply = (
-                "لم أتمكن من قراءة نص واضح من هذه الصورة — قد تكون صورة فوتوغرافية أو "
-                "بدقة منخفضة أو لا تحتوي على نص مقروء. إن كانت إعلان وظيفة، أرسل لقطة "
-                "شاشة أوضح؛ وإن كانت سيرتك الذاتية، ارفع ملف PDF أو Word."
+                "لا يوجد لدي مستند مقروء منك حتى الآن. ارفع لقطة شاشة واضحة أو ملف PDF "
+                "وسأقرأه ثم أساعدك في تلخيصه أو استخراج أهم المعلومات منه."
                 if _is_ar else
-                "I couldn't read clear text from that image — it may be a photo, a "
-                "low-resolution image, or have no readable text. If it's a job posting, "
-                "please send a clearer screenshot; if it's your CV, upload the PDF or "
-                "Word file."
+                "I don't have a readable document from you yet. Upload a clear "
+                "screenshot or a PDF and I'll read it, then I can summarize it or "
+                "pull out the key information for you."
             )
             self._append_chat(user_id, "assistant", reply)
             return {"type": "document_context", "message": reply, "success": True}
