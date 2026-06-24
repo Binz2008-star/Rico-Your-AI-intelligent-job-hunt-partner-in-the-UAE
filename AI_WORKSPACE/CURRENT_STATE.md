@@ -1,11 +1,12 @@
 # Current State
 
-_Last updated: 2026-06-23 (job-flow stable through #735; #737 no_text routing + #738 upload size limits + #736 image reading all merged & deploy-verified live; awaiting owner live screenshot smoke test for #736)_
+_Last updated: 2026-06-23 (job-flow stable through #735; #737 no_text + #738 size limits + #736 image reading + #739 image/document follow-up handling all merged & live; OCRSPACE_API_KEY set on Render as the reliable OCR backstop)_
 
 ## Production baseline
 
-- **Repository main HEAD / production backend SHA:** `a7e294b9f0307110f45b17df507f6027d1b2b04c` (#736 — read job-screenshot images via free vision model + OCR.space).
-- **Production deploy verification:** `Deploy Render Backend` confirmed Render serves `a7e294b`; `/health` **200**; `Deploy to Production` + `Deploy Render Backend` both succeeded. (#738 `115adde` and #737 `e214178` were likewise deploy-verified in sequence.)
+- **Repository main HEAD / production backend SHA:** `f202a86fcba2c66b953256e4ec0ca71744f9f91f` (#739 — image/document action requests answered from transcript; no CV-draft hijack).
+- **Production deploy verification:** `Deploy Render Backend` + `Deploy to Production` both succeeded for `f202a86` (`/version` match + `/health` 200). #736 `a7e294b`, #738 `115adde`, #737 `e214178` were deploy-verified in sequence.
+- **Image reading reliability:** `OCRSPACE_API_KEY` configured on Render (owner) as a dependable free OCR backstop behind the (rate-limited) free vision model — image text extraction should now be consistent.
 - **Vercel:** production/root/proxy healthy by deploy verification.
 - **Render logs:** direct Render MCP log scan unavailable in-session; no error signals from `/health` or deploy workflows.
 
