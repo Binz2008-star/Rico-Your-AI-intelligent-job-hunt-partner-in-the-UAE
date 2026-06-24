@@ -140,6 +140,22 @@ _CV_IMPROVE_FOLLOWUP_RE = re.compile(
     re.IGNORECASE | re.UNICODE,
 )
 
+# Follow-up requests that act on a just-uploaded image/document — the button
+# payloads from the Document Intelligence layer ("Describe what's in this image.",
+# "Extract any visible text from this image.", "Summarize this document for me.",
+# "Extract the most important information from this document.") plus close natural
+# variants. Handled deterministically from the stored transcript BEFORE the
+# onboarding / CV-builder routing so an image action can never be hijacked into a
+# CV draft. Only fires when a recent uploaded document is in session context.
+_DOC_FOLLOWUP_RE = re.compile(
+    r"\bdescribe\b.{0,30}\b(image|picture|photo|screenshot|document|file|it)\b"
+    r"|\bwhat(?:'?s| is| does)\b.{0,30}\b(in|on|say|says|contain)\b.{0,24}\b(image|picture|photo|screenshot|document|file|it)\b"
+    r"|\bextract\b.{0,40}\b(text|information|info|details)\b"
+    r"|\bsummari[sz]e\b.{0,30}\b(this|the|image|document|file|content|key|it)\b"
+    r"|\b(read|ocr)\b.{0,30}\b(image|picture|photo|screenshot|document|file|text|it)\b",
+    re.IGNORECASE,
+)
+
 # Strings that must never appear inside a deterministic CV draft body.
 # Used as a post-generation guard in _handle_cv_generate_from_profile.
 _CV_PLACEHOLDER_PATTERNS = re.compile(
@@ -1931,6 +1947,25 @@ class RicoChatAPI:
                 _entries = self._collect_uploaded_documents(user_id, profile)
                 if _entries:
                     ctx["uploaded_documents"] = _entries
+            except Exception:
+                pass
+
+            # Inject the transcript of the most recently uploaded image/document
+            # (set by the upload route after vision/OCR extraction). Without this,
+            # follow-up actions like "Summarize this document" / "Extract key
+            # information" reach the AI with no document text and answer
+            # inaccurately. Injected early (before the long conversation history) so
+            # it survives context truncation.
+            try:
+                _recent = self._get_recent_context(user_id)
+                _last_doc = _recent.get("last_uploaded_document") if isinstance(_recent, dict) else None
+                _doc_text = (_last_doc or {}).get("extracted_text")
+                if _doc_text:
+                    ctx["last_uploaded_document"] = {
+                        "filename": _last_doc.get("filename"),
+                        "type": _last_doc.get("display_label") or _last_doc.get("document_type"),
+                        "transcribed_text": str(_doc_text)[:4000],
+                    }
             except Exception:
                 pass
 
@@ -5244,8 +5279,14 @@ class RicoChatAPI:
         *,
         save_user_message: bool,
         language: str | None = None,
+        prompt_override: str | None = None,
     ) -> dict[str, Any]:
-        """Run the single conversational AI fallback path used by chat routing."""
+        """Run the single conversational AI fallback path used by chat routing.
+
+        ``prompt_override`` lets a caller send the model an augmented prompt (e.g.
+        with an uploaded document's transcript embedded) while still saving the
+        user's ORIGINAL ``message`` to chat history.
+        """
         if save_user_message:
             self._append_chat(user_id, "user", message)
         user_context = self._build_openai_context(profile, user_id=user_id)
@@ -5253,7 +5294,9 @@ class RicoChatAPI:
         if isinstance(user_context, dict):
             user_context["blocked_questions"] = blocked_questions
 
-        ai_response = self._get_openai_agent().respond(message, user_context=user_context, language=language)
+        ai_response = self._get_openai_agent().respond(
+            prompt_override or message, user_context=user_context, language=language
+        )
         raw_ai_message = ai_response.get("message", "")
         filtered_ai_message = self._preserve_ai_message(raw_ai_message, blocked_questions)
         ai_response["message"] = filtered_ai_message
@@ -5348,6 +5391,15 @@ class RicoChatAPI:
         _doc_reply = self._get_recent_upload_document_reply(user_id, message)
         if _doc_reply is not None:
             return self._finalize(_doc_reply, self.SOURCE_KEYWORD, profile=None)
+
+        # ── Recent-upload document ACTION ─────────────────────────────────────
+        # "Describe this image" / "Extract key information" / "Summarize this
+        # document" — answer from the stored transcript BEFORE the onboarding /
+        # CV-builder routing, so an image/document action can never be hijacked
+        # into a CV draft. Returns None unless this is such a request.
+        _doc_action = self._handle_uploaded_document_followup(user_id, message, language)
+        if _doc_action is not None:
+            return _doc_action
 
         completed = is_onboarding_complete(user_id)
 
@@ -9838,6 +9890,63 @@ class RicoChatAPI:
             return {"type": "document_context", "message": reply}
         except Exception:
             return None
+
+    def _handle_uploaded_document_followup(
+        self, user_id: str, message: str, language: str | None = None
+    ) -> dict[str, Any] | None:
+        """Answer an image/document ACTION ("describe this image", "extract key
+        information", "summarize this document") from the stored transcript.
+
+        Runs BEFORE onboarding / CV-builder / AI routing so these requests can
+        never be hijacked into a CV draft. Returns ``None`` when the message is
+        not such a request, or when there is no recent uploaded document in
+        context (so normal routing handles it).
+        """
+        if not _DOC_FOLLOWUP_RE.search(message or ""):
+            return None
+        try:
+            ctx = self._get_recent_context(user_id)
+        except Exception:
+            ctx = {}
+        doc = ctx.get("last_uploaded_document") if isinstance(ctx, dict) else None
+        if not isinstance(doc, dict):
+            return None  # no recent upload — let normal routing handle it
+
+        text = str(doc.get("extracted_text") or "").strip()
+        label = str(doc.get("display_label") or doc.get("document_type") or "document")
+        _is_ar = (language == "ar") or bool(re.search(r"[؀-ۿ]", message or ""))
+
+        if not text:
+            # The file was recognised but no usable text could be read from it.
+            # Be honest — never fabricate a CV or act on stale content.
+            reply = (
+                "لم أتمكن من قراءة نص واضح من هذه الصورة — قد تكون صورة فوتوغرافية أو "
+                "بدقة منخفضة أو لا تحتوي على نص مقروء. إن كانت إعلان وظيفة، أرسل لقطة "
+                "شاشة أوضح؛ وإن كانت سيرتك الذاتية، ارفع ملف PDF أو Word."
+                if _is_ar else
+                "I couldn't read clear text from that image — it may be a photo, a "
+                "low-resolution image, or have no readable text. If it's a job posting, "
+                "please send a clearer screenshot; if it's your CV, upload the PDF or "
+                "Word file."
+            )
+            self._append_chat(user_id, "assistant", reply)
+            return {"type": "document_context", "message": reply, "success": True}
+
+        # We have the transcript → let the AI answer the specific request from it.
+        profile = self._resolve_profile(user_id)
+        augmented = (
+            f"{message}\n\n"
+            f"[Transcribed text of the {label} the user just uploaded — file "
+            f"'{doc.get('filename') or 'upload'}']\n"
+            f'"""\n{text[:4000]}\n"""\n'
+            "Answer the user's request using ONLY the transcribed text above. Do not "
+            "invent details, and do not produce a CV or resume unless the transcribed "
+            "text itself is a CV."
+        )
+        return self._answer_with_ai_fallback(
+            user_id, message, profile,
+            save_user_message=True, language=language, prompt_override=augmented,
+        )
 
     # ── Letter-choice resolver (BUG-02) ──────────────────────────────────────
 
