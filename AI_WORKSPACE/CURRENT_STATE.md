@@ -1,11 +1,12 @@
 # Current State
 
-_Last updated: 2026-06-24 (image-reading chain complete & live through #741; durable transcript store fixes the postgres-mode follow-up bug; pending owner re-test of the screenshot follow-up)_
+_Last updated: 2026-06-25 (Phase-0 job-link trust gate #747 + pipeline save/count correctness #749 merged & deployed; owner-side authenticated smoke still pending — sandbox cannot reach production)_
 
 ## Production baseline
 
-- **Repository main HEAD / production backend SHA:** `7e0b9ec3a3f88b834e9bc19131457a296f9ac1df` (#741 — durable uploaded-document transcript store, postgres-safe).
-- **Production deploy verification:** `Deploy Render Backend` + `Deploy to Production` both succeeded for `7e0b9ec` (`/version` match + `/health` 200; clean startup ⇒ lifespan migration runner did not crash). Prior deploys verified in sequence: #739 `f202a86`, #736 `a7e294b`, #738 `115adde`, #737 `e214178`.
+- **Repository main HEAD / production backend SHA:** `61131231165093254ba750be93e9ea367195ac41` (#749 — trusted, counted, idempotent job save after the Phase-0 trust gate).
+- **Production deploy verification:** `Deploy Render Backend` run #80 succeeded for `6113123` (the gated workflow blocks until `/version.commit` matches the pushed SHA **and** `/health` 200, so success ⇒ both verified). Prior deploys verified in sequence: #747 `0d28a08`, #741 `7e0b9ec`, #739 `f202a86`, #736 `a7e294b`, #738 `115adde`, #737 `e214178`.
+- **Pending owner-side smoke:** the authenticated save→count flow (and the #741 screenshot follow-up) must be confirmed by the owner on `ricohunt.com`; the sandbox cannot reach authenticated `onrender.com` (agent proxy 403), so live smoke is owner-run only.
 - **Migration 032 (`uploaded_document_context`):** auto-applied on startup via the app.py lifespan runner (idempotent `CREATE TABLE/INDEX IF NOT EXISTS`), targeting the exact branch the production `DATABASE_URL` uses. Direct confirmation of the `migration_ok` log line / table existence needs Render-log or Neon access (unavailable in-session) — the owner re-test is the end-to-end proof.
 - **Image reading reliability:** `OCRSPACE_API_KEY` set on Render as a dependable free OCR backstop behind the (rate-limited) free vision model (OpenRouter/HF).
 - **Render logs:** direct Render MCP log scan unavailable in-session; no error signals from `/health` or deploy workflows.
@@ -75,6 +76,8 @@ No provider keys are hardcoded, committed, or logged.
 | **#736** | Image reading (Finding 2) — job-screenshot images transcribed via free VLM (OpenRouter/HF) + OCR.space fallback, re-classified to a readable `classified` response; graceful (never blocks uploads) | `a7e294b` | ✅ merged + deploy-verified |
 | **#739** | Image/document action follow-up — buttons (Describe/Extract/Summarize) answer from the stored transcript via an early interceptor (no CV-draft hijack); transcript injected into AI context for typed questions | `f202a86` | ✅ merged + deploy-verified |
 | **#741** | Durable transcript store (`uploaded_document_context` table + repo) — fixes the postgres-mode bug where the OCR transcript was saved only to the no-op `RicoMemoryStore`; follow-ups now read durably; migration 032 auto-applies on startup | `7e0b9ec` | ✅ merged + deploy-verified (owner re-test pending) |
+| **#747** | Phase-0 job-link trust gate (`src/services/job_link_trust.py`) — View & Apply may only surface a source-backed, non-fake, non-LLM apply URL; rejects recent_context/LLM/sequential-LinkedIn/placeholder URLs; `apply_to_job` restored with safe action errors | `0d28a08` | ✅ merged + deploy-verified |
+| **#749** | Pipeline save/count correctness — chat ordinal "save the Nth job" now persists to the user-scoped counted store (`rico_job_recommendations`), idempotent on a trusted save identity; untrusted recent_context jobs save as leads with no claimed apply link; user-safe save errors (`src/services/job_save.py`) | `6113123` | ✅ merged + deploy-verified (owner-side authenticated smoke pending) |
 
 > Note: `fix/single-role-taxonomy-rejection` was an independent duplicate of the #735 fix built in another session — **abandoned** (not merged). Do not revive it.
 
@@ -132,16 +135,23 @@ No provider keys are hardcoded, committed, or logged.
 - **#712 / #711** — migration drift (`005 pipeline_runs`, `011` indexes missing) — still open, separate.
 - Older epics/backlog (#654, #618, #531, #356, #355, #354, #353, #352, #294, #263, #213, #198, #196, #187, #179, #147, #140, #138, #127, #118, #105, #99, #96) — not urgent.
 
-## Forward plan (prioritized, 2026-06-24)
+## Phase-0 trust + save/count — COMPLETE & LIVE (2026-06-25)
 
-1. **Now (owner):** re-test #741 in `/command` — upload job screenshot → buttons + typed Qs answer from the text; never "no file"; never a CV draft. Gates everything image-related.
-2. **Next build (recommended): #732** — stop the unevidenced "Developer" target-role push; base guidance on actual CV signals. Owner hits this every session.
-3. **Then: Finding 3** — wire read-screenshot → "Save as target job" / "Score against my CV" end-to-end (the "link A↔B without buttons" ask).
-4. **Cleanup pass:** close stale PRs #722/#713, salvage #697; Finding 5 (dead `CV_THRESHOLD`, stale `CLAUDE.md` `/chat` note).
-5. **Backlog:** #721 degraded cards, #712 migration drift, Finding 4 (onboarding/upload honor `classified`), older epics.
+- **#747 (trust gate, live):** `resolve_trusted_apply_url` is the only sanctioned apply-URL resolver. Untrusted origins (`recent_context`, `llm`, `chat`, `search_match`, …) are rejected at Gate 0; placeholder/sequential-LinkedIn/bad-scheme URLs rejected; a trusted provenance marker (`persisted_job_id` / `source_job_id` / `provider`+`source_backed`) is required. `apply_to_job` no longer errors on missing links — safe action messages instead.
+- **#749 (save/count, live):** the chat ordinal save persists to the counted `rico_job_recommendations` (so the application/pipeline count actually increments), idempotent on a trusted save identity (`source_job_id`/`persisted_job_id`, else a `title|company` hash — never the bare `job_id`). A recent_context job is still saved, as a **lead**, with no apply URL persisted and no verified-link claim. Save failures return user-safe messages. No `pipeline_runs` (migration 005 / #711) dependency. Helper: `src/services/job_save.py`; tests: `tests/test_pipeline_save_count_correctness.py`.
+- **Pending:** owner-side authenticated smoke on `ricohunt.com` — search a role, "save the second job to my pipeline" → count +1, repeat → count unchanged. Sandbox cannot reach authenticated production.
+
+## Forward plan (prioritized, 2026-06-25)
+
+1. **Active blocker: #744 (document-action routing)** — "Extract key information" was routed down the AI path with no transcript and hit the public job-listing CTA, while "Summarize" worked. Fix routes all document actions (describe/extract/summarize) to the document-read path before the AI/legacy split when a fresh `uploaded_document_context` exists. This clears the #741 screenshot re-test. (Was on hold; hold lifted 2026-06-25.)
+2. **Parked: #742 (#732 target-role evidence guard)** — stays parked until #744 lands and the #741 re-test clears.
+3. **Owner smoke:** confirm #749 save→count and the #741 screenshot follow-up on production.
+4. **Then: Finding 3** — wire read-screenshot → "Save as target job" / "Score against my CV" end-to-end (the "link A↔B without buttons" ask).
+5. **Cleanup pass:** close stale PRs #722/#713, salvage #697; Finding 5 (dead `CV_THRESHOLD`, stale `CLAUDE.md` `/chat` note).
+6. **Backlog:** #721 degraded cards, #712 migration drift, Finding 4 (onboarding/upload honor `classified`), older epics.
 
 ## Recommended next command
 
 ```text
-Rico mode. Production is 7e0b9ec (#741, durable transcript store) — image-reading chain #736→#739→#741 is live. First confirm the owner re-test of the screenshot follow-up. Then the recommended next build is issue #732 (Rico over-commits to Developer without CV evidence): make career guidance evidence-based, no silent target_role=Developer push. Keep backend-focused, mocks-only tests, no provider/frontend scope creep. After that, Finding 3 (application-evidence destination) completes the screenshot loop.
+Rico mode. Production is 6113123 (#749) — Phase-0 trust gate (#747) + pipeline save/count correctness (#749) are live. Active blocker is #744 (document-action routing): route describe/extract/summarize to the document-read path before the AI/legacy split when a fresh uploaded_document_context exists — this clears the #741 screenshot re-test. Keep #742 (target-role guard) parked until #744 lands. Backend-focused, mocks-only tests, no provider/frontend/trust-gate scope creep.
 ```
