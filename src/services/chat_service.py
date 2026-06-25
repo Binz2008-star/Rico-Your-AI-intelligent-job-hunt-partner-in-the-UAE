@@ -131,6 +131,23 @@ def send_message(
     profile = get_profile(ctx.user_id)
     profile_present = profile is not None
 
+    # ── Uploaded-document action — deterministic, before the AI/legacy split ───
+    # "Summarize this document", "Extract key information", "Describe this image"
+    # must always read from the freshly uploaded document's transcript. Without
+    # this, the intent router can route one button (extract) down the AI path with
+    # no transcript — which then paraphrases the public job-listing CTA — while
+    # another (summarize) takes the legacy document path and works. Route both the
+    # same way whenever a fresh uploaded_document_context exists for this user.
+    from src.rico_chat_api import RicoChatAPI as _RicoChatAPI
+    if _RicoChatAPI.is_document_action_message(message):
+        _doc_reply = _RicoChatAPI(persist=ctx.can_persist_profile).handle_document_action(
+            ctx.user_id, message, language
+        )
+        if _doc_reply is not None:
+            _doc_reply.setdefault("intent", "document_action")
+            _doc_reply.setdefault("response_source", "document_context")
+            return _doc_reply
+
     # ── Guard: public/no-profile sessions must never reach the AI for job-listing
     # requests — the AI has no search tools in this context and will hallucinate
     # company names, roles, and requirements from training data.
