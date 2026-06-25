@@ -897,7 +897,11 @@ class TestChatService:
         ctx = RicoSessionContext.for_authenticated("u1")
         mock_api = type("API", (), {"process_message": lambda self, user_id, message, **kwargs: _CHAT_RESPONSE})()
         with patch("src.rico_env.get_ai_provider", return_value="openai"), \
-             patch("src.rico_chat_api.RicoChatAPI", return_value=mock_api):
+             patch("src.rico_chat_api.RicoChatAPI") as MockAPI:
+            MockAPI.return_value = mock_api
+            # "hi" is not a document action; the real staticmethod returns False, so
+            # send_message skips the document-read path and delegates to process_message.
+            MockAPI.is_document_action_message.return_value = False
             result = send_message(ctx=ctx, message="hi")
         assert result == _CHAT_RESPONSE
 
