@@ -9323,37 +9323,93 @@ class RicoChatAPI:
             self._append_chat(user_id, "assistant", msg)
             return {"type": "clarification", "intent": "save_job", "message": msg}
 
+        from src.services.job_save import resolve_save_decision
+
         link = resolve_job_link(job)
+        # The job came from recent_search_matches — an untrusted origin under the
+        # #747 trust gate. Resolve a trusted save identity + apply URL: a job with
+        # no trusted apply link is still saved (as a lead), never with a claimed
+        # verified link, and the bare LLM/session job_id is never used as the key.
+        decision = resolve_save_decision(job, origin="recent_context")
+        _label = f"**{title}**" + (f" at **{company}**" if company else "")
         job_dict = {
             "title": title,
             "company": company,
-            "apply_url": link["apply_url"],
+            # Only surface a trusted apply URL; otherwise leave it blank so the
+            # saved record never carries an LLM/recent_context-generated link.
+            "apply_url": decision.apply_url or "",
             "source_url": link["source_url"],
             "alt_url": link["alt_link"],
             "verification_status": link["verification_status"],
         }
-        job_key = self._derive_lifecycle_job_key(title, company)
+
+        # Persist to the user-scoped, counted recommendations table (idempotent
+        # upsert keyed on the trusted save identity) so the saved job actually
+        # appears in the pipeline/application count. Previously the ordinal save
+        # went only through the agent save_job tool (legacy JSON) and never
+        # incremented the user's count.
+        persisted = False
         try:
-            result = agent_runtime.handle_action(
-                user_id=user_id, action="save", job=job_dict, job_key=job_key, source="chat",
+            from src.repositories import applications_repo
+            persisted = bool(
+                applications_repo.create(
+                    job_id=decision.save_key,
+                    title=title,
+                    company=company,
+                    url=decision.apply_url or "",
+                    status="saved",
+                    source="chat",
+                    user_id=user_id,
+                )
             )
         except Exception as exc:
-            logger.warning("rico_chat: ordinal save failed user=%s title=%s err=%s",
-                           user_id, title, type(exc).__name__)
-            result = None
+            # Subscription gate / DB unavailable / any failure → user-safe message,
+            # never a raw error or stack trace.
+            detail = getattr(exc, "detail", None)
+            safe = detail.get("message") if isinstance(detail, dict) else None
+            logger.warning(
+                "rico_chat: ordinal save persist failed user=%s err=%s",
+                user_id, type(exc).__name__,
+            )
+            msg = safe or (
+                f"I couldn't save {_label} to your pipeline right now. Please try again in a "
+                "moment, or open your Applications tab to add it manually."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "save_job_error", "intent": "save_job", "message": msg,
+                "entities": {"title": title, "company": company},
+            }
 
-        _label = f"**{title}**" + (f" at **{company}**" if company else "")
-        if result is not None and getattr(result, "ok", False):
-            msg = f"Saved {_label} to your pipeline. You'll find it in your tracked jobs."
+        # Best-effort side-effects (audit log, learning signals, career memory).
+        # Never let a side-effect failure turn a successful save into an error.
+        try:
+            agent_runtime.handle_action(
+                user_id=user_id, action="save", job=job_dict,
+                job_key=decision.save_key, source="chat",
+            )
+        except Exception:
+            logger.debug("rico_chat: ordinal save side-effects failed", exc_info=True)
+
+        if persisted:
+            if decision.verified:
+                msg = f"Saved {_label} to your pipeline. You'll find it in your tracked jobs."
+            else:
+                msg = (
+                    f"Saved {_label} to your pipeline as a lead. I don't have a verified apply "
+                    "link for it yet — open the role on the source site to confirm it's live "
+                    "before applying. You'll find it in your tracked jobs."
+                )
             response = {
                 "type": "save_job", "intent": "save_job", "message": msg,
                 "entities": {"title": title, "company": company},
                 "verification_status": link["verification_status"],
+                "verified_apply_link": decision.verified,
             }
             self._append_chat(user_id, "assistant", msg)
-            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile, runtime_result=result)
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
-        # Persistence failed — do NOT claim success.
+        # Persistence reported no write — do NOT claim success.
         msg = (
             f"I couldn't save {_label} to your pipeline right now. Please try again in a moment, "
             "or open your Applications tab to add it manually."

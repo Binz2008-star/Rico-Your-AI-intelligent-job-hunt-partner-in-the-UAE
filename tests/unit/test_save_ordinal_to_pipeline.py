@@ -85,20 +85,25 @@ def _run(api, msg):
 def test_save_second_job_persists_and_confirms(api, monkeypatch):
     captured = {}
 
-    def fake_handle(*, user_id, action, job=None, job_key=None, source=None):
-        captured.update(action=action, job=job, job_key=job_key)
-        return _Result(ok=True)
-
-    monkeypatch.setattr("src.rico_chat_api.agent_runtime.handle_action", fake_handle)
+    # Persistence now goes to the user-scoped, counted recommendations store so the
+    # save actually increments the pipeline count. agent_runtime is a best-effort
+    # side-effect (audit/learning) only.
+    monkeypatch.setattr(
+        "src.repositories.applications_repo.create",
+        lambda **kw: captured.update(kw) or True,
+    )
+    monkeypatch.setattr("src.rico_chat_api.agent_runtime.handle_action", lambda **kw: _Result(ok=True))
 
     r = _run(api, "Save the second job to my pipeline")
     assert r["type"] == "save_job"
-    assert captured["action"] == "save"
-    # The SECOND job was resolved from recent context.
-    assert captured["job"]["title"] == "Product Owner"
-    assert captured["job"]["company"] == "Globex"
-    # Canonical link field used.
-    assert captured["job"]["apply_url"] == "https://globex.com/jobs/2"
+    # The SECOND job was resolved from recent context and persisted (counted).
+    assert captured["title"] == "Product Owner"
+    assert captured["company"] == "Globex"
+    assert captured["status"] == "saved"
+    assert captured["user_id"] == "u-save"
+    # Untrusted recent_context origin → no verified apply link is persisted or claimed.
+    assert captured["url"] == ""
+    assert r.get("verified_apply_link") is False
     # Confirmation only after success.
     assert "saved" in r["message"].lower() and "pipeline" in r["message"].lower()
 
@@ -106,19 +111,19 @@ def test_save_second_job_persists_and_confirms(api, monkeypatch):
 def test_save_first_job_arabic(api, monkeypatch):
     captured = {}
     monkeypatch.setattr(
-        "src.rico_chat_api.agent_runtime.handle_action",
-        lambda **kw: captured.update(kw) or _Result(ok=True),
+        "src.repositories.applications_repo.create",
+        lambda **kw: captured.update(kw) or True,
     )
+    monkeypatch.setattr("src.rico_chat_api.agent_runtime.handle_action", lambda **kw: _Result(ok=True))
     r = _run(api, "احفظ أول وظيفة")
     assert r["type"] == "save_job"
-    assert captured["job"]["title"] == "Technical Product Owner"
+    assert captured["title"] == "Technical Product Owner"
 
 
 def test_save_failure_does_not_claim_success(api, monkeypatch):
-    monkeypatch.setattr(
-        "src.rico_chat_api.agent_runtime.handle_action",
-        lambda **kw: _Result(ok=False, error="db down"),
-    )
+    # Counted persistence reports no write → never claim success.
+    monkeypatch.setattr("src.repositories.applications_repo.create", lambda **kw: False)
+    monkeypatch.setattr("src.rico_chat_api.agent_runtime.handle_action", lambda **kw: _Result(ok=True))
     r = _run(api, "Save the second job to my pipeline")
     assert r["type"] == "save_job_error"
     assert "couldn't save" in r["message"].lower() or "could not" in r["message"].lower()
@@ -128,9 +133,11 @@ def test_save_failure_does_not_claim_success(api, monkeypatch):
 def test_save_persistence_exception_reports_failure(api, monkeypatch):
     def boom(**kw):
         raise RuntimeError("boom")
-    monkeypatch.setattr("src.rico_chat_api.agent_runtime.handle_action", boom)
+    monkeypatch.setattr("src.repositories.applications_repo.create", boom)
     r = _run(api, "Save the second job to my pipeline")
     assert r["type"] == "save_job_error"
+    # No raw exception text leaks to the user.
+    assert "boom" not in r["message"]
 
 
 def test_save_with_no_recent_context_asks(monkeypatch):
