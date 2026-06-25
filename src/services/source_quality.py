@@ -10,14 +10,23 @@ Status values:
     rate_limited         — domains known for 429 responses (trabajo.org, etc.)
     aggregator_untrusted — spammy or low-quality aggregators
     needs_source_verification — unknown domain; frontend shows "Needs verification"
+
+Phase-0 additions (additive — no existing exports changed)
+-----------------------------------------------------------
+* ``is_placeholder_url`` — detects known fake / templated apply URLs.
+  Used by :mod:`src.services.job_link_trust` as Gate 2 of the trust chain.
+* ``is_demo_job_id``    — detects obviously synthetic job identifiers.
+* ``classify_source_tier`` — returns ordered tier label for a job dict.
 """
 from __future__ import annotations
 
+import re
 from functools import lru_cache
+from typing import Optional
 from urllib.parse import urlparse
 
 # ---------------------------------------------------------------------------
-# Domain classification tables
+# Domain classification tables  (pre-existing, must not be removed)
 # ---------------------------------------------------------------------------
 
 # Employer / ATS platforms — high-quality, direct apply
@@ -106,6 +115,10 @@ _AGGREGATOR_UNTRUSTED_DOMAINS: frozenset[str] = frozenset(
 )
 
 
+# ---------------------------------------------------------------------------
+# Pre-existing public functions  (must not be removed or renamed)
+# ---------------------------------------------------------------------------
+
 def is_google_intermediary(url: str) -> bool:
     """True when *url* is a Google Jobs search/intermediary page, not a direct apply URL.
 
@@ -180,7 +193,7 @@ def _matches_domain(hostname: str, domain_set: frozenset[str]) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Company name quality classification
+# Company name quality classification  (pre-existing, must not be removed)
 # ---------------------------------------------------------------------------
 
 # Anonymous / placeholder company names that indicate the real employer is hidden
@@ -246,3 +259,134 @@ def classify_company(company: str) -> str:
 def is_low_quality_company(company: str) -> bool:
     """True when the company name signals an anonymous or low-quality posting."""
     return classify_company(company) in ("anonymous", "low_quality")
+
+
+# ---------------------------------------------------------------------------
+# Phase-0 additions — Placeholder / fake URL detection
+# (additive; no existing exports changed)
+# ---------------------------------------------------------------------------
+
+# Indeed job-key placeholder patterns produced by LLMs:
+#   https://www.indeed.com/viewjob?jk=abc123
+#   https://www.indeed.com/viewjob?jk=def456
+# The pattern matches jk= values that are short alpha+digit combos, not
+# real 16-char hex keys.
+_INDEED_PLACEHOLDER_JK_RE = re.compile(
+    r"[?&]jk=(?P<key>[a-z]{2,8}\d{2,6})(?:&|$|\s)",
+    re.IGNORECASE,
+)
+
+# Generic placeholder token patterns anywhere in a URL
+_GENERIC_PLACEHOLDER_PATH_RE = re.compile(
+    r"/(?:jobs?|apply|view|listing)/"
+    r"(?:abc|def|xyz|foo|bar|test|sample|example|job|fake|dummy)\d{0,6}"
+    r"(?:/|$|\?)",
+    re.IGNORECASE,
+)
+
+# Sequential numeric LinkedIn job IDs as full URL check
+_SEQUENTIAL_LINKEDIN_RE = re.compile(
+    r"linkedin\.com/jobs/view/(?P<id>\d{1,7})(?:/|$|\?)",
+    re.IGNORECASE,
+)
+
+# Hard-coded localhost / example / placeholder hostnames
+_PLACEHOLDER_HOST_RE = re.compile(
+    r"https?://(?:localhost|127\.0\.0\.1|example\.com|test\.com|placeholder\.com)",
+    re.IGNORECASE,
+)
+
+# Template variable tokens: {{url}}, ${apply_link}, [APPLY_URL], <link>
+_TEMPLATE_TOKEN_RE = re.compile(
+    r"\{\{[^}]+\}\}"   # Handlebars: {{url}}
+    r"|\$\{[^}]+\}"   # JS template: ${url}
+    r"|\[[A-Z_]{4,}\]"  # Uppercase bracket: [APPLY_URL]
+    r"|<[a-z_]+_(?:url|link)>",  # XML-style: <apply_url>
+    re.IGNORECASE,
+)
+
+
+def is_placeholder_url(url: Optional[str]) -> bool:
+    """Return True if *url* looks like a placeholder or LLM-generated fake.
+
+    This is Gate 2 in the trust chain (see job_link_trust.py).  A URL
+    that passes this check is NOT automatically trusted; the full trust
+    chain must still be satisfied.
+
+    Returns
+    -------
+    bool
+        ``True``  → URL is fake / placeholder → do NOT show "View & Apply".
+        ``False`` → URL passed heuristic checks → continue to provenance gate.
+    """
+    if not url or not isinstance(url, str):
+        return True  # missing is treated as placeholder
+    url = url.strip()
+    if not url:
+        return True
+
+    if _PLACEHOLDER_HOST_RE.search(url):
+        return True
+    if _TEMPLATE_TOKEN_RE.search(url):
+        return True
+    if _INDEED_PLACEHOLDER_JK_RE.search(url):
+        return True
+    if _GENERIC_PLACEHOLDER_PATH_RE.search(url):
+        return True
+
+    # Sequential LinkedIn: IDs below 10 000 000 are too small to be real.
+    m = _SEQUENTIAL_LINKEDIN_RE.search(url)
+    if m and int(m.group("id")) < 10_000_000:
+        return True
+
+    return False
+
+
+def is_demo_job_id(job_id: Optional[str]) -> bool:
+    """Return True if *job_id* looks like a demo / LLM-generated identifier.
+
+    Examples of fake IDs produced by LLMs:  job_1, job_2, job-001, abc123
+    """
+    if not job_id or not isinstance(job_id, str):
+        return False
+    jid = job_id.strip().lower()
+    if re.fullmatch(r"(?:job|demo|fake|test|sample)[_-]?\d{1,5}", jid):
+        return True
+    if re.fullmatch(r"[a-z]{2,5}\d{1,5}", jid) and len(jid) <= 8:
+        return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Phase-0: Source-tier classification (additive)
+# ---------------------------------------------------------------------------
+
+SOURCE_TIERS: list[str] = [
+    "verified_scrape",  # Direct scrape with job ID confirmed from ATS
+    "api_ingestion",    # Provider API (JSearch, Adzuna, etc.)
+    "aggregator",       # Job board aggregator without direct ATS link
+    "llm_enriched",     # LLM-enriched record — no guarantee of accuracy
+    "unknown",          # No source metadata at all
+]
+
+
+def classify_source_tier(job: dict) -> str:  # type: ignore[type-arg]
+    """Return the source tier string for *job*.
+
+    Tier ordering from most to least trustworthy:
+        verified_scrape > api_ingestion > aggregator > llm_enriched > unknown
+    """
+    provider = (job.get("provider") or "").lower()
+    source_backed: bool = bool(job.get("source_backed"))
+    source_job_id: Optional[str] = job.get("source_job_id")
+    persisted: Optional[str] = job.get("persisted_job_id")
+
+    if persisted and source_backed:
+        return "verified_scrape"
+    if source_job_id and provider:
+        return "api_ingestion"
+    if provider and not source_job_id:
+        return "aggregator"
+    if job.get("llm_generated") or job.get("origin") == "llm":
+        return "llm_enriched"
+    return "unknown"
