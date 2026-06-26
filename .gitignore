@@ -20,6 +20,9 @@ Thumbs.db
 
 # Browser profiles and runtime data
 data/ng_profile/
+
+# Runtime learning/intelligence cache (SQLite WAL files)
+learning_cache/
 data/linkedin_tmp/
 playwright/
 
