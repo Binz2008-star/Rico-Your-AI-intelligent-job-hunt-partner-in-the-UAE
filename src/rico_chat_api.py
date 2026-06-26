@@ -1962,6 +1962,15 @@ class RicoChatAPI:
                 "profile_exists": True,
                 **{k: v for k, v in raw.items() if k in essential_fields and v not in (None, "", [], {})},
             }
+            # Never surface a corrupted preferred_cities value (a misfiled chat
+            # message) to the model — it confuses location reasoning.
+            if ctx.get("preferred_cities"):
+                from src.services.city_validation import sanitize_cities
+                _clean_cities = sanitize_cities(self._as_list(ctx["preferred_cities"]))
+                if _clean_cities:
+                    ctx["preferred_cities"] = _clean_cities
+                else:
+                    ctx.pop("preferred_cities", None)
 
         # Embed last 8 turns so the AI has conversation context for yes/no and follow-ups
         if user_id:
@@ -4614,9 +4623,12 @@ class RicoChatAPI:
             if len(msg.split()) > 6:
                 return None
             # Accept any non-empty text as city input — normalise and save
+            from src.services.city_validation import sanitize_cities
             raw_cities = [c.strip() for c in re.split(r"[,،/|]+", msg) if c.strip()]
-            # Reject yes/no affirmations stored in place of a city name
-            raw_cities = [c for c in raw_cities if c.lower() not in self._CITY_REJECT_WORDS]
+            # Drop affirmations and misfiled chat/document messages (e.g. a
+            # "Summarize this document for me." captured while awaiting a city)
+            # so a non-city value can never be stored as a preferred city.
+            raw_cities = sanitize_cities(raw_cities, known_cities=self._UAE_CITIES)
             if not raw_cities:
                 return None
             # Title-case known UAE cities; keep others as entered
@@ -5100,7 +5112,10 @@ class RicoChatAPI:
 
         skills = self._as_list(self._profile_value(profile, "skills"))[:8]
         years = self._profile_value(profile, "years_experience")
-        cities = self._as_list(self._profile_value(profile, "preferred_cities"))
+        # Drop any corrupted non-city value (e.g. a misfiled chat message) so it
+        # never poisons the search location or fit score.
+        from src.services.city_validation import sanitize_cities
+        cities = sanitize_cities(self._as_list(self._profile_value(profile, "preferred_cities")))
         city_text = f" in {', '.join(map(str, cities[:2]))}" if cities else " in the UAE"
         basis = []
         if years:
