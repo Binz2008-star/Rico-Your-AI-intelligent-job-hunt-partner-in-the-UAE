@@ -47,9 +47,17 @@ _NON_CITY_TOKENS = frozenset({
     "لخص", "لخّص", "صف", "استخرج", "ترجم", "اقرأ", "مستند", "صورة", "ملف",
 })
 
-# Yes/no affirmations that must never be stored as a city.
+# Yes/no/confirmation/acknowledgement words that must never be stored as a city.
+# Keep in sync with RicoChatAPI._CITY_REJECT_WORDS.
 _REJECT_WORDS = frozenset({
-    "yes", "no", "ok", "okay", "sure", "نعم", "لا", "اوكي", "موافق",
+    # English
+    "yes", "yeah", "yep", "yup", "ok", "okay", "sure", "fine", "great",
+    "good", "cool", "done", "alright", "please", "thanks", "thank you",
+    "go ahead", "no", "nope", "nah",
+    # Arabic
+    "نعم", "أيوه", "ايوه", "اوك", "اوكي", "اوكيه", "حسنا", "حسناً",
+    "تمام", "تمم", "اكيد", "أكيد", "طبعا", "طبعاً", "تفضل", "يلا",
+    "ماشي", "زين", "كويس", "شكرا", "شكراً", "موافق", "اه", "آه", "لا",
 })
 
 _MAX_CITY_WORDS = 4          # "Ras Al Khaimah" = 3, "Umm Al Quwain" = 3
