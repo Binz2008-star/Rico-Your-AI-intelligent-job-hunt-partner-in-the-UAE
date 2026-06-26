@@ -20,7 +20,7 @@ import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryH
 import { translations, useTranslation, type TranslationKey } from "@/lib/translations";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 function ensureSessionId(sessionIdRef: React.MutableRefObject<string | null>): string {
     if (typeof window === "undefined") return sessionIdRef.current || "ssr-session";
@@ -395,9 +395,10 @@ function JobFallbackActions({ match, onAction }: { match: JobMatch; onAction: (p
     const t = useTranslation(language);
     const [copied, setCopied] = useState(false);
 
-    const actions = getJobFallbackActions({ title: match.title, company: match.company });
+    const actions = getJobFallbackActions({ title: match.title, company: match.company, employer_url: match.employer_url });
 
     const labelFor: Record<string, string> = {
+        company_website: t("cmdFallbackCompanyWebsite"),
         company_site: t("cmdFallbackCompanySite"),
         linkedin: t("cmdFallbackLinkedIn"),
         google: t("cmdFallbackGoogle"),

@@ -95,9 +95,15 @@ def normalize_item(item: Dict[str, Any]) -> Dict[str, Any]:
 
     `link` stays as the best single URL for legacy callers; `apply_link` and
     `alt_link` are kept separately so the apply-fallback chain can use them.
+    `employer_url` surfaces the company's own website when JSearch provides it;
+    it is never treated as a verified apply link.
+    `apply_is_direct` reflects JSearch's own signal that the apply link goes
+    straight to the employer/ATS without an intermediate page.
     """
     apply_link = str(item.get("job_apply_link") or "").strip()
     alt_link = str(item.get("job_google_link") or "").strip()
+    employer_url = str(item.get("employer_website") or "").strip()
+    apply_is_direct = bool(item.get("job_apply_is_direct"))
     location = ", ".join(filter(None, [
         item.get("job_city") or "",
         item.get("job_state") or "",
@@ -110,6 +116,8 @@ def normalize_item(item: Dict[str, Any]) -> Dict[str, Any]:
         "link":            apply_link or alt_link,
         "apply_link":      apply_link,
         "alt_link":        alt_link,
+        "employer_url":    employer_url,
+        "apply_is_direct": apply_is_direct,
         "description":     str(item.get("job_description") or ""),
         "source":          "jsearch",
         "salary_string":   str(item.get("job_salary_string") or ""),
