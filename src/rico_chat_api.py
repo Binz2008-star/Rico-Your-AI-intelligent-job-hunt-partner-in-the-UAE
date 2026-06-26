@@ -156,6 +156,34 @@ _DOC_FOLLOWUP_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Job-document action regexes — intercept "Save as target job" and "Score against my CV"
+# from the suggested-action buttons (document_classifier._SUGGESTED_ACTIONS["job_description"]).
+# These run inside _handle_uploaded_document_followup BEFORE _DOC_FOLLOWUP_RE so they are
+# never mis-routed to the onboarding / CV-builder / generic AI path.
+# IMPORTANT: keep these narrow enough not to catch ordinal saves ("save the second job").
+_JOB_DOC_SAVE_RE = re.compile(
+    r"\bsave\b.{0,50}\bas\s+(?:a\s+)?target\s+job\b"
+    r"|\bsave\b.{0,20}\bthis\b.{0,30}\b(?:to\s+(?:my\s+)?pipeline|as\s+target)\b"
+    r"|\badd\b.{0,15}\bthis\b.{0,30}\bpipeline\b",
+    re.IGNORECASE,
+)
+_JOB_DOC_SCORE_RE = re.compile(
+    r"\bscore\b.{0,60}\b(?:cv|resume|profile)\b"
+    r"|\b(?:match|compare)\b.{0,40}\b(?:cv|resume|profile)\b"
+    r"|\bfit\s+score\b"
+    r"|\bhow\s+(?:well|good)\b.{0,60}\b(?:fit|match|qualify)\b.{0,40}\b(?:this\s+job|job\s+desc)",
+    re.IGNORECASE,
+)
+# Simple heuristics for extracting job title / company from a raw transcript.
+_JOB_TITLE_FROM_TEXT_RE = re.compile(
+    r"(?:job\s+title|position|role|title)\s*[:\-]\s*([^\n]{3,80})",
+    re.IGNORECASE,
+)
+_JOB_COMPANY_FROM_TEXT_RE = re.compile(
+    r"(?:company|employer|organization|client)\s*[:\-]\s*([^\n]{2,60})",
+    re.IGNORECASE,
+)
+
 # Strings that must never appear inside a deterministic CV draft body.
 # Used as a post-generation guard in _handle_cv_generate_from_profile.
 _CV_PLACEHOLDER_PATTERNS = re.compile(
@@ -10026,12 +10054,21 @@ class RicoChatAPI:
         """Answer an image/document ACTION ("describe this image", "extract key
         information", "summarize this document") from the stored transcript.
 
+        Also handles the job-doc action buttons "Save as target job" and "Score
+        against my CV" (Finding 3) — these run first so they are never mis-routed
+        to the CV-builder or generic AI path.
+
         Runs BEFORE onboarding / CV-builder / AI routing so these requests can
         never be hijacked into a CV draft. The transcript is read from the durable
         store (survives ``RICO_MEMORY_BACKEND=postgres`` / restarts / multiple
         instances). Returns ``None`` only when the message is not such a request,
         so normal routing handles non-document chat.
         """
+        # Finding 3: job-doc save / score actions — handle before the describe/summarize path.
+        _job_action = self._handle_job_doc_action(user_id, message, language)
+        if _job_action is not None:
+            return _job_action
+
         if not _DOC_FOLLOWUP_RE.search(message or ""):
             return None
 
@@ -10068,6 +10105,191 @@ class RicoChatAPI:
         return self._answer_with_ai_fallback(
             user_id, message, profile,
             save_user_message=True, language=language, prompt_override=augmented,
+        )
+
+    # ── Finding 3: job-doc save / score actions ───────────────────────────────
+
+    def _handle_job_doc_action(
+        self, user_id: str, message: str, language: str | None,
+    ) -> "dict[str, Any] | None":
+        """Intercept 'Save as target job' and 'Score against my CV' when a job
+        description document is the most recently uploaded file.
+
+        Returns None when the message is not one of these actions so that normal
+        routing continues. Called before the describe/summarize path so these
+        actions are never mis-routed into a CV draft or generic AI reply.
+        """
+        is_save = bool(_JOB_DOC_SAVE_RE.search(message or ""))
+        is_score = bool(_JOB_DOC_SCORE_RE.search(message or ""))
+        if not is_save and not is_score:
+            return None
+
+        _is_ar = (language == "ar") or bool(re.search(r"[؀-ۿ]", message or ""))
+        doc = self._get_last_uploaded_document(user_id)
+        if not doc:
+            reply = (
+                "لا يوجد لدي مستند مرفوع منك حتى الآن. "
+                "ارفع وصف الوظيفة أو لقطة الشاشة أولاً."
+                if _is_ar else
+                "I don't have an uploaded job document yet. "
+                "Upload the job description or screenshot first, then I can save or score it."
+            )
+            self._append_chat(user_id, "assistant", reply)
+            return {"type": "document_context", "message": reply, "success": False}
+
+        text = str(doc.get("extracted_text") or "").strip()
+        if not text:
+            reply = (
+                "المستند المرفوع لا يحتوي على نص مقروء. "
+                "ارفع ملفاً يحتوي على نص واضح."
+                if _is_ar else
+                "The uploaded document doesn't have readable text. "
+                "Please upload a clear image or PDF with visible text."
+            )
+            self._append_chat(user_id, "assistant", reply)
+            return {"type": "document_context", "message": reply, "success": False}
+
+        if is_save:
+            return self._save_uploaded_job_to_pipeline(user_id, doc, text, _is_ar)
+        return self._score_uploaded_job_against_cv(user_id, doc, text, _is_ar, language)
+
+    @staticmethod
+    def _extract_job_meta_from_text(text: str) -> "tuple[str, str]":
+        """Best-effort title and company extraction from a job description transcript."""
+        title_m = _JOB_TITLE_FROM_TEXT_RE.search(text[:1000])
+        company_m = _JOB_COMPANY_FROM_TEXT_RE.search(text[:1000])
+        title = title_m.group(1).strip() if title_m else ""
+        company = company_m.group(1).strip() if company_m else ""
+        if not title:
+            for line in text[:500].splitlines():
+                line = line.strip()
+                if 3 <= len(line) <= 80:
+                    title = line
+                    break
+        return title or "Uploaded job description", company
+
+    def _save_uploaded_job_to_pipeline(
+        self, user_id: str, doc: "dict[str, Any]", text: str, is_ar: bool,
+    ) -> "dict[str, Any]":
+        """Persist the uploaded job description as a lead in the user's pipeline."""
+        title, company = self._extract_job_meta_from_text(text)
+        from src.services.job_save import resolve_save_decision
+        job_dict = {"title": title, "company": company, "apply_url": "", "source_url": ""}
+        decision = resolve_save_decision(job_dict, origin="upload")
+        _label = f"**{title}**" + (f" at **{company}**" if company else "")
+
+        persisted = False
+        try:
+            from src.repositories import applications_repo
+            persisted = bool(
+                applications_repo.create(
+                    job_id=decision.save_key,
+                    title=title,
+                    company=company,
+                    url="",
+                    status="saved",
+                    source="upload",
+                    user_id=user_id,
+                )
+            )
+        except Exception as exc:
+            detail = getattr(exc, "detail", None)
+            safe = detail.get("message") if isinstance(detail, dict) else None
+            logger.warning(
+                "rico_chat: upload job save failed user=%s err=%s",
+                user_id, type(exc).__name__,
+            )
+            msg = safe or (
+                f"لم أتمكن من حفظ الوظيفة في خط الأنابيب. حاول مرة أخرى لاحقاً."
+                if is_ar else
+                f"I couldn't save {_label} to your pipeline right now. "
+                "Please try again or add it manually in your Applications tab."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "save_job_error", "intent": "save_uploaded_job", "message": msg}
+
+        if persisted:
+            msg = (
+                f"تم حفظ **{title}** في خط أنابيب الوظائف كفرصة. "
+                "لا يوجد رابط تقديم موثوق بعد — ستجده في قائمة الوظائف المحفوظة."
+                if is_ar else
+                f"Saved {_label} to your pipeline as a lead. "
+                "There's no verified apply link yet — you'll find it in your tracked jobs "
+                "and can add the link manually."
+            )
+        else:
+            msg = (
+                f"**{title}** موجود بالفعل في خط الأنابيب."
+                if is_ar else
+                f"{_label} is already in your pipeline."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "save_job",
+            "intent": "save_uploaded_job",
+            "message": msg,
+            "entities": {"title": title, "company": company, "source": "upload"},
+        }
+
+    def _score_uploaded_job_against_cv(
+        self, user_id: str, doc: "dict[str, Any]", text: str,
+        is_ar: bool, language: "str | None",
+    ) -> "dict[str, Any]":
+        """Score the uploaded job description against the user's stored CV text."""
+        cv_text = ""
+        try:
+            from src.rico_db import RicoDB
+            _db = RicoDB()
+            bundle = _db.get_user_bundle(user_id)
+            if bundle:
+                cv_text = (bundle.get("cv_text") or "").strip()
+        except Exception:
+            pass
+
+        if not cv_text:
+            profile = self._resolve_profile(user_id)
+            cv_text = (
+                self._profile_value(profile, "cv_text")
+                or self._profile_value(profile, "pasted_cv_text")
+                or ""
+            ).strip()
+
+        if not cv_text:
+            msg = (
+                "أحتاج إلى سيرتك الذاتية أولاً. "
+                "ارفعها من ملفك الشخصي أو الصقها في المحادثة."
+                if is_ar else
+                "I need your CV to score this job against it. "
+                "Upload your CV from your profile or paste it here, then ask again."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "clarification",
+                "intent": "score_job_vs_cv",
+                "message": msg,
+                "next_action": "upload_cv",
+            }
+
+        filename = str(doc.get("filename") or "uploaded document")
+        augmented = (
+            "Score this job description against my current CV and give a detailed fit analysis.\n\n"
+            f"[Job description — '{filename}']\n\"\"\"\n{text[:3000]}\n\"\"\"\n\n"
+            f"[My current CV]\n\"\"\"\n{cv_text[:3000]}\n\"\"\"\n\n"
+            "Provide:\n"
+            "1. Overall fit score (0–100) with a brief justification.\n"
+            "2. Strong matches — skills, experience, or qualifications that align well.\n"
+            "3. Gaps — what the job requires that the CV currently lacks.\n"
+            "4. Recommendation: worth applying? What to tailor?\n"
+            "Use ONLY the texts above. Do not invent details."
+        )
+        profile = self._resolve_profile(user_id)
+        return self._answer_with_ai_fallback(
+            user_id,
+            message="Score this job description against my current CV.",
+            profile=profile,
+            save_user_message=True,
+            language=language,
+            prompt_override=augmented,
         )
 
     # ── Letter-choice resolver (BUG-02) ──────────────────────────────────────
