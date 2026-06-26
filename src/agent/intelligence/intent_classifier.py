@@ -1403,6 +1403,79 @@ def _extract_arabic_role(normalized_text: str) -> Optional[str]:
     return role
 
 
+# ── Search confirmation / continuation patterns ──────────────────────────────
+#
+# Stage 1 fix — production symptom:
+#   "Yes, search Software Engineer" → intent=unknown → bare_role_gate_reject_to_ai
+#
+# Root cause: _JOB_SEARCH_EXPLICIT_RE requires a job noun in the message tail.
+# Confirmation-prefixed bare-title searches have no such noun, so they fall
+# through to unknown.  This early-exit block intercepts them before the fallback.
+#
+# Match examples (all → job_search_explicit):
+#   "Yes, search Software Engineer"
+#   "yes search Product Manager"
+#   "Search Data Analyst"
+#   "find Data Engineer"
+#   "go ahead search Environmental Manager"
+#   "please find Compliance Officer"
+#   "sure, search UI/UX Designer"
+#   "نعم، ابحث عن Software Engineer"
+#
+# Non-match examples (fall through to existing handlers):
+#   "search jobs"           → bare job noun, excluded via negative lookahead
+#   "find roles"            → bare job noun, excluded
+#   "Yes"                   → acknowledgement, no change
+#   "Yes, show my pipeline" → existing handler, no change
+_SEARCH_CONFIRMATION_RE = re.compile(
+    r"^"
+    # Optional confirmation/affirmation prefix (English + Arabic)
+    r"(?:"
+    r"yes[,.]?\s+|yeah[,.]?\s+|yep[,.]?\s+|yup[,.]?\s+"
+    r"|ok[,.]?\s+|okay[,.]?\s+"
+    r"|sure[,.]?\s+|alright[,.]?\s+|fine[,.]?\s+"
+    r"|please[,.]?\s+"
+    r"|go\s+ahead[,.]?\s+"
+    r"|نعم[،,]?\s+|اوكي[،,]?\s+|تمام[،,]?\s+|حسنا[،,]?\s+|موافق[،,]?\s+"
+    r")?"
+    # Required search/find verb
+    r"(?:search|find|look\s+for|show\s+me|show)\s+"
+    # Negative lookahead: block bare job-noun queries (those belong to other handlers)
+    r"(?!(?:jobs?|roles?|positions?|openings?|vacancies|vacancy|listings?)\b)"
+    # Capture the role title — allows spaces, slashes, ampersands, hyphens, parens.
+    # Trailing optional group allows "in Dubai" / "jobs in UAE" suffixes.
+    r"(?P<role>[A-Za-z؀-ۿ][A-Za-z؀-ۿ\s/&()\-]{1,80}?)"
+    r"(?:\s+(?:jobs?|roles?|positions?|in\b|for\b).{0,50})?$",
+    re.IGNORECASE,
+)
+
+# Bare job-noun guard — "search jobs" / "find roles" must NOT be captured by
+# _SEARCH_CONFIRMATION_RE; they belong to profile-match or help handlers.
+_BARE_JOB_NOUN_RE = re.compile(
+    r"^(?:yes[,.]?\s+|yeah[,.]?\s+|ok[,.]?\s+|okay[,.]?\s+|sure[,.]?\s+|)?"
+    r"(?:search|find|look\s+for|show(?:\s+me)?)\s+"
+    r"(?:jobs?|roles?|positions?|openings?|vacancies|vacancy|listings?)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _extract_role_from_confirmation(text: str) -> Optional[str]:
+    """Extract a clean role title from a confirmation-prefixed search phrase.
+
+    Strips leading confirmation prefix ("Yes, ", "go ahead ", Arabic) and
+    search verb ("search", "find", "look for"), and trailing location/job-noun
+    suffixes ("in Dubai", "jobs in UAE"). Returns None for bare job-noun queries
+    or messages that do not match the confirmation pattern.
+    """
+    if _BARE_JOB_NOUN_RE.match(text.strip()):
+        return None
+    m = _SEARCH_CONFIRMATION_RE.match(text.strip())
+    if not m:
+        return None
+    role = m.group("role").strip().rstrip(",. ")
+    return role if len(role) >= 2 else None
+
+
 def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResult:
     """Classify a user message into a canonical intent.
 
@@ -1793,6 +1866,15 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         if role:
             role = _ARABIC_TO_ENGLISH_ROLE_MAP.get(role, role)
         return IntentResult("job_search_explicit", 0.85, "regex", extracted_role=role)
+
+    # ── 4b. Search-confirmation fast-path (Stage 1 fix) ──────────────────
+    # "Yes, search Software Engineer" / "go ahead find Technical Product Owner" /
+    # "Search Data Analyst" — confirmation-prefixed bare-title searches that have no
+    # job noun, so they fall through _JOB_SEARCH_EXPLICIT_RE above.
+    # Intercept here, before role_change, and promote to job_search_explicit.
+    _confirm_role = _extract_role_from_confirmation(text)
+    if _confirm_role:
+        return IntentResult("job_search_explicit", 0.88, "regex", extracted_role=_confirm_role)
 
     # Role change — only if no explicit job-search keyword present
     role_match = _ROLE_CHANGE_RE.match(text)
