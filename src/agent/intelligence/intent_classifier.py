@@ -676,6 +676,16 @@ _SAVE_JOB_RE = re.compile(
     re.IGNORECASE,
 )
 
+# "save it/Dubai to my profile/preferences/account" must route to profile_update,
+# not save_job. Checked BEFORE _SAVE_JOB_RE so these never reach the job-save path.
+_SAVE_TO_PROFILE_RE = re.compile(
+    r"\bsave\b.{0,80}\bto\s+my\s+(?:profile|preferences?|settings?|account)\b"
+    r"|\bsave\b.{0,60}\bas\s+my\s+preferred\b"
+    r"|احفظ\S*.{0,60}(?:في\s+ملف(?:ي|ه|ك)|في\s+تفضيلات(?:ي|ك)|في\s+حساب(?:ي|ك))"
+    r"|(?:خزّن|خزن|اضف|أضف)\S*.{0,60}(?:في\s+ملف(?:ي|ه|ك)|في\s+تفضيلات(?:ي|ك)|في\s+حساب(?:ي|ك))",
+    re.IGNORECASE | re.UNICODE,
+)
+
 # Ordinal save: "save the first/second/Nth/last job to my pipeline". Emits
 # save_job with an ordinal entity so the handler resolves the job from the recent
 # search results — mirrors the ordinal open-apply-link path.
@@ -1673,6 +1683,11 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
             _save_ord = _ARABIC_ORDINAL_TO_INT.get(_save_ord_ar.group("aord"))
             if _save_ord is not None:
                 return IntentResult("save_job", 0.95, "regex", entities={"ordinal": _save_ord})
+
+    # "save it/Dubai to my profile/preferences" — must not be mistaken for a
+    # job save. Check before _SAVE_JOB_RE so profile writes take priority.
+    if _SAVE_TO_PROFILE_RE.search(text):
+        return IntentResult("profile_update", 0.92, "regex")
 
     if _SAVE_JOB_RE.search(text):
         return IntentResult("save_job", 0.95, "regex")
