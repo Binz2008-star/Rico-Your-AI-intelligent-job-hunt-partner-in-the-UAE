@@ -15,6 +15,7 @@ import { AttachmentAnalysisCard } from "@/components/ui/rico/AttachmentAnalysisC
 import { ApiError, clearChatHistory, confirmCVProfile, executePermissionAction, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { buildAuthHref } from "@/lib/redirect";
+import { getJobFallbackActions, buildCopyText } from "@/lib/job-fallback";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
 import { translations, useTranslation, type TranslationKey } from "@/lib/translations";
 import Link from "next/link";
@@ -378,6 +379,98 @@ function SourceQualityBadge({ status }: { status: VerificationStatus }) {
     return null;
 }
 
+/**
+ * JobFallbackActions — safe, honestly-labelled actions for a job card whose
+ * direct apply/source link is unavailable or degraded (login_required,
+ * rate_limited, aggregator_untrusted, google_intermediary, or missing).
+ *
+ * Guarantees a card is never a dead-end without re-introducing BUG-03: none of
+ * these are presented as a verified "Apply" link. They are user-initiated
+ * searches (company site / Google / LinkedIn), a clipboard copy, and a save to
+ * the pipeline. Safety/source gating is untouched — we never surface the bad
+ * provider URL itself.
+ */
+function JobFallbackActions({ match, onAction }: { match: JobMatch; onAction: (prompt: string) => void }) {
+    const { language } = useLanguage();
+    const t = useTranslation(language);
+    const [copied, setCopied] = useState(false);
+
+    const actions = getJobFallbackActions({ title: match.title, company: match.company });
+
+    const labelFor: Record<string, string> = {
+        company_site: t("cmdFallbackCompanySite"),
+        linkedin: t("cmdFallbackLinkedIn"),
+        google: t("cmdFallbackGoogle"),
+        copy: copied ? t("cmdFallbackCopied") : t("cmdFallbackCopy"),
+        save: t("cmdFallbackSave"),
+    };
+
+    const handleCopy = async () => {
+        const text = buildCopyText(match.title ?? "", match.company ?? "");
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch {
+            // Clipboard unavailable (insecure context / denied) — fall back to a
+            // chat prompt so the action is never silently lost.
+            onAction(`Search for ${text}`);
+        }
+    };
+
+    const linkClass =
+        "rounded-md border border-border-soft bg-surface-glass px-2.5 py-1.5 text-[10px] text-text-secondary transition-colors hover:border-border-subtle hover:text-rico-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-1 focus-visible:ring-offset-surface";
+
+    return (
+        <div className="flex flex-col gap-1.5" data-testid="job-fallback-actions">
+            <span className="text-[9px] text-text-muted italic">{t("cmdNoDirectApply")}</span>
+            <div className="flex flex-wrap items-center gap-1.5">
+                {actions.map((a) => {
+                    if (a.kind === "link") {
+                        return (
+                            <a
+                                key={a.key}
+                                href={a.href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                data-testid={`job-fallback-${a.key}`}
+                                aria-label={`${labelFor[a.key]}: ${match.title} at ${match.company}`}
+                                className={linkClass}
+                            >
+                                {labelFor[a.key]}
+                            </a>
+                        );
+                    }
+                    if (a.kind === "copy") {
+                        return (
+                            <button
+                                key={a.key}
+                                type="button"
+                                onClick={handleCopy}
+                                data-testid={`job-fallback-${a.key}`}
+                                className={linkClass}
+                            >
+                                {labelFor[a.key]}
+                            </button>
+                        );
+                    }
+                    return (
+                        <button
+                            key={a.key}
+                            type="button"
+                            onClick={() => onAction(`Save ${match.title} at ${match.company} to my pipeline`)}
+                            data-testid={`job-fallback-${a.key}`}
+                            className="rounded-md border border-gold/30 bg-gold/10 px-2.5 py-1.5 text-[10px] font-medium text-gold transition-colors hover:bg-gold/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-1 focus-visible:ring-offset-surface"
+                        >
+                            {labelFor[a.key]}
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
 function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt: string) => void }) {
     const { language } = useLanguage();
     const t = useTranslation(language);
@@ -521,6 +614,13 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
                 )}
             </div>
 
+            {/* Safe fallback CTAs — when no clean direct link exists, the card
+                must never be a dead-end. Never presented as a verified Apply
+                link, so source/safety gating is preserved (BUG-03 stays fixed). */}
+            {!linkHref && (
+                <JobFallbackActions match={match} onAction={onAction} />
+            )}
+
             {/* Mark as Applied CTA — appears after the user opens the apply link */}
             {linkOpened && !markedApplied && (
                 <button
@@ -544,11 +644,9 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
             {vStatus && (
                 <div className="flex flex-wrap items-center gap-1.5">
                     <SourceQualityBadge status={vStatus} />
-                    {isBadPrimary && !altUrl && !sourceUrl && (
-                        <span className="text-[9px] text-text-muted italic">
-                            {t("cmdNoDirectApply")}
-                        </span>
-                    )}
+                    {/* "No direct apply" note is now rendered by JobFallbackActions
+                        (shown whenever there is no clean link), so it is omitted here
+                        to avoid duplicating the same message on the card. */}
                     {vStatus === "google_intermediary" && altUrl && (
                         <span className="text-[9px] text-text-muted italic">
                             {t("cmdGoogleJobsNote")}
