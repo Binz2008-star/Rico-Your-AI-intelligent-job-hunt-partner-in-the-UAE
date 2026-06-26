@@ -4477,9 +4477,19 @@ class RicoChatAPI:
         "الفجيرة", "أم القيوين", "العين",
     })
 
-    # Yes/no words that must not be stored as city names
+    # Yes/no/confirmation words that must not be stored as city names.
+    # A bare "تمام" (ok/fine) was being persisted as preferred_cities=["تمام"]
+    # and then rendered in every CV draft. Keep in sync with affirmative/ack
+    # vocabulary used elsewhere.
     _CITY_REJECT_WORDS: frozenset[str] = frozenset({
-        "yes", "no", "ok", "okay", "sure", "نعم", "لا", "اوكي", "موافق",
+        # English
+        "yes", "yeah", "yep", "yup", "ok", "okay", "sure", "fine", "great",
+        "good", "cool", "done", "alright", "please", "thanks", "thank you",
+        "go ahead", "no", "nope", "nah",
+        # Arabic
+        "نعم", "أيوه", "ايوه", "اوك", "اوكي", "اوكيه", "حسنا", "حسناً",
+        "تمام", "تمم", "اكيد", "أكيد", "طبعا", "طبعاً", "تفضل", "يلا",
+        "ماشي", "زين", "كويس", "شكرا", "شكراً", "موافق", "اه", "آه", "لا",
     })
 
     def _resolve_pending_field(
