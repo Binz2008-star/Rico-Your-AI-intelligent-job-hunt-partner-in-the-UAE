@@ -3037,6 +3037,7 @@ class RicoChatAPI:
         apply_url = _lr["apply_url"]
         alt_link = _lr["alt_link"]
         source_url = _lr["source_url"]
+        employer_url = _lr.get("employer_url", "")
         usable_link = _lr["usable_link"]
         link_unavailable = _lr["link_unavailable"]
         link_unavailable_reason = _lr["reason"]
@@ -3070,6 +3071,7 @@ class RicoChatAPI:
             "apply_url": apply_url,
             "source_url": source_url,
             "alt_link": alt_link,
+            "employer_url": employer_url,
             # Canonical link the Apply button should use. When empty, the card must
             # render the fallback CTA instead of a dead-end Apply button.
             "usable_link": usable_link,

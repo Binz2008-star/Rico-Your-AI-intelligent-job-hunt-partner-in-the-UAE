@@ -886,6 +886,9 @@ export interface JobMatch {
   apply_url?: string;
   source_url?: string;
   alt_link?: string;
+  /** Company's own website from the upstream provider (e.g. JSearch employer_website).
+   *  Never used as an apply link — only surfaced in the company-site fallback CTA. */
+  employer_url?: string;
   verification_status?:
     | "live"
     | "live_verified"

@@ -18,9 +18,10 @@ import { buildAuthHref } from "@/lib/redirect";
 import { getJobFallbackActions, buildCopyText } from "@/lib/job-fallback";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
 import { translations, useTranslation, type TranslationKey } from "@/lib/translations";
+import { getJobFallbackActions } from "@/lib/job-fallback";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 function ensureSessionId(sessionIdRef: React.MutableRefObject<string | null>): string {
     if (typeof window === "undefined") return sessionIdRef.current || "ssr-session";
@@ -330,6 +331,83 @@ function CvReadyOnboardingPanel({
 
 type VerificationStatus = JobMatch["verification_status"];
 
+function JobFallbackActions({ match, onAction }: { match: JobMatch; onAction: (prompt: string) => void }) {
+    const { language } = useLanguage();
+    const t = useTranslation(language);
+    const [copied, setCopied] = React.useState(false);
+    const actions = getJobFallbackActions({
+        title: match.title,
+        company: match.company,
+        employer_url: match.employer_url,
+    });
+
+    const labelFor = (key: string) => {
+        if (key === "company_website") return t("cmdFallbackCompanyWebsite");
+        if (key === "company_site") return t("cmdFallbackCompanySite");
+        if (key === "linkedin") return t("cmdFallbackLinkedIn");
+        if (key === "google") return t("cmdFallbackGoogle");
+        if (key === "copy") return copied ? t("cmdFallbackCopied") : t("cmdFallbackCopy");
+        if (key === "save") return t("cmdFallbackSave");
+        return key;
+    };
+
+    return (
+        <div className="flex flex-wrap gap-1.5 pt-0.5" data-testid="job-fallback-actions">
+            {actions.map((action) => {
+                if (action.kind === "link" && action.href) {
+                    return (
+                        <a
+                            key={action.key}
+                            href={action.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            data-testid={`job-fallback-${action.key}`}
+                            className="rounded border border-border-soft bg-surface-glass px-2 py-1 text-[9px] text-text-secondary transition-colors hover:border-border-subtle hover:text-rico-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gold/50"
+                        >
+                            {labelFor(action.key)}
+                        </a>
+                    );
+                }
+                if (action.kind === "copy") {
+                    const text = `${match.title || ""} — ${match.company || ""}`.trim().replace(/^—\s*/, "");
+                    return (
+                        <button
+                            key={action.key}
+                            type="button"
+                            data-testid="job-fallback-copy"
+                            onClick={() => {
+                                if (navigator.clipboard) {
+                                    navigator.clipboard.writeText(text).then(() => {
+                                        setCopied(true);
+                                        setTimeout(() => setCopied(false), 2000);
+                                    }).catch(() => undefined);
+                                }
+                            }}
+                            className="rounded border border-border-soft bg-surface-glass px-2 py-1 text-[9px] text-text-secondary transition-colors hover:border-border-subtle hover:text-rico-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gold/50"
+                        >
+                            {labelFor(action.key)}
+                        </button>
+                    );
+                }
+                if (action.kind === "save") {
+                    return (
+                        <button
+                            key={action.key}
+                            type="button"
+                            data-testid="job-fallback-save"
+                            onClick={() => onAction(`save ${match.title || "this role"} at ${match.company || "this company"}`)}
+                            className="rounded border border-border-soft bg-surface-glass px-2 py-1 text-[9px] text-text-secondary transition-colors hover:border-border-subtle hover:text-rico-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gold/50"
+                        >
+                            {labelFor(action.key)}
+                        </button>
+                    );
+                }
+                return null;
+            })}
+        </div>
+    );
+}
+
 function SourceQualityBadge({ status }: { status: VerificationStatus }) {
     const { language } = useLanguage();
     const t = useTranslation(language);
@@ -599,6 +677,8 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
                         {t("cmdLinkUnavailable")}
                     </span>
                 )}
+                {/* Fallback actions — shown only when there is no usable primary link */}
+                {!linkHref && <JobFallbackActions match={match} onAction={onAction} />}
                 {/* Secondary source link when apply and source both exist and differ */}
                 {showSource && (
                     <a

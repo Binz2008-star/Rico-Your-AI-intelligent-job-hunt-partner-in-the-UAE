@@ -24,6 +24,14 @@ from typing import Any, Dict
 # must fall back to a CTA instead of linking there.
 _UNUSABLE_STATUSES = frozenset({"aggregator_untrusted", "google_intermediary"})
 
+# Statuses that must never be overridden by JSearch's apply_is_direct signal.
+# Aggregators, rate-limited walls, and login gates stay as-is regardless of
+# what the upstream API claims.
+_DIRECT_UPGRADE_BLOCKED = frozenset({
+    "aggregator_untrusted", "google_intermediary",
+    "login_required", "rate_limited",
+})
+
 # Ordered candidate fields for each role, newest provider names first. The legacy
 # single ``link`` field is the lowest-priority apply candidate so older callers
 # that only set ``link`` still resolve.
@@ -72,6 +80,7 @@ def resolve_job_link(job: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(job, dict):
         return {
             "usable_link": "", "apply_url": "", "alt_link": "", "source_url": "",
+            "employer_url": "",
             "verification_status": "lead_needs_verification",
             "link_unavailable": True, "reason": "no_link",
         }
@@ -79,6 +88,8 @@ def resolve_job_link(job: Dict[str, Any]) -> Dict[str, Any]:
     apply_url = _first_url(job, _APPLY_FIELDS)
     alt_link = _first_url(job, _ALT_FIELDS)
     source_url = _first_url(job, _SOURCE_FIELDS)
+    employer_url = str(job.get("employer_url") or "").strip()
+    apply_is_direct = bool(job.get("apply_is_direct"))
     explicit_status = str(job.get("verification_status") or "").strip().lower()
 
     # source_url falls back to a (non-empty) alt_link or apply_url; Google
@@ -107,6 +118,14 @@ def resolve_job_link(job: Dict[str, Any]) -> Dict[str, Any]:
         verification_status = "google_intermediary"
     else:
         verification_status = classify_url(apply_url or source_url)
+
+    # JSearch's apply_is_direct=True means the link goes straight to an employer
+    # ATS page. Upgrade display status to live_verified for unknown domains, but
+    # never override a known-bad classification (aggregator, login wall, etc.).
+    if (apply_is_direct and apply_url and _is_http(apply_url)
+            and not is_google_intermediary(apply_url)
+            and verification_status not in _DIRECT_UPGRADE_BLOCKED):
+        verification_status = "live_verified"
 
     # Choose the single usable link in priority order: direct apply → source.
     usable_link = ""
@@ -144,6 +163,7 @@ def resolve_job_link(job: Dict[str, Any]) -> Dict[str, Any]:
         "apply_url": apply_url,
         "alt_link": alt_link,
         "source_url": source_url,
+        "employer_url": employer_url,
         "verification_status": verification_status,
         "link_unavailable": link_unavailable,
         "reason": reason,
