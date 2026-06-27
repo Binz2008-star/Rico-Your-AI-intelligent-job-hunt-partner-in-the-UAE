@@ -114,7 +114,10 @@ _EXPLAIN_PATTERNS = re.compile(
 _PREFS_PATTERNS = re.compile(
     r"\b(update|change|set|modify|adjust)\b.{0,40}"
     r"\b(salary|city|location|preference|role|title|industry|experience|notice|telegram)\b"
-    r"|\b(i (want|prefer|need|am looking for)|my (preference|target|goal) is)\b",
+    r"|\b(i (want|prefer|need|am looking for)|my (preference|target|goal) is)\b"
+    # Declarative city statements: "My favorite city is Dubai", "I live in Dubai"
+    r"|\bmy\s+(?:favorite|preferred|home|base|target)?\s*city\s+is\b"
+    r"|\bi\s+(?:live|work|am\s+based|reside)\s+in\b",
     re.IGNORECASE,
 )
 _INTERVIEW_PATTERNS = re.compile(
@@ -348,7 +351,10 @@ def _build_tool_args(
     elif intent == "update_preferences":
         prefs: Dict[str, Any] = {}
         if entities.get("city"):
-            prefs["preferred_city"] = entities["city"]
+            # preferred_cities is the canonical DB field (List[str]); the old
+            # preferred_city key (singular string) was silently dropped by
+            # upsert_profile's field-whitelist filter (BUG-08).
+            prefs["preferred_cities"] = [entities["city"]]
         if entities.get("salary_raw"):
             prefs["salary_hint"] = entities["salary_raw"]
         if entities.get("job_title"):
