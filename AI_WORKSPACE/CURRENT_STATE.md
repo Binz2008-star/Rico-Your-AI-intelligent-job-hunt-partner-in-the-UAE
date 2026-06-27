@@ -1,11 +1,12 @@
 # Current State
 
-_Last updated: 2026-06-26 (#755/#721 link-quality + #744 document-action routing both merged & deployed; #742 no longer parked; next is #712 migration drift runbook; do not start #746; do not delete branches)_
+_Last updated: 2026-06-27 (Rico Website Hard QA BUG-01 through BUG-05 merged to main `007246b4`; BUG-08 PR #763 rebased to focused 3-file diff; PR #756 runbook reviewed; production baseline unchanged — BUG fixes code-merged only, not deploy-verified)_
 
 ## Production baseline
 
-- **Repository main HEAD / production backend SHA:** `504c75573fa760471666fed8447a26448ddffd20` (#755 — employer_url + apply_is_direct surfaced from JSearch; company-site fallback CTA uses real employer URL when available).
-- **Production deploy verification:** `Deploy Render Backend` run #80 succeeded for `6113123` (the gated workflow blocks until `/version.commit` matches the pushed SHA **and** `/health` 200, so success ⇒ both verified). Prior deploys verified in sequence: #747 `0d28a08`, #741 `7e0b9ec`, #739 `f202a86`, #736 `a7e294b`, #738 `115adde`, #737 `e214178`.
+- **Repository main HEAD (code-merged, NOT deploy-verified for BUG fixes):** `007246b42285b001563ba5f220d69b89a791018f` (BUG-05 fix, #762). The QA BUG-01 through BUG-05 commits are in main but have NOT been confirmed deployed to `rico-job-automation-api.onrender.com`. Prior main advances: BUG-04 `4918f55` (#761), BUG-03 `b6a1196` (#760), BUG-02 `3a9221a`, BUG-01 `325aa0e`, #755 `504c755`.
+- **Last deploy-verified SHA:** `61131231165093254ba750be93e9ea367195ac41` (#749 — pipeline save/count correctness). All commits after #749 are code-merged to main but deploy verification has not been confirmed from this sandbox.
+- **Production deploy verification (last confirmed):** `Deploy Render Backend` run #80 succeeded for `6113123` (the gated workflow blocks until `/version.commit` matches the pushed SHA **and** `/health` 200, so success ⇒ both verified). Prior deploys verified in sequence: #747 `0d28a08`, #741 `7e0b9ec`, #739 `f202a86`, #736 `a7e294b`, #738 `115adde`, #737 `e214178`.
 - **Pending owner-side smoke:** the authenticated save→count flow (and the #741 screenshot follow-up) must be confirmed by the owner on `ricohunt.com`; the sandbox cannot reach authenticated `onrender.com` (agent proxy 403), so live smoke is owner-run only.
 - **Migration 032 (`uploaded_document_context`):** auto-applied on startup via the app.py lifespan runner (idempotent `CREATE TABLE/INDEX IF NOT EXISTS`), targeting the exact branch the production `DATABASE_URL` uses. Direct confirmation of the `migration_ok` log line / table existence needs Render-log or Neon access (unavailable in-session) — the owner re-test is the end-to-end proof.
 - **Image reading reliability:** `OCRSPACE_API_KEY` set on Render as a dependable free OCR backstop behind the (rate-limited) free vision model (OpenRouter/HF).
@@ -142,13 +143,38 @@ No provider keys are hardcoded, committed, or logged.
 - **#749 (save/count, live):** the chat ordinal save persists to the counted `rico_job_recommendations` (so the application/pipeline count actually increments), idempotent on a trusted save identity (`source_job_id`/`persisted_job_id`, else a `title|company` hash — never the bare `job_id`). A recent_context job is still saved, as a **lead**, with no apply URL persisted and no verified-link claim. Save failures return user-safe messages. No `pipeline_runs` (migration 005 / #711) dependency. Helper: `src/services/job_save.py`; tests: `tests/test_pipeline_save_count_correctness.py`.
 - **Pending:** owner-side authenticated smoke on `ricohunt.com` — search a role, "save the second job to my pipeline" → count +1, repeat → count unchanged. Sandbox cannot reach authenticated production.
 
-## Forward plan (prioritized, 2026-06-26)
+## Rico Website Hard QA — BUG-01 through BUG-08 (2026-06-27)
 
-1. **Next: #712 migration drift runbook** — document and resolve the outstanding Neon migration gaps (`005 pipeline_runs`, `011 idx_rico_recommendations_user_job_unique`). Do not start #746 yet.
-2. **Owner smoke:** confirm #749 save→count on production (authenticated). Sandbox cannot reach production.
-3. **Then: Finding 3** — wire read-screenshot → "Save as target job" / "Score against my CV" end-to-end (the "link A↔B without buttons" ask).
-4. **Cleanup pass:** close stale PRs #722/#713, salvage #697; Finding 5 (dead `CV_THRESHOLD`, stale `CLAUDE.md` `/chat` note). Do not delete branches yet.
-5. **Backlog:** Finding 4 (onboarding/upload honor `classified`), #742 (target-role evidence guard), older epics.
+Fixing bugs from the "Rico Website Hard QA Report". Each PR is one bug category, focused diff only. No SQL, no schema migrations, no provider API calls in tests.
+
+| BUG | PR | Merge SHA | Status | Description |
+|---|---|---:|---|---|
+| **BUG-01** | #757 | `325aa0e` | ✅ merged | Bust sidebar cache after chat save; correct `/flow` destination in save copy |
+| **BUG-02** | #758 | `3a9221a` | ✅ merged | Sanitize `preferred_cities` at profile read/write boundary; strip corrupted AI-response values stored as city names |
+| **BUG-03** | #760 | `b6a1196` | ✅ merged | Sidebar nav routing (href not chatPrompt), icon rendering, pipeline counter |
+| **BUG-04** | #761 | `4918f55` | ✅ merged | Redirect `/pipeline` → `/flow` (old route returned 404) |
+| **BUG-05** | #762 | `007246b` | ✅ merged | "Yes, search {role}" quick-reply button caused infinite confirmation loop; interceptor added before role classification in `_handle_active_user_inner` |
+| **BUG-06** | — | — | ⏸ not started | — |
+| **BUG-07** | — | — | ⏸ not started | — |
+| **BUG-08** | #763 | — | 🔄 open / CI pending | "My favorite city is Dubai" silently ignored (3 stacked bugs: intent regex, router regex, `preferred_city` vs `preferred_cities`). PR rebased to focused 3-file diff after audit found prior branch contamination (would have reverted BUG-02 if merged as-is). |
+| **BUG-09 … BUG-18** | — | — | ⏸ not started | Contradictory filters, race condition, duplicate buttons, Arabic search, role drift, save idempotency, JSearch name leak, CSS z-index, sidebar widgets, ?q= nav |
+
+> ⚠️ **BUG-01 through BUG-05 are code-merged to main but NOT deploy-verified.** Production backend is still running the last confirmed deploy (`6113123` / #749). Owner must trigger a Render deploy and confirm `/health` + `/version` before these fixes are considered live.
+
+## PR #756 — Migration drift runbook (docs-only)
+
+- **Status:** Open draft — base is `a3cbfc4` (pre-BUG-fixes, behind main). Content: 606-line `docs/runbooks/production-drift-005-011.md`.
+- **Assessment (reviewed 2026-06-27):** Safe to merge. Docs-only, zero production impact. Rollback = delete the file. Content is thorough and correct: 10 read-only prechecks (§2), step-by-step split execution (§3 Step A: 011 indexes, Step B: 005 pipeline_runs), rollback/recovery (§4), verification queries (§5), 6 approval gates G1–G6 (§6), copy-paste production checklist (§7). Collision risks (ENUM non-idempotency, trigger existence, settings-table DDL divergence) are all documented and gated. The out-of-date base SHA does not affect a docs-only PR — content itself is current and correct.
+- **Recommendation:** Mark ready and merge. No SQL is executed. No schema changes applied. After merging, owner executes § 3–7 manually with G1–G6 sign-off before any production SQL.
+
+## Forward plan (prioritized, 2026-06-27)
+
+1. **Immediate:** merge PR #756 migration drift runbook (docs-only, safe).
+2. **Immediate:** owner triggers Render deploy for BUG-01 through BUG-05 + #755; confirm `/health` + `/version` after BUG-05 (`007246b`).
+3. **Next BUG PR:** PR #763 (BUG-08) — review CI results, merge when green (diff is now confirmed focused: 3 files only).
+4. **Continue QA:** BUG-06 through BUG-18 in sequence (after #763 merged).
+5. **Runbook execution (owner-only):** after PR #756 merged and G1–G6 signed off, owner applies migrations 011 (Step A) then 005 (Step B) via Neon console.
+6. **Backlog:** Finding 3 (link A↔B), Finding 4 (onboarding classified), #742, older epics.
 
 ## Completed since last update (2026-06-26)
 
@@ -159,5 +185,5 @@ No provider keys are hardcoded, committed, or logged.
 ## Recommended next command
 
 ```text
-Rico mode. Production is 504c755 (#755). #744 (document-action routing) and #755 (#721 link-quality) are merged. Next step is the #712 migration drift runbook — document and safely resolve the outstanding Neon migration gaps (005 pipeline_runs, 011 unique index). Do NOT start #746. Do NOT delete branches. Backend-focused, mocks-only tests.
+Rico mode. Main HEAD is 007246b (BUG-05). Last deploy-verified SHA is 6113123 (#749) — owner must trigger Render deploy for the BUG-01 through BUG-05 changes. PR #763 (BUG-08) is open, CI pending, focused 3-file diff after rebase — merge when CI green. PR #756 migration drift runbook is docs-only and safe to merge. Continue QA with BUG-09 after #763 lands. Do NOT start #746. Do NOT delete branches.
 ```
