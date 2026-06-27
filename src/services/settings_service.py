@@ -49,9 +49,6 @@ def update_settings(data: Dict[str, Any], user_id: Optional[str] = None) -> Dict
     if is_db_available():
         settings_repo.upsert(clean, user_id=user_id)
 
-    if "exclude_keywords" in clean:
-        os.environ["EXCLUDE_KEYWORDS"] = ",".join(str(k) for k in clean["exclude_keywords"])
-
     return get_settings(user_id=user_id)
 
 

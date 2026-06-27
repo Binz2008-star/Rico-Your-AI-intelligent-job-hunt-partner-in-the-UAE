@@ -1,10 +1,10 @@
 # Current State
 
-_Last updated: 2026-06-27 (Rico Website Hard QA BUG-01 through BUG-05 merged to main `007246b4`; BUG-08 PR #763 rebased to focused 3-file diff; PR #756 runbook reviewed; production baseline unchanged — BUG fixes code-merged only, not deploy-verified)_
+_Last updated: 2026-06-27 (Rico Website Hard QA BUG-01 through BUG-08 + PR #756 all merged to main `2ef4107`; BUG-06 and BUG-07 blocked — no description found; BUG-09 in progress; production baseline unchanged — BUG fixes code-merged only, not deploy-verified)_
 
 ## Production baseline
 
-- **Repository main HEAD (code-merged, NOT deploy-verified for BUG fixes):** `007246b42285b001563ba5f220d69b89a791018f` (BUG-05 fix, #762). The QA BUG-01 through BUG-05 commits are in main but have NOT been confirmed deployed to `rico-job-automation-api.onrender.com`. Prior main advances: BUG-04 `4918f55` (#761), BUG-03 `b6a1196` (#760), BUG-02 `3a9221a`, BUG-01 `325aa0e`, #755 `504c755`.
+- **Repository main HEAD (code-merged, NOT deploy-verified for BUG fixes):** `2ef4107` (PR #756 migration runbook, docs-only). Merge train: BUG-08 `62ff5ad` (#763), BUG-05 `007246b` (#762), BUG-04 `4918f55` (#761), BUG-03 `b6a1196` (#760), BUG-02 `3a9221a` (#759), BUG-01 `325aa0e` (#757), #755 `504c755`. None of these are confirmed deployed.
 - **Last deploy-verified SHA:** `61131231165093254ba750be93e9ea367195ac41` (#749 — pipeline save/count correctness). All commits after #749 are code-merged to main but deploy verification has not been confirmed from this sandbox.
 - **Production deploy verification (last confirmed):** `Deploy Render Backend` run #80 succeeded for `6113123` (the gated workflow blocks until `/version.commit` matches the pushed SHA **and** `/health` 200, so success ⇒ both verified). Prior deploys verified in sequence: #747 `0d28a08`, #741 `7e0b9ec`, #739 `f202a86`, #736 `a7e294b`, #738 `115adde`, #737 `e214178`.
 - **Pending owner-side smoke:** the authenticated save→count flow (and the #741 screenshot follow-up) must be confirmed by the owner on `ricohunt.com`; the sandbox cannot reach authenticated `onrender.com` (agent proxy 403), so live smoke is owner-run only.
@@ -154,27 +154,36 @@ Fixing bugs from the "Rico Website Hard QA Report". Each PR is one bug category,
 | **BUG-03** | #760 | `b6a1196` | ✅ merged | Sidebar nav routing (href not chatPrompt), icon rendering, pipeline counter |
 | **BUG-04** | #761 | `4918f55` | ✅ merged | Redirect `/pipeline` → `/flow` (old route returned 404) |
 | **BUG-05** | #762 | `007246b` | ✅ merged | "Yes, search {role}" quick-reply button caused infinite confirmation loop; interceptor added before role classification in `_handle_active_user_inner` |
-| **BUG-06** | — | — | ⏸ not started | — |
-| **BUG-07** | — | — | ⏸ not started | — |
-| **BUG-08** | #763 | — | 🔄 open / CI pending | "My favorite city is Dubai" silently ignored (3 stacked bugs: intent regex, router regex, `preferred_city` vs `preferred_cities`). PR rebased to focused 3-file diff after audit found prior branch contamination (would have reverted BUG-02 if merged as-is). |
-| **BUG-09 … BUG-18** | — | — | ⏸ not started | Contradictory filters, race condition, duplicate buttons, Arabic search, role drift, save idempotency, JSearch name leak, CSS z-index, sidebar widgets, ?q= nav |
+| **BUG-06** | — | — | 🚫 blocked — no description | Description not found in repo, GitHub issues, or any workspace doc. Owner must supply original QA report entry. |
+| **BUG-07** | — | — | 🚫 blocked — no description | Description not found in repo, GitHub issues, or any workspace doc. Owner must supply original QA report entry. |
+| **BUG-08** | #763 | `62ff5ad` | ✅ merged | "My favorite city is Dubai" silently ignored (3 stacked bugs: intent regex, router regex, `preferred_city` vs `preferred_cities`). |
+| **BUG-09** | — | — | 🔄 in progress | Contradictory keyword filters: excluded keywords bleed across sessions / are not cleared when user removes them. |
+| **BUG-10** | — | — | ⏸ not started | Rapid double-send drops a message (race condition in frontend submit guard). |
+| **BUG-11** | — | — | ⏸ not started | Duplicate quick-reply buttons rendered on some responses. |
+| **BUG-12** | — | — | ⏸ not started | Search results body ignores Arabic locale. |
+| **BUG-13** | — | — | ⏸ not started | Profile/role drift across multiple uploaded CVs — wrong role shown after re-upload. |
+| **BUG-14** | — | — | ⏸ not started | No save idempotency on pipeline: second "save this job" shows success but increments counter. |
+| **BUG-15** | — | — | ⏸ not started | Internal API name leaked to user-facing UI ("JSearch API" visible in responses). |
+| **BUG-16** | — | — | ⏸ not started | "Waking up" banner overlaps chat content (CSS z-index). |
+| **BUG-17** | — | — | ⏸ not started | Sidebar widgets disappear on `/queue` and `/upload` pages. |
+| **BUG-18** | — | — | ⏸ not started | `?q=` query-string navigation mutates / resets chat thread. |
+| **BUG-19** | — | — | ⏸ not started | Job-confirmation screenshots not classified as application evidence → "Unrecognized Document"; save falls back to wrong recent-context job. Two sub-bugs: (A) no application-confirmation image classifier, (B) job-extraction on save ignores uploaded image context. |
 
-> ⚠️ **BUG-01 through BUG-05 are code-merged to main but NOT deploy-verified.** Production backend is still running the last confirmed deploy (`6113123` / #749). Owner must trigger a Render deploy and confirm `/health` + `/version` before these fixes are considered live.
+> ⚠️ **BUG-01 through BUG-08 are code-merged to main but NOT deploy-verified.** Production backend is still running the last confirmed deploy (`6113123` / #749). Owner must trigger a Render deploy and confirm `/health` + `/version` before these fixes are considered live.
 
 ## PR #756 — Migration drift runbook (docs-only)
 
-- **Status:** Open draft — base is `a3cbfc4` (pre-BUG-fixes, behind main). Content: 606-line `docs/runbooks/production-drift-005-011.md`.
-- **Assessment (reviewed 2026-06-27):** Safe to merge. Docs-only, zero production impact. Rollback = delete the file. Content is thorough and correct: 10 read-only prechecks (§2), step-by-step split execution (§3 Step A: 011 indexes, Step B: 005 pipeline_runs), rollback/recovery (§4), verification queries (§5), 6 approval gates G1–G6 (§6), copy-paste production checklist (§7). Collision risks (ENUM non-idempotency, trigger existence, settings-table DDL divergence) are all documented and gated. The out-of-date base SHA does not affect a docs-only PR — content itself is current and correct.
-- **Recommendation:** Mark ready and merge. No SQL is executed. No schema changes applied. After merging, owner executes § 3–7 manually with G1–G6 sign-off before any production SQL.
+- **Status:** ✅ Merged at `2ef4107` (2026-06-27). Content: 606-line `docs/runbooks/production-drift-005-011.md`.
+- **Rollback execution (owner-only):** after G1–G6 signed off, owner applies migrations 011 (Step A) then 005 (Step B) via Neon console.
 
 ## Forward plan (prioritized, 2026-06-27)
 
-1. **Immediate:** merge PR #756 migration drift runbook (docs-only, safe).
-2. **Immediate:** owner triggers Render deploy for BUG-01 through BUG-05 + #755; confirm `/health` + `/version` after BUG-05 (`007246b`).
-3. **Next BUG PR:** PR #763 (BUG-08) — review CI results, merge when green (diff is now confirmed focused: 3 files only).
-4. **Continue QA:** BUG-06 through BUG-18 in sequence (after #763 merged).
-5. **Runbook execution (owner-only):** after PR #756 merged and G1–G6 signed off, owner applies migrations 011 (Step A) then 005 (Step B) via Neon console.
-6. **Backlog:** Finding 3 (link A↔B), Finding 4 (onboarding classified), #742, older epics.
+1. **Immediate:** owner triggers Render deploy for BUG-01 through BUG-08 + #755 + #756; confirm `/health` + `/version` after `2ef4107`.
+2. **Active:** BUG-09 — fix contradictory keyword filters (in progress this session).
+3. **Next:** BUG-10 through BUG-18 in sequence; BUG-06 and BUG-07 blocked until owner provides original QA descriptions.
+4. **BUG-19:** job-confirmation screenshot classifier + save context fix (after BUG-09..18).
+5. **Backlog:** Finding 3 (link A↔B), Finding 4 (onboarding classified), #742, older epics.
+6. **Runbook execution (owner-only):** G1–G6 sign-off required before any Neon SQL.
 
 ## Completed since last update (2026-06-26)
 
