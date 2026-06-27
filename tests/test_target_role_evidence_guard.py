@@ -123,3 +123,74 @@ def test_real_suggester_environmental_cv_does_not_push_developer():
     role, candidates, status = _resolve(api, profile)
     assert status == "stale"
     assert role == "Developer"
+
+
+# ── _handle_delegated_decision — #732 career-steering gap ────────────────────
+# When user says "I don't know, advise me" Rico must NOT auto-search an
+# unevidenced coding role. The delegated-decision handler must check alignment
+# via _resolve_profile_search_role before asserting the saved role.
+
+def test_delegated_decision_stale_developer_does_not_auto_search():
+    """CV present + Developer saved but no coding evidence → role suggestions,
+    NOT job_search_explicit (#732 career-steering gap)."""
+    api = _api()
+    profile = {
+        "target_roles": ["Developer"],
+        "cv_status": "parsed",
+        "cv_filename": "cv.pdf",
+        "skills": ["NEBOSH", "ISO 14001", "environmental auditing"],
+    }
+    with patch.object(api, "_generate_role_suggestions", return_value=[]):
+        result = api._handle_delegated_decision("user1", profile, "ارجوك انصحني انا لا اعلم")
+    assert result["type"] == "profile_role_suggestions"
+    assert result.get("next_action") != "search_jobs"
+
+
+def test_delegated_decision_evidenced_developer_proceeds_to_search():
+    """CV present + Developer saved + coding evidence → job_search_explicit (no regression)."""
+    api = _api()
+    profile = {
+        "target_roles": ["Developer"],
+        "cv_status": "parsed",
+        "cv_filename": "cv.pdf",
+        "skills": ["Python", "Django", "REST APIs"],
+    }
+    coding_sugg = [{"label": "Software Developer"}, {"label": "Backend Engineer"}]
+    with patch.object(api, "_generate_role_suggestions", return_value=coding_sugg):
+        result = api._handle_delegated_decision("user1", profile, "you decide for me")
+    assert result["type"] == "job_search_explicit"
+    assert result["chosen_role"] == "Developer"
+    assert result["next_action"] == "search_jobs"
+
+
+def test_delegated_decision_no_cv_uses_saved_target_role():
+    """No CV → alignment cannot be assessed; saved role used as-is (no regression)."""
+    api = _api()
+    profile = {"target_roles": ["Developer"]}
+    result = api._handle_delegated_decision("user1", profile, "decide for me")
+    assert result["type"] == "job_search_explicit"
+    assert result["chosen_role"] == "Developer"
+
+
+def test_delegated_decision_no_target_roles_returns_clarification():
+    """No target roles, no CV → clarification asking for context (no regression)."""
+    api = _api()
+    result = api._handle_delegated_decision("user1", {}, "I don't know what to do")
+    assert result["type"] == "clarification"
+    assert result.get("next_action") == "need_profile_for_delegation"
+
+
+def test_delegated_decision_stale_non_coding_role_is_lenient():
+    """Non-coding stale role does NOT trigger suggestions — lenient fallback (#732 guard
+    is coding-specific; non-coding roles like Marketing Manager keep the search path)."""
+    api = _api()
+    profile = {
+        "target_roles": ["Marketing Manager"],
+        "cv_status": "parsed",
+        "cv_filename": "cv.pdf",
+        "skills": ["campaign management", "brand strategy"],
+    }
+    with patch.object(api, "_generate_role_suggestions", return_value=[]):
+        result = api._handle_delegated_decision("user1", profile, "choose for me")
+    assert result["type"] == "job_search_explicit"
+    assert result["chosen_role"] == "Marketing Manager"
