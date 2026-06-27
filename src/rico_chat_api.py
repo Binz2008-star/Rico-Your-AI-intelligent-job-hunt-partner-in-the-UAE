@@ -9458,12 +9458,12 @@ class RicoChatAPI:
 
         if persisted:
             if decision.verified:
-                msg = f"Saved {_label} to your pipeline. You'll find it in your tracked jobs."
+                msg = f"Saved {_label} to your pipeline. [View your pipeline →](/flow)"
             else:
                 msg = (
                     f"Saved {_label} to your pipeline as a lead. I don't have a verified apply "
                     "link for it yet — open the role on the source site to confirm it's live "
-                    "before applying. You'll find it in your tracked jobs."
+                    "before applying. [View your pipeline →](/flow)"
                 )
             response = {
                 "type": "save_job", "intent": "save_job", "message": msg,
