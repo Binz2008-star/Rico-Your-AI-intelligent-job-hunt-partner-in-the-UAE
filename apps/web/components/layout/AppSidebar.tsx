@@ -198,10 +198,13 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
                             </h3>
                             <ul className="space-y-0.5">
                                 {section.items.map((item) => {
-                                    const navHref = item.chatPrompt
+                                    // href is the source of truth for navigation.
+                                    // chatPrompt only prefills when already on /command — never overrides a real destination.
+                                    const isOnCommand = pathname === "/command";
+                                    const navHref = (item.chatPrompt && isOnCommand)
                                         ? `/command?q=${encodeURIComponent(item.chatPrompt)}`
                                         : item.href;
-                                    const isActive = pathname === item.href || (item.chatPrompt ? pathname === "/command" : false);
+                                    const isActive = pathname === item.href;
                                     return (
                                         <li key={item.href}>
                                             <Tooltip>
