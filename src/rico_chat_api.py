@@ -11272,6 +11272,11 @@ class RicoChatAPI:
         arabic = self._is_arabic_text(message)
 
         if has_cv and target_roles:
+            _, _, status = self._resolve_profile_search_role(profile)
+            if status == "stale":
+                # Saved role is not CV-aligned — surface evidence-based options
+                # instead of asserting it (#732: no unevidenced coding role assertion)
+                return self._handle_profile_role_suggestions(profile, message)
             chosen_role = target_roles[0]
             return {
                 "type": "job_search_explicit",
