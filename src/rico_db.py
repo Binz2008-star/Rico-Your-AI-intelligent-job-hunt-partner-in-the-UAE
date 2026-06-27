@@ -919,6 +919,21 @@ class RicoDB:
                 column, user_id, job_key,
             )
 
+    def delete_saved_jobs(self, user_id: str) -> int:
+        """Delete all rows with status='saved' for the user.
+
+        Application history (status='applied', 'interview', etc.) is deliberately
+        excluded — those records must never be deleted through the chat interface.
+        Returns the number of rows deleted.
+        """
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM rico_job_recommendations WHERE user_id = %s AND status = 'saved'",
+                    (user_id,),
+                )
+                return cur.rowcount or 0
+
     def mark_followups_due(self, interval_days: int = 7) -> int:
         """Transition aged ``applied`` jobs to ``follow_up_due`` (Issue #355).
 

@@ -160,32 +160,40 @@ class TestInterceptUnsupportedDeleteMutation(unittest.TestCase):
         # Suppress _is_arabic_text — tested separately per case
         self.api._is_arabic_text = MagicMock(return_value=False)
 
-    def test_english_delete_returns_capability_limitation(self):
+    def test_english_delete_saved_jobs_asks_confirmation(self):
+        # P2-B: saved-jobs delete → 2-turn confirmation (no longer capability_limitation)
         result = self.api._intercept_unsupported_delete_mutation("user1", "delete all saved jobs")
         self.assertIsNotNone(result)
-        self.assertEqual(result["type"], "capability_limitation")
-        self.assertIn("/flow", result["message"])
-        self.assertIn("/applications", result["message"])
+        self.assertEqual(result["type"], "delete_saved_jobs_confirm")
+        self.assertEqual(result["next_action"], "await_confirmation")
 
-    def test_english_clear_pipeline_returns_capability_limitation(self):
+    def test_english_clear_pipeline_asks_confirmation(self):
+        # P2-B: "clear my pipeline" targets the saved-jobs list → confirmation
         result = self.api._intercept_unsupported_delete_mutation("user1", "clear my pipeline")
         self.assertIsNotNone(result)
-        self.assertEqual(result["type"], "capability_limitation")
+        self.assertEqual(result["type"], "delete_saved_jobs_confirm")
 
     def test_english_response_never_contains_success_phrase(self):
+        # The confirmation message must not contain any success phrase either
         for phrase in ("deleted successfully", "removed successfully", "تم الحذف", "تم الحفظ"):
             result = self.api._intercept_unsupported_delete_mutation("user1", "delete all saved jobs")
             self.assertNotIn(phrase, result["message"])
 
-    def test_arabic_delete_returns_arabic_response(self):
+    def test_arabic_delete_saved_jobs_asks_confirmation(self):
         self.api._is_arabic_text = MagicMock(return_value=True)
         result = self.api._intercept_unsupported_delete_mutation(
             "user1", "امسح جميع الوظائف المحفوظة"
         )
         self.assertIsNotNone(result)
+        # P2-B: saved-jobs delete → confirmation, not capability_limitation
+        self.assertEqual(result["type"], "delete_saved_jobs_confirm")
+
+    def test_english_delete_applications_is_blocked(self):
+        # Application history is permanently protected — still capability_limitation
+        result = self.api._intercept_unsupported_delete_mutation("user1", "delete my applications")
+        self.assertIsNotNone(result)
         self.assertEqual(result["type"], "capability_limitation")
-        # Arabic response must contain Arabic navigation hint
-        self.assertIn("/flow", result["message"])
+        self.assertEqual(result["intent"], "protected_application_history")
 
     def test_unrelated_message_returns_none(self):
         result = self.api._intercept_unsupported_delete_mutation("user1", "find jobs in Dubai")

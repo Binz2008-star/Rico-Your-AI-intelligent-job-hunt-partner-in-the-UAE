@@ -452,11 +452,41 @@ _SALARY_READBACK_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Unsupported database delete via chat: "delete all saved jobs", "clear my applications".
-# Used by _intercept_unsupported_delete_mutation to prevent the AI from inventing a false
-# success for operations that have no backend implementation through the chat interface.
-# Intentionally does NOT match preference-removal patterns ("remove Abu Dhabi from my cities",
-# "remove Python from my skills") which are handled by dedicated profile/preference handlers.
+# Delete saved jobs via chat: "delete all saved jobs", "clear my saved jobs".
+# These CAN be executed after a 2-turn confirmation (P2-B).
+# Intentionally does NOT match preference-removal patterns or application-history patterns.
+_DELETE_SAVED_JOBS_RE = re.compile(
+    r"""
+    (?:
+        # English: destructive verb targeting the saved-jobs list only
+          \b(?:delete|erase|wipe|purge|remove|clear)\b.{0,60}?\b(?:saved\s+jobs?|all\s+(?:my\s+)?(?:saved\s+)?jobs?|my\s+(?:saved\s+jobs?|job\s+list|pipeline))\b
+        |
+        # Arabic: احذف/امسح + saved-jobs noun only (not applications)
+        \b(?:امسح|احذف|امحِ|أزل)\b[^.!?،؟]{0,80}(?:الوظائف(?:\s+المحفوظة)?|وظائف(?:\s+المحفوظة)?|المحفوظات|قائمة\s+الوظائف)
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# Application-history delete via chat: these CANNOT be executed — application records
+# are protected audit history. Rico redirects to the Applications page.
+_DELETE_APPLICATIONS_RE = re.compile(
+    r"""
+    (?:
+        # English: delete/clear/remove targeting application records
+          \b(?:delete|erase|wipe|purge)\b.{0,60}?\b(?:applications?|my\s+records?|my\s+applied)\b
+        | \bremove\b.{0,50}?\b(?:my\s+applications?|all\s+applications?)\b
+        | \bclear\b.{0,50}?\b(?:my\s+applications?|all\s+applications?)\b
+        |
+        # Arabic: احذف + applications noun
+        \b(?:امسح|احذف|امحِ|أزل)\b[^.!?،؟]{0,80}(?:الطلبات|طلباتي|جميع\s+الطلبات)
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# Combined guard: either saved-jobs OR applications delete — kept for the early-check
+# at _handle_active_user_inner so we intercept before the AI fallback.
 _UNSUPPORTED_DELETE_RE = re.compile(
     r"""
     (?:
@@ -5740,10 +5770,15 @@ class RicoChatAPI:
                 profile=profile,
             )
 
-        # ── Unsupported delete mutation guard (P0 trust bug #764) ────────────
-        # Catch "delete all saved jobs", "احذف جميع الوظائف" etc. before the AI
-        # fallback can invent a false success. Rico has no chat route for database
-        # deletes — returning a capability limitation is always correct here.
+        # ── Pending saved-jobs deletion confirmation (P2-B) ──────────────────
+        # Must run before the delete guard so a "yes" / "نعم" in the 2-minute
+        # confirmation window executes the real deletion instead of re-asking.
+        _pending_delete = self._handle_pending_delete_saved_jobs(user_id, message)
+        if _pending_delete is not None:
+            return self._finalize(_pending_delete, self.SOURCE_KEYWORD, profile=profile)
+
+        # ── Delete mutation guard (P0 trust bug #764 / P2-B) ─────────────────
+        # Saved-jobs → confirmation flow; application history → blocked.
         _delete_guard = self._intercept_unsupported_delete_mutation(user_id, message)
         if _delete_guard is not None:
             return self._finalize(_delete_guard, self.SOURCE_KEYWORD, profile=profile)
@@ -10927,31 +10962,83 @@ class RicoChatAPI:
         self._append_chat(user_id, "assistant", msg)
         return {"type": "learning_profile_summary", "message": msg}
 
+    _PENDING_DELETE_SAVED_JOBS_KEY: str = "pending_delete_saved_jobs"
+
     def _intercept_unsupported_delete_mutation(
         self, user_id: str, message: str
     ) -> dict[str, Any] | None:
-        """Return a capability-limitation response for chat-driven database deletes.
+        """Route chat-driven delete intents to the correct handler.
 
-        Rico has no backend route for deleting saved jobs or application records
-        through the chat interface. Without this guard the AI model invents a false
-        success — the P0 trust bug described in Issue #764.
+        Saved-jobs deletes → 2-turn confirmation flow (P2-B).
+        Application-history deletes → capability_limitation (those records are protected).
 
-        Returns a response dict if the message matches an unsupported delete pattern,
-        else None so the caller continues normal routing.
+        Returns a response dict if the message matches a delete pattern, else None.
         """
         if not _UNSUPPORTED_DELETE_RE.search(message):
             return None
+
         arabic = self._is_arabic_text(message)
+
+        # ── Application-history: permanently blocked ──────────────────────────
+        if _DELETE_APPLICATIONS_RE.search(message) and not _DELETE_SAVED_JOBS_RE.search(message):
+            if arabic:
+                msg = (
+                    "سجلات طلباتك محمية — لا يمكن حذفها حتى من خلال المحادثة.\n\n"
+                    "يمكنك الاطلاع عليها من صفحة **Applications** ← /applications"
+                )
+            else:
+                msg = (
+                    "Application records are protected history and cannot be deleted.\n\n"
+                    "You can view them at **Applications** → /applications"
+                )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "capability_limitation",
+                "intent": "protected_application_history",
+                "message": msg,
+                "target_route": "/applications",
+                "next_action": "navigate_to_page",
+            }
+
+        # ── Saved-jobs: ask for confirmation (P2-B) ───────────────────────────
+        if _DELETE_SAVED_JOBS_RE.search(message):
+            try:
+                import time
+                self.memory.set_context(user_id, self._PENDING_DELETE_SAVED_JOBS_KEY, {
+                    "pending": True,
+                    "expires_at": int(time.time()) + 120,  # 2-minute window
+                })
+            except Exception:
+                pass
+            if arabic:
+                msg = (
+                    "هل أنت متأكد أنك تريد حذف **جميع** وظائفك المحفوظة؟\n\n"
+                    "هذا الإجراء لا يمكن التراجع عنه. اكتب **نعم** للمتابعة أو **لا** للإلغاء."
+                )
+            else:
+                msg = (
+                    "Are you sure you want to delete **all** your saved jobs?\n\n"
+                    "This cannot be undone. Type **yes** to confirm or **no** to cancel."
+                )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "delete_saved_jobs_confirm",
+                "intent": "delete_saved_jobs",
+                "message": msg,
+                "next_action": "await_confirmation",
+            }
+
+        # ── Fallback: mixed/ambiguous pattern — still block ───────────────────
         if arabic:
             msg = (
-                "لا أستطيع حذف الوظائف المحفوظة أو الطلبات من خلال المحادثة.\n\n"
+                "لا أستطيع حذف الوظائف أو الطلبات من خلال المحادثة.\n\n"
                 "يمكنك إدارتها مباشرةً من:\n"
                 "• صفحة **Saved Jobs** ← /flow\n"
                 "• صفحة **Applications** ← /applications"
             )
         else:
             msg = (
-                "I can't delete saved jobs or application records through chat.\n\n"
+                "I can't delete records through chat.\n\n"
                 "You can manage them directly from:\n"
                 "• **Saved Jobs** page → /flow\n"
                 "• **Applications** page → /applications"
@@ -10963,6 +11050,93 @@ class RicoChatAPI:
             "message": msg,
             "target_route": "/flow",
             "next_action": "navigate_to_page",
+        }
+
+    def _handle_pending_delete_saved_jobs(
+        self, user_id: str, message: str
+    ) -> dict[str, Any] | None:
+        """Execute or cancel a pending saved-jobs deletion based on user confirmation.
+
+        Returns a response dict if there is a live pending deletion waiting for
+        confirmation, else None so the caller continues normal routing.
+        """
+        try:
+            import time
+            ctx = self.memory.get_context(user_id, self._PENDING_DELETE_SAVED_JOBS_KEY) or {}
+        except Exception:
+            return None
+
+        if not ctx.get("pending") or ctx.get("expires_at", 0) < (
+            __import__("time").time()
+        ):
+            return None
+
+        def _clear():
+            try:
+                self.memory.set_context(user_id, self._PENDING_DELETE_SAVED_JOBS_KEY, {})
+            except Exception:
+                pass
+
+        arabic = self._is_arabic_text(message)
+
+        if RicoChatAPI._is_affirmative(message):
+            _clear()
+            try:
+                from src.rico_db import RicoDB as _RicoDB
+                db = _RicoDB()
+                deleted = db.delete_saved_jobs(user_id)
+                logger.info("rico_chat: delete_saved_jobs executed user=%s deleted=%d", user_id, deleted)
+                if deleted > 0:
+                    if arabic:
+                        msg = f"تم حذف **{deleted}** وظيفة محفوظة بنجاح."
+                    else:
+                        msg = f"Done — **{deleted}** saved job{'s' if deleted != 1 else ''} deleted."
+                else:
+                    if arabic:
+                        msg = "لا توجد وظائف محفوظة لحذفها."
+                    else:
+                        msg = "No saved jobs found to delete."
+                self._append_chat(user_id, "assistant", msg)
+                return {
+                    "type": "delete_saved_jobs_done",
+                    "deleted_count": deleted,
+                    "message": msg,
+                }
+            except Exception as exc:
+                logger.error("rico_chat: delete_saved_jobs failed user=%s err=%s", user_id, exc)
+                if arabic:
+                    msg = "حدث خطأ أثناء الحذف. يرجى المحاولة مرة أخرى لاحقاً."
+                else:
+                    msg = "Something went wrong while deleting. Please try again later."
+                self._append_chat(user_id, "assistant", msg)
+                return {
+                    "type": "delete_saved_jobs_failed",
+                    "message": msg,
+                }
+
+        if RicoChatAPI._is_negative(message):
+            _clear()
+            if arabic:
+                msg = "تم الإلغاء — لم يتم حذف أي وظيفة محفوظة."
+            else:
+                msg = "Cancelled — no saved jobs were deleted."
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "delete_saved_jobs_cancelled",
+                "message": msg,
+            }
+
+        # Ambiguous reply — re-prompt
+        if arabic:
+            msg = "اكتب **نعم** لتأكيد الحذف أو **لا** للإلغاء."
+        else:
+            msg = "Please type **yes** to confirm deletion or **no** to cancel."
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "delete_saved_jobs_confirm",
+            "intent": "delete_saved_jobs",
+            "message": msg,
+            "next_action": "await_confirmation",
         }
 
     def _handle_preference_correction(
