@@ -1,13 +1,31 @@
 # Current State
 
-_Last updated: 2026-06-27 (Rico Website Hard QA BUG-01 through BUG-08 + PR #756 all merged to main `2ef4107`; BUG-06 and BUG-07 blocked — no description found; BUG-09 in progress; production baseline unchanged — BUG fixes code-merged only, not deploy-verified)_
+_Last updated: 2026-06-27 — **QA Cycle 1 CLOSED.** P0 #764 (mutation trust guard) deployed and verified. BUG-01 through BUG-05, BUG-08, BUG-09, BUG-10 all deploy-verified at `4ad2e29`. BUG-06/BUG-07 blocked (no owner description). Next: P2 user-experience and agent capability improvements._
+
+## QA Cycle 1 — CLOSED 2026-06-27
+
+| Bug | PR | SHA | Deployed | Tests |
+|---|---|---:|---|---|
+| BUG-01 | #757 | `325aa0e` | ✅ | frontend (sidebar cache) |
+| BUG-02 | #759 | `3a9221a` | ✅ | preference sanitization |
+| BUG-03 | #760 | `b6a1196` | ✅ | `test_bug03_source_url_fallback.py` 18/18 |
+| BUG-04 | #761 | `4918f55` | ✅ | frontend (`/pipeline` → `/flow`) |
+| BUG-05 | #762 | `007246b` | ✅ | `test_bug05_confirmation_loop.py` 7/7 |
+| BUG-06 | — | — | 🚫 blocked | no description |
+| BUG-07 | — | — | 🚫 blocked | no description |
+| BUG-08 | #763 | `62ff5ad` | ✅ | `test_bug08_city_declaration.py` 14/14 |
+| BUG-09 | — | `46a7ba7` | ✅ | `test_bug09_keyword_filter_bleed.py` 7/7 |
+| BUG-10 | — | `b776abf` | ✅ | frontend (double-send `sendingRef`) |
+| P0 #764 | #767 | `71466d2` | ✅ | `test_p0_mutation_trust_guard.py` 42/42 |
+
+Regression suite: **104/104 PASS**. 45 pre-existing environment failures (cryptography version, mock log-format, webhook secrets) — none caused by any BUG or P0 change.
 
 ## Production baseline
 
-- **Repository main HEAD (code-merged, NOT deploy-verified for BUG fixes):** `2ef4107` (PR #756 migration runbook, docs-only). Merge train: BUG-08 `62ff5ad` (#763), BUG-05 `007246b` (#762), BUG-04 `4918f55` (#761), BUG-03 `b6a1196` (#760), BUG-02 `3a9221a` (#759), BUG-01 `325aa0e` (#757), #755 `504c755`. None of these are confirmed deployed.
-- **Last deploy-verified SHA:** `61131231165093254ba750be93e9ea367195ac41` (#749 — pipeline save/count correctness). All commits after #749 are code-merged to main but deploy verification has not been confirmed from this sandbox.
-- **Production deploy verification (last confirmed):** `Deploy Render Backend` run #80 succeeded for `6113123` (the gated workflow blocks until `/version.commit` matches the pushed SHA **and** `/health` 200, so success ⇒ both verified). Prior deploys verified in sequence: #747 `0d28a08`, #741 `7e0b9ec`, #739 `f202a86`, #736 `a7e294b`, #738 `115adde`, #737 `e214178`.
-- **Pending owner-side smoke:** the authenticated save→count flow (and the #741 screenshot follow-up) must be confirmed by the owner on `ricohunt.com`; the sandbox cannot reach authenticated `onrender.com` (agent proxy 403), so live smoke is owner-run only.
+- **Repository main HEAD:** `4ad2e29566c10b389069fc68faacd9f5c1c5c010` (PR #767 — P0 mutation trust guard). Full merge train in production: P0 `71466d2`, BUG-10 `b776abf`, BUG-09 `46a7ba7`, BUG-08 `62ff5ad`, BUG-05 `007246b`, BUG-04 `4918f55`, BUG-03 `b6a1196`, BUG-02 `3a9221a`, BUG-01 `325aa0e`, #755 `504c755`.
+- **Last deploy-verified SHA:** `4ad2e29` — `deploy-render.yml` run #28301440105 succeeded (gated on `/version.commit` match + `/health` 200). ✅
+- **Production deploy verification history:** `4ad2e29` (run #28301440105), `6113123` (run #80), `0d28a08` (#747), `7e0b9ec` (#741), `f202a86` (#739), `a7e294b` (#736), `115adde` (#738), `e214178` (#737).
+- **Pending owner-side smoke:** authenticated save→count flow and #741 screenshot follow-up require `ricohunt.com` login — sandbox cannot reach authenticated production.
 - **Migration 032 (`uploaded_document_context`):** auto-applied on startup via the app.py lifespan runner (idempotent `CREATE TABLE/INDEX IF NOT EXISTS`), targeting the exact branch the production `DATABASE_URL` uses. Direct confirmation of the `migration_ok` log line / table existence needs Render-log or Neon access (unavailable in-session) — the owner re-test is the end-to-end proof.
 - **Image reading reliability:** `OCRSPACE_API_KEY` set on Render as a dependable free OCR backstop behind the (rate-limited) free vision model (OpenRouter/HF).
 - **Render logs:** direct Render MCP log scan unavailable in-session; no error signals from `/health` or deploy workflows.
@@ -169,30 +187,43 @@ Fixing bugs from the "Rico Website Hard QA Report". Each PR is one bug category,
 | **BUG-18** | — | — | ⏸ not started | `?q=` query-string navigation mutates / resets chat thread. |
 | **BUG-19** | — | — | ⏸ not started | Job-confirmation screenshots not classified as application evidence → "Unrecognized Document"; save falls back to wrong recent-context job. Two sub-bugs: (A) no application-confirmation image classifier, (B) job-extraction on save ignores uploaded image context. |
 
-> ⚠️ **BUG-01 through BUG-08 are code-merged to main but NOT deploy-verified.** Production backend is still running the last confirmed deploy (`6113123` / #749). Owner must trigger a Render deploy and confirm `/health` + `/version` before these fixes are considered live.
+> ✅ **QA Cycle 1 is CLOSED.** BUG-01 through BUG-05, BUG-08, BUG-09, BUG-10, and P0 #764 are all confirmed deployed and smoke-tested at `4ad2e29`. BUG-06 and BUG-07 remain blocked until the owner supplies original QA report descriptions.
 
 ## PR #756 — Migration drift runbook (docs-only)
 
 - **Status:** ✅ Merged at `2ef4107` (2026-06-27). Content: 606-line `docs/runbooks/production-drift-005-011.md`.
 - **Rollback execution (owner-only):** after G1–G6 signed off, owner applies migrations 011 (Step A) then 005 (Step B) via Neon console.
 
-## Forward plan (prioritized, 2026-06-27)
+## Forward plan — P2 User Experience and Agent Capabilities (2026-06-27)
 
-1. **Immediate:** owner triggers Render deploy for BUG-01 through BUG-08 + #755 + #756; confirm `/health` + `/version` after `2ef4107`.
-2. **Active:** BUG-09 — fix contradictory keyword filters (in progress this session).
-3. **Next:** BUG-10 through BUG-18 in sequence; BUG-06 and BUG-07 blocked until owner provides original QA descriptions.
-4. **BUG-19:** job-confirmation screenshot classifier + save context fix (after BUG-09..18).
-5. **Backlog:** Finding 3 (link A↔B), Finding 4 (onboarding classified), #742, older epics.
-6. **Runbook execution (owner-only):** G1–G6 sign-off required before any Neon SQL.
+QA Cycle 1 is complete. The focus shifts from bug-patching to meaningful user-facing improvements.
 
-## Completed since last update (2026-06-26)
+1. **P2-A — Attachment and image understanding (end-to-end):**
+   Finding 3 (link screenshot → "Save as target job" / "Score against my CV") and Finding 4 (onboarding `classified` surface for non-CV docs). Infrastructure is in place (#736→#739→#741); wiring the action buttons end-to-end is the gap.
 
-- **#744 (document-action routing)** — merged at `9628c4bff5ac5f5bffe5cd26ab611403fa328349`. All document actions (describe/extract/summarize) now route to the document-read path before the AI/legacy split when a fresh `uploaded_document_context` exists. Cleared the #741 screenshot re-test blocker.
-- **#755 / #721 (link-quality)** — merged at `504c75573fa760471666fed8447a26448ddffd20`. `employer_url` + `apply_is_direct` from JSearch live; company-site fallback CTA uses real employer URL when available. #721 closed.
-- **#742 (target-role evidence guard)** — no longer parked.
+2. **P2-B — Direct chat mutations (delete, update, follow-up):**
+   Users want to delete saved jobs, update application status, and set reminders through chat. Today these are intercepted with a redirect. The long-term fix is a real backend tool for each mutation, gated by `agent_runtime.handle_action()`, so Rico can actually execute them instead of redirecting.
+
+3. **P2-C — Agent Runtime improvements:**
+   - Improve `handle_action("remind")` reliability (currently stub-level).
+   - Add `handle_action("delete_saved_job")` and `handle_action("update_application_status")` as real tools.
+   - Idempotency keys and audit logging already in place — the tool implementations are missing.
+
+4. **P2-D — Memory and session continuity:**
+   Rico loses context on page reload and across sessions for public users. Durable `uploaded_document_context` is solved (#741). Next: persist role preferences and search context durably per-user so Rico doesn't ask for the same info twice.
+
+5. **P2-E — Hallucination reduction:**
+   Issue #732 (Rico over-commits "Developer" without CV evidence) is still open. Extend the role-evidence guard to all profile fields — Rico must not claim a role, city, or seniority level without a grounded source (CV or explicit user statement).
+
+6. **P2-F — QA Cycle 2 (BUG-11 through BUG-19):**
+   Secondary bug queue. Start after P2-A and P2-B are underway. BUG-19 (job-confirmation screenshot classifier) naturally pairs with P2-A.
+
+7. **Blocked / owner-only:**
+   - BUG-06, BUG-07: await owner QA report descriptions.
+   - Migration drift #712 (migrations 005 and 011): runbook ready, G1–G6 sign-off required before any Neon SQL.
 
 ## Recommended next command
 
 ```text
-Rico mode. Main HEAD is 007246b (BUG-05). Last deploy-verified SHA is 6113123 (#749) — owner must trigger Render deploy for the BUG-01 through BUG-05 changes. PR #763 (BUG-08) is open, CI pending, focused 3-file diff after rebase — merge when CI green. PR #756 migration drift runbook is docs-only and safe to merge. Continue QA with BUG-09 after #763 lands. Do NOT start #746. Do NOT delete branches.
+Rico mode. QA Cycle 1 closed. Production at 4ad2e29 — all verified. Next: P2 user-experience track. Recommended start: P2-B (direct chat mutations — give Rico real delete/update/remind tools via agent_runtime) OR P2-E (Issue #732 role-evidence guard). Do NOT start BUG-11 through BUG-19 before P2-A or P2-B has a branch. Do NOT run migrations without owner G1–G6 sign-off.
 ```
