@@ -12,6 +12,7 @@ import {
     ApiError,
     createManualApplication,
     getApplications,
+    getApplicationStats,
     logout,
     updateApplicationStatus,
 } from '@/lib/api';
@@ -145,9 +146,22 @@ export default function FlowPage() {
 
     const loadApplications = useCallback(async () => {
         try {
-            const response = await getApplications(undefined, 1, 50);
+            const [response, stats] = await Promise.all([
+                getApplications(undefined, 1, 50),
+                getApplicationStats().catch(() => null),
+            ]);
             setApplications(response.applications);
-            setTotal(response.total);
+            // Compute meaningful total from stats (excludes noise statuses like
+            // 'opened'/'opened_external' that auto-populate on every link click).
+            if (stats) {
+                const meaningfulTotal = STATUS_COUNT_ORDER.reduce(
+                    (sum, s) => sum + (stats[s] ?? 0),
+                    0
+                );
+                setTotal(meaningfulTotal);
+            } else {
+                setTotal(response.total);
+            }
             setError(false);
         } catch (err: unknown) {
             const is401 = err instanceof ApiError && err.statusCode === 401;
