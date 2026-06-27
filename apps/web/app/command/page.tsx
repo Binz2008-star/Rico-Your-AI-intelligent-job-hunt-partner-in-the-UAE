@@ -1889,7 +1889,7 @@ export default function CommandPage() {
                                             </div>
                                         </div>
                                     )}
-                                    {!m.streaming && m.options && m.options.length > 0 && (
+                                    {!m.streaming && m.options && m.options.length > 0 && !m.agentic_ui?.actions?.length && (
                                         <OptionButtons options={m.options} onAction={(prompt) => sendMessage(prompt)} />
                                     )}
                                     {!m.streaming && m.agentic_ui?.actions && m.agentic_ui.actions.length > 0 && (
