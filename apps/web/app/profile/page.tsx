@@ -6,6 +6,7 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { GuardrailWarnings } from "@/components/shared/GuardrailWarnings";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { StatusCard } from "@/components/StatusCard";
+import { MaterialIcon } from "@/components/ui/MaterialIcon";
 import { ToastContainer } from "@/components/ui/Toast";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/useToast";
@@ -476,7 +477,7 @@ function ProfileCompleteness({ profile }: { profile: ProfileResponse }) {
                         <span className="text-[11px] text-text-secondary">{t(f.labelKey)}</span>
                         {f.filled ? (
                             <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-400">
-                                <span className="material-icons-round text-[11px]">check_circle</span>
+                                <MaterialIcon icon="check_circle" size={11} />
                                 {t("profileFieldProvided")}
                             </span>
                         ) : (

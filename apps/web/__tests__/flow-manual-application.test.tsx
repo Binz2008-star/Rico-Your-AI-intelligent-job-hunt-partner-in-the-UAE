@@ -5,10 +5,11 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 
-const { fetchApplicationsMock, createManualApplicationMock, updateApplicationStatusMock } = vi.hoisted(() => ({
+const { fetchApplicationsMock, createManualApplicationMock, updateApplicationStatusMock, getApplicationStatsMock } = vi.hoisted(() => ({
     fetchApplicationsMock: vi.fn(),
     createManualApplicationMock: vi.fn(),
     updateApplicationStatusMock: vi.fn(),
+    getApplicationStatsMock: vi.fn().mockResolvedValue({}),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -46,6 +47,7 @@ vi.mock("@/lib/api", () => ({
     getApplications: fetchApplicationsMock,
     createManualApplication: createManualApplicationMock,
     updateApplicationStatus: updateApplicationStatusMock,
+    getApplicationStats: getApplicationStatsMock,
 }));
 
 import FlowPage from "@/app/flow/page";

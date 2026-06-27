@@ -2,6 +2,7 @@
 
 import { fetchProfile, type ProfileResponse } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { MaterialIcon } from "@/components/ui/MaterialIcon";
 import { useCallback, useEffect, useState } from "react";
 
 // ── Field definitions ─────────────────────────────────────────────────────────
@@ -38,12 +39,12 @@ function FieldRow({ label, present }: { label: string; present: boolean }) {
       <span className="text-[12px] text-text-secondary">{label}</span>
       {present ? (
         <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-400">
-          <span className="material-icons-round text-[12px]">check_circle</span>
+          <MaterialIcon icon="check_circle" size={12} />
           Provided
         </span>
       ) : (
         <span className="flex items-center gap-1 text-[11px] text-text-tertiary">
-          <span className="material-icons-round text-[12px]">radio_button_unchecked</span>
+          <MaterialIcon icon="radio_button_unchecked" size={12} />
           Missing
         </span>
       )}
