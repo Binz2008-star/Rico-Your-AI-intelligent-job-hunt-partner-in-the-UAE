@@ -452,6 +452,28 @@ _SALARY_READBACK_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Unsupported database delete via chat: "delete all saved jobs", "clear my applications".
+# Used by _intercept_unsupported_delete_mutation to prevent the AI from inventing a false
+# success for operations that have no backend implementation through the chat interface.
+# Intentionally does NOT match preference-removal patterns ("remove Abu Dhabi from my cities",
+# "remove Python from my skills") which are handled by dedicated profile/preference handlers.
+_UNSUPPORTED_DELETE_RE = re.compile(
+    r"""
+    (?:
+        # English: explicit destructive verb + saved-jobs or applications noun
+          \b(?:delete|erase|wipe|purge)\b.{0,60}?\b(?:saved\s+jobs?|all\s+(?:my\s+)?jobs?|my\s+(?:jobs?|pipeline|applications?|records?|list)|applications?|pipeline)\b
+        | \bremove\b.{0,50}?\ball\s+(?:my\s+)?(?:saved\s+)?jobs?\b
+        | \bremove\b.{0,50}?\bmy\s+applications?\b
+        | \bremove\b.{0,50}?\ball\s+applications?\b
+        | \bclear\b.{0,50}?\b(?:saved\s+jobs?|all\s+(?:my\s+)?jobs?|my\s+pipeline|my\s+applications?|all\s+applications?)\b
+        |
+        # Arabic: احذف/امسح + saved-jobs or applications noun
+        \b(?:امسح|احذف|امحِ|أزل)\b[^.!?،؟]{0,80}(?:الوظائف(?:\s+المحفوظة)?|جميع\s+(?:الوظائف|الطلبات)|وظائف(?:\s+المحفوظة)?|الطلبات|طلباتي|المحفوظات|قائمة\s+الوظائف)
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
 # Granular profile field update: "add Python to my skills", "remove OSHA from my skills",
 # "update my experience to 8 years", "I'm now based in Abu Dhabi",
 # "change my target role to HSE Manager", "add oil and gas to my industries".
@@ -4481,10 +4503,48 @@ class RicoChatAPI:
                 save_user_message=False,
             )
         if reminder_signals:
-            return {
-                "type": "reminder_set",
-                "message": "تم ضبط التذكير. سأذكرك بالمتابعة." if "تذكير" in last else "Reminder set. I'll nudge you to follow up.",
-            }
+            # Attempt to set a real reminder against the most recently discussed job.
+            # Only emit success after backend confirmation; never claim a fake reminder.
+            arabic = self._is_arabic_text(message)
+            recent_matches = self._recent_search_matches(user_id)
+            job_for_reminder = recent_matches[0] if recent_matches else None
+            if job_for_reminder:
+                title = str(job_for_reminder.get("title") or "").strip()
+                company = str(job_for_reminder.get("company") or "").strip()
+                try:
+                    result = agent_runtime.handle_action(
+                        user_id=user_id,
+                        action="remind",
+                        job=job_for_reminder,
+                        source="chat",
+                    )
+                    if result.ok:
+                        _label = f"**{title}**" + (f" — {company}" if company else "")
+                        msg = (
+                            f"تم ضبط التذكير لـ {_label}. سأذكّرك بالمتابعة."
+                            if arabic else
+                            f"Reminder set for {_label}. I'll nudge you to follow up."
+                        )
+                        self._append_chat(user_id, "assistant", msg)
+                        return {"type": "reminder_set", "message": msg}
+                except Exception:
+                    pass
+                # Backend call failed — be honest
+                msg = (
+                    "لم أتمكن من ضبط التذكير الآن. حاول مرة أخرى بعد قليل."
+                    if arabic else
+                    "I couldn't set a reminder right now. Please try again in a moment."
+                )
+                self._append_chat(user_id, "assistant", msg)
+                return {"type": "reminder_set_failed", "message": msg}
+            # No job in context — ask which job before claiming anything
+            msg = (
+                "أي وظيفة تريد ضبط تذكير لها؟ أرسل لي اسم الوظيفة أو الشركة."
+                if arabic else
+                "Which job would you like me to set a reminder for? Send me the title or company name."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "intent": "set_reminder", "message": msg}
 
         return None
 
@@ -5679,6 +5739,14 @@ class RicoChatAPI:
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
+
+        # ── Unsupported delete mutation guard (P0 trust bug #764) ────────────
+        # Catch "delete all saved jobs", "احذف جميع الوظائف" etc. before the AI
+        # fallback can invent a false success. Rico has no chat route for database
+        # deletes — returning a capability limitation is always correct here.
+        _delete_guard = self._intercept_unsupported_delete_mutation(user_id, message)
+        if _delete_guard is not None:
+            return self._finalize(_delete_guard, self.SOURCE_KEYWORD, profile=profile)
 
         # ── Proactive Telegram declaration: "my telegram is @handle" ─────────
         # When the user volunteers their Telegram handle with the keyword "telegram"
@@ -10858,6 +10926,44 @@ class RicoChatAPI:
 
         self._append_chat(user_id, "assistant", msg)
         return {"type": "learning_profile_summary", "message": msg}
+
+    def _intercept_unsupported_delete_mutation(
+        self, user_id: str, message: str
+    ) -> dict[str, Any] | None:
+        """Return a capability-limitation response for chat-driven database deletes.
+
+        Rico has no backend route for deleting saved jobs or application records
+        through the chat interface. Without this guard the AI model invents a false
+        success — the P0 trust bug described in Issue #764.
+
+        Returns a response dict if the message matches an unsupported delete pattern,
+        else None so the caller continues normal routing.
+        """
+        if not _UNSUPPORTED_DELETE_RE.search(message):
+            return None
+        arabic = self._is_arabic_text(message)
+        if arabic:
+            msg = (
+                "لا أستطيع حذف الوظائف المحفوظة أو الطلبات من خلال المحادثة.\n\n"
+                "يمكنك إدارتها مباشرةً من:\n"
+                "• صفحة **Saved Jobs** ← /flow\n"
+                "• صفحة **Applications** ← /applications"
+            )
+        else:
+            msg = (
+                "I can't delete saved jobs or application records through chat.\n\n"
+                "You can manage them directly from:\n"
+                "• **Saved Jobs** page → /flow\n"
+                "• **Applications** page → /applications"
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "capability_limitation",
+            "intent": "unsupported_delete_mutation",
+            "message": msg,
+            "target_route": "/flow",
+            "next_action": "navigate_to_page",
+        }
 
     def _handle_preference_correction(
         self, user_id: str, message: str, profile: Any
