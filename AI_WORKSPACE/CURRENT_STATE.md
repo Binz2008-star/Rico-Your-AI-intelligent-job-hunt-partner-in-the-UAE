@@ -1,10 +1,10 @@
 # Current State
 
-_Last updated: 2026-06-25 (Phase-0 job-link trust gate #747 + pipeline save/count correctness #749 merged & deployed; owner-side authenticated smoke still pending — sandbox cannot reach production)_
+_Last updated: 2026-06-26 (employer_url + apply_is_direct from JSearch #755 merged & deployed; owner-side authenticated smoke still pending — sandbox cannot reach production)_
 
 ## Production baseline
 
-- **Repository main HEAD / production backend SHA:** `61131231165093254ba750be93e9ea367195ac41` (#749 — trusted, counted, idempotent job save after the Phase-0 trust gate).
+- **Repository main HEAD / production backend SHA:** `504c75573fa760471666fed8447a26448ddffd20` (#755 — employer_url + apply_is_direct surfaced from JSearch; company-site fallback CTA uses real employer URL when available).
 - **Production deploy verification:** `Deploy Render Backend` run #80 succeeded for `6113123` (the gated workflow blocks until `/version.commit` matches the pushed SHA **and** `/health` 200, so success ⇒ both verified). Prior deploys verified in sequence: #747 `0d28a08`, #741 `7e0b9ec`, #739 `f202a86`, #736 `a7e294b`, #738 `115adde`, #737 `e214178`.
 - **Pending owner-side smoke:** the authenticated save→count flow (and the #741 screenshot follow-up) must be confirmed by the owner on `ricohunt.com`; the sandbox cannot reach authenticated `onrender.com` (agent proxy 403), so live smoke is owner-run only.
 - **Migration 032 (`uploaded_document_context`):** auto-applied on startup via the app.py lifespan runner (idempotent `CREATE TABLE/INDEX IF NOT EXISTS`), targeting the exact branch the production `DATABASE_URL` uses. Direct confirmation of the `migration_ok` log line / table existence needs Render-log or Neon access (unavailable in-session) — the owner re-test is the end-to-end proof.
@@ -78,6 +78,7 @@ No provider keys are hardcoded, committed, or logged.
 | **#741** | Durable transcript store (`uploaded_document_context` table + repo) — fixes the postgres-mode bug where the OCR transcript was saved only to the no-op `RicoMemoryStore`; follow-ups now read durably; migration 032 auto-applies on startup | `7e0b9ec` | ✅ merged + deploy-verified (owner re-test pending) |
 | **#747** | Phase-0 job-link trust gate (`src/services/job_link_trust.py`) — View & Apply may only surface a source-backed, non-fake, non-LLM apply URL; rejects recent_context/LLM/sequential-LinkedIn/placeholder URLs; `apply_to_job` restored with safe action errors | `0d28a08` | ✅ merged + deploy-verified |
 | **#749** | Pipeline save/count correctness — chat ordinal "save the Nth job" now persists to the user-scoped counted store (`rico_job_recommendations`), idempotent on a trusted save identity; untrusted recent_context jobs save as leads with no claimed apply link; user-safe save errors (`src/services/job_save.py`) | `6113123` | ✅ merged + deploy-verified (owner-side authenticated smoke pending) |
+| **#755** | Link quality (#721) — `employer_url` + `apply_is_direct` surfaced from JSearch `employer_website` / `job_apply_is_direct`; `apply_is_direct=True` upgrades unknown domains to `live_verified`; aggregator/login/rate-limited never overridden; `employer_url` returned as separate field, never in apply_link/alt_link/usable_link; company-site fallback CTA uses real URL when available (label "Company website" vs "Search company site") | `504c755` | ✅ merged + deploy-verified |
 
 > Note: `fix/single-role-taxonomy-rejection` was an independent duplicate of the #735 fix built in another session — **abandoned** (not merged). Do not revive it.
 
@@ -131,7 +132,7 @@ No provider keys are hardcoded, committed, or logged.
 ## Open issues — highlights (29 total)
 
 - **#732 — Rico over-commits to "Developer" without evidence.** HIGH value, owner-facing: profiles show `Target Roles: Developer` despite the real profile (Technical Product Owner / Operations Manager). Career guidance should be CV-evidence-based.
-- **#721 / #722** — degraded job-card actionability (empty `alt_url`).
+- **#732 — Rico over-commits to "Developer" without evidence** (see above).
 - **#712 / #711** — migration drift (`005 pipeline_runs`, `011` indexes missing) — still open, separate.
 - Older epics/backlog (#654, #618, #531, #356, #355, #354, #353, #352, #294, #263, #213, #198, #196, #187, #179, #147, #140, #138, #127, #118, #105, #99, #96) — not urgent.
 
@@ -148,10 +149,10 @@ No provider keys are hardcoded, committed, or logged.
 3. **Owner smoke:** confirm #749 save→count and the #741 screenshot follow-up on production.
 4. **Then: Finding 3** — wire read-screenshot → "Save as target job" / "Score against my CV" end-to-end (the "link A↔B without buttons" ask).
 5. **Cleanup pass:** close stale PRs #722/#713, salvage #697; Finding 5 (dead `CV_THRESHOLD`, stale `CLAUDE.md` `/chat` note).
-6. **Backlog:** #721 degraded cards, #712 migration drift, Finding 4 (onboarding/upload honor `classified`), older epics.
+6. **Backlog:** #712 migration drift, Finding 4 (onboarding/upload honor `classified`), older epics. (#721 closed by #755.)
 
 ## Recommended next command
 
 ```text
-Rico mode. Production is 6113123 (#749) — Phase-0 trust gate (#747) + pipeline save/count correctness (#749) are live. Active blocker is #744 (document-action routing): route describe/extract/summarize to the document-read path before the AI/legacy split when a fresh uploaded_document_context exists — this clears the #741 screenshot re-test. Keep #742 (target-role guard) parked until #744 lands. Backend-focused, mocks-only tests, no provider/frontend/trust-gate scope creep.
+Rico mode. Production is 504c755 (#755) — employer_url + apply_is_direct from JSearch are live (#721 closed). Active blocker is #744 (document-action routing): route describe/extract/summarize to the document-read path before the AI/legacy split when a fresh uploaded_document_context exists — this clears the #741 screenshot re-test. Keep #742 (target-role guard) parked until #744 lands. Backend-focused, mocks-only tests, no provider/frontend/trust-gate scope creep.
 ```
