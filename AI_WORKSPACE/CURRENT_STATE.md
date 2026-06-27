@@ -1,6 +1,6 @@
 # Current State
 
-_Last updated: 2026-06-26 (employer_url + apply_is_direct from JSearch #755 merged & deployed; owner-side authenticated smoke still pending — sandbox cannot reach production)_
+_Last updated: 2026-06-26 (#755/#721 link-quality + #744 document-action routing both merged & deployed; #742 no longer parked; next is #712 migration drift runbook; do not start #746; do not delete branches)_
 
 ## Production baseline
 
@@ -142,17 +142,22 @@ No provider keys are hardcoded, committed, or logged.
 - **#749 (save/count, live):** the chat ordinal save persists to the counted `rico_job_recommendations` (so the application/pipeline count actually increments), idempotent on a trusted save identity (`source_job_id`/`persisted_job_id`, else a `title|company` hash — never the bare `job_id`). A recent_context job is still saved, as a **lead**, with no apply URL persisted and no verified-link claim. Save failures return user-safe messages. No `pipeline_runs` (migration 005 / #711) dependency. Helper: `src/services/job_save.py`; tests: `tests/test_pipeline_save_count_correctness.py`.
 - **Pending:** owner-side authenticated smoke on `ricohunt.com` — search a role, "save the second job to my pipeline" → count +1, repeat → count unchanged. Sandbox cannot reach authenticated production.
 
-## Forward plan (prioritized, 2026-06-25)
+## Forward plan (prioritized, 2026-06-26)
 
-1. **Active blocker: #744 (document-action routing)** — "Extract key information" was routed down the AI path with no transcript and hit the public job-listing CTA, while "Summarize" worked. Fix routes all document actions (describe/extract/summarize) to the document-read path before the AI/legacy split when a fresh `uploaded_document_context` exists. This clears the #741 screenshot re-test. (Was on hold; hold lifted 2026-06-25.)
-2. **Parked: #742 (#732 target-role evidence guard)** — stays parked until #744 lands and the #741 re-test clears.
-3. **Owner smoke:** confirm #749 save→count and the #741 screenshot follow-up on production.
-4. **Then: Finding 3** — wire read-screenshot → "Save as target job" / "Score against my CV" end-to-end (the "link A↔B without buttons" ask).
-5. **Cleanup pass:** close stale PRs #722/#713, salvage #697; Finding 5 (dead `CV_THRESHOLD`, stale `CLAUDE.md` `/chat` note).
-6. **Backlog:** #712 migration drift, Finding 4 (onboarding/upload honor `classified`), older epics. (#721 closed by #755.)
+1. **Next: #712 migration drift runbook** — document and resolve the outstanding Neon migration gaps (`005 pipeline_runs`, `011 idx_rico_recommendations_user_job_unique`). Do not start #746 yet.
+2. **Owner smoke:** confirm #749 save→count on production (authenticated). Sandbox cannot reach production.
+3. **Then: Finding 3** — wire read-screenshot → "Save as target job" / "Score against my CV" end-to-end (the "link A↔B without buttons" ask).
+4. **Cleanup pass:** close stale PRs #722/#713, salvage #697; Finding 5 (dead `CV_THRESHOLD`, stale `CLAUDE.md` `/chat` note). Do not delete branches yet.
+5. **Backlog:** Finding 4 (onboarding/upload honor `classified`), #742 (target-role evidence guard), older epics.
+
+## Completed since last update (2026-06-26)
+
+- **#744 (document-action routing)** — merged at `9628c4bff5ac5f5bffe5cd26ab611403fa328349`. All document actions (describe/extract/summarize) now route to the document-read path before the AI/legacy split when a fresh `uploaded_document_context` exists. Cleared the #741 screenshot re-test blocker.
+- **#755 / #721 (link-quality)** — merged at `504c75573fa760471666fed8447a26448ddffd20`. `employer_url` + `apply_is_direct` from JSearch live; company-site fallback CTA uses real employer URL when available. #721 closed.
+- **#742 (target-role evidence guard)** — no longer parked.
 
 ## Recommended next command
 
 ```text
-Rico mode. Production is 504c755 (#755) — employer_url + apply_is_direct from JSearch are live (#721 closed). Active blocker is #744 (document-action routing): route describe/extract/summarize to the document-read path before the AI/legacy split when a fresh uploaded_document_context exists — this clears the #741 screenshot re-test. Keep #742 (target-role guard) parked until #744 lands. Backend-focused, mocks-only tests, no provider/frontend/trust-gate scope creep.
+Rico mode. Production is 504c755 (#755). #744 (document-action routing) and #755 (#721 link-quality) are merged. Next step is the #712 migration drift runbook — document and safely resolve the outstanding Neon migration gaps (005 pipeline_runs, 011 unique index). Do NOT start #746. Do NOT delete branches. Backend-focused, mocks-only tests.
 ```
