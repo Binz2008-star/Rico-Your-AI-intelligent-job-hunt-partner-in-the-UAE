@@ -166,3 +166,87 @@ def test_save_out_of_range_asks(api, monkeypatch):
     r = _run(api, "save job 9 to pipeline")
     assert r["type"] == "clarification"
     assert "between 1 and 2" in r["message"]
+
+
+# ── Stats path reflects the persisted save ────────────────────────────────────
+
+class _StatsStore:
+    """Minimal fake repo that tracks rows and supports get_stats."""
+
+    def __init__(self) -> None:
+        self.rows: dict[tuple, dict] = {}
+
+    def create(self, job_id, title, company, location="", url="", status="opened",
+               source="manual", user_id=None):
+        self.rows[(user_id, job_id)] = {"title": title, "company": company, "status": status}
+        return True
+
+    def get_stats(self, user_id=None):
+        user_rows = [v for (u, _), v in self.rows.items() if u == user_id]
+        by_status: dict[str, int] = {}
+        for row in user_rows:
+            by_status[row["status"]] = by_status.get(row["status"], 0) + 1
+        return {
+            "total": len(user_rows),
+            "saved": by_status.get("saved", 0),
+            "applied": by_status.get("applied", 0),
+            "interview": by_status.get("interview", 0),
+            "offer": by_status.get("offer", 0),
+            "rejected": by_status.get("rejected", 0),
+        }
+
+
+def test_stats_reflect_saved_item(monkeypatch):
+    """After an ordinal save, get_stats returns saved >= 1 for that user."""
+    from unittest.mock import patch
+
+    _api = RicoChatAPI(persist=False)
+    store = _StatsStore()
+    match = {"title": "Product Owner", "company": "Globex", "source_job_id": "JS-99"}
+
+    with (
+        patch.object(_api, "_recent_search_matches", return_value=[match]),
+        patch("src.services.job_link.resolve_job_link",
+              return_value={"apply_url": "", "source_url": "", "alt_link": "", "verification_status": "unverified"}),
+        patch("src.repositories.applications_repo.create", side_effect=store.create),
+        patch("src.repositories.applications_repo.get_stats", side_effect=store.get_stats),
+        patch("src.rico_chat_api.agent_runtime.handle_action", return_value=None),
+        patch.object(_api, "_append_chat", lambda *a, **k: None),
+        patch.object(_api, "_finalize", lambda resp, *a, **k: resp),
+    ):
+        res = _api._save_job_by_ordinal("u@test", 1, profile=None)
+        assert res["type"] == "save_job"
+
+        from src.repositories import applications_repo
+        stats = applications_repo.get_stats(user_id="u@test")
+        assert stats["saved"] >= 1, f"expected saved >= 1, got {stats}"
+
+
+def test_repeated_save_does_not_double_count(monkeypatch):
+    """Saving the same job twice must not increment the saved count above 1."""
+    from unittest.mock import patch
+
+    _api = RicoChatAPI(persist=False)
+    store = _StatsStore()
+    match = {"title": "Product Owner", "company": "Globex", "source_job_id": "JS-99"}
+
+    def _do_save():
+        with (
+            patch.object(_api, "_recent_search_matches", return_value=[match]),
+            patch("src.services.job_link.resolve_job_link",
+                  return_value={"apply_url": "", "source_url": "", "alt_link": "", "verification_status": "unverified"}),
+            patch("src.repositories.applications_repo.create", side_effect=store.create),
+            patch("src.rico_chat_api.agent_runtime.handle_action", return_value=None),
+            patch.object(_api, "_append_chat", lambda *a, **k: None),
+            patch.object(_api, "_finalize", lambda resp, *a, **k: resp),
+        ):
+            return _api._save_job_by_ordinal("u@test", 1, profile=None)
+
+    res1 = _do_save()
+    res2 = _do_save()
+    assert res1["type"] == "save_job"
+    assert res2["type"] == "save_job"
+    # Upsert keyed on (user_id, job_id) → only one row for each key
+    saved_rows = [(u, k) for (u, k), v in store.rows.items()
+                  if u == "u@test" and v["status"] == "saved"]
+    assert len(saved_rows) == 1, f"expected 1 saved row, got {len(saved_rows)}"
