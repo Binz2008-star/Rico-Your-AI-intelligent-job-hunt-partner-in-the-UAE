@@ -31,6 +31,16 @@ from src.services.identity_flow_mapper import IdentitySignal
 logger = logging.getLogger(__name__)
 _UTC = timezone.utc
 
+
+def _sanitize_cities_safe(cities: list) -> list:
+    """Strip corrupted non-city values at read time without failing. No I/O."""
+    try:
+        from src.services.city_validation import sanitize_cities
+        return sanitize_cities(cities) or []
+    except Exception:
+        return cities
+
+
 # Dynamic field extraction from dataclasses
 _PROFILE_FIELDS = {f.name for f in fields(RicoProfile)}
 _SETTINGS_FIELDS = {f.name for f in fields(RicoAgentSettings)}
@@ -118,7 +128,7 @@ def _bundle_to_profile(bundle: dict[str, Any]) -> RicoProfile:
         telegram_username=bundle.get("telegram_username"),
         telegram_chat_id=bundle.get("telegram_chat_id"),
         target_roles=pdata.get("target_roles") or [],
-        preferred_cities=pdata.get("preferred_cities") or [],
+        preferred_cities=_sanitize_cities_safe(pdata.get("preferred_cities") or []),
         salary_expectation_aed=pdata.get("salary_expectation_aed"),
         minimum_salary_aed=pdata.get("minimum_salary_aed"),
         skills=pdata.get("skills") or [],
