@@ -80,6 +80,7 @@ const nextConfig = {
             { source: "/saved-searches", destination: "/command", permanent: false },
             { source: "/onboarding", destination: "/command", permanent: false },
             { source: "/orchestrate", destination: "/command", permanent: false },
+            { source: "/pipeline", destination: "/flow", permanent: false },
         ];
     },
 };
