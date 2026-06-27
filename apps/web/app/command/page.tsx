@@ -808,6 +808,10 @@ export default function CommandPage() {
     const promptSentRef = useRef(false);
     const sessionIdRef = useRef<string | null>(null);
     const welcomeMessageRef = useRef("");
+    // Synchronous send guard — prevents double-send from rapid Enter taps.
+    // React state (thinking) is async-batched and cannot guard against same-tick
+    // re-entry; a useRef is set/cleared synchronously so the second tap sees it.
+    const sendingRef = useRef(false);
 
     useEffect(() => {
         ensureSessionId(sessionIdRef);
@@ -915,8 +919,9 @@ export default function CommandPage() {
             return;
         }
         const trimmed = text.trim();
-        if (!trimmed || thinking) return;
+        if (!trimmed || sendingRef.current) return;
 
+        sendingRef.current = true;
         setMessages((prev) => [...prev, { id: nextId(), role: "user", text: displayText?.trim() ?? trimmed }]);
         setThinking(true);
         const lc = trimmed.toLowerCase();
@@ -953,6 +958,7 @@ export default function CommandPage() {
                     clearTimeout(timeoutId);
                     clearTimeout(slowHintId);
                     setSlowHint(false);
+                    sendingRef.current = false;
                     setThinking(false);
                     setOperationState(null);
                     scrollBottom();
@@ -1155,12 +1161,13 @@ export default function CommandPage() {
             clearTimeout(timeoutId);
             clearTimeout(slowHintId);
             setSlowHint(false);
+            sendingRef.current = false;
             setThinking(false);
             setOperationState(null);
             scrollBottom();
             textareaRef.current?.focus();
         }
-    }, [chatAudience, language, scrollBottom, thinking, t]);
+    }, [chatAudience, language, scrollBottom, t]);
 
     useEffect(() => {
         if (chatAudience === "checking") return;
