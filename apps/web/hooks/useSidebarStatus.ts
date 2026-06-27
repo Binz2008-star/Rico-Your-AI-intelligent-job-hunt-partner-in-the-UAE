@@ -48,6 +48,12 @@ const TTL_MS = 60_000;
 let cache: { at: number; data: StatusData } | null = null;
 let inflight: Promise<StatusData> | null = null;
 
+/** Drop the module-level sidebar cache so the next render fetches fresh stats.
+ *  Call this after any action that changes pipeline counts (e.g. chat save). */
+export function bustSidebarCache(): void {
+    cache = null;
+}
+
 function clampPct(v: number | null | undefined): number | null {
     if (v == null) return null;
     const n = v > 1 ? v : v * 100; // accept 0–1 or 0–100

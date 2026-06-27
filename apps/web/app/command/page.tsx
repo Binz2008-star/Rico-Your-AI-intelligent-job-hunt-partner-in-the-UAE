@@ -7,6 +7,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, ProfileUpdatePayload, RicoOption, UploadCVResponse } from "@/lib/api";
 import type { RicoAgenticUi, RicoChatAction, RicoProposedChange, RicoAttachmentAnalysis, ExecuteAllowedAction } from "@/lib/schemas";
 import { EXECUTE_ALLOWED_ACTIONS } from "@/lib/schemas";
+import { bustSidebarCache } from "@/hooks/useSidebarStatus";
 import { ChatActionsRow } from "@/components/ui/rico/ChatActionCard";
 import { RicoMarkdownContent } from "@/components/ui/rico/RicoMarkdownContent";
 import { PermissionRequestCard } from "@/components/ui/rico/PermissionRequestCard";
@@ -1034,6 +1035,9 @@ export default function CommandPage() {
                 }
                 if (typeof res.messages_remaining === "number") {
                     setMessagesRemaining(res.messages_remaining);
+                }
+                if (res.type === "save_job") {
+                    bustSidebarCache();
                 }
             }
 
