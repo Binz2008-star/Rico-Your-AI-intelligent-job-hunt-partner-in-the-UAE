@@ -1,184 +1,220 @@
-# Proposal: Rico Mission Control Dashboard (Phase 1)
+# Proposal: Rico Mission Control — Career Operating System
 
-Status: proposal / PR plan
+Status: proposal / PR plan (direction approved with "Mission as philosophy" revision)
 Owner branch: `claude/rico-mission-control-proposal-a5bndk`
 Source-of-truth issues: #746 (Command UX + funnel), #138 (cinematic redesign system),
 #99 (Companion UX), #355 (Follow-up reminders/workers), #356 (Inbox Intelligence — design-only, later)
 
-This is **not** a new redesign. It is a small, action-first evolution of the page
-that already exists, reusing the existing API surface. No new backend workflow,
-no new AI provider, no billing changes, no motion system.
+This is **not** a new redesign and **not** a one-shot rebuild. It is a small,
+action-first first step that also commits to a product **identity**: Rico is a
+**Career Operating System** that runs the user's *career mission*, not a chat box.
+The first PR stays frontend-only and reuses existing APIs. The layered system
+below is the North Star the PRs grow toward — it is explicitly *not* Phase-1 scope.
 
 ---
 
-## Goal
+## 0. Product philosophy — "Mission", not "Dashboard"
 
-Turn the **logged-in** experience from chat-first into action-first. When a
-returning user lands, the first thing they see is *what to do today*, not an
-empty chat prompt. Chat ("Ask Rico") stays one tap away.
+Every Rico decision answers one question: **does this move the user closer to their
+career mission?** If yes, surface it. If no, keep it out of the user's way.
 
-Phase 1 surfaces exactly four things:
+This reframes the unit of work. Instead of `code → function → file → feature`, Rico's
+unit of automation is:
 
-1. **Today actions** — a prioritized, data-driven to-do list.
-2. **Pipeline summary** — scored opportunities / applications in flow / pacing.
-3. **Profile / CV readiness** — completeness score + missing fields.
-4. **Ask Rico entry point** — a prominent deep-link into `/command`.
+```
+Job → Application → Pipeline → Career → Mission → Career Lifecycle
+```
 
----
+Consequence for the codebase: the logged-in surface and its components adopt a
+**Mission** vocabulary — not `Dashboard`:
 
-## 1. Which page becomes Mission Control: `/dashboard` or `/command`?
+```
+MissionControl   (the page-level surface)
+CurrentMission   (the 🎯 header: role · city · salary · progress)
+MissionTodayCard (today's prioritized actions)
+MissionFeed      (later: "12 new jobs — review?")
+MissionTimeline  (later: today's events as a timeline, not chat)
+MissionAction / MissionStatus / MissionAssistant (later)
+```
 
-**`/dashboard`.**
-
-Rationale:
-
-- `/command` (`apps/web/app/command/page.tsx`, ~2,100 lines) **is** the chat-first
-  surface — message stream, streaming SSE, CV upload, job cards, permission
-  cards. It is the live "Ask Rico" experience and the target of the separate
-  `/command` visible-state track in **#746**. Repurposing it as a dashboard
-  would collide with that work and with the live chat flow documented in
-  `CLAUDE.md` (Public Chat Flow / CV Upload). It should *stay* the conversation
-  surface and become Mission Control's "Ask Rico" destination.
-- `/dashboard` (`apps/web/app/dashboard/page.tsx`) is already the right shell:
-  server component, `force-dynamic`, onboarding-gated (redirects to
-  `/onboarding` when `profile_exists === false`), and it already renders a
-  sectioned `DashboardContent` (Mission header → Pipeline → "Next Best Actions"
-  → Readiness → Momentum → Activity).
-- The gap is that today's "Next Best Actions" are **static placeholder
-  `StatusCard`s** (hard-coded links to `/command`, `/jobs`, `/settings`) — not
-  driven by the user's real state. Making them real is the whole job. That is an
-  evolution of one section, not a rebuild.
-
-Net: keep both routes, change their roles only slightly —
-`/dashboard` = Mission Control (action-first), `/command` = Ask Rico (chat).
-The sidebar/links already point users between them.
+The route stays `/dashboard` in Phase 1 (avoids breaking existing links and the
+onboarding redirect); a `/mission` alias can be added later once the surface is proven.
 
 ---
 
-## 2. Exact files to touch (first PR)
+## 1. North Star — Rico Career Operating System (target architecture)
 
-All frontend, all in `apps/web`. Five files, under the 6-file cap:
+This is the destination, captured so every PR can be checked against it. **None of
+the lower layers ship in Phase 1.**
+
+```
+                 Rico Career Operating System
+                 ┌─────────────────────────┐
+                 │   CAREER MISSION (top)   │  ← role, salary, city, deadline, progress
+                 │  "Land a better job"     │
+                 └────────────┬─────────────┘
+             ┌────────────────▼─────────────────┐
+             │        Rico Orchestrator          │  ← decides which agent runs next
+             └────────────────┬─────────────────┘
+PROFILE LAYER     CV · Skills · Experience · Target Roles · Salary · Cities · Prefs
+MEMORY LAYER      Saved jobs · Applications · Conversations · Recruiter history · Follow-ups · Docs
+INTELLIGENCE      Job Matching · CV Optimization · ATS · Interview Coach · Cover Letter · Advisor · Market Intel
+ACTION LAYER      Search · Save · Track · Follow-up · Prepare Interview · Notify
+AUTOMATION        Daily Scan · Telegram · Email Digest · Reminder Engine · Opportunity Radar
+AGENTS            Career Manager → Search · CV · ATS · Interview · Recruiter · Follow-up · Reminder · Analytics
+TOOLS             Job APIs · Browser · PDF/Word · Email · Telegram · Calendar · Neon · Stripe · OpenAI · DeepSeek
+GOVERNANCE        Permissions · Audit Logs · Rate Limits · AI Cost Control · PII · Consent · RBAC · Observability · Flags
+```
+
+What already exists in the repo (so we build *on* it, not beside it):
+
+- **Profile / Memory:** `fetchProfile`, applications, saved searches, chat history.
+- **Intelligence:** job matching + match reasons (#99), CV parsing/upload.
+- **Action:** `src/agent/runtime.py` (idempotent dispatcher), `actions` router.
+- **Automation:** `src/run_daily.py` (daily scan), Telegram router, `#355` reminders sweep.
+- **Governance:** `src/rico_safety.py`, rate limits, approval mode, notification audience rules.
+
+The orchestrator + multi-agent split is the long-term path — **not** invented now.
+
+---
+
+## 2. Phased rollout (UI-first, low-risk)
+
+| Phase | Theme | What ships |
+|------|-------|-----------|
+| **1 — Mission Control surface (this PR plan)** | Action-first home | `/dashboard` → MissionControl: 🎯 Current Mission header, Today's Actions, pipeline summary, profile/CV readiness, Ask Rico. Frontend only, existing APIs. |
+| 2 — Mission Feed | "Pull", not "ask" | Rico opens with "12 new jobs — review?" instead of an empty prompt. Reuses `getJobs`. |
+| 3 — Mission Timeline | Events, not chat | Today's progress as a timeline (found 12, CV updated, follow-up sent, awaiting Amazon, interview tomorrow). |
+| 4 — AI Workspace | Visible operations | Each mission step shows progress (Searching → Matching → Optimizing CV), Cursor-style. May need a job/operation status feed. |
+| 5 — Operating System | Morning brief | "Good morning Roben. Today: 4 interviews, 17 new jobs, 2 follow-ups, 1 recruiter replied. Recommended mission: apply to Emirates." Backed by automation + orchestrator. |
+
+Backend work (a real `Mission` model, orchestrator, agents, governance hardening)
+is layered in only when a phase needs it — never ahead of the UI that uses it.
+
+---
+
+## 3. Which page becomes Mission Control: `/dashboard` or `/command`?
+
+**`/dashboard`** (kept as the route; renamed to `MissionControl` in code).
+
+- `/command` (`apps/web/app/command/page.tsx`, ~2,100 lines) **is** the chat surface
+  and the target of #746's visible-state track — it stays the "Ask Rico" / conversation
+  destination, reached from Mission Control.
+- `/dashboard` already has the right shell: server component, `force-dynamic`,
+  onboarding gate (redirect to `/onboarding` when `profile_exists === false`), and a
+  sectioned content component. Today its "Next Best Actions" are **static placeholder
+  cards** — turning them into real, mission-driven actions is the whole Phase-1 job.
+
+---
+
+## 4. Exact files to touch (first PR — 5 files, under the 6-file cap)
+
+All frontend, all in `apps/web`. Existing `DashboardStats` and `ProfileReadinessCard`
+are reused unchanged inside MissionControl.
 
 | # | File | Change |
 |---|------|--------|
-| 1 | `apps/web/components/DashboardContent.tsx` | **Edit.** Reorder so the new Today panel + Ask Rico card are the top sections; replace the static "Next Best Actions" `StatusCard` trio with `<TodayActionsCard />`. Keep `<DashboardStats />` (pipeline) and the Readiness section (`ProfileSummaryCard` + `ProfileReadinessCard`) as-is. |
-| 2 | `apps/web/components/dashboard/TodayActionsCard.tsx` | **New.** Client component. Fetches the existing endpoints, builds a prioritized action list, renders rows with deep links. Loading / empty / error states. |
-| 3 | `apps/web/lib/dashboard/today.ts` | **New.** Pure, unit-testable helper: takes the fetched data and returns an ordered `TodayAction[]` (priority + label + href). No I/O, so it can be tested without the network. |
-| 4 | `apps/web/components/dashboard/AskRicoCard.tsx` | **New.** Prominent "Ask Rico" entry: links to `/command` plus 2–3 quick-prompt chips using the already-supported `?q=` deep-link (CommandPage reads `?prompt=`/`?q=`). |
-| 5 | `apps/web/lib/translations.ts` | **Edit.** Add `en`/`ar` keys for the Today panel and Ask Rico copy (project i18n pattern via `useTranslation`). |
+| 1 | `apps/web/app/dashboard/page.tsx` | **Edit.** Render `<MissionControl />` instead of `<DashboardContent />`. Onboarding gate unchanged. |
+| 2 | `apps/web/components/mission/MissionControl.tsx` | **New.** Page composition. Top→bottom: `CurrentMission` header (inline) → `MissionTodayCard` → `DashboardStats` (pipeline, reused) → readiness (`ProfileSummaryCard` + `ProfileReadinessCard`, reused) → Ask Rico CTA (inline). |
+| 3 | `apps/web/components/mission/MissionTodayCard.tsx` | **New.** Today's prioritized actions from existing endpoints, with loading/empty/error states. |
+| 4 | `apps/web/lib/mission/today.ts` | **New.** Pure, unit-testable: input = fetched data, output = ordered `MissionAction[]` (priority + label + href). No I/O. |
+| 5 | `apps/web/lib/translations.ts` | **Edit.** `en`/`ar` keys for Current Mission, Today's Actions, Ask Rico. |
 
-Reused without modification: `DashboardStats.tsx`, `ProfileReadinessCard.tsx`,
-`ProfileSummaryCard.tsx`, `DashboardShell.tsx`, all of `lib/api.ts`, and the
-`/dashboard` server page (onboarding gate stays).
+> The 🎯 Current Mission header and Ask Rico block live inline in `MissionControl` for
+> Phase 1 to respect the 5-file cap; extract to `CurrentMissionHeader.tsx` /
+> `MissionAssistantCard.tsx` in a follow-up once they grow. The old `DashboardContent.tsx`
+> can be deleted in the same PR (it becomes dead) or kept one release as a thin re-export.
 
----
-
-## 3. Data sources already available (no new backend)
-
-Every Phase-1 tile is assembled client-side from endpoints already wired into
-`apps/web/lib/api.ts`:
-
-| Tile | Helper (`lib/api.ts`) | Endpoint | Fields used |
-|------|----------------------|----------|-------------|
-| Today: follow-ups due | `getFollowUpReminders()` | `GET /api/v1/apply/follow-ups` | `ApplicationDraft[]` (`job_title`, `company`, `follow_up_at`) — the #355 reminder surface |
-| Today: drafts awaiting approval | `getApplicationQueue()` | `GET /api/v1/apply/queue` | pending `ApplicationDraft[]` (`status === "pending"`) |
-| Today: complete-profile nudge | `fetchProfile()` | `GET /api/v1/rico/profile` | `profile_exists`, `completeness_score`, missing fields / `target_roles` |
-| Today: review new matches | `getJobs(1,1,0)` | `GET /api/v1/jobs` | `total` (scored opportunities) |
-| Pipeline summary | `getJobs` / `getApplications` / `getApplicationStats` / `getSettings` | `…/jobs`, `…/applications`, `…/applications/stats`, `…/settings` | already rendered by `DashboardStats` |
-| Profile / CV readiness | `fetchProfile()` | `GET /api/v1/rico/profile` | `completeness_score`, field breakdown (already rendered by `ProfileReadinessCard`) |
-| Ask Rico | `fetchMe()` (name only, optional) | `GET /api/v1/me` | `name` for greeting; chips deep-link to `/command?q=…` |
-
-These mirror the visible-state needs called out in #746 (CV/profile status,
-latest search, tracked applications, next action) and the "one clear next
-action" requirement of #99 — without backend changes.
+Reused without modification: `DashboardShell`, `DashboardStats`, `ProfileReadinessCard`,
+`ProfileSummaryCard`, all of `lib/api.ts`.
 
 ---
 
-## 4. Missing APIs
+## 5. Data sources already available (no new backend)
 
-**None required for Phase 1.** All four tiles compose from existing endpoints.
-
-Caveats (data freshness, not missing routes):
-
-- `GET /api/v1/apply/follow-ups` only returns items once the **#355** reminders
-  sweep (`POST /api/v1/pipeline/reminders`, cron) has transitioned applications
-  to `follow_up_due`. If the cron is not yet scheduled in production, this tile
-  is simply empty — it degrades gracefully, it does not error. (Scheduling the
-  cron is #355's job, out of scope here.)
-- Per-application `needs_follow_up` / `days_since_applied` flags exist on the
-  applications payload (`applications_repo.get_all`) and the chat
-  `application_status` shape, so a follow-up count can also be derived from
-  `getApplications()` if we prefer not to depend on the queue endpoint.
-
-**Optional future (NOT this PR):** a single `GET /api/v1/dashboard/today`
-aggregator to collapse the client-side fan-out (currently ~4 parallel calls)
-into one response. Defer until Phase 1 proves the layout; it is an optimization,
-not a blocker.
+| Surface | Helper (`lib/api.ts`) | Endpoint | Fields |
+|--------|----------------------|----------|--------|
+| 🎯 Current Mission: role / city / salary | `fetchProfile()` | `GET /api/v1/rico/profile` | `target_roles[0]`, `preferred_cities[0]`, `salary_expectation_aed` |
+| 🎯 Current Mission: progress | `fetchProfile()` + pipeline | `…/rico/profile`, `…/applications/stats` | proxy from `completeness_score` + pipeline activity |
+| Today: drafts awaiting approval | `getApplicationQueue()` | `GET /api/v1/apply/queue` | pending `ApplicationDraft[]` |
+| Today: follow-ups due | `getFollowUpReminders()` | `GET /api/v1/apply/follow-ups` | `ApplicationDraft[]` (`follow_up_at`) — #355 surface |
+| Today: complete-profile nudge | `fetchProfile()` | `GET /api/v1/rico/profile` | `completeness_score`, missing fields |
+| Today: review new matches | `getJobs(1,1,0)` | `GET /api/v1/jobs` | `total` |
+| Pipeline summary | `getJobs` / `getApplications` / `getApplicationStats` / `getSettings` | (existing) | rendered by `DashboardStats` |
+| Profile / CV readiness | `fetchProfile()` | `GET /api/v1/rico/profile` | rendered by `ProfileReadinessCard` |
+| Ask Rico chips | — | `/command?q=…` deep-link (already supported) | — |
 
 ---
 
-## 5. First PR scope (under 6 files)
+## 6. Missing APIs
 
-**Title:** `feat(dashboard): Mission Control Phase 1 — action-first dashboard`
+**Phase 1: none required.** Every tile composes from existing endpoints, so the first
+PR ships with zero backend change.
+
+Honest gaps (data, not routes — handled by graceful degradation now, real backend later):
+
+- **No `Mission` model yet.** `deadline` and a true `progress %` are not stored, so the
+  🎯 header shows role/city/salary now and treats deadline + progress as **optional**
+  (progress = a transparent proxy from `completeness_score` + pipeline activity, labelled
+  as such — never a fake number). A real `missions` table + `GET/PUT /api/v1/mission` is
+  the first backend item when Phase 2/3 needs it.
+- **Follow-ups depend on the #355 cron** running in production to populate `follow_up_due`;
+  until then that tile is simply empty (degrades, never errors).
+- **Optional later:** `GET /api/v1/dashboard/today` (or `/mission/today`) aggregator to
+  collapse the ~4 parallel client calls into one. Deferred — optimization, not a blocker.
+
+---
+
+## 7. First PR scope (under 6 files)
+
+**Title:** `feat(mission): Mission Control Phase 1 — action-first career home`
 
 **In scope:**
+- `/dashboard` renders `MissionControl` (Mission-named components).
+- 🎯 `CurrentMission` header from real profile data (role · city · salary · progress proxy).
+- `MissionTodayCard`: prioritized actions, ordered by `lib/mission/today.ts`:
+  drafts awaiting approval → follow-ups due → complete profile → review N new matches.
+  Each row is one tap to a real destination (`/flow`, `/profile`, `/jobs`, `/command?q=…`).
+- Ask Rico CTA → `/command` + 2–3 quick-prompt chips via `?q=`.
+- i18n (en/ar); loading/empty/error states.
 
-- Add `TodayActionsCard` driven by `getFollowUpReminders` + `getApplicationQueue`
-  + `fetchProfile` + `getJobs`, ordered by `lib/dashboard/today.ts`.
-- Priority order (highest first): drafts awaiting approval → follow-ups due →
-  complete profile (when `completeness_score` below threshold) → review N new
-  matches. Each row is a single tap with a real destination
-  (`/flow`, `/profile`, `/jobs`, `/command?q=…`).
-- Add `AskRicoCard` with a primary "Ask Rico" CTA → `/command` and 2–3
-  quick-prompt chips via `?q=`.
-- Reorder `DashboardContent` so Today + Ask Rico are the top two sections; keep
-  `DashboardStats` (pipeline) and the existing Readiness section beneath.
-- i18n keys (en/ar). Loading / empty / error states for the new card.
+**Out of scope (constraints honoured):** no new backend route/workflow; no `Mission`
+table yet; no new AI provider; no billing changes; no motion/animation system (#138);
+no `/command` chat changes (#746 track); no Inbox Intelligence (#356, design-only);
+no orchestrator/agents/governance work; no broad redesign (`DashboardShell` + theme unchanged).
 
-**Explicitly out of scope (per constraints):**
-
-- No new backend route or workflow; no `dashboard/today` aggregator yet.
-- No new AI provider; no billing/subscription changes.
-- No motion/animation system (#138 cinematic layer stays untouched).
-- No `/command` chat changes (that is the #746 visible-state track).
-- No Inbox Intelligence (#356 is design-only, later).
-- No broad redesign — `DashboardShell`, theme tokens, and other sections unchanged.
-
-**Files:** `DashboardContent.tsx` (edit), `TodayActionsCard.tsx` (new),
-`today.ts` (new), `AskRicoCard.tsx` (new), `translations.ts` (edit) = **5 files.**
+**Files:** 5 (see §4).
 
 ---
 
-## 6. Acceptance criteria
+## 8. Acceptance criteria
 
-- [ ] Logged-in `/dashboard` renders **Today actions** and **Ask Rico** as the
-      top two sections; pipeline summary and profile/CV readiness remain visible
-      below.
-- [ ] Today actions are **derived from live data** (follow-ups, pending drafts,
-      profile completeness, job match count) — no hard-coded placeholder rows.
-- [ ] Actions are prioritized deterministically by `lib/dashboard/today.ts`, and
-      each row deep-links to a real destination that performs the action.
-- [ ] When a user has nothing pending, the card shows a clear, non-empty empty
-      state (e.g. "You're all caught up — ask Rico to find new roles") rather
-      than a blank panel.
-- [ ] Each data source fails independently: a 401/timeout/empty on one feed
-      degrades that tile only and never blocks the rest of the dashboard
-      (matches the existing `DashboardStats` per-feed pattern).
-- [ ] "Ask Rico" opens `/command`; quick-prompt chips pass a working `?q=`
-      deep-link that CommandPage consumes.
-- [ ] Onboarding gate is preserved: users without a profile still redirect to
-      `/onboarding`.
-- [ ] No new env vars, no new backend endpoints, no billing or provider changes.
-- [ ] `npm run build` and `npm run lint` pass in `apps/web`; `lib/dashboard/today.ts`
-      has unit coverage for the prioritization order.
-- [ ] Mobile-friendly and accessible (keyboard-reachable rows, `aria-label`s),
-      consistent with #99's mobile/accessibility requirement.
+- [ ] Logged-in `/dashboard` renders **MissionControl** with the 🎯 Current Mission header
+      and Today's Actions as the top two blocks; pipeline + profile/CV readiness below.
+- [ ] Current Mission header uses **real profile data**; when role/salary/city are missing
+      it shows a "set your mission" prompt, never invented values; progress is a labelled proxy.
+- [ ] Today's actions are **derived from live data** (queue, follow-ups, profile, matches) —
+      no hard-coded placeholder rows.
+- [ ] Actions are prioritized deterministically by `lib/mission/today.ts` (unit-tested),
+      and each row deep-links to a destination that performs the action.
+- [ ] Caught-up state shows a clear non-empty message ("All clear — ask Rico to find new
+      roles"), not a blank panel.
+- [ ] Each feed fails independently: a 401/timeout/empty on one tile never blocks the rest
+      (same per-feed pattern as `DashboardStats`).
+- [ ] Ask Rico opens `/command`; quick-prompt chips pass a working `?q=` deep-link.
+- [ ] Onboarding gate preserved (no profile → `/onboarding`).
+- [ ] No new env vars, backend endpoints, billing, or provider changes.
+- [ ] `npm run build` and `npm run lint` pass in `apps/web`.
+- [ ] Mobile-friendly and accessible (keyboard-reachable rows, `aria-label`s) per #99.
 
 ---
 
-## Phasing beyond PR 1 (context only — not this PR)
+## 9. Beyond PR 1 (context only)
 
-- **PR 2:** `GET /api/v1/dashboard/today` aggregator to replace client fan-out.
-- **PR 3:** richer follow-up actions once #355 cron is live in production.
-- **PR 4+:** match-explanation surfacing (#99) and `/command` visible-state cards
-  (#746) — separate tracks, not folded into Mission Control.
+- **PR 2:** Mission Feed ("12 new jobs — review?") on top of `getJobs`.
+- **PR 3:** Mission Timeline (events, not chat) + `missions` table for deadline/progress.
+- **PR 4:** AI Workspace operation states; richer follow-ups once #355 cron is live.
+- **PR 5:** Morning brief + orchestrator; agent split (Search/CV/ATS/Interview/Recruiter/
+  Follow-up/Reminder/Analytics) introduced one agent at a time behind feature flags.
+- Governance (audit, cost control, PII, RBAC, observability) hardens alongside automation —
+  not deferred to the end.
