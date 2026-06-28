@@ -10297,12 +10297,15 @@ class RicoChatAPI:
 
         text = str(doc.get("extracted_text") or "").strip()
         if not text:
+            # Image uploaded but OCR hasn't run yet — guide user to extract first.
             reply = (
-                "المستند المرفوع لا يحتوي على نص مقروء. "
-                "ارفع ملفاً يحتوي على نص واضح."
+                "الصورة المرفوعة لم تُقرأ بعد. "
+                "اضغط على **'استخراج النص (OCR)'** أو **'وصف هذه الصورة'** أولاً — "
+                "بعد قراءتها سأتمكن من حفظها كوظيفة مستهدفة أو تقييمها مقابل سيرتك الذاتية."
                 if _is_ar else
-                "The uploaded document doesn't have readable text. "
-                "Please upload a clear image or PDF with visible text."
+                "The uploaded image hasn't been read yet. "
+                "First click **'Extract text (OCR)'** or **'Describe this image'** — "
+                "once I've read it, I can save it as a target job or score it against your CV."
             )
             self._append_chat(user_id, "assistant", reply)
             return {"type": "document_context", "message": reply, "success": False}
