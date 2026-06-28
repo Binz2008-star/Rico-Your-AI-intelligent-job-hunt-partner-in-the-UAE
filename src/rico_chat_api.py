@@ -11062,7 +11062,9 @@ class RicoChatAPI:
         """
         try:
             import time
-            ctx = self.memory.get_context(user_id, self._PENDING_DELETE_SAVED_JOBS_KEY) or {}
+            ctx = self.memory.get_context(user_id, self._PENDING_DELETE_SAVED_JOBS_KEY)
+            if not isinstance(ctx, dict):
+                return None
         except Exception:
             return None
 
