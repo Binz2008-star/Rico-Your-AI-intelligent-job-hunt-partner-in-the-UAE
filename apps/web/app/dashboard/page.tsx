@@ -1,5 +1,5 @@
-import { DashboardContent } from "@/components/DashboardContent";
 import { DashboardShell } from "@/components/DashboardShell";
+import { MissionControl } from "@/components/mission/MissionControl";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -41,8 +41,8 @@ export default async function DashboardPage({
   }
 
   return (
-    <DashboardShell>
-      <DashboardContent />
+    <DashboardShell title="Mission Control">
+      <MissionControl />
     </DashboardShell>
   );
 }
