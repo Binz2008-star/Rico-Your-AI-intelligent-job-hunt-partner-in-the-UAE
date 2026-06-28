@@ -3,6 +3,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, Inter, Space_Grotesk } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 
 // No-flash theme script: runs before paint to apply the stored theme class so a
@@ -36,25 +37,50 @@ const ibmPlexMono = IBM_Plex_Mono({
     display: "swap",
 });
 
+const SITE_URL = "https://ricohunt.com";
+const OG_IMAGE = `${SITE_URL}/opengraph-image`;
+
 export const metadata: Metadata = {
     metadataBase: new URL(
         process.env.NEXT_PUBLIC_APP_URL ||
         process.env.NEXT_PUBLIC_SITE_URL ||
-        "https://ricohunt.com"
+        SITE_URL
     ),
-    title: "Rico Hunt — Your AI Job-Hunt Partner in the UAE",
-    description: "Your AI job-hunt partner in the UAE. Upload your CV and Rico finds matching jobs, tracks your applications, and guides your next move — in English and Arabic.",
-    alternates: { canonical: "/" },
+    title: "Rico Hunt — AI Career Operating System for the UAE",
+    description:
+        "Rico Hunt helps professionals in the UAE manage their entire job search with AI — from CV analysis and job matching to application tracking, follow-ups, and interview preparation.",
+    alternates: {
+        canonical: "/",
+    },
     openGraph: {
-        title: "Rico Hunt — Your AI Job-Hunt Partner in the UAE",
-        description: "Upload your CV. Rico finds matching UAE jobs, tracks your applications, and guides your next move — in English and Arabic.",
-        type: "website",
+        title: "Rico Hunt — AI Career Operating System for the UAE",
+        description:
+            "Rico Hunt helps professionals in the UAE manage their entire job search with AI — from CV analysis and job matching to application tracking, follow-ups, and interview preparation.",
+        url: `${SITE_URL}/`,
         siteName: "Rico Hunt",
+        type: "website",
+        images: [
+            {
+                url: OG_IMAGE,
+                width: 1200,
+                height: 630,
+                alt: "Rico Hunt — AI Career Operating System for the UAE",
+            },
+        ],
     },
     twitter: {
         card: "summary_large_image",
-        title: "Rico Hunt — Your AI Job-Hunt Partner in the UAE",
-        description: "Upload your CV. Rico finds matching UAE jobs, tracks your applications, and guides your next move — in English and Arabic.",
+        title: "Rico Hunt — AI Career Operating System for the UAE",
+        description:
+            "Rico Hunt helps professionals in the UAE manage their entire job search with AI — from CV analysis and job matching to application tracking, follow-ups, and interview preparation.",
+        images: [OG_IMAGE],
+    },
+    icons: {
+        icon: [
+            { url: "/favicon.ico", sizes: "any" },
+            { url: "/icon.svg", type: "image/svg+xml" },
+        ],
+        apple: "/apple-touch-icon.png",
     },
 };
 
@@ -65,6 +91,70 @@ export const viewport: Viewport = {
     initialScale: 1,
     viewportFit: "cover",
     themeColor: "#06060c",
+};
+
+// JSON-LD structured data: Organization + WebSite + SoftwareApplication
+const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+        {
+            "@type": "Organization",
+            "@id": `${SITE_URL}/#organization`,
+            name: "Rico Hunt",
+            url: SITE_URL,
+            logo: {
+                "@type": "ImageObject",
+                url: `${SITE_URL}/icon.svg`,
+            },
+            sameAs: [],
+            contactPoint: {
+                "@type": "ContactPoint",
+                contactType: "customer support",
+                areaServed: "AE",
+                availableLanguage: ["English", "Arabic"],
+            },
+        },
+        {
+            "@type": "WebSite",
+            "@id": `${SITE_URL}/#website`,
+            url: SITE_URL,
+            name: "Rico Hunt",
+            description:
+                "AI Career Operating System for professionals in the UAE — CV analysis, job matching, application tracking, follow-ups, and interview preparation.",
+            publisher: { "@id": `${SITE_URL}/#organization` },
+            potentialAction: {
+                "@type": "SearchAction",
+                target: {
+                    "@type": "EntryPoint",
+                    urlTemplate: `${SITE_URL}/jobs?q={search_term_string}`,
+                },
+                "query-input": "required name=search_term_string",
+            },
+            inLanguage: ["en", "ar"],
+        },
+        {
+            "@type": "SoftwareApplication",
+            "@id": `${SITE_URL}/#app`,
+            name: "Rico Hunt",
+            url: SITE_URL,
+            applicationCategory: "BusinessApplication",
+            operatingSystem: "Web",
+            description:
+                "Rico Hunt helps professionals in the UAE manage their entire job search with AI — from CV analysis and job matching to application tracking, follow-ups, and interview preparation.",
+            offers: {
+                "@type": "Offer",
+                price: "0",
+                priceCurrency: "AED",
+            },
+            publisher: { "@id": `${SITE_URL}/#organization` },
+            availableOnDevice: "Desktop, Mobile",
+            inLanguage: ["en", "ar"],
+            areaServed: {
+                "@type": "Country",
+                name: "United Arab Emirates",
+            },
+        },
+    ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -79,6 +169,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 />
             </head>
             <body className={`${spaceGrotesk.variable} ${inter.variable} ${ibmPlexMono.variable} antialiased bg-background text-text-primary font-body overflow-x-hidden`}>
+                <Script
+                    id="json-ld-root"
+                    type="application/ld+json"
+                    strategy="beforeInteractive"
+                    dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+                />
                 <ThemeProvider><LanguageProvider>{children}</LanguageProvider></ThemeProvider>
                 <Analytics />
             </body>

@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "Rico Hunt — Your AI Job-Hunt Partner in the UAE";
+export const alt = "Rico Hunt — AI Career Operating System for the UAE";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -75,7 +75,7 @@ export default function Image() {
                         letterSpacing: -1,
                     }}
                 >
-                    Your AI Job-Hunt Partner in the UAE
+                    AI Career Operating System for the UAE
                 </div>
 
                 {/* Sub-headline */}
@@ -88,12 +88,12 @@ export default function Image() {
                         marginBottom: 52,
                     }}
                 >
-                    Upload your CV. Rico finds matching jobs, tracks applications, and guides your next move — in English and Arabic.
+                    CV analysis, job matching, application tracking, follow-ups, and interview preparation — all in one place.
                 </div>
 
                 {/* Feature pills */}
                 <div style={{ display: "flex", gap: 12 }}>
-                    {["CV-first onboarding", "Manual approval only", "English & Arabic"].map((label) => (
+                    {["CV Analysis", "Job Matching", "Application Tracking", "Interview Prep"].map((label) => (
                         <div
                             key={label}
                             style={{
