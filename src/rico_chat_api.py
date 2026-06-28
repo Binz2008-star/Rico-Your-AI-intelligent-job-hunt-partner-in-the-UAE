@@ -3309,7 +3309,7 @@ class RicoChatAPI:
     ) -> dict[str, Any]:
         """Finalize response with metadata."""
         from src.services.agentic_ui_composer import compose
-        agentic_ui = compose(runtime_result)
+        agentic_ui = compose(runtime_result, response)
         agent = self._get_openai_agent()
 
         # Get Jotform form IDs from environment
