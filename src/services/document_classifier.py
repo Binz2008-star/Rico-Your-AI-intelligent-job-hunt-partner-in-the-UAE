@@ -265,6 +265,12 @@ _SUGGESTED_ACTIONS: dict[str, list[dict[str, str]]] = {
          "message": "Describe what's in this image."},
         {"label": "Extract text (OCR)",  "kind": "chat_continue",
          "message": "Extract any visible text from this image."},
+        # Finding 3: job-screenshot → save/score actions. Handler checks for
+        # extracted_text and guides user to extract first if not yet read.
+        {"label": "Save as target job",    "kind": "chat_continue",
+         "message": "Save this as a target job in my pipeline."},
+        {"label": "Score against my CV",   "kind": "chat_continue",
+         "message": "Score this job description against my current CV."},
     ],
     "unknown": [
         {"label": "Summarize",               "kind": "chat_continue",

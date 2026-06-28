@@ -54,6 +54,7 @@ export default function manifest(): MetadataRoute.Manifest {
                 src: "/screenshots/mobile.png",
                 sizes: "390x844",
                 type: "image/png",
+                // @ts-expect-error: label is a valid PWA manifest field not yet typed by Next.js
                 label: "Rico Hunt Mobile \u2014 Track applications on the go",
             },
         ],
