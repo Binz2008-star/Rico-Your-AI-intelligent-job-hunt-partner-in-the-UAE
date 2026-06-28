@@ -10,6 +10,7 @@ import { EXECUTE_ALLOWED_ACTIONS } from "@/lib/schemas";
 import { bustSidebarCache } from "@/hooks/useSidebarStatus";
 import { ChatActionsRow } from "@/components/ui/rico/ChatActionCard";
 import { RicoMarkdownContent } from "@/components/ui/rico/RicoMarkdownContent";
+import { MissionContextBar } from "@/components/mission/MissionContextBar";
 import { PermissionRequestCard } from "@/components/ui/rico/PermissionRequestCard";
 import { ProposedChangeCard } from "@/components/ui/rico/ProposedChangeCard";
 import { AttachmentAnalysisCard } from "@/components/ui/rico/AttachmentAnalysisCard";
@@ -1575,6 +1576,11 @@ export default function CommandPage() {
                 className="hidden"
                 onChange={handleCVUpload}
             />
+
+            {/* Mission Context Bar — authenticated only; shows goal, progress, next action */}
+            {chatAudience === "authenticated" && (
+                <MissionContextBar onAction={(prompt) => void sendMessage(prompt)} />
+            )}
 
             <main id="command-main" className="relative z-10 mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col px-2 sm:px-4 lg:px-6">
                 {/* The cold-start banner stays mounted and overlays the message pane,
