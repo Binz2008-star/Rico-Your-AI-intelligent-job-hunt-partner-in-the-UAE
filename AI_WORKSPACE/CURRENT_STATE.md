@@ -1,6 +1,6 @@
 # Current State
 
-_Last updated: 2026-06-27 — **QA Cycle 1 CLOSED.** P0 #764 (mutation trust guard) deployed and verified. BUG-01 through BUG-05, BUG-08, BUG-09, BUG-10 all deploy-verified at `4ad2e29`. BUG-06/BUG-07 blocked (no owner description). Next: P2 user-experience and agent capability improvements._
+_Last updated: 2026-06-28 — **PR #770 merged** (P2-B delete-saved-jobs + PR-A agentic UI schema + PR-C live action cards). Chat-as-interface milestone: Rico now emits `agentic_ui` action cards in every real chat response. Career OS vision recorded in `AI_WORKSPACE/CAREER_OS_VISION.md`. QA Cycle 1 remains closed at `4ad2e29`; #770 is the next production commit._
 
 ## QA Cycle 1 — CLOSED 2026-06-27
 
@@ -193,6 +193,33 @@ Fixing bugs from the "Rico Website Hard QA Report". Each PR is one bug category,
 
 - **Status:** ✅ Merged at `2ef4107` (2026-06-27). Content: 606-line `docs/runbooks/production-drift-005-011.md`.
 - **Rollback execution (owner-only):** after G1–G6 signed off, owner applies migrations 011 (Step A) then 005 (Step B) via Neon console.
+
+## Chat-as-Interface milestone — PR #770 (2026-06-28)
+
+Merged at `78c22857`. Squash commit: `feat(chat-as-interface): P2-B delete-saved-jobs + PR-A agentic UI schema + PR-C live action cards`.
+
+| Sub-feature | What shipped |
+|---|---|
+| **P2-B** | 2-turn delete-saved-jobs confirmation (`_handle_pending_delete_saved_jobs`, memory TTL, `delete_saved_jobs_confirm` → `delete_saved_jobs_done`) |
+| **PR-A** | `RicoAgenticUi` Pydantic schema (`src/schemas/chat.py`) — actions, permission_request, proposed_changes, attachment_analysis, progress |
+| **PR-C** | `compose(result, response_dict)` in `src/services/agentic_ui_composer.py` — emits type-based action cards on every real chat response |
+| **MagicMock fix** | `isinstance(ctx, dict)` guard in `_handle_pending_delete_saved_jobs` — fixes 10 previously-failing tests |
+| **Tests** | 38 `test_agentic_ui_composer.py` + 41 `test_attachment_analysis_factory.py` + 2 conversation-state fixes |
+
+Action cards now emitted by type:
+
+| Response type | Actions |
+|---|---|
+| `job_matches` | View all jobs (navigate /flow) + Save search (chat_continue) + Refine search (chat_continue) |
+| `delete_saved_jobs_confirm` | Yes, delete all (high impact, requires_confirmation) + No, keep them |
+| `delete_saved_jobs_done` | Find new jobs (chat_continue) |
+| `profile_update` / `profile_summary` / `cv_first_profile` | View my profile (navigate /profile) |
+| `application_status_update` | Track applications (navigate /applications) |
+| `save_job` | View saved jobs (navigate /flow) |
+
+**Pending:** Render deploy (auto-triggered on main push). Vercel preview was green at `4J9TMRdDLTD`.
+
+---
 
 ## Forward plan — P2 User Experience and Agent Capabilities (2026-06-27)
 
