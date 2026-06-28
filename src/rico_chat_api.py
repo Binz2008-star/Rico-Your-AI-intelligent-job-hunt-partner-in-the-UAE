@@ -2024,6 +2024,19 @@ class RicoChatAPI:
                 else:
                     ctx.pop("preferred_cities", None)
 
+            # #732 — flag stale/unevidenced coding target_roles so the AI never
+            # asserts "Developer" when the CV evidence points elsewhere.
+            _ctx_roles = self._as_list(ctx.get("target_roles", []))
+            if _ctx_roles and self._has_cv_profile(profile):
+                try:
+                    if not self._role_is_cv_aligned(profile, str(_ctx_roles[0])):
+                        ctx["target_roles_note"] = (
+                            "STALE — these saved target roles may not reflect the current CV. "
+                            "Do not assert or search these roles without first confirming with the user."
+                        )
+                except Exception:
+                    pass
+
         # Embed last 8 turns so the AI has conversation context for yes/no and follow-ups
         if user_id:
             # Inject uploaded documents FIRST: the serialized context is truncated
@@ -11498,8 +11511,8 @@ class RicoChatAPI:
         """Handle 'keep going / كمل / continue' after CV upload or profile-building.
 
         Priority:
-        1. Profile has target_roles → search with the first one.
-        2. Profile has CV → suggest roles and ask user to choose.
+        1. Profile has target_roles AND they are CV-aligned → search with the first one.
+        2. Profile has CV (or stale target_roles) → suggest roles and ask user to choose.
         3. No context → ask one concise question.
         """
         has_cv = bool(profile and self._profile_value(profile, "cv_status") == "parsed")
@@ -11507,6 +11520,9 @@ class RicoChatAPI:
 
         if target_roles:
             chosen_role = target_roles[0]
+            # #732 — skip stale/unevidenced coding role; surface CV-derived suggestions.
+            if has_cv and not self._role_is_cv_aligned(profile, chosen_role):
+                return self._handle_profile_role_suggestions(profile, message)
             return self._classified_role_search(user_id, chosen_role, profile)
 
         if has_cv:
@@ -12039,7 +12055,14 @@ class RicoChatAPI:
         if cv_ok:
             lines.append("📄 CV uploaded and parsed")
         if target_roles:
-            lines.append(f"🎯 **Target roles:** {', '.join(target_roles[:3])}")
+            role_display = ', '.join(target_roles[:3])
+            if cv_ok and not self._role_is_cv_aligned(profile, target_roles[0]):
+                lines.append(
+                    f"🎯 **Target roles:** {role_display} "
+                    f"*(may not match your CV — say \"suggest roles from my CV\" to update)*"
+                )
+            else:
+                lines.append(f"🎯 **Target roles:** {role_display}")
         if cities:
             lines.append(f"📍 **Preferred cities:** {', '.join(cities[:3])}")
         if exp is not None:

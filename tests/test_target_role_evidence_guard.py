@@ -194,3 +194,131 @@ def test_delegated_decision_stale_non_coding_role_is_lenient():
         result = api._handle_delegated_decision("user1", profile, "choose for me")
     assert result["type"] == "job_search_explicit"
     assert result["chosen_role"] == "Marketing Manager"
+
+
+# ── _handle_profile_readback — #732 profile summary stale-role warning ────────
+
+def test_profile_readback_stale_developer_shows_warning():
+    """CV present + Developer saved but no coding evidence → profile summary shows
+    stale-role warning, not a bare role assertion."""
+    api = _api()
+    profile = {
+        "target_roles": ["Developer"],
+        "cv_filename": "cv.pdf",
+        "cv_status": "parsed",
+        "skills": ["NEBOSH", "ISO 14001", "sustainability"],
+        "years_experience": 8,
+    }
+    with patch.object(api, "_generate_role_suggestions", return_value=[]):
+        result = api._handle_profile_readback("user1", profile, "show my profile")
+    assert result["type"] == "profile_summary"
+    assert "may not match your CV" in result["message"]
+
+
+def test_profile_readback_evidenced_developer_no_warning():
+    """CV present + coding evidence → no stale-role warning (no regression)."""
+    api = _api()
+    profile = {
+        "target_roles": ["Developer"],
+        "cv_filename": "cv.pdf",
+        "cv_status": "parsed",
+        "skills": ["Python", "Django", "REST APIs"],
+    }
+    coding_sugg = [{"label": "Software Developer"}]
+    with patch.object(api, "_generate_role_suggestions", return_value=coding_sugg):
+        result = api._handle_profile_readback("user1", profile, "show my profile")
+    assert result["type"] == "profile_summary"
+    assert "may not match your CV" not in result["message"]
+    assert "Developer" in result["message"]
+
+
+def test_profile_readback_no_cv_no_warning():
+    """No CV → alignment cannot be assessed; role shown as-is (no regression)."""
+    api = _api()
+    profile = {"target_roles": ["Developer"], "years_experience": 3}
+    result = api._handle_profile_readback("user1", profile, "show my profile")
+    assert result["type"] == "profile_summary"
+    assert "may not match your CV" not in result["message"]
+    assert "Developer" in result["message"]
+
+
+# ── _handle_post_cv_continuation — #732 continuation stale-role gap ──────────
+
+def test_post_cv_continuation_stale_developer_routes_to_suggestions():
+    """CV parsed + Developer saved but no coding evidence → role suggestions,
+    not an immediate search (new #732 gap fixed)."""
+    api = _api()
+    profile = {
+        "target_roles": ["Developer"],
+        "cv_status": "parsed",
+        "cv_filename": "cv.pdf",
+        "skills": ["NEBOSH", "ISO 14001", "sustainability"],
+    }
+    with patch.object(api, "_generate_role_suggestions", return_value=[]):
+        result = api._handle_post_cv_continuation("user1", profile, "keep going")
+    assert result["type"] == "profile_role_suggestions"
+
+
+def test_post_cv_continuation_evidenced_developer_searches():
+    """CV parsed + coding evidence → proceeds to search (no regression)."""
+    api = _api()
+    profile = {
+        "target_roles": ["Developer"],
+        "cv_status": "parsed",
+        "cv_filename": "cv.pdf",
+        "skills": ["Python", "FastAPI"],
+    }
+    coding_sugg = [{"label": "Software Developer"}]
+    with patch.object(api, "_generate_role_suggestions", return_value=coding_sugg):
+        with patch.object(api, "_classified_role_search", return_value={"type": "job_search_explicit"}) as mock_search:
+            result = api._handle_post_cv_continuation("user1", profile, "continue")
+    assert mock_search.called
+    assert result["type"] == "job_search_explicit"
+
+
+def test_post_cv_continuation_no_cv_no_alignment_check():
+    """No CV → alignment skipped; target role used directly (no regression)."""
+    api = _api()
+    profile = {"target_roles": ["Developer"]}
+    with patch.object(api, "_classified_role_search", return_value={"type": "job_search_explicit"}) as mock_search:
+        result = api._handle_post_cv_continuation("user1", profile, "continue")
+    assert mock_search.called
+
+
+# ── _build_openai_context — #732 stale-role AI context note ──────────────────
+
+def test_openai_context_stale_developer_adds_note():
+    """CV present + Developer saved + no coding evidence → context includes
+    target_roles_note warning so the AI doesn't assert Developer."""
+    api = _api()
+    profile = {
+        "target_roles": ["Developer"],
+        "cv_filename": "cv.pdf",
+        "skills": ["NEBOSH", "ISO 14001"],
+    }
+    with patch.object(api, "_generate_role_suggestions", return_value=[]):
+        ctx = api._build_openai_context(profile, user_id=None)
+    assert "target_roles_note" in ctx
+    assert "STALE" in ctx["target_roles_note"]
+
+
+def test_openai_context_evidenced_developer_no_note():
+    """CV present + coding evidence → no stale note (no regression)."""
+    api = _api()
+    profile = {
+        "target_roles": ["Developer"],
+        "cv_filename": "cv.pdf",
+        "skills": ["Python", "Django"],
+    }
+    coding_sugg = [{"label": "Software Developer"}]
+    with patch.object(api, "_generate_role_suggestions", return_value=coding_sugg):
+        ctx = api._build_openai_context(profile, user_id=None)
+    assert "target_roles_note" not in ctx
+
+
+def test_openai_context_no_cv_no_stale_note():
+    """No CV → alignment skipped; no stale note injected (no regression)."""
+    api = _api()
+    profile = {"target_roles": ["Developer"]}
+    ctx = api._build_openai_context(profile, user_id=None)
+    assert "target_roles_note" not in ctx
