@@ -258,14 +258,26 @@ class TestResolvePendingIntent:
 
     def test_reminder_en_signal(self):
         api = self._api_with_last_message("Want me to set a reminder to follow up next week?")
-        result = api._resolve_pending_intent("user1", "yes", _make_profile())
+        job = {"title": "HSE Manager", "company": "Acme LLC"}
+        ok_result = MagicMock()
+        ok_result.ok = True
+        api._recent_search_matches = MagicMock(return_value=[job])
+        with patch("src.rico_chat_api.agent_runtime") as mock_rt:
+            mock_rt.handle_action.return_value = ok_result
+            result = api._resolve_pending_intent("user1", "yes", _make_profile())
         assert result is not None
         assert result["type"] == "reminder_set"
         assert "Reminder" in result["message"] or "reminder" in result["message"]
 
     def test_reminder_ar_signal(self):
         api = self._api_with_last_message("هل تريد تذكير للمتابعة؟")
-        result = api._resolve_pending_intent("user1", "نعم", _make_profile())
+        job = {"title": "مدير سلامة", "company": "شركة الخليج"}
+        ok_result = MagicMock()
+        ok_result.ok = True
+        api._recent_search_matches = MagicMock(return_value=[job])
+        with patch("src.rico_chat_api.agent_runtime") as mock_rt:
+            mock_rt.handle_action.return_value = ok_result
+            result = api._resolve_pending_intent("user1", "نعم", _make_profile())
         assert result is not None
         assert result["type"] == "reminder_set"
         assert "تذكير" in result["message"] or "تذك" in result["message"]
