@@ -1,6 +1,6 @@
 # Current State
 
-_Last updated: 2026-06-28 — **PR #770 merged** (P2-B delete-saved-jobs + PR-A agentic UI schema + PR-C live action cards). Chat-as-interface milestone: Rico now emits `agentic_ui` action cards in every real chat response. Career OS vision recorded in `AI_WORKSPACE/CAREER_OS_VISION.md`. QA Cycle 1 remains closed at `4ad2e29`; #770 is the next production commit._
+_Last updated: 2026-06-28 — **PR #776 merged** (chore: remove dead redirect stubs + No Dead UI Rule). Production HEAD: `f0e0cea`. Route architecture is now clean: `/chat` and `/orchestrate` stubs deleted; `/pipeline → /flow` redirect removed. No Dead UI Rule adopted (DEC-20260628-001). P2-A complete (#775 at `744dbec`). Forward focus: Career Operating System / Mission Control._
 
 ## QA Cycle 1 — CLOSED 2026-06-27
 
@@ -22,8 +22,8 @@ Regression suite: **104/104 PASS**. 45 pre-existing environment failures (crypto
 
 ## Production baseline
 
-- **Repository main HEAD:** `4ad2e29566c10b389069fc68faacd9f5c1c5c010` (PR #767 — P0 mutation trust guard). Full merge train in production: P0 `71466d2`, BUG-10 `b776abf`, BUG-09 `46a7ba7`, BUG-08 `62ff5ad`, BUG-05 `007246b`, BUG-04 `4918f55`, BUG-03 `b6a1196`, BUG-02 `3a9221a`, BUG-01 `325aa0e`, #755 `504c755`.
-- **Last deploy-verified SHA:** `4ad2e29` — `deploy-render.yml` run #28301440105 succeeded (gated on `/version.commit` match + `/health` 200). ✅
+- **Repository main HEAD:** `f0e0cea` (PR #776 — No Dead UI Rule + route cleanup). Merge train from previous: `744dbec` (PR #775 — P2-A), `78c22857` (PR #770 — Chat-as-interface milestone), `4ad2e29` (PR #767 — P0 mutation trust guard).
+- **Last deploy-verified SHA:** `4ad2e29` — `deploy-render.yml` run #28301440105 succeeded (gated on `/version.commit` match + `/health` 200). ✅ (PRs #770, #775, #776 are frontend-only; Render deploy auto-triggered but not yet verified in-session.)
 - **Production deploy verification history:** `4ad2e29` (run #28301440105), `6113123` (run #80), `0d28a08` (#747), `7e0b9ec` (#741), `f202a86` (#739), `a7e294b` (#736), `115adde` (#738), `e214178` (#737).
 - **Pending owner-side smoke:** authenticated save→count flow and #741 screenshot follow-up require `ricohunt.com` login — sandbox cannot reach authenticated production.
 - **Migration 032 (`uploaded_document_context`):** auto-applied on startup via the app.py lifespan runner (idempotent `CREATE TABLE/INDEX IF NOT EXISTS`), targeting the exact branch the production `DATABASE_URL` uses. Direct confirmation of the `migration_ok` log line / table existence needs Render-log or Neon access (unavailable in-session) — the owner re-test is the end-to-end proof.
@@ -151,7 +151,6 @@ No provider keys are hardcoded, committed, or logged.
 ## Open issues — highlights (29 total)
 
 - **#732 — Rico over-commits to "Developer" without evidence.** HIGH value, owner-facing: profiles show `Target Roles: Developer` despite the real profile (Technical Product Owner / Operations Manager). Career guidance should be CV-evidence-based.
-- **#732 — Rico over-commits to "Developer" without evidence** (see above).
 - **#712 / #711** — migration drift (`005 pipeline_runs`, `011` indexes missing) — still open, separate.
 - Older epics/backlog (#654, #618, #531, #356, #355, #354, #353, #352, #294, #263, #213, #198, #196, #187, #179, #147, #140, #138, #127, #118, #105, #99, #96) — not urgent.
 
@@ -217,40 +216,44 @@ Action cards now emitted by type:
 | `application_status_update` | Track applications (navigate /applications) |
 | `save_job` | View saved jobs (navigate /flow) |
 
-**Pending:** Render deploy (auto-triggered on main push). Vercel preview was green at `4J9TMRdDLTD`.
-
 ---
 
-## Forward plan — P2 User Experience and Agent Capabilities (2026-06-27)
+## Route architecture — post-PR #776
 
-QA Cycle 1 is complete. The focus shifts from bug-patching to meaningful user-facing improvements.
+**No Dead UI Rule** adopted (DEC-20260628-001 in `AI_WORKSPACE/DECISIONS.md`, enforced in `OPERATING_RULES.md`):
+a route must be active+reachable, redirect-only with no real page code, or removed.
 
-1. **P2-A — Attachment and image understanding (end-to-end):**
-   Finding 3 (link screenshot → "Save as target job" / "Score against my CV") and Finding 4 (onboarding `classified` surface for non-CV docs). Infrastructure is in place (#736→#739→#741); wiring the action buttons end-to-end is the gap.
+| Route | State | Notes |
+|---|---|---|
+| `/command` | ✅ active | Primary chat surface |
+| `/flow` | ✅ active | Application flow page |
+| `/login`, `/signup`, `/forgot-password` | ✅ active | Auth surfaces |
+| `/chat` | ✅ redirect-only | `next.config.js` → `/command`; stub deleted (Phase A) |
+| `/orchestrate` | ✅ redirect-only | `next.config.js` → `/command`; stub deleted (Phase A) |
+| `/pipeline` | ✅ redirect removed | No page ever existed; redirect had no purpose |
+| `/dashboard` | ⚠️ Phase B | Redirect + 48-line page. Needs product decision: live or strip. |
+| `/onboarding` | ⚠️ Phase B | Redirect + 466-line page. Needs product decision: live or strip. |
+| `/jobs` | ⚠️ Phase B | Redirect + 336-line page. Needs product decision: live or strip. |
+| `/signals` | ⚠️ Phase B | Redirect + 576-line page. Needs product decision: live or strip. |
+| `/archive` | ⚠️ Phase B | Redirect + 162-line page. Needs product decision: live or strip. |
+| `/saved-searches` | ⚠️ Phase B | Redirect + 102-line page. Needs product decision: live or strip. |
 
-2. **P2-B — Direct chat mutations (delete, update, follow-up):**
-   Users want to delete saved jobs, update application status, and set reminders through chat. Today these are intercepted with a redirect. The long-term fix is a real backend tool for each mutation, gated by `agent_runtime.handle_action()`, so Rico can actually execute them instead of redirecting.
+Phase B routes are blocked until each gets an explicit product decision.
 
-3. **P2-C — Agent Runtime improvements:**
-   - Improve `handle_action("remind")` reliability (currently stub-level).
-   - Add `handle_action("delete_saved_job")` and `handle_action("update_application_status")` as real tools.
-   - Idempotency keys and audit logging already in place — the tool implementations are missing.
+## Career Operating System — forward plan
 
-4. **P2-D — Memory and session continuity:**
-   Rico loses context on page reload and across sessions for public users. Durable `uploaded_document_context` is solved (#741). Next: persist role preferences and search context durably per-user so Rico doesn't ask for the same info twice.
+Per owner direction (2026-06-28), the next development focus is Career OS / Mission Control, introduced in one PR per phase:
 
-5. **P2-E — Hallucination reduction:**
-   Issue #732 (Rico over-commits "Developer" without CV evidence) is still open. Extend the role-evidence guard to all profile fields — Rico must not claim a role, city, or seniority level without a grounded source (CV or explicit user statement).
+1. **Current Mission** — what is Rico working on right now for the user
+2. **Mission Feed** — live updates from the job search pipeline
+3. **Daily Actions** — surfaced tasks Rico recommends each day
+4. **Career Timeline** — application history and progress
+5. **AI Workspace** — Rico's reasoning and plan visible to the user
 
-6. **P2-F — QA Cycle 2 (BUG-11 through BUG-19):**
-   Secondary bug queue. Start after P2-A and P2-B are underway. BUG-19 (job-confirmation screenshot classifier) naturally pairs with P2-A.
-
-7. **Blocked / owner-only:**
-   - BUG-06, BUG-07: await owner QA report descriptions.
-   - Migration drift #712 (migrations 005 and 011): runbook ready, G1–G6 sign-off required before any Neon SQL.
+Do not open more than one PR per phase. Do not revive Phase B routes until product decision is made.
 
 ## Recommended next command
 
 ```text
-Rico mode. QA Cycle 1 closed. Production at 4ad2e29 — all verified. Next: P2 user-experience track. Recommended start: P2-B (direct chat mutations — give Rico real delete/update/remind tools via agent_runtime) OR P2-E (Issue #732 role-evidence guard). Do NOT start BUG-11 through BUG-19 before P2-A or P2-B has a branch. Do NOT run migrations without owner G1–G6 sign-off.
+Rico mode. Production HEAD: f0e0cea. Route architecture clean (No Dead UI Rule adopted, PR #776 merged). P2-A complete (PR #775). Next: Career OS / Mission Control — start with Phase 1 (Current Mission surface). One PR per phase. Do NOT touch /dashboard, /onboarding, /jobs, /signals, /archive, /saved-searches until Phase B product decision is made. Do NOT run migrations without owner G1–G6 sign-off.
 ```
