@@ -41,6 +41,7 @@ from src.api.routers.subscription import router as subscription_router
 from src.api.routers.admin_subscriptions import router as admin_subscriptions_router
 from src.api.routers.job_lifecycle import router as job_lifecycle_router
 from src.api.routers.apply_queue import router as apply_queue_router
+from src.api.routers.mission import router as mission_router
 from src.api.routers.user import router as user_router
 from src.api.routers.files import router as files_router
 
@@ -305,6 +306,7 @@ app.include_router(subscription_router)
 app.include_router(admin_subscriptions_router)
 app.include_router(job_lifecycle_router)
 app.include_router(apply_queue_router)
+app.include_router(mission_router)
 
 
 @app.get("/health")
