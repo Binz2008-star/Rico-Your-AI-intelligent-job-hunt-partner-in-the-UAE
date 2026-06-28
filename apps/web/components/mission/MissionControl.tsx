@@ -10,7 +10,7 @@ import { ProfileSummaryCard } from "@/components/ProfileSummaryCard";
 import { MissionTodayCard } from "@/components/mission/MissionTodayCard";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { fetchProfile, type ProfileResponse } from "@/lib/api";
+import { getMission, type MissionState } from "@/lib/api";
 import { useTranslation } from "@/lib/translations";
 
 // ── 🎯 Current Mission header ─────────────────────────────────────────────────
@@ -21,12 +21,12 @@ const headerClass =
 function CurrentMissionHeader() {
   const { language } = useLanguage();
   const t = useTranslation(language);
-  const [profile, setProfile] = useState<ProfileResponse | null>(null);
+  const [mission, setMission] = useState<MissionState | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
 
   const load = useCallback(async () => {
     try {
-      setProfile(await fetchProfile());
+      setMission(await getMission());
       setState("ready");
     } catch {
       setState("error");
@@ -50,12 +50,11 @@ function CurrentMissionHeader() {
     );
   }
 
-  const role = profile?.target_roles?.[0] ?? null;
-  const city = profile?.preferred_cities?.[0] ?? null;
-  const salary = profile?.salary_expectation_aed ?? null;
-  const hasMission = state === "ready" && Boolean(profile?.profile_exists) && Boolean(role || city || salary);
+  const role = mission?.target_roles?.[0] ?? null;
+  const city = mission?.target_locations?.[0] ?? null;
+  const hasMission = state === "ready" && Boolean(role || city);
 
-  // No mission yet (or profile failed to load) → invite the user to set one.
+  // No mission yet → invite the user to set one via Rico chat.
   if (!hasMission) {
     return (
       <div className={headerClass}>
@@ -67,8 +66,14 @@ function CurrentMissionHeader() {
           <p className="text-[15px] font-semibold text-rico-text">{t("missionSetTitle")}</p>
           <p className="text-[12px] text-text-tertiary">{t("missionSetDesc")}</p>
         </div>
+        {mission?.next_recommendation && (
+          <div className="mt-3 flex items-start gap-2 rounded-xl border border-gold/20 bg-gold/5 px-3 py-2.5">
+            <MaterialIcon icon="auto_awesome" size={14} className="mt-0.5 shrink-0 text-gold" />
+            <p className="text-[12px] leading-snug text-text-secondary">{mission.next_recommendation}</p>
+          </div>
+        )}
         <Link
-          href="/profile"
+          href="/command"
           className="mt-3 inline-flex self-start rounded-full border border-gold/30 bg-gold/10 px-4 py-2 text-[12px] font-semibold text-gold transition-colors hover:bg-gold/15 rico-focus-strong"
         >
           {t("missionSetCta")}
@@ -77,7 +82,7 @@ function CurrentMissionHeader() {
     );
   }
 
-  const pct = Math.round(Math.min(100, Math.max(0, (profile?.completeness_score ?? 0) * 100)));
+  const pct = mission?.progress_score ?? 0;
 
   return (
     <div className={headerClass}>
@@ -93,12 +98,12 @@ function CurrentMissionHeader() {
               {t("missionCurrentMission")}
             </span>
             <p className="mt-1 break-words text-[18px] font-bold leading-tight text-rico-text md:text-[20px]">
-              {role ?? t("missionRoleLabel")}
+              {mission?.goal ?? role ?? t("missionRoleLabel")}
             </p>
           </div>
         </div>
 
-        {/* Mission facts — only rendered when the profile actually supplied them */}
+        {/* Mission facts */}
         <div className="flex flex-wrap gap-2">
           {city && (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-border-subtle/60 bg-surface-glass px-3 py-1 text-[12px] text-text-secondary">
@@ -106,15 +111,21 @@ function CurrentMissionHeader() {
               {city}
             </span>
           )}
-          {salary != null && (
+          {(mission?.jobs_saved ?? 0) > 0 && (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-border-subtle/60 bg-surface-glass px-3 py-1 text-[12px] text-text-secondary">
-              <MaterialIcon icon="workspace_premium" size={13} className="text-text-tertiary" />
-              {t("missionSalaryLabel")}: {salary.toLocaleString()} AED
+              <MaterialIcon icon="bookmark" size={13} className="text-text-tertiary" />
+              {mission!.jobs_saved} saved
+            </span>
+          )}
+          {(mission?.applications_sent ?? 0) > 0 && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border-subtle/60 bg-surface-glass px-3 py-1 text-[12px] text-text-secondary">
+              <MaterialIcon icon="send" size={13} className="text-text-tertiary" />
+              {mission!.applications_sent} applied
             </span>
           )}
         </div>
 
-        {/* Progress — transparently labelled as a profile-completeness proxy, not a fake mission % */}
+        {/* Progress — real 4-factor score from the Mission Engine */}
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between gap-3">
             <span className="text-[11px] font-medium text-text-tertiary">{t("missionProgressLabel")}</span>
@@ -126,8 +137,15 @@ function CurrentMissionHeader() {
               style={{ width: `${pct}%` }}
             />
           </div>
-          <span className="text-[10px] text-text-tertiary">{t("missionProgressBasis")}</span>
         </div>
+
+        {/* Rico's next recommendation */}
+        {mission?.next_recommendation && pct < 100 && (
+          <div className="flex items-start gap-2 rounded-xl border border-gold/20 bg-gold/5 px-3 py-2.5">
+            <MaterialIcon icon="auto_awesome" size={14} className="mt-0.5 shrink-0 text-gold" />
+            <p className="text-[12px] leading-snug text-text-secondary">{mission.next_recommendation}</p>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1715,6 +1715,27 @@ export async function recordSubscriptionIntent(
 // is validated at the API boundary — consistent with all other Rico endpoints.
 export type { ExecutePermissionActionRequest, ExecutePermissionActionResponse };
 
+// ── Mission Engine ─────────────────────────────────────────────────────────────
+
+export interface MissionState {
+  goal: string;
+  target_roles: string[];
+  target_locations: string[];
+  cv_status: "uploaded" | "missing";
+  jobs_saved: number;
+  applications_sent: number;
+  progress_score: number;
+  missing_factors: string[];
+  next_recommendation: string;
+  blocking_reason: string | null;
+}
+
+export async function getMission(): Promise<MissionState> {
+  return requestJson<MissionState>("/api/v1/mission/current", {
+    credentials: "include",
+  });
+}
+
 /** Call POST /api/v1/rico/actions/execute — requires the user to be authenticated.
  *
  * The response is validated against ExecutePermissionActionResponseSchema so any
