@@ -156,7 +156,9 @@ _RESPONSE_TYPE_ACTIONS: dict[str, Any] = {
     "profile_update":   _profile_actions,
     "profile_summary":  _profile_actions,
     "cv_first_profile": _profile_actions,
-    # application flows
+    # application flows — application_list is the conversational query response
+    # ("what are my applications?"), application_status is the tracker card response
+    "application_list":          _application_status_actions,
     "application_status":        _application_status_actions,
     "application_status_update": _applications_actions,
     # prepare/tailor application

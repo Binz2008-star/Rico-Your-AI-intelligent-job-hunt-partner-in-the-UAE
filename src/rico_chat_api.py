@@ -404,14 +404,21 @@ _PROFILE_PITCH_RE = re.compile(
 )
 
 # Application list query: "list my applications", "what jobs did I apply to?",
-# "show my applied jobs", "how many applications do I have?"
+# "show my applied jobs", "how many applications do I have?",
+# "what are my applications?", "where are my applications?", "do I have any applications?"
 _APPLICATIONS_LIST_RE = re.compile(
     r"\b(?:list|show|display|view|see)\b.{0,30}"
     r"\b(?:my\s+)?(?:applications?|applied\s+jobs?|jobs?\s+i(?:'ve|\s+have)?\s+applied(?:\s+to)?|submitted(?:\s+applications?)?)\b"
     r"|\b(?:what|which)\s+(?:jobs?|companies?|roles?|positions?)\s+(?:have\s+I|did\s+I|have\s+i)\s+appl(?:ied|y)(?:\s+to)?\b"
     r"|\b(?:my\s+)?application\s+(?:list|history|tracker|overview)\b"
     r"|\bhow\s+many\s+(?:applications?|jobs?\s+(?:have\s+I|did\s+I)\s+applied(?:\s+to)?)\b"
-    r"|\b(?:عرض|أظهر|كم)\b.{0,20}\b(?:طلباتي|التقديمات|وظائف\s+تقدمت\s+إليها)\b",
+    # Conversational question forms — "what are my applications?",
+    # "where are my applications?", "do I have any applications?"
+    r"|\bwhat\s+are\s+my\s+(?:job\s+)?applications?\b"
+    r"|\bwhere\s+are\s+my\s+(?:job\s+)?applications?\b"
+    r"|\bdo\s+i\s+have\s+any\s+(?:job\s+)?applications?\b"
+    r"|\b(?:عرض|أظهر|كم)\b.{0,20}\b(?:طلباتي|التقديمات|وظائف\s+تقدمت\s+إليها)\b"
+    r"|\bما\s+هي\s+طلباتي\b",
     re.IGNORECASE,
 )
 
@@ -2553,11 +2560,12 @@ class RicoChatAPI:
     # "show applications" / "list applications" (no "my") are intentionally excluded:
     # those bare forms stay in _LIST_FOLLOWUP_PHRASES so they replay lifecycle context
     # when a prior application turn exists, which is the correct contextual behavior.
+    # Conversational question forms ("what are my applications?", "where are my
+    # applications?") are intentionally excluded here — they route via
+    # _APPLICATIONS_LIST_RE to _handle_applications_list instead.
     # English: "show my applications", "my applications", "show my job applications",
     #          "show my job applications and their status", "my jobs", "show my pipeline".
-    #          Question forms: "what are my applications?", "do I have any applications?",
-    #          "how many applications do I have?", "what is my application status?".
-    # Arabic:  "طلباتي", "اعرض طلباتي", "ما هي طلباتي", etc.
+    # Arabic:  "طلباتي", "اعرض طلباتي", etc.
     _SHOW_MY_APPLICATIONS_RE = re.compile(
         r"^(?:"
         # "show/list/... my [job] applications [and their status / status]"
@@ -2569,22 +2577,10 @@ class RicoChatAPI:
         # "show my pipeline" / "my pipeline" / "show my application pipeline"
         r"|(?:show|display|view|open)\s+my\s+(?:application\s+)?pipeline"
         r"|my\s+(?:application\s+)?pipeline"
-        # Question forms: "what are my applications?", "what are my jobs?"
-        r"|what\s+are\s+my\s+(?:job\s+)?applications?"
-        r"|what\s+are\s+my\s+jobs?"
-        # "what is / what's my application status?"
-        r"|what(?:'s|\s+is)\s+my\s+(?:job\s+)?application\s+status"
-        # "how many applications do I have?"
-        r"|how\s+many\s+(?:job\s+)?applications?\s+do\s+i\s+have"
-        # "do I have any applications?"
-        r"|do\s+i\s+have\s+any\s+(?:job\s+)?applications?"
-        # "where are my applications?"
-        r"|where\s+are\s+my\s+(?:job\s+)?applications?"
         # Arabic
         r"|(?:اعرض|أعرض|عرض|اظهر|أظهر|ارني|أريني)\s+طلباتي"
         r"|طلباتي"
-        r"|ما\s+هي\s+طلباتي"
-        r")[?!.\s]*$",
+        r")$",
         re.IGNORECASE,
     )
 
