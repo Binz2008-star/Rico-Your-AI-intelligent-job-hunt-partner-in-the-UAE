@@ -113,6 +113,42 @@ def _new_search_actions() -> list[dict[str, Any]]:
     ]
 
 
+def _application_status_actions() -> list[dict[str, Any]]:
+    """Action cards shown after Rico displays the application status summary."""
+    return [
+        {
+            "id": "view-flow",
+            "label": "View Application Flow",
+            "kind": "navigate",
+            "href": "/flow",
+        },
+        {
+            "id": "add-application",
+            "label": "Add application",
+            "kind": "chat_continue",
+            "payload": {"message": "Add a new job application manually"},
+        },
+    ]
+
+
+def _prepare_application_actions() -> list[dict[str, Any]]:
+    """Action cards shown after Rico prepares/tailors a job application."""
+    return [
+        {
+            "id": "view-flow",
+            "label": "View Application Flow",
+            "kind": "navigate",
+            "href": "/flow",
+        },
+        {
+            "id": "find-similar",
+            "label": "Find similar jobs",
+            "kind": "chat_continue",
+            "payload": {"message": "find me more jobs like this"},
+        },
+    ]
+
+
 # ── Injection map ─────────────────────────────────────────────────────────────
 
 _RESPONSE_TYPE_ACTIONS: dict[str, Any] = {
@@ -121,7 +157,10 @@ _RESPONSE_TYPE_ACTIONS: dict[str, Any] = {
     "profile_summary":  _profile_actions,
     "cv_first_profile": _profile_actions,
     # application flows
+    "application_status":        _application_status_actions,
     "application_status_update": _applications_actions,
+    # prepare/tailor application
+    "prepare_application": _prepare_application_actions,
     # saved-jobs deletion confirmation
     "delete_saved_jobs_confirm": _delete_saved_jobs_confirm_actions,
     # post-deletion (empty list, offer a fresh start)

@@ -323,6 +323,56 @@ class TestApplicationActions:
         assert act["href"] == "/applications"
 
 
+# ── PR-C: application_status ─────────────────────────────────────────────────
+
+class TestApplicationStatusActions:
+
+    def test_view_flow_action_present(self):
+        from src.services.agentic_ui_composer import compose
+        r = compose(None, {"type": "application_status"})
+        assert "view-flow" in _action_ids(r)
+
+    def test_view_flow_navigates_to_flow(self):
+        from src.services.agentic_ui_composer import compose
+        r = compose(None, {"type": "application_status"})
+        act = next(a for a in r["actions"] if a["id"] == "view-flow")
+        assert act["kind"] == "navigate"
+        assert act["href"] == "/flow"
+
+    def test_add_application_is_chat_continue(self):
+        from src.services.agentic_ui_composer import compose
+        r = compose(None, {"type": "application_status"})
+        assert "add-application" in _action_ids(r)
+        act = next(a for a in r["actions"] if a["id"] == "add-application")
+        assert act["kind"] == "chat_continue"
+        assert act["payload"].get("message")  # frontend reads payload.message
+
+
+# ── PR-C: prepare_application ─────────────────────────────────────────────────
+
+class TestPrepareApplicationActions:
+
+    def test_view_flow_action_present(self):
+        from src.services.agentic_ui_composer import compose
+        r = compose(None, {"type": "prepare_application"})
+        assert "view-flow" in _action_ids(r)
+
+    def test_view_flow_navigates_to_flow(self):
+        from src.services.agentic_ui_composer import compose
+        r = compose(None, {"type": "prepare_application"})
+        act = next(a for a in r["actions"] if a["id"] == "view-flow")
+        assert act["kind"] == "navigate"
+        assert act["href"] == "/flow"
+
+    def test_find_similar_is_chat_continue(self):
+        from src.services.agentic_ui_composer import compose
+        r = compose(None, {"type": "prepare_application"})
+        assert "find-similar" in _action_ids(r)
+        act = next(a for a in r["actions"] if a["id"] == "find-similar")
+        assert act["kind"] == "chat_continue"
+        assert act["payload"].get("message")  # frontend reads payload.message
+
+
 # ── PR-C: save_job ────────────────────────────────────────────────────────────
 
 class TestSaveJobActions:
