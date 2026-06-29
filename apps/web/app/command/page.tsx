@@ -11,6 +11,7 @@ import { bustSidebarCache } from "@/hooks/useSidebarStatus";
 import { ChatActionsRow } from "@/components/ui/rico/ChatActionCard";
 import { RicoMarkdownContent } from "@/components/ui/rico/RicoMarkdownContent";
 import { MissionContextBar } from "@/components/mission/MissionContextBar";
+import { CVDraftCard } from "@/components/mission/CVDraftCard";
 import { PermissionRequestCard } from "@/components/ui/rico/PermissionRequestCard";
 import { ProposedChangeCard } from "@/components/ui/rico/ProposedChangeCard";
 import { AttachmentAnalysisCard } from "@/components/ui/rico/AttachmentAnalysisCard";
@@ -1284,22 +1285,10 @@ export default function CommandPage() {
             // CV preview ready for confirmation
             if (result.status === "preview_ready" && result.preview) {
                 const preview = result.preview;
-                const skills = preview.skills_detected ?? preview.skills ?? [];
-                const previewText = (
-                    `${t("cmdCvPreviewTitle")}\n\n` +
-                    `${t("cmdCvPreviewName")} ${preview.name || "—"}\n` +
-                    `${t("cmdCvPreviewEmail")} ${preview.email || "—"}\n` +
-                    `${t("cmdCvPreviewPhone")} ${preview.phone || "—"}\n` +
-                    `${t("cmdCvPreviewRole")} ${preview.current_role || "—"}\n` +
-                    `${t("cmdCvPreviewExp")} ${preview.experience_years ? `~${preview.experience_years} ${t("cmdCvPreviewExpYears")}` : "—"}\n` +
-                    `${t("cmdCvPreviewSkills")} ${skills.slice(0, 6).join(", ") || "—"}\n` +
-                    `${t("cmdCvPreviewQuality")} ${result.extraction_quality || "—"}\n\n` +
-                    t("cmdCvConfirmPrompt")
-                );
                 const message: Message = {
                     id: nextId(),
                     role: "rico",
-                    text: previewText,
+                    text: "",
                     type: "profile_preview",
                     preview: preview,
                     filename: result.filename,
@@ -1808,6 +1797,15 @@ export default function CommandPage() {
                                     {/* Profile gap card */}
                                     {m.type === "profile_gap" && m.profile_gaps && m.profile_gaps.length > 0 && (
                                         <ProfileGapCard gaps={m.profile_gaps} />
+                                    )}
+
+                                    {/* CV draft card — structured preview, no raw contact values */}
+                                    {m.type === "profile_preview" && m.preview && (
+                                        <CVDraftCard
+                                            preview={m.preview}
+                                            filename={m.filename ?? ""}
+                                            extractionQuality={m.extractionQuality}
+                                        />
                                     )}
 
                                     {/* Profile preview confirmation buttons */}
