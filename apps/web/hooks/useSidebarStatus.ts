@@ -105,12 +105,17 @@ async function loadStatus(): Promise<StatusData> {
         const offer = stats.offer ?? 0;
         const saved = stats.saved ?? 0;
         const rejected = stats.rejected ?? 0;
+        // Use the authoritative total from the backend (includes all statuses:
+        // saved, opened, prepared, applied, follow_up_due, interview, offer,
+        // rejected, decision_made) rather than summing the 5 explicit fields.
+        const total = typeof stats.total === "number" ? stats.total
+            : applied + interview + offer + saved + rejected;
         pipeline = {
             applied,
             interview,
             offer,
             saved,
-            total: applied + interview + offer + saved + rejected,
+            total,
         };
     }
 

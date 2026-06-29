@@ -16,32 +16,29 @@ export interface NavSection {
 }
 
 // Active routes only — /jobs, /signals, /archive, /saved-searches redirect to /command or /profile
+// chatPrompt is intentionally absent from items with real page destinations so sidebar
+// navigation is always consistent regardless of which page the user is currently on.
 
 export const mainNavSections: NavSection[] = [
     {
         title: "Search",
         items: [
-            { label: "Ask Rico",      href: "/command", icon: "auto_awesome"  },
-            { label: "Pipeline",      href: "/flow",    icon: "insights",
-              chatPrompt: "Show me the pipeline status and any recent job matches." },
-            { label: "Applications",  href: "/queue",   icon: "rocket_launch",
-              chatPrompt: "Show my job applications and their current status." },
+            { label: "Ask Rico",  href: "/command", icon: "auto_awesome" },
+            { label: "Pipeline",  href: "/flow",    icon: "insights" },
         ],
     },
     {
         title: "Career",
         items: [
-            { label: "Profile",  href: "/profile", icon: "person",
-              chatPrompt: "Review my career profile and tell me what's missing or needs updating." },
+            { label: "Profile",  href: "/profile", icon: "person" },
             { label: "My Files", href: "/upload",  icon: "folder_open" },
         ],
     },
     {
         title: "Account",
         items: [
-            { label: "Pro Plan", href: "/subscription", icon: "workspace_premium" },
-            { label: "Settings", href: "/settings",     icon: "settings",
-              chatPrompt: "Help me update my job search preferences and settings." },
+            { label: "My Plan", href: "/subscription", icon: "workspace_premium" },
+            { label: "Settings", href: "/settings",    icon: "settings" },
         ],
     },
 ];

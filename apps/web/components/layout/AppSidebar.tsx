@@ -25,7 +25,7 @@ const NAV_ITEM_KEYS: Record<string, TranslationKey> = {
     "/queue": "applications",
     "/profile": "profileTitle",
     "/upload": "navMyCv",
-    "/subscription": "navProPlan",
+    "/subscription": "navMyPlan",
     "/settings": "settings",
 };
 
