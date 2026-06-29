@@ -2555,7 +2555,9 @@ class RicoChatAPI:
     # when a prior application turn exists, which is the correct contextual behavior.
     # English: "show my applications", "my applications", "show my job applications",
     #          "show my job applications and their status", "my jobs", "show my pipeline".
-    # Arabic:  "طلباتي", "اعرض طلباتي", etc.
+    #          Question forms: "what are my applications?", "do I have any applications?",
+    #          "how many applications do I have?", "what is my application status?".
+    # Arabic:  "طلباتي", "اعرض طلباتي", "ما هي طلباتي", etc.
     _SHOW_MY_APPLICATIONS_RE = re.compile(
         r"^(?:"
         # "show/list/... my [job] applications [and their status / status]"
@@ -2567,10 +2569,22 @@ class RicoChatAPI:
         # "show my pipeline" / "my pipeline" / "show my application pipeline"
         r"|(?:show|display|view|open)\s+my\s+(?:application\s+)?pipeline"
         r"|my\s+(?:application\s+)?pipeline"
+        # Question forms: "what are my applications?", "what are my jobs?"
+        r"|what\s+are\s+my\s+(?:job\s+)?applications?"
+        r"|what\s+are\s+my\s+jobs?"
+        # "what is / what's my application status?"
+        r"|what(?:'s|\s+is)\s+my\s+(?:job\s+)?application\s+status"
+        # "how many applications do I have?"
+        r"|how\s+many\s+(?:job\s+)?applications?\s+do\s+i\s+have"
+        # "do I have any applications?"
+        r"|do\s+i\s+have\s+any\s+(?:job\s+)?applications?"
+        # "where are my applications?"
+        r"|where\s+are\s+my\s+(?:job\s+)?applications?"
         # Arabic
         r"|(?:اعرض|أعرض|عرض|اظهر|أظهر|ارني|أريني)\s+طلباتي"
         r"|طلباتي"
-        r")$",
+        r"|ما\s+هي\s+طلباتي"
+        r")[?!.\s]*$",
         re.IGNORECASE,
     )
 
