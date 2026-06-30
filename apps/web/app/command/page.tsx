@@ -1553,6 +1553,7 @@ export default function CommandPage() {
                     className="hidden md:flex shrink-0"
                     user={sidebarUser ?? undefined}
                     onLogout={chatAudience === "authenticated" ? handleLogout : undefined}
+                    loading={chatAudience === "checking"}
                 />
             )}
 

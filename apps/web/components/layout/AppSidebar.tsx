@@ -36,9 +36,14 @@ interface AppSidebarProps {
         email?: string;
     };
     onLogout?: () => void;
+    // True while the host page is still verifying the session (e.g. /command's
+    // chatAudience === "checking"). Renders a skeleton footer instead of the
+    // generic guest "User" label, so a logged-in user never sees a flash of
+    // logged-out-looking content while /me resolves. See BUG-7.
+    loading?: boolean;
 }
 
-export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
+export function AppSidebar({ className, user, onLogout, loading }: AppSidebarProps) {
     const pathname = usePathname();
     const { language } = useLanguage();
     const t = useTranslation(language);
@@ -282,28 +287,42 @@ export function AppSidebar({ className, user, onLogout }: AppSidebarProps) {
 
                 {/* User Footer */}
                 <div className="p-4">
-                    <button
-                        onClick={onLogout}
-                        aria-label={onLogout ? t("logout") : undefined}
-                        className="flex w-full items-center gap-3 rounded-lg p-2 transition-colors hover:bg-surface-subtle group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
-                    >
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gold text-xs font-bold text-[#0a0a1a]">
-                            {initials}
+                    {loading ? (
+                        <div
+                            className="flex w-full items-center gap-3 rounded-lg p-2"
+                            role="status"
+                            aria-label={t("navVerifyingSession")}
+                        >
+                            <div className="h-8 w-8 shrink-0 animate-pulse rounded-full bg-surface-subtle/60 motion-reduce:animate-none" />
+                            <div className="flex-1 min-w-0 space-y-1.5">
+                                <div className="h-3 w-20 animate-pulse rounded bg-surface-subtle/60 motion-reduce:animate-none" />
+                                <div className="h-2.5 w-28 animate-pulse rounded bg-surface-subtle/40 motion-reduce:animate-none" />
+                            </div>
                         </div>
-                        <div className="flex-1 min-w-0 text-start">
-                            <p className="text-sm font-medium text-text-primary truncate">
-                                {displayName}
-                            </p>
-                            <p className="truncate text-xs text-text-tertiary">
-                                {user?.email ?? ""}
-                            </p>
-                        </div>
-                        <MaterialIcon
-                            icon="logout"
-                            size={16}
-                            className="text-text-tertiary opacity-0 transition-opacity group-hover:opacity-100"
-                        />
-                    </button>
+                    ) : (
+                        <button
+                            onClick={onLogout}
+                            aria-label={onLogout ? t("logout") : undefined}
+                            className="flex w-full items-center gap-3 rounded-lg p-2 transition-colors hover:bg-surface-subtle group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+                        >
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gold text-xs font-bold text-[#0a0a1a]">
+                                {initials}
+                            </div>
+                            <div className="flex-1 min-w-0 text-start">
+                                <p className="text-sm font-medium text-text-primary truncate">
+                                    {displayName}
+                                </p>
+                                <p className="truncate text-xs text-text-tertiary">
+                                    {user?.email ?? ""}
+                                </p>
+                            </div>
+                            <MaterialIcon
+                                icon="logout"
+                                size={16}
+                                className="text-text-tertiary opacity-0 transition-opacity group-hover:opacity-100"
+                            />
+                        </button>
+                    )}
                 </div>
             </aside>
         </TooltipProvider>
