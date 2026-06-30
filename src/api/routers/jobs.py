@@ -18,7 +18,6 @@ from src.services.jobs_service import (
     save_job,
     skip_job,
 )
-from src.services.subscription_gating import enforce_saved_job_allowed
 
 router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
 
@@ -108,8 +107,13 @@ def apply_job(
                 title=job.get("title", ""),
                 company=job.get("company", ""),
                 status=lc_status,
-                apply_url=job.get("apply_link") or job.get("link") or "",
-                source_url=job.get("link") or "",
+                apply_url=(
+                    job.get("apply_url")
+                    or job.get("apply_link")
+                    or job.get("link")
+                    or ""
+                ),
+                source_url=job.get("source_url") or job.get("link") or "",
             )
     except Exception:
         import logging as _logging
@@ -145,7 +149,6 @@ def save_job_route(
     current_user: dict = Depends(get_current_user),
 ) -> JobActionResponse:
     user_id = _current_user_id(current_user)
-    enforce_saved_job_allowed(user_id)
     job = _resolve_action_job(job_id, req)
     saved = save_job(job, user_id=user_id)
     if saved:

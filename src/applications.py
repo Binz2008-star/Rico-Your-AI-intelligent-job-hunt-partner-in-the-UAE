@@ -200,8 +200,22 @@ def is_applied_batch(jobs: List[Dict[str, Any]], user_id: Optional[str] = None) 
     """
     Batch version of is_applied() — reads the file ONCE for all jobs.
     Returns {job_id: bool} mapping.
-    When user_id is provided, only matches jobs for that user.
+    When user_id is provided, checks the DB (SaaS path) before falling back
+    to the legacy JSON file so SaaS users don't see already-acted-on jobs.
     """
+    if user_id:
+        try:
+            from src.repositories.applications_repo import get_all as _db_get_all
+            db_apps = _db_get_all(user_id=user_id)
+            db_job_ids = {
+                a.get("job_id")
+                for a in db_apps
+                if isinstance(a, dict) and a.get("job_id")
+            }
+            return {get_job_id(j): (get_job_id(j) in db_job_ids) for j in jobs}
+        except Exception:
+            pass  # fall through to JSON path on any DB error
+
     applied_jobs = load_applied_jobs()
     if user_id:
         applied_jobs = [j for j in applied_jobs if j.get("user_id") == user_id]

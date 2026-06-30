@@ -114,6 +114,10 @@ class AgentRuntime:
         # 2. Resolve job dict
         resolved_job = self._resolve_job(job, job_key)
 
+        # Inject caller identity so tool functions can pass it to the service layer.
+        # Tools receive only the job dict; this is the established pattern (see _approved).
+        resolved_job = {**resolved_job, "_user_id": user_id}
+
         # 2a. When the caller has already surfaced a PermissionRequestCard and the user
         #     explicitly clicked Approve, inject the sentinel so apply_job passes it
         #     through to apply_to_job(approved=True). This is the ONLY path where the
@@ -251,8 +255,13 @@ class AgentRuntime:
                         title=resolved_job.get("title", ""),
                         company=resolved_job.get("company", ""),
                         status=lc_status,
-                        apply_url=resolved_job.get("apply_url", ""),
-                        source_url=resolved_job.get("source_url", ""),
+                        apply_url=(
+                            resolved_job.get("apply_url")
+                            or resolved_job.get("apply_link")
+                            or resolved_job.get("link")
+                            or ""
+                        ),
+                        source_url=resolved_job.get("source_url") or resolved_job.get("link") or "",
                     )
             except Exception:
                 logger.debug("runtime: failed to record job context interaction", exc_info=True)

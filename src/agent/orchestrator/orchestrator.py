@@ -93,7 +93,11 @@ def _execute_action(action: AgentAction, user_email: str) -> ToolExecutionResult
         return result
 
     # 4. Execute
-    job = action.job or {}
+    # Mirror runtime.py pattern: inject _user_id into job dict so tool functions
+    # (skip_job, save_job, block_company) can pass it to service layer, which
+    # now requires user_id for DB-backed dedup.
+    job = dict(action.job or {})
+    job["_user_id"] = user_email
     logger.info(
         "action_execute type=%r tool=%r job_title=%r user=%r action_id=%s",
         action.type, tool_name, job.get("title", ""), user_email, action.action_id,

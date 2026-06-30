@@ -13,7 +13,6 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
-from functools import lru_cache
 from typing import Any
 from collections import defaultdict
 
@@ -226,9 +225,8 @@ class ProfileContextResolver:
         # Pending ask cache for write-read consistency (5-minute TTL)
         self._pending_ask_cache: dict[str, dict[str, datetime]] = defaultdict(dict)
 
-    @lru_cache(maxsize=128)
     def _get_cached_profile(self, canonical_user_id: str) -> tuple[ProfileContext, datetime] | None:
-        """LRU cache wrapper for profile retrieval."""
+        """Return cached profile if within TTL, else None."""
         if canonical_user_id in self._cache:
             cached, timestamp = self._cache[canonical_user_id]
             if (datetime.now(_UTC) - timestamp).total_seconds() < self._cache_ttl:
@@ -536,8 +534,22 @@ class ProfileContextResolver:
                 limit=200,
             )
 
-            # Filter actions for this user
-            user_actions = [a for a in recent_actions if a.get("user_email") == canonical_user_id]
+            # Filter actions for this user within the last 7 days
+            def _ts(action: dict) -> datetime | None:
+                raw = action.get("timestamp")
+                if not raw:
+                    return None
+                try:
+                    ts = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+                    return ts if ts.tzinfo else ts.replace(tzinfo=_UTC)
+                except (ValueError, AttributeError):
+                    return None
+
+            user_actions = [
+                a for a in recent_actions
+                if a.get("user_email") == canonical_user_id
+                and (_ts(a) or week_ago) >= week_ago
+            ]
 
             # Analyze action patterns
             action_counts = defaultdict(int)
@@ -647,10 +659,11 @@ class ProfileContextResolver:
                     if (now - t).total_seconds() < 300
                 }
 
-            # Query audit logs for profile_question events
+            # Query audit logs for profile_question events for this user only
             audits = get_recent(limit=100)
             for audit in audits:
-                if audit.get("event_type") == "profile_question":
+                if (audit.get("event_type") == "profile_question"
+                        and audit.get("user_email") == canonical_user_id):
                     field = audit.get("data", {}).get("field_name")
                     timestamp = audit.get("timestamp")
                     if field and timestamp:
@@ -790,7 +803,6 @@ class ProfileContextResolver:
     def invalidate_cache(self, canonical_user_id: str) -> None:
         """Invalidate cached profile for a user."""
         self._cache.pop(canonical_user_id, None)
-        self._get_cached_profile.cache_clear()  # Clear LRU cache
 
 
 # Lazy module-level instance

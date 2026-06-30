@@ -1143,7 +1143,7 @@ class RicoDB:
                         UPDATE application_drafts
                         SET status = %s, updated_at = now(),
                             follow_up_at = now() + INTERVAL '7 days'
-                        WHERE id = %s AND user_id = %s
+                        WHERE id = %s AND user_id = %s AND status = 'pending'
                         RETURNING id
                         """,
                         (status, draft_id, user_id),
@@ -1153,7 +1153,7 @@ class RicoDB:
                         """
                         UPDATE application_drafts
                         SET status = %s, updated_at = now()
-                        WHERE id = %s AND user_id = %s
+                        WHERE id = %s AND user_id = %s AND status = 'pending'
                         RETURNING id
                         """,
                         (status, draft_id, user_id),
