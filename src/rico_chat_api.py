@@ -8821,6 +8821,7 @@ class RicoChatAPI:
                     "apply_url": apply_url,
                     "source_url": effective_source,
                     "alt_url": alt_url,
+                    "link": (resolved.get("link") or "") if resolved else "",
                     "verification_status": verification_status,
                 }
                 # Stable job_key (title+company) keeps runtime idempotency correct
@@ -8876,6 +8877,7 @@ class RicoChatAPI:
                         "company": company,
                         "apply_url": apply_url,
                         "source_url": source_url,
+                        "link": (_recent_resolved.get("link") or "").strip(),
                         "verification_status": "lead_needs_verification",
                     }
                     job_key = self._derive_lifecycle_job_key(title, company)

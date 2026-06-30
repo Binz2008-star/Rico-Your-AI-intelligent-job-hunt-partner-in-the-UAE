@@ -647,10 +647,11 @@ class ProfileContextResolver:
                     if (now - t).total_seconds() < 300
                 }
 
-            # Query audit logs for profile_question events
+            # Query audit logs for profile_question events for this user only
             audits = get_recent(limit=100)
             for audit in audits:
-                if audit.get("event_type") == "profile_question":
+                if (audit.get("event_type") == "profile_question"
+                        and audit.get("user_email") == canonical_user_id):
                     field = audit.get("data", {}).get("field_name")
                     timestamp = audit.get("timestamp")
                     if field and timestamp:
