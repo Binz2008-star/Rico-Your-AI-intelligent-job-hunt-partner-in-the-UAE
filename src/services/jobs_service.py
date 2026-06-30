@@ -13,7 +13,6 @@ from src.applications import (
     get_applied_jobs,
     get_job_id,
     is_applied,
-    mark_applied,
 )
 from src.db import is_db_available
 from src.repositories import jobs_repo
@@ -240,9 +239,26 @@ def skip_job(job: Dict[str, Any], user_id: Optional[str] = None) -> bool:
     if not user_id:
         raise ValueError("user_id is required for authenticated access")
 
-    if is_applied(job, user_id=user_id):
+    # Route through applications_repo so writes land in the DB for SaaS users,
+    # consistent with save_job(). is_applied() reads JSON and misses DB records.
+    from src.repositories.applications_repo import (
+        create as _repo_create,
+        find_by_job_id as _find,
+    )
+
+    job_id = job.get("job_id") or get_job_id(job)
+    if _find(job_id, user_id=user_id):
         return False
-    return mark_applied(job, status="decision_made", notes="Skipped via API", user_id=user_id)
+    return _repo_create(
+        job_id=job_id,
+        title=job.get("title", ""),
+        company=job.get("company", ""),
+        location=job.get("location", ""),
+        url=job.get("link", ""),
+        status="decision_made",
+        source="skip",
+        user_id=user_id,
+    )
 
 
 def save_job(job: Dict[str, Any], user_id: Optional[str] = None) -> bool:
@@ -282,8 +298,23 @@ def block_company(job: Dict[str, Any], user_id: Optional[str] = None) -> str:
     if not company:
         raise ValueError("Job missing company field")
 
-    if not is_applied(job, user_id=user_id):
-        mark_applied(job, status="decision_made", notes="Company blocked via API", user_id=user_id)
+    from src.repositories.applications_repo import (
+        create as _repo_create,
+        find_by_job_id as _find,
+    )
+
+    job_id = job.get("job_id") or get_job_id(job)
+    if not _find(job_id, user_id=user_id):
+        _repo_create(
+            job_id=job_id,
+            title=job.get("title", ""),
+            company=job.get("company", ""),
+            location=job.get("location", ""),
+            url=job.get("link", ""),
+            status="decision_made",
+            source="block",
+            user_id=user_id,
+        )
 
     _persist_blocked_company(user_id, company)
     logger.info("block_company: user=%s blocked company=%r", user_id, company)
