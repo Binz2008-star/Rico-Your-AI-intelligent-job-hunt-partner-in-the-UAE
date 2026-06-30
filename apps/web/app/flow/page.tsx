@@ -19,17 +19,36 @@ import {
 import type { Application, ApplicationStatus } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useTranslation, type TranslationKey } from '@/lib/translations';
+import { APPLICATION_STATUSES, STAGE_DEFS, type StageKey } from '@/lib/applicationStatus';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 type ViewMode = 'list' | 'board';
 
-const KANBAN_COLS: Array<{ labelKey: TranslationKey; statuses: ApplicationStatus[]; accent: string }> = [
-    { labelKey: 'flowColLeads',     statuses: ['saved', 'opened', 'opened_external', 'prepared'], accent: 'border-text-tertiary/30' },
-    { labelKey: 'flowColApplied',   statuses: ['applied', 'follow_up_due'],                       accent: 'border-sky-500/30' },
-    { labelKey: 'flowColInterview', statuses: ['interview'],                                       accent: 'border-gold/40' },
-    { labelKey: 'flowColOutcome',   statuses: ['offer', 'rejected', 'decision_made'],              accent: 'border-magenta/30' },
-];
+// Board column labels, keyed by the canonical stage (lib/applicationStatus.ts).
+// The set of statuses per column comes from STAGE_DEFS — the same source the
+// stat grid and the chat pipeline summary read — so a status can never be
+// classified into a different stage depending on which view renders it (BUG-6).
+const STAGE_LABEL_KEYS: Record<StageKey, TranslationKey> = {
+    lead: 'flowColLeads',
+    applied: 'flowColApplied',
+    interview: 'flowColInterview',
+    outcome: 'flowColOutcome',
+};
+
+const STAGE_ACCENTS: Record<StageKey, string> = {
+    lead: 'border-text-tertiary/30',
+    applied: 'border-sky-500/30',
+    interview: 'border-gold/40',
+    outcome: 'border-magenta/30',
+};
+
+const KANBAN_COLS: Array<{ labelKey: TranslationKey; statuses: ApplicationStatus[]; accent: string }> =
+    STAGE_DEFS.map((stage) => ({
+        labelKey: STAGE_LABEL_KEYS[stage.key],
+        statuses: stage.statuses,
+        accent: STAGE_ACCENTS[stage.key],
+    }));
 
 // Maps each canonical backend status to its display-label translation key.
 // Backend values are never changed — only the rendered label is localized.
@@ -46,10 +65,7 @@ const STATUS_LABEL_KEYS: Record<ApplicationStatus, TranslationKey> = {
     decision_made: 'flowStatusDecision',
 };
 
-const STATUS_OPTIONS: ApplicationStatus[] = [
-    'saved', 'opened', 'opened_external', 'prepared',
-    'applied', 'follow_up_due', 'interview', 'offer', 'rejected', 'decision_made',
-];
+const STATUS_OPTIONS: ApplicationStatus[] = APPLICATION_STATUSES;
 
 const NEXT_ACTION_KEYS: Record<ApplicationStatus, TranslationKey> = {
     saved: 'flowNextSaved',

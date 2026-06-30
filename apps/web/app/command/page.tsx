@@ -21,6 +21,8 @@ import { buildAuthHref } from "@/lib/redirect";
 import { getJobFallbackActions, buildCopyText } from "@/lib/job-fallback";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
 import { translations, useTranslation, type TranslationKey } from "@/lib/translations";
+import { APPLICATION_STATUSES } from "@/lib/applicationStatus";
+import type { ApplicationStatus } from "@/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -667,19 +669,33 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
     );
 }
 
+// Status -> translation key, covering every status in APPLICATION_STATUSES
+// (lib/applicationStatus.ts) so the chat pipeline summary never silently
+// drops a status the way it used to (BUG-6: this previously only knew about
+// 5 of the 10 backend statuses).
+const CMD_STATUS_LABEL_KEYS: Record<ApplicationStatus, TranslationKey> = {
+    saved: "cmdStatusSaved",
+    opened: "cmdStatusOpened",
+    opened_external: "cmdStatusOpenedExternal",
+    prepared: "cmdStatusPrepared",
+    applied: "cmdStatusApplied",
+    follow_up_due: "cmdStatusFollowUpDue",
+    interview: "cmdStatusInterview",
+    offer: "cmdStatusOffer",
+    rejected: "cmdStatusRejected",
+    decision_made: "cmdStatusDecision",
+};
+
 function ApplicationStatusCard({ applications, followUpNeeded }: {
     applications: ApplicationEntry[];
     followUpNeeded: ApplicationEntry[];
 }) {
     const { language } = useLanguage();
     const t = useTranslation(language);
-    const stageDefs = [
-        { key: "saved", label: t("cmdStatusSaved") },
-        { key: "applied", label: t("cmdStatusApplied") },
-        { key: "interview", label: t("cmdStatusInterview") },
-        { key: "offer", label: t("cmdStatusOffer") },
-        { key: "rejected", label: t("cmdStatusRejected") },
-    ];
+    const stageDefs = APPLICATION_STATUSES.map((status) => ({
+        key: status as string,
+        label: t(CMD_STATUS_LABEL_KEYS[status]),
+    }));
     const counts = stageDefs.reduce((acc, s) => ({
         ...acc,
         [s.key]: applications.filter((a) => a.status === s.key).length,
