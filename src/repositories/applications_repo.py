@@ -173,11 +173,40 @@ def get_all(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         if not db:
             raise HTTPException(status_code=503, detail="Database unavailable")
         db_user_id = _provision_db_user_id(db, user_id)
-        return db.get_recommendations(db_user_id, limit=200)
+        return _dedupe_by_job_identity(db.get_recommendations(db_user_id, limit=200))
 
     # Legacy fallback
     _warn_legacy_fallback("get_all")
     return _get_applied()
+
+
+def _dedupe_by_job_identity(apps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Collapse rows that represent the same real-world job into one.
+
+    job_key is derived independently by several write paths (daily pipeline,
+    chat "save this job", lifecycle tracking), each with its own scheme, so
+    the same job can land under more than one job_key and render as duplicate
+    cards on /flow (BUG-3). Rows come back ordered by updated_at DESC, so the
+    first row seen per normalized (title, company, location) wins.
+    """
+    seen: set = set()
+    deduped: List[Dict[str, Any]] = []
+    for app in apps:
+        if not isinstance(app, dict):
+            deduped.append(app)
+            continue
+        title = (app.get("title") or "").strip().lower()
+        company = (app.get("company") or "").strip().lower()
+        if not title and not company:
+            deduped.append(app)
+            continue
+        location = (app.get("location") or "").strip().lower()
+        identity = (title, company, location)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        deduped.append(app)
+    return deduped
 
 
 def get_stats(user_id: Optional[str] = None) -> Dict[str, Any]:
