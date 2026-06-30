@@ -56,6 +56,92 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260630-032 — Rico UX Improvements: Search & Intent Flow (engineering spec, owner-authored)
+
+Status: proposed (tracking task — spin each item into its own TASK-NNN when picked up)
+Owner: unassigned
+Branch: —
+Issue/PR: docs-only (this ledger entry)
+
+#### Objective
+Capture the owner's engineering spec for chat/intent-flow UX so it is not lost in chat
+history. Source: owner review of the conversational search/recommendation flow, reframed as
+a directly-implementable spec ("لكنني سأعيد صياغتها لتكون Engineering Spec قابلة للتنفيذ
+مباشرة بدون إدخال حلول قد تقيد التصميم" — agree with most points, but reframed as an
+implementable engineering spec without baking in solutions that would constrain design).
+Priority: P1 (Core Conversation UX). No implementation in this entry — docs/ledger only.
+
+#### Source
+Owner-authored spec, pasted verbatim into this session on 2026-06-30, titled "Rico UX
+Improvements — Search & Intent Flow." Touches `src/rico_chat_api.py` (intent classification /
+role intelligence pipeline), `src/services/chat_service.py`, and the public/`/command` and
+`/chat` frontends. Any implementation must continue to respect `src/rico_safety.py` guardrails
+and `src/agent/runtime.py` approval-gating — interrupting a pending confirmation flow must
+never be used to bypass an approval-gated action (e.g. apply).
+
+#### Backlog (spec sections, in the owner's priority order)
+
+1. **Interruptible Conversation Flow** — a newly detected high-confidence intent should
+   interrupt a pending confirmation flow instead of Rico continuing to wait on the stale
+   question. Interrupt only when: intent confidence is high, the new intent differs from the
+   pending confirmation, and the request is executable immediately. Do NOT interrupt when the
+   user is answering the pending question or genuine clarification is required.
+   Example: Assistant asks "What sounds best to you?"; user says "Find me a job" — Rico should
+   immediately start the job search ("Got it. I'll start searching for jobs that match your
+   profile.") rather than re-asking the original question.
+2. **Search-first Principle** — for "Find me a job" / "Find jobs from my CV" / "Search jobs",
+   the primary goal is to search immediately and return results, then offer improvements —
+   not to pause for configuration questions first unless search is genuinely impossible
+   without them. Preferred flow: Search → Return results → Offer improvements (not the
+   reverse).
+3. **Internal Terms Must Never Reach Users** — internal state labels (`STALE`, `DIRTY`,
+   `NEEDS_REFRESH`, `LOW_CONFIDENCE_ROLE`, etc.) must be translated into natural language
+   before reaching user-facing text. E.g. not "Target roles are STALE" but "Your saved target
+   roles no longer fully reflect your current experience."
+4. **Recommendation Confidence** — role recommendations should surface a match percentage
+   (e.g. ESG Manager 96%, Compliance Manager 94%, Operations Manager 93%, HSE Manager 92%)
+   with a brief explanation of why each role is recommended.
+5. **Preserve Valid Existing Roles** — do not reject a user's saved role outright just because
+   stronger matches exist; grade existing + recommended roles together (✅ Strong match / ✅
+   Moderate match / ❌ Weak match) instead of a categorical rejection like "Logistics doesn't
+   fit." Prefer comparative phrasing: "Logistics-focused roles are a weaker match than
+   Operations, ESG, Compliance, and HSE positions based on your experience."
+6. **Immediate Actions** — after recommendations, present executable actions (e.g. "Search
+   these roles now", "Update my saved target roles", "Compare current vs recommended roles",
+   "Keep my current target roles") instead of another open-ended question; these actions
+   should execute immediately when chosen.
+7. **Long-running Search Experience** — searching should show an elapsed timer and progress
+   updates, with a single retry if appropriate. Target max wait: 20s. If the search can't
+   complete in time, return partial results when possible; otherwise explain clearly
+   (provider unavailable / timeout / retry available) rather than leaving the user waiting
+   indefinitely.
+8. **Preserve User Intent** — the user's original request must complete before optional
+   improvements are offered. E.g. for "Find jobs from my CV": (1) search jobs, (2) return
+   results, (3) suggest role improvements, (4) offer to save new target roles — never reverse
+   this order.
+
+#### Owner's overall assessment (verbatim)
+"The current implementation demonstrates good profile reasoning and CV understanding. The
+biggest remaining UX gap is execution flow: Rico identifies improvements well, but it
+sometimes pauses for confirmation instead of completing the task the user explicitly
+requested. Prioritizing task completion first, followed by optional optimization, will make
+the assistant feel significantly more responsive and aligned with user intent."
+
+#### Constraints
+- Docs/ledger only in this entry — no code changes.
+- Each numbered item becomes its own scoped TASK-NNN + branch when implemented. Do not start
+  without explicit scope/branch assignment.
+- Implementation must not weaken `src/rico_safety.py` guardrails or
+  `RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS` — "interruptible flow" (item 1) is about routing a
+  new intent, not about skipping approval gates for high-impact actions.
+
+#### Notes
+- Logged per explicit owner instruction ("note the following as we need to work on it as
+  well") on 2026-06-30, immediately after BUG-2/BUG-3/BUG-6 closure. Not yet prioritized
+  against BUG-7/BUG-9/BUG-10/BUG-11.
+
+---
+
 ### TASK-20260622-031 — PR C: strongest CV/profile selection + session-context retention
 
 Status: scoped
