@@ -234,6 +234,8 @@ _NON_ROLE_STARTERS: frozenset[str] = frozenset({
     "create", "generate", "send", "change", "apply", "submit", "check",
     "review", "save", "build", "prepare", "edit", "add", "remove", "start",
     "open", "try", "set", "use", "share", "update", "improve", "track",
+    # Pipeline / state management verbs — never start a job title
+    "clear", "reset",
     # Gerund forms of the above that were missing
     "creating", "generating", "sending", "changing", "applying", "submitting",
     "checking", "reviewing", "saving", "building", "preparing", "editing",
@@ -506,6 +508,43 @@ _UNSUPPORTED_DELETE_RE = re.compile(
         |
         # Arabic: احذف/امسح + saved-jobs or applications noun
         \b(?:امسح|احذف|امحِ|أزل)\b[^.!?،؟]{0,80}(?:الوظائف(?:\s+المحفوظة)?|جميع\s+(?:الوظائف|الطلبات)|وظائف(?:\s+المحفوظة)?|الطلبات|طلباتي|المحفوظات|قائمة\s+الوظائف)
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# Explicit pipeline / application-list reset intent.
+# Matches: "clear all applications", "reset my pipeline", "archive all applications",
+# "start over", "start fresh", "restart pipeline", "remove all tracked jobs", etc.
+# Does NOT overlap with _DELETE_SAVED_JOBS_RE (which targets saved-jobs only).
+_PIPELINE_RESET_RE = re.compile(
+    r"""
+    (?:
+        # English: destructive/reset verb + pipeline/applications/tracked-jobs noun
+          \b(?:clear|reset|wipe|purge|erase)\b.{0,60}?\b(?:all\s+(?:my\s+)?)?(?:applications?|tracked\s+jobs?|job\s+pipeline|(?:my\s+)?pipeline)\b
+        | \barchive\b.{0,60}?\b(?:all\s+(?:my\s+)?)?applications?\b
+        | \b(?:remove|delete)\b.{0,60}?\ball\s+(?:my\s+)?tracked\s+jobs?\b
+        | \b(?:start\s+(?:over|fresh|from\s+scratch)|restart\s+(?:the\s+)?(?:pipeline|job\s+(?:search|hunt)))\b
+        |
+        # Arabic: امسح/أعد ضبط + pipeline/applications
+        \b(?:امسح|احذف|امحِ|أزل|أعد\s+ضبط)\b[^.!?،؟]{0,80}(?:الطلبات|طلباتي|جميع\s+الطلبات|خط\s+الأنابيب|مساري)
+        | \b(?:ابدأ\s+(?:من\s+جديد|من\s+الصفر)|أعد\s+البدء)\b
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# Implicit pipeline reset — vague phrases like "clear them", "must start over".
+# Only fires when last Rico turn was an application tracking summary (context-aware).
+_PIPELINE_RESET_IMPLICIT_RE = re.compile(
+    r"""
+    (?:
+          \b(?:clear|reset|wipe)\s+(?:them|it\s+all|everything|all\s+of\s+them|it|those)\b
+        | \b(?:must\s+start\s+over|we\s+(?:must\s+)?start\s+over|lets?\s+start\s+(?:over|again|fresh))\b
+        | \b(?:clean\s+slate|fresh\s+start)\b
+        | \b(?:get\s+rid\s+of\s+(?:all\s+of\s+)?(?:them|everything))\b
+        | \b(?:امسح|احذف)\s+(?:كل(?:ها|هم)?|الكل|جميعها)\b
+        | \b(?:ابدأ\s+من\s+جديد|نبدأ\s+من\s+جديد)\b
     )
     """,
     re.IGNORECASE | re.VERBOSE,
@@ -5801,12 +5840,40 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        # ── Pending pipeline reset confirmation (P2-B) ───────────────────────
+        # Must run before the pipeline reset guard so a confirmation reply in the
+        # 2-minute window executes the action instead of re-asking.
+        _pending_reset = self._handle_pending_pipeline_reset(user_id, message)
+        if _pending_reset is not None:
+            return self._finalize(_pending_reset, self.SOURCE_KEYWORD, profile=profile)
+
         # ── Pending saved-jobs deletion confirmation (P2-B) ──────────────────
         # Must run before the delete guard so a "yes" / "نعم" in the 2-minute
         # confirmation window executes the real deletion instead of re-asking.
         _pending_delete = self._handle_pending_delete_saved_jobs(user_id, message)
         if _pending_delete is not None:
             return self._finalize(_pending_delete, self.SOURCE_KEYWORD, profile=profile)
+
+        # ── Pipeline reset intent (explicit) ──────────────────────────────────
+        # "clear all applications", "reset my pipeline", "start over", etc.
+        # Fires before role classification to prevent misrouting as a job role.
+        if _PIPELINE_RESET_RE.search(message):
+            return self._finalize(
+                self._handle_pipeline_reset(user_id, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Pipeline reset intent (implicit + context-aware) ──────────────────
+        # "clear them", "must start over" — only when last turn was app tracking.
+        if _PIPELINE_RESET_IMPLICIT_RE.search(message):
+            _last_t = self._get_last_turn(user_id)
+            if _last_t.get("intent") == "application_tracking":
+                return self._finalize(
+                    self._handle_pipeline_reset(user_id, message),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
 
         # ── Delete mutation guard (P0 trust bug #764 / P2-B) ─────────────────
         # Saved-jobs → confirmation flow; application history → blocked.
@@ -10997,6 +11064,153 @@ class RicoChatAPI:
         return {"type": "learning_profile_summary", "message": msg}
 
     _PENDING_DELETE_SAVED_JOBS_KEY: str = "pending_delete_saved_jobs"
+    _PENDING_PIPELINE_RESET_KEY: str = "pending_pipeline_reset"
+
+    def _handle_pipeline_reset(self, user_id: str, message: str) -> dict[str, Any]:
+        """Detect pipeline/application-list reset intent and ask for confirmation.
+
+        Never executes immediately.  Stores a 2-minute pending state and returns
+        a confirmation prompt with three options: Archive (default) / Delete / Cancel.
+        """
+        arabic = self._is_arabic_text(message)
+        try:
+            import time
+            self.memory.set_context(user_id, self._PENDING_PIPELINE_RESET_KEY, {
+                "pending": True,
+                "expires_at": int(time.time()) + 120,
+            })
+        except Exception:
+            pass
+
+        if arabic:
+            msg = (
+                "يبدو أنك تريد إعادة ضبط سجلات طلباتك. ماذا تريد أن تفعل؟\n\n"
+                "• اكتب **أرشفة** — لأرشفة جميع الطلبات (مستحسن، يمكن التراجع عنه)\n"
+                "• اكتب **حذف** — للحذف النهائي (انتقل إلى صفحة الطلبات)\n"
+                "• اكتب **إلغاء** — لإلغاء العملية والبقاء كما هو"
+            )
+        else:
+            msg = (
+                "It looks like you want to reset your tracked applications. What would you like to do?\n\n"
+                "• Type **archive** — Archive all applications (recommended, reversible)\n"
+                "• Type **delete** — Permanently delete (manage from the Applications page)\n"
+                "• Type **cancel** — Keep everything as-is"
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "pipeline_reset_confirm",
+            "intent": "pipeline_reset",
+            "message": msg,
+            "next_action": "await_confirmation",
+        }
+
+    def _handle_pending_pipeline_reset(
+        self, user_id: str, message: str
+    ) -> dict[str, Any] | None:
+        """Execute or cancel a pending pipeline reset based on the user's choice.
+
+        Returns a response dict if there is a live pending reset waiting for
+        confirmation, else None so the caller continues normal routing.
+        """
+        try:
+            import time
+            ctx = self.memory.get_context(user_id, self._PENDING_PIPELINE_RESET_KEY)
+            if not isinstance(ctx, dict):
+                return None
+        except Exception:
+            return None
+
+        if not ctx.get("pending") or ctx.get("expires_at", 0) < (
+            __import__("time").time()
+        ):
+            return None
+
+        def _clear():
+            try:
+                self.memory.set_context(user_id, self._PENDING_PIPELINE_RESET_KEY, {})
+            except Exception:
+                pass
+
+        arabic = self._is_arabic_text(message)
+        lower = (message or "").strip().lower()
+
+        # Archive choice (recommended default)
+        if re.search(r"\b(?:archive|أرشف|أرشفة)\b", lower, re.IGNORECASE):
+            _clear()
+            if arabic:
+                msg = (
+                    "لأرشفة جميع طلباتك، توجّه إلى **صفحة الطلبات** واستخدم خيار الأرشفة الجماعية.\n\n"
+                    "→ /applications"
+                )
+            else:
+                msg = (
+                    "To archive all your tracked applications, head to the **Applications page** "
+                    "and use the bulk-archive option there.\n\n"
+                    "→ /applications"
+                )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "pipeline_reset_archive",
+                "intent": "pipeline_reset",
+                "message": msg,
+                "target_route": "/applications",
+                "next_action": "navigate_to_page",
+            }
+
+        # Permanent delete choice
+        if re.search(r"\b(?:delete|حذف|del)\b", lower, re.IGNORECASE):
+            _clear()
+            if arabic:
+                msg = (
+                    "لحذف السجلات نهائياً، انتقل إلى **صفحة الطلبات** حيث يمكنك "
+                    "إدارة كل سجل على حدة.\n\n"
+                    "→ /applications"
+                )
+            else:
+                msg = (
+                    "To permanently remove records, go to the **Applications page** where "
+                    "you can manage each entry individually.\n\n"
+                    "→ /applications"
+                )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "pipeline_reset_delete_redirect",
+                "intent": "pipeline_reset",
+                "message": msg,
+                "target_route": "/applications",
+                "next_action": "navigate_to_page",
+            }
+
+        # Cancel / negative
+        if RicoChatAPI._is_negative(message) or re.search(
+            r"\b(?:cancel|إلغاء|ألغ)\b", lower, re.IGNORECASE
+        ):
+            _clear()
+            if arabic:
+                msg = "تم الإلغاء — لم يتغيّر شيء."
+            else:
+                msg = "Cancelled — nothing was changed."
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "pipeline_reset_cancelled",
+                "intent": "pipeline_reset",
+                "message": msg,
+            }
+
+        # Ambiguous — re-prompt
+        if arabic:
+            msg = (
+                "اكتب **أرشفة** أو **حذف** أو **إلغاء** للاختيار."
+            )
+        else:
+            msg = "Please type **archive**, **delete**, or **cancel** to choose."
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "pipeline_reset_confirm",
+            "intent": "pipeline_reset",
+            "message": msg,
+            "next_action": "await_confirmation",
+        }
 
     def _intercept_unsupported_delete_mutation(
         self, user_id: str, message: str
