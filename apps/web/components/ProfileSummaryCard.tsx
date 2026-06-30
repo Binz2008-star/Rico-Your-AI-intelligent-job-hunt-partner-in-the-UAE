@@ -90,7 +90,7 @@ export function ProfileSummaryCard() {
                 <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
                     {profile.years_experience != null && (
                         <p className="text-[12px] text-on-surface-variant">
-                            {t("profileSummaryExperience")} <span className="font-medium text-on-surface">{profile.years_experience} {t("profileSummaryYrs")}</span>
+                            {t("profileSummaryExperience")} <span className="font-medium text-on-surface">{Math.round(profile.years_experience!)} {t("profileSummaryYrs")}</span>
                         </p>
                     )}
 

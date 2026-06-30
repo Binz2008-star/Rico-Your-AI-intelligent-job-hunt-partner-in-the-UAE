@@ -981,6 +981,7 @@ class RicoDB:
             "interview": by_status.get("interview", 0),
             "rejected": by_status.get("rejected", 0),
             "offer": by_status.get("offer", 0),
+            "follow_up_due": by_status.get("follow_up_due", 0),
         }
 
 
