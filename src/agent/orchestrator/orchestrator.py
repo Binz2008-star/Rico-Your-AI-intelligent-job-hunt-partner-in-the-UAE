@@ -98,6 +98,9 @@ def _execute_action(action: AgentAction, user_email: str) -> ToolExecutionResult
         "action_execute type=%r tool=%r job_title=%r user=%r action_id=%s",
         action.type, tool_name, job.get("title", ""), user_email, action.action_id,
     )
+    # Inject _user_id so service-layer tools (save/skip/block) can route writes to
+    # the correct store (DB for SaaS users, JSON fallback for legacy).
+    job = {**job, "_user_id": user_email}
     # Detect whether the tool expects a job argument.  No-arg tools (e.g.
     # trigger_pipeline) should be called without arguments even on the action
     # path, which passes a job dict for job-oriented tools.

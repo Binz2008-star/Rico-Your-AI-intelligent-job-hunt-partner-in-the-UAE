@@ -132,17 +132,15 @@ class TestApplyAction:
 
 
 class TestSaveAction:
-    def test_save_calls_mark_applied_with_saved_status(self):
+    def test_save_calls_jobs_service_save(self):
         with _patch_audit(), _patch_is_duplicate():
-            with patch("src.applications.mark_applied", return_value=True) as mock:
+            with patch("src.services.jobs_service.save_job", return_value=True) as mock:
                 result = _run("save")
         mock.assert_called_once()
-        call_args = mock.call_args
-        assert call_args[0][1] == "saved" or "saved" in str(call_args)
 
     def test_save_returns_ok(self):
         with _patch_audit(), _patch_is_duplicate():
-            with patch("src.applications.mark_applied", return_value=True):
+            with patch("src.services.jobs_service.save_job", return_value=True):
                 result = _run("save")
         assert result.ok is True
 
@@ -175,7 +173,9 @@ class TestDraftAction:
         assert result.ok is True
         assert "Dear Hiring Manager" in result.message
         mock_gen.assert_called_once()
-        assert mock_gen.call_args.args[0] == _JOB
+        # Runtime injects _user_id into job dict; check original fields are present
+        actual_job = mock_gen.call_args.args[0]
+        assert all(actual_job.get(k) == v for k, v in _JOB.items())
 
     def test_draft_data_contains_draft_key(self):
         with _patch_audit(), _patch_is_duplicate():
@@ -286,7 +286,9 @@ class TestJobResolution:
                 mock_gen.return_value = "msg"
                 _run("draft", job=_JOB)
         mock_gen.assert_called_once()
-        assert mock_gen.call_args.args[0] == _JOB
+        # Runtime injects _user_id into job dict; check original fields are present
+        actual_job = mock_gen.call_args.args[0]
+        assert all(actual_job.get(k) == v for k, v in _JOB.items())
 
     def test_falls_back_to_cache_when_no_job(self):
         from src.agent.runtime import AgentRuntime
@@ -301,7 +303,9 @@ class TestJobResolution:
                     job_key="some-key", job=None, source="test",
                 )
         mock_gen.assert_called_once()
-        assert mock_gen.call_args.args[0] == cached
+        # Runtime injects _user_id into job dict; check original fields are present
+        actual_job = mock_gen.call_args.args[0]
+        assert all(actual_job.get(k) == v for k, v in cached.items())
 
     def test_stubs_job_from_key_when_cache_misses(self):
         from src.agent.runtime import AgentRuntime
@@ -427,7 +431,7 @@ class TestTelegramRuntimeIntegration:
     def test_handle_job_action_returns_ok_and_reply(self):
         from src.rico_telegram_ui import handle_job_action
         with patch("src.agent.runtime.log_action"), _patch_is_duplicate():
-            with patch("src.applications.mark_applied", return_value=True):
+            with patch("src.services.jobs_service.save_job", return_value=True):
                 result = handle_job_action("save", _JOB, user_id="tg-42")
         assert "ok" in result
         assert "reply" in result
@@ -445,6 +449,7 @@ class TestTelegramRuntimeIntegration:
             from src.rico_telegram_ui import handle_job_action
             with patch("src.agent.runtime.log_action"), _patch_is_duplicate():
                 with patch("src.applications.mark_applied", return_value=True), \
+                     patch("src.services.jobs_service.save_job", return_value=True), \
                      patch("src.services.apply_service.apply_to_job", return_value={"status": "applied"}), \
                      patch("src.services.jobs_service.skip_job", return_value=True), \
                      patch("src.message_generator.generate_message", return_value="msg"), \

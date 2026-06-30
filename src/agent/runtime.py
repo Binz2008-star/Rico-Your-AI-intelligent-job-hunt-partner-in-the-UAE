@@ -114,6 +114,11 @@ class AgentRuntime:
         # 2. Resolve job dict
         resolved_job = self._resolve_job(job, job_key)
 
+        # Inject _user_id so service-layer tools (save/skip/block) can route writes to
+        # the correct store (DB for SaaS users, JSON fallback for legacy). The runtime
+        # always has a valid user_id from the caller (JWT for API, chat_id for Telegram).
+        resolved_job = {**resolved_job, "_user_id": user_id}
+
         # 2a. When the caller has already surfaced a PermissionRequestCard and the user
         #     explicitly clicked Approve, inject the sentinel so apply_job passes it
         #     through to apply_to_job(approved=True). This is the ONLY path where the

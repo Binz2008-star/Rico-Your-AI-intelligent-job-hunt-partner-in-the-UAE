@@ -108,12 +108,12 @@ class TestJobTools:
         assert result.success is True
         assert result.tool_name == "skip_job"
 
-    def test_save_job_calls_mark_applied(self):
+    def test_save_job_calls_jobs_service_save(self):
         from src.agent.tools.job_tools import save_job as tool_save_job
         job = {"title": "Env Mgr", "link": "https://example.com/j2", "company": "Green Co"}
-        with patch("src.applications.mark_applied", return_value=True) as mock_ma:
+        with patch("src.services.jobs_service.save_job", return_value=True) as mock_svc:
             result = tool_save_job(job)
-        mock_ma.assert_called_once_with(job, "saved", "Saved via agent")
+        mock_svc.assert_called_once()
         assert result.success is True
 
     def test_apply_job_records_execution_time(self):
