@@ -13,7 +13,6 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
-from functools import lru_cache
 from typing import Any
 from collections import defaultdict
 
@@ -226,9 +225,8 @@ class ProfileContextResolver:
         # Pending ask cache for write-read consistency (5-minute TTL)
         self._pending_ask_cache: dict[str, dict[str, datetime]] = defaultdict(dict)
 
-    @lru_cache(maxsize=128)
     def _get_cached_profile(self, canonical_user_id: str) -> tuple[ProfileContext, datetime] | None:
-        """LRU cache wrapper for profile retrieval."""
+        """Return cached profile if within TTL, else None."""
         if canonical_user_id in self._cache:
             cached, timestamp = self._cache[canonical_user_id]
             if (datetime.now(_UTC) - timestamp).total_seconds() < self._cache_ttl:
@@ -805,7 +803,6 @@ class ProfileContextResolver:
     def invalidate_cache(self, canonical_user_id: str) -> None:
         """Invalidate cached profile for a user."""
         self._cache.pop(canonical_user_id, None)
-        self._get_cached_profile.cache_clear()  # Clear LRU cache
 
 
 # Lazy module-level instance
