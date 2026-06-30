@@ -251,7 +251,13 @@ def skip_job(job: Dict[str, Any], user_id: Optional[str] = None) -> bool:
         title=job.get("title", ""),
         company=job.get("company", ""),
         location=job.get("location", ""),
-        url=job.get("link", ""),
+        url=(
+            job.get("apply_url")
+            or job.get("apply_link")
+            or job.get("link")
+            or job.get("source_url")
+            or ""
+        ),
         status="decision_made",
         source="skip",
         user_id=user_id,
@@ -283,7 +289,13 @@ def save_job(job: Dict[str, Any], user_id: Optional[str] = None) -> bool:
         title=job.get("title", ""),
         company=job.get("company", ""),
         location=job.get("location", ""),
-        url=job.get("link", ""),
+        url=(
+            job.get("apply_url")
+            or job.get("apply_link")
+            or job.get("link")
+            or job.get("source_url")
+            or ""
+        ),
         status="saved",
         user_id=user_id,
     )
@@ -314,7 +326,13 @@ def block_company(job: Dict[str, Any], user_id: Optional[str] = None) -> str:
             title=job.get("title", ""),
             company=company,
             location=job.get("location", ""),
-            url=job.get("link", ""),
+            url=(
+                job.get("apply_url")
+                or job.get("apply_link")
+                or job.get("link")
+                or job.get("source_url")
+                or ""
+            ),
             status="decision_made",
             source="block",
             user_id=user_id,

@@ -536,8 +536,22 @@ class ProfileContextResolver:
                 limit=200,
             )
 
-            # Filter actions for this user
-            user_actions = [a for a in recent_actions if a.get("user_email") == canonical_user_id]
+            # Filter actions for this user within the last 7 days
+            def _ts(action: dict) -> datetime | None:
+                raw = action.get("timestamp")
+                if not raw:
+                    return None
+                try:
+                    ts = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+                    return ts if ts.tzinfo else ts.replace(tzinfo=_UTC)
+                except (ValueError, AttributeError):
+                    return None
+
+            user_actions = [
+                a for a in recent_actions
+                if a.get("user_email") == canonical_user_id
+                and (_ts(a) or week_ago) >= week_ago
+            ]
 
             # Analyze action patterns
             action_counts = defaultdict(int)
