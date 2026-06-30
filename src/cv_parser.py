@@ -267,7 +267,10 @@ class CVParser:
             clean = re.sub(r"['\-]", "", line.replace(" ", ""))
             if not clean.isalpha():
                 continue
-            return line
+            # Normalize casing (CV headers are routinely ALL CAPS or all
+            # lowercase) so the name is consistent wherever it's later
+            # displayed, regardless of how it was styled on the source CV.
+            return line.title()
         return None
 
     _ROLE_TITLE_KEYWORDS = frozenset({
