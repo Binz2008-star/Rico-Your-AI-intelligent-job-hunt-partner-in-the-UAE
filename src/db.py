@@ -300,16 +300,16 @@ def mark_applied(job_link: str, notes: str = None) -> bool:
 
 def update_application_status(job_link: str, status: str, notes: str = None) -> bool:
     """Update application status."""
-    conn = get_db_connection()
-    if not conn:
-        return False
-
     valid_statuses = ['saved', 'opened', 'opened_external', 'applied', 'interview', 'rejected', 'offer']
     # Map opened_external to opened for storage
     if status == 'opened_external':
         status = 'opened'
     if status not in valid_statuses:
         logger.warning("db_update_application_status_invalid: %s", status)
+        return False
+
+    conn = get_db_connection()
+    if not conn:
         return False
 
     try:
