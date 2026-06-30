@@ -255,8 +255,13 @@ class AgentRuntime:
                         title=resolved_job.get("title", ""),
                         company=resolved_job.get("company", ""),
                         status=lc_status,
-                        apply_url=resolved_job.get("apply_url", ""),
-                        source_url=resolved_job.get("source_url", ""),
+                        apply_url=(
+                            resolved_job.get("apply_url")
+                            or resolved_job.get("apply_link")
+                            or resolved_job.get("link")
+                            or ""
+                        ),
+                        source_url=resolved_job.get("source_url") or resolved_job.get("link") or "",
                     )
             except Exception:
                 logger.debug("runtime: failed to record job context interaction", exc_info=True)
