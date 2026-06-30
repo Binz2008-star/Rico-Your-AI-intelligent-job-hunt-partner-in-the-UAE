@@ -18,6 +18,7 @@ import {
     uploadUserFile,
     type UserDocument,
 } from '@/lib/api';
+import { clearAuth } from '@/lib/auth';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useTranslation, type TranslationKey } from '@/lib/translations';
 import Link from 'next/link';
@@ -681,16 +682,35 @@ export default function UploadPage() {
     const isAr = language === 'ar';
     const router = useRouter();
     const [isAuth, setIsAuth] = useState<boolean | null>(null);
+    const [me, setMe] = useState<{ name?: string | null; email?: string | null } | null>(null);
 
     useEffect(() => {
-        fetchMe().then(me => setIsAuth(me.authenticated)).catch(() => setIsAuth(false));
+        fetchMe()
+            .then(me => {
+                setIsAuth(me.authenticated);
+                setMe(me);
+            })
+            .catch(() => setIsAuth(false));
     }, []);
+
+    const handleLogout = useCallback(async () => {
+        await clearAuth();
+        router.push('/login');
+    }, [router]);
 
     const title = isAuth ? t('filesPageTitle') : t('uploadYourCV');
     const subtitle = isAuth ? t('filesPageSubtitle') : t('uploadCvSubtitle');
 
     return (
-        <AppShell title={title} subtitle={subtitle}>
+        <AppShell
+            title={title}
+            subtitle={subtitle}
+            sidebarProps={
+                isAuth
+                    ? { user: { name: me?.name ?? undefined, email: me?.email ?? undefined }, onLogout: handleLogout }
+                    : undefined
+            }
+        >
             {isAuth === null ? (
                 <div className="py-20 text-center">
                     <MaterialIcon icon="hourglass_empty" className="animate-spin text-2xl text-text-tertiary" />
