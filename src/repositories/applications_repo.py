@@ -187,9 +187,20 @@ def _dedupe_by_job_identity(apps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     chat "save this job", lifecycle tracking), each with its own scheme, so
     the same job can land under more than one job_key and render as duplicate
     cards on /flow (BUG-3). Rows come back ordered by updated_at DESC, so the
-    first row seen per normalized (title, company, location) wins.
+    first row seen per identity wins.
+
+    A row matches a previously seen row when either:
+      - normalized (title, company, location) match (BUG-3's original key), or
+      - normalized (title, company, apply_url/link) match — closes the gap
+        where the same posting is re-saved with a differently formatted
+        location string (e.g. "Dubai" vs "Dubai, UAE") but an identical apply
+        link, which previously bypassed dedup and rendered as a duplicate
+        card (e.g. a duplicated "Mastercard" entry).
+    location-only matches still require an identical location so two
+    genuinely distinct postings at different sites are never merged.
     """
-    seen: set = set()
+    seen_loc: set = set()
+    seen_url: set = set()
     deduped: List[Dict[str, Any]] = []
     for app in apps:
         if not isinstance(app, dict):
@@ -201,22 +212,59 @@ def _dedupe_by_job_identity(apps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             deduped.append(app)
             continue
         location = (app.get("location") or "").strip().lower()
-        identity = (title, company, location)
-        if identity in seen:
+        loc_identity = (title, company, location)
+
+        url = (app.get("apply_url") or app.get("link") or "").strip().lower()
+        url_identity = (title, company, url) if url else None
+
+        if loc_identity in seen_loc or (url_identity and url_identity in seen_url):
             continue
-        seen.add(identity)
+        seen_loc.add(loc_identity)
+        if url_identity:
+            seen_url.add(url_identity)
         deduped.append(app)
     return deduped
+
+
+_VALID_STATUSES = (
+    "saved", "opened", "opened_external", "prepared", "applied", "interview",
+    "rejected", "offer", "decision_made", "follow_up_due",
+)
+
+
+def _stats_from_apps(apps: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Derive total/by_status counts from an already-deduped application list.
+
+    Computing stats from the same list get_all() returns (rather than a
+    separate, independently-aggregated DB query) guarantees the two endpoints
+    can never disagree on totals — this was the root cause of chat/sidebar/
+    /flow showing different counts for the same user.
+    """
+    by_status: Dict[str, int] = {s: 0 for s in _VALID_STATUSES}
+    for app in apps:
+        if not isinstance(app, dict):
+            continue
+        status = app.get("status")
+        if status in by_status:
+            by_status[status] += 1
+        elif status:
+            by_status[status] = by_status.get(status, 0) + 1
+    return {
+        "total": len(apps),
+        "by_status": by_status,
+        "applied": by_status.get("applied", 0),
+        "saved": by_status.get("saved", 0),
+        "interview": by_status.get("interview", 0),
+        "rejected": by_status.get("rejected", 0),
+        "offer": by_status.get("offer", 0),
+        "follow_up_due": by_status.get("follow_up_due", 0),
+    }
 
 
 def get_stats(user_id: Optional[str] = None) -> Dict[str, Any]:
     """Aggregate statistics for a specific user or fall back to legacy JSON."""
     if user_id:
-        db = _db()
-        if not db:
-            raise HTTPException(status_code=503, detail="Database unavailable")
-        db_user_id = _provision_db_user_id(db, user_id)
-        return db.get_recommendation_stats(db_user_id)
+        return _stats_from_apps(get_all(user_id=user_id))
 
     # Legacy fallback
     _warn_legacy_fallback("get_stats")

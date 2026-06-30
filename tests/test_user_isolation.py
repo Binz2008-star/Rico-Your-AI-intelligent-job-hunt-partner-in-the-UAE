@@ -193,26 +193,40 @@ class TestUserApplicationsIsolation:
         assert alice_apps != bob_apps
 
     def test_get_stats_returns_different_counts_per_user(self):
-        """applications_repo.get_stats must aggregate per-user."""
+        """applications_repo.get_stats must aggregate per-user from the same
+        canonical, deduped list get_all() returns (no separate DB aggregate)."""
         from src.repositories import applications_repo
+
+        alice_recs = [
+            {"job_id": "j1", "title": "HSE Manager", "company": "Acme", "status": "applied"},
+            {"job_id": "j2", "title": "Safety Lead", "company": "Beta", "status": "saved"},
+            {"job_id": "j3", "title": "QHSE Officer", "company": "Gamma", "status": "applied"},
+            {"job_id": "j4", "title": "EHS Manager", "company": "Delta", "status": "interview"},
+            {"job_id": "j5", "title": "HSE Advisor", "company": "Epsilon", "status": "applied"},
+        ]
+        bob_recs = [
+            {"job_id": "k1", "title": "Safety Officer", "company": "Zeta", "status": "saved"},
+        ]
 
         db = MagicMock()
         db.available = True
         db._exact_auth_lookup_enabled = False
         db.get_user_bundle.side_effect = lambda uid: {"id": f"uuid-{uid}"}
-        db.get_recommendation_stats.side_effect = lambda uid: (
-            {"total": 5, "applied": 3, "saved": 2} if uid == "uuid-alice@rico.ai" else
-            {"total": 1, "applied": 0, "saved": 1} if uid == "uuid-bob@rico.ai" else
-            {"total": 0}
+        db.get_recommendations.side_effect = lambda uid, **kw: (
+            alice_recs if uid == "uuid-alice@rico.ai" else
+            bob_recs if uid == "uuid-bob@rico.ai" else []
         )
 
         with patch("src.repositories.applications_repo._db", return_value=db):
             alice_stats = applications_repo.get_stats(user_id="alice@rico.ai")
             bob_stats = applications_repo.get_stats(user_id="bob@rico.ai")
+            # Stats must agree with the canonical list count (the bug this guards against).
+            alice_total_from_list = len(applications_repo.get_all(user_id="alice@rico.ai"))
 
         assert alice_stats["total"] == 5
         assert bob_stats["total"] == 1
         assert alice_stats != bob_stats
+        assert alice_stats["total"] == alice_total_from_list
 
     def test_find_by_job_id_is_user_scoped(self):
         """find_by_job_id must not leak another user's application."""
@@ -471,3 +485,96 @@ class TestAuthenticatedRouteFailClosed:
         call_kwargs = mock_update.call_args[1]
         assert "user_id" in call_kwargs
         assert call_kwargs["user_id"] == "alice@rico.ai"
+
+
+# ── Canonical applications data source (pipeline unification) ──────────────────
+
+
+class TestCanonicalApplicationsSource:
+    """The authenticated /applications and /applications/stats routes — and the
+    chat application summary — must all agree on the same total, because they
+    are now derived from the same applications_repo.get_all() list.
+
+    Regression guard for: chat said 'no DB access', sidebar showed a
+    different count than /flow's header, and /flow's header disagreed with
+    its own list/board.
+    """
+
+    def _recs(self):
+        return [
+            {"job_id": "j1", "title": "HSE Manager", "company": "Acme", "status": "applied", "location": "Dubai"},
+            {"job_id": "j2", "title": "Safety Lead", "company": "Beta", "status": "saved", "location": "Abu Dhabi"},
+            {"job_id": "j3", "title": "QHSE Officer", "company": "Gamma", "status": "interview", "location": "Dubai"},
+        ]
+
+    def test_stats_route_total_matches_list_route_total(self):
+        """GET /applications/stats total must equal GET /applications total for the same user."""
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+        from src.api.auth import create_access_token
+
+        recs = self._recs()
+        db = MagicMock()
+        db.available = True
+        db._exact_auth_lookup_enabled = False
+        db.get_user_bundle.return_value = {"id": "uuid-carol"}
+        db.get_recommendations.return_value = recs
+
+        token = create_access_token({"sub": "carol@rico.ai", "role": "user"})
+        tc = TestClient(app, raise_server_exceptions=False)
+        tc.cookies.set("access_token", token)
+
+        with patch("src.repositories.applications_repo._db", return_value=db):
+            stats_resp = tc.get("/api/v1/applications/stats")
+            list_resp = tc.get("/api/v1/applications")
+
+        assert stats_resp.status_code == 200
+        assert list_resp.status_code == 200
+        assert stats_resp.json()["total"] == len(recs)
+        assert list_resp.json()["total"] == len(recs)
+        assert stats_resp.json()["total"] == list_resp.json()["total"]
+
+    def test_chat_application_summary_uses_canonical_repo_not_legacy_file(self):
+        """Chat's application summary must read the canonical repo, never the
+        legacy non-user-scoped JSON file (which was the 'no DB access' bug)."""
+        from src.rico_chat_api import RicoChatAPI
+
+        recs = self._recs()
+        db = MagicMock()
+        db.available = True
+        db._exact_auth_lookup_enabled = False
+        db.get_user_bundle.return_value = {"id": "uuid-dave"}
+        db.get_recommendations.return_value = recs
+
+        api = RicoChatAPI(persist=False)
+        api.memory = MagicMock()
+
+        with patch("src.repositories.applications_repo._db", return_value=db), \
+             patch("src.applications.get_applied_jobs") as legacy_apps, \
+             patch("src.applications.get_application_stats") as legacy_stats:
+            result = api._handle_application_tracking("dave@rico.ai")
+
+        assert result["type"] == "application_status"
+        assert len(result["applications"]) == len(recs)
+        assert result["stats"]["total"] == len(recs)
+        legacy_apps.assert_not_called()
+        legacy_stats.assert_not_called()
+
+    def test_chat_application_summary_honest_on_db_failure(self):
+        """On a genuine canonical-repo failure, chat must say it's temporarily
+        unavailable — never silently substitute legacy data or claim no access
+        while /applications can still serve data."""
+        from src.rico_chat_api import RicoChatAPI
+
+        api = RicoChatAPI(persist=False)
+        api.memory = MagicMock()
+
+        with patch(
+            "src.repositories.applications_repo.get_all",
+            side_effect=RuntimeError("db down"),
+        ):
+            result = api._handle_application_tracking("erin@rico.ai")
+
+        assert result["type"] == "application_status"
+        assert result.get("unavailable") is True
+        assert result["applications"] == []

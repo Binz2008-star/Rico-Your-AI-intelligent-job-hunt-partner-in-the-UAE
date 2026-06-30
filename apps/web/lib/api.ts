@@ -741,6 +741,7 @@ export async function getApplicationStats(
       offer: 0,
       rejected: 1,
       saved: 0,
+      total: 4,
     };
   }
 
@@ -754,9 +755,16 @@ export async function getApplicationStats(
   const normalized: Record<string, number> = {};
 
   for (const [key, value] of Object.entries(data)) {
-    // Skip the nested by_status object and the pre-summed total to avoid
-    // type coercion bugs (number + object = "[object Object]") and double-counting.
-    if (key === "by_status" || key === "total" || typeof value !== "number") continue;
+    // Skip the nested by_status object to avoid a type coercion bug
+    // (number + object = "[object Object]"). `total` is the backend's
+    // canonical count (same source /flow and the sidebar must agree with) —
+    // pass it through unmodified rather than re-deriving it from a partial
+    // sum of named status fields.
+    if (key === "by_status" || typeof value !== "number") continue;
+    if (key === "total") {
+      normalized.total = value;
+      continue;
+    }
     const normalizedKey = APPLICATION_STATUS_ALIASES[key] ?? key;
     normalized[normalizedKey] = (normalized[normalizedKey] ?? 0) + value;
   }

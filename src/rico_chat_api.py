@@ -17643,20 +17643,44 @@ class RicoChatAPI:
         }
 
     def _handle_application_tracking(self, user_id: str, intent: str = "application_tracking", message: str = "") -> dict[str, Any]:
-        """Route application tracking requests to the applications repository."""
+        """Route application tracking requests to the applications repository.
+
+        Always reads from the same canonical, user-scoped repo that
+        /applications and /flow use (src.repositories.applications_repo) so
+        chat, sidebar, and /flow never disagree on tracked-application counts.
+        On a genuine DB failure this surfaces an honest "temporarily
+        unavailable" message instead of silently substituting the legacy,
+        non-user-scoped JSON file — that fallback previously made chat show
+        different (and stale, cross-user) data than /flow.
+        """
+        arabic = self._is_arabic_text(message)
         try:
             from src.repositories.applications_repo import get_all, get_stats
             apps = get_all(user_id=user_id)
             stats = get_stats(user_id=user_id)
         except Exception:
-            # Fallback to legacy file-based store
-            from src.applications import get_applied_jobs, get_application_stats
-            apps = get_applied_jobs()
-            stats = get_application_stats()
+            logger.exception(
+                "_handle_application_tracking: canonical repo failed for user_id=%s", user_id
+            )
+            unavailable_msg = (
+                "تعذّر الوصول إلى بيانات طلباتك المحفوظة مؤقتاً. حاول مرة أخرى خلال لحظات، "
+                "أو افتح صفحة /applications مباشرة."
+                if arabic else
+                "I'm temporarily unable to reach your applications data. "
+                "Please try again in a moment, or open /applications directly."
+            )
+            return {
+                "type": "application_status",
+                "message": unavailable_msg,
+                "applications": [],
+                "stats": {},
+                "follow_up_needed": [],
+                "unavailable": True,
+            }
 
         enriched = self._enrich_applications(self._sort_applications_recent(apps))
         follow_up_needed = [a for a in enriched if a.get("needs_follow_up")]
-        msg = self._build_tracking_message(enriched, stats, arabic=self._is_arabic_text(message))
+        msg = self._build_tracking_message(enriched, stats, arabic=arabic)
         if enriched:
             latest = enriched[0]
             self._store_recent_context(

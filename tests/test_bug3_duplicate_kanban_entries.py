@@ -130,6 +130,124 @@ class TestDuplicateJobKeyCollapsedOnRead:
         assert len(result) == 2
 
 
+class TestDuplicateApplyUrlCollapsedOnRead:
+    """Same posting re-saved with a differently formatted location string but
+    an identical apply link (e.g. 'Dubai' vs 'Dubai, UAE') must still collapse
+    to one row — this was the reported duplicate Mastercard card."""
+
+    def test_same_title_company_url_different_location_text_merges(self):
+        from src.repositories import applications_repo
+
+        rows = [
+            {**_rec("key-1", "Manager, Commercial", "Mastercard", location="Dubai, UAE",
+                     updated_at="2026-06-30T12:00:00"), "apply_url": "https://jobs.example.com/12345"},
+            {**_rec("key-2", "Manager, Commercial", "Mastercard", location="Dubai",
+                     updated_at="2026-06-30T09:00:00"), "apply_url": "https://jobs.example.com/12345"},
+        ]
+        mock_db = MagicMock()
+        mock_db.get_recommendations.return_value = rows
+        mock_db.available = True
+
+        with patch.object(applications_repo, "_db", return_value=mock_db), \
+             patch.object(applications_repo, "_provision_db_user_id", return_value="db-uuid"):
+            result = applications_repo.get_all(user_id="user_a")
+
+        assert len(result) == 1
+        assert result[0]["job_id"] == "key-1", "must keep the most recently updated row"
+
+    def test_same_url_different_title_or_company_not_merged(self):
+        """A shared apply_url alone (e.g. a generic careers page) must not
+        merge genuinely different postings — title+company must also match."""
+        from src.repositories import applications_repo
+
+        rows = [
+            {**_rec("key-1", "Manager, Commercial", "Mastercard", location="Dubai"),
+             "apply_url": "https://jobs.example.com/careers"},
+            {**_rec("key-2", "Analyst, Risk", "Mastercard", location="Dubai"),
+             "apply_url": "https://jobs.example.com/careers"},
+        ]
+        mock_db = MagicMock()
+        mock_db.get_recommendations.return_value = rows
+        mock_db.available = True
+
+        with patch.object(applications_repo, "_db", return_value=mock_db), \
+             patch.object(applications_repo, "_provision_db_user_id", return_value="db-uuid"):
+            result = applications_repo.get_all(user_id="user_a")
+
+        assert len(result) == 2
+
+    def test_blank_url_does_not_false_match_other_blank_url_rows(self):
+        """Two distinct postings that both lack an apply_url must rely solely
+        on the (title, company, location) identity, not collide on empty url."""
+        from src.repositories import applications_repo
+
+        rows = [
+            _rec("key-1", "Manager, Commercial", "Mastercard", location="Dubai"),
+            _rec("key-2", "Manager, Commercial", "Mastercard", location="Abu Dhabi"),
+        ]
+        mock_db = MagicMock()
+        mock_db.get_recommendations.return_value = rows
+        mock_db.available = True
+
+        with patch.object(applications_repo, "_db", return_value=mock_db), \
+             patch.object(applications_repo, "_provision_db_user_id", return_value="db-uuid"):
+            result = applications_repo.get_all(user_id="user_a")
+
+        assert len(result) == 2
+
+
+class TestStatsMatchesCanonicalList:
+    """applications_repo.get_stats() must derive its total from the same
+    deduped list get_all() returns — this is the root-cause fix for chat,
+    sidebar, and /flow disagreeing on tracked-application counts."""
+
+    def test_stats_total_equals_deduped_list_length(self):
+        from src.repositories import applications_repo
+
+        rows = [
+            {**_rec("key-1", "Manager, Commercial", "Mastercard", location="Dubai, UAE"),
+             "apply_url": "https://jobs.example.com/12345", "status": "applied"},
+            {**_rec("key-2", "Manager, Commercial", "Mastercard", location="Dubai"),
+             "apply_url": "https://jobs.example.com/12345", "status": "applied"},  # duplicate, collapses
+            {**_rec("key-3", "HSE Officer", "Beta LLC"), "status": "saved"},
+            {**_rec("key-4", "QHSE Lead", "Gamma Inc"), "status": "interview"},
+        ]
+        mock_db = MagicMock()
+        mock_db.get_recommendations.return_value = rows
+        mock_db.available = True
+
+        with patch.object(applications_repo, "_db", return_value=mock_db), \
+             patch.object(applications_repo, "_provision_db_user_id", return_value="db-uuid"):
+            apps = applications_repo.get_all(user_id="user_a")
+            stats = applications_repo.get_stats(user_id="user_a")
+
+        assert stats["total"] == len(apps) == 3
+        assert stats["applied"] == 1
+        assert stats["saved"] == 1
+        assert stats["by_status"]["interview"] == 1
+
+    def test_stats_includes_all_valid_statuses_as_named_fields(self):
+        """Unlike the old raw SQL aggregate (only 6 of 10 statuses named at
+        the top level), by_status must always carry all 10 valid statuses,
+        defaulting absent ones to 0."""
+        from src.repositories import applications_repo
+
+        mock_db = MagicMock()
+        mock_db.get_recommendations.return_value = []
+        mock_db.available = True
+
+        with patch.object(applications_repo, "_db", return_value=mock_db), \
+             patch.object(applications_repo, "_provision_db_user_id", return_value="db-uuid"):
+            stats = applications_repo.get_stats(user_id="user_a")
+
+        assert stats["total"] == 0
+        for status in (
+            "saved", "opened", "opened_external", "prepared", "applied",
+            "interview", "rejected", "offer", "decision_made", "follow_up_due",
+        ):
+            assert stats["by_status"][status] == 0
+
+
 class TestFindByJobIdUnaffected:
     """find_by_job_id() reads via db.get_recommendations() directly, bypassing
     get_all()'s dedup, so subscription-gating / idempotency checks keyed on a
