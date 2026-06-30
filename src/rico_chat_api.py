@@ -234,6 +234,8 @@ _NON_ROLE_STARTERS: frozenset[str] = frozenset({
     "create", "generate", "send", "change", "apply", "submit", "check",
     "review", "save", "build", "prepare", "edit", "add", "remove", "start",
     "open", "try", "set", "use", "share", "update", "improve", "track",
+    # Pipeline / state management verbs — never start a job title
+    "clear", "reset",
     # Gerund forms of the above that were missing
     "creating", "generating", "sending", "changing", "applying", "submitting",
     "checking", "reviewing", "saving", "building", "preparing", "editing",
@@ -506,6 +508,43 @@ _UNSUPPORTED_DELETE_RE = re.compile(
         |
         # Arabic: احذف/امسح + saved-jobs or applications noun
         \b(?:امسح|احذف|امحِ|أزل)\b[^.!?،؟]{0,80}(?:الوظائف(?:\s+المحفوظة)?|جميع\s+(?:الوظائف|الطلبات)|وظائف(?:\s+المحفوظة)?|الطلبات|طلباتي|المحفوظات|قائمة\s+الوظائف)
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# Explicit pipeline / application-list reset intent.
+# Matches: "clear all applications", "reset my pipeline", "archive all applications",
+# "start over", "start fresh", "restart pipeline", "remove all tracked jobs", etc.
+# Does NOT overlap with _DELETE_SAVED_JOBS_RE (which targets saved-jobs only).
+_PIPELINE_RESET_RE = re.compile(
+    r"""
+    (?:
+        # English: destructive/reset verb + pipeline/applications/tracked-jobs noun
+          \b(?:clear|reset|wipe|purge|erase)\b.{0,60}?\b(?:all\s+(?:my\s+)?)?(?:applications?|tracked\s+jobs?|job\s+pipeline|(?:my\s+)?pipeline)\b
+        | \barchive\b.{0,60}?\b(?:all\s+(?:my\s+)?)?applications?\b
+        | \b(?:remove|delete)\b.{0,60}?\ball\s+(?:my\s+)?tracked\s+jobs?\b
+        | \b(?:start\s+(?:over|fresh|from\s+scratch)|restart\s+(?:the\s+)?(?:pipeline|job\s+(?:search|hunt)))\b
+        |
+        # Arabic: امسح/أعد ضبط + pipeline/applications
+        \b(?:امسح|احذف|امحِ|أزل|أعد\s+ضبط)\b[^.!?،؟]{0,80}(?:الطلبات|طلباتي|جميع\s+الطلبات|خط\s+الأنابيب|مساري)
+        | \b(?:ابدأ\s+(?:من\s+جديد|من\s+الصفر)|أعد\s+البدء)\b
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# Implicit pipeline reset — vague phrases like "clear them", "must start over".
+# Only fires when last Rico turn was an application tracking summary (context-aware).
+_PIPELINE_RESET_IMPLICIT_RE = re.compile(
+    r"""
+    (?:
+          \b(?:clear|reset|wipe)\s+(?:them|it\s+all|everything|all\s+of\s+them|it|those)\b
+        | \b(?:must\s+start\s+over|we\s+(?:must\s+)?start\s+over|lets?\s+start\s+(?:over|again|fresh))\b
+        | \b(?:clean\s+slate|fresh\s+start)\b
+        | \b(?:get\s+rid\s+of\s+(?:all\s+of\s+)?(?:them|everything))\b
+        | \b(?:امسح|احذف)\s+(?:كل(?:ها|هم)?|الكل|جميعها)\b
+        | \b(?:ابدأ\s+من\s+جديد|نبدأ\s+من\s+جديد)\b
     )
     """,
     re.IGNORECASE | re.VERBOSE,
@@ -4918,6 +4957,7 @@ class RicoChatAPI:
         location: str = "",
         quota_exhausted: bool = False,
         rate_limited: bool = False,
+        arabic: bool = False,
     ) -> dict[str, Any]:
         """Build a safe fallback response when every job provider is degraded.
 
@@ -4937,30 +4977,49 @@ class RicoChatAPI:
         if quota_exhausted:
             provider_state = "quota_exhausted"
             message = (
+                f"وصلت مصادر التوظيف إلى حد البحث المسموح به الآن، لذا لا يمكنني جلب "
+                f"إعلانات **{role}** الآن. إليك بدائل آمنة للمتابعة:"
+                if arabic else
                 f"Live job providers have reached their search quota for now, so I can't pull "
                 f"fresh **{role}** listings this minute. Here are safe ways to keep moving:"
             )
         elif rate_limited:
             provider_state = "rate_limited"
             message = (
+                f"مصدر التوظيف مقيّد مؤقتاً، لذا نتائج **{role}** غير متاحة الآن. "
+                f"حاول مجدداً بعد قليل، أو استخدم إحدى هذه البدائل:"
+                if arabic else
                 f"The job source is temporarily rate-limited, so fresh **{role}** results aren't "
                 f"available right now. Try again shortly, or use one of these:"
             )
         else:
             provider_state = "unavailable"
             message = (
+                f"لم أتمكن من الوصول إلى مصدر التوظيف المباشر لـ **{role}** الآن. "
+                f"إليك بدائل آمنة للمتابعة:"
+                if arabic else
                 f"I couldn't reach a live job source for **{role}** right now. "
                 f"Here are safe ways to keep moving:"
             )
 
-        options = [
-            {"action": "retry_search", "label": "Try again later", "role": role, "location": location},
-            {"action": "open_url", "label": "Search on Google", "url": google_url},
-            {"action": "open_url", "label": "Search on LinkedIn", "url": linkedin_url},
-            {"action": "search_company_site", "label": "Search a company career site", "role": role},
-            {"action": "copy_text", "label": "Copy role title", "text": role},
-            {"action": "save_role_search", "label": "Save this role search", "role": role, "location": location},
-        ]
+        if arabic:
+            options = [
+                {"action": "retry_search", "label": "حاول مرة أخرى لاحقاً", "role": role, "location": location},
+                {"action": "open_url", "label": "بحث على Google", "url": google_url},
+                {"action": "open_url", "label": "بحث على LinkedIn", "url": linkedin_url},
+                {"action": "search_company_site", "label": "ابحث في موقع شركة", "role": role},
+                {"action": "copy_text", "label": "نسخ المسمى الوظيفي", "text": role},
+                {"action": "save_role_search", "label": "حفظ هذا البحث", "role": role, "location": location},
+            ]
+        else:
+            options = [
+                {"action": "retry_search", "label": "Try again later", "role": role, "location": location},
+                {"action": "open_url", "label": "Search on Google", "url": google_url},
+                {"action": "open_url", "label": "Search on LinkedIn", "url": linkedin_url},
+                {"action": "search_company_site", "label": "Search a company career site", "role": role},
+                {"action": "copy_text", "label": "Copy role title", "text": role},
+                {"action": "save_role_search", "label": "Save this role search", "role": role, "location": location},
+            ]
 
         response = {
             "type": "provider_degraded",
@@ -4994,6 +5053,18 @@ class RicoChatAPI:
         employment_type_filter: str = "",
     ) -> dict[str, Any]:
         """Handle target role search with role intelligence integration."""
+        # Detect user's language from the most recent user turn.  This lets all
+        # downstream message builders return Arabic text without any call-site changes.
+        arabic = False
+        try:
+            _recent_msgs = self._get_recent_messages(user_id, limit=5)
+            for _rm in reversed(_recent_msgs):
+                if _rm.get("role") == "user":
+                    arabic = self._is_arabic_text(str(_rm.get("content") or ""))
+                    break
+        except Exception:
+            pass
+
         try:
             normalized_role = normalize_role(role)
         except Exception as e:
@@ -5054,6 +5125,9 @@ class RicoChatAPI:
             )
             mark_failed(user_id, operation_id, str(exc))
             _graceful_msg = (
+                "عذراً، لم أتمكن من إتمام البحث الآن. "
+                "حاول تحديد اسم الوظيفة — مثلاً: 'وظائف مدير الامتثال في دبي'."
+                if arabic else
                 "I couldn't complete that search right now. "
                 "Try specifying a role name — for example: 'Compliance Manager jobs in Dubai'."
             )
@@ -5081,6 +5155,7 @@ class RicoChatAPI:
                 location=location,
                 quota_exhausted=quota_exhausted,
                 rate_limited=rate_limited,
+                arabic=arabic,
             )
 
         # Filter out already-applied jobs
@@ -5234,7 +5309,10 @@ class RicoChatAPI:
         # never poisons the search location or fit score.
         from src.services.city_validation import sanitize_cities
         cities = sanitize_cities(self._as_list(self._profile_value(profile, "preferred_cities")))
-        city_text = f" in {', '.join(map(str, cities[:2]))}" if cities else " in the UAE"
+        if arabic:
+            city_text = f" في {', '.join(map(str, cities[:2]))}" if cities else " في الإمارات"
+        else:
+            city_text = f" in {', '.join(map(str, cities[:2]))}" if cities else " in the UAE"
         basis = []
         if years:
             try:
@@ -5242,10 +5320,13 @@ class RicoChatAPI:
             except (TypeError, ValueError):
                 years_int = None
             if years_int is not None:
-                basis.append(f"~{years_int} years experience")
+                basis.append(f"~{years_int} years experience" if not arabic else f"~{years_int} سنوات خبرة")
         if skills:
-            basis.append("skills: " + ", ".join(map(str, skills[:6])))
-        basis_text = " using your CV profile" + (f" ({'; '.join(basis)})" if basis else "")
+            basis.append(("مهارات: " if arabic else "skills: ") + ", ".join(map(str, skills[:6])))
+        if arabic:
+            basis_text = " بناءً على ملفك الوظيفي" + (f" ({'; '.join(basis)})" if basis else "")
+        else:
+            basis_text = " using your CV profile" + (f" ({'; '.join(basis)})" if basis else "")
 
         role_intelligence_data = self._enrich_with_role_intelligence(
             user_id, normalized_role, profile, skills, years, cities
@@ -5254,6 +5335,7 @@ class RicoChatAPI:
         message = self._build_role_search_message(
             normalized_role, city_text, basis_text, top_matches, role_intelligence_data,
             from_saved_profile=from_saved_profile,
+            arabic=arabic,
         )
 
         response = {
@@ -5273,6 +5355,8 @@ class RicoChatAPI:
 
         if rate_limited:
             response["rate_limit_notice"] = (
+                "هذا المصدر مقيّد مؤقتاً. جرّب الرابط البديل لكل نتيجة، أو أعد البحث بعد قليل."
+                if arabic else
                 "This source is temporarily rate-limited. "
                 "Try the alternate link on each result, or search again shortly."
             )
@@ -5340,12 +5424,18 @@ class RicoChatAPI:
         top_matches: list[Any],
         role_intelligence_data: dict[str, Any] | None,
         from_saved_profile: bool = False,
+        arabic: bool = False,
     ) -> str:
         """Build message for role search response."""
         if from_saved_profile:
-            prefix = f"Searching based on your saved target role: {normalized_role}. "
+            prefix = (
+                f"أبحث بناءً على دورك المحفوظ: {normalized_role}. "
+                if arabic else
+                f"Searching based on your saved target role: {normalized_role}. "
+            )
         else:
             prefix = ""
+
         if top_matches:
             def _has_url(m: Any) -> bool:
                 return bool(
@@ -5354,24 +5444,46 @@ class RicoChatAPI:
             link_count = sum(1 for m in top_matches if _has_url(m))
             lead_count = len(top_matches) - link_count
             total = len(top_matches)
-            if link_count and lead_count:
-                base_message = (
-                    f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
-                    f"I found {total} candidate match(es) from the job source pipeline "
-                    f"({link_count} with provider links, {lead_count} need verification)."
-                )
-            elif link_count:
-                base_message = (
-                    f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
-                    f"I found {link_count} match(es) with provider data available."
-                )
+            if arabic:
+                if link_count and lead_count:
+                    base_message = (
+                        f"حسناً — سأستهدف وظائف {normalized_role}{city_text}{basis_text}. "
+                        f"وجدت {total} فرصة من مصادر التوظيف "
+                        f"({link_count} برابط مزود، {lead_count} تحتاج تحقق)."
+                    )
+                elif link_count:
+                    base_message = (
+                        f"حسناً — سأستهدف وظائف {normalized_role}{city_text}{basis_text}. "
+                        f"وجدت {link_count} نتيجة بروابط مزودي البيانات."
+                    )
+                else:
+                    base_message = (
+                        f"حسناً — سأستهدف وظائف {normalized_role}{city_text}{basis_text}. "
+                        f"وجدت {lead_count} فرصة تحتاج تحقق من المصدر."
+                    )
             else:
-                base_message = (
-                    f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
-                    f"I found {lead_count} candidate match(es) that need source verification."
-                )
+                if link_count and lead_count:
+                    base_message = (
+                        f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
+                        f"I found {total} candidate match(es) from the job source pipeline "
+                        f"({link_count} with provider links, {lead_count} need verification)."
+                    )
+                elif link_count:
+                    base_message = (
+                        f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
+                        f"I found {link_count} match(es) with provider data available."
+                    )
+                else:
+                    base_message = (
+                        f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
+                        f"I found {lead_count} candidate match(es) that need source verification."
+                    )
         else:
-            base_message = f"Got it — I will target {normalized_role} roles{city_text}{basis_text}."
+            base_message = (
+                f"حسناً — سأستهدف وظائف {normalized_role}{city_text}{basis_text}."
+                if arabic else
+                f"Got it — I will target {normalized_role} roles{city_text}{basis_text}."
+            )
 
         # Adjacent roles are an OPT-IN offer, never a silent substitution. We always
         # searched the exact requested role (normalized_role); related roles such as
@@ -5380,17 +5492,33 @@ class RicoChatAPI:
         _adjacent = (role_intelligence_data or {}).get("adjacent_roles", []) if role_intelligence_data else []
         _adjacent_names = [r["role"] for r in _adjacent[:3] if r.get("role")]
         if not top_matches and _adjacent_names:
-            base_message += (
-                f" I searched **{normalized_role}** specifically and didn't find live matches. "
-                f"Want me to also look at {', '.join(_adjacent_names)}?"
-            )
+            if arabic:
+                base_message += (
+                    f" بحثت عن **{normalized_role}** تحديداً ولم أجد نتائج حالية. "
+                    f"هل تريد أن أبحث أيضاً في {', '.join(_adjacent_names)}؟"
+                )
+            else:
+                base_message += (
+                    f" I searched **{normalized_role}** specifically and didn't find live matches. "
+                    f"Want me to also look at {', '.join(_adjacent_names)}?"
+                )
         elif not top_matches:
-            base_message += " I couldn't retrieve live jobs right now. I can still suggest target searches based on your CV — or try again later."
-        elif _adjacent_names:
             base_message += (
-                f" These are **{normalized_role}** roles. If you'd like, I can also look at "
-                f"{', '.join(_adjacent_names)} — just say the word."
+                " لم أتمكن من استرداد الوظائف الآن. يمكنني اقتراح بحث مناسب بناءً على سيرتك — أو حاول مرة أخرى لاحقاً."
+                if arabic else
+                " I couldn't retrieve live jobs right now. I can still suggest target searches based on your CV — or try again later."
             )
+        elif _adjacent_names:
+            if arabic:
+                base_message += (
+                    f" هذه وظائف **{normalized_role}**. إن أردت، يمكنني أيضاً البحث في "
+                    f"{', '.join(_adjacent_names)} — قل لي فقط."
+                )
+            else:
+                base_message += (
+                    f" These are **{normalized_role}** roles. If you'd like, I can also look at "
+                    f"{', '.join(_adjacent_names)} — just say the word."
+                )
 
         return prefix + base_message
 
@@ -5801,12 +5929,40 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        # ── Pending pipeline reset confirmation (P2-B) ───────────────────────
+        # Must run before the pipeline reset guard so a confirmation reply in the
+        # 2-minute window executes the action instead of re-asking.
+        _pending_reset = self._handle_pending_pipeline_reset(user_id, message)
+        if _pending_reset is not None:
+            return self._finalize(_pending_reset, self.SOURCE_KEYWORD, profile=profile)
+
         # ── Pending saved-jobs deletion confirmation (P2-B) ──────────────────
         # Must run before the delete guard so a "yes" / "نعم" in the 2-minute
         # confirmation window executes the real deletion instead of re-asking.
         _pending_delete = self._handle_pending_delete_saved_jobs(user_id, message)
         if _pending_delete is not None:
             return self._finalize(_pending_delete, self.SOURCE_KEYWORD, profile=profile)
+
+        # ── Pipeline reset intent (explicit) ──────────────────────────────────
+        # "clear all applications", "reset my pipeline", "start over", etc.
+        # Fires before role classification to prevent misrouting as a job role.
+        if _PIPELINE_RESET_RE.search(message):
+            return self._finalize(
+                self._handle_pipeline_reset(user_id, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Pipeline reset intent (implicit + context-aware) ──────────────────
+        # "clear them", "must start over" — only when last turn was app tracking.
+        if _PIPELINE_RESET_IMPLICIT_RE.search(message):
+            _last_t = self._get_last_turn(user_id)
+            if _last_t.get("intent") == "application_tracking":
+                return self._finalize(
+                    self._handle_pipeline_reset(user_id, message),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
 
         # ── Delete mutation guard (P0 trust bug #764 / P2-B) ─────────────────
         # Saved-jobs → confirmation flow; application history → blocked.
@@ -10997,6 +11153,153 @@ class RicoChatAPI:
         return {"type": "learning_profile_summary", "message": msg}
 
     _PENDING_DELETE_SAVED_JOBS_KEY: str = "pending_delete_saved_jobs"
+    _PENDING_PIPELINE_RESET_KEY: str = "pending_pipeline_reset"
+
+    def _handle_pipeline_reset(self, user_id: str, message: str) -> dict[str, Any]:
+        """Detect pipeline/application-list reset intent and ask for confirmation.
+
+        Never executes immediately.  Stores a 2-minute pending state and returns
+        a confirmation prompt with three options: Archive (default) / Delete / Cancel.
+        """
+        arabic = self._is_arabic_text(message)
+        try:
+            import time
+            self.memory.set_context(user_id, self._PENDING_PIPELINE_RESET_KEY, {
+                "pending": True,
+                "expires_at": int(time.time()) + 120,
+            })
+        except Exception:
+            pass
+
+        if arabic:
+            msg = (
+                "يبدو أنك تريد إعادة ضبط سجلات طلباتك. ماذا تريد أن تفعل؟\n\n"
+                "• اكتب **أرشفة** — لأرشفة جميع الطلبات (مستحسن، يمكن التراجع عنه)\n"
+                "• اكتب **حذف** — للحذف النهائي (انتقل إلى صفحة الطلبات)\n"
+                "• اكتب **إلغاء** — لإلغاء العملية والبقاء كما هو"
+            )
+        else:
+            msg = (
+                "It looks like you want to reset your tracked applications. What would you like to do?\n\n"
+                "• Type **archive** — Archive all applications (recommended, reversible)\n"
+                "• Type **delete** — Permanently delete (manage from the Applications page)\n"
+                "• Type **cancel** — Keep everything as-is"
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "pipeline_reset_confirm",
+            "intent": "pipeline_reset",
+            "message": msg,
+            "next_action": "await_confirmation",
+        }
+
+    def _handle_pending_pipeline_reset(
+        self, user_id: str, message: str
+    ) -> dict[str, Any] | None:
+        """Execute or cancel a pending pipeline reset based on the user's choice.
+
+        Returns a response dict if there is a live pending reset waiting for
+        confirmation, else None so the caller continues normal routing.
+        """
+        try:
+            import time
+            ctx = self.memory.get_context(user_id, self._PENDING_PIPELINE_RESET_KEY)
+            if not isinstance(ctx, dict):
+                return None
+        except Exception:
+            return None
+
+        if not ctx.get("pending") or ctx.get("expires_at", 0) < (
+            __import__("time").time()
+        ):
+            return None
+
+        def _clear():
+            try:
+                self.memory.set_context(user_id, self._PENDING_PIPELINE_RESET_KEY, {})
+            except Exception:
+                pass
+
+        arabic = self._is_arabic_text(message)
+        lower = (message or "").strip().lower()
+
+        # Archive choice (recommended default)
+        if re.search(r"\b(?:archive|أرشف|أرشفة)\b", lower, re.IGNORECASE):
+            _clear()
+            if arabic:
+                msg = (
+                    "لأرشفة جميع طلباتك، توجّه إلى **صفحة الطلبات** واستخدم خيار الأرشفة الجماعية.\n\n"
+                    "→ /applications"
+                )
+            else:
+                msg = (
+                    "To archive all your tracked applications, head to the **Applications page** "
+                    "and use the bulk-archive option there.\n\n"
+                    "→ /applications"
+                )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "pipeline_reset_archive",
+                "intent": "pipeline_reset",
+                "message": msg,
+                "target_route": "/applications",
+                "next_action": "navigate_to_page",
+            }
+
+        # Permanent delete choice
+        if re.search(r"\b(?:delete|حذف|del)\b", lower, re.IGNORECASE):
+            _clear()
+            if arabic:
+                msg = (
+                    "لحذف السجلات نهائياً، انتقل إلى **صفحة الطلبات** حيث يمكنك "
+                    "إدارة كل سجل على حدة.\n\n"
+                    "→ /applications"
+                )
+            else:
+                msg = (
+                    "To permanently remove records, go to the **Applications page** where "
+                    "you can manage each entry individually.\n\n"
+                    "→ /applications"
+                )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "pipeline_reset_delete_redirect",
+                "intent": "pipeline_reset",
+                "message": msg,
+                "target_route": "/applications",
+                "next_action": "navigate_to_page",
+            }
+
+        # Cancel / negative
+        if RicoChatAPI._is_negative(message) or re.search(
+            r"\b(?:cancel|إلغاء|ألغ)\b", lower, re.IGNORECASE
+        ):
+            _clear()
+            if arabic:
+                msg = "تم الإلغاء — لم يتغيّر شيء."
+            else:
+                msg = "Cancelled — nothing was changed."
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "pipeline_reset_cancelled",
+                "intent": "pipeline_reset",
+                "message": msg,
+            }
+
+        # Ambiguous — re-prompt
+        if arabic:
+            msg = (
+                "اكتب **أرشفة** أو **حذف** أو **إلغاء** للاختيار."
+            )
+        else:
+            msg = "Please type **archive**, **delete**, or **cancel** to choose."
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "pipeline_reset_confirm",
+            "intent": "pipeline_reset",
+            "message": msg,
+            "next_action": "await_confirmation",
+        }
 
     def _intercept_unsupported_delete_mutation(
         self, user_id: str, message: str
@@ -17340,20 +17643,44 @@ class RicoChatAPI:
         }
 
     def _handle_application_tracking(self, user_id: str, intent: str = "application_tracking", message: str = "") -> dict[str, Any]:
-        """Route application tracking requests to the applications repository."""
+        """Route application tracking requests to the applications repository.
+
+        Always reads from the same canonical, user-scoped repo that
+        /applications and /flow use (src.repositories.applications_repo) so
+        chat, sidebar, and /flow never disagree on tracked-application counts.
+        On a genuine DB failure this surfaces an honest "temporarily
+        unavailable" message instead of silently substituting the legacy,
+        non-user-scoped JSON file — that fallback previously made chat show
+        different (and stale, cross-user) data than /flow.
+        """
+        arabic = self._is_arabic_text(message)
         try:
             from src.repositories.applications_repo import get_all, get_stats
             apps = get_all(user_id=user_id)
             stats = get_stats(user_id=user_id)
         except Exception:
-            # Fallback to legacy file-based store
-            from src.applications import get_applied_jobs, get_application_stats
-            apps = get_applied_jobs()
-            stats = get_application_stats()
+            logger.exception(
+                "_handle_application_tracking: canonical repo failed for user_id=%s", user_id
+            )
+            unavailable_msg = (
+                "تعذّر الوصول إلى بيانات طلباتك المحفوظة مؤقتاً. حاول مرة أخرى خلال لحظات، "
+                "أو افتح صفحة /applications مباشرة."
+                if arabic else
+                "I'm temporarily unable to reach your applications data. "
+                "Please try again in a moment, or open /applications directly."
+            )
+            return {
+                "type": "application_status",
+                "message": unavailable_msg,
+                "applications": [],
+                "stats": {},
+                "follow_up_needed": [],
+                "unavailable": True,
+            }
 
         enriched = self._enrich_applications(self._sort_applications_recent(apps))
         follow_up_needed = [a for a in enriched if a.get("needs_follow_up")]
-        msg = self._build_tracking_message(enriched, stats, arabic=self._is_arabic_text(message))
+        msg = self._build_tracking_message(enriched, stats, arabic=arabic)
         if enriched:
             latest = enriched[0]
             self._store_recent_context(

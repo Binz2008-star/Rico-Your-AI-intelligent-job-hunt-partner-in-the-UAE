@@ -167,17 +167,12 @@ export default function FlowPage() {
                 getApplicationStats().catch(() => null),
             ]);
             setApplications(response.applications);
-            // Compute meaningful total from stats (excludes noise statuses like
-            // 'opened'/'opened_external' that auto-populate on every link click).
-            if (stats) {
-                const meaningfulTotal = STATUS_COUNT_ORDER.reduce(
-                    (sum, s) => sum + (stats[s] ?? 0),
-                    0
-                );
-                setTotal(meaningfulTotal);
-            } else {
-                setTotal(response.total);
-            }
+            // Header total must match the canonical, deduped count from the
+            // backend (the same source the chat summary and sidebar widget
+            // use) — not a partial sum derived from a curated status subset,
+            // which previously disagreed with the list/board counts.
+            const canonicalTotal = typeof stats?.total === 'number' ? stats.total : response.total;
+            setTotal(canonicalTotal);
             setError(false);
         } catch (err: unknown) {
             const is401 = err instanceof ApiError && err.statusCode === 401;
