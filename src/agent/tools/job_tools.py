@@ -103,25 +103,31 @@ def apply_job(job: Dict[str, Any]) -> ToolExecutionResult:
 def skip_job(job: Dict[str, Any]) -> ToolExecutionResult:
     """Mark a job as skipped so it won't resurface."""
     from src.services.jobs_service import skip_job as _svc_skip
+    user_id = job.get("_user_id")
     start = time.monotonic()
     try:
-        skipped = _svc_skip(job)
+        skipped = _svc_skip(job, user_id=user_id)
         elapsed = int((time.monotonic() - start) * 1000)
         data = {"skipped": bool(skipped), "title": job.get("title", "Unknown")}
         return _timed("skip_job", True, data, elapsed)
+    except ValueError as exc:
+        return _timed("skip_job", False, exc, int((time.monotonic() - start) * 1000))
     except Exception as exc:
         return _timed("skip_job", False, exc, int((time.monotonic() - start) * 1000))
 
 
 def save_job(job: Dict[str, Any]) -> ToolExecutionResult:
     """Save a job without applying — marks as 'saved' in the tracker."""
-    from src.applications import mark_applied
+    from src.services.jobs_service import save_job as _svc_save
+    user_id = job.get("_user_id")
     start = time.monotonic()
     try:
-        saved = mark_applied(job, "saved", "Saved via agent")
+        saved = _svc_save(job, user_id=user_id)
         elapsed = int((time.monotonic() - start) * 1000)
         data = {"saved": bool(saved), "title": job.get("title", "Unknown")}
         return _timed("save_job", True, data, elapsed)
+    except ValueError as exc:
+        return _timed("save_job", False, exc, int((time.monotonic() - start) * 1000))
     except Exception as exc:
         return _timed("save_job", False, exc, int((time.monotonic() - start) * 1000))
 
@@ -129,9 +135,10 @@ def save_job(job: Dict[str, Any]) -> ToolExecutionResult:
 def block_company(job: Dict[str, Any]) -> ToolExecutionResult:
     """Block all future results from this company."""
     from src.services.jobs_service import block_company as _svc_block
+    user_id = job.get("_user_id")
     start = time.monotonic()
     try:
-        company = _svc_block(job)
+        company = _svc_block(job, user_id=user_id)
         elapsed = int((time.monotonic() - start) * 1000)
         return _timed("block_company", True, {"company": company}, elapsed)
     except ValueError as exc:
