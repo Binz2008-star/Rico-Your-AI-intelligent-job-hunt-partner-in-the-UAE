@@ -57,9 +57,15 @@ def set_reminder(job: Dict[str, Any]) -> ToolExecutionResult:
     """Set a 2-day reminder for a job by updating its application status."""
     start = time.monotonic()
     try:
-        from src.applications import update_application_status
         reminder_date = (datetime.now() + timedelta(days=2)).date().isoformat()
-        update_application_status(job, "saved", notes=f"Reminder requested for {reminder_date}")
+        notes = f"Reminder requested for {reminder_date}"
+        user_id = job.get("_user_id")
+        if user_id:
+            from src.repositories import applications_repo
+            applications_repo.update_status(job, "saved", user_id=user_id, notes=notes)
+        else:
+            from src.applications import update_application_status
+            update_application_status(job, "saved", notes=notes)
         return _timed("set_reminder", True,
                       {"reminder_date": reminder_date, "title": job.get("title", "")},
                       int((time.monotonic() - start) * 1000))
