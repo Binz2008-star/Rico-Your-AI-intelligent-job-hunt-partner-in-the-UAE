@@ -404,14 +404,21 @@ _PROFILE_PITCH_RE = re.compile(
 )
 
 # Application list query: "list my applications", "what jobs did I apply to?",
-# "show my applied jobs", "how many applications do I have?"
+# "show my applied jobs", "how many applications do I have?",
+# "what are my applications?", "where are my applications?", "do I have any applications?"
 _APPLICATIONS_LIST_RE = re.compile(
     r"\b(?:list|show|display|view|see)\b.{0,30}"
     r"\b(?:my\s+)?(?:applications?|applied\s+jobs?|jobs?\s+i(?:'ve|\s+have)?\s+applied(?:\s+to)?|submitted(?:\s+applications?)?)\b"
     r"|\b(?:what|which)\s+(?:jobs?|companies?|roles?|positions?)\s+(?:have\s+I|did\s+I|have\s+i)\s+appl(?:ied|y)(?:\s+to)?\b"
     r"|\b(?:my\s+)?application\s+(?:list|history|tracker|overview)\b"
     r"|\bhow\s+many\s+(?:applications?|jobs?\s+(?:have\s+I|did\s+I)\s+applied(?:\s+to)?)\b"
-    r"|\b(?:عرض|أظهر|كم)\b.{0,20}\b(?:طلباتي|التقديمات|وظائف\s+تقدمت\s+إليها)\b",
+    # Conversational question forms — "what are my applications?",
+    # "where are my applications?", "do I have any applications?"
+    r"|\bwhat\s+are\s+my\s+(?:job\s+)?applications?\b"
+    r"|\bwhere\s+are\s+my\s+(?:job\s+)?applications?\b"
+    r"|\bdo\s+i\s+have\s+any\s+(?:job\s+)?applications?\b"
+    r"|\b(?:عرض|أظهر|كم)\b.{0,20}\b(?:طلباتي|التقديمات|وظائف\s+تقدمت\s+إليها)\b"
+    r"|\bما\s+هي\s+طلباتي\b",
     re.IGNORECASE,
 )
 
@@ -2553,6 +2560,9 @@ class RicoChatAPI:
     # "show applications" / "list applications" (no "my") are intentionally excluded:
     # those bare forms stay in _LIST_FOLLOWUP_PHRASES so they replay lifecycle context
     # when a prior application turn exists, which is the correct contextual behavior.
+    # Conversational question forms ("what are my applications?", "where are my
+    # applications?") are intentionally excluded here — they route via
+    # _APPLICATIONS_LIST_RE to _handle_applications_list instead.
     # English: "show my applications", "my applications", "show my job applications",
     #          "show my job applications and their status", "my jobs", "show my pipeline".
     # Arabic:  "طلباتي", "اعرض طلباتي", etc.

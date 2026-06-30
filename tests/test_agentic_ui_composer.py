@@ -323,6 +323,26 @@ class TestApplicationActions:
         assert act["href"] == "/applications"
 
 
+# ── PR-C: application_list ────────────────────────────────────────────────────
+
+class TestApplicationListActions:
+    """application_list is the conversational query response type
+    ("what are my applications?"), distinct from the tracker-card application_status."""
+
+    def test_view_flow_action_present(self):
+        from src.services.agentic_ui_composer import compose
+        r = compose(None, {"type": "application_list"})
+        assert "view-flow" in _action_ids(r)
+
+    def test_add_application_is_chat_continue(self):
+        from src.services.agentic_ui_composer import compose
+        r = compose(None, {"type": "application_list"})
+        assert "add-application" in _action_ids(r)
+        act = next(a for a in r["actions"] if a["id"] == "add-application")
+        assert act["kind"] == "chat_continue"
+        assert act["payload"].get("message")
+
+
 # ── PR-C: application_status ─────────────────────────────────────────────────
 
 class TestApplicationStatusActions:
