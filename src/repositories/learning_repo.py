@@ -696,6 +696,8 @@ class LearningRepository:
     def _db_write_signal(self, canonical_user_id: str, signal: LearningSignal) -> None:
         """Write signal to database."""
         conn = get_db_connection()
+        if not conn:
+            return
         try:
             with conn.cursor() as cur:
                 # Check if table exists
@@ -755,6 +757,8 @@ class LearningRepository:
         """Load full profile from database."""
         profile = LearningProfile(canonical_user_id=canonical_user_id)
         conn = get_db_connection()
+        if not conn:
+            return profile
 
         try:
             with conn.cursor() as cur:
