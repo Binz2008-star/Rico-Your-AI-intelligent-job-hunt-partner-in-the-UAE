@@ -12,7 +12,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any
 from collections import defaultdict
@@ -530,8 +530,7 @@ class ProfileContextResolver:
     def _hydrate_from_actions(self, profile: RicoProfile, canonical_user_id: str) -> RicoProfile:
         """Infer preferences from action history with minimum count threshold."""
         try:
-            # Get recent actions for this user (last 7 days)
-            week_ago = datetime.now(_UTC) - timedelta(days=7)
+            # Get recent actions for this user
             recent_actions = get_recent(
                 limit=200,
             )
@@ -647,9 +646,11 @@ class ProfileContextResolver:
                     if (now - t).total_seconds() < 300
                 }
 
-            # Query audit logs for profile_question events
+            # Query audit logs for profile_question events (filter to this user only)
             audits = get_recent(limit=100)
             for audit in audits:
+                if audit.get("user_email") != canonical_user_id:
+                    continue
                 if audit.get("event_type") == "profile_question":
                     field = audit.get("data", {}).get("field_name")
                     timestamp = audit.get("timestamp")

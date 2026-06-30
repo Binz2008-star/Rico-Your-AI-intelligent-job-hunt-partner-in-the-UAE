@@ -444,3 +444,42 @@ def _db_write_permission_check(
         logger.exception("permission_check_db_write_failed user=%s intent=%s", canonical_user_id, intent)
     finally:
         conn.close()
+
+
+# ── Identity audit logging ──────────────────────────────────────────────────────
+
+def log_identity_resolution(
+    canonical_user_id: str,
+    identity_source: str,
+    confidence: float,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Log an identity resolution event (best-effort, never raises)."""
+    logger.info(
+        "identity_resolved canonical=%s source=%s confidence=%.2f",
+        canonical_user_id, identity_source, confidence,
+    )
+
+
+def log_identity_merge(
+    canonical_user_id: str,
+    merged_from: str,
+    merge_reason: str = "",
+) -> None:
+    """Log an identity merge event (best-effort, never raises)."""
+    logger.info(
+        "identity_merged canonical=%s merged_from=%s reason=%s",
+        canonical_user_id, merged_from, merge_reason,
+    )
+
+
+def log_identity_link(
+    canonical_user_id: str,
+    link_type: str,
+    link_value: str,
+) -> None:
+    """Log an identity link event (best-effort, never raises)."""
+    logger.info(
+        "identity_linked canonical=%s link_type=%s",
+        canonical_user_id, link_type,
+    )
