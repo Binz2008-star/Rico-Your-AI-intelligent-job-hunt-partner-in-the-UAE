@@ -4957,6 +4957,7 @@ class RicoChatAPI:
         location: str = "",
         quota_exhausted: bool = False,
         rate_limited: bool = False,
+        arabic: bool = False,
     ) -> dict[str, Any]:
         """Build a safe fallback response when every job provider is degraded.
 
@@ -4976,30 +4977,49 @@ class RicoChatAPI:
         if quota_exhausted:
             provider_state = "quota_exhausted"
             message = (
+                f"وصلت مصادر التوظيف إلى حد البحث المسموح به الآن، لذا لا يمكنني جلب "
+                f"إعلانات **{role}** الآن. إليك بدائل آمنة للمتابعة:"
+                if arabic else
                 f"Live job providers have reached their search quota for now, so I can't pull "
                 f"fresh **{role}** listings this minute. Here are safe ways to keep moving:"
             )
         elif rate_limited:
             provider_state = "rate_limited"
             message = (
+                f"مصدر التوظيف مقيّد مؤقتاً، لذا نتائج **{role}** غير متاحة الآن. "
+                f"حاول مجدداً بعد قليل، أو استخدم إحدى هذه البدائل:"
+                if arabic else
                 f"The job source is temporarily rate-limited, so fresh **{role}** results aren't "
                 f"available right now. Try again shortly, or use one of these:"
             )
         else:
             provider_state = "unavailable"
             message = (
+                f"لم أتمكن من الوصول إلى مصدر التوظيف المباشر لـ **{role}** الآن. "
+                f"إليك بدائل آمنة للمتابعة:"
+                if arabic else
                 f"I couldn't reach a live job source for **{role}** right now. "
                 f"Here are safe ways to keep moving:"
             )
 
-        options = [
-            {"action": "retry_search", "label": "Try again later", "role": role, "location": location},
-            {"action": "open_url", "label": "Search on Google", "url": google_url},
-            {"action": "open_url", "label": "Search on LinkedIn", "url": linkedin_url},
-            {"action": "search_company_site", "label": "Search a company career site", "role": role},
-            {"action": "copy_text", "label": "Copy role title", "text": role},
-            {"action": "save_role_search", "label": "Save this role search", "role": role, "location": location},
-        ]
+        if arabic:
+            options = [
+                {"action": "retry_search", "label": "حاول مرة أخرى لاحقاً", "role": role, "location": location},
+                {"action": "open_url", "label": "بحث على Google", "url": google_url},
+                {"action": "open_url", "label": "بحث على LinkedIn", "url": linkedin_url},
+                {"action": "search_company_site", "label": "ابحث في موقع شركة", "role": role},
+                {"action": "copy_text", "label": "نسخ المسمى الوظيفي", "text": role},
+                {"action": "save_role_search", "label": "حفظ هذا البحث", "role": role, "location": location},
+            ]
+        else:
+            options = [
+                {"action": "retry_search", "label": "Try again later", "role": role, "location": location},
+                {"action": "open_url", "label": "Search on Google", "url": google_url},
+                {"action": "open_url", "label": "Search on LinkedIn", "url": linkedin_url},
+                {"action": "search_company_site", "label": "Search a company career site", "role": role},
+                {"action": "copy_text", "label": "Copy role title", "text": role},
+                {"action": "save_role_search", "label": "Save this role search", "role": role, "location": location},
+            ]
 
         response = {
             "type": "provider_degraded",
@@ -5033,6 +5053,18 @@ class RicoChatAPI:
         employment_type_filter: str = "",
     ) -> dict[str, Any]:
         """Handle target role search with role intelligence integration."""
+        # Detect user's language from the most recent user turn.  This lets all
+        # downstream message builders return Arabic text without any call-site changes.
+        arabic = False
+        try:
+            _recent_msgs = self._get_recent_messages(user_id, limit=5)
+            for _rm in reversed(_recent_msgs):
+                if _rm.get("role") == "user":
+                    arabic = self._is_arabic_text(str(_rm.get("content") or ""))
+                    break
+        except Exception:
+            pass
+
         try:
             normalized_role = normalize_role(role)
         except Exception as e:
@@ -5093,6 +5125,9 @@ class RicoChatAPI:
             )
             mark_failed(user_id, operation_id, str(exc))
             _graceful_msg = (
+                "عذراً، لم أتمكن من إتمام البحث الآن. "
+                "حاول تحديد اسم الوظيفة — مثلاً: 'وظائف مدير الامتثال في دبي'."
+                if arabic else
                 "I couldn't complete that search right now. "
                 "Try specifying a role name — for example: 'Compliance Manager jobs in Dubai'."
             )
@@ -5120,6 +5155,7 @@ class RicoChatAPI:
                 location=location,
                 quota_exhausted=quota_exhausted,
                 rate_limited=rate_limited,
+                arabic=arabic,
             )
 
         # Filter out already-applied jobs
@@ -5273,7 +5309,10 @@ class RicoChatAPI:
         # never poisons the search location or fit score.
         from src.services.city_validation import sanitize_cities
         cities = sanitize_cities(self._as_list(self._profile_value(profile, "preferred_cities")))
-        city_text = f" in {', '.join(map(str, cities[:2]))}" if cities else " in the UAE"
+        if arabic:
+            city_text = f" في {', '.join(map(str, cities[:2]))}" if cities else " في الإمارات"
+        else:
+            city_text = f" in {', '.join(map(str, cities[:2]))}" if cities else " in the UAE"
         basis = []
         if years:
             try:
@@ -5281,10 +5320,13 @@ class RicoChatAPI:
             except (TypeError, ValueError):
                 years_int = None
             if years_int is not None:
-                basis.append(f"~{years_int} years experience")
+                basis.append(f"~{years_int} years experience" if not arabic else f"~{years_int} سنوات خبرة")
         if skills:
-            basis.append("skills: " + ", ".join(map(str, skills[:6])))
-        basis_text = " using your CV profile" + (f" ({'; '.join(basis)})" if basis else "")
+            basis.append(("مهارات: " if arabic else "skills: ") + ", ".join(map(str, skills[:6])))
+        if arabic:
+            basis_text = " بناءً على ملفك الوظيفي" + (f" ({'; '.join(basis)})" if basis else "")
+        else:
+            basis_text = " using your CV profile" + (f" ({'; '.join(basis)})" if basis else "")
 
         role_intelligence_data = self._enrich_with_role_intelligence(
             user_id, normalized_role, profile, skills, years, cities
@@ -5293,6 +5335,7 @@ class RicoChatAPI:
         message = self._build_role_search_message(
             normalized_role, city_text, basis_text, top_matches, role_intelligence_data,
             from_saved_profile=from_saved_profile,
+            arabic=arabic,
         )
 
         response = {
@@ -5312,6 +5355,8 @@ class RicoChatAPI:
 
         if rate_limited:
             response["rate_limit_notice"] = (
+                "هذا المصدر مقيّد مؤقتاً. جرّب الرابط البديل لكل نتيجة، أو أعد البحث بعد قليل."
+                if arabic else
                 "This source is temporarily rate-limited. "
                 "Try the alternate link on each result, or search again shortly."
             )
@@ -5379,12 +5424,18 @@ class RicoChatAPI:
         top_matches: list[Any],
         role_intelligence_data: dict[str, Any] | None,
         from_saved_profile: bool = False,
+        arabic: bool = False,
     ) -> str:
         """Build message for role search response."""
         if from_saved_profile:
-            prefix = f"Searching based on your saved target role: {normalized_role}. "
+            prefix = (
+                f"أبحث بناءً على دورك المحفوظ: {normalized_role}. "
+                if arabic else
+                f"Searching based on your saved target role: {normalized_role}. "
+            )
         else:
             prefix = ""
+
         if top_matches:
             def _has_url(m: Any) -> bool:
                 return bool(
@@ -5393,24 +5444,46 @@ class RicoChatAPI:
             link_count = sum(1 for m in top_matches if _has_url(m))
             lead_count = len(top_matches) - link_count
             total = len(top_matches)
-            if link_count and lead_count:
-                base_message = (
-                    f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
-                    f"I found {total} candidate match(es) from the job source pipeline "
-                    f"({link_count} with provider links, {lead_count} need verification)."
-                )
-            elif link_count:
-                base_message = (
-                    f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
-                    f"I found {link_count} match(es) with provider data available."
-                )
+            if arabic:
+                if link_count and lead_count:
+                    base_message = (
+                        f"حسناً — سأستهدف وظائف {normalized_role}{city_text}{basis_text}. "
+                        f"وجدت {total} فرصة من مصادر التوظيف "
+                        f"({link_count} برابط مزود، {lead_count} تحتاج تحقق)."
+                    )
+                elif link_count:
+                    base_message = (
+                        f"حسناً — سأستهدف وظائف {normalized_role}{city_text}{basis_text}. "
+                        f"وجدت {link_count} نتيجة بروابط مزودي البيانات."
+                    )
+                else:
+                    base_message = (
+                        f"حسناً — سأستهدف وظائف {normalized_role}{city_text}{basis_text}. "
+                        f"وجدت {lead_count} فرصة تحتاج تحقق من المصدر."
+                    )
             else:
-                base_message = (
-                    f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
-                    f"I found {lead_count} candidate match(es) that need source verification."
-                )
+                if link_count and lead_count:
+                    base_message = (
+                        f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
+                        f"I found {total} candidate match(es) from the job source pipeline "
+                        f"({link_count} with provider links, {lead_count} need verification)."
+                    )
+                elif link_count:
+                    base_message = (
+                        f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
+                        f"I found {link_count} match(es) with provider data available."
+                    )
+                else:
+                    base_message = (
+                        f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
+                        f"I found {lead_count} candidate match(es) that need source verification."
+                    )
         else:
-            base_message = f"Got it — I will target {normalized_role} roles{city_text}{basis_text}."
+            base_message = (
+                f"حسناً — سأستهدف وظائف {normalized_role}{city_text}{basis_text}."
+                if arabic else
+                f"Got it — I will target {normalized_role} roles{city_text}{basis_text}."
+            )
 
         # Adjacent roles are an OPT-IN offer, never a silent substitution. We always
         # searched the exact requested role (normalized_role); related roles such as
@@ -5419,17 +5492,33 @@ class RicoChatAPI:
         _adjacent = (role_intelligence_data or {}).get("adjacent_roles", []) if role_intelligence_data else []
         _adjacent_names = [r["role"] for r in _adjacent[:3] if r.get("role")]
         if not top_matches and _adjacent_names:
-            base_message += (
-                f" I searched **{normalized_role}** specifically and didn't find live matches. "
-                f"Want me to also look at {', '.join(_adjacent_names)}?"
-            )
+            if arabic:
+                base_message += (
+                    f" بحثت عن **{normalized_role}** تحديداً ولم أجد نتائج حالية. "
+                    f"هل تريد أن أبحث أيضاً في {', '.join(_adjacent_names)}؟"
+                )
+            else:
+                base_message += (
+                    f" I searched **{normalized_role}** specifically and didn't find live matches. "
+                    f"Want me to also look at {', '.join(_adjacent_names)}?"
+                )
         elif not top_matches:
-            base_message += " I couldn't retrieve live jobs right now. I can still suggest target searches based on your CV — or try again later."
-        elif _adjacent_names:
             base_message += (
-                f" These are **{normalized_role}** roles. If you'd like, I can also look at "
-                f"{', '.join(_adjacent_names)} — just say the word."
+                " لم أتمكن من استرداد الوظائف الآن. يمكنني اقتراح بحث مناسب بناءً على سيرتك — أو حاول مرة أخرى لاحقاً."
+                if arabic else
+                " I couldn't retrieve live jobs right now. I can still suggest target searches based on your CV — or try again later."
             )
+        elif _adjacent_names:
+            if arabic:
+                base_message += (
+                    f" هذه وظائف **{normalized_role}**. إن أردت، يمكنني أيضاً البحث في "
+                    f"{', '.join(_adjacent_names)} — قل لي فقط."
+                )
+            else:
+                base_message += (
+                    f" These are **{normalized_role}** roles. If you'd like, I can also look at "
+                    f"{', '.join(_adjacent_names)} — just say the word."
+                )
 
         return prefix + base_message
 

@@ -195,17 +195,17 @@ Fixing bugs from the "Rico Website Hard QA Report". Each PR is one bug category,
 | **BUG-06** | — | — | 🚫 blocked — no description | Description not found in repo, GitHub issues, or any workspace doc. Owner must supply original QA report entry. |
 | **BUG-07** | — | — | 🚫 blocked — no description | Description not found in repo, GitHub issues, or any workspace doc. Owner must supply original QA report entry. |
 | **BUG-08** | #763 | `62ff5ad` | ✅ merged | "My favorite city is Dubai" silently ignored (3 stacked bugs: intent regex, router regex, `preferred_city` vs `preferred_cities`). |
-| **BUG-09** | — | — | 🔄 in progress | Contradictory keyword filters: excluded keywords bleed across sessions / are not cleared when user removes them. |
-| **BUG-10** | — | — | ⏸ not started | Rapid double-send drops a message (race condition in frontend submit guard). |
-| **BUG-11** | — | — | ⏸ not started | Duplicate quick-reply buttons rendered on some responses. |
+| **BUG-09** | #791 | `merged` | ✅ merged | Sidebar widgets disappear on `/upload` page — `sidebarProps` was not passed; fixed by threading `onLogout` + `sidebarProps` through the page component |
+| **BUG-10** | #792 | `merged` | ✅ merged | Data quality: years experience displayed as `30.0`; salary displayed without comma (`AED 18000/month`). Fixed `_target_role_search_response` (int rounding) and `_format_pref_changes` (comma-format). Tests: `test_bug10_data_quality_display.py` |
+| **BUG-11** | #793 | `merged` | ✅ merged | Name casing inconsistency — CV names extracted verbatim (ALL CAPS on UAE CVs). `CVParser._extract_name` now returns `line.title()`. Tests: `test_bug11_name_casing.py` |
 | **BUG-12** | — | — | ⏸ not started | Search results body ignores Arabic locale. |
 | **BUG-13** | — | — | ⏸ not started | Profile/role drift across multiple uploaded CVs — wrong role shown after re-upload. |
 | **BUG-14** | — | — | ⏸ not started | No save idempotency on pipeline: second "save this job" shows success but increments counter. |
-| **BUG-15** | — | — | ⏸ not started | Internal API name leaked to user-facing UI ("JSearch API" visible in responses). |
-| **BUG-16** | — | — | ⏸ not started | "Waking up" banner overlaps chat content (CSS z-index). |
-| **BUG-17** | — | — | ⏸ not started | Sidebar widgets disappear on `/queue` and `/upload` pages. |
+| **BUG-15** | #794 | open | 🔄 PR open | Internal API name leaked to user-facing UI ("JSearch API" visible in responses). Fixed in `apps/web/lib/translations.ts`. |
+| **BUG-16** | #794 | open | 🔄 PR open | "Waking up" banner overlaps chat content (CSS z-index). Fixed in `apps/web/app/command/page.tsx` (pt-12/pt-14). |
+| **BUG-17 (pipeline reset)** | — | `61b783b` | ✅ pushed | "Clear them we must start over" misclassified as job role search. Fixed: "clear"/"reset" added to `_NON_ROLE_STARTERS`; `_PIPELINE_RESET_RE` + `_PIPELINE_RESET_IMPLICIT_RE` added; 2-turn Archive/Delete/Cancel confirmation flow. Tests: `test_bug17_pipeline_reset.py` 13/13. |
 | **BUG-18** | — | — | ⏸ not started | `?q=` query-string navigation mutates / resets chat thread. |
-| **BUG-19** | — | — | ⏸ not started | Job-confirmation screenshots not classified as application evidence → "Unrecognized Document"; save falls back to wrong recent-context job. Two sub-bugs: (A) no application-confirmation image classifier, (B) job-extraction on save ignores uploaded image context. |
+| **BUG-19** | — | — | ⏸ not started | Job-confirmation screenshots not classified as application evidence → "Unrecognized Document"; save falls back to wrong recent-context job. |
 
 > ✅ **QA Cycle 1 is CLOSED.** BUG-01 through BUG-05, BUG-08, BUG-09, BUG-10, and P0 #764 are all confirmed deployed and smoke-tested at `4ad2e29`. BUG-06 and BUG-07 remain blocked until the owner supplies original QA report descriptions.
 
