@@ -120,7 +120,7 @@ class TestProfileUpdateHelper:
         )
         joined = "\n".join(lines)
         assert "**Preferred city** → Dubai, Abu Dhabi" in joined
-        assert "**Salary expectation** → AED 18000/month" in joined
+        assert "**Salary expectation** → AED 18,000/month" in joined
 
     def test_format_pref_changes_empty(self):
         from src.rico_chat_api import RicoChatAPI

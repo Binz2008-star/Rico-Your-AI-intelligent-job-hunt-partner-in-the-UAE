@@ -3691,7 +3691,10 @@ class RicoChatAPI:
             _label = labels.get(_k, _k.replace("_", " ").title())
             _val_str = ", ".join(str(x) for x in _v) if isinstance(_v, list) else str(_v)
             if _k == "salary_expectation_aed":
-                _val_str = f"AED {_val_str}/month"
+                try:
+                    _val_str = f"AED {int(float(_v)):,}/month"
+                except (TypeError, ValueError):
+                    _val_str = f"AED {_val_str}/month"
             changes.append(f"**{_label}** \u2192 {_val_str}")
         return changes
 
@@ -5234,7 +5237,12 @@ class RicoChatAPI:
         city_text = f" in {', '.join(map(str, cities[:2]))}" if cities else " in the UAE"
         basis = []
         if years:
-            basis.append(f"~{years} years experience")
+            try:
+                years_int = int(float(years))
+            except (TypeError, ValueError):
+                years_int = None
+            if years_int is not None:
+                basis.append(f"~{years_int} years experience")
         if skills:
             basis.append("skills: " + ", ".join(map(str, skills[:6])))
         basis_text = " using your CV profile" + (f" ({'; '.join(basis)})" if basis else "")
