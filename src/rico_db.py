@@ -408,6 +408,8 @@ class RicoDB:
                 d["created_at"] = d["created_at"].isoformat()
             if d.get("updated_at"):
                 d["updated_at"] = d["updated_at"].isoformat()
+            if d.get("years_experience") is not None:
+                d["years_experience"] = int(float(d["years_experience"]))
             result.append(d)
         return result
 
@@ -436,6 +438,8 @@ class RicoDB:
             d["created_at"] = d["created_at"].isoformat()
         if d.get("updated_at"):
             d["updated_at"] = d["updated_at"].isoformat()
+        if d.get("years_experience") is not None:
+            d["years_experience"] = int(float(d["years_experience"]))
         return d
 
 
@@ -981,6 +985,7 @@ class RicoDB:
             "interview": by_status.get("interview", 0),
             "rejected": by_status.get("rejected", 0),
             "offer": by_status.get("offer", 0),
+            "follow_up_due": by_status.get("follow_up_due", 0),
         }
 
 
