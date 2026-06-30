@@ -1604,7 +1604,7 @@ export default function CommandPage() {
                 </div>
 
                 {/* Messages Container */}
-                <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 py-5 space-y-4 scroll-pb-32 sm:px-4 sm:py-7" role="log" aria-live="polite" aria-atomic="false" aria-label="Chat messages">
+                <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 pt-12 pb-5 space-y-4 scroll-pb-32 sm:px-4 sm:pt-14 sm:pb-7" role="log" aria-live="polite" aria-atomic="false" aria-label="Chat messages">
 
                     {/* Clear history control — shown at top when authenticated with loaded history */}
                     {chatAudience === "authenticated" && messages.length > 1 && (
