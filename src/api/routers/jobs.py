@@ -107,8 +107,13 @@ def apply_job(
                 title=job.get("title", ""),
                 company=job.get("company", ""),
                 status=lc_status,
-                apply_url=job.get("apply_link") or job.get("link") or "",
-                source_url=job.get("link") or "",
+                apply_url=(
+                    job.get("apply_url")
+                    or job.get("apply_link")
+                    or job.get("link")
+                    or ""
+                ),
+                source_url=job.get("source_url") or job.get("link") or "",
             )
     except Exception:
         import logging as _logging
