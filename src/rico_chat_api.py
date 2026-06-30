@@ -10999,22 +10999,33 @@ class RicoChatAPI:
 
         offers = by_status.get("offer", [])
         interviews = by_status.get("interview", [])
-        applied = by_status.get("applied", []) + by_status.get("opened", [])
+        applied = by_status.get("applied", [])
+        follow_up_due = by_status.get("follow_up_due", [])
+        prepared = by_status.get("prepared", [])
         saved = by_status.get("saved", [])
         rejected = by_status.get("rejected", [])
+        # "opened"/"opened_external" = user clicked through to the listing but has
+        # not yet marked the application as submitted — distinct from "applied".
+        opened = by_status.get("opened", []) + by_status.get("opened_external", [])
         follow_up = [a for a in apps if a.get("needs_follow_up")]
 
         stage_parts = []
         if offers:
-            stage_parts.append(f"{len(offers)} offer")
+            stage_parts.append(f"{len(offers)} offer{'s' if len(offers) != 1 else ''}")
         if interviews:
-            stage_parts.append(f"{len(interviews)} interview")
+            stage_parts.append(f"{len(interviews)} interview{'s' if len(interviews) != 1 else ''}")
         if applied:
             stage_parts.append(f"{len(applied)} applied")
+        if follow_up_due:
+            stage_parts.append(f"{len(follow_up_due)} follow-up due")
+        if prepared:
+            stage_parts.append(f"{len(prepared)} prepared")
         if saved:
             stage_parts.append(f"{len(saved)} saved")
         if rejected:
             stage_parts.append(f"{len(rejected)} rejected")
+        if opened:
+            stage_parts.append(f"{len(opened)} link{'s' if len(opened) != 1 else ''} opened")
         stage_line = ", ".join(stage_parts) if stage_parts else f"{total} tracked"
 
         sentences = [

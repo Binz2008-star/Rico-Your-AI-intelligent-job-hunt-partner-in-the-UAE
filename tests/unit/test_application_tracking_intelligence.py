@@ -216,3 +216,79 @@ def test_handle_tracking_empty_returns_no_apps_message():
     assert result["type"] == "application_status"
     assert "no tracked applications" in result["message"].lower()
     assert result["follow_up_needed"] == []
+
+
+# ── _build_tracking_message: opened vs applied accuracy ──────────────────────
+
+def test_opened_not_counted_as_applied():
+    """'link opened' status must NOT appear in the 'applied' count.
+
+    Regression for: chat said '101 applied' when only 1 had status=applied and
+    100 had status=opened (links the user clicked but didn't mark as submitted).
+    """
+    api = _make_api()
+    apps = api._enrich_applications([
+        _app("applied", 2, 2, company="Noon"),
+        _app("opened", 1, 1, company="ADNOC"),
+        _app("opened", 1, 1, company="Careem"),
+        _app("opened", 1, 1, company="Talabat"),
+    ])
+    msg = api._build_tracking_message(apps, {})
+    assert "1 applied" in msg, f"expected '1 applied', got: {msg}"
+    assert "3 links opened" in msg or "links opened" in msg
+    # Must NOT claim 4 applications were applied
+    assert "4 applied" not in msg
+    assert "3 applied" not in msg
+    assert "2 applied" not in msg
+
+
+def test_follow_up_due_status_shown_in_stage_line():
+    """Applications with status=follow_up_due must appear in the stage summary."""
+    api = _make_api()
+    apps = api._enrich_applications([
+        _app("applied", 2, 2, company="A"),
+        _app("follow_up_due", 2, 2, company="B"),
+    ])
+    msg = api._build_tracking_message(apps, {})
+    assert "1 follow-up due" in msg
+
+
+def test_single_link_opened_singular_label():
+    """1 link opened → 'link opened' (no trailing 's')."""
+    api = _make_api()
+    apps = api._enrich_applications([
+        _app("opened", 1, 1, company="Solo"),
+    ])
+    msg = api._build_tracking_message(apps, {})
+    assert "1 link opened" in msg
+    assert "1 links opened" not in msg
+
+
+def test_multiple_offers_plural_label():
+    """2 offers → '2 offers' (plural)."""
+    api = _make_api()
+    apps = api._enrich_applications([
+        _app("offer", 5, 1, company="A"),
+        _app("offer", 5, 1, company="B"),
+    ])
+    msg = api._build_tracking_message(apps, {})
+    assert "2 offers" in msg
+
+
+def test_smoke_103_tracked_accurate_summary():
+    """Mirrors the real production data from the 2026-06-30 smoke test:
+    103 total — 1 applied, 2 follow_up_due, 100 opened.
+    Chat must not say '101 applied'."""
+    api = _make_api()
+    apps_data = (
+        [_app("applied", 2, 2, company=f"A{i}") for i in range(1)]
+        + [_app("follow_up_due", 2, 2, company=f"FU{i}") for i in range(2)]
+        + [_app("opened", 1, 1, company=f"O{i}") for i in range(100)]
+    )
+    apps = api._enrich_applications(apps_data)
+    msg = api._build_tracking_message(apps, {"total": 103})
+    assert "103 tracked applications" in msg
+    assert "1 applied" in msg
+    assert "1 follow-up due" not in msg or "2 follow-up due" in msg  # at least the plural
+    assert "101 applied" not in msg
+    assert "100 links opened" in msg or "links opened" in msg
