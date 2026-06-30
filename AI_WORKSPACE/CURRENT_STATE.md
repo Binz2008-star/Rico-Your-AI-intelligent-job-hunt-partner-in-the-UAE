@@ -1,6 +1,6 @@
 # Current State
 
-_Last updated: 2026-06-28 — **PR #776 merged** (chore: remove dead redirect stubs + No Dead UI Rule). Production HEAD: `f0e0cea`. Route architecture is now clean: `/chat` and `/orchestrate` stubs deleted; `/pipeline → /flow` redirect removed. No Dead UI Rule adopted (DEC-20260628-001). P2-A complete (#775 at `744dbec`). Forward focus: Career Operating System / Mission Control._
+_Last updated: 2026-06-30 — **PR #781 merged** (fix: question-form application routing + sidebar nav/count/plan fixes). Production HEAD: `e4979eb`. Previous: `0e0a6aa` (dashboard), `6863409` (PR #780 — Chat-OS action cards for application\_status + prepare\_application), `f0e0cea` (PR #776 — No Dead UI Rule). Chat routing and sidebar nav are now correct. Forward focus: remaining smoke-test bugs from the 2026-06-30 QA session._
 
 ## QA Cycle 1 — CLOSED 2026-06-27
 
@@ -20,10 +20,31 @@ _Last updated: 2026-06-28 — **PR #776 merged** (chore: remove dead redirect st
 
 Regression suite: **104/104 PASS**. 45 pre-existing environment failures (cryptography version, mock log-format, webhook secrets) — none caused by any BUG or P0 change.
 
+## PR #780 + #781 — Chat-OS agentic UI + smoke-test fixes (2026-06-30)
+
+### PR #780 — action cards for `application_status` and `prepare_application`
+Merged at `6863409`. Added `_application_status_actions()` and `_prepare_application_actions()` factories to `agentic_ui_composer.py` and registered them in `_RESPONSE_TYPE_ACTIONS`. Tests: 6 new unit tests in `test_agentic_ui_composer.py`.
+
+| Response type | Action cards |
+|---|---|
+| `application_status` | View Application Flow (navigate /flow) · Add application (chat_continue) |
+| `prepare_application` | View Application Flow (navigate /flow) · Find similar jobs (chat_continue) |
+
+### PR #781 — question-form routing + sidebar nav/count/plan fixes
+Merged at `e4979eb`. Squash commit on `main`.
+
+| Fix | What | Files |
+|---|---|---|
+| Chat routing | Extended `_APPLICATIONS_LIST_RE` to match question-form phrases ("what are my applications?", "how many applications do I have?", etc.) — previously fell to AI path with no action cards | `src/rico_chat_api.py` |
+| Composer mapping | Added `"application_list": _application_status_actions` to `_RESPONSE_TYPE_ACTIONS` so both question-form and tracker-card responses get action cards | `src/services/agentic_ui_composer.py` |
+| BUG-1 (sidebar count) | `useSidebarStatus.ts` now uses `stats.total` from backend rather than summing only `applied+interview+offer+saved+rejected` — previously missed `opened`, `opened_external`, `prepared`, `follow_up_due`, `decision_made` | `apps/web/hooks/useSidebarStatus.ts` |
+| BUG-4 (sidebar nav) | Removed `chatPrompt` from all nav items — sidebar links now always navigate to real pages, never inject `/command?q=…` URLs | `apps/web/components/layout/app-nav.ts` |
+| BUG-5 (plan label) | "Pro Plan" → "My Plan" nav label + `navMyPlan` translation key (EN + AR) — eliminates "Pro Plan / PREMIUM" badge contradiction | `apps/web/components/layout/app-nav.ts`, `AppSidebar.tsx`, `translations.ts` |
+
 ## Production baseline
 
-- **Repository main HEAD:** `f0e0cea` (PR #776 — No Dead UI Rule + route cleanup). Merge train from previous: `744dbec` (PR #775 — P2-A), `78c22857` (PR #770 — Chat-as-interface milestone), `4ad2e29` (PR #767 — P0 mutation trust guard).
-- **Last deploy-verified SHA:** `4ad2e29` — `deploy-render.yml` run #28301440105 succeeded (gated on `/version.commit` match + `/health` 200). ✅ (PRs #770, #775, #776 are frontend-only; Render deploy auto-triggered but not yet verified in-session.)
+- **Repository main HEAD:** `e4979eb` (PR #781 — chat routing + sidebar fixes). Merge train: `0e0a6aa` (dashboard), `6863409` (PR #780 — Chat-OS action cards), `f0e0cea` (PR #776 — No Dead UI Rule + route cleanup), `744dbec` (PR #775 — P2-A), `78c22857` (PR #770 — Chat-as-interface milestone), `4ad2e29` (PR #767 — P0 mutation trust guard).
+- **Last deploy-verified SHA:** `4ad2e29` — `deploy-render.yml` run #28301440105 succeeded. ✅ (PRs #770, #775, #776, #780, #781 are frontend-only or backend-lightweight; Render deploy auto-triggered for backend changes but not yet re-verified in-session.)
 - **Production deploy verification history:** `4ad2e29` (run #28301440105), `6113123` (run #80), `0d28a08` (#747), `7e0b9ec` (#741), `f202a86` (#739), `a7e294b` (#736), `115adde` (#738), `e214178` (#737).
 - **Pending owner-side smoke:** authenticated save→count flow and #741 screenshot follow-up require `ricohunt.com` login — sandbox cannot reach authenticated production.
 - **Migration 032 (`uploaded_document_context`):** auto-applied on startup via the app.py lifespan runner (idempotent `CREATE TABLE/INDEX IF NOT EXISTS`), targeting the exact branch the production `DATABASE_URL` uses. Direct confirmation of the `migration_ok` log line / table existence needs Render-log or Neon access (unavailable in-session) — the owner re-test is the end-to-end proof.
@@ -215,6 +236,8 @@ Action cards now emitted by type:
 | `profile_update` / `profile_summary` / `cv_first_profile` | View my profile (navigate /profile) |
 | `application_status_update` | Track applications (navigate /applications) |
 | `save_job` | View saved jobs (navigate /flow) |
+| `application_list` / `application_status` | View Application Flow (navigate /flow) + Add application (chat_continue) — **added PR #780/#781** |
+| `prepare_application` | View Application Flow (navigate /flow) + Find similar jobs (chat_continue) — **added PR #780** |
 
 ---
 
@@ -252,8 +275,26 @@ Per owner direction (2026-06-28), the next development focus is Career OS / Miss
 
 Do not open more than one PR per phase. Do not revive Phase B routes until product decision is made.
 
+## 2026-06-30 Smoke-test bug backlog (new — from owner production testing session)
+
+These are separate from the QA Cycle 1 BUG-01/19 list above.
+
+| ID | Status | Description |
+|---|---|---|
+| **BUG-1** | ✅ fixed (PR #781) | Sidebar pipeline count disagreed with /flow and chat — sidebar was summing subset of statuses, missing opened/prepared/follow_up_due/decision_made |
+| **BUG-2** | ⏸ open | Self-cancelling keyword filters: excluded keywords conflict with target keywords (app already shows a warning, may be config/UX rather than code bug) |
+| **BUG-3** | ⏸ open | Duplicate board entry: same job appears twice on /flow kanban board |
+| **BUG-4** | ✅ fixed (PR #781) | Sidebar nav links injected `/command?q=…` URLs instead of navigating to real pages |
+| **BUG-5** | ✅ fixed (PR #781) | "Pro Plan / PREMIUM" label contradiction in sidebar |
+| **BUG-6** | ⏸ open | Status taxonomy mismatch: list view vs kanban board use different status labels |
+| **BUG-7** | ⏸ open | Session hydration: user appears logged-out on first load until hard refresh |
+| **BUG-8** | ⏸ open | (details in session history) |
+| **BUG-9** | ⏸ open | Sidebar widgets disappear on /upload page |
+| **BUG-10** | ⏸ open | Data quality: 30.0 years experience displayed, salary inconsistency |
+| **BUG-11** | ⏸ open | Name casing inconsistency in profile |
+
 ## Recommended next command
 
 ```text
-Rico mode. Production HEAD: f0e0cea. Route architecture clean (No Dead UI Rule adopted, PR #776 merged). P2-A complete (PR #775). Next: Career OS / Mission Control — start with Phase 1 (Current Mission surface). One PR per phase. Do NOT touch /dashboard, /onboarding, /jobs, /signals, /archive, /saved-searches until Phase B product decision is made. Do NOT run migrations without owner G1–G6 sign-off.
+Rico mode. Production HEAD: e4979eb. PR #780 (action cards for application_status/prepare_application) and PR #781 (question-form routing + BUG-1/4/5 fixes) are both merged. Open bugs from 2026-06-30 smoke test: BUG-2 (keyword conflict), BUG-3 (duplicate board entry), BUG-6 (status taxonomy), BUG-7 (session hydration), BUG-9 (sidebar /upload). Fix in priority order. One PR per bug group. Do NOT touch /dashboard, /onboarding, /jobs, /signals, /archive, /saved-searches until Phase B product decision. Do NOT run migrations without owner G1–G6 sign-off.
 ```
