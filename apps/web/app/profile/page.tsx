@@ -669,7 +669,7 @@ function ProfileDetail({
                         </Row>
                         <Row label={t("profileExperience")}>
                             <EditableTextField
-                                value={profile.years_experience != null ? String(profile.years_experience) : null}
+                                value={profile.years_experience != null ? String(Math.round(profile.years_experience)) : null}
                                 onSave={onSaveExperience}
                                 placeholder={t("profileEnterExperience")}
                                 label="experience"

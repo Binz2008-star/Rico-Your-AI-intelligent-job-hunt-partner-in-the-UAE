@@ -32,6 +32,20 @@ logger = logging.getLogger(__name__)
 _UTC = timezone.utc
 
 
+def _coerce_years_exp(v: Any) -> int | None:
+    """Convert DB NUMERIC(4,1) years_experience to a whole-number int.
+
+    NUMERIC(4,1) returns Decimal('8.0') via psycopg2; without coercion FastAPI
+    serialises it as 8.0 and the frontend renders "8.0 yrs" instead of "8 yrs".
+    """
+    if v is None:
+        return None
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        return None
+
+
 def _sanitize_cities_safe(cities: list) -> list:
     """Strip corrupted non-city values at read time without failing. No I/O."""
     try:
@@ -135,7 +149,7 @@ def _bundle_to_profile(bundle: dict[str, Any]) -> RicoProfile:
         industries=pdata.get("industries") or [],
         visa_status=pdata.get("visa_status"),
         notice_period=pdata.get("notice_period"),
-        years_experience=pdata.get("years_experience"),
+        years_experience=_coerce_years_exp(pdata.get("years_experience")),
         current_role=pdata.get("current_role"),
         current_company=pdata.get("current_company"),
         linkedin_url=pdata.get("linkedin_url"),

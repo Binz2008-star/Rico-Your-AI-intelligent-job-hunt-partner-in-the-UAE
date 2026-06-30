@@ -1803,7 +1803,7 @@ class RicoChatAPI:
                 "label": d.get("label") or d.get("filename", ""),
                 "is_primary": bool(d.get("is_primary")),
                 "skills_count": d.get("skills_count"),
-                "years_experience": float(d["years_experience"]) if d.get("years_experience") is not None else None,
+                "years_experience": int(float(d["years_experience"])) if d.get("years_experience") is not None else None,
             }
             for d in _docs
         ]
