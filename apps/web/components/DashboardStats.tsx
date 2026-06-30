@@ -157,11 +157,17 @@ export function DashboardStats() {
             const statsError = statsResult.status === "rejected" ? getLoadError("Application stats", statsResult.reason) : null;
             const settingsError = settingsResult.status === "rejected" ? getLoadError("Settings", settingsResult.reason) : null;
 
+            // Prefer the authoritative aggregate COUNT(*) from /applications/stats
+            // (same source the sidebar uses) over /applications' list total, which
+            // is capped at the 200-row page fetched here and silently under-reports
+            // for users with more than 200 tracked recommendations.
+            const statsTotal = typeof statsRes?.total === "number" ? statsRes.total : null;
+
             setError(null);
             setLastUpdated(new Date());
             setStats({
                 jobsTotal: jobsRes?.total ?? 0,
-                appsTotal: appsRes?.total ?? 0,
+                appsTotal: statsTotal ?? (appsRes?.total ?? 0),
                 applied: asCount(statsRes?.applied),
                 interview: asCount(statsRes?.interview),
                 offer: asCount(statsRes?.offer),
@@ -264,7 +270,7 @@ export function DashboardStats() {
                     {getApplicationsCopy(stats)}
                 </p>
                 <span className="mt-1 block text-[10px] text-text-tertiary font-mono">
-                    source: /api/v1/applications
+                    source: /api/v1/applications/stats
                 </span>
                 <span className="mt-2 inline-flex text-[12px] font-semibold text-gold">Open Flow</span>
             </StatusCard>
