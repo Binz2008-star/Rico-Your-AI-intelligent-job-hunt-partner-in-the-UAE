@@ -731,10 +731,10 @@ def find_profiles_by_email(email: str) -> list[Any]:
                 with conn.cursor() as cur:
                     cur.execute(
                         """
-                        SELECT u.*, p.data as profile_data, s.data as settings_data
+                        SELECT u.*, p.profile as profile_data, s.settings as settings_data
                         FROM rico_users u
                         LEFT JOIN rico_profiles p ON p.user_id = u.id
-                        LEFT JOIN rico_settings s ON s.user_id = u.id
+                        LEFT JOIN rico_agent_settings s ON s.user_id = u.id
                         WHERE LOWER(u.email) = %s
                         LIMIT 10
                         """,
@@ -773,10 +773,10 @@ def find_profiles_by_phone(phone: str) -> list[Any]:
                     # Remove non-digits from stored phone and compare last N digits
                     cur.execute(
                         """
-                        SELECT u.*, p.data as profile_data, s.data as settings_data
+                        SELECT u.*, p.profile as profile_data, s.settings as settings_data
                         FROM rico_users u
                         LEFT JOIN rico_profiles p ON p.user_id = u.id
-                        LEFT JOIN rico_settings s ON s.user_id = u.id
+                        LEFT JOIN rico_agent_settings s ON s.user_id = u.id
                         WHERE REGEXP_REPLACE(u.phone, '[^0-9]', '', 'g') LIKE %s
                         LIMIT 10
                         """,
@@ -815,10 +815,10 @@ def find_profiles_by_telegram_username(username: str) -> list[Any]:
                 with conn.cursor() as cur:
                     cur.execute(
                         """
-                        SELECT u.*, p.data as profile_data, s.data as settings_data
+                        SELECT u.*, p.profile as profile_data, s.settings as settings_data
                         FROM rico_users u
                         LEFT JOIN rico_profiles p ON p.user_id = u.id
-                        LEFT JOIN rico_settings s ON s.user_id = u.id
+                        LEFT JOIN rico_agent_settings s ON s.user_id = u.id
                         WHERE LOWER(u.telegram_username) = %s
                         LIMIT 10
                         """,

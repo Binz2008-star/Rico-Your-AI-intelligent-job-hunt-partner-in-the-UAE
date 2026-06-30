@@ -201,11 +201,7 @@ def find_by_job_id(job_id: str, user_id: Optional[str] = None) -> Optional[Dict[
         if not db:
             raise HTTPException(status_code=503, detail="Database unavailable")
         db_user_id = _provision_db_user_id(db, user_id)
-        apps = db.get_recommendations(db_user_id, limit=200)
-        return next(
-            (a for a in apps if isinstance(a, dict) and a.get("job_id") == job_id),
-            None,
-        )
+        return db.get_recommendation_by_key(db_user_id, job_id)
 
     # Legacy fallback
     _warn_legacy_fallback("find_by_job_id")

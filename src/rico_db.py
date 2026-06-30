@@ -839,6 +839,41 @@ class RicoDB:
             })
         return result
 
+    def get_recommendation_by_key(self, user_id: str, job_key: str) -> Optional[Dict[str, Any]]:
+        """Fetch a single recommendation row by user_id + job_key. Returns None if not found."""
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT job_key, job, repo_score, rico_score, explanation, status, created_at, updated_at "
+                    "FROM rico_job_recommendations "
+                    "WHERE user_id = %s AND job_key = %s "
+                    "LIMIT 1",
+                    (user_id, job_key),
+                )
+                row = cur.fetchone()
+        if not row:
+            return None
+        job = dict(row["job"]) if isinstance(row["job"], dict) else {}
+        return {
+            "job_id": row["job_key"],
+            "title": job.get("title", ""),
+            "company": job.get("company", ""),
+            "location": job.get("location", ""),
+            "link": (
+                job.get("link") or job.get("apply_url")
+                or job.get("job_apply_link") or job.get("apply_link") or ""
+            ),
+            "apply_url": (
+                job.get("apply_url") or job.get("job_apply_link")
+                or job.get("apply_link") or job.get("link") or ""
+            ),
+            "score": row["rico_score"] or row["repo_score"] or 0,
+            "status": row["status"],
+            "notes": row["explanation"] or "",
+            "date_applied": row["created_at"].isoformat() if row["created_at"] else None,
+            "date_updated": row["updated_at"].isoformat() if row["updated_at"] else None,
+        }
+
     def upsert_recommendation(
         self,
         user_id: str,
