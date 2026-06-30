@@ -282,11 +282,11 @@ These are separate from the QA Cycle 1 BUG-01/19 list above.
 | ID | Status | Description |
 |---|---|---|
 | **BUG-1** | ✅ fixed (PR #781) | Sidebar pipeline count disagreed with /flow and chat — sidebar was summing subset of statuses, missing opened/prepared/follow_up_due/decision_made |
-| **BUG-2** | ⏸ open | Self-cancelling keyword filters: excluded keywords conflict with target keywords (app already shows a warning, may be config/UX rather than code bug) |
-| **BUG-3** | ⏸ open | Duplicate board entry: same job appears twice on /flow kanban board |
+| **BUG-2** | ✅ fixed (PR #786, `c8aabd7`) | Self-cancelling keyword filters: `exclude_keywords` was read from a process-global env var instead of per-user settings, and `include_keywords` was never read in scoring at all — fixed in `src/scoring.py` to honor per-user include/exclude keywords (exclude still wins on overlap, by design) |
+| **BUG-3** | ✅ fixed (PR #787, `83e961e2`) | Duplicate board entry: same job appears twice on /flow kanban board |
 | **BUG-4** | ✅ fixed (PR #781) | Sidebar nav links injected `/command?q=…` URLs instead of navigating to real pages |
 | **BUG-5** | ✅ fixed (PR #781) | "Pro Plan / PREMIUM" label contradiction in sidebar |
-| **BUG-6** | ⏸ open | Status taxonomy mismatch: list view vs kanban board use different status labels |
+| **BUG-6** | ✅ fixed (PR #788, `cc1eed1`) | Status taxonomy mismatch: list view vs kanban board use different status labels — `apps/web/lib/applicationStatus.ts` is now the single source of truth for status list + stage grouping, consumed by list view, board view, StatusBadge, and the chat pipeline summary |
 | **BUG-7** | ⏸ open | Session hydration: user appears logged-out on first load until hard refresh |
 | **BUG-8** | ⏸ open | (details in session history) |
 | **BUG-9** | ⏸ open | Sidebar widgets disappear on /upload page |
@@ -296,5 +296,5 @@ These are separate from the QA Cycle 1 BUG-01/19 list above.
 ## Recommended next command
 
 ```text
-Rico mode. Production HEAD: e4979eb. PR #780 (action cards for application_status/prepare_application) and PR #781 (question-form routing + BUG-1/4/5 fixes) are both merged. Open bugs from 2026-06-30 smoke test: BUG-2 (keyword conflict), BUG-3 (duplicate board entry), BUG-6 (status taxonomy), BUG-7 (session hydration), BUG-9 (sidebar /upload). Fix in priority order. One PR per bug group. Do NOT touch /dashboard, /onboarding, /jobs, /signals, /archive, /saved-searches until Phase B product decision. Do NOT run migrations without owner G1–G6 sign-off.
+Rico mode. PR #780/#781 (BUG-1/4/5), #786 (BUG-2 keyword conflict), #787 (BUG-3 duplicate board entry), and #788 (BUG-6 status taxonomy) are all merged and deployed. Open bugs from 2026-06-30 smoke test: BUG-7 (session hydration), BUG-9 (sidebar /upload), BUG-10 (data quality: experience/salary display), BUG-11 (name casing inconsistency). Fix in priority order. One PR per bug group. Do NOT touch /dashboard, /onboarding, /jobs, /signals, /archive, /saved-searches until Phase B product decision. Do NOT run migrations without owner G1–G6 sign-off.
 ```
