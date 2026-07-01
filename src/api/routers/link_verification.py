@@ -87,7 +87,7 @@ class BatchVerifyResponse(BaseModel):
     results: dict[str, VerifyLinkResponse]
 
 
-@router.post("/verify-batch", response_model=BatchVerifyResponse)
+@router.post("/verify/batch", response_model=BatchVerifyResponse)
 @limiter.limit("5/minute")  # Stricter rate limit for batch
 async def verify_links_batch(request: Request, batch_request: BatchVerifyRequest, _user: dict = Depends(get_current_user)) -> BatchVerifyResponse:
     """Verify multiple links in parallel.

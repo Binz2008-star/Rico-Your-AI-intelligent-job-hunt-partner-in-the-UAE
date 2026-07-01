@@ -17,7 +17,6 @@ interface UILinkVerificationResult {
 }
 
 const VERIFICATION_CACHE = new Map<string, LinkVerificationResult>();
-const MAX_CONCURRENT = 5;
 const MAX_VISIBLE_TO_VERIFY = 12;
 
 export function useLinkVerification(signals: OpportunitySignal[]) {
@@ -25,7 +24,10 @@ export function useLinkVerification(signals: OpportunitySignal[]) {
     Record<string, UILinkVerificationResult>
   >({});
   const [isVerifying, setIsVerifying] = useState(false);
-  const verifyingRef = useRef<Set<string>>(new Set());
+  // Ref-based guard prevents the callback from changing identity on every
+  // isVerifying state flip, which would otherwise create an infinite loop:
+  // setIsVerifying → new verifyVisibleSignals → useEffect re-fires → repeat.
+  const isRunningRef = useRef(false);
 
   const getUrlToVerify = useCallback(
     (signal: OpportunitySignal): string | null => {
@@ -104,8 +106,9 @@ export function useLinkVerification(signals: OpportunitySignal[]) {
   );
 
   const verifyVisibleSignals = useCallback(async () => {
-    if (isVerifying) return;
+    if (isRunningRef.current) return;
 
+    isRunningRef.current = true;
     setIsVerifying(true);
 
     // Get first MAX_VISIBLE_TO_VERIFY signals with URLs
@@ -167,8 +170,9 @@ export function useLinkVerification(signals: OpportunitySignal[]) {
       return updated;
     });
 
+    isRunningRef.current = false;
     setIsVerifying(false);
-  }, [signals, isVerifying, getUrlToVerify, verifyBatch]);
+  }, [signals, getUrlToVerify, verifyBatch]);
 
   // Auto-verify when signals change
   useEffect(() => {
