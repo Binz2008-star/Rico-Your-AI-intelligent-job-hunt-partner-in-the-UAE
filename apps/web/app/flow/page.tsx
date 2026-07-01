@@ -160,6 +160,22 @@ export default function FlowPage() {
     const [updating, setUpdating] = useState<string | null>(null);
     const [formData, setFormData] = useState<ManualApplicationForm>(() => createEmptyFormData());
 
+    const closeTrackModal = useCallback(() => {
+        setShowModal(false);
+        setFormError(null);
+        setFormData(createEmptyFormData());
+    }, []);
+
+    // Escape closes the Track Application modal, matching standard dialog behavior.
+    useEffect(() => {
+        if (!showModal) return;
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') closeTrackModal();
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [showModal, closeTrackModal]);
+
     const loadApplications = useCallback(async () => {
         try {
             const [response, stats] = await Promise.all([
@@ -486,13 +502,18 @@ export default function FlowPage() {
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
                     role="dialog"
+                    aria-modal="true"
                     aria-label={t('flowTrackApplicationModalTitle')}
                     dir={isRTL ? 'rtl' : 'ltr'}
+                    onClick={closeTrackModal}
                 >
-                    <Card className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto bg-surface-elevated">
-                        <CardContent className="p-5 sm:p-6">
-                        <h2 className="font-semibold text-on-surface mb-4">{t('flowTrackApplicationModalTitle')}</h2>
-                        <form onSubmit={handleTrackApplication} className="space-y-4" aria-label="Manual application form">
+                    <Card
+                        className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden bg-surface-elevated"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <CardContent className="flex flex-1 flex-col overflow-hidden p-0">
+                        <h2 className="shrink-0 border-b border-border-soft px-5 pb-4 pt-5 font-semibold text-on-surface sm:px-6 sm:pt-6">{t('flowTrackApplicationModalTitle')}</h2>
+                        <form onSubmit={handleTrackApplication} className="flex-1 space-y-4 overflow-y-auto px-5 pb-5 pt-4 sm:px-6 sm:pb-6" aria-label="Manual application form">
                             <div>
                                 <label htmlFor="title" className="block text-sm text-on-surface-variant mb-1">{t('flowModalJobTitle')}</label>
                                 <input
@@ -566,11 +587,7 @@ export default function FlowPage() {
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => {
-                                        setShowModal(false);
-                                        setFormError(null);
-                                        setFormData(createEmptyFormData());
-                                    }}
+                                    onClick={closeTrackModal}
                                     disabled={saving}
                                     className="flex-1 rounded-lg border border-border-soft px-4 py-2 text-sm font-semibold text-on-surface-variant transition-colors hover:border-white/20 hover:text-on-surface disabled:opacity-60"
                                 >
