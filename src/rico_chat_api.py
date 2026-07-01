@@ -17397,7 +17397,7 @@ class RicoChatAPI:
         arabic = self._is_arabic_text(message)
         if query_type == "lifecycle_show_saved":
             rows = get_by_status(user_id, "saved")
-            label = "saved"
+            label = "المحفوظة" if arabic else "saved"
             empty_msg = (
                 "لم تحفظ أي وظائف بعد. عند حفظ وظيفة من Rico، ستظهر هنا."
                 if arabic else
@@ -17405,7 +17405,7 @@ class RicoChatAPI:
             )
         elif query_type == "lifecycle_show_applied":
             rows = get_by_status(user_id, "applied")
-            label = "applied"
+            label = "المُقدَّمة" if arabic else "applied"
             empty_msg = (
                 "لا توجد وظائف مسجَّلة كمُقدَّمة بعد. بعد التقديم، اضغط 'تم التقديم' حتى يتابعها Rico."
                 if arabic else
@@ -17413,7 +17413,7 @@ class RicoChatAPI:
             )
         else:  # lifecycle_show_opened_not_applied
             rows = get_opened_not_applied(user_id)
-            label = "opened but not applied"
+            label = "المفتوحة وغير المُقدَّمة" if arabic else "opened but not applied"
             empty_msg = (
                 "لا توجد وظائف في هذه الفئة بعد — هذه وظائف ضغطت رابط التقديم لها لكن لم تُسجّلها كمُقدَّمة."
                 if arabic else
@@ -17453,13 +17453,22 @@ class RicoChatAPI:
                 "count": 0,
             }
 
-        lines = [f"Here are your **{label}** jobs ({len(rows)}):\n"]
-        for r in rows[:20]:
-            title = r.get("title") or "Unknown Role"
-            company = r.get("company") or "Unknown Company"
-            url = r.get("apply_url") or r.get("source_url") or ""
-            link_part = f" — [Apply]({url})" if url else ""
-            lines.append(f"• **{title}** at {company}{link_part}")
+        if arabic:
+            lines = [f"إليك وظائفك **{label}** ({len(rows)}):\n"]
+            for r in rows[:20]:
+                title = r.get("title") or "دور غير معروف"
+                company = r.get("company") or "شركة غير معروفة"
+                url = r.get("apply_url") or r.get("source_url") or ""
+                link_part = f" — [تقدّم]({url})" if url else ""
+                lines.append(f"• **{title}** في {company}{link_part}")
+        else:
+            lines = [f"Here are your **{label}** jobs ({len(rows)}):\n"]
+            for r in rows[:20]:
+                title = r.get("title") or "Unknown Role"
+                company = r.get("company") or "Unknown Company"
+                url = r.get("apply_url") or r.get("source_url") or ""
+                link_part = f" — [Apply]({url})" if url else ""
+                lines.append(f"• **{title}** at {company}{link_part}")
 
         return {
             "type": "lifecycle_query",
