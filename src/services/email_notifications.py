@@ -184,3 +184,104 @@ def unsubscribe_by_token(token: str) -> bool:
     if not user_id:
         return False
     return opt_out(user_id)
+
+
+# ---------------------------------------------------------------------------
+# Email alert log — per-(user, job) dedup + per-period send cap
+# ---------------------------------------------------------------------------
+# Backed by email_alert_log (migration 033). Mirrors the telegram_alert_log
+# helpers on RicoDB. All best-effort: on DB/table absence they fail open in the
+# safe direction (dedup: "not sent"; cap: "0 sent") so a missing migration
+# never blocks or duplicates alerts silently.
+
+_EMAIL_ALERT_TYPE = "job_match"
+
+
+def was_email_alert_sent(user_id: str, job_key: str, alert_type: str = _EMAIL_ALERT_TYPE) -> bool:
+    """Return True if this (user, job, type) was already emailed. Never raises."""
+    if not user_id or not job_key:
+        return False
+    from src.db import get_db_connection
+
+    conn = get_db_connection()
+    if not conn:
+        return False
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM email_alert_log WHERE user_id=%s AND job_key=%s AND alert_type=%s",
+                (user_id, job_key, alert_type),
+            )
+            return cur.fetchone() is not None
+    except Exception:
+        logger.debug("email_notifications.was_email_alert_sent failed user=%s", user_id, exc_info=True)
+        return False
+    finally:
+        conn.close()
+
+
+def log_email_alert(user_id: str, job_key: str, alert_type: str = _EMAIL_ALERT_TYPE) -> bool:
+    """Record that a job was emailed. Returns True if newly inserted (not a dup)."""
+    if not user_id or not job_key:
+        return False
+    from src.db import get_db_connection
+
+    conn = get_db_connection()
+    if not conn:
+        return False
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO email_alert_log (user_id, job_key, alert_type)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (user_id, job_key, alert_type) DO NOTHING
+                """,
+                (user_id, job_key, alert_type),
+            )
+            inserted = cur.rowcount > 0
+        conn.commit()
+        return inserted
+    except Exception:
+        logger.debug("email_notifications.log_email_alert failed user=%s", user_id, exc_info=True)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
+    finally:
+        conn.close()
+
+
+def emailed_within_days(user_id: str, days: int, alert_type: str = _EMAIL_ALERT_TYPE) -> bool:
+    """Return True if any alert email was logged for the user within *days*.
+
+    Backs the frequency cap: daily users skip if emailed in the last ~1 day,
+    weekly users if emailed in the last ~7 days. Fails open to False (allow
+    sending) on DB error so a transient failure never permanently mutes a user.
+    """
+    if not user_id or days <= 0:
+        return False
+    from src.db import get_db_connection
+
+    conn = get_db_connection()
+    if not conn:
+        return False
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT 1 FROM email_alert_log
+                 WHERE user_id = %s
+                   AND alert_type = %s
+                   AND sent_at >= NOW() - (%s * INTERVAL '1 day')
+                 LIMIT 1
+                """,
+                (user_id, alert_type, days),
+            )
+            return cur.fetchone() is not None
+    except Exception:
+        logger.debug("email_notifications.emailed_within_days failed user=%s", user_id, exc_info=True)
+        return False
+    finally:
+        conn.close()

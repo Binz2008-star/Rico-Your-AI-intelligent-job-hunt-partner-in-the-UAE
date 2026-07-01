@@ -104,6 +104,24 @@ idempotent email job. ~80% of the parts already exist.
   `RICO_ENABLE_EMAIL_ALERTS` kill-switch; validate with `dry_run=true`.
 - **PR-3:** enable GitHub Action cron; monitor `email_alert_log`; then Arabic localization.
 
+## Delivery status (PR #805, branch `claude/rico-job-alert-emails-6fugqq`)
+
+PR-1 and PR-2 both landed on this branch/PR (branch policy required staying on
+the designated branch, so the staged split became one feature PR):
+
+- **PR-1 (done):** migration 033, HTML mailer, `RicoAgentSettings` email fields,
+  `email_notifications` opt-in/out/token, opt-in/out/status + public unsubscribe.
+- **PR-2 (done):** `email_alert_service` (match reuse via `RicoSystem.run_for_profile`,
+  exclude applied/saved/hidden + `email_alert_log` dedup, threshold, MIN/MAX jobs,
+  daily/weekly frequency cap, synthetic guard, `RICO_ENABLE_EMAIL_ALERTS`
+  kill-switch, HTML+text digest renderer), cron-guarded
+  `POST /api/v1/pipeline/job-alert-emails` (`?dry_run=true`), dispatch-only
+  `job-alert-emails.yml` workflow, `email_alert_log` log/dedup helpers,
+  `get_users_with_email_alerts` roster.
+- **PR-3 (pending):** enable the daily `schedule:` on the workflow, set
+  `RICO_ENABLE_EMAIL_ALERTS=true` + `RICO_API_URL` on the backend after a
+  `dry_run` smoke, monitor `email_alert_log`; then Arabic localization.
+
 ## Risks
 - Plain-text → HTML deliverability (inherit SPF/DKIM from reset emails).
 - SMTP rate limits on large lists → batch + per-run cap.

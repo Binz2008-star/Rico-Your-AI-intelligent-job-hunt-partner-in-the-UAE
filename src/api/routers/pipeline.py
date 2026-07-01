@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from src.api.deps import get_current_user, require_admin, require_cron_secret
 from src.schemas.pipeline import (
+    JobAlertEmailsResponse,
     PipelineStatusResponse,
     PipelineTriggerResponse,
     ProfileNudgeResponse,
@@ -64,6 +65,29 @@ def run_reminders(
 
     summary = run_due_scan(interval)
     return RemindersResponse(**summary)
+
+
+@router.post("/job-alert-emails", response_model=JobAlertEmailsResponse)
+def run_job_alert_emails(
+    request: Request,
+    _cron: None = Depends(require_cron_secret),
+) -> JobAlertEmailsResponse:
+    """Personalized job-alert email sweep, called by cron (Render/GitHub).
+
+    Guarded by the X-Cron-Secret shared secret (not JWT). Sends one digest email
+    of top matches to each opted-in user, respecting dedup and the per-user
+    daily/weekly cadence. Idempotent within a cadence window.
+
+    Sending requires ``RICO_ENABLE_EMAIL_ALERTS`` to be truthy. Pass
+    ``?dry_run=true`` to evaluate matching and report counts WITHOUT sending or
+    logging (this bypasses the kill-switch for smoke testing).
+    """
+    from src.services.email_alert_service import run_email_alert_sweep
+
+    raw = (request.query_params.get("dry_run") or "").strip().lower()
+    dry_run = raw in {"1", "true", "yes", "on"}
+    summary = run_email_alert_sweep(dry_run=dry_run)
+    return JobAlertEmailsResponse(**summary)
 
 
 @router.post("/profile-nudge", response_model=ProfileNudgeResponse)
