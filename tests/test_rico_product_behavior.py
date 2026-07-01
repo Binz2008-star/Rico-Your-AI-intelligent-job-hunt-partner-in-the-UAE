@@ -291,7 +291,7 @@ class TestCareerExecution:
         assert "upload your cv" not in msg
         assert result.get("type") in {
             "job_matches", "search_results", "clarification",
-            "no_results_recovery", "role_suggestions",
+            "no_results_recovery", "role_suggestions", "profile_role_suggestions",
         }
 
 
