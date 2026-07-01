@@ -144,15 +144,15 @@ the assistant feel significantly more responsive and aligned with user intent."
 
 ### TASK-20260622-031 — PR C: strongest CV/profile selection + session-context retention
 
-Status: scoped
-Owner: unassigned
-Branch: `fix/profile-context-role-selection` recommended
-Issue/PR: PR C not opened yet
+Status: review
+Owner: Claude
+Branch: `fix/profile-context-role-selection` (pushed, PR not yet opened — no `gh` auth in session)
+Issue/PR: PR C not opened yet — open via https://github.com/Binz2008-star/Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE/pull/new/fix/profile-context-role-selection
 
 #### Objective
 Fix the remaining production Tests 1 and 7 after the job-flow stabilization train (#727/#724/#723/#728/#729/#730).
 
-#### Test 1
+#### Test 1 — ✅ fixed (pending PR/merge)
 Prompt: `Find UAE jobs that match my strongest CV profile.`
 
 Expected:
@@ -161,7 +161,13 @@ Expected:
 - If multiple profile tracks exist and confidence is ambiguous, ask the user to choose.
 - Do not silently choose stale or irrelevant target_role.
 
-#### Test 7
+Fix: search-first behavior in `job_search_profile_match` and the location-guard path of
+`_classified_role_search` (`src/rico_chat_api.py`) — when a saved role is stale but the CV
+yields a clear single-family suggestion list, search the top CV-evidenced role immediately
+with an explanatory note instead of pausing to ask. Falls back to ask-to-choose when CV
+suggestions are empty or span 2+ families. Commit `48e9cba` on `fix/profile-context-role-selection`.
+
+#### Test 7 — ✅ fixed, already on `main`
 Prompt: `Search UAE jobs for Environmental Manager.`
 
 Expected:
@@ -170,6 +176,10 @@ Expected:
 - Preserve authenticated user/CV/session context.
 - Do not ask a logged-in Pro user with uploaded CV to sign up or upload again.
 - Keep location UAE-focused with safe preference for UAE/Ajman/Dubai/Sharjah/Abu Dhabi.
+
+Fix landed directly on `main` at `bd4c4f8` ("honor verbatim role text in classified role
+search") — `_classified_role_search`'s `profile_relevant` branch now passes `role_text.strip()`
+instead of the taxonomy canonical alias.
 
 #### Constraints
 - No auth rewrite.
@@ -185,21 +195,35 @@ Expected:
 - Do not touch unrelated chat flows.
 
 #### Required process
-- [ ] Start from clean current `origin/main`.
-- [ ] Read-only map current CV/profile selection flow.
-- [ ] Read-only map where `target_role` is loaded.
-- [ ] Read-only map where auth/CV context is lost.
-- [ ] Read-only map where role substitution happens.
-- [ ] Report the smallest safe implementation plan before large edits.
-- [ ] Add regression tests for T1 and T7.
-- [ ] Open Draft PR first.
-- [ ] Run focused tests and related chat/profile tests.
+- [x] Start from clean current `origin/main`.
+- [x] Read-only map current CV/profile selection flow.
+- [x] Read-only map where `target_role` is loaded.
+- [x] Read-only map where auth/CV context is lost.
+- [x] Read-only map where role substitution happens.
+- [x] Report the smallest safe implementation plan before large edits.
+- [x] Add regression tests for T1 and T7.
+- [ ] Open Draft PR (branch pushed; PR creation needs `gh auth login` or manual open via GitHub UI).
+- [x] Run focused tests and related chat/profile tests — 27/27 in
+      `tests/unit/test_profile_context_role_selection.py`; 143/143 across
+      `test_bug17_pipeline_reset.py`, `test_bug12_arabic_search_locale.py`,
+      `test_arabic_context_retention.py`, `test_apply_tracking_and_freshness.py`,
+      `test_manual_application_tracking.py`, `test_lifecycle_followup.py`,
+      `test_application_tracking_intelligence.py`, `test_p0_trust_fixes.py`.
 - [ ] Merge only if CI is green and scope is clean.
 - [ ] Verify `/version` and `/health` after deploy.
 
 #### Handoff notes
 - Latest full handoff: `AI_WORKSPACE/HANDOFFS/2026-06-22-job-flow-stabilization-complete.md`.
 - Current production baseline before PR C: `38fbf5da19975df6f7d3d21168b137741d502e6d`.
+- T1 fix source: an unmerged background session left the search-first behavior on
+  `origin/claude/workflow-progress-check-qycxuo` (commit `52e44b8`) alongside T7 and TASK-030
+  fixes that had already been hand-ported to `main` separately (`bd4c4f8`, `77563af`). Only the
+  search-first hunks were hand-applied to `fix/profile-context-role-selection` — that branch
+  also carried a stale `_build_tracking_message` hunk (pre-dating PR #797's opened/applied
+  stage-count fix) which was intentionally NOT ported, since applying it would have regressed
+  that fix. `claude/workflow-progress-check-qycxuo` has since been deleted as fully superseded.
+- Rollback plan: revert the merge commit for `fix/profile-context-role-selection`; no
+  schema/env changes, isolated to `src/rico_chat_api.py` chat-routing logic.
 - Rollback plan: revert PR C only; no schema/env changes allowed.
 
 ---

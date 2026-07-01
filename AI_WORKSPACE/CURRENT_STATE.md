@@ -1,6 +1,21 @@
 # Current State
 
-_Last updated: 2026-06-30 — **PR #781 merged** (fix: question-form application routing + sidebar nav/count/plan fixes). Production HEAD: `e4979eb`. Previous: `0e0a6aa` (dashboard), `6863409` (PR #780 — Chat-OS action cards for application\_status + prepare\_application), `f0e0cea` (PR #776 — No Dead UI Rule). Chat routing and sidebar nav are now correct. Forward focus: remaining smoke-test bugs from the 2026-06-30 QA session._
+_Last updated: 2026-07-01 — `main` HEAD `ff6c690` (dashboard). BUG-9 through BUG-17 all merged
+and deployed since the 2026-06-30 update below (PRs #783–#797), plus two fixes landed directly
+on `main` outside the PR flow: `bd4c4f8` (T7 — verbatim role text) and `77563af` (TASK-030 —
+uploaded-document context injection). Forward focus: land `fix/profile-context-role-selection`
+(T1 search-first fix) to close out TASK-20260622-031 / PR C. See that task in `TASKS.md` for
+detail — this file's BUG-9–BUG-17 history has not yet been backfilled into the tables below._
+
+## PR C / TASK-20260622-031 — status as of 2026-07-01
+
+- **T7** (verbatim role, no silent taxonomy substitution): ✅ fixed, on `main` (`bd4c4f8`).
+- **T1** (search-first for stale profile roles instead of pausing to ask): ✅ fixed, pushed to
+  `fix/profile-context-role-selection` (`48e9cba`), PR not yet opened (no `gh` auth in session —
+  open via https://github.com/Binz2008-star/Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE/pull/new/fix/profile-context-role-selection).
+- Both fixes originated from an unmerged background session (`claude/workflow-progress-check-qycxuo`,
+  now deleted). That branch also carried a stale pre-PR#797 `_build_tracking_message` hunk that
+  was intentionally not ported — see `TASKS.md` TASK-20260622-031 handoff notes.
 
 ## QA Cycle 1 — CLOSED 2026-06-27
 
