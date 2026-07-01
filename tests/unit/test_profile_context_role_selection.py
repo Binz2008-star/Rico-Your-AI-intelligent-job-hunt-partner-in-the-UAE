@@ -228,3 +228,44 @@ def test_t7_message_never_prompts_signup_or_upload():
         ).lower()
         assert "sign up" not in msg and "signup" not in msg
         assert "upload your cv" not in msg and "register" not in msg
+
+
+def test_t7_classified_role_search_uses_verbatim_role_not_taxonomy_alias():
+    """_classified_role_search must pass the user's exact role text to
+    _target_role_search_response, not the taxonomy canonical alias.
+
+    Regression: resolve_taxonomy_role('Environmental Manager') -> 'Environmental Officer'.
+    Before the fix, the search ran for 'Environmental Officer' silently.
+
+    The bug path fires when the user's role is NOT already in target_roles
+    (so the fuzzy early-exit is skipped) and the taxonomy classifier returns a
+    different canonical alias.
+    """
+    api = _api()
+    search_mock = MagicMock(return_value={"type": "job_matches", "message": "ok"})
+    # Profile has HSE skills but target_roles is EMPTY — so the fuzzy-match
+    # early exit (which correctly uses role_text) is skipped, and the call reaches
+    # classify_role_candidate at line 18184.
+    profile = {
+        "target_roles": [],
+        "cv_status": "parsed", "cv_filename": "cv.pdf",
+        "skills": ["environmental compliance", "hse", "nebosh"],
+        "years_experience": 7,
+    }
+    # classify_role_candidate returns profile_relevant with a *different* canonical alias.
+    with (
+        patch("src.rico_chat_api.classify_role_candidate",
+              return_value=("profile_relevant", "Environmental Officer")),
+        patch.object(api, "_target_role_search_response", search_mock),
+        patch.object(api, "_get_recent_context", return_value={}),
+        patch.object(api, "_store_recent_context", return_value=None),
+        patch.object(api, "_append_chat", return_value=None),
+    ):
+        api._classified_role_search("u-test", "Environmental Manager", profile)
+
+    assert search_mock.call_count == 1
+    called_role = search_mock.call_args.args[1]
+    assert called_role == "Environmental Manager", (
+        f"Expected search for 'Environmental Manager' but got '{called_role}'. "
+        "Taxonomy alias must not silently substitute the user's verbatim role."
+    )

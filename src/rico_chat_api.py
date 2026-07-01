@@ -18185,7 +18185,7 @@ class RicoChatAPI:
 
         if classification == "profile_relevant" and canonical_role:
             return self._target_role_search_response(
-                user_id, canonical_role, profile,
+                user_id, role_text.strip(), profile,
                 location=location, employment_type_filter=employment_type_filter,
             )
 
