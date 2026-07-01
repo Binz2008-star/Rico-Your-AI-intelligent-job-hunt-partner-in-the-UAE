@@ -12005,13 +12005,27 @@ class RicoChatAPI:
             city_str = f", based in {cities[0]}" if cities else " based in the UAE"
             skills_sentence = f" Skilled in {skills_str}." if skills_str else ""
 
-            msg = (
-                f"**Your professional pitch:**\n\n"
-                f"{exp_str}experienced **{role}**{industry_str}{cert_str}{city_str}."
-                f"{skills_sentence} "
-                f"Open to opportunities across the Emirates.\n\n"
-                "Say **'improve it'** for a more detailed version, or use it as-is on LinkedIn or in emails."
-            )
+            if arabic:
+                exp_str_ar = f"خبرة {int(float(exp))} سنوات " if exp and str(exp).replace(".", "").isdigit() else ""
+                industry_str_ar = f" في قطاع {industries[0]}" if industries else ""
+                cert_str_ar = f"، حاصل على {certs[0]}" if certs else ""
+                city_str_ar = f"، مقيم في {cities[0]}" if cities else "، مقيم في الإمارات"
+                skills_sentence_ar = f" يتقن: {skills_str}." if skills_str else ""
+                msg = (
+                    f"**نبذتك المهنية:**\n\n"
+                    f"{exp_str_ar}متخصص في **{role}**{industry_str_ar}{cert_str_ar}{city_str_ar}."
+                    f"{skills_sentence_ar} "
+                    f"متاح للفرص في جميع أنحاء الإمارات.\n\n"
+                    "قل **'طوّرها'** للحصول على نسخة أكثر تفصيلاً، أو استخدمها كما هي على LinkedIn أو في رسائل التقديم."
+                )
+            else:
+                msg = (
+                    f"**Your professional pitch:**\n\n"
+                    f"{exp_str}experienced **{role}**{industry_str}{cert_str}{city_str}."
+                    f"{skills_sentence} "
+                    f"Open to opportunities across the Emirates.\n\n"
+                    "Say **'improve it'** for a more detailed version, or use it as-is on LinkedIn or in emails."
+                )
         self._append_chat(user_id, "assistant", msg)
         return {"type": "profile_pitch", "message": msg}
 
@@ -15379,118 +15393,6 @@ class RicoChatAPI:
             "target_role": target_role,
             "strengths": strengths,
             "gaps": gaps,
-            "message": msg,
-        }
-
-    # ── Interview preparation ────────────────────────────────────────────────────
-
-    def _handle_interview_prep(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
-        target_role = ""
-        if profile:
-            roles = getattr(profile, "target_roles", None) or []
-            if roles:
-                target_role = roles[0]
-            if not target_role:
-                target_role = getattr(profile, "current_role", "") or ""
-
-        role_line = f" for **{target_role}**" if target_role else ""
-
-        arabic = self._is_arabic_text(message)
-        if arabic:
-            msg = (
-                f"## التحضير للمقابلة{role_line}\n\n"
-                "**قبل المقابلة:**\n"
-                "- ابحث عن الشركة: أهدافها، ثقافتها، آخر أخبارها\n"
-                "- راجع متطلبات الوظيفة وحضّر أمثلة من تجربتك تتوافق معها\n"
-                "- جهّز أسئلة ذكية لطرحها على المحاور\n\n"
-                "**أسئلة شائعة يجب التحضير لها:**\n"
-                "1. حدثنا عن نفسك — ملخص مهني موجز (2 دقيقتين)\n"
-                "2. ما أبرز إنجازاتك؟ — استخدم مقاييس واضحة\n"
-                "3. لماذا تريد العمل معنا؟ — اربطه بأهداف الشركة\n"
-                "4. ما نقاط قوتك وضعفك؟ — كن صادقاً مع تحسّن واضح\n"
-                "5. أين ترى نفسك بعد 5 سنوات؟ — اربطه بمسار الوظيفة\n\n"
-                "**أسلوب STAR للأسئلة السلوكية:**\n"
-                "**S**ituation → **T**ask → **A**ction → **R**esult\n\n"
-                "**في يوم المقابلة:**\n"
-                "- احضر قبل 10 دقائق على الأقل\n"
-                "- ابدأ بمصافحة واثقة وتواصل بالعيون\n"
-                "- في نهاية المقابلة اسأل: «ما الخطوة القادمة في عملية التوظيف؟»"
-            )
-        else:
-            msg = (
-                f"## Interview Preparation Guide{role_line}\n\n"
-                "**Before the interview:**\n"
-                "- Research the company: mission, culture, recent news, key projects\n"
-                "- Map the job requirements to your experience with concrete examples\n"
-                "- Prepare 3–5 smart questions to ask the interviewer\n\n"
-                "**Common questions to prepare for:**\n"
-                "1. **Tell me about yourself** — 2-minute career summary ending with why this role\n"
-                "2. **Greatest achievement?** — Use numbers: \"increased X by Y%\", \"saved AED Z\"\n"
-                "3. **Why this company?** — Tie it to their goals or products\n"
-                "4. **Strengths and weaknesses?** — Be honest; pair weaknesses with active improvement\n"
-                "5. **Where do you see yourself in 5 years?** — Align with the role's growth path\n\n"
-                "**STAR method for behavioural questions:**\n"
-                "**S**ituation → **T**ask → **A**ction → **R**esult\n\n"
-                "*Example:* \"Tell me about a time you handled a difficult stakeholder.\"\n"
-                "→ Situation, your Task, Action you took, measurable Result.\n\n"
-                "**On the day:**\n"
-                "- Arrive or join the call 10 minutes early\n"
-                "- Firm handshake, eye contact, confident posture\n"
-                "- Close by asking: \"What is the next step in your hiring process?\""
-            )
-
-        self._append_chat(user_id, "assistant", msg)
-        return {
-            "type": "interview_prep",
-            "target_role": target_role,
-            "message": msg,
-        }
-
-    # ── Salary negotiation ───────────────────────────────────────────────────────
-
-    def _handle_salary_negotiation(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
-        arabic = self._is_arabic_text(message)
-        if arabic:
-            msg = (
-                "## كيف تتفاوض على راتبك في الإمارات\n\n"
-                "**التوقيت المثالي:**\n"
-                "- انتظر حتى تحصل على عرض رسمي قبل التفاوض\n"
-                "- لا تذكر توقعاتك أولاً — دع صاحب العمل يبدأ\n\n"
-                "**الخطوات:**\n"
-                "1. **ابحث عن متوسط الراتب** للدور والخبرة في الإمارات\n"
-                "2. **حدد نطاقاً** — الحد الأدنى المقبول والهدف المثالي\n"
-                "3. **برر طلبك** بإنجازاتك ومهاراتك، وليس باحتياجاتك الشخصية\n"
-                "4. **لا تقبل أو ترفض فوراً** — اطلب يومين للتفكير\n"
-                "5. **تفاوض على الباقة كاملة**: بدل السكن، التأمين، الإجازة، المسمى الوظيفي\n\n"
-                "**عبارات مفيدة:**\n"
-                "- «بناءً على خبرتي وبحثي في السوق، كنت أتوقع نطاقاً بين X وY درهم»\n"
-                "- «هل هناك مرونة في العرض؟»\n"
-                "- «أقدّر العرض — هل يمكنني أخذ يومين للنظر فيه؟»\n\n"
-                "**ملاحظة:** التفاوض أمر طبيعي ومتوقع في سوق الإمارات — 70٪ من أصحاب العمل يتوقعونه."
-            )
-        else:
-            msg = (
-                "## Salary Negotiation in the UAE\n\n"
-                "**Timing:**\n"
-                "- Wait until you have a formal offer before negotiating\n"
-                "- Avoid naming your number first — let the employer anchor\n\n"
-                "**Step-by-step:**\n"
-                "1. **Research market rates** for the role, level, and industry in the UAE\n"
-                "2. **Set your range** — know your walk-away floor and your ideal target\n"
-                "3. **Justify with value**, not personal need: cite achievements, certifications, market data\n"
-                "4. **Don't accept or decline on the spot** — ask for 48 hours to consider\n"
-                "5. **Negotiate the full package**: housing allowance, medical, annual leave, title, start date\n\n"
-                "**Phrases that work:**\n"
-                "- *\"Based on my experience and market benchmarks, I was expecting a range of AED X–Y.\"*\n"
-                "- *\"Is there flexibility in the offer?\"*\n"
-                "- *\"I appreciate the offer — could I have 48 hours to review it?\"*\n\n"
-                "**UAE tip:** Negotiation is expected here — roughly 70% of employers build room into the first offer. "
-                "Counter-offers are rarely rescinded for politely negotiating."
-            )
-
-        self._append_chat(user_id, "assistant", msg)
-        return {
-            "type": "salary_negotiation",
             "message": msg,
         }
 
