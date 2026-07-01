@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -99,6 +99,10 @@ class WorkflowCoordinator:
         IntentType.UNKNOWN: PermissionLevel.SAFE,
     }
 
+    # Pending confirmation tokens expire after this many seconds to prevent
+    # unbounded memory growth from abandoned confirmation dialogs.
+    _CONFIRMATION_TTL_S = 300  # 5 minutes
+
     def __init__(self):
         self._pending_confirmations: Dict[str, Dict[str, Any]] = {}
 
@@ -128,6 +132,9 @@ class WorkflowCoordinator:
             WorkflowResult with execution outcome
         """
         wall_start = time.monotonic()
+
+        # Lazily evict expired confirmation tokens to bound memory growth.
+        self._evict_expired_confirmations()
 
         # Check for confirmation token (user confirmed a pending action)
         if confirmation_token and confirmation_token in self._pending_confirmations:
@@ -279,7 +286,8 @@ class WorkflowCoordinator:
         autonomy_level: str,
     ) -> WorkflowResult:
         """Execute a previously confirmed action."""
-        if confirmation_token not in self._pending_confirmations:
+        pending = self._pending_confirmations.get(confirmation_token)
+        if pending is None:
             return WorkflowResult(
                 success=False,
                 intent=IntentType.UNKNOWN,
@@ -287,7 +295,41 @@ class WorkflowCoordinator:
                 error="invalid_confirmation_token",
             )
 
-        pending = self._pending_confirmations.pop(confirmation_token)
+        # Reject expired tokens (guard against memory-accumulated stale entries).
+        try:
+            created_at = datetime.fromisoformat(pending["timestamp"])
+            age = datetime.now(_UTC) - created_at
+            if age > timedelta(seconds=self._CONFIRMATION_TTL_S):
+                del self._pending_confirmations[confirmation_token]
+                logger.info(
+                    "coordinator: confirmation_token expired user=%s age_s=%.0f",
+                    canonical_user_id, age.total_seconds(),
+                )
+                return WorkflowResult(
+                    success=False,
+                    intent=IntentType.UNKNOWN,
+                    message="Confirmation token has expired. Please try the action again.",
+                    error="confirmation_token_expired",
+                )
+        except Exception:
+            pass
+
+        # Reject tokens that belong to a different user (cross-user token isolation).
+        stored_user = pending.get("canonical_user_id", "")
+        if stored_user and stored_user != canonical_user_id:
+            logger.warning(
+                "coordinator: confirmation_token user mismatch stored=%s caller=%s",
+                stored_user, canonical_user_id,
+            )
+            del self._pending_confirmations[confirmation_token]
+            return WorkflowResult(
+                success=False,
+                intent=IntentType.UNKNOWN,
+                message="Confirmation token not found or expired",
+                error="invalid_confirmation_token",
+            )
+
+        del self._pending_confirmations[confirmation_token]
         intent = pending["intent"]
         job = pending["job"]
 
@@ -298,6 +340,20 @@ class WorkflowCoordinator:
             profile,
             canonical_user_id,
         )
+
+    def _evict_expired_confirmations(self) -> None:
+        """Remove confirmation tokens that have exceeded the TTL."""
+        if not self._pending_confirmations:
+            return
+        cutoff = datetime.now(_UTC) - timedelta(seconds=self._CONFIRMATION_TTL_S)
+        expired = [
+            tok for tok, p in self._pending_confirmations.items()
+            if datetime.fromisoformat(p.get("timestamp", "1970-01-01T00:00:00+00:00")) < cutoff
+        ]
+        for tok in expired:
+            del self._pending_confirmations[tok]
+        if expired:
+            logger.debug("coordinator: evicted %d expired confirmation token(s)", len(expired))
 
     def _execute_workflow(
         self,
