@@ -14245,6 +14245,24 @@ class RicoChatAPI:
                 if arabic else
                 "You haven't logged any applications yet. Start searching and I'll track your progress."
             )
+        elif arabic:
+            lines = [
+                f"**ملخص طلباتك ({total} إجمالاً):**\n",
+                f"• مُقدَّمة: **{applied}**",
+            ]
+            if saved:      lines.append(f"• محفوظة / قيد التقديم: **{saved}**")
+            if interview:  lines.append(f"• مرحلة المقابلة: **{interview}**")
+            if offered:    lines.append(f"• عرض مُقدَّم: **{offered}**")
+            if rejected:   lines.append(f"• مرفوضة / مُرفَضة: **{rejected}**")
+            if skipped:    lines.append(f"• متخطاة: **{skipped}**")
+            lines.append(f"\n📊 **معدل الاستجابة (مقابلات):** {response_rate}")
+
+            if interview == 0 and applied >= 5:
+                lines.append("\n💡 معدل استجابة منخفض — فكّر في مراجعة كلمات مفتاحية في سيرتك الذاتية أو توسيع نطاق بحثك.")
+            elif offered > 0:
+                lines.append(f"\n🎉 لديك {'عرض عمل' if offered == 1 else f'{offered} عروض عمل'} — تهانيّ!")
+
+            msg = "\n".join(lines)
         else:
             lines = [
                 f"**Your Application Pipeline ({total} total):**\n",
@@ -17327,13 +17345,13 @@ class RicoChatAPI:
         elif recent_role:
             # Continuing an active search
             options = [
-                {"action": "find_jobs",          "label": f"Search more {recent_role} jobs"},
-                {"action": "prepare_application", "label": "Prepare application / cover letter"},
-                {"action": "interview_prep",      "label": "Prepare for an interview"},
-                {"action": "track_applications",  "label": "Check my applications"},
-                {"action": "profile_completeness","label": "See what's missing from my profile"},
+                {"action": "find_jobs",          "label": (f"البحث عن المزيد من وظائف {recent_role}" if arabic else f"Search more {recent_role} jobs")},
+                {"action": "prepare_application", "label": ("إعداد طلب توظيف / خطاب تقديم" if arabic else "Prepare application / cover letter")},
+                {"action": "interview_prep",      "label": ("التحضير لمقابلة عمل" if arabic else "Prepare for an interview")},
+                {"action": "track_applications",  "label": ("متابعة طلباتي" if arabic else "Check my applications")},
+                {"action": "profile_completeness","label": ("ما الذي ينقص ملفي؟" if arabic else "See what's missing from my profile")},
             ]
-            intro = "Here is what I can help you with:"
+            intro = "إليك ما يمكنني مساعدتك به:" if arabic else "Here is what I can help you with:"
         else:
             options = [
                 {"action": "find_jobs",           "label": "Find matching UAE jobs"          if not arabic else "البحث عن وظائف تناسبني"},
