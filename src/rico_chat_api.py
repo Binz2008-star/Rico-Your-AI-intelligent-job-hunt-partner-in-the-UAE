@@ -27,6 +27,8 @@ from src.agent.intelligence.intent_classifier import (
     _OPEN_APPLY_LINK_ORDINAL_RE,
     _SAVE_JOB_ORDINAL_RE,
     _SAVE_JOB_ORDINAL_AR_RE,
+    _CV_PROFILE_REF_RE,
+    _clean_role_token,
 )
 from src.agent.intelligence.normalizer import normalize_role
 from src.agent.intelligence.recommender import recommend_adjacent_roles
@@ -2418,6 +2420,53 @@ class RicoChatAPI:
         if self._has_cv_profile(profile) and not self._role_is_cv_aligned(profile, role):
             return (role, candidates, "stale")
         return (role, candidates, "single")
+
+    def _profile_search_first_or_suggest(
+        self, user_id: str, profile: Any, role_text: str,
+        resolved_role: Optional[str], *,
+        location: str = "", employment_type_filter: str = "",
+    ) -> dict[str, Any]:
+        """Shared stale/none profile-role resolution.
+
+        Search-first when the CV gives a clear single-family suggestion list;
+        otherwise ask the user to choose. Used wherever a profile-based search
+        resolves to "stale" (saved role no longer matches the CV) or "none" (no
+        usable saved role) so both get the same CV-aware treatment instead of a
+        generic "upload your CV" prompt or a blind search on the stale role.
+        """
+        suggestions = self._generate_role_suggestions(
+            self._as_list(self._profile_value(profile, "skills")),
+            self._as_list(self._profile_value(profile, "certifications")),
+            self._profile_value(profile, "years_experience"),
+            self._as_list(self._profile_value(profile, "industries")),
+            self._profile_value(profile, "current_role"),
+        )
+        families = {
+            self._role_family(s["label"]) for s in suggestions if s.get("label")
+        }
+        if suggestions and len(families) == 1:
+            top = suggestions[0]["label"]
+            response = self._target_role_search_response(
+                user_id, top, profile,
+                location=location, employment_type_filter=employment_type_filter,
+                from_saved_profile=True,
+            )
+            note = (
+                f"Your saved role **{resolved_role}** doesn't match your current CV. "
+                f"I searched for **{top}** based on your skills instead."
+                if resolved_role else
+                f"I used your CV to find the best match: **{top}**."
+            )
+            response["message"] = note + "\n\n" + response.get("message", "")
+            if resolved_role:
+                response["stale_target_role"] = resolved_role
+            self._append_chat(user_id, "assistant", response.get("message", ""))
+            return response
+        suggestion_resp = self._handle_profile_role_suggestions(profile, role_text)
+        if resolved_role:
+            suggestion_resp = {**suggestion_resp, "stale_target_role": resolved_role}
+        self._append_chat(user_id, "assistant", suggestion_resp.get("message", ""))
+        return suggestion_resp
 
     def _profile_role_choice_response(
         self, candidates: list[str], message: str = ""
@@ -7888,44 +7937,17 @@ class RicoChatAPI:
                 return self._finalize(_pm_choice, self.SOURCE_KEYWORD, profile=profile)
             if _pm_status in ("none", "stale"):
                 # Search-first: if the CV has a clear single-track suggestion list,
-                # search the top CV-evidenced role immediately with an explanatory note
-                # rather than asking the user to choose. Only fall through to the
-                # ask-to-choose path when CV suggestions are empty or span 2+ families.
-                if _pm_status == "stale":
-                    _sf_suggestions = self._generate_role_suggestions(
-                        self._as_list(self._profile_value(profile, "skills")),
-                        self._as_list(self._profile_value(profile, "certifications")),
-                        self._profile_value(profile, "years_experience"),
-                        self._as_list(self._profile_value(profile, "industries")),
-                        self._profile_value(profile, "current_role"),
-                    )
-                    _sf_families = {
-                        self._role_family(s["label"])
-                        for s in _sf_suggestions if s.get("label")
-                    }
-                    if _sf_suggestions and len(_sf_families) == 1:
-                        _sf_top = _sf_suggestions[0]["label"]
-                        _sf_response = self._target_role_search_response(
-                            user_id, _sf_top, profile, from_saved_profile=True
-                        )
-                        _sf_note = (
-                            f"Your saved role **{_pm_role}** doesn't match your current CV. "
-                            f"I searched for **{_sf_top}** based on your skills instead."
-                        )
-                        _sf_response["message"] = (
-                            _sf_note + "\n\n" + _sf_response.get("message", "")
-                        )
-                        _sf_response["stale_target_role"] = _pm_role
-                        if _pm_excluded:
-                            _sf_response["excluded_roles"] = _pm_excluded
-                        return self._finalize(_sf_response, self.SOURCE_KEYWORD, profile=profile)
-                # Stale with ambiguous/empty CV suggestions, or status "none":
-                # surface CV-aligned suggestions and let the user choose.
-                _pm_sugg = self._handle_profile_role_suggestions(profile, message)
-                if _pm_status == "stale" and _pm_role:
-                    _pm_sugg = {**_pm_sugg, "stale_target_role": _pm_role}
-                self._append_chat(user_id, "assistant", _pm_sugg.get("message", ""))
-                return self._finalize(_pm_sugg, self.SOURCE_KEYWORD, profile=profile)
+                # search the top CV-evidenced role immediately with an explanatory
+                # note rather than asking the user to choose (or, for "none",
+                # falsely implying no CV exists). Falls back to ask-to-choose when
+                # CV suggestions are empty or span 2+ families.
+                _pm_response = self._profile_search_first_or_suggest(
+                    user_id, profile, message,
+                    _pm_role if _pm_status == "stale" else None,
+                )
+                if _pm_excluded and _pm_response.get("type") != "profile_role_suggestions":
+                    _pm_response["excluded_roles"] = _pm_excluded
+                return self._finalize(_pm_response, self.SOURCE_KEYWORD, profile=profile)
             # status == "single": exactly one CV-aligned saved role → search it.
             _pm_response = self._target_role_search_response(
                 user_id, _pm_role, profile, from_saved_profile=True
@@ -8211,6 +8233,20 @@ class RicoChatAPI:
                 }
                 self._append_chat(user_id, "assistant", response["message"])
                 return self._finalize(response, routed.source, profile=profile)
+
+            # target_roles is present but may be stale (no longer matches the
+            # CV) — never blindly search it without checking CV alignment
+            # first, same guard job_search_profile_match already has.
+            _js_role, _js_candidates, _js_status = self._resolve_profile_search_role(profile)
+            if _js_status == "stale":
+                return self._finalize(
+                    self._profile_search_first_or_suggest(
+                        user_id, profile, message, _js_role,
+                        location=_js_location, employment_type_filter=_js_emp_type,
+                    ),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
 
             # Removed fast-path override to prevent intent interception
             # Previously: generic job searches without job_title were intercepted by profile suggestions
@@ -18129,55 +18165,38 @@ class RicoChatAPI:
         profile_relevant without running them through the taxonomy classifier,
         because they are already derived from the user's CV.
         """
-        # Location guard: if role_text is just a location (UAE, Dubai, etc.) redirect to
-        # profile-based search rather than returning a misleading "I don't recognise X as a role".
+        # Location/self-reference guard: if role_text is just a location (UAE,
+        # Dubai, etc.) or a CV/profile self-reference that isn't a real job
+        # title ("my strongest profile"), redirect to profile-based search
+        # rather than returning a misleading "I don't recognise X as a role".
         role_tokens = role_text.strip().lower().split()
         _loc_fillers = {"jobs", "job", "roles", "role", "in", "the", "a", "an", "for"}
-        if role_tokens and all(t in _LOCATION_TERMS or t in _loc_fillers for t in role_tokens):
-            # A location-only "role" means a profile-based search (e.g. "find UAE
-            # jobs that match my profile" extracts "UAE" as the role). Resolve the
-            # profile role properly — never blindly search saved target_roles[0].
+        _is_location_only = bool(role_tokens) and all(
+            t in _LOCATION_TERMS or t in _loc_fillers for t in role_tokens
+        )
+        _is_profile_self_ref = bool(_CV_PROFILE_REF_RE.search(role_text)) and not _clean_role_token(role_text)
+        if _is_location_only or _is_profile_self_ref:
+            # A location-only or self-referential "role" means a profile-based
+            # search (e.g. "find UAE jobs that match my profile" extracts "UAE"
+            # as the role; "find jobs for my strongest profile" extracts "my
+            # strongest profile"). Resolve the profile role properly — never
+            # blindly search saved target_roles[0].
             _lg_role, _lg_candidates, _lg_status = self._resolve_profile_search_role(profile)
             if _lg_status == "ambiguous":
                 _lg_choice = self._profile_role_choice_response(_lg_candidates, role_text)
                 self._append_chat(user_id, "assistant", _lg_choice["message"])
                 return _lg_choice
-            if _lg_status == "stale":
-                # Search-first: same as job_search_profile_match — if CV has a clear
-                # single-track suggestion list, search immediately with an explanatory note.
-                _lg_sf_sugg = self._generate_role_suggestions(
-                    self._as_list(self._profile_value(profile, "skills")),
-                    self._as_list(self._profile_value(profile, "certifications")),
-                    self._profile_value(profile, "years_experience"),
-                    self._as_list(self._profile_value(profile, "industries")),
-                    self._profile_value(profile, "current_role"),
+            if _lg_status in ("none", "stale"):
+                # Search-first: if the CV has a clear single-track suggestion
+                # list, search immediately with an explanatory note — or, for
+                # "none", falsely implying no CV exists via a generic "upload
+                # CV" prompt. Falls back to ask-to-choose when CV suggestions
+                # are empty or span 2+ families.
+                return self._profile_search_first_or_suggest(
+                    user_id, profile, role_text,
+                    _lg_role if _lg_status == "stale" else None,
+                    location=location, employment_type_filter=employment_type_filter,
                 )
-                _lg_sf_families = {
-                    self._role_family(s["label"])
-                    for s in _lg_sf_sugg if s.get("label")
-                }
-                if _lg_sf_sugg and len(_lg_sf_families) == 1:
-                    _lg_sf_top = _lg_sf_sugg[0]["label"]
-                    _lg_sf_resp = self._target_role_search_response(
-                        user_id, _lg_sf_top, profile,
-                        location=location, employment_type_filter=employment_type_filter,
-                        from_saved_profile=True,
-                    )
-                    _lg_sf_note = (
-                        f"Your saved role **{_lg_role}** doesn't match your current CV. "
-                        f"I searched for **{_lg_sf_top}** based on your skills instead."
-                    )
-                    _lg_sf_resp["message"] = (
-                        _lg_sf_note + "\n\n" + _lg_sf_resp.get("message", "")
-                    )
-                    _lg_sf_resp["stale_target_role"] = _lg_role
-                    self._append_chat(user_id, "assistant", _lg_sf_resp.get("message", ""))
-                    return _lg_sf_resp
-                _lg_sugg = self._handle_profile_role_suggestions(profile, role_text)
-                if _lg_role:
-                    _lg_sugg = {**_lg_sugg, "stale_target_role": _lg_role}
-                self._append_chat(user_id, "assistant", _lg_sugg.get("message", ""))
-                return _lg_sugg
             if _lg_status == "single":
                 return self._target_role_search_response(
                     user_id, _lg_role, profile,

@@ -118,6 +118,17 @@ class TestClassifiedRoleSearchLocationGuard(unittest.TestCase):
             )
         else:
             api._target_role_search_response = MagicMock()
+            # "none" status (no saved role) is now handled by the shared
+            # search-first-or-suggest helper (fix/profile-search-intent-routing).
+            # This hand-mocked API doesn't exercise the helper's real body, so
+            # stub it directly with the CV-aware "ask for a role" shape it
+            # produces when there's nothing to search.
+            api._profile_search_first_or_suggest = MagicMock(
+                return_value={
+                    "type": "clarification",
+                    "message": "What role are you looking for? I can search UAE jobs right away.",
+                }
+            )
 
         result = RicoChatAPI._classified_role_search(api, "user@test.com", role_text, profile)
         return result
