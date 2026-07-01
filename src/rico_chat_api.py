@@ -12021,23 +12021,37 @@ class RicoChatAPI:
             return {"type": "clarification", "message": msg}
 
         total = len(apps)
-        lines = [f"**Your applications ({total} total):**\n"]
+        if arabic:
+            lines = [f"**تقديماتك ({total} إجمالاً):**\n"]
+        else:
+            lines = [f"**Your applications ({total} total):**\n"]
         for app in apps[:10]:
             lines.append(self._format_application_line(app))
 
         if total > 10:
-            lines.append(f"\n_…and {total - 10} more. Open your **Applications** page to see all._")
+            if arabic:
+                lines.append(f"\n_…و{total - 10} أخرى. افتح صفحة **التقديمات** لعرض الجميع._")
+            else:
+                lines.append(f"\n_…and {total - 10} more. Open your **Applications** page to see all._")
 
         # Quick counts by status
         from collections import Counter
         counts = Counter(app.get("status", "unknown") for app in apps)
         summary_parts = []
-        if counts.get("applied"):
-            summary_parts.append(f"{counts['applied']} applied")
-        if counts.get("interview"):
-            summary_parts.append(f"{counts['interview']} at interview stage")
-        if counts.get("offer"):
-            summary_parts.append(f"{counts['offer']} with offers")
+        if arabic:
+            if counts.get("applied"):
+                summary_parts.append(f"{counts['applied']} مُقدَّمة")
+            if counts.get("interview"):
+                summary_parts.append(f"{counts['interview']} في مرحلة المقابلة")
+            if counts.get("offer"):
+                summary_parts.append(f"{counts['offer']} عروض")
+        else:
+            if counts.get("applied"):
+                summary_parts.append(f"{counts['applied']} applied")
+            if counts.get("interview"):
+                summary_parts.append(f"{counts['interview']} at interview stage")
+            if counts.get("offer"):
+                summary_parts.append(f"{counts['offer']} with offers")
         if summary_parts:
             lines.append("\n" + " · ".join(summary_parts))
 
@@ -12068,38 +12082,70 @@ class RicoChatAPI:
             self._append_chat(user_id, "assistant", msg)
             return {"type": "clarification", "message": msg}
 
-        lines = ["**Here's what I have on file for you:**\n"]
-        if cv_ok:
-            lines.append("📄 CV uploaded and parsed")
-        if target_roles:
-            role_display = ', '.join(target_roles[:3])
-            if cv_ok and not self._role_is_cv_aligned(profile, target_roles[0]):
-                lines.append(
-                    f"🎯 **Target roles:** {role_display} "
-                    f"*(may not match your CV — say \"suggest roles from my CV\" to update)*"
-                )
-            else:
-                lines.append(f"🎯 **Target roles:** {role_display}")
-        if cities:
-            lines.append(f"📍 **Preferred cities:** {', '.join(cities[:3])}")
-        if exp is not None:
-            try:
-                lines.append(f"🕐 **Years of experience:** {int(float(exp))}")
-            except (ValueError, TypeError):
-                lines.append(f"🕐 **Years of experience:** {exp}")
-        if industries:
-            lines.append(f"🏭 **Industries:** {', '.join(industries[:3])}")
-        if skills:
-            lines.append(f"💡 **Skills:** {', '.join(skills[:6])}")
-        if certs:
-            lines.append(f"🏅 **Certifications:** {', '.join(certs[:3])}")
-        if salary:
-            try:
-                lines.append(f"💰 **Salary expectation:** AED {int(float(salary)):,}/month")
-            except (ValueError, TypeError):
-                lines.append(f"💰 **Salary expectation:** AED {salary}")
-
-        lines.append("\nSay **'update my profile'** to change any of these.")
+        if arabic:
+            lines = ["**إليك ما لديّ في ملفك الشخصي:**\n"]
+            if cv_ok:
+                lines.append("📄 تم رفع السيرة الذاتية وتحليلها")
+            if target_roles:
+                role_display = ', '.join(target_roles[:3])
+                if cv_ok and not self._role_is_cv_aligned(profile, target_roles[0]):
+                    lines.append(
+                        f"🎯 **المسميات المستهدفة:** {role_display} "
+                        f"*(قد لا تتطابق مع سيرتك — قل \"اقترح أدواراً من سيرتي\" للتحديث)*"
+                    )
+                else:
+                    lines.append(f"🎯 **المسميات المستهدفة:** {role_display}")
+            if cities:
+                lines.append(f"📍 **المدن المفضلة:** {', '.join(cities[:3])}")
+            if exp is not None:
+                try:
+                    lines.append(f"🕐 **سنوات الخبرة:** {int(float(exp))}")
+                except (ValueError, TypeError):
+                    lines.append(f"🕐 **سنوات الخبرة:** {exp}")
+            if industries:
+                lines.append(f"🏭 **القطاعات:** {', '.join(industries[:3])}")
+            if skills:
+                lines.append(f"💡 **المهارات:** {', '.join(skills[:6])}")
+            if certs:
+                lines.append(f"🏅 **الشهادات:** {', '.join(certs[:3])}")
+            if salary:
+                try:
+                    lines.append(f"💰 **الراتب المتوقع:** {int(float(salary)):,} درهم/شهر")
+                except (ValueError, TypeError):
+                    lines.append(f"💰 **الراتب المتوقع:** {salary} درهم")
+            lines.append("\nقل **'حدّث ملفي'** لتغيير أي من هذه المعلومات.")
+        else:
+            lines = ["**Here's what I have on file for you:**\n"]
+            if cv_ok:
+                lines.append("📄 CV uploaded and parsed")
+            if target_roles:
+                role_display = ', '.join(target_roles[:3])
+                if cv_ok and not self._role_is_cv_aligned(profile, target_roles[0]):
+                    lines.append(
+                        f"🎯 **Target roles:** {role_display} "
+                        f"*(may not match your CV — say \"suggest roles from my CV\" to update)*"
+                    )
+                else:
+                    lines.append(f"🎯 **Target roles:** {role_display}")
+            if cities:
+                lines.append(f"📍 **Preferred cities:** {', '.join(cities[:3])}")
+            if exp is not None:
+                try:
+                    lines.append(f"🕐 **Years of experience:** {int(float(exp))}")
+                except (ValueError, TypeError):
+                    lines.append(f"🕐 **Years of experience:** {exp}")
+            if industries:
+                lines.append(f"🏭 **Industries:** {', '.join(industries[:3])}")
+            if skills:
+                lines.append(f"💡 **Skills:** {', '.join(skills[:6])}")
+            if certs:
+                lines.append(f"🏅 **Certifications:** {', '.join(certs[:3])}")
+            if salary:
+                try:
+                    lines.append(f"💰 **Salary expectation:** AED {int(float(salary)):,}/month")
+                except (ValueError, TypeError):
+                    lines.append(f"💰 **Salary expectation:** AED {salary}")
+            lines.append("\nSay **'update my profile'** to change any of these.")
         msg = "\n".join(lines)
         self._append_chat(user_id, "assistant", msg)
         return {"type": "profile_summary", "message": msg}
@@ -12377,19 +12423,28 @@ class RicoChatAPI:
             }
 
         app = matches[0]
-        title   = app.get("title") or app.get("job_title") or "Unknown role"
+        title   = app.get("title") or app.get("job_title") or ("دور غير معروف" if arabic else "Unknown role")
         company = app.get("company") or app.get("employer_name") or company_query
         status  = (app.get("status") or "applied").replace("_", " ").title()
         applied = app.get("applied_at") or app.get("created_at") or ""
         date_str = str(applied)[:10] if applied else ""
 
-        lines = [f"✅ **Yes — you've applied to {company}**\n"]
-        lines.append(f"- **Role:** {title}")
-        lines.append(f"- **Status:** {status}")
-        if date_str:
-            lines.append(f"- **Applied on:** {date_str}")
-        if len(matches) > 1:
-            lines.append(f"\n_{len(matches)} applications found for {company_query}. Showing the most recent._")
+        if arabic:
+            lines = [f"✅ **نعم — لقد تقدمت إلى {company}**\n"]
+            lines.append(f"- **المسمى:** {title}")
+            lines.append(f"- **الحالة:** {status}")
+            if date_str:
+                lines.append(f"- **تاريخ التقديم:** {date_str}")
+            if len(matches) > 1:
+                lines.append(f"\n_وُجد {len(matches)} طلبات لـ {company_query}. يُعرض الأحدث._")
+        else:
+            lines = [f"✅ **Yes — you've applied to {company}**\n"]
+            lines.append(f"- **Role:** {title}")
+            lines.append(f"- **Status:** {status}")
+            if date_str:
+                lines.append(f"- **Applied on:** {date_str}")
+            if len(matches) > 1:
+                lines.append(f"\n_{len(matches)} applications found for {company_query}. Showing the most recent._")
 
         msg = "\n".join(lines)
         self._append_chat(user_id, "assistant", msg)
