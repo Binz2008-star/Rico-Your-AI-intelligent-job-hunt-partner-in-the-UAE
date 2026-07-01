@@ -6415,7 +6415,7 @@ class RicoChatAPI:
         # → deterministic pitch built from profile fields; no AI token spend.
         if _PROFILE_PITCH_RE.search(message):
             return self._finalize(
-                self._handle_profile_pitch(user_id, profile),
+                self._handle_profile_pitch(user_id, profile, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -11963,9 +11963,9 @@ class RicoChatAPI:
 
     # ── Profile pitch / bio ─────────────────────────────────────────────────────
 
-    def _handle_profile_pitch(self, user_id: str, profile: Any) -> dict[str, Any]:
+    def _handle_profile_pitch(self, user_id: str, profile: Any, message: str = "") -> dict[str, Any]:
         """Build a 2-3 sentence professional pitch from profile fields."""
-        arabic = self._is_arabic_text("")
+        arabic = self._is_arabic_text(message)
         target_roles = self._as_list(self._profile_value(profile, "target_roles"))
         skills = self._as_list(self._profile_value(profile, "skills"))[:4]
         exp = self._profile_value(profile, "years_experience")
@@ -11975,6 +11975,8 @@ class RicoChatAPI:
 
         if not target_roles and not skills:
             msg = (
+                "أحتاج إلى مزيد من بيانات ملفك لكتابة نبذة. ارفع سيرتك الذاتية أو أخبرني بمجال عملك ومهاراتك أولاً."
+                if arabic else
                 "I need more profile data to write a pitch. "
                 "Upload your CV or tell me your target role and key skills first."
             )
