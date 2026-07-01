@@ -820,8 +820,11 @@ _NOT_CODING_RE = re.compile(
     re.IGNORECASE,
 )
 # Reference to the user's CV / profile as the search basis (T5).
+# "my\s+\w+\s+(?:cv|resume|profile)" additionally covers "my strongest profile",
+# "my current CV", etc. — a single adjective/qualifier between "my" and the noun.
 _CV_PROFILE_REF_RE = re.compile(
-    r"\b(?:my\s+cv|my\s+resume|my\s+profile|based\s+on\s+my|match(?:es|ing)?\s+my|"
+    r"\b(?:my\s+cv|my\s+resume|my\s+profile|my\s+\w+\s+(?:cv|resume|profile)|"
+    r"based\s+on\s+my|match(?:es|ing)?\s+my|"
     r"from\s+my\s+(?:cv|resume|profile)|for\s+me)\b",
     re.IGNORECASE,
 )
@@ -1848,6 +1851,29 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
             action="show",
             target_route="/applications",
         )
+
+    # 4a-2. CV/profile-based search with no distinct explicit role — "find jobs
+    # from my CV", "find UAE jobs that match my strongest CV profile", "find
+    # jobs for my strongest profile". Gated on _JOB_SEARCH_EXPLICIT_RE also
+    # matching (i.e. this message would otherwise become job_search_explicit)
+    # so this never fires on unrelated CV prose. When the role text
+    # job_search_explicit would extract is garbage — empty, a bare location
+    # ("UAE"), or itself just a CV/profile self-reference ("my strongest
+    # profile") — defer to profile_match instead of letting job_search_explicit
+    # search that garbage text as a literal role. A genuine role mentioned
+    # alongside a CV reference ("find HSE Manager jobs that match my CV")
+    # still takes the explicit-role path below, since _clean_role_token keeps it.
+    if (
+        has_cv_profile
+        and _JOB_SEARCH_EXPLICIT_RE.search(text)
+        and _CV_PROFILE_REF_RE.search(text)
+    ):
+        _pm_for_m = _JOB_SEARCH_FOR_ROLE_RE.search(text)
+        _pm_tentative = (
+            _pm_for_m.group(1).strip() if _pm_for_m else _extract_role_before_noun(text)
+        )
+        if not _pm_tentative or not _clean_role_token(_pm_tentative):
+            return IntentResult("job_search_profile_match", 0.85, "regex")
 
     # Check explicit job search FIRST (has job/role/position keyword)
     if _JOB_SEARCH_EXPLICIT_RE.search(text):
