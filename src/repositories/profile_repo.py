@@ -79,6 +79,7 @@ _BOOLEAN_SETTINGS = {
     "can_send_follow_up_reminders",
     "can_create_weekly_report",
     "can_receive_telegram_notifications",
+    "can_receive_email_alerts",
 }
 
 
@@ -131,6 +132,8 @@ def _bundle_to_profile(bundle: dict[str, Any]) -> RicoProfile:
         can_send_follow_up_reminders=sdata.get("can_send_follow_up_reminders", True),
         can_create_weekly_report=sdata.get("can_create_weekly_report", True),
         can_receive_telegram_notifications=sdata.get("can_receive_telegram_notifications", False),
+        can_receive_email_alerts=sdata.get("can_receive_email_alerts", False),
+        email_alert_frequency=sdata.get("email_alert_frequency", "daily"),
     )
 
     # Build profile with proper type conversion

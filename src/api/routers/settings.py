@@ -106,3 +106,47 @@ def telegram_status(user_id: str = Depends(get_current_user_id)) -> Dict[str, An
     profile = get_profile(user_id)
     tg_username = getattr(profile, "telegram_username", None) if profile else None
     return {"opted_in": is_opted_in(user_id), "telegram_username": tg_username}
+
+
+# ── Email job-alert preferences ──────────────────────────────────────────────
+
+class EmailOptInRequest(BaseModel):
+    frequency: Optional[str] = None  # "daily" | "weekly"; defaults to daily
+
+
+class EmailStatusResponse(BaseModel):
+    opted_in: bool
+    frequency: str
+
+
+@router.post("/email/opt-in", response_model=EmailStatusResponse)
+def email_opt_in(
+    body: EmailOptInRequest,
+    user_id: str = Depends(get_current_user_id),
+) -> Dict[str, Any]:
+    """Enable email job-alert notifications for the authenticated user."""
+    from src.services.email_notifications import opt_in, is_opted_in, get_frequency
+
+    ok = opt_in(user_id=user_id, frequency=body.frequency)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to enable email alerts.")
+    return {"opted_in": is_opted_in(user_id), "frequency": get_frequency(user_id)}
+
+
+@router.post("/email/opt-out", response_model=EmailStatusResponse)
+def email_opt_out(user_id: str = Depends(get_current_user_id)) -> Dict[str, Any]:
+    """Disable email job-alert notifications for the authenticated user."""
+    from src.services.email_notifications import opt_out, is_opted_in, get_frequency
+
+    ok = opt_out(user_id=user_id)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to disable email alerts.")
+    return {"opted_in": is_opted_in(user_id), "frequency": get_frequency(user_id)}
+
+
+@router.get("/email/status", response_model=EmailStatusResponse)
+def email_status(user_id: str = Depends(get_current_user_id)) -> Dict[str, Any]:
+    """Return the current email job-alert opt-in status and cadence."""
+    from src.services.email_notifications import is_opted_in, get_frequency
+
+    return {"opted_in": is_opted_in(user_id), "frequency": get_frequency(user_id)}
