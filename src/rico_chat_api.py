@@ -6000,7 +6000,7 @@ class RicoChatAPI:
         # ── Pending pipeline reset confirmation (P2-B) ───────────────────────
         # Must run before the pipeline reset guard so a confirmation reply in the
         # 2-minute window executes the action instead of re-asking.
-        _pending_reset = self._handle_pending_pipeline_reset(user_id, message)
+        _pending_reset = self._handle_pending_pipeline_reset(user_id, message, profile)
         if _pending_reset is not None:
             return self._finalize(_pending_reset, self.SOURCE_KEYWORD, profile=profile)
 
@@ -11291,7 +11291,7 @@ class RicoChatAPI:
         }
 
     def _handle_pending_pipeline_reset(
-        self, user_id: str, message: str
+        self, user_id: str, message: str, profile: Any = None,
     ) -> dict[str, Any] | None:
         """Execute or cancel a pending pipeline reset based on the user's choice.
 
@@ -11382,6 +11382,29 @@ class RicoChatAPI:
                 "intent": "pipeline_reset",
                 "message": msg,
             }
+
+        # Latest user intent cancels a stale, low-risk pending flow: this
+        # confirmation never executes a direct mutation either way (archive
+        # and delete both just redirect to /applications), so if the message
+        # is not an attempt to answer it and clearly starts something else,
+        # drop the pending state and let normal dispatch handle the new
+        # request instead of trapping the user in an endless
+        # archive/delete/cancel re-prompt.
+        try:
+            _new_intent = classify_intent(
+                message, has_cv_profile=self._has_cv_profile(profile)
+            )
+        except Exception:
+            _new_intent = None
+        if (
+            _new_intent is not None
+            and _new_intent.confidence >= 0.8
+            and _new_intent.legacy_intent not in (
+                None, "unknown", "nonsense", "acknowledgement", "smalltalk", "help",
+            )
+        ):
+            _clear()
+            return None
 
         # Ambiguous — re-prompt
         if arabic:

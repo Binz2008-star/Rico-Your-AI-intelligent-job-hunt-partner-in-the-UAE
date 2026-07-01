@@ -261,3 +261,86 @@ class TestConfirmationFlowRequiresExplicitChoice:
 
         result = api._handle_pending_pipeline_reset("u@example.com", "archive")
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Contextual Command Resolver — latest user intent cancels a stale, low-risk
+# pending pipeline-reset flow, instead of trapping the user in an endless
+# "please type archive/delete/cancel" re-prompt loop.
+# ---------------------------------------------------------------------------
+
+class TestLatestIntentCancelsStalePendingReset:
+    """A confident, distinct new request during a pending reset confirmation
+    must drop the pending state and let normal dispatch handle it — never
+    re-prompt over the user's new intent. Low-confidence/ambiguous replies
+    must still re-prompt as before (regression guard)."""
+
+    def _api_with_pending(self):
+        from src.rico_chat_api import RicoChatAPI
+        import time
+
+        api = RicoChatAPI()
+        api.memory = MagicMock()
+        pending = {"pending": True, "expires_at": int(time.time()) + 120}
+        api.memory.get_context.side_effect = lambda uid, key: (
+            pending if key == RicoChatAPI._PENDING_PIPELINE_RESET_KEY else None
+        )
+        return api
+
+    def test_new_confident_job_search_cancels_pending_reset(self):
+        """User ignores the archive/delete/cancel prompt and asks for something
+        else entirely — the pending reset must be dropped, not re-prompted."""
+        api = self._api_with_pending()
+
+        with patch.object(api, "_append_chat") as mock_append, \
+             patch("src.rico_chat_api.upsert_profile") as mock_upsert:
+            result = api._handle_pending_pipeline_reset(
+                "u@example.com", "find me HSE Manager jobs in Dubai"
+            )
+
+        assert result is None, "A confident new intent must return None, not re-prompt"
+        mock_upsert.assert_not_called()
+        # The stale prompt must not be re-sent for this message.
+        for call in mock_append.call_args_list:
+            assert "archive" not in str(call).lower()
+
+        # Pending state must actually be cleared, not just skipped this turn.
+        api.memory.set_context.assert_called_with(
+            "u@example.com", api._PENDING_PIPELINE_RESET_KEY, {}
+        )
+
+    def test_ambiguous_reply_still_reprompts(self):
+        """A low-confidence/ambiguous reply must still re-prompt — this is not
+        a blanket bypass, only confident distinct intents cancel the pending flow."""
+        api = self._api_with_pending()
+
+        with patch.object(api, "_append_chat"):
+            result = api._handle_pending_pipeline_reset("u@example.com", "hmm not sure")
+
+        assert result is not None
+        assert result["type"] == "pipeline_reset_confirm"
+        assert result["next_action"] == "await_confirmation"
+
+    def test_smalltalk_reply_still_reprompts(self):
+        """Smalltalk/acknowledgement must not count as a distinct new intent —
+        it is not 'executable immediately', so it still re-prompts."""
+        api = self._api_with_pending()
+
+        with patch.object(api, "_append_chat"):
+            result = api._handle_pending_pipeline_reset("u@example.com", "ok thanks")
+
+        assert result is not None
+        assert result["type"] == "pipeline_reset_confirm"
+
+    def test_archive_choice_unaffected_by_new_interrupt_check(self):
+        """Regression guard: the interrupt check must not shadow the existing
+        archive/delete/cancel answers, which are checked first."""
+        api = self._api_with_pending()
+
+        with patch.object(api, "_append_chat"), \
+             patch("src.rico_chat_api.upsert_profile") as mock_upsert:
+            result = api._handle_pending_pipeline_reset("u@example.com", "archive")
+
+        assert result is not None
+        assert result["type"] == "pipeline_reset_archive"
+        mock_upsert.assert_not_called()
