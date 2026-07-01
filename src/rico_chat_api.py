@@ -670,19 +670,6 @@ _MARKET_PULSE_RE = re.compile(
 )
 
 # Notice period / availability declaration or query.
-# "my notice period is 30 days", "I'm available immediately", "I can join in 2 weeks",
-# "what is my notice period?", "update my availability to 1 month".
-_NOTICE_PERIOD_RE = re.compile(
-    r"\b(?:my\s+)?notice\s+period\s+(?:is|was|will\s+be|=)\s*.{1,30}"
-    r"|\bI(?:'m|\s+am)\s+available\s+(?:immediately|now|from|in\s+\d)"
-    r"|\bI\s+can\s+(?:join|start)\s+(?:in|within|immediately|next)\b"
-    r"|\b(?:update|set|change)\s+(?:my\s+)?(?:notice\s+period|availability)\b"
-    r"|\bwhat(?:'s|\s+is)\s+my\s+notice\s+period\b"
-    r"|\b(?:available\s+immediately|immediate\s+joiner|immediate\s+availability)\b"
-    r"|\b(?:فترة\s+الإشعار|الإتاحة)\s*(?:هي|لدي|الخاصة\s+بي)?\b",
-    re.IGNORECASE,
-)
-
 # Visa / work permit status declaration or query.
 # "I'm on a spouse visa", "I have a valid work permit", "do I need a visa?",
 # "update my visa status to employment visa", "my visa is expiring soon".
@@ -1280,10 +1267,20 @@ _PROBATION_RULES_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Termination notice period in UAE — "how much notice do I need to give?",
-# "notice period UAE", "can my employer fire me without notice?".
+# Notice period — personal declarations, queries, and UAE law information.
+# Covers: "my notice period is 30 days", "I'm available immediately",
+# "how much notice do I need to give?", "notice period UAE",
+# "can my employer fire me without notice?".
 _NOTICE_PERIOD_RE = re.compile(
-    r"\b(?:how\s+(?:much|long\s+(?:a?\s+)?is\s+(?:the\s+)?|many\s+days\s+(?:is\s+)?)\s*notice\s+(?:do\s+I\s+(?:need\s+to\s+give|have\s+to\s+give|need)|period|must\s+I\s+give))\b"
+    # Personal declarations
+    r"\b(?:my\s+)?notice\s+period\s+(?:is|was|will\s+be|=)\s*.{1,30}"
+    r"|\bI(?:'m|\s+am)\s+available\s+(?:immediately|now|from|in\s+\d)"
+    r"|\bI\s+can\s+(?:join|start)\s+(?:in|within|immediately|next)\b"
+    r"|\b(?:update|set|change)\s+(?:my\s+)?(?:notice\s+period|availability)\b"
+    r"|\b(?:available\s+immediately|immediate\s+joiner|immediate\s+availability)\b"
+    r"|\b(?:فترة\s+الإشعار|الإتاحة)\s*(?:هي|لدي|الخاصة\s+بي)?\b"
+    # Informational queries about UAE notice period law
+    r"|\b(?:how\s+(?:much|long\s+(?:a?\s+)?is\s+(?:the\s+)?|many\s+days\s+(?:is\s+)?)\s*notice\s+(?:do\s+I\s+(?:need\s+to\s+give|have\s+to\s+give|need)|period|must\s+I\s+give))\b"
     r"|\b(?:what\s+(?:is|are|'s)\s+(?:the\s+)?(?:my\s+)?notice\s+period(?:\s+(?:in\s+(?:UAE|Dubai)|UAE|Dubai|rules?|law|requirement|for\s+resignation|for\s+termination))?)\b"
     r"|\b(?:notice\s+period\s+(?:in\s+(?:UAE|Dubai)|UAE|Dubai|rules?|law|requirement|for\s+resignation|for\s+termination))\b"
     r"|\b(?:can\s+(?:my\s+)?(?:employer|company|they)\s+(?:fire|dismiss|terminate|let\s+me\s+go)\s+(?:me\s+)?(?:without|with\s+no)\s+notice)\b"
@@ -13533,70 +13530,6 @@ class RicoChatAPI:
             "message": msg,
         }
 
-    def _handle_notice_period(
-        self, user_id: str, profile: Any, message: str
-    ) -> dict[str, Any]:
-        """Handle notice period declarations and queries.
-
-        Detects: "my notice period is 30 days", "I'm available immediately",
-        "what is my notice period?", "update my notice period to 1 month".
-        """
-        import re as _re
-
-        arabic = self._is_arabic_text(message)
-
-        # Is this a query (read) or a declaration (write)?
-        is_query = bool(_re.search(
-            r"\bwhat(?:'s|\s+is)\s+my\s+notice\s+period\b", message, _re.IGNORECASE
-        ))
-
-        if is_query:
-            current = self._profile_value(profile, "notice_period") or ""
-            if current:
-                msg = (
-                    f"فترة الإشعار المسجلة لديك هي: **{current}**."
-                    if arabic else
-                    f"Your notice period is set to: **{current}**."
-                )
-            else:
-                msg = (
-                    "لم تُحدّد فترة إشعار بعد. أخبرني بها، مثلاً: 'فترة إشعاري شهر واحد'."
-                    if arabic else
-                    "You haven't set a notice period yet. Tell me — e.g. 'my notice period is 30 days'."
-                )
-            self._append_chat(user_id, "assistant", msg)
-            return {"type": "notice_period_readback", "notice_period": current, "message": msg}
-
-        # Parse the declared value
-        _IMMEDIATELY = _re.search(
-            r"\b(?:immediately|now|right\s+away|متاح\s+الآن|فوراً)\b", message, _re.IGNORECASE
-        )
-        if _IMMEDIATELY or _re.search(r"\bavailable\s+immediately\b|\bimmediate\s+joiner\b", message, _re.IGNORECASE):
-            value = "Immediate"
-        else:
-            _val_m = _re.search(
-                r"(?:notice\s+period\s+(?:is|was|=)|join\s+in|start\s+in|available\s+(?:in|from|within))\s*"
-                r"(\d+\s*(?:day|week|month|year)s?|immediately|one|two|three|four)\b",
-                message, _re.IGNORECASE,
-            )
-            value = _val_m.group(1).strip().title() if _val_m else ""
-
-        if value:
-            upsert_profile(user_id=user_id, updates={"notice_period": value})
-            msg = (
-                f"تم تحديث فترة الإشعار إلى: **{value}**. سيظهر ذلك في طلباتك القادمة."
-                if arabic else
-                f"Notice period updated to **{value}**. This will be included in your applications."
-            )
-        else:
-            msg = (
-                "أخبرني بفترة الإشعار، مثلاً: '30 يوماً' أو 'شهر واحد' أو 'متاح فوراً'."
-                if arabic else
-                "What's your notice period? E.g. '30 days', '1 month', or 'immediately available'."
-            )
-        self._append_chat(user_id, "assistant", msg)
-        return {"type": "notice_period_update", "notice_period": value or None, "message": msg}
-
     def _handle_visa_status(
         self, user_id: str, profile: Any, message: str
     ) -> dict[str, Any]:
@@ -16440,7 +16373,54 @@ class RicoChatAPI:
     # ── Termination notice period ─────────────────────────────────────────────────
 
     def _handle_notice_period(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
+        import re as _re
         arabic = self._is_arabic_text(message)
+
+        # ── Personal query: "what is my notice period?" ──────────────────────
+        is_query = bool(_re.search(r"\bwhat(?:'s|\s+is)\s+my\s+notice\s+period\b", message, _re.IGNORECASE))
+        if is_query:
+            current = self._profile_value(profile, "notice_period") or ""
+            if current:
+                msg = (
+                    f"فترة الإشعار المسجلة لديك هي: **{current}**."
+                    if arabic else
+                    f"Your notice period is set to: **{current}**."
+                )
+            else:
+                msg = (
+                    "لم تُحدّد فترة إشعار بعد. أخبرني بها، مثلاً: 'فترة إشعاري شهر واحد'."
+                    if arabic else
+                    "You haven't set a notice period yet. Tell me — e.g. 'my notice period is 30 days'."
+                )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "notice_period_readback", "notice_period": current, "message": msg}
+
+        # ── Personal declaration: "my notice period is 30 days" ─────────────
+        _IMMEDIATELY = _re.search(
+            r"\b(?:immediately|now|right\s+away|متاح\s+الآن|فوراً)\b", message, _re.IGNORECASE
+        )
+        if _IMMEDIATELY or _re.search(r"\bavailable\s+immediately\b|\bimmediate\s+joiner\b", message, _re.IGNORECASE):
+            value = "Immediate"
+        else:
+            _val_m = _re.search(
+                r"(?:notice\s+period\s+(?:is|was|=)|join\s+in|start\s+in|available\s+(?:in|from|within))\s*"
+                r"(\d+\s*(?:day|week|month|year)s?|immediately|one|two|three|four)\b",
+                message, _re.IGNORECASE,
+            )
+            value = _val_m.group(1).strip().title() if _val_m else ""
+
+        if value:
+            from src.repositories.profile_repo import upsert_profile
+            upsert_profile(user_id=user_id, updates={"notice_period": value})
+            msg = (
+                f"تم تحديث فترة الإشعار إلى: **{value}**. سيظهر ذلك في طلباتك القادمة."
+                if arabic else
+                f"Notice period updated to **{value}**. This will be included in your applications."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "notice_period_update", "notice_period": value, "message": msg}
+
+        # ── Informational: UAE notice period law ─────────────────────────────
         if arabic:
             msg = (
                 "## مدة الإخطار (Notice Period) في الإمارات\n\n"
