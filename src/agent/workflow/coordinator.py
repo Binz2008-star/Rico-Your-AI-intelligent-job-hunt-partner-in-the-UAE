@@ -58,10 +58,11 @@ class WorkflowResult:
     """Result of workflow execution."""
     success: bool
     intent: IntentType
-    message: str
+    message: Optional[str]
     data: Dict[str, Any] = field(default_factory=dict)
     requires_confirmation: bool = False
     confirmation_prompt: Optional[str] = None
+    confirmation_token: Optional[str] = None
     permission_level: PermissionLevel = PermissionLevel.SAFE
     execution_time_ms: int = 0
     learning_signals_logged: bool = False
@@ -579,7 +580,7 @@ class WorkflowCoordinator:
                 success=tool_result.success,
                 intent=IntentType.GET_STATS,
                 data=tool_result.data,
-                message=tool_result.error if not tool_result.success else None,
+                message=tool_result.error if not tool_result.success else "Stats retrieved",
                 execution_time_ms=tool_result.execution_time_ms,
             )
         except Exception as exc:
