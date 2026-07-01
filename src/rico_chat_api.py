@@ -17684,6 +17684,7 @@ class RicoChatAPI:
         message: str = "",
     ) -> dict[str, Any]:
         """Return structured role-broadening options when live search returns no matches."""
+        arabic = self._is_arabic_text(message)
         suggestions = self._generate_role_suggestions(
             self._as_list(self._profile_value(profile, "skills")),
             self._as_list(self._profile_value(profile, "certifications")),
@@ -17701,16 +17702,14 @@ class RicoChatAPI:
         if searched_roles:
             alt_options.append({
                 "action": "broaden_search",
-                "label": f"Broaden search for {searched_roles[0]}",
+                "label": (f"توسيع البحث عن {searched_roles[0]}" if arabic else f"Broaden search for {searched_roles[0]}"),
                 "message": f"find {searched_roles[0]} jobs in UAE",
             })
         alt_options.append({
             "action": "show_all_suggestions",
-            "label": "Show more roles from my CV",
+            "label": ("عرض المزيد من الأدوار من سيرتي الذاتية" if arabic else "Show more roles from my CV"),
             "message": "show roles from my cv",
         })
-
-        arabic = self._is_arabic_text(message)
         searched_label = ", ".join(searched_roles[:2]) if searched_roles else (
             "دورك المستهدف" if arabic else "your target role"
         )
