@@ -223,24 +223,42 @@ def write_audit_log(
 
 # ── Recent log query (for inspection / tests) ─────────────────────────────────
 
-def get_recent(limit: int = 20) -> list:
-    """Return recent audit log entries from DB, or [] when DB is unavailable."""
+def get_recent(limit: int = 20, user_id: str | None = None) -> list:
+    """Return recent audit log entries from DB, or [] when DB is unavailable.
+
+    When *user_id* is provided only rows for that user are returned, which is
+    far more efficient than fetching global rows and filtering in Python.
+    """
     conn = get_db_connection()
     if not conn:
         return []
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT action_id, action_type, user_email, job_title,
-                       timestamp, result_status, duration_ms, failure_reason,
-                       event_type, data
-                FROM action_audit_log
-                ORDER BY timestamp DESC
-                LIMIT %s
-                """,
-                (limit,),
-            )
+            if user_id:
+                cur.execute(
+                    """
+                    SELECT action_id, action_type, user_email, job_title,
+                           timestamp, result_status, duration_ms, failure_reason,
+                           event_type, data
+                    FROM action_audit_log
+                    WHERE user_email = %s
+                    ORDER BY timestamp DESC
+                    LIMIT %s
+                    """,
+                    (user_id, limit),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT action_id, action_type, user_email, job_title,
+                           timestamp, result_status, duration_ms, failure_reason,
+                           event_type, data
+                    FROM action_audit_log
+                    ORDER BY timestamp DESC
+                    LIMIT %s
+                    """,
+                    (limit,),
+                )
             rows = cur.fetchall()
         return [
             {

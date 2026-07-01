@@ -532,6 +532,7 @@ class ProfileContextResolver:
             week_ago = datetime.now(_UTC) - timedelta(days=7)
             recent_actions = get_recent(
                 limit=200,
+                user_id=canonical_user_id,
             )
 
             # Filter actions for this user within the last 7 days
@@ -660,10 +661,9 @@ class ProfileContextResolver:
                 }
 
             # Query audit logs for profile_question events for this user only
-            audits = get_recent(limit=100)
+            audits = get_recent(limit=100, user_id=canonical_user_id)
             for audit in audits:
-                if (audit.get("event_type") == "profile_question"
-                        and audit.get("user_email") == canonical_user_id):
+                if audit.get("event_type") == "profile_question":
                     field = audit.get("data", {}).get("field_name")
                     timestamp = audit.get("timestamp")
                     if field and timestamp:
@@ -678,8 +678,8 @@ class ProfileContextResolver:
         """Load behavioral signals from action repository."""
         signals = {}
         try:
-            recent_actions = get_recent(limit=100)
-            user_actions = [a for a in recent_actions if a.get("user_email") == canonical_user_id]
+            recent_actions = get_recent(limit=100, user_id=canonical_user_id)
+            user_actions = recent_actions
 
             signals["total_actions"] = len(user_actions)
             signals["applied_count"] = len([a for a in user_actions if a.get("action_type") == "apply"])
