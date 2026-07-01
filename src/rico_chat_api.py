@@ -2113,6 +2113,25 @@ class RicoChatAPI:
                         "type": _last_doc.get("display_label") or _last_doc.get("document_type"),
                         "transcribed_text": str(_doc_text)[:4000],
                     }
+                else:
+                    # Non-CV classified documents (offer letter, contract, cover letter, etc.)
+                    # are stored with metadata only — no extracted text. Inject the metadata
+                    # so the AI can respond contextually to follow-up queries like
+                    # "can you review it?" or "summarize it" without full content.
+                    _meta_doc = (self._get_recent_context(user_id) or {}).get(
+                        "last_uploaded_document"
+                    )
+                    if isinstance(_meta_doc, dict) and _meta_doc.get("document_type"):
+                        _label = _meta_doc.get("display_label") or _meta_doc.get("document_type")
+                        _fname = _meta_doc.get("filename", "")
+                        _conf = _meta_doc.get("confidence")
+                        _conf_str = f" — confidence {round(float(_conf) * 100)}%" if _conf else ""
+                        ctx["last_uploaded_document"] = {
+                            "type": _label,
+                            "filename": _fname,
+                            "note": f"[Uploaded document: {_label} ({_fname}){_conf_str}. "
+                                    "No full text available — describe based on document type.]",
+                        }
             except Exception:
                 pass
 
