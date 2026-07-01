@@ -799,3 +799,40 @@ def get_learning_repository() -> LearningRepository:
             if _repo is None:
                 _repo = LearningRepository()
     return _repo
+
+
+# ── Module-level convenience wrappers ─────────────────────────────────────────
+# These are referenced by src/agent/coordinator.py and
+# src/agent/workflow/coordinator.py.
+
+def record_learning_signal(
+    canonical_user_id: str,
+    signal_type: str,
+    signal_value: str,
+    signal_weight: float = 0.5,
+    source: str = "job_action",
+    metadata: dict[str, Any] | None = None,
+) -> bool:
+    """Module-level wrapper for LearningRepository.record_signal()."""
+    return get_learning_repository().record_signal(
+        canonical_user_id=canonical_user_id,
+        signal_type=signal_type,
+        signal_value=signal_value,
+        signal_weight=signal_weight,
+        source=source,
+        metadata=metadata,
+    )
+
+
+def get_learning_profile(canonical_user_id: str, apply_decay: bool = True) -> LearningProfile:
+    """Module-level wrapper for LearningRepository.get_learning_profile()."""
+    return get_learning_repository().get_learning_profile(canonical_user_id, apply_decay=apply_decay)
+
+
+def infer_signals_from_job_action(
+    canonical_user_id: str,
+    action_type: str,
+    job: dict[str, Any],
+) -> None:
+    """Module-level wrapper for LearningRepository.infer_signals_from_job_action()."""
+    get_learning_repository().infer_signals_from_job_action(canonical_user_id, action_type, job)
