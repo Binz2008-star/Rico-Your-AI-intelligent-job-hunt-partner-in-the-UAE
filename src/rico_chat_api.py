@@ -12541,14 +12541,18 @@ class RicoChatAPI:
             f"Found **{len(top)} opening{'s' if len(top) != 1 else ''}** at **{company}** in the UAE:"
         )
         lines = [header, ""]
+        apply_label = "تقدّم" if arabic else "Apply"
         for i, job in enumerate(top, 1):
             title   = job.get("title") or job.get("job_title") or "Role"
             loc     = job.get("location") or job.get("job_city") or "UAE"
             url     = job.get("apply_url") or job.get("job_apply_link") or ""
-            lines.append(f"{i}. **{title}** — {loc}" + (f" ([Apply]({url}))" if url else ""))
+            lines.append(f"{i}. **{title}** — {loc}" + (f" ([{apply_label}]({url}))" if url else ""))
 
         if len(matches) > 5:
-            lines.append(f"\n_…and {len(matches) - 5} more. Say 'show me more' to see them._")
+            if arabic:
+                lines.append(f"\n_…و{len(matches) - 5} نتيجة أخرى. قل 'أرني المزيد' لعرضها._")
+            else:
+                lines.append(f"\n_…and {len(matches) - 5} more. Say 'show me more' to see them._")
 
         msg = "\n".join(lines)
         self._append_chat(user_id, "assistant", msg)
@@ -12652,6 +12656,8 @@ class RicoChatAPI:
             f"Found **{len(top)} {role} role{'s' if len(top) != 1 else ''}**"
             + (f" paying above {threshold_label}" if threshold_label else "") + ":"
         )
+        at_word = " في " if arabic else " at "
+        apply_label = "تقدّم" if arabic else "Apply"
         lines = [header, ""]
         for i, job in enumerate(top, 1):
             title   = job.get("title") or job.get("job_title") or "Role"
@@ -12659,19 +12665,24 @@ class RicoChatAPI:
             loc     = job.get("location") or job.get("job_city") or "UAE"
             sal     = job.get("salary_string") or ""
             url     = job.get("apply_url") or job.get("job_apply_link") or ""
-            line = f"{i}. **{title}**" + (f" at {company}" if company else "") + f" — {loc}"
+            line = f"{i}. **{title}**" + (f"{at_word}{company}" if company else "") + f" — {loc}"
             if sal:
                 line += f" | {sal}"
             if url:
-                line += f" ([Apply]({url}))"
+                line += f" ([{apply_label}]({url}))"
             lines.append(line)
 
         if min_salary and len(salary_filtered) < len(all_matches):
-            lines.append(
-                f"\n_Salary data isn't always available — showing {len(top)} of {len(all_matches)} "
-                f"results (some may not display salary). All {len(all_matches)} are shown if none "
-                f"listed exact salary above {threshold_label}._"
-            )
+            if arabic:
+                lines.append(
+                    f"\n_بيانات الراتب غير متوفرة دائماً — يعرض {len(top)} من {len(all_matches)} نتيجة._"
+                )
+            else:
+                lines.append(
+                    f"\n_Salary data isn't always available — showing {len(top)} of {len(all_matches)} "
+                    f"results (some may not display salary). All {len(all_matches)} are shown if none "
+                    f"listed exact salary above {threshold_label}._"
+                )
 
         msg = "\n".join(lines)
         self._append_chat(user_id, "assistant", msg)
@@ -12782,6 +12793,8 @@ class RicoChatAPI:
             if arabic else
             f"Found **{len(top)} {emp_type} {role} {'role' if role else 'job'}{'s' if len(top) != 1 else ''}** in the UAE:"
         )
+        at_word = " في " if arabic else " at "
+        apply_label = "تقدّم" if arabic else "Apply"
         lines = [header, ""]
         for i, job in enumerate(top, 1):
             title   = job.get("title") or job.get("job_title") or "Role"
@@ -12789,11 +12802,11 @@ class RicoChatAPI:
             loc     = job.get("location") or job.get("job_city") or "UAE"
             etype   = job.get("employment_type") or job.get("job_employment_type") or ""
             url     = job.get("apply_url") or job.get("job_apply_link") or ""
-            line = f"{i}. **{title}**" + (f" at {company}" if company else "") + f" — {loc}"
+            line = f"{i}. **{title}**" + (f"{at_word}{company}" if company else "") + f" — {loc}"
             if etype and etype.lower() != emp_type.lower():
                 line += f" ({etype})"
             if url:
-                line += f" ([Apply]({url}))"
+                line += f" ([{apply_label}]({url}))"
             lines.append(line)
 
         msg = "\n".join(lines)
@@ -12980,15 +12993,17 @@ class RicoChatAPI:
             if arabic else
             f"Found **{len(top)} {industry} role{'s' if len(top) != 1 else ''}**{loc_label}:"
         )
+        at_word = " في " if arabic else " at "
+        apply_label = "تقدّم" if arabic else "Apply"
         lines = [header, ""]
         for i, job in enumerate(top, 1):
             title   = job.get("title") or job.get("job_title") or "Role"
             company = job.get("company") or job.get("employer_name") or ""
             loc     = job.get("location") or job.get("job_city") or "UAE"
             url     = job.get("apply_url") or job.get("job_apply_link") or ""
-            line = f"{i}. **{title}**" + (f" at {company}" if company else "") + f" — {loc}"
+            line = f"{i}. **{title}**" + (f"{at_word}{company}" if company else "") + f" — {loc}"
             if url:
-                line += f" ([Apply]({url}))"
+                line += f" ([{apply_label}]({url}))"
             lines.append(line)
 
         msg = "\n".join(lines)
@@ -13400,15 +13415,17 @@ class RicoChatAPI:
             if arabic else
             f"Found **{len(top)} {seniority_label} {role} role{'s' if len(top) != 1 else ''}**{loc_label}:"
         )
+        at_word = " في " if arabic else " at "
+        apply_label = "تقدّم" if arabic else "Apply"
         lines = [header, ""]
         for i, job in enumerate(top, 1):
             title   = job.get("title") or job.get("job_title") or "Role"
             company = job.get("company") or job.get("employer_name") or ""
             loc     = job.get("location") or job.get("job_city") or "UAE"
             url     = job.get("apply_url") or job.get("job_apply_link") or ""
-            line = f"{i}. **{title}**" + (f" at {company}" if company else "") + f" — {loc}"
+            line = f"{i}. **{title}**" + (f"{at_word}{company}" if company else "") + f" — {loc}"
             if url:
-                line += f" ([Apply]({url}))"
+                line += f" ([{apply_label}]({url}))"
             lines.append(line)
 
         msg = "\n".join(lines)
@@ -14325,17 +14342,21 @@ class RicoChatAPI:
 
         loc_label = f" in {location}" if location and location != "UAE" else " in the UAE"
         header = (
+            f"وجدت **{len(top)} وظيفة {company_type_label}**{(' لـ ' + role) if role else ''}{' في ' + location if location and location != 'UAE' else ' في الإمارات'}:"
+            if arabic else
             f"Found **{len(top)} {company_type_label}** {role} role{'s' if len(top) != 1 else ''}{loc_label}:"
         )
+        at_word = " في " if arabic else " at "
+        apply_label = "تقدّم" if arabic else "Apply"
         lines = [header, ""]
         for i, job in enumerate(top, 1):
             title   = job.get("title") or job.get("job_title") or "Role"
             company = job.get("company") or job.get("employer_name") or ""
             loc     = job.get("location") or job.get("job_city") or location
             url     = job.get("apply_url") or job.get("job_apply_link") or ""
-            line = f"{i}. **{title}**" + (f" at {company}" if company else "") + f" — {loc}"
+            line = f"{i}. **{title}**" + (f"{at_word}{company}" if company else "") + f" — {loc}"
             if url:
-                line += f" ([Apply]({url}))"
+                line += f" ([{apply_label}]({url}))"
             lines.append(line)
 
         msg = "\n".join(lines)
@@ -14406,18 +14427,6 @@ class RicoChatAPI:
             "",
         ]
 
-        if top:
-            action_plan.append(f"**Live openings{' for ' + role if role else ''} right now:**")
-            action_plan.append("")
-            for i, job in enumerate(top, 1):
-                title   = job.get("title") or job.get("job_title") or "Role"
-                company = job.get("company") or job.get("employer_name") or ""
-                url     = job.get("apply_url") or job.get("job_apply_link") or ""
-                line = f"{i}. **{title}**" + (f" at {company}" if company else "")
-                if url:
-                    line += f" ([Apply now]({url}))"
-                action_plan.append(line)
-
         if arabic:
             action_plan = [
                 urgency_header, "",
@@ -14431,6 +14440,30 @@ class RicoChatAPI:
                 "• تقدم لـ 10 وظائف يومياً على الأقل.",
                 "• سجّل في Bayt وNaukrigulf وGulfTalent.",
             ]
+            if top:
+                action_plan.append("")
+                action_plan.append(f"**وظائف متاحة الآن{' لـ ' + role if role else ''}:**")
+                action_plan.append("")
+                for i, job in enumerate(top, 1):
+                    title   = job.get("title") or job.get("job_title") or "دور"
+                    company = job.get("company") or job.get("employer_name") or ""
+                    url     = job.get("apply_url") or job.get("job_apply_link") or ""
+                    line = f"{i}. **{title}**" + (f" في {company}" if company else "")
+                    if url:
+                        line += f" ([تقدّم الآن]({url}))"
+                    action_plan.append(line)
+        else:
+            if top:
+                action_plan.append(f"**Live openings{' for ' + role if role else ''} right now:**")
+                action_plan.append("")
+                for i, job in enumerate(top, 1):
+                    title   = job.get("title") or job.get("job_title") or "Role"
+                    company = job.get("company") or job.get("employer_name") or ""
+                    url     = job.get("apply_url") or job.get("job_apply_link") or ""
+                    line = f"{i}. **{title}**" + (f" at {company}" if company else "")
+                    if url:
+                        line += f" ([Apply now]({url}))"
+                    action_plan.append(line)
 
         msg = "\n".join(action_plan)
         self._append_chat(user_id, "assistant", msg)
