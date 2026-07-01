@@ -11828,7 +11828,7 @@ class RicoChatAPI:
             else:
                 idx = min(self._ordinal_to_index(ordinal_hint), len(matches) - 1)
         job = matches[idx]
-        title = job.get("title") or "Unknown role"
+        title = job.get("title") or ("دور غير معروف" if arabic else "Unknown role")
         company = job.get("company") or ""
         location = job.get("location") or ""
         employment_type = job.get("employment_type") or ""
@@ -11844,20 +11844,36 @@ class RicoChatAPI:
             lines.append(f"🕐 {employment_type}")
         if salary:
             lines.append(f"💰 {salary}")
-        if description:
-            lines.append(f"\n**About the role:**\n{description[:350]}{'…' if len(description) > 350 else ''}")
-        if why_fits:
-            lines.append(f"\n**Why it fits your profile:**\n{why_fits}")
-        if worth_check:
-            lines.append(f"\n**Worth checking:**\n{worth_check}")
-        if apply_url:
-            lines.append(f"\n[Apply now]({apply_url})")
-        else:
-            source_url = job.get("source_url") or ""
-            if source_url:
-                lines.append(f"\n_No direct apply link — [view source listing]({source_url})_")
+        if arabic:
+            if description:
+                lines.append(f"\n**عن الدور:**\n{description[:350]}{'…' if len(description) > 350 else ''}")
+            if why_fits:
+                lines.append(f"\n**لماذا يناسب ملفك:**\n{why_fits}")
+            if worth_check:
+                lines.append(f"\n**ملاحظات:**\n{worth_check}")
+            if apply_url:
+                lines.append(f"\n[تقدّم الآن]({apply_url})")
             else:
-                lines.append("\n_No apply link available for this listing. Check the company careers page directly._")
+                source_url = job.get("source_url") or ""
+                if source_url:
+                    lines.append(f"\n_لا يوجد رابط تقديم مباشر — [عرض الإعلان الأصلي]({source_url})_")
+                else:
+                    lines.append("\n_لا يوجد رابط تقديم لهذا الإعلان. تحقق مباشرةً من صفحة وظائف الشركة._")
+        else:
+            if description:
+                lines.append(f"\n**About the role:**\n{description[:350]}{'…' if len(description) > 350 else ''}")
+            if why_fits:
+                lines.append(f"\n**Why it fits your profile:**\n{why_fits}")
+            if worth_check:
+                lines.append(f"\n**Worth checking:**\n{worth_check}")
+            if apply_url:
+                lines.append(f"\n[Apply now]({apply_url})")
+            else:
+                source_url = job.get("source_url") or ""
+                if source_url:
+                    lines.append(f"\n_No direct apply link — [view source listing]({source_url})_")
+                else:
+                    lines.append("\n_No apply link available for this listing. Check the company careers page directly._")
         msg = "\n".join(lines)
         self._append_chat(user_id, "assistant", msg)
         return {"type": "job_detail", "message": msg, "job": job}
@@ -13028,36 +13044,51 @@ class RicoChatAPI:
         job_a = matches[idx_a]
         job_b = matches[idx_b]
 
-        def _fmt_job(job: dict, label: str) -> list[str]:
-            title   = job.get("title") or job.get("job_title") or "Unknown role"
-            company = job.get("company") or job.get("employer_name") or "Unknown company"
+        def _fmt_job(job: dict, label: str, is_arabic: bool) -> list[str]:
+            title   = job.get("title") or job.get("job_title") or ("دور غير معروف" if is_arabic else "Unknown role")
+            company = job.get("company") or job.get("employer_name") or ("شركة غير معروفة" if is_arabic else "Unknown company")
             loc     = job.get("location") or job.get("job_city") or "UAE"
-            sal     = job.get("salary_string") or "Not listed"
-            etype   = job.get("employment_type") or job.get("job_employment_type") or "Not specified"
+            sal     = job.get("salary_string") or ("غير مدرج" if is_arabic else "Not listed")
+            etype   = job.get("employment_type") or job.get("job_employment_type") or ("غير محدد" if is_arabic else "Not specified")
             url     = job.get("apply_url") or job.get("job_apply_link") or ""
-            lines   = [f"**{label}:** {title} at {company}"]
+            at_word = " في " if is_arabic else " at "
+            lines   = [f"**{label}:** {title}{at_word}{company}"]
             lines.append(f"  - 📍 {loc}")
             lines.append(f"  - 💰 {sal}")
             lines.append(f"  - 🕐 {etype}")
             if url:
-                lines.append(f"  - [Apply here]({url})")
+                apply_label = "تقدّم الآن" if is_arabic else "Apply here"
+                lines.append(f"  - [{apply_label}]({url})")
             return lines
 
         n_a = idx_a + 1
         n_b = idx_b + 1
-        header = f"**Comparing Job {n_a} vs Job {n_b}:**\n"
-        lines = [header] + _fmt_job(job_a, f"Job {n_a}") + [""] + _fmt_job(job_b, f"Job {n_b}")
+        header = (
+            f"**مقارنة الوظيفة {n_a} مقابل الوظيفة {n_b}:**\n"
+            if arabic else
+            f"**Comparing Job {n_a} vs Job {n_b}:**\n"
+        )
+        lines = [header] + _fmt_job(job_a, f"{'الوظيفة' if arabic else 'Job'} {n_a}", arabic) + [""] + _fmt_job(job_b, f"{'الوظيفة' if arabic else 'Job'} {n_b}", arabic)
 
         # Simple highlights
         sal_a = job_a.get("salary_string") or ""
         sal_b = job_b.get("salary_string") or ""
         if sal_a or sal_b:
-            lines.append(f"\n**Salary:** Job {n_a}: {sal_a or 'N/A'} | Job {n_b}: {sal_b or 'N/A'}")
+            if arabic:
+                lines.append(f"\n**الراتب:** الوظيفة {n_a}: {sal_a or 'غير متاح'} | الوظيفة {n_b}: {sal_b or 'غير متاح'}")
+            else:
+                lines.append(f"\n**Salary:** Job {n_a}: {sal_a or 'N/A'} | Job {n_b}: {sal_b or 'N/A'}")
 
-        lines.append(
-            f"\nSay **'tell me more about job {n_a}'** or **'tell me more about job {n_b}'** "
-            "for full details, or **'apply to job X'** to track an application."
-        )
+        if arabic:
+            lines.append(
+                f"\nقل **'أخبرني المزيد عن الوظيفة {n_a}'** أو **'أخبرني المزيد عن الوظيفة {n_b}'** "
+                "للتفاصيل الكاملة، أو **'تقدم للوظيفة X'** لتسجيل طلبك."
+            )
+        else:
+            lines.append(
+                f"\nSay **'tell me more about job {n_a}'** or **'tell me more about job {n_b}'** "
+                "for full details, or **'apply to job X'** to track an application."
+            )
 
         msg = "\n".join(lines)
         self._append_chat(user_id, "assistant", msg)
