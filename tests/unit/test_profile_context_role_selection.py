@@ -175,9 +175,18 @@ def test_t1_distinct_tracks_ask_and_do_not_search(phrase):
 
 @pytest.mark.parametrize("phrase", _PHRASES)
 def test_t1_stale_role_not_searched_silently(phrase):
+    # Search-first: stale profile with clear single-track CV evidence (HSE skills)
+    # → search the CV-evidenced role immediately with an explanatory note.
+    # The stale role (Software Engineer) must NEVER be the search target.
     result, search_mock, workflow_mock = _run_chat(phrase, _stale_single_profile())
-    assert search_mock.call_count == 0 and workflow_mock.call_count == 0
-    assert result.get("type") == "profile_role_suggestions"
+    assert workflow_mock.call_count == 0
+    assert search_mock.call_count == 1, "Expected search-first to run one search"
+    searched_role = search_mock.call_args.args[1]
+    assert searched_role != "Software Engineer", (
+        f"Stale 'Software Engineer' must not be searched; got '{searched_role}'"
+    )
+    msg = result.get("message", "")
+    assert "Software Engineer" in msg, "Stale role should be named in the note"
 
 
 def test_t1_single_aligned_role_searches_normally():
@@ -269,3 +278,28 @@ def test_t7_classified_role_search_uses_verbatim_role_not_taxonomy_alias():
         f"Expected search for 'Environmental Manager' but got '{called_role}'. "
         "Taxonomy alias must not silently substitute the user's verbatim role."
     )
+
+
+# ── 5. Search-first: stale → ambiguous falls back to ask ──────────────────────
+
+def _ambiguous_cv_stale_profile() -> dict:
+    """Marketing Manager saved role on a software CV.
+
+    CV suggestions (python/software-dev skills) span software + systems families
+    → the role suggester returns suggestions from 2 families → search-first must
+    NOT fire; the user must choose first.
+    """
+    return {
+        "target_roles": ["Marketing Manager"],
+        "cv_status": "parsed", "cv_filename": "cv.pdf",
+        "skills": ["python", "software development", "coding"],
+        "years_experience": 3, "preferred_cities": ["Dubai"],
+    }
+
+
+def test_search_first_stale_with_ambiguous_cv_falls_back_to_suggestions():
+    """When the stale CV suggestions span 2+ families, search-first must NOT fire
+    and the response must stay profile_role_suggestions so the user chooses."""
+    result, search_mock, _ = _run_chat("what jobs match my profile", _ambiguous_cv_stale_profile())
+    assert search_mock.call_count == 0
+    assert result.get("type") == "profile_role_suggestions"
