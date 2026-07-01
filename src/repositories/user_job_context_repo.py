@@ -165,7 +165,7 @@ def find_by_title_company(
                 cur.execute(
                     """
                     SELECT title, company, location, apply_url, source_url,
-                           verification_status, searched_at
+                           alt_url, verification_status, searched_at
                       FROM user_job_context
                      WHERE user_id = %s
                        AND lower(title) LIKE lower(%s)
