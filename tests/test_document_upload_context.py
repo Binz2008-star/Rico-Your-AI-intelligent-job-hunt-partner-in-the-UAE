@@ -166,3 +166,101 @@ class TestGetRecentUploadDocumentReply:
         call_args = api._append_chat.call_args[0]
         assert call_args[0] == "user1"
         assert call_args[1] == "assistant"
+
+
+# ── _build_openai_context: document metadata injection (TASK-030) ─────────────
+
+class TestBuildOpenaiContextDocumentInjection:
+    """_build_openai_context must inject document metadata into the AI context
+    even when extracted_text is absent (non-CV classified documents).
+
+    Without this fix, typing "can you review my offer letter?" after uploading
+    the document reaches the AI with no document context at all.
+    """
+
+    def _make_api(self):
+        api = RicoChatAPI.__new__(RicoChatAPI)
+        api.memory = MagicMock()
+        api.memory.get_context.return_value = {}
+        api.memory.set_context.return_value = None
+        api._append_chat = MagicMock()
+        return api
+
+    def test_metadata_only_doc_injected_when_no_extracted_text(self):
+        """Non-CV document with metadata but no text → AI context gets the note."""
+        api = self._make_api()
+        doc_meta = {
+            "document_type": "offer_letter",
+            "display_label": "Offer Letter",
+            "filename": "emaar_offer.pdf",
+            "confidence": 0.87,
+        }
+        api._get_last_uploaded_document = MagicMock(return_value=None)
+        api._get_recent_context = MagicMock(return_value={"last_uploaded_document": doc_meta})
+
+        ctx = api._build_openai_context(profile=None, user_id="u1")
+
+        assert "last_uploaded_document" in ctx
+        assert ctx["last_uploaded_document"]["type"] == "Offer Letter"
+        assert ctx["last_uploaded_document"]["filename"] == "emaar_offer.pdf"
+        assert "Offer Letter" in ctx["last_uploaded_document"]["note"]
+        assert "emaar_offer.pdf" in ctx["last_uploaded_document"]["note"]
+        assert "87%" in ctx["last_uploaded_document"]["note"]
+
+    def test_extracted_text_path_still_works(self):
+        """When extracted_text exists, the full transcript is injected (unchanged path)."""
+        api = self._make_api()
+        doc_with_text = {
+            "document_type": "offer_letter",
+            "display_label": "Offer Letter",
+            "filename": "offer.pdf",
+            "extracted_text": "Salary: 25,000 AED per month...",
+        }
+        api._get_last_uploaded_document = MagicMock(return_value=doc_with_text)
+        api._get_recent_context = MagicMock(return_value={})
+
+        ctx = api._build_openai_context(profile=None, user_id="u1")
+
+        assert "last_uploaded_document" in ctx
+        assert "transcribed_text" in ctx["last_uploaded_document"]
+        assert "Salary" in ctx["last_uploaded_document"]["transcribed_text"]
+        assert "note" not in ctx["last_uploaded_document"]
+
+    def test_no_document_leaves_no_key(self):
+        """No uploaded document → no last_uploaded_document key in context."""
+        api = self._make_api()
+        api._get_last_uploaded_document = MagicMock(return_value=None)
+        api._get_recent_context = MagicMock(return_value={})
+
+        ctx = api._build_openai_context(profile=None, user_id="u1")
+
+        assert "last_uploaded_document" not in ctx
+
+    def test_empty_document_type_not_injected(self):
+        """A recent_context entry with no document_type is not injected."""
+        api = self._make_api()
+        api._get_last_uploaded_document = MagicMock(return_value=None)
+        api._get_recent_context = MagicMock(return_value={
+            "last_uploaded_document": {"filename": "x.pdf"}  # no document_type
+        })
+
+        ctx = api._build_openai_context(profile=None, user_id="u1")
+
+        assert "last_uploaded_document" not in ctx
+
+    def test_no_confidence_omits_confidence_string(self):
+        """When confidence is absent, the note still works without a %."""
+        api = self._make_api()
+        doc_meta = {
+            "document_type": "contract",
+            "display_label": "Employment Contract",
+            "filename": "contract.pdf",
+        }
+        api._get_last_uploaded_document = MagicMock(return_value=None)
+        api._get_recent_context = MagicMock(return_value={"last_uploaded_document": doc_meta})
+
+        ctx = api._build_openai_context(profile=None, user_id="u1")
+
+        assert "last_uploaded_document" in ctx
+        assert "%" not in ctx["last_uploaded_document"]["note"]
+        assert "Employment Contract" in ctx["last_uploaded_document"]["note"]
