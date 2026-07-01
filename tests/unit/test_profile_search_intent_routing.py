@@ -91,6 +91,8 @@ ACCEPTANCE_PHRASES = [
     "Find jobs from my CV",
     "Find UAE jobs from my CV",
     "Search jobs based on my CV",
+    "Find UAE jobs that match my CV",
+    "Search jobs using my CV",
 ]
 
 
