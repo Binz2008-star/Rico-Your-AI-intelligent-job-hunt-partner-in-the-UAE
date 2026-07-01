@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
-from functools import lru_cache
+import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from pathlib import Path
 
@@ -103,6 +103,7 @@ class RicoRepoAdapter:
         self._job_fetcher = job_fetcher or self._default_fetch_jobs
         self._scorer = scorer or self._default_score_jobs
         self._cache_key = None  # Cache invalidation key
+        self._fetch_cache: tuple[float, list | None] = (0.0, None)  # (fetched_at, result)
 
     def _default_fetch_jobs(self) -> List[Dict[str, Any]]:
         """Default job fetching implementation."""
@@ -136,15 +137,20 @@ class RicoRepoAdapter:
             return self._cached_fetch_jobs()
         return self._job_fetcher()
 
-    @lru_cache(maxsize=1)
     def _cached_fetch_jobs(self) -> List[Dict[str, Any]]:
-        """Cached job fetching to avoid repeated network calls."""
+        """Cached job fetching with TTL-based expiry (respects cache_ttl_seconds)."""
+        now = time.monotonic()
+        fetched_at, cached_result = self._fetch_cache
+        if cached_result is not None and (now - fetched_at) < self.config.cache_ttl_seconds:
+            return cached_result
         logger.info("adapter_cache_miss_fetching_jobs")
-        return self._job_fetcher()
+        result = self._job_fetcher()
+        self._fetch_cache = (now, result)
+        return result
 
     def invalidate_cache(self) -> None:
         """Invalidate the job fetch cache."""
-        self._cached_fetch_jobs.cache_clear()
+        self._fetch_cache = (0.0, None)
         logger.info("adapter_cache_invalidated")
 
     def score_jobs_with_existing_engine(
