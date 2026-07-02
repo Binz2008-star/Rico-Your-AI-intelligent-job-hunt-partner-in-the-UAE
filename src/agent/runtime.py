@@ -321,6 +321,17 @@ class AgentRuntime:
         action: str, ok: bool, data: Dict[str, Any], error: Optional[str]
     ) -> str:
         if not ok:
+            # Map known internal error codes (e.g. no_apply_link_available) to a
+            # user-safe message so raw codes never reach the chat UI. Unknown /
+            # free-text errors keep the existing "Action failed: …" format.
+            code = (error or "").strip()
+            try:
+                from src.services.apply_service import is_safe_action_code, wrap_action_error
+
+                if is_safe_action_code(code):
+                    return wrap_action_error(code)
+            except Exception:  # noqa: BLE001 — never let mapping crash the reply
+                pass
             return f"Action failed: {error or 'unknown error'}"
 
         # Actions whose reply comes from tool output

@@ -400,6 +400,17 @@ def resolve_apply_action(
     )
 
 
+def is_safe_action_code(code: str) -> bool:
+    """Return True if *code* is a known internal action error code.
+
+    Lets callers map only recognised internal codes to a safe message while
+    leaving free-text/unknown errors (e.g. "engine down") in their existing
+    format, so no raw internal code (``no_apply_link_available`` etc.) leaks to
+    the user while generic error text is preserved.
+    """
+    return (code or "").strip() in _SAFE_MESSAGES
+
+
 def wrap_action_error(
     internal_code: str,
     job: Optional[Dict[str, Any]] = None,
