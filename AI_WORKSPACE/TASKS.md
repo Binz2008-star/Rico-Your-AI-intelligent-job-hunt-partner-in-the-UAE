@@ -58,7 +58,7 @@ Issue/PR: <link or number>
 
 ### TASK-20260702-033 — Enable personalized job-alert emails (PR-3, owner-gated)
 
-Status: proposed
+Status: in_progress (migration applied + plumbing smoke done; activation still owner-gated)
 Owner: unassigned (owner-gated enable steps)
 Branch: —
 Issue/PR: follows merged PR #805 (`f64e7e0`)
@@ -73,10 +73,14 @@ start; this is the enable + harden pass.
   `migrations/033_email_job_alerts.sql`, `.github/workflows/job-alert-emails.yml`.
 
 #### Enable steps (in order)
-- [ ] Apply `migrations/033` to Neon (additive/idempotent; owner G-signoff per migration policy).
-- [ ] Set backend secrets: `RICO_API_URL`, confirm `RICO_CRON_SECRET`.
-- [ ] Smoke: run the `Job Alert Emails (manual)` workflow with `dry_run=true`; confirm `status="ok"`
-      and sane match counts, zero sends.
+- [x] Apply `migrations/033` to Neon (done 2026-07-02; both tables + idx_eal_user_sent /
+      idx_eut_token + primary/unique indexes verified).
+- [x] Plumbing smoke: `POST /api/v1/pipeline/job-alert-emails?dry_run=true` (X-Cron-Secret) →
+      `{status: ok, users: 0, sent: 0, dry_run: true}` (2026-07-02). Endpoint deployed + cron
+      auth OK + dry-run bypasses kill-switch without sending. (Optional GitHub-workflow path
+      still needs `RICO_API_URL` / `RICO_CRON_SECRET` repo secrets if run via CI instead.)
+- [ ] Match-quality smoke: opt in one test/owner account (`POST /api/v1/settings/email/opt-in`),
+      re-run the dry-run; expect `users:1` and non-zero would-send or a match-related skip reason.
 - [ ] Set `RICO_ENABLE_EMAIL_ALERTS=true` on Render.
 - [ ] Enable the daily `schedule:` in `job-alert-emails.yml`.
 - [ ] Monitor `email_alert_log` for the first sends; verify unsubscribe link end-to-end.

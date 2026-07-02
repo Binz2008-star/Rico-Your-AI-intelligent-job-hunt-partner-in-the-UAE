@@ -1,7 +1,8 @@
 # Current State
 
 _Last updated: 2026-07-02 — `main` HEAD `f64e7e0` (PR #805 — personalized job-alert emails,
-merged; feature is gated/inert, see the "Email job alerts" section directly below). Prior line:
+merged; migration 033 APPLIED to Neon + production dry-run plumbing smoke PASSED; feature
+remains gated/inert, see the "Email job alerts" section directly below). Prior line:
 2026-07-01 — `main` HEAD `ff6c690` (dashboard). BUG-9 through BUG-17 all merged_
 
 ## Email job alerts — PR #805 (merged 2026-07-02, gated/inert)
@@ -12,7 +13,14 @@ sending** — the feature is doubly gated and unscheduled:
 - opt-in default **off** (`RicoAgentSettings.can_receive_email_alerts=False`)
 - kill-switch `RICO_ENABLE_EMAIL_ALERTS` default **off** (sweep returns `disabled`)
 - cron workflow `job-alert-emails.yml` is **dispatch-only** (no `schedule:`)
-- **migration 033 NOT applied** to Neon (code degrades safely without it)
+- **migration 033 APPLIED** to Neon (2026-07-02, verified: both tables + `idx_eal_user_sent`
+  / `idx_eut_token` + primary/unique indexes present)
+
+**Production dry-run plumbing smoke PASSED (2026-07-02):** owner ran
+`POST /api/v1/pipeline/job-alert-emails?dry_run=true` (X-Cron-Secret) →
+`{status: ok, users: 0, sent: 0, skipped: 0, failed: 0, dry_run: true}`. Confirms endpoint
+deployed, cron-secret auth works, and dry-run bypasses the kill-switch without sending.
+`users: 0` expected (no opt-ins yet) — validates plumbing, not match quality.
 
 What shipped (16 files): `migrations/033_email_job_alerts.sql` (`email_alert_log`,
 `email_unsubscribe_tokens`); `src/services/email_notifications.py` (opt-in/out, unsubscribe
@@ -29,10 +37,11 @@ enable: unsubscribe URL now resolves via the `/proxy` rewrite; daily frequency w
 hours-based (jitter-tolerant). Deferred to PR-3 (scale-only): sync cron runs live JSearch per
 user sequentially (#3), per-job dedup opens a new DB connection (#5).
 
-**PR-3 to enable (owner-gated, not done):** apply migration 033 → run the manual workflow with
-`dry_run=true` as a smoke → set `RICO_ENABLE_EMAIL_ALERTS=true` + `RICO_API_URL`/
-`RICO_CRON_SECRET` secrets → enable the daily `schedule:` → address #3/#5 → monitor
-`email_alert_log`; then Arabic localization. Tracked as TASK-20260702-033 in `TASKS.md`.
+**Remaining before activation (owner-gated, not done):** (1) opt in one test/owner account →
+re-run the dry-run for a match-quality smoke (`users:1`, non-zero would-send or a match-related
+skip reason) → (2) set `RICO_ENABLE_EMAIL_ALERTS=true` → enable the daily `schedule:` →
+address #3/#5 → monitor `email_alert_log`; then Arabic localization. Done so far: migration 033
+applied + dry-run plumbing smoke passed. Tracked as TASK-20260702-033 in `TASKS.md`.
 
 ---
 
