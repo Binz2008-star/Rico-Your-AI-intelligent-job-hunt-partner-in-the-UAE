@@ -7430,6 +7430,38 @@ class RicoChatAPI:
                 profile=profile,
             )
 
+        # ── Arabic conversational guard (BUG #6 / BUG #5) ─────────────────────
+        # Arabic input that contains a job-adjacent word (وظيفة, أريد, راتب) but
+        # NO explicit search-trigger keyword (ابحث, بحث, وظيف as a standalone
+        # noun) was falling through to the job-search classifier, which fired a
+        # backend search that either (a) cold-started Render and hung for 2+ min
+        # or (b) returned irrelevant results for a conversational statement.
+        #
+        # Fix: if the message is Arabic AND does NOT contain an explicit search
+        # command keyword, short-circuit to the AI conversational fallback
+        # (answer_with_ai_fallback) BEFORE the job-search classifier runs.
+        # This preserves "ابحث عن وظيفة" (explicit search) while routing
+        # "أريد وظيفة في دبي مع راتب 50000 درهم" (declarative) to conversation.
+        _ARABIC_SEARCH_TRIGGER_RE = re.compile(
+            r"\b(ابحث|بحث|دوّر|دور\s+عن|ساعدني\s+في\s+إيجاد|أيجاد\s+وظيف|\bهل\s+في\s+وظائف\b)",
+        )
+        if self._is_arabic_text(message) and not _ARABIC_SEARCH_TRIGGER_RE.search(message):
+            # Let normal structured intents (save/skip/apply/help/acknowledgement)
+            # still run through classify_intent — only intercept pure conversational
+            # Arabic that would otherwise be misread as a job-search command.
+            from src.rico_intent_router import _SEARCH_PATTERNS as _ROUTER_SEARCH_PAT
+            if not _ROUTER_SEARCH_PAT.search(message):
+                logger.info(
+                    "rico_arabic_conversational_guard user=%s msg=%r — routing to AI fallback",
+                    user_id, message,
+                )
+                return self._answer_with_ai_fallback(
+                    user_id=user_id,
+                    message=message,
+                    profile=profile,
+                    save_user_message=False,
+                )
+
         # ── Step 1: Unified intent classification ────────────────────────────
         if has_cv and self._looks_like_career_execution_request(message):
             return self._finalize(
@@ -7463,6 +7495,40 @@ class RicoChatAPI:
             response = {"type": "acknowledgement", "message": ack_text}
             self._append_chat(user_id, "assistant", ack_text)
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+
+        # Emotional support / frustration (BUG #9) — empathetic reply before any action.
+        # Never jump straight to a job search when the user is expressing frustration.
+        # Route via AI fallback so the reply is context-aware, not a canned string.
+        if legacy_intent == "emotional_support" or intent == "emotional_support":
+            _is_ar = self._is_arabic_text(message)
+            _empathy_prefix = (
+                "أسمعك! أعلم أن البحث عن عمل قد يكون مرهقاً، خاصة في الإمارات. "
+                "دعني أرى ما يمكنني فعله لمساعدتك الآن."
+                if _is_ar else
+                "I hear you — job searching in the UAE can be genuinely tough, and it makes sense to feel frustrated. "
+                "Let me see what I can do to help right now."
+            )
+            logger.info("rico_emotional_support user=%s", user_id)
+            # Inject the empathy prefix into the message context for the AI fallback
+            # so it responds in a supportive tone rather than defaulting to job-search mode.
+            _augmented = (
+                f"[Context: The user is expressing frustration. Respond empathetically first, "
+                f"then offer the most relevant next action based on their profile. "
+                f"Do NOT immediately trigger a job search.]\n\n{message}"
+            )
+            result = self._answer_with_ai_fallback(
+                user_id=user_id,
+                message=_augmented,
+                profile=profile,
+                save_user_message=False,
+            )
+            # Prepend the deterministic empathy prefix so the user always
+            # gets an immediate warm acknowledgement even if the AI call is slow.
+            _ai_reply = result.get("message", "")
+            if _ai_reply and not _ai_reply.startswith(_empathy_prefix[:20]):
+                result["message"] = f"{_empathy_prefix}\n\n{_ai_reply}"
+            self._append_chat(user_id, "assistant", result.get("message", _empathy_prefix))
+            return self._finalize(result, self.SOURCE_KEYWORD, profile=profile)
 
         # Positive job feedback — record learning signal and acknowledge
         if legacy_intent == "job_feedback_positive":

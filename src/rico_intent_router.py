@@ -39,6 +39,7 @@ SUPPORTED_INTENTS = {
     "prepare_interview",
     "set_reminder",
     "help",
+    "emotional_support",  # frustration / venting — empathetic response before any action
     "unknown",
 }
 
@@ -54,6 +55,7 @@ INTENT_TO_TOOL: Dict[str, Optional[str]] = {
     "prepare_interview":  None,
     "set_reminder":       "set_reminder",
     "help":               None,
+    "emotional_support":  None,  # no tool — needs empathetic conversational reply
     "unknown":            None,
 }
 
@@ -132,6 +134,19 @@ _REMIND_PATTERNS = re.compile(
 )
 _HELP_PATTERNS = re.compile(
     r"^\s*(help|menu|options|what can you do|commands|start|get started)\s*[?!.]?\s*$",
+    re.IGNORECASE,
+)
+
+# Emotional / frustration patterns — must be checked BEFORE _SEARCH_PATTERNS
+# so that "why can't you find me a job" doesn't trigger search_jobs.
+# Arabic: يئس (despair), مجدي (useful), عديم الفائدة (useless), محبط (frustrating)
+_EMOTIONAL_PATTERNS = re.compile(
+    r"\b(useless|completely useless|you('re| are) (useless|terrible|awful|hopeless|broken|garbage|rubbish))"
+    r"|\b(why (can'?t|can not|couldn'?t|won'?t|don'?t) you"
+    r"|you never|you always|you keep|you just|this is (useless|broken|terrible|awful|a waste))"
+    r"|\b(frustrated|frustrating|annoyed|annoying|fed up|sick of|tired of|giving up|hopeless|helpless)"
+    r"|\b(nothing works|doesn'?t work|never works|stop working|broken again)"
+    r"|يئست|محبط|عديم الفائدة|لا فائدة|مجدي|تعبت|بطيء جداً|ما تساعد|مش شغال",
     re.IGNORECASE,
 )
 
@@ -236,6 +251,11 @@ def _keyword_classify(message: str) -> Tuple[Optional[str], float]:
 
     Returns (intent, confidence) or (None, 0.0) if no pattern matches.
     Ordered from most-specific to least-specific.
+
+    IMPORTANT: _EMOTIONAL_PATTERNS runs before _SEARCH_PATTERNS so that
+    frustration phrases like "why can't you find me a job" are routed to
+    emotional_support (conversational empathy) rather than triggering a
+    job search that will silently hang or compound the user's frustration.
     """
     if _HELP_PATTERNS.match(message):
         return "help", 1.0
@@ -255,6 +275,10 @@ def _keyword_classify(message: str) -> Tuple[Optional[str], float]:
         return "prepare_interview", 0.90
     if _PREFS_PATTERNS.search(message):
         return "update_preferences", 0.85
+    # Emotional / frustration check BEFORE job search — prevents venting phrases
+    # that mention jobs (e.g. "why can't you find me a job") from firing a search.
+    if _EMOTIONAL_PATTERNS.search(message):
+        return "emotional_support", 0.88
     if _SEARCH_PATTERNS.search(message):
         return "search_jobs", 0.85
     return None, 0.0
