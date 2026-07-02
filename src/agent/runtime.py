@@ -316,12 +316,53 @@ class AgentRuntime:
                 pass
         return {"id": job_key} if job_key else {}
 
+    # Maps internal error codes (from tool layer) to user-safe messages.
+    # Never expose internal codes to the chat surface — all unknown codes
+    # fall through to the generic message at the bottom of _build_message.
+    _ERROR_MESSAGES: Dict[str, str] = {
+        "no_apply_link_available": (
+            "This job doesn't have a direct apply link. "
+            "Use the link on the job card to apply manually on the employer's site."
+        ),
+        "apply_url_untrusted": (
+            "Rico can't auto-apply to this job because the apply link "
+            "hasn't been verified as safe. Use the link on the job card to apply directly."
+        ),
+        "subscription_limit": (
+            "Auto-apply is available on the Pro plan. "
+            "Upgrade to let Rico submit applications on your behalf."
+        ),
+        "tool_not_found": (
+            "This action isn't available right now. Please try again shortly."
+        ),
+        "job_not_found": (
+            "Rico couldn't find that job in your session. "
+            "Try searching again and selecting the job from fresh results."
+        ),
+        "approval_required": (
+            "Rico needs your explicit approval before submitting this application. "
+            "Use the Approve button on the job card."
+        ),
+        "manual_required": (
+            "Automated apply isn't available for this job. "
+            "Use the apply link on the card to apply directly on the employer's site."
+        ),
+    }
+
     @staticmethod
     def _build_message(
         action: str, ok: bool, data: Dict[str, Any], error: Optional[str]
     ) -> str:
         if not ok:
-            return f"Action failed: {error or 'unknown error'}"
+            # Never leak internal error codes to the chat surface.
+            # Resolve to a human-readable message; fall back to a generic
+            # one when the code is unrecognised.
+            safe_msg = AgentRuntime._ERROR_MESSAGES.get(
+                error or "",
+                "Something didn't work as expected. Please try again "
+                "or use the apply link on the job card directly.",
+            )
+            return safe_msg
 
         # Actions whose reply comes from tool output
         if action == "draft":
