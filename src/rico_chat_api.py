@@ -214,6 +214,36 @@ _APP_CONF_COMPANY_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Applied-from-screenshot OCR fallback (2026-07-02 smoke failure): when the user
+# reports they applied and the only job context is an uploaded screenshot whose
+# CLASSIFICATION failed, the OCR text itself often still carries a clear job
+# entity (title / company / location). These heuristics recover it — low
+# classification confidence must never invalidate successfully extracted text.
+_ROLE_KEYWORD_RE = re.compile(
+    r"\b(manager|engineer|developer|leader|lead|officer|specialist|coordinator|"
+    r"director|consultant|analyst|executive|supervisor|assistant|head|architect|"
+    r"designer|accountant|technician|advisor|administrator|planner|inspector|"
+    r"scientist|estimator|surveyor|buyer|recruiter|teacher|nurse|chef|barista)\b",
+    re.IGNORECASE,
+)
+_UAE_LOCATION_LINE_RE = re.compile(
+    r"\b(abu\s*dhabi|dubai|sharjah|ajman|ras\s+al[\s-]+khaimah|fujairah|"
+    r"umm\s+al[\s-]+quwain|al\s+ain|united\s+arab\s+emirates|uae)\b",
+    re.IGNORECASE,
+)
+# Job-board UI chrome that must never be mistaken for a company name.
+_SCREENSHOT_NOISE_LINE_RE = re.compile(
+    r"^(?:easy\s+apply|promoted|actively\s+recruiting|be\s+an\s+early\s+applicant|"
+    r"viewed|saved?|apply(?:\s+now)?|remote|on-?site|hybrid|full[-\s]?time|"
+    r"part[-\s]?time|contract|internship|new|featured|sponsored)$"
+    r"|\b\d+\s+(?:applicants?|connections?|alumni|employees?)\b"
+    r"|\b(?:hours?|days?|weeks?|months?)\s+ago\b"
+    r"|\bposted\b|\bsalary\b|^aed\b|^\d+$",
+    re.IGNORECASE,
+)
+# Inline segment separators used by job-board cards ("Company — Title — Location").
+_CARD_SEGMENT_SPLIT_RE = re.compile(r"\s+[—–|·•]\s+|\s{3,}")
+
 # Strings that must never appear inside a deterministic CV draft body.
 # Used as a post-generation guard in _handle_cv_generate_from_profile.
 _CV_PLACEHOLDER_PATTERNS = re.compile(
@@ -8656,10 +8686,11 @@ class RicoChatAPI:
                 self._append_chat(user_id, "assistant", msg)
                 return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
-            # Evidence confirmed — clear the pending flag and write the record.
+            # Evidence confirmed — clear the pending flags and write the record.
             try:
                 ctx = self._get_recent_context(user_id)
                 ctx.pop("_pending_confirm_apply", None)
+                ctx.pop("_pending_confirm_apply_options", None)
                 self._store_recent_context(user_id, ctx)
             except Exception:
                 pass
@@ -10350,6 +10381,12 @@ class RicoChatAPI:
             }
 
         if not job or not title or not company:
+            # 2026-07-02 smoke failure: before asking "which job?", try the OCR
+            # text of the last uploaded screenshot — it often carries the job
+            # entity even when document classification failed at 0% confidence.
+            fallback = self._applied_from_screenshot_fallback(user_id, arabic)
+            if fallback is not None:
+                return fallback
             msg = (
                 "أي وظيفة تقصد؟ أرسل اسم الوظيفة أو الشركة لكي أسجلها كطلب تم تقديمه."
                 if arabic else
@@ -10680,6 +10717,170 @@ class RicoChatAPI:
             "", company, flags=re.IGNORECASE,
         ).strip()
         return title, company
+
+    @classmethod
+    def _extract_job_entities_from_transcript(
+        cls, text: str, max_entities: int = 3,
+    ) -> "list[dict[str, str]]":
+        """Extract (title, company) job entities from an OCR transcript.
+
+        Handles labelled fields (Position:/Company:), confirmation phrasing
+        ("application for T at C"), single-line board cards
+        ("Company — Title — Location"), and stacked card lines
+        (Title / Company / Location on adjacent lines). Conservative: an entity
+        needs BOTH a role-keyword title and a plausible company line; UI chrome
+        (Easy Apply, "3 days ago", applicant counts) is never a company.
+        """
+        head = (text or "")[:2500]
+        entities: list[dict[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+
+        def _clean(value: str) -> str:
+            value = re.sub(
+                r"\s+(?:has|have|was|were|is|are|successfully)\b.*$",
+                "", value.strip(" \t-—–·|,."), flags=re.IGNORECASE,
+            ).strip()
+            return value
+
+        def _add(title: str, company: str) -> None:
+            title, company = _clean(title), _clean(company)
+            if not (3 <= len(title) <= 80 and 2 <= len(company) <= 60):
+                return
+            if _SCREENSHOT_NOISE_LINE_RE.search(company) or _UAE_LOCATION_LINE_RE.search(company):
+                return
+            key = (title.lower(), company.lower())
+            if key in seen:
+                return
+            seen.add(key)
+            entities.append({"title": title, "company": company})
+
+        # 1) Labelled fields / confirmation phrasing (single-entity styles).
+        _lt, _lc = cls._extract_application_meta_from_text(head)
+        if _lt and _lc and _lt != "Uploaded job description":
+            _add(_lt, _lc)
+
+        # 2) Line scan for board-card layouts.
+        lines = [ln.strip() for ln in head.splitlines() if ln.strip()]
+        for idx, line in enumerate(lines):
+            if len(entities) >= max_entities:
+                break
+            segments = [s for s in _CARD_SEGMENT_SPLIT_RE.split(line) if s.strip()]
+            if len(segments) >= 2:
+                # Single-line card: "Company — Title — Dept — Location".
+                title_seg = next(
+                    (s for s in segments
+                     if _ROLE_KEYWORD_RE.search(s) and not _UAE_LOCATION_LINE_RE.search(s)),
+                    None,
+                )
+                if title_seg:
+                    company_seg = next(
+                        (s for s in segments
+                         if s is not title_seg
+                         and not _UAE_LOCATION_LINE_RE.search(s)
+                         and not _SCREENSHOT_NOISE_LINE_RE.search(s)),
+                        None,
+                    )
+                    if company_seg:
+                        _add(title_seg, company_seg)
+                continue
+            # Stacked card: a title line with the company on an adjacent line.
+            if not _ROLE_KEYWORD_RE.search(line):
+                continue
+            if _UAE_LOCATION_LINE_RE.search(line) or _SCREENSHOT_NOISE_LINE_RE.search(line):
+                continue
+            if not (2 <= len(line.split()) <= 8):
+                continue
+            for neighbor_idx in (idx + 1, idx - 1):
+                if not (0 <= neighbor_idx < len(lines)):
+                    continue
+                neighbor = lines[neighbor_idx]
+                if (
+                    _ROLE_KEYWORD_RE.search(neighbor)
+                    or _UAE_LOCATION_LINE_RE.search(neighbor)
+                    or _SCREENSHOT_NOISE_LINE_RE.search(neighbor)
+                ):
+                    continue
+                _add(line, neighbor)
+                break
+
+        return entities[:max_entities]
+
+    def _applied_from_screenshot_fallback(
+        self, user_id: str, arabic: bool,
+    ) -> "dict[str, Any] | None":
+        """Recover the applied-to job from the last uploaded transcript's OCR text.
+
+        Fires when an applied-status report could not be resolved to a job. The
+        document CLASSIFICATION verdict is deliberately ignored here — low
+        classification confidence must not invalidate successfully extracted
+        text (2026-07-02 smoke failure). CVs and identity documents are the
+        only excluded transcript types (their role lines are work history, not
+        an applied-to job). Returns None when no entity can be extracted so the
+        caller's normal clarification proceeds.
+        """
+        doc = self._get_last_uploaded_document(user_id)
+        if not isinstance(doc, dict):
+            return None
+        if str(doc.get("document_type") or "") in ("cv", "identity_document"):
+            return None
+        text = str(doc.get("extracted_text") or "").strip()
+        if not text:
+            return None
+        entities = self._extract_job_entities_from_transcript(text)
+        if not entities:
+            return None
+
+        # Arm one-click confirmation: the user already asserted they applied,
+        # so the button click must persist immediately (no second confirm turn).
+        try:
+            ctx = self._get_recent_context(user_id)
+            if len(entities) == 1:
+                ctx["_pending_confirm_apply"] = dict(entities[0])
+            else:
+                ctx["_pending_confirm_apply_options"] = [dict(e) for e in entities]
+            self._store_recent_context(user_id, ctx)
+        except Exception:
+            pass
+
+        options = [
+            {
+                "action": "confirm_mark_applied",
+                "label": (f"{e['title']} — {e['company']}" if len(entities) > 1
+                          else ("نعم، سجّل التقديم" if arabic else "Yes, I applied to this")),
+                "message": f"Mark as applied — {e['title']} at {e['company']}",
+            }
+            for e in entities
+        ]
+        if len(entities) == 1:
+            e = entities[0]
+            msg = (
+                f"قرأت من الصورة المرفوعة: **{e['title']}** في **{e['company']}**. "
+                "هل هذه هي الوظيفة التي تقدمت عليها؟ "
+                "إن لم تكن هي، أرسل اسم الوظيفة والشركة."
+                if arabic else
+                f"From your uploaded screenshot I read: **{e['title']}** at **{e['company']}**. "
+                "Is this the job you applied to? "
+                "If not, send me the job title and company name."
+            )
+        else:
+            listing = "\n".join(f"- **{e['title']}** — {e['company']}" for e in entities)
+            msg = (
+                "قرأت أكثر من وظيفة في الصورة المرفوعة — على أي وظيفة تقدمت؟\n\n"
+                f"{listing}\n\n"
+                "اختر من الأزرار، أو أرسل اسم الوظيفة والشركة إن كانت وظيفة أخرى."
+                if arabic else
+                "I read more than one job in your uploaded screenshot — which one did you apply to?\n\n"
+                f"{listing}\n\n"
+                "Pick one below, or send the job title and company if it's a different one."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "clarification",
+            "intent": "application_status_update",
+            "message": msg,
+            "options": options,
+            "next_action": "confirm_application_from_upload",
+        }
 
     def _track_uploaded_application(
         self, user_id: str, text: str, is_ar: bool,
@@ -11026,6 +11227,16 @@ class RicoChatAPI:
                 and pending.get("company", "").lower() == company.lower()
             ):
                 return True
+            # Screenshot-fallback disambiguation: any job the user was offered
+            # counts as explicitly confirmed once they pick it (they already
+            # asserted they applied — the button click chooses which job).
+            for offered in ctx.get("_pending_confirm_apply_options") or []:
+                if (
+                    isinstance(offered, dict)
+                    and offered.get("title", "").lower() == title.lower()
+                    and offered.get("company", "").lower() == company.lower()
+                ):
+                    return True
             # URL evidence from a prior open_apply_link or application_tracking action
             recent_app = ctx.get("recent_application") or {}
             if (
