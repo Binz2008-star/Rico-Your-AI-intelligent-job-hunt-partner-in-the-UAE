@@ -187,6 +187,34 @@ class TestEmailedWithinHours:
 
 
 # ---------------------------------------------------------------------------
+# Batched dedup helper (get_sent_job_keys; hardening #5)
+# ---------------------------------------------------------------------------
+
+class TestGetSentJobKeys:
+    def test_returns_set_of_keys_in_one_query(self):
+        cur = MagicMock()
+        cur.fetchall.return_value = [("k1",), ("k2",), ("k3",)]
+        cur.__enter__ = MagicMock(return_value=cur)
+        cur.__exit__ = MagicMock(return_value=False)
+        conn = MagicMock()
+        conn.cursor.return_value = cur
+        with patch("src.db.get_db_connection", return_value=conn):
+            keys = en.get_sent_job_keys("u@x.com")
+        assert keys == {"k1", "k2", "k3"}
+        assert cur.execute.call_count == 1  # single round trip, not N
+        conn.close.assert_called_once()
+
+    def test_no_db_returns_empty_set(self):
+        with patch("src.db.get_db_connection", return_value=None):
+            assert en.get_sent_job_keys("u@x.com") == set()
+
+    def test_empty_user_short_circuits(self):
+        with patch("src.db.get_db_connection") as gc:
+            assert en.get_sent_job_keys("") == set()
+            gc.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # Mailer HTML support
 # ---------------------------------------------------------------------------
 

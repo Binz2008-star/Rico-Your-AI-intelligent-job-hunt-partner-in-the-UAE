@@ -95,7 +95,7 @@ def _find_matches(profile: Any, user_id: str) -> List[Dict[str, Any]]:
     """
     try:
         from src.rico_repo_adapter import RicoSystem
-        from src.services.email_notifications import was_email_alert_sent
+        from src.services.email_notifications import get_sent_job_keys
         from src.applications import get_job_id
     except Exception:
         logger.exception("email_alert: match engine import failed user=%s", user_id)
@@ -113,6 +113,7 @@ def _find_matches(profile: Any, user_id: str) -> List[Dict[str, Any]]:
 
     excluded = _excluded_job_keys(user_id)
     threshold = _min_score_for(user_id)
+    already_emailed = get_sent_job_keys(user_id)  # one query, not one per candidate
     picked: List[Dict[str, Any]] = []
     seen_keys: set[str] = set()
 
@@ -131,7 +132,7 @@ def _find_matches(profile: Any, user_id: str) -> List[Dict[str, Any]]:
             continue
         job_key = get_job_id({"title": title, "company": company,
                               "location": m.get("location") or "", "link": link})
-        if was_email_alert_sent(user_id, job_key):
+        if job_key in already_emailed:
             continue  # already emailed this job to this user
         seen_keys.add(pair_key)
         picked.append({
