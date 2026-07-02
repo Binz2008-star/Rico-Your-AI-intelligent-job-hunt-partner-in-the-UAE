@@ -28,6 +28,21 @@ _MAGIC_TABLE: list[tuple[bytes, str]] = [
 _WEBP_RIFF   = b"RIFF"
 _WEBP_MARKER = b"WEBP"
 
+# Minimum extractable characters for a text-bearing document (PDF / Word / text)
+# to be classified by content. Below this, the file has no usable text layer —
+# e.g. a screenshot or scan exported as a PDF, or an empty file — and must NOT be
+# pushed through CV extraction (it would only yield a misleading "poor quality"
+# CV preview). Such files are tagged "no_text" so the router can route them away
+# from the CV pipeline. (OCR/vision for these is handled separately, out of scope.)
+_MIN_TEXT_CHARS = 25
+
+# Minimum raw byte size for a near-empty file to be treated as a real "no_text"
+# document (a screenshot / scan exported as a PDF carries image data and is at
+# least several KB). Below this, a near-empty file is a tiny stub or corrupt
+# upload, not a real image-only document — it is left to flow through the normal
+# pipeline rather than being labelled no_text.
+_MIN_DOC_BYTES = 1024
+
 
 def detect_format(data: bytes, filename: str = "") -> str:
     """Return a format slug based on magic bytes, with filename extension as tiebreaker."""
@@ -147,6 +162,17 @@ _SIGNALS: dict[str, list[str]] = {
         "place of birth", "issuing authority", "رقم جواز السفر",
         "الهوية الإماراتية", "رقم بطاقة الهوية",
     ],
+    "application_confirmation": [
+        "application submitted", "application sent", "application received",
+        "application has been submitted", "application was sent", "application was submitted",
+        "we have received your application", "we've received your application",
+        "thank you for applying", "thanks for applying", "thank you for your application",
+        "successfully applied", "your application to", "your application for",
+        "application is under review", "application confirmation",
+        "application id", "application reference", "application number",
+        "your application was sent to",
+        "تم إرسال طلبك", "تم استلام طلبك", "تم تقديم طلبك", "شكراً لتقديمك",
+    ],
     "company_profile": [
         "company profile", "corporate profile", "company overview", "corporate overview",
         "our mission", "our vision", "our values", "our culture",
@@ -168,8 +194,10 @@ _DISPLAY_LABELS: dict[str, str] = {
     "certificate":       "Certificate / License",
     "identity_document": "Identity Document",
     "company_profile":   "Company Profile",
+    "application_confirmation": "Application Confirmation",
     "invoice":           "Invoice",
     "image":             "Image",
+    "no_text":           "Unreadable / Image-only Document",
     "unknown":           "Document",
 }
 
@@ -231,6 +259,17 @@ _SUGGESTED_ACTIONS: dict[str, list[dict[str, str]]] = {
          "message": "Extract the issuer, issue date, and expiry from this certificate."},
     ],
     "identity_document": [],  # Blocked for security — no actions offered
+    "no_text": [],            # No readable text — router returns a needs-text message
+    # BUG-19: a job-application confirmation (screenshot/email) is application
+    # EVIDENCE — offer tracking, never generic "Summarize" dead-ends.
+    "application_confirmation": [
+        {"label": "Track this application",   "kind": "chat_continue",
+         "message": "Track this application in my pipeline."},
+        {"label": "View my applications",     "kind": "chat_continue",
+         "message": "Show my applications."},
+        {"label": "Set a follow-up reminder", "kind": "chat_continue",
+         "message": "Set a follow-up reminder for this application."},
+    ],
     "company_profile": [
         {"label": "Summarize",              "kind": "chat_continue",
          "message": "Summarize this company profile."},
@@ -248,6 +287,12 @@ _SUGGESTED_ACTIONS: dict[str, list[dict[str, str]]] = {
          "message": "Describe what's in this image."},
         {"label": "Extract text (OCR)",  "kind": "chat_continue",
          "message": "Extract any visible text from this image."},
+        # Finding 3: job-screenshot → save/score actions. Handler checks for
+        # extracted_text and guides user to extract first if not yet read.
+        {"label": "Save as target job",    "kind": "chat_continue",
+         "message": "Save this as a target job in my pipeline."},
+        {"label": "Score against my CV",   "kind": "chat_continue",
+         "message": "Score this job description against my current CV."},
     ],
     "unknown": [
         {"label": "Summarize",               "kind": "chat_continue",
@@ -329,6 +374,19 @@ class DocumentClassifier:
             )
 
         text = self._extract_text(data, file_format)
+
+        # No-text / image-only documents: a screenshot or scan exported as a PDF.
+        # There is no text layer to classify or extract, so the CV parser would only
+        # produce a misleading "poor quality" CV preview (#674 residual). Tag these
+        # distinctly so the router never routes them into CV extraction. Only real
+        # documents (>= _MIN_DOC_BYTES of image data) qualify — tiny stubs / corrupt
+        # uploads are left to the normal pipeline.
+        if len(text.strip()) < _MIN_TEXT_CHARS and len(data) >= _MIN_DOC_BYTES:
+            return self._make(
+                "no_text", 0.9, {"no_text": 0.9}, file_format,
+                metadata={"chars": len(text)},
+            )
+
         return self._classify_text(text, file_format, filename)
 
     # ── Text extraction ───────────────────────────────────────────
@@ -405,6 +463,21 @@ class DocumentClassifier:
         ):
             top_type = "identity_document"
             confidence = 0.92
+
+        # Hard override (BUG-19): application confirmations are short, highly
+        # specific texts ("your application was sent to …", "thank you for
+        # applying"). Two or more distinct confirmation signals in a non-CV text
+        # decisively identify application evidence — the ratio score alone stays
+        # too low against larger signal banks (e.g. job_description).
+        _conf_signals = _SIGNALS["application_confirmation"]
+        _conf_hits = sum(1 for s in _conf_signals if s in lower)
+        if (
+            _conf_hits >= 2
+            and top_type != "identity_document"
+            and raw_scores.get("cv", 0) < 0.15
+        ):
+            top_type = "application_confirmation"
+            confidence = 0.9
 
         non_zero = {k: round(v, 3) for k, v in raw_scores.items() if v > 0}
         return self._make(

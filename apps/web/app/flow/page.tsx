@@ -12,23 +12,43 @@ import {
     ApiError,
     createManualApplication,
     getApplications,
+    getApplicationStats,
     logout,
     updateApplicationStatus,
 } from '@/lib/api';
 import type { Application, ApplicationStatus } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useTranslation, type TranslationKey } from '@/lib/translations';
+import { APPLICATION_STATUSES, STAGE_DEFS, type StageKey } from '@/lib/applicationStatus';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 type ViewMode = 'list' | 'board';
 
-const KANBAN_COLS: Array<{ labelKey: TranslationKey; statuses: ApplicationStatus[]; accent: string }> = [
-    { labelKey: 'flowColLeads',     statuses: ['saved', 'opened', 'opened_external', 'prepared'], accent: 'border-text-tertiary/30' },
-    { labelKey: 'flowColApplied',   statuses: ['applied', 'follow_up_due'],                       accent: 'border-sky-500/30' },
-    { labelKey: 'flowColInterview', statuses: ['interview'],                                       accent: 'border-gold/40' },
-    { labelKey: 'flowColOutcome',   statuses: ['offer', 'rejected', 'decision_made'],              accent: 'border-magenta/30' },
-];
+// Board column labels, keyed by the canonical stage (lib/applicationStatus.ts).
+// The set of statuses per column comes from STAGE_DEFS — the same source the
+// stat grid and the chat pipeline summary read — so a status can never be
+// classified into a different stage depending on which view renders it (BUG-6).
+const STAGE_LABEL_KEYS: Record<StageKey, TranslationKey> = {
+    lead: 'flowColLeads',
+    applied: 'flowColApplied',
+    interview: 'flowColInterview',
+    outcome: 'flowColOutcome',
+};
+
+const STAGE_ACCENTS: Record<StageKey, string> = {
+    lead: 'border-text-tertiary/30',
+    applied: 'border-sky-500/30',
+    interview: 'border-gold/40',
+    outcome: 'border-magenta/30',
+};
+
+const KANBAN_COLS: Array<{ labelKey: TranslationKey; statuses: ApplicationStatus[]; accent: string }> =
+    STAGE_DEFS.map((stage) => ({
+        labelKey: STAGE_LABEL_KEYS[stage.key],
+        statuses: stage.statuses,
+        accent: STAGE_ACCENTS[stage.key],
+    }));
 
 // Maps each canonical backend status to its display-label translation key.
 // Backend values are never changed — only the rendered label is localized.
@@ -45,10 +65,7 @@ const STATUS_LABEL_KEYS: Record<ApplicationStatus, TranslationKey> = {
     decision_made: 'flowStatusDecision',
 };
 
-const STATUS_OPTIONS: ApplicationStatus[] = [
-    'saved', 'opened', 'opened_external', 'prepared',
-    'applied', 'follow_up_due', 'interview', 'offer', 'rejected', 'decision_made',
-];
+const STATUS_OPTIONS: ApplicationStatus[] = APPLICATION_STATUSES;
 
 const NEXT_ACTION_KEYS: Record<ApplicationStatus, TranslationKey> = {
     saved: 'flowNextSaved',
@@ -143,11 +160,35 @@ export default function FlowPage() {
     const [updating, setUpdating] = useState<string | null>(null);
     const [formData, setFormData] = useState<ManualApplicationForm>(() => createEmptyFormData());
 
+    const closeTrackModal = useCallback(() => {
+        setShowModal(false);
+        setFormError(null);
+        setFormData(createEmptyFormData());
+    }, []);
+
+    // Escape closes the Track Application modal, matching standard dialog behavior.
+    useEffect(() => {
+        if (!showModal) return;
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') closeTrackModal();
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [showModal, closeTrackModal]);
+
     const loadApplications = useCallback(async () => {
         try {
-            const response = await getApplications(undefined, 1, 50);
+            const [response, stats] = await Promise.all([
+                getApplications(undefined, 1, 50),
+                getApplicationStats().catch(() => null),
+            ]);
             setApplications(response.applications);
-            setTotal(response.total);
+            // Header total must match the canonical, deduped count from the
+            // backend (the same source the chat summary and sidebar widget
+            // use) — not a partial sum derived from a curated status subset,
+            // which previously disagreed with the list/board counts.
+            const canonicalTotal = typeof stats?.total === 'number' ? stats.total : response.total;
+            setTotal(canonicalTotal);
             setError(false);
         } catch (err: unknown) {
             const is401 = err instanceof ApiError && err.statusCode === 401;
@@ -461,13 +502,18 @@ export default function FlowPage() {
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
                     role="dialog"
+                    aria-modal="true"
                     aria-label={t('flowTrackApplicationModalTitle')}
                     dir={isRTL ? 'rtl' : 'ltr'}
+                    onClick={closeTrackModal}
                 >
-                    <Card className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto bg-surface-elevated">
-                        <CardContent className="p-5 sm:p-6">
-                        <h2 className="font-semibold text-on-surface mb-4">{t('flowTrackApplicationModalTitle')}</h2>
-                        <form onSubmit={handleTrackApplication} className="space-y-4" aria-label="Manual application form">
+                    <Card
+                        className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden bg-surface-elevated"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <CardContent className="flex flex-1 flex-col overflow-hidden p-0">
+                        <h2 className="shrink-0 border-b border-border-soft px-5 pb-4 pt-5 font-semibold text-on-surface sm:px-6 sm:pt-6">{t('flowTrackApplicationModalTitle')}</h2>
+                        <form onSubmit={handleTrackApplication} className="flex-1 space-y-4 overflow-y-auto px-5 pb-5 pt-4 sm:px-6 sm:pb-6" aria-label="Manual application form">
                             <div>
                                 <label htmlFor="title" className="block text-sm text-on-surface-variant mb-1">{t('flowModalJobTitle')}</label>
                                 <input
@@ -541,11 +587,7 @@ export default function FlowPage() {
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => {
-                                        setShowModal(false);
-                                        setFormError(null);
-                                        setFormData(createEmptyFormData());
-                                    }}
+                                    onClick={closeTrackModal}
                                     disabled={saving}
                                     className="flex-1 rounded-lg border border-border-soft px-4 py-2 text-sm font-semibold text-on-surface-variant transition-colors hover:border-white/20 hover:text-on-surface disabled:opacity-60"
                                 >

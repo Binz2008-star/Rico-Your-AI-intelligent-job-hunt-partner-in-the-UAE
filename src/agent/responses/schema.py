@@ -15,6 +15,10 @@ Fields:
     options      – action buttons / choices (only for type=clarification|options)
     next_action  – suggested next step for the frontend
     debug_id     – opaque reference for server-side log correlation
+    agentic_ui   – optional agentic UI envelope (action cards, permission prompts,
+                   progress steps, proposed changes, attachment analysis).
+                   Old clients that only read message/type ignore this field.
+                   See src/agent/responses/agentic_ui.py for the full schema.
 """
 from __future__ import annotations
 
@@ -72,6 +76,12 @@ class RicoResponse:
     confidence: Optional[float] = None
     role_intelligence: Optional[Dict[str, Any]] = None
 
+    # ── Agentic UI envelope (PR-A — optional, ignored by old clients) ─────────
+    # Populated by callers that want to attach action cards, permission prompts,
+    # progress steps, proposed changes, or attachment analysis to a response.
+    # Import lazily to avoid circular-import issues in tests that stub the module.
+    agentic_ui: Optional[Dict[str, Any]] = None
+
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dict, omitting None/empty optional fields for clean JSON."""
         d: Dict[str, Any] = {
@@ -98,6 +108,8 @@ class RicoResponse:
             d["confidence"] = self.confidence
         if self.role_intelligence is not None:
             d["role_intelligence"] = self.role_intelligence
+        if self.agentic_ui is not None:
+            d["agentic_ui"] = self.agentic_ui
         return d
 
 

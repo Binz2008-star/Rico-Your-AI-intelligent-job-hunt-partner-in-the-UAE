@@ -617,7 +617,10 @@ _CV_GENERATE_RE = re.compile(
 
 _PROFILE_UPDATE_RE = re.compile(
     r"\b(update|change|set|modify|adjust)\b.{0,40}"
-    r"\b(salary|city|location|preference|role|title|industry|experience|notice|email|phone|telegram)\b",
+    r"\b(salary|city|location|preference|role|title|industry|experience|notice|email|phone|telegram)\b"
+    # Declarative city statements: "My favorite city is Dubai", "I live in Dubai"
+    r"|\bmy\s+(?:favorite|preferred|home|base|target)?\s*city\s+is\b"
+    r"|\bi\s+(?:live|work|am\s+based|reside)\s+in\b",
     re.IGNORECASE,
 )
 
@@ -676,6 +679,49 @@ _SAVE_JOB_RE = re.compile(
     re.IGNORECASE,
 )
 
+# "save it/Dubai to my profile/preferences/account" must route to profile_update,
+# not save_job. Checked BEFORE _SAVE_JOB_RE so these never reach the job-save path.
+_SAVE_TO_PROFILE_RE = re.compile(
+    r"\bsave\b.{0,80}\bto\s+my\s+(?:profile|preferences?|settings?|account)\b"
+    r"|\bsave\b.{0,60}\bas\s+my\s+preferred\b"
+    r"|احفظ\S*.{0,60}(?:في\s+ملف(?:ي|ه|ك)|في\s+تفضيلات(?:ي|ك)|في\s+حساب(?:ي|ك))"
+    r"|(?:خزّن|خزن|اضف|أضف)\S*.{0,60}(?:في\s+ملف(?:ي|ه|ك)|في\s+تفضيلات(?:ي|ك)|في\s+حساب(?:ي|ك))",
+    re.IGNORECASE | re.UNICODE,
+)
+
+# Ordinal save: "save the first/second/Nth/last job to my pipeline". Emits
+# save_job with an ordinal entity so the handler resolves the job from the recent
+# search results — mirrors the ordinal open-apply-link path.
+_SAVE_JOB_ORDINAL_RE = re.compile(
+    r"\b(?:save|bookmark|keep|shortlist|add)\b\s+(?:the\s+)?"
+    r"(?:"
+    # "save job 2" / "save job number 2" / "save job #2"  (noun before number)
+    r"job\s+(?:number\s+|#)?(?P<ord_after>\d{1,2})"
+    r"|"
+    # "save the second job" / "save the 2nd one"  (ordinal before noun)
+    r"(?P<ord>first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last|\d{1,2})"
+    r"(?:st|nd|rd|th)?\s*(?:job|role|position|result|listing|one)"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# Arabic ordinal save: "احفظ أول وظيفة" / "احفظ ثاني وظيفة بالبايبلاين".
+# Verb (احفظ/خزن/اضف) + Arabic ordinal token (around the job noun وظيفة).
+_SAVE_JOB_ORDINAL_AR_RE = re.compile(
+    r"(?:احفظ|احفظي|خزن|خزّن|اضف|أضف|ضيف)\b[^\n]{0,20}?"
+    r"(?P<aord>اول|أول|الاولى|الأولى|الاولي|ثاني|ثانيه|ثانية|الثاني|الثانيه|الثانية|"
+    r"ثالث|ثالثه|ثالثة|الثالثة|رابع|رابعة|خامس|خامسة|اخر|آخر|الاخير|الأخير|الاخيره|الأخيرة)",
+    re.UNICODE,
+)
+
+_ARABIC_ORDINAL_TO_INT = {
+    "اول": 1, "أول": 1, "الاولى": 1, "الأولى": 1, "الاولي": 1,
+    "ثاني": 2, "ثانيه": 2, "ثانية": 2, "الثاني": 2, "الثانيه": 2, "الثانية": 2,
+    "ثالث": 3, "ثالثه": 3, "ثالثة": 3, "الثالثة": 3,
+    "رابع": 4, "رابعة": 4, "خامس": 5, "خامسة": 5,
+    "اخر": -1, "آخر": -1, "الاخير": -1, "الأخير": -1, "الاخيره": -1, "الأخيرة": -1,
+}
+
 # Extracts explicit role name from "find/search … jobs for <role>" patterns.
 # Checked alongside _JOB_SEARCH_EXPLICIT_RE to attach extracted_role.
 _JOB_SEARCH_FOR_ROLE_RE = re.compile(
@@ -710,6 +756,218 @@ _ROLE_PREFIX_STOPWORDS = frozenset({
     "only", "filter", "exclude", "include", "no", "not", "without", "remove",
 })
 
+# ── Multi-role search-list parsing ────────────────────────────────────────────
+# Users routinely request several target roles in one message:
+#   "Search for Technical Product Owner, Product Owner, Technical Project Manager
+#    and Operations Technology Manager roles in UAE. Do not search Software
+#    Engineer, Backend, Golang or Machine Learning roles unless I ask for coding."
+# The single-role extractors above treat the whole comma list as one unknown
+# role, so the chat layer replied "I do not recognize '<the whole list>' as a job
+# role". extract_role_list() splits the list into individual target roles and a
+# trailing negative-constraint ("do not search …") clause of excluded roles.
+
+# Leading search verb removed from the positive segment ("Search for A, B …").
+_MULTI_ROLE_LEAD_RE = re.compile(
+    r"^\s*(?:please\s+)?(?:search|searching|look|looking|find|finding|show|get|"
+    r"fetch|give|list|browse)\w*(?:\s+(?:me|for|up))*\s+",
+    re.IGNORECASE,
+)
+
+# Strips a leading "<≤3 filler words> jobs/roles for " introduction left after the
+# search verb, so "search UAE jobs for HSE Manager and QHSE Manager" parses the
+# list as [HSE Manager, QHSE Manager] instead of dropping the first item (whose
+# "jobs for" prefix would otherwise be rejected by the non-role-word guard).
+_MULTI_ROLE_JOBS_FOR_RE = re.compile(
+    r"^\s*(?:\w+\s+){0,3}?(?:jobs?|roles?|positions?|openings?|vacancies?)\s+for\s+",
+    re.IGNORECASE,
+)
+
+# Trailing politeness / urgency qualifiers that are not part of a role title:
+# "Technical Product Owner only" -> "Technical Product Owner".
+_ROLE_TRAILING_QUALIFIERS = frozenset({
+    "only", "please", "pls", "plz", "now", "today", "asap", "thanks", "thx",
+    "here", "kindly", "urgently", "urgent", "immediately", "soon",
+})
+
+
+def _strip_role_qualifiers(role: Optional[str]) -> Optional[str]:
+    """Drop trailing politeness/urgency qualifier words from an extracted role."""
+    if not role:
+        return role
+    words = role.strip().split()
+    while words and words[-1].lower().strip(".,!?") in _ROLE_TRAILING_QUALIFIERS:
+        words.pop()
+    return " ".join(words) if words else role
+
+
+# Descriptive category → concrete allowed roles (T6). Keeps Rico on safe
+# product/management titles instead of guessing literal words like "product".
+_CATEGORY_PRODUCT_TECH_MGMT_ROLES = [
+    "Technical Product Owner", "Product Owner", "Technical Project Manager",
+    "Digital Transformation Manager", "Operations Technology Manager",
+]
+_CATEGORY_RE = re.compile(
+    r"\bproduct\s*(?:and|&|/|\+)\s*technical\s+management\b"
+    r"|\btechnical\s*(?:and|&|/|\+)\s*product\s+management\b",
+    re.IGNORECASE,
+)
+# "not coding jobs" exclusion shorthand → concrete engineering roles to exclude.
+_CODING_EXCLUSION_ROLES = [
+    "Software Engineer", "Full Stack", "Backend", "Golang", "Machine Learning",
+]
+_NOT_CODING_RE = re.compile(
+    r"\b(?:not|no|without|avoid|exclude|skip|except)\s+coding\b|\bnon[- ]?coding\b",
+    re.IGNORECASE,
+)
+# Reference to the user's CV / profile as the search basis (T5).
+# "my\s+\w+\s+(?:cv|resume|profile)" additionally covers "my strongest profile",
+# "my current CV", etc. — a single adjective/qualifier between "my" and the noun.
+_CV_PROFILE_REF_RE = re.compile(
+    r"\b(?:my\s+cv|my\s+resume|my\s+profile|my\s+\w+\s+(?:cv|resume|profile)|"
+    r"based\s+on\s+my|match(?:es|ing)?\s+my|"
+    r"from\s+my\s+(?:cv|resume|profile)|for\s+me)\b",
+    re.IGNORECASE,
+)
+
+# Opener of the negative-constraint clause — everything after it is an EXCLUSION
+# list. Kept narrow so ordinary prose ("not sure", "no thanks") never trips it.
+_EXCLUSION_OPENER_RE = re.compile(
+    r"\b(?:do\s*n['’]?t|do\s+not|never|please\s+do\s+not|please\s+do\s*n['’]?t)\s+"
+    r"(?:search|include|show|fetch|return|look\s+for|want|consider|send|pull)\b"
+    r"|\b(?:excluding|exclude|avoid|skip)\b",
+    re.IGNORECASE,
+)
+
+# Subordinate clause that qualifies (but is not part of) a role list — dropped
+# before splitting, e.g. "… roles unless I explicitly ask for coding jobs".
+_ROLE_LIST_TAIL_CLAUSE_RE = re.compile(
+    r"\b(?:unless|except|if|when|whenever|because|since|but|while|so\s+that)\b",
+    re.IGNORECASE,
+)
+
+# Trailing job-noun / location qualifier stripped from a captured role token:
+#   "Operations Technology Manager roles in UAE" -> "Operations Technology Manager"
+_ROLE_TOKEN_TAIL_RE = re.compile(
+    r"\s*\b(?:jobs?|roles?|positions?|openings?|vacancies?|work)?\b"
+    r"\s*\bin\s+[A-Za-z'’ .\-]+$"
+    r"|\s*\b(?:jobs?|roles?|positions?|openings?|vacancies?|work)\s*$",
+    re.IGNORECASE,
+)
+
+# Connectors a role list is split on: commas, semicolons, slashes, ampersands,
+# and the words "and" / "or".
+_ROLE_LIST_SPLIT_RE = re.compile(r"\s*(?:,|;|/|&|\band\b|\bor\b|\bplus\b)\s*", re.IGNORECASE)
+
+# Leading filler dropped from a single role token. Reuses the role-prefix
+# stopwords plus list-specific qualifiers ("pure Software Engineer" -> "Software
+# Engineer").
+_ROLE_TOKEN_LEAD_STOPWORDS = _ROLE_PREFIX_STOPWORDS | frozenset({
+    "pure", "purely", "strictly", "such", "as", "like", "also", "plus",
+})
+
+_ROLE_TOKEN_TRAILING_NOUNS = frozenset({
+    "jobs", "job", "roles", "role", "positions", "position",
+    "openings", "opening", "vacancies", "vacancy", "work",
+})
+
+# English location words — a token made up entirely of these is a place, not a role.
+_ENGLISH_LOCATION_WORDS = frozenset({
+    "uae", "u.a.e", "dubai", "abu", "dhabi", "sharjah", "ajman", "ras",
+    "al", "khaimah", "fujairah", "ain", "umm", "quwain", "emirates",
+    "united", "arab", "gulf", "gcc",
+})
+
+# Words that never appear inside a real role title — their presence means the
+# captured token is prose, not a role (e.g. "UAE jobs that match my CV"). Used to
+# reject false-positive list items so the multi-role path only fires on genuine
+# role lists. Job nouns are included because a real title never carries them once
+# the trailing qualifier has been stripped.
+_NON_ROLE_WORDS = frozenset({
+    "that", "which", "match", "matches", "matching", "suit", "suits", "fit",
+    "fits", "based", "my", "me", "mine", "our", "your", "their", "his", "her",
+    "i", "we", "you", "they", "cv", "resume", "profile", "experience",
+    "please", "kindly", "best", "with", "apply", "applying",
+    "jobs", "job", "roles", "role", "positions", "position", "openings",
+    "opening", "vacancies", "vacancy", "work", "anything", "something",
+})
+
+
+def _clean_role_token(token: str) -> Optional[str]:
+    """Normalise one role-list item to a bare role title, or None if it is not one.
+
+    Strips a trailing "roles/jobs in <location>" qualifier, leading command/filler
+    words ("pure", "search for", …) and trailing job nouns, then validates the
+    remainder is a 1–6 word phrase containing letters, not a pure location, and
+    free of prose/filler words that never appear inside a real role title.
+    """
+    t = (token or "").strip().strip(".!?;:").strip()
+    if not t:
+        return None
+    # Iteratively peel a trailing "roles/jobs in <location>" / bare job-noun tail.
+    prev = None
+    while prev != t:
+        prev = t
+        t = _ROLE_TOKEN_TAIL_RE.sub("", t).strip().strip(".!?;:").strip()
+    words = [w for w in t.split() if w]
+    while words and words[0].lower() in _ROLE_TOKEN_LEAD_STOPWORDS:
+        words.pop(0)
+    while words and words[-1].lower().strip(".") in _ROLE_TOKEN_TRAILING_NOUNS:
+        words.pop()
+    if not words or not (1 <= len(words) <= _MAX_WORD_COUNT_FOR_ROLE):
+        return None
+    role = " ".join(words)
+    if not re.search(r"[A-Za-z]", role):
+        return None
+    if all(w.lower().strip(".") in _ENGLISH_LOCATION_WORDS for w in words):
+        return None
+    # Any prose/filler word inside the phrase means this is not a clean role title.
+    if any(w.lower().strip(".") in _NON_ROLE_WORDS for w in words):
+        return None
+    return role
+
+
+def _split_role_phrase(segment: str) -> list[str]:
+    """Split a comma/and-separated role segment into de-duplicated role titles."""
+    if not segment:
+        return []
+    # Drop a trailing subordinate clause that is not part of the list itself.
+    segment = _ROLE_LIST_TAIL_CLAUSE_RE.split(segment, maxsplit=1)[0]
+    roles: list[str] = []
+    seen: set[str] = set()
+    for part in _ROLE_LIST_SPLIT_RE.split(segment):
+        role = _clean_role_token(part)
+        if role and role.lower() not in seen:
+            seen.add(role.lower())
+            roles.append(role)
+    return roles
+
+
+def extract_role_list(text: str) -> tuple[list[str], list[str]]:
+    """Parse a multi-role search request into ``(target_roles, excluded_roles)``.
+
+    Handles comma- and "and"/"or"-separated lists, strips trailing
+    "roles in UAE" / "jobs in Dubai" qualifiers, and preserves a trailing
+    negative-constraint clause ("do not search X, Y …") as the exclusion list.
+    Returns two (possibly empty) lists; callers decide whether the positive list
+    is long enough to treat the message as a multi-role search.
+    """
+    if not text:
+        return [], []
+    positive_segment = text
+    excluded_segment = ""
+    opener = _EXCLUSION_OPENER_RE.search(text)
+    if opener:
+        positive_segment = text[: opener.start()]
+        excluded_segment = text[opener.end():]
+    # Remove the leading search verb, then any "<loc> jobs/roles for" introduction
+    # ("UAE jobs for HSE Manager and QHSE Manager" -> "HSE Manager and QHSE Manager").
+    positive_segment = _MULTI_ROLE_LEAD_RE.sub("", positive_segment, count=1)
+    positive_segment = _MULTI_ROLE_JOBS_FOR_RE.sub("", positive_segment, count=1)
+    target_roles = _split_role_phrase(positive_segment)
+    excluded_roles = _split_role_phrase(excluded_segment)
+    return target_roles, excluded_roles
+
+
 # Matches job-card action messages sent from RicoJobMatchCard:
 #   "{action} — {title} at {company}"
 # Must be checked BEFORE generic apply/save patterns.
@@ -743,6 +1001,41 @@ _OPEN_APPLY_LINK_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Ordinal open-apply-link: "open the apply link for the first/second/Nth job",
+# "open apply link for job 2", "show the apply link for the last one". Must be
+# matched before _APPLY_JOB_RE so an ordinal link request is never mis-routed to
+# apply_job (which then fails with "missing required 'link' field"). The "the"
+# between open/apply that _OPEN_APPLY_LINK_RE omits is allowed here.
+_OPEN_APPLY_LINK_ORDINAL_RE = re.compile(
+    r"\b(?:open|show|give|send|share|get)\b(?:\s+me)?\s+(?:the\s+)?(?:apply\s+)?"
+    r"(?:link|url|apply\s+link|application\s+link)\s+(?:for|to|of)\s+"
+    r"(?:the\s+)?(?:job\s+(?:number\s+|#)?)?"
+    r"(?P<ord>first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last|\d{1,2})"
+    r"(?:st|nd|rd|th)?\s*(?:job|role|position|result|listing|one)?\b",
+    re.IGNORECASE,
+)
+
+_ORDINAL_WORD_TO_INT = {
+    "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5,
+    "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10,
+}
+
+
+def _parse_ordinal(token: str) -> Optional[int]:
+    """Return a 1-based index for an ordinal token ("first"→1, "3"→3, "last"→-1)."""
+    if not token:
+        return None
+    t = token.strip().lower()
+    if t == "last":
+        return -1
+    if t in _ORDINAL_WORD_TO_INT:
+        return _ORDINAL_WORD_TO_INT[t]
+    if t.isdigit():
+        n = int(t)
+        return n if n >= 1 else None
+    return None
+
+
 _APPLY_JOB_RE = re.compile(
     r"\b(apply|apply to|apply for|submit|send application)\b",
     re.IGNORECASE,
@@ -752,7 +1045,11 @@ _ARABIC_APPLIED_STATUS_RE = re.compile(
     r"(?:قمت\s+ب)?تقديم\s+الطلب"
     r"|قدمت\s+(?:الطلب|علي\s+الوظيفه|عليه|عليها|له|لها)"
     r"|تم\s+التقديم\s+بنجاح"
-    r"|ارسلت\s+الطلب",
+    r"|ارسلت\s+الطلب"
+    # "قمت بالتقديم عليها" / "لقد قمت بالتقديم" — applied-report phrasing with the
+    # التقديم noun form (owner smoke 2026-07-02: previously classified unknown).
+    r"|قمت\s+بالتقديم(?:\s+(?:عليه|عليها|له|لها|على))?"
+    r"|تقدمت\s+(?:عليه|عليها|له|لها|على|للوظيفه|للوظيفة)",
     re.UNICODE,
 )
 
@@ -1126,6 +1423,79 @@ def _extract_arabic_role(normalized_text: str) -> Optional[str]:
     return role
 
 
+# ── Search confirmation / continuation patterns ──────────────────────────────
+#
+# Stage 1 fix — production symptom:
+#   "Yes, search Software Engineer" → intent=unknown → bare_role_gate_reject_to_ai
+#
+# Root cause: _JOB_SEARCH_EXPLICIT_RE requires a job noun in the message tail.
+# Confirmation-prefixed bare-title searches have no such noun, so they fall
+# through to unknown.  This early-exit block intercepts them before the fallback.
+#
+# Match examples (all → job_search_explicit):
+#   "Yes, search Software Engineer"
+#   "yes search Product Manager"
+#   "Search Data Analyst"
+#   "find Data Engineer"
+#   "go ahead search Environmental Manager"
+#   "please find Compliance Officer"
+#   "sure, search UI/UX Designer"
+#   "نعم، ابحث عن Software Engineer"
+#
+# Non-match examples (fall through to existing handlers):
+#   "search jobs"           → bare job noun, excluded via negative lookahead
+#   "find roles"            → bare job noun, excluded
+#   "Yes"                   → acknowledgement, no change
+#   "Yes, show my pipeline" → existing handler, no change
+_SEARCH_CONFIRMATION_RE = re.compile(
+    r"^"
+    # Optional confirmation/affirmation prefix (English + Arabic)
+    r"(?:"
+    r"yes[,.]?\s+|yeah[,.]?\s+|yep[,.]?\s+|yup[,.]?\s+"
+    r"|ok[,.]?\s+|okay[,.]?\s+"
+    r"|sure[,.]?\s+|alright[,.]?\s+|fine[,.]?\s+"
+    r"|please[,.]?\s+"
+    r"|go\s+ahead[,.]?\s+"
+    r"|نعم[،,]?\s+|اوكي[،,]?\s+|تمام[،,]?\s+|حسنا[،,]?\s+|موافق[،,]?\s+"
+    r")?"
+    # Required search/find verb
+    r"(?:search|find|look\s+for|show\s+me|show)\s+"
+    # Negative lookahead: block bare job-noun queries (those belong to other handlers)
+    r"(?!(?:jobs?|roles?|positions?|openings?|vacancies|vacancy|listings?)\b)"
+    # Capture the role title — allows spaces, slashes, ampersands, hyphens, parens.
+    # Trailing optional group allows "in Dubai" / "jobs in UAE" suffixes.
+    r"(?P<role>[A-Za-z؀-ۿ][A-Za-z؀-ۿ\s/&()\-]{1,80}?)"
+    r"(?:\s+(?:jobs?|roles?|positions?|in\b|for\b).{0,50})?$",
+    re.IGNORECASE,
+)
+
+# Bare job-noun guard — "search jobs" / "find roles" must NOT be captured by
+# _SEARCH_CONFIRMATION_RE; they belong to profile-match or help handlers.
+_BARE_JOB_NOUN_RE = re.compile(
+    r"^(?:yes[,.]?\s+|yeah[,.]?\s+|ok[,.]?\s+|okay[,.]?\s+|sure[,.]?\s+|)?"
+    r"(?:search|find|look\s+for|show(?:\s+me)?)\s+"
+    r"(?:jobs?|roles?|positions?|openings?|vacancies|vacancy|listings?)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _extract_role_from_confirmation(text: str) -> Optional[str]:
+    """Extract a clean role title from a confirmation-prefixed search phrase.
+
+    Strips leading confirmation prefix ("Yes, ", "go ahead ", Arabic) and
+    search verb ("search", "find", "look for"), and trailing location/job-noun
+    suffixes ("in Dubai", "jobs in UAE"). Returns None for bare job-noun queries
+    or messages that do not match the confirmation pattern.
+    """
+    if _BARE_JOB_NOUN_RE.match(text.strip()):
+        return None
+    m = _SEARCH_CONFIRMATION_RE.match(text.strip())
+    if not m:
+        return None
+    role = m.group("role").strip().rstrip(",. ")
+    return role if len(role) >= 2 else None
+
+
 def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResult:
     """Classify a user message into a canonical intent.
 
@@ -1264,6 +1634,17 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
             target_route="/jobs",
         )
 
+    # Ordinal open-apply-link ("open the apply link for the first job") must be
+    # caught before the title/company form and before generic apply_job.
+    om = _OPEN_APPLY_LINK_ORDINAL_RE.search(text)
+    if om:
+        _ordinal = _parse_ordinal(om.group("ord"))
+        if _ordinal is not None:
+            return IntentResult(
+                "open_apply_link", 0.95, "regex",
+                entities={"ordinal": _ordinal},
+            )
+
     # Free-text open-apply-link must be caught before generic apply_job.
     m = _OPEN_APPLY_LINK_RE.search(text)
     if m:
@@ -1297,6 +1678,26 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
             "save_target_role", 0.95, "regex",
             extracted_role=save_role_match.group(1).strip(),
         )
+
+    # Ordinal save ("save the second job to my pipeline" / "احفظ ثاني وظيفة")
+    # must be detected before the plain save pattern so the handler can resolve
+    # the Nth job from recent search results.
+    _save_ord_m = _SAVE_JOB_ORDINAL_RE.search(text)
+    if _save_ord_m:
+        _save_ord = _parse_ordinal(_save_ord_m.group("ord") or _save_ord_m.group("ord_after"))
+        if _save_ord is not None:
+            return IntentResult("save_job", 0.95, "regex", entities={"ordinal": _save_ord})
+    if has_arabic:
+        _save_ord_ar = _SAVE_JOB_ORDINAL_AR_RE.search(text)
+        if _save_ord_ar:
+            _save_ord = _ARABIC_ORDINAL_TO_INT.get(_save_ord_ar.group("aord"))
+            if _save_ord is not None:
+                return IntentResult("save_job", 0.95, "regex", entities={"ordinal": _save_ord})
+
+    # "save it/Dubai to my profile/preferences" — must not be mistaken for a
+    # job save. Check before _SAVE_JOB_RE so profile writes take priority.
+    if _SAVE_TO_PROFILE_RE.search(text):
+        return IntentResult("profile_update", 0.92, "regex")
 
     if _SAVE_JOB_RE.search(text):
         return IntentResult("save_job", 0.95, "regex")
@@ -1359,6 +1760,58 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         return IntentResult("application_tracking", 0.8, "regex")
 
     # ── 4. Job search patterns ───────────────────────────────────────────
+    # 4a-0. Descriptive category → concrete allowed roles ("I want product and
+    # technical management jobs, not coding jobs"). Mapped before the generic
+    # multi-role parser, which would otherwise treat "product"/"coding" as roles.
+    if _CATEGORY_RE.search(text):
+        _cat_roles = list(_CATEGORY_PRODUCT_TECH_MGMT_ROLES)
+        _cat_excl = (
+            list(_CODING_EXCLUSION_ROLES) if _NOT_CODING_RE.search(text)
+            else extract_role_list(text)[1]
+        )
+        return IntentResult(
+            "job_search_multi_role", 0.9, "regex",
+            extracted_role=_cat_roles[0],
+            entities={"roles": _cat_roles, "excluded_roles": _cat_excl, "category": True},
+        )
+
+    # 4a-1. CV/profile-based search with exclusions but no explicit positive role
+    # ("find jobs based on my CV, but do not search Software Engineer, ..."). Route
+    # to profile-match carrying the exclusion guard so excluded roles are never
+    # searched or suggested.
+    _cv_pos, _cv_excl = extract_role_list(text)
+    if _cv_excl and not _cv_pos and _CV_PROFILE_REF_RE.search(text):
+        return IntentResult(
+            "job_search_profile_match", 0.9, "regex",
+            entities={"excluded_roles": _cv_excl},
+        )
+
+    # 4a. Multi-role search list — "search for A, B and C roles in UAE, do not
+    # search X, Y". A single comma/and-separated request for several target roles
+    # (with optional negative constraints). Must run before role_change and
+    # job_search_explicit so the whole list is not captured as one unknown role
+    # ("I do not recognize '<the whole list>' as a job role"). Gated on a search
+    # verb + an explicit job noun so ordinary prose never triggers it.
+    if (
+        (_ROLE_CHANGE_RE.match(text) or _JOB_SEARCH_EXPLICIT_RE.search(text))
+        and re.search(r"\b(?:jobs?|roles?|positions?|openings?|vacancies?)\b", text, re.IGNORECASE)
+    ):
+        _ml_roles, _ml_excluded = extract_role_list(text)
+        if len(_ml_roles) >= 2:
+            _ml_entities: dict = {"roles": _ml_roles, "excluded_roles": _ml_excluded}
+            _ml_city = _UAE_CITY_EXTRACT_RE.search(text)
+            # "UAE" is the default search scope, not a city constraint — skip it.
+            if _ml_city and _ml_city.group(1).strip().lower() != "uae":
+                _ml_entities["location"] = _ml_city.group(1).strip().title()
+            _ml_emp = _EMPLOYMENT_TYPE_EXTRACT_RE.search(text)
+            if _ml_emp:
+                _ml_entities["employment_type"] = _ml_emp.group(1).lower()
+            return IntentResult(
+                "job_search_multi_role", 0.9, "regex",
+                extracted_role=_ml_roles[0],
+                entities=_ml_entities,
+            )
+
     # Source-filter and compound-refinement checks must precede _JOB_SEARCH_EXPLICIT_RE
     # so filter tokens ("exclude", "only", "no contract") are never misclassified as roles.
     if _SOURCE_FILTER_RE.search(text):
@@ -1403,6 +1856,29 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
             target_route="/applications",
         )
 
+    # 4a-2. CV/profile-based search with no distinct explicit role — "find jobs
+    # from my CV", "find UAE jobs that match my strongest CV profile", "find
+    # jobs for my strongest profile". Gated on _JOB_SEARCH_EXPLICIT_RE also
+    # matching (i.e. this message would otherwise become job_search_explicit)
+    # so this never fires on unrelated CV prose. When the role text
+    # job_search_explicit would extract is garbage — empty, a bare location
+    # ("UAE"), or itself just a CV/profile self-reference ("my strongest
+    # profile") — defer to profile_match instead of letting job_search_explicit
+    # search that garbage text as a literal role. A genuine role mentioned
+    # alongside a CV reference ("find HSE Manager jobs that match my CV")
+    # still takes the explicit-role path below, since _clean_role_token keeps it.
+    if (
+        has_cv_profile
+        and _JOB_SEARCH_EXPLICIT_RE.search(text)
+        and _CV_PROFILE_REF_RE.search(text)
+    ):
+        _pm_for_m = _JOB_SEARCH_FOR_ROLE_RE.search(text)
+        _pm_tentative = (
+            _pm_for_m.group(1).strip() if _pm_for_m else _extract_role_before_noun(text)
+        )
+        if not _pm_tentative or not _clean_role_token(_pm_tentative):
+            return IntentResult("job_search_profile_match", 0.85, "regex")
+
     # Check explicit job search FIRST (has job/role/position keyword)
     if _JOB_SEARCH_EXPLICIT_RE.search(text):
         # Try to extract an explicit role target so the handler can search for that role
@@ -1412,6 +1888,8 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         extracted_role = for_role_m.group(1).strip() if for_role_m else None
         if not extracted_role:
             extracted_role = _extract_role_before_noun(text)
+        # Strip trailing politeness/urgency qualifiers ("... Owner only" -> "... Owner").
+        extracted_role = _strip_role_qualifiers(extracted_role)
         # Extract location and employment_type entities for richer search queries.
         _search_entities: dict = {}
         _city_m = _UAE_CITY_EXTRACT_RE.search(text)
@@ -1436,6 +1914,15 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         if role:
             role = _ARABIC_TO_ENGLISH_ROLE_MAP.get(role, role)
         return IntentResult("job_search_explicit", 0.85, "regex", extracted_role=role)
+
+    # ── 4b. Search-confirmation fast-path (Stage 1 fix) ──────────────────
+    # "Yes, search Software Engineer" / "go ahead find Technical Product Owner" /
+    # "Search Data Analyst" — confirmation-prefixed bare-title searches that have no
+    # job noun, so they fall through _JOB_SEARCH_EXPLICIT_RE above.
+    # Intercept here, before role_change, and promote to job_search_explicit.
+    _confirm_role = _extract_role_from_confirmation(text)
+    if _confirm_role:
+        return IntentResult("job_search_explicit", 0.88, "regex", extracted_role=_confirm_role)
 
     # Role change — only if no explicit job-search keyword present
     role_match = _ROLE_CHANGE_RE.match(text)

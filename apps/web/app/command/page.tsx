@@ -5,19 +5,27 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, ProfileUpdatePayload, RicoOption, UploadCVResponse } from "@/lib/api";
-import type { RicoAgenticUi, RicoChatAction, RicoProposedChange, ExecuteAllowedAction } from "@/lib/schemas";
+import type { RicoAgenticUi, RicoChatAction, RicoProposedChange, RicoAttachmentAnalysis, ExecuteAllowedAction } from "@/lib/schemas";
 import { EXECUTE_ALLOWED_ACTIONS } from "@/lib/schemas";
+import { bustSidebarCache } from "@/hooks/useSidebarStatus";
 import { ChatActionsRow } from "@/components/ui/rico/ChatActionCard";
+import { RicoMarkdownContent } from "@/components/ui/rico/RicoMarkdownContent";
+import { MissionContextBar } from "@/components/mission/MissionContextBar";
+import { CVDraftCard } from "@/components/mission/CVDraftCard";
 import { PermissionRequestCard } from "@/components/ui/rico/PermissionRequestCard";
 import { ProposedChangeCard } from "@/components/ui/rico/ProposedChangeCard";
-import { clearChatHistory, confirmCVProfile, executePermissionAction, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
+import { AttachmentAnalysisCard } from "@/components/ui/rico/AttachmentAnalysisCard";
+import { ApiError, clearChatHistory, confirmCVProfile, executePermissionAction, fetchChatHistory, fetchMe, logout, sendChat, sendChatPublic, sendChatStream, sendChatStreamPublic, submitAction, updateProfile, uploadCV } from "@/lib/api";
 import { orchestrationApi } from "@/lib/api/orchestration";
 import { buildAuthHref } from "@/lib/redirect";
+import { getJobFallbackActions, buildCopyText } from "@/lib/job-fallback";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
 import { translations, useTranslation, type TranslationKey } from "@/lib/translations";
+import { APPLICATION_STATUSES } from "@/lib/applicationStatus";
+import type { ApplicationStatus } from "@/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 function ensureSessionId(sessionIdRef: React.MutableRefObject<string | null>): string {
     if (typeof window === "undefined") return sessionIdRef.current || "ssr-session";
@@ -217,75 +225,6 @@ function parseHistoryContent(content: string, id: number): Partial<Message> {
     return { id, role: "rico", text: content };
 }
 
-// Splits inline text into markdown links, bold, italic, and bare URLs so each
-// can be rendered. Bare URLs and [label](url) links become clickable <a> tags
-// (the plain-text chat path previously rendered URLs as inert text).
-const INLINE_TOKEN_RE = /(\[[^\]]+\]\(https?:\/\/[^\s)]+\)|\*\*[^*]+\*\*|\*[^*]+\*|https?:\/\/[^\s<>()]+)/g;
-const MD_LINK_RE = /^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/;
-const LINK_CLASS = "text-gold underline underline-offset-2 hover:text-gold-hover break-words";
-
-function renderInline(text: string): React.ReactNode {
-    const parts = text.split(INLINE_TOKEN_RE);
-    return parts.map((part, i) => {
-        if (!part) return null;
-        const md = part.match(MD_LINK_RE);
-        if (md) {
-            return (
-                <a key={i} href={md[2]} target="_blank" rel="noopener noreferrer" className={LINK_CLASS}>
-                    {md[1]}
-                </a>
-            );
-        }
-        if (part.startsWith("**") && part.endsWith("**")) {
-            return <strong key={i} className="font-semibold text-rico-text">{part.slice(2, -2)}</strong>;
-        }
-        if (part.startsWith("*") && part.endsWith("*")) {
-            return <em key={i} className="italic">{part.slice(1, -1)}</em>;
-        }
-        if (/^https?:\/\//.test(part)) {
-            // Keep trailing sentence punctuation out of the link target.
-            const trail = part.match(/[.,;:!?]+$/);
-            const trailing = trail ? trail[0] : "";
-            const href = trailing ? part.slice(0, part.length - trailing.length) : part;
-            return (
-                <span key={i}>
-                    <a href={href} target="_blank" rel="noopener noreferrer" className={LINK_CLASS}>
-                        {href}
-                    </a>
-                    {trailing}
-                </span>
-            );
-        }
-        return part;
-    });
-}
-
-function renderMarkdown(text: string): React.ReactNode {
-    const lines = text.split("\n");
-    return lines.map((line, i) => {
-        if (line.startsWith("### ")) {
-            return <p key={i} className="font-semibold text-[13px] text-rico-text mt-2 mb-0.5">{renderInline(line.slice(4))}</p>;
-        }
-        if (line.startsWith("## ")) {
-            return <p key={i} className="font-semibold text-[14px] text-rico-text mt-3 mb-1">{renderInline(line.slice(3))}</p>;
-        }
-        if (line.startsWith("# ")) {
-            return <p key={i} className="font-bold text-[15px] text-rico-text mt-3 mb-1">{renderInline(line.slice(2))}</p>;
-        }
-        if (line.startsWith("- ") || line.startsWith("• ")) {
-            return (
-                <div key={i} className="flex gap-1.5 leading-relaxed">
-                    <span className="text-gold shrink-0 mt-0.5">•</span>
-                    <span>{renderInline(line.slice(2))}</span>
-                </div>
-            );
-        }
-        if (line.trim() === "") {
-            return <div key={i} className="h-1.5" />;
-        }
-        return <p key={i} className="leading-relaxed">{renderInline(line)}</p>;
-    });
-}
 
 function WorkingIndicator({ message }: { message: string }) {
     return (
@@ -332,7 +271,7 @@ function CvReadyOnboardingPanel({
     const { language } = useLanguage();
     const t = useTranslation(language);
     return (
-        <div className="pb-4 animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none">
+        <div className="pb-4 animate-in fade-in motion-reduce:animate-none">
             <div className="relative overflow-hidden rounded-2xl border border-border-subtle/70 bg-surface-elevated/60 p-5 backdrop-blur-sm sm:p-6">
                 {/* Pulse-style ambient glow */}
                 <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-gold/[0.08] blur-2xl" aria-hidden="true" />
@@ -443,6 +382,99 @@ function SourceQualityBadge({ status }: { status: VerificationStatus }) {
         );
     }
     return null;
+}
+
+/**
+ * JobFallbackActions — safe, honestly-labelled actions for a job card whose
+ * direct apply/source link is unavailable or degraded (login_required,
+ * rate_limited, aggregator_untrusted, google_intermediary, or missing).
+ *
+ * Guarantees a card is never a dead-end without re-introducing BUG-03: none of
+ * these are presented as a verified "Apply" link. They are user-initiated
+ * searches (company site / Google / LinkedIn), a clipboard copy, and a save to
+ * the pipeline. Safety/source gating is untouched — we never surface the bad
+ * provider URL itself.
+ */
+function JobFallbackActions({ match, onAction }: { match: JobMatch; onAction: (prompt: string) => void }) {
+    const { language } = useLanguage();
+    const t = useTranslation(language);
+    const [copied, setCopied] = useState(false);
+
+    const actions = getJobFallbackActions({ title: match.title, company: match.company, employer_url: match.employer_url });
+
+    const labelFor: Record<string, string> = {
+        company_website: t("cmdFallbackCompanyWebsite"),
+        company_site: t("cmdFallbackCompanySite"),
+        linkedin: t("cmdFallbackLinkedIn"),
+        google: t("cmdFallbackGoogle"),
+        copy: copied ? t("cmdFallbackCopied") : t("cmdFallbackCopy"),
+        save: t("cmdFallbackSave"),
+    };
+
+    const handleCopy = async () => {
+        const text = buildCopyText(match.title ?? "", match.company ?? "");
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch {
+            // Clipboard unavailable (insecure context / denied) — fall back to a
+            // chat prompt so the action is never silently lost.
+            onAction(`Search for ${text}`);
+        }
+    };
+
+    const linkClass =
+        "rounded-md border border-border-soft bg-surface-glass px-2.5 py-1.5 text-[10px] text-text-secondary transition-colors hover:border-border-subtle hover:text-rico-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-1 focus-visible:ring-offset-surface";
+
+    return (
+        <div className="flex flex-col gap-1.5" data-testid="job-fallback-actions">
+            <span className="text-[9px] text-text-muted italic">{t("cmdNoDirectApply")}</span>
+            <div className="flex flex-wrap items-center gap-1.5">
+                {actions.map((a) => {
+                    if (a.kind === "link") {
+                        return (
+                            <a
+                                key={a.key}
+                                href={a.href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                data-testid={`job-fallback-${a.key}`}
+                                aria-label={`${labelFor[a.key]}: ${match.title} at ${match.company}`}
+                                className={linkClass}
+                            >
+                                {labelFor[a.key]}
+                            </a>
+                        );
+                    }
+                    if (a.kind === "copy") {
+                        return (
+                            <button
+                                key={a.key}
+                                type="button"
+                                onClick={handleCopy}
+                                data-testid={`job-fallback-${a.key}`}
+                                className={linkClass}
+                            >
+                                {labelFor[a.key]}
+                            </button>
+                        );
+                    }
+                    return (
+                        <button
+                            key={a.key}
+                            type="button"
+                            onClick={() => onAction(`Save ${match.title} at ${match.company} to my pipeline`)}
+                            data-testid={`job-fallback-${a.key}`}
+                            className="rounded-md border border-gold/30 bg-gold/10 px-2.5 py-1.5 text-[10px] font-medium text-gold transition-colors hover:bg-gold/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-1 focus-visible:ring-offset-surface"
+                        >
+                            {labelFor[a.key]}
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    );
 }
 
 function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt: string) => void }) {
@@ -588,6 +620,13 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
                 )}
             </div>
 
+            {/* Safe fallback CTAs — when no clean direct link exists, the card
+                must never be a dead-end. Never presented as a verified Apply
+                link, so source/safety gating is preserved (BUG-03 stays fixed). */}
+            {!linkHref && (
+                <JobFallbackActions match={match} onAction={onAction} />
+            )}
+
             {/* Mark as Applied CTA — appears after the user opens the apply link */}
             {linkOpened && !markedApplied && (
                 <button
@@ -611,11 +650,9 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
             {vStatus && (
                 <div className="flex flex-wrap items-center gap-1.5">
                     <SourceQualityBadge status={vStatus} />
-                    {isBadPrimary && !altUrl && !sourceUrl && (
-                        <span className="text-[9px] text-text-muted italic">
-                            {t("cmdNoDirectApply")}
-                        </span>
-                    )}
+                    {/* "No direct apply" note is now rendered by JobFallbackActions
+                        (shown whenever there is no clean link), so it is omitted here
+                        to avoid duplicating the same message on the card. */}
                     {vStatus === "google_intermediary" && altUrl && (
                         <span className="text-[9px] text-text-muted italic">
                             {t("cmdGoogleJobsNote")}
@@ -632,19 +669,33 @@ function JobMatchCard({ match, onAction }: { match: JobMatch; onAction: (prompt:
     );
 }
 
+// Status -> translation key, covering every status in APPLICATION_STATUSES
+// (lib/applicationStatus.ts) so the chat pipeline summary never silently
+// drops a status the way it used to (BUG-6: this previously only knew about
+// 5 of the 10 backend statuses).
+const CMD_STATUS_LABEL_KEYS: Record<ApplicationStatus, TranslationKey> = {
+    saved: "cmdStatusSaved",
+    opened: "cmdStatusOpened",
+    opened_external: "cmdStatusOpenedExternal",
+    prepared: "cmdStatusPrepared",
+    applied: "cmdStatusApplied",
+    follow_up_due: "cmdStatusFollowUpDue",
+    interview: "cmdStatusInterview",
+    offer: "cmdStatusOffer",
+    rejected: "cmdStatusRejected",
+    decision_made: "cmdStatusDecision",
+};
+
 function ApplicationStatusCard({ applications, followUpNeeded }: {
     applications: ApplicationEntry[];
     followUpNeeded: ApplicationEntry[];
 }) {
     const { language } = useLanguage();
     const t = useTranslation(language);
-    const stageDefs = [
-        { key: "saved", label: t("cmdStatusSaved") },
-        { key: "applied", label: t("cmdStatusApplied") },
-        { key: "interview", label: t("cmdStatusInterview") },
-        { key: "offer", label: t("cmdStatusOffer") },
-        { key: "rejected", label: t("cmdStatusRejected") },
-    ];
+    const stageDefs = APPLICATION_STATUSES.map((status) => ({
+        key: status as string,
+        label: t(CMD_STATUS_LABEL_KEYS[status]),
+    }));
     const counts = stageDefs.reduce((acc, s) => ({
         ...acc,
         [s.key]: applications.filter((a) => a.status === s.key).length,
@@ -746,6 +797,7 @@ export default function CommandPage() {
     // "pending" = history not yet checked; "has_history" = history loaded; "empty" = no history
     const [historyState, setHistoryState] = useState<"pending" | "has_history" | "empty">("pending");
     const [messagesRemaining, setMessagesRemaining] = useState<number | null>(null);
+    const [initialContentReady, setInitialContentReady] = useState(false);
 
     // True when the latest Rico message has an unresolved permission request — blocks new input.
     const hasPendingPermission = messages.some(
@@ -774,6 +826,10 @@ export default function CommandPage() {
     const promptSentRef = useRef(false);
     const sessionIdRef = useRef<string | null>(null);
     const welcomeMessageRef = useRef("");
+    // Synchronous send guard — prevents double-send from rapid Enter taps.
+    // React state (thinking) is async-batched and cannot guard against same-tick
+    // re-entry; a useRef is set/cleared synchronously so the second tap sees it.
+    const sendingRef = useRef(false);
 
     useEffect(() => {
         ensureSessionId(sessionIdRef);
@@ -844,6 +900,7 @@ export default function CommandPage() {
                     setMessages(mappedMessages);
                     promptSentRef.current = true;
                     setHistoryState("has_history");
+                    setInitialContentReady(true);
                     return;
                 }
             } catch {
@@ -880,8 +937,9 @@ export default function CommandPage() {
             return;
         }
         const trimmed = text.trim();
-        if (!trimmed || thinking) return;
+        if (!trimmed || sendingRef.current) return;
 
+        sendingRef.current = true;
         setMessages((prev) => [...prev, { id: nextId(), role: "user", text: displayText?.trim() ?? trimmed }]);
         setThinking(true);
         const lc = trimmed.toLowerCase();
@@ -918,6 +976,7 @@ export default function CommandPage() {
                     clearTimeout(timeoutId);
                     clearTimeout(slowHintId);
                     setSlowHint(false);
+                    sendingRef.current = false;
                     setThinking(false);
                     setOperationState(null);
                     scrollBottom();
@@ -1000,6 +1059,9 @@ export default function CommandPage() {
                 }
                 if (typeof res.messages_remaining === "number") {
                     setMessagesRemaining(res.messages_remaining);
+                }
+                if (res.type === "save_job") {
+                    bustSidebarCache();
                 }
             }
 
@@ -1117,12 +1179,13 @@ export default function CommandPage() {
             clearTimeout(timeoutId);
             clearTimeout(slowHintId);
             setSlowHint(false);
+            sendingRef.current = false;
             setThinking(false);
             setOperationState(null);
             scrollBottom();
             textareaRef.current?.focus();
         }
-    }, [chatAudience, language, scrollBottom, thinking, t]);
+    }, [chatAudience, language, scrollBottom, t]);
 
     useEffect(() => {
         if (chatAudience === "checking") return;
@@ -1133,22 +1196,29 @@ export default function CommandPage() {
 
         const timeoutId = window.setTimeout(() => {
             if (prompt) {
+                setInitialContentReady(true);
                 void sendMessage(prompt);
                 return;
             }
             if (cvReady) {
                 // CvReadyOnboardingPanel renders instead of a static message.
+                setInitialContentReady(true);
                 return;
             }
             if (chatAudience === "authenticated") {
                 // History exists — messages already set; no welcome needed.
-                if (historyState === "has_history") return;
+                if (historyState === "has_history") {
+                    setInitialContentReady(true);
+                    return;
+                }
                 const msg = buildWelcomeMessage(language, userName);
                 welcomeMessageRef.current = msg;
                 setMessages([{ id: 1, role: "rico", text: msg }]);
+                setInitialContentReady(true);
                 return;
             }
             setMessages([{ id: 1, role: "rico", text: t("cmdWelcomePublic") }]);
+            setInitialContentReady(true);
         }, 0);
         return () => window.clearTimeout(timeoutId);
     }, [chatAudience, historyState, cvReady, prompt, sendMessage, t, language, userName]);
@@ -1215,6 +1285,7 @@ export default function CommandPage() {
                         role: "rico" as const,
                         text: result.message ?? `I detected this as: **${result.display_label ?? result.document_type}**\n\nWhat would you like me to do with it?`,
                         actions,
+                        agentic_ui: (result as unknown as Record<string, unknown>).agentic_ui as RicoAgenticUi | null | undefined,
                     },
                 ]);
                 return;
@@ -1230,22 +1301,10 @@ export default function CommandPage() {
             // CV preview ready for confirmation
             if (result.status === "preview_ready" && result.preview) {
                 const preview = result.preview;
-                const skills = preview.skills_detected ?? preview.skills ?? [];
-                const previewText = (
-                    `${t("cmdCvPreviewTitle")}\n\n` +
-                    `${t("cmdCvPreviewName")} ${preview.name || "—"}\n` +
-                    `${t("cmdCvPreviewEmail")} ${preview.email || "—"}\n` +
-                    `${t("cmdCvPreviewPhone")} ${preview.phone || "—"}\n` +
-                    `${t("cmdCvPreviewRole")} ${preview.current_role || "—"}\n` +
-                    `${t("cmdCvPreviewExp")} ${preview.experience_years ? `~${preview.experience_years} ${t("cmdCvPreviewExpYears")}` : "—"}\n` +
-                    `${t("cmdCvPreviewSkills")} ${skills.slice(0, 6).join(", ") || "—"}\n` +
-                    `${t("cmdCvPreviewQuality")} ${result.extraction_quality || "—"}\n\n` +
-                    t("cmdCvConfirmPrompt")
-                );
                 const message: Message = {
                     id: nextId(),
                     role: "rico",
-                    text: previewText,
+                    text: "",
                     type: "profile_preview",
                     preview: preview,
                     filename: result.filename,
@@ -1275,9 +1334,13 @@ export default function CommandPage() {
                 }
                 setMessages((prev) => [...prev, { id: nextId(), role: "rico", text }]);
             }
-        } catch {
-            setUploadError(t("uploadError"));
-            setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: t("cmdCvUploadErr") }]);
+        } catch (err) {
+            // A 413 means the file was too large — show the friendly size message,
+            // never the generic "could not process your CV" (the size is the real reason).
+            const tooLarge = err instanceof ApiError && err.statusCode === 413;
+            const msgKey = tooLarge ? "cmdCvTooLarge" : "cmdCvUploadErr";
+            setUploadError(t(msgKey));
+            setMessages((prev) => [...prev, { id: nextId(), role: "rico", text: t(msgKey) }]);
         } finally {
             setThinking(false);
             setOperationState(null);
@@ -1490,6 +1553,7 @@ export default function CommandPage() {
                     className="hidden md:flex shrink-0"
                     user={sidebarUser ?? undefined}
                     onLogout={chatAudience === "authenticated" ? handleLogout : undefined}
+                    loading={chatAudience === "checking"}
                 />
             )}
 
@@ -1519,20 +1583,28 @@ export default function CommandPage() {
                 onChange={handleCVUpload}
             />
 
+            {/* Mission Context Bar — authenticated only; shows goal, progress, next action */}
+            {chatAudience === "authenticated" && (
+                <MissionContextBar onAction={(prompt) => void sendMessage(prompt)} />
+            )}
+
             <main id="command-main" className="relative z-10 mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col px-2 sm:px-4 lg:px-6">
-                {/* Cold-start banner — amber, shown when any request exceeds ~5 s */}
-                {slowHint && thinking && (
-                    <div
-                        role="status"
-                        className="mx-2 mb-1 mt-2 flex items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-[11px] font-medium text-amber-300 animate-in fade-in slide-in-from-top-1 motion-reduce:animate-none sm:mx-4"
-                    >
-                        <span aria-hidden="true">⚡</span>
-                        {t("cmdWorkingSlowHint")}
-                    </div>
-                )}
+                {/* The cold-start banner stays mounted and overlays the message pane,
+                    so its delayed appearance cannot resize the pane or composer. */}
+                <div
+                    role="status"
+                    aria-hidden={!(slowHint && thinking)}
+                    data-testid="command-slow-banner"
+                    className={`pointer-events-none absolute inset-x-0 top-0 z-20 mx-2 mt-2 flex min-h-9 items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-[11px] font-medium text-amber-300 shadow-lg shadow-background/40 transition-opacity duration-200 sm:mx-4 ${
+                        slowHint && thinking ? "visible opacity-100" : "invisible opacity-0"
+                    }`}
+                >
+                    <span aria-hidden="true">⚡</span>
+                    {t("cmdWorkingSlowHint")}
+                </div>
 
                 {/* Messages Container */}
-                <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 py-5 space-y-4 scroll-pb-32 sm:px-4 sm:py-7" role="log" aria-live="polite" aria-atomic="false" aria-label="Chat messages">
+                <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 pt-12 pb-5 space-y-4 scroll-pb-32 sm:px-4 sm:pt-14 sm:pb-7" role="log" aria-live="polite" aria-atomic="false" aria-label="Chat messages">
 
                     {/* Clear history control — shown at top when authenticated with loaded history */}
                     {chatAudience === "authenticated" && messages.length > 1 && (
@@ -1577,7 +1649,7 @@ export default function CommandPage() {
                     )}
 
                     {/* CV-ready onboarding panel — Pulse-style glass card with action chips */}
-                    {cvReady && messages.length === 0 && chatAudience !== "checking" && !thinking && (
+                    {initialContentReady && cvReady && messages.length === 0 && chatAudience !== "checking" && !thinking && (
                         <CvReadyOnboardingPanel
                             onAction={(prompt, label) => sendMessage(prompt, label)}
                             disabled={thinking}
@@ -1585,8 +1657,8 @@ export default function CommandPage() {
                     )}
 
                     {/* Welcome hero + quick start chips */}
-                    {messages.length === 0 && !thinking && !cvReady && (
-                        <div className="flex flex-col items-center gap-5 pb-4 pt-6 sm:pt-10 animate-in fade-in slide-in-from-bottom-3 motion-reduce:animate-none">
+                    {initialContentReady && messages.length === 0 && !thinking && !cvReady && (
+                        <div className="flex flex-col items-center gap-5 pb-4 pt-6 sm:pt-10 animate-in fade-in motion-reduce:animate-none">
                             {/* Hero */}
                             <div className="flex flex-col items-center gap-3 text-center">
                                 <div className="rico-orb !w-12 !h-12 !text-[18px]" aria-hidden="true"><span>R</span></div>
@@ -1658,7 +1730,7 @@ export default function CommandPage() {
                             <div
                                 key={m.id}
                                 dir="ltr"
-                                className={`flex animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none ${m.role === "user" ? "justify-end items-end" : "justify-start items-start gap-2.5"} ${isFirstInGroup ? "mt-4" : "mt-1"}`}
+                                className={`flex min-h-6 animate-in fade-in motion-reduce:animate-none ${m.role === "user" ? "justify-end items-end" : "justify-start items-start gap-2.5"} ${isFirstInGroup ? "mt-4" : "mt-1"}`}
                             >
                                 {m.role === "rico" && (
                                     <div
@@ -1691,7 +1763,7 @@ export default function CommandPage() {
                                     {/* Message text */}
                                     {m.text && (
                                         m.role === "rico"
-                                            ? <div className="space-y-0.5 text-[13px]">{renderMarkdown(m.text)}</div>
+                                            ? <RicoMarkdownContent>{m.text!}</RicoMarkdownContent>
                                             : <div className="whitespace-pre-wrap">{m.text}</div>
                                     )}
 
@@ -1742,6 +1814,15 @@ export default function CommandPage() {
                                     {/* Profile gap card */}
                                     {m.type === "profile_gap" && m.profile_gaps && m.profile_gaps.length > 0 && (
                                         <ProfileGapCard gaps={m.profile_gaps} />
+                                    )}
+
+                                    {/* CV draft card — structured preview, no raw contact values */}
+                                    {m.type === "profile_preview" && m.preview && (
+                                        <CVDraftCard
+                                            preview={m.preview}
+                                            filename={m.filename ?? ""}
+                                            extractionQuality={m.extractionQuality}
+                                        />
                                     )}
 
                                     {/* Profile preview confirmation buttons */}
@@ -1887,6 +1968,13 @@ export default function CommandPage() {
                                             disabled={thinking}
                                         />
                                     )}
+                                    {!m.streaming &&
+                                        m.agentic_ui?.attachment_analysis &&
+                                        m.agentic_ui.attachment_analysis.length > 0 && (
+                                        <AttachmentAnalysisCard
+                                            analyses={m.agentic_ui.attachment_analysis as RicoAttachmentAnalysis[]}
+                                        />
+                                    )}
 
                                     {/* Role confirmation reasons + next_actions */}
                                     {!m.streaming && m.type === "role_confirmation" && (
@@ -1920,7 +2008,7 @@ export default function CommandPage() {
                     })}
 
                     {thinking && (
-                        <div className="flex flex-col gap-2">
+                        <div className="flex min-h-12 flex-col gap-2">
                             <WorkingIndicator message={operationState?.message ?? t("cmdWorking")} />
                             {operationState?.state === "searching" && (
                                 <SearchElapsedTimer t={t} />
@@ -1934,37 +2022,43 @@ export default function CommandPage() {
                 {/* Input bar — shrink-0 flex child keeps it below the scroll area;
                     safe-area padding covers iOS home indicator. */}
                 <div className={`shrink-0 px-2 pt-3 sm:px-4 ${chatAudience === "authenticated" ? "pb-[calc(56px+1rem+env(safe-area-inset-bottom))] md:pb-[calc(1rem+env(safe-area-inset-bottom))]" : "pb-[calc(1rem+env(safe-area-inset-bottom))]"}`}>
-                    {chatAudience === "public" && messages.filter((m) => m.role === "rico").length >= 2 && (
-                        <div className="mb-2 flex items-center justify-between gap-3 px-1">
-                            <p className="text-[11px] text-text-muted">{t("cmdSignUpCta")}</p>
-                            <Link
-                                href={COMMAND_SIGNUP_HREF}
-                                className="text-[11px] px-3 py-1 rounded-lg bg-gold/10 border border-gold/25 text-gold hover:bg-gold/18 transition-colors shrink-0 font-medium cursor-pointer"
-                            >
-                                {t("cmdSignUpFree")}
-                            </Link>
+                    {/* Dynamic notices use an always-present slot, preventing quota,
+                        upload, or sign-up messages from moving the composer. */}
+                    <div className="relative min-h-10" aria-live="polite">
+                        <div className="absolute inset-x-0 bottom-2 space-y-2">
+                            {chatAudience === "public" && messages.filter((m) => m.role === "rico").length >= 2 && (
+                                <div className="flex items-center justify-between gap-3 px-1">
+                                    <p className="text-[11px] text-text-muted">{t("cmdSignUpCta")}</p>
+                                    <Link
+                                        href={COMMAND_SIGNUP_HREF}
+                                        className="text-[11px] px-3 py-1 rounded-lg bg-gold/10 border border-gold/25 text-gold hover:bg-gold/18 transition-colors shrink-0 font-medium cursor-pointer"
+                                    >
+                                        {t("cmdSignUpFree")}
+                                    </Link>
+                                </div>
+                            )}
+                            {uploadError && (
+                                <p className="text-center text-[11px] text-rico-red" role="alert">{uploadError}</p>
+                            )}
+                            {messagesRemaining !== null && messagesRemaining <= 10 && chatAudience === "authenticated" && (
+                                <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/25 bg-amber-500/8 px-3 py-2" role="status">
+                                    <p className="text-[11px] text-amber-400">
+                                        {messagesRemaining === 0
+                                            ? t("cmdMsgLimitReached")
+                                            : messagesRemaining === 1
+                                                ? t("cmdMsgLimitOne")
+                                                : t("cmdMsgLimitFew").replace("{n}", String(messagesRemaining))}
+                                    </p>
+                                    <Link
+                                        href="/subscription"
+                                        className="shrink-0 text-[11px] font-medium text-amber-400 underline underline-offset-2 hover:text-amber-300 transition-colors"
+                                    >
+                                        {t("cmdUpgrade")}
+                                    </Link>
+                                </div>
+                            )}
                         </div>
-                    )}
-                    {uploadError && (
-                        <p className="text-[11px] text-rico-red mb-2 text-center" role="alert">{uploadError}</p>
-                    )}
-                    {messagesRemaining !== null && messagesRemaining <= 10 && chatAudience === "authenticated" && (
-                        <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-amber-500/25 bg-amber-500/8 px-3 py-2" role="status" aria-live="polite">
-                            <p className="text-[11px] text-amber-400">
-                                {messagesRemaining === 0
-                                    ? t("cmdMsgLimitReached")
-                                    : messagesRemaining === 1
-                                        ? t("cmdMsgLimitOne")
-                                        : t("cmdMsgLimitFew").replace("{n}", String(messagesRemaining))}
-                            </p>
-                            <Link
-                                href="/subscription"
-                                className="shrink-0 text-[11px] font-medium text-amber-400 underline underline-offset-2 hover:text-amber-300 transition-colors"
-                            >
-                                {t("cmdUpgrade")}
-                            </Link>
-                        </div>
-                    )}
+                    </div>
                     <div className="flex items-end gap-2 rounded-2xl border border-border-soft bg-surface-elevated/95 p-1.5 shadow-xl shadow-black/10 backdrop-blur-md transition-[border-color,box-shadow] focus-within:border-gold/30 focus-within:shadow-[0_0_0_3px_rgba(245,166,35,0.07),0_8px_32px_rgba(0,0,0,0.12)]">
                         {/* CV upload button — label triggers the hidden file input natively,
                             avoiding the programmatic .click() which some mobile browsers block. */}
@@ -2002,7 +2096,7 @@ export default function CommandPage() {
                                     : chatAudience === "checking"
                                         ? t("cmdPlaceholderChecking")
                                         : t("cmdPlaceholderReady")}
-                                className="max-h-[120px] w-full resize-none rounded-xl border-0 bg-transparent py-3 pe-12 ps-3 text-sm text-rico-text placeholder:text-text-muted outline-none transition-all"
+                                className="max-h-[120px] w-full resize-none rounded-xl border-0 bg-transparent py-3 pe-12 ps-3 text-[16px] sm:text-sm text-rico-text placeholder:text-text-muted outline-none transition-all"
                             />
                             <button
                                 type="button"
@@ -2021,7 +2115,7 @@ export default function CommandPage() {
                             </button>
                         </div>
                     </div>
-                    <p id="command-input-hint" className="text-center text-[10px] text-text-muted mt-2 opacity-40">
+                    <p id="command-input-hint" className="mt-2 min-h-4 text-center text-[10px] text-text-secondary">
                         {t("cmdHint")}
                     </p>
                 </div>

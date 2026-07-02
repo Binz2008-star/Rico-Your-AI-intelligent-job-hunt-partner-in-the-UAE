@@ -408,6 +408,8 @@ class RicoDB:
                 d["created_at"] = d["created_at"].isoformat()
             if d.get("updated_at"):
                 d["updated_at"] = d["updated_at"].isoformat()
+            if d.get("years_experience") is not None:
+                d["years_experience"] = int(float(d["years_experience"]))
             result.append(d)
         return result
 
@@ -436,6 +438,8 @@ class RicoDB:
             d["created_at"] = d["created_at"].isoformat()
         if d.get("updated_at"):
             d["updated_at"] = d["updated_at"].isoformat()
+        if d.get("years_experience") is not None:
+            d["years_experience"] = int(float(d["years_experience"]))
         return d
 
 
@@ -919,6 +923,21 @@ class RicoDB:
                 column, user_id, job_key,
             )
 
+    def delete_saved_jobs(self, user_id: str) -> int:
+        """Delete all rows with status='saved' for the user.
+
+        Application history (status='applied', 'interview', etc.) is deliberately
+        excluded — those records must never be deleted through the chat interface.
+        Returns the number of rows deleted.
+        """
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM rico_job_recommendations WHERE user_id = %s AND status = 'saved'",
+                    (user_id,),
+                )
+                return cur.rowcount or 0
+
     def mark_followups_due(self, interval_days: int = 7) -> int:
         """Transition aged ``applied`` jobs to ``follow_up_due`` (Issue #355).
 
@@ -966,6 +985,7 @@ class RicoDB:
             "interview": by_status.get("interview", 0),
             "rejected": by_status.get("rejected", 0),
             "offer": by_status.get("offer", 0),
+            "follow_up_due": by_status.get("follow_up_due", 0),
         }
 
 

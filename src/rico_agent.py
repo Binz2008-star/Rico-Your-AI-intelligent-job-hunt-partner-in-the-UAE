@@ -23,6 +23,8 @@ class RicoAgentSettings:
     can_send_follow_up_reminders: bool = True
     can_create_weekly_report: bool = True
     can_receive_telegram_notifications: bool = False
+    can_receive_email_alerts: bool = False
+    email_alert_frequency: str = "daily"  # "daily" | "weekly"
     communication_style: str = "professional"
     match_strictness: str = "balanced"
 

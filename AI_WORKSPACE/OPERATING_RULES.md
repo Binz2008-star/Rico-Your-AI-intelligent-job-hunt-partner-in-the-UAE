@@ -141,6 +141,21 @@ Use this matrix after relevant merges/deploys.
 - If credentials appear in history, report whether redaction and rotation are both needed.
 - Do not call live third-party APIs from unit tests.
 
+## No Dead UI Rule
+
+A route must be exactly one of:
+
+1. **Active and reachable** — no redirect; the page is the live production UI.
+2. **Redirect-only** — `next.config.js` redirect is the mechanism AND the `page.tsx` either does not
+   exist or contains only a thin passthrough with no meaningful logic.
+3. **Removed** — route, redirect, and page file all deleted.
+
+Hybrid state (redirect + real page.tsx code) is prohibited. It silently escapes CI, TypeScript, and
+code review while accumulating unreachable dead code. See DEC-20260628-001.
+
+Before opening a PR that adds or keeps a redirect: confirm `page.tsx` either does not exist or
+contains only `redirect()`. If it contains real logic, either make the route live or strip the page.
+
 ## Status Reporting Format
 
 Use fact-only status reports:

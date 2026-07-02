@@ -49,13 +49,24 @@ _cache_lock = RLock()
 
 @dataclass
 class FetchResult:
-    """Outcome of a JSearch query. `rate_limited` is True when retries were
-    exhausted on a 429 so callers can show an alternate-link message."""
+    """Outcome of a job query.
+
+    Shared by every provider (JSearch, Jooble, Adzuna) and the provider
+    orchestrator in ``src/job_providers.py`` so callers handle one type.
+
+    - ``rate_limited`` is True when retries were exhausted on a 429 (temporary).
+    - ``quota_exhausted`` is True when the subscription's hard quota is spent
+      (e.g. RapidAPI BASIC at 100%) — a longer, non-retryable degraded state.
+    - ``provider`` names the source that produced ``items`` ("jsearch", "jooble",
+      "adzuna", "cache", "internal", or "none" when every provider was skipped).
+    """
     items: List[Dict[str, Any]] = field(default_factory=list)
     cache_hit: bool = False
     rate_limited: bool = False
     retries: int = 0
     error: Optional[str] = None
+    quota_exhausted: bool = False
+    provider: str = "jsearch"
 
 
 def clear_cache() -> None:
@@ -86,15 +97,21 @@ def normalize_item(item: Dict[str, Any]) -> Dict[str, Any]:
 
     `link` stays as the best single URL for legacy callers; `apply_link` and
     `alt_link` are kept separately so the apply-fallback chain can use them.
+    `employer_url` surfaces the company's own website when JSearch provides it;
+    it is never treated as a verified apply link.
+    `apply_is_direct` reflects JSearch's own signal that the apply link goes
+    straight to the employer/ATS without an intermediate page.
     """
     apply_link = str(item.get("job_apply_link") or "").strip()
     # Best trusted mirror from apply_options beats the Google intermediary,
-    # which downstream (_format_match) blanks anyway. Google link stays as the
-    # legacy fallback when no trusted mirror exists.
+    # which downstream (resolve_job_link) blanks anyway. Google link stays as
+    # the legacy fallback when no trusted mirror exists.
     alt_link = (
         pick_best_alternate_apply_link(apply_link, item.get("apply_options"))
         or str(item.get("job_google_link") or "").strip()
     )
+    employer_url = str(item.get("employer_website") or "").strip()
+    apply_is_direct = bool(item.get("job_apply_is_direct"))
     location = ", ".join(filter(None, [
         item.get("job_city") or "",
         item.get("job_state") or "",
@@ -107,6 +124,8 @@ def normalize_item(item: Dict[str, Any]) -> Dict[str, Any]:
         "link":            apply_link or alt_link,
         "apply_link":      apply_link,
         "alt_link":        alt_link,
+        "employer_url":    employer_url,
+        "apply_is_direct": apply_is_direct,
         "description":     str(item.get("job_description") or ""),
         "source":          "jsearch",
         "salary_string":   str(item.get("job_salary_string") or ""),
@@ -245,6 +264,12 @@ def search(query: str, *, use_cache: bool = True, country: str = "ae") -> FetchR
             return FetchResult(items=items, retries=retries)
         except urllib.error.HTTPError as exc:
             code = getattr(exc, "code", 0)
+            # 403 on RapidAPI means the monthly quota is fully spent — there is no
+            # point retrying, so stop immediately and flag quota_exhausted.
+            if code == 403:
+                logger.warning("jsearch_quota_exhausted query=%r status=403", query)
+                last_error = "http_403"
+                break
             if code == 429 or 500 <= code < 600:
                 retries += 1
                 last_error = f"http_{code}"
@@ -266,14 +291,17 @@ def search(query: str, *, use_cache: bool = True, country: str = "ae") -> FetchR
             break
 
     rate_limited = last_error == "http_429"
+    quota_exhausted = last_error == "http_403"
     if rate_limited:
         logger.warning("jsearch_rate_limited query=%r retries=%d", query, retries)
-    # Serve stale cache if we have it, even when rate-limited.
+    # Serve stale cache if we have it, even when rate-limited / quota-exhausted.
     stale = _cache_get(query) if use_cache else None
     return FetchResult(
         items=stale or [],
         cache_hit=bool(stale),
         rate_limited=rate_limited,
+        quota_exhausted=quota_exhausted,
         retries=retries,
         error=last_error,
+        provider="jsearch",
     )

@@ -40,7 +40,10 @@ def onboarding_submit(request: Request, body: OnboardingSubmitRequest) -> Dict[s
         from src.role_normalization import validate_and_normalize_target_roles
         updates["target_roles"] = validate_and_normalize_target_roles(body.target_roles)
     if body.preferred_cities is not None:
-        updates["preferred_cities"] = [c.strip() for c in body.preferred_cities if c.strip()]
+        from src.services.city_validation import sanitize_cities
+        updates["preferred_cities"] = sanitize_cities(
+            [c.strip() for c in body.preferred_cities if c.strip()]
+        ) or []
     if body.salary_expectation_aed is not None:
         updates["salary_expectation_aed"] = body.salary_expectation_aed
     if body.years_experience is not None:

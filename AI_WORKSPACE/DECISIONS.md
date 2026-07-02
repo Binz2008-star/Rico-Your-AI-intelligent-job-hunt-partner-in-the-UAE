@@ -28,6 +28,89 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260628-001 — No Dead UI Rule
+
+Status: accepted
+Date: 2026-06-28
+Owner: Roben / Claude
+Related task: PR #775 (cleanup); audit surfaced during P2-A production verification
+
+#### Context
+
+During P2-A production verification, a route audit found that `next.config.js` redirected 9 routes
+to `/command` or `/flow`, while 7 of those routes still contained substantial `page.tsx` implementations
+(48–576 lines each). The most notable case: `/onboarding` redirects to `/command`, but
+`apps/web/app/onboarding/page.tsx` is 466 lines of real code including CV upload, classification,
+and bilingual error messages — none of which is reachable in production.
+
+This "redirect + live page" pattern creates an invisible class of dead code: it passes `npm run build`,
+passes TypeScript, and passes CI, but is never executed by any user. It silently accumulates drift,
+bugs, and maintenance debt without any signal.
+
+#### Decision
+
+**No route may redirect away while still keeping meaningful `page.tsx` code behind it.**
+
+A route must be exactly one of:
+
+1. **Active and reachable** — no redirect; the page is the live production UI.
+2. **Redirect-only** — `next.config.js` redirect is the correct mechanism AND the `page.tsx` either does
+   not exist or contains only a thin passthrough (e.g. `redirect("/command")`) with no meaningful logic.
+3. **Removed** — route, redirect, and page file all deleted.
+
+Hybrid state (redirect + real page.tsx) is prohibited. If a page cannot be made live yet, keep it
+redirect-only with no implementation, or gate it behind a feature flag that makes the page reachable.
+
+#### Consequences
+
+- Positive: CI failures, type errors, and behavioral bugs in `page.tsx` files are guaranteed to matter —
+  there is no silent dead-code escape hatch.
+- Positive: redirect inventory in `next.config.js` is the single truthful routing contract.
+- Trade-off: routes with meaningful page code that are intentionally hidden (future features, WIP)
+  must live on a feature branch until they are either live or formally removed.
+
+#### Follow-up
+
+- [x] Phase A (2026-06-28): delete `/chat` and `/orchestrate` stubs; remove `/pipeline → /flow` redirect
+      (no page file exists for `/pipeline`).
+- [ ] Phase B: resolve `/dashboard`, `/onboarding`, `/jobs`, `/signals`, `/archive`, `/saved-searches` —
+      each requires an explicit product decision: make live, strip to stub, or delete.
+
+
+### DEC-20260621-003 — Action-audit hardening rolled out; migration drift surfaced and tracked
+
+Status: accepted
+Date: 2026-06-21
+Owner: Roben / Claude
+Related task: PR #708, issues #710, #711
+
+#### Context
+
+DEC-20260621-002 approved #708 as the draft implementation candidate for hardening the existing
+`action_audit_log` (migration 030). This decision records the completed rollout and the production
+migration drift it surfaced.
+
+#### Decision
+
+- Apply migration 030 to production Neon before deploying, then merge + deploy #708. Done:
+  #708 merged at `9078d77`, migration 030 applied + verified in production, backend live on `9078d77`.
+- Treat production migration drift as separate, gated cleanups — never bundled with #708:
+  - #710 (`021_user_job_context_alt_url.sql`) applied + closed.
+  - #711 (`005` `pipeline_runs`, `011` `rico_job_recommendations` unique index) logged, NOT applied
+    (verify-first; 011 deletes rows).
+
+#### Consequences
+
+- Positive: audit log is now DB-enforced append-only; request-time DDL removed from `write_audit_log()`.
+- Positive: a full `005`–`030` prod drift audit now exists and is repeatable.
+- Trade-off: numbered migrations are still applied manually (no deploy-time runner) — the systemic
+  root cause behind both 030's manual apply and the 021/005/011 drift.
+
+#### Follow-up
+- [ ] #711 — apply 005 (targeted) and 011 (verify-first) under explicit approval.
+- [ ] Add a migration runner / CI gate so prod schema can't silently fall behind `main`.
+
+
 ### DEC-20260621-002 — Harden existing `action_audit_log`; do not build parallel audit/approval systems
 
 Status: accepted

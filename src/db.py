@@ -33,11 +33,10 @@ def get_db_connection():
     try:
         return psycopg2.connect(DATABASE_URL, connect_timeout=5)
     except OperationalError as e:
-        print(f"⚠️ Database connection failed: {e}")
-        print("🔄 Falling back to JSON storage")
+        logger.warning("db_connection_failed: %s", e)
         return None
     except Exception as e:
-        print(f"⚠️ Unexpected database error: {e}")
+        logger.warning("db_connection_unexpected_error: %s", e)
         return None
 
 
@@ -129,6 +128,10 @@ def init_db():
                 ALTER TABLE settings
                 ADD COLUMN IF NOT EXISTS score_threshold_watch INTEGER DEFAULT 50
             """)
+            cursor.execute("""
+                ALTER TABLE settings
+                ADD COLUMN IF NOT EXISTS blocked_companies TEXT[] DEFAULT '{}'
+            """)
 
             # Add link verification columns to jobs table
             cursor.execute("""
@@ -170,12 +173,12 @@ def init_db():
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_auto_apply_timestamp ON auto_apply_attempts(timestamp DESC)")
 
         _commit(conn)
-        print("✅ Database initialized successfully")
+        logger.info("db_init_ok")
         return True
 
     except Exception as e:
         _rollback(conn)
-        print(f"❌ Database initialization failed: {e}")
+        logger.error("db_init_failed: %s", e)
         return False
     finally:
         if conn:
@@ -221,7 +224,7 @@ def save_job(job: Dict[str, Any], score: int) -> bool:
 
     except Exception as e:
         _rollback(conn)
-        print(f"❌ Failed to save job: {e}")
+        logger.error("db_save_job_failed: %s", e)
         return False
     finally:
         if conn:
@@ -251,7 +254,7 @@ def get_seen_links(days_back: int = 90, limit: int = 8000) -> List[str]:
             return [row[0] for row in cursor.fetchall()]
 
     except Exception as e:
-        print(f"❌ Failed to get seen links: {e}")
+        logger.error("db_get_seen_links_failed: %s", e)
         return []
     finally:
         if conn:
@@ -288,7 +291,7 @@ def mark_applied(job_link: str, notes: str = None) -> bool:
 
     except Exception as e:
         _rollback(conn)
-        print(f"❌ Failed to mark job as applied: {e}")
+        logger.error("db_mark_applied_failed: %s", e)
         return False
     finally:
         if conn:
@@ -306,7 +309,7 @@ def update_application_status(job_link: str, status: str, notes: str = None) -> 
     if status == 'opened_external':
         status = 'opened'
     if status not in valid_statuses:
-        print(f"❌ Invalid status: {status}")
+        logger.warning("db_update_application_status_invalid: %s", status)
         return False
 
     try:
@@ -326,7 +329,7 @@ def update_application_status(job_link: str, status: str, notes: str = None) -> 
 
     except Exception as e:
         _rollback(conn)
-        print(f"❌ Failed to update application status: {e}")
+        logger.error("db_update_application_status_failed: %s", e)
         return False
     finally:
         if conn:
@@ -364,7 +367,7 @@ def get_top_jobs(limit: int = 10) -> List[Dict[str, Any]]:
             return jobs
 
     except Exception as e:
-        print(f"❌ Failed to get top jobs: {e}")
+        logger.error("db_get_top_jobs_failed: %s", e)
         return []
     finally:
         if conn:
@@ -402,7 +405,7 @@ def get_application_stats() -> Dict[str, Any]:
             }
 
     except Exception as e:
-        print(f"❌ Failed to get application stats: {e}")
+        logger.error("db_get_application_stats_failed: %s", e)
         return {}
     finally:
         if conn:

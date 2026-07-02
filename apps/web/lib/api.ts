@@ -741,6 +741,7 @@ export async function getApplicationStats(
       offer: 0,
       rejected: 1,
       saved: 0,
+      total: 4,
     };
   }
 
@@ -754,9 +755,16 @@ export async function getApplicationStats(
   const normalized: Record<string, number> = {};
 
   for (const [key, value] of Object.entries(data)) {
-    // Skip the nested by_status object and the pre-summed total to avoid
-    // type coercion bugs (number + object = "[object Object]") and double-counting.
-    if (key === "by_status" || key === "total" || typeof value !== "number") continue;
+    // Skip the nested by_status object to avoid a type coercion bug
+    // (number + object = "[object Object]"). `total` is the backend's
+    // canonical count (same source /flow and the sidebar must agree with) —
+    // pass it through unmodified rather than re-deriving it from a partial
+    // sum of named status fields.
+    if (key === "by_status" || typeof value !== "number") continue;
+    if (key === "total") {
+      normalized.total = value;
+      continue;
+    }
     const normalizedKey = APPLICATION_STATUS_ALIASES[key] ?? key;
     normalized[normalizedKey] = (normalized[normalizedKey] ?? 0) + value;
   }
@@ -886,6 +894,9 @@ export interface JobMatch {
   apply_url?: string;
   source_url?: string;
   alt_link?: string;
+  /** Company's own website from the upstream provider (e.g. JSearch employer_website).
+   *  Never used as an apply link — only surfaced in the company-site fallback CTA. */
+  employer_url?: string;
   verification_status?:
     | "live"
     | "live_verified"
@@ -1711,6 +1722,27 @@ export async function recordSubscriptionIntent(
 // Types are derived from Zod schemas in lib/schemas/index.ts so the contract
 // is validated at the API boundary — consistent with all other Rico endpoints.
 export type { ExecutePermissionActionRequest, ExecutePermissionActionResponse };
+
+// ── Mission Engine ─────────────────────────────────────────────────────────────
+
+export interface MissionState {
+  goal: string;
+  target_roles: string[];
+  target_locations: string[];
+  cv_status: "uploaded" | "missing";
+  jobs_saved: number;
+  applications_sent: number;
+  progress_score: number;
+  missing_factors: string[];
+  next_recommendation: string;
+  blocking_reason: string | null;
+}
+
+export async function getMission(): Promise<MissionState> {
+  return requestJson<MissionState>("/api/v1/mission/current", {
+    credentials: "include",
+  });
+}
 
 /** Call POST /api/v1/rico/actions/execute — requires the user to be authenticated.
  *

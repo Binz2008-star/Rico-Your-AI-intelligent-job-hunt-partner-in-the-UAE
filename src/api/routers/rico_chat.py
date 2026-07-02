@@ -65,7 +65,6 @@ from src.rico_openai_runtime import call_openai_minimal
 from src.schemas.actions import ActionRequest, ActionResponse, ExecutePermissionActionRequest
 from src.schemas.chat import RicoChatResponse, RicoSessionContext
 from src.services import chat_service
-from src.agent.responses.schema import build_error_response
 
 logger = logging.getLogger(__name__)
 _UTC = timezone.utc
@@ -73,14 +72,39 @@ _UTC = timezone.utc
 # Constants
 _UNSAFE_CHARS_RE = re.compile("[<>\"';\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]")
 _PDF_MAGIC = b"%PDF"
-_MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+# Upload size limits, by file kind. Documents (CV/cover-letter/etc.) can carry
+# embedded fonts and high-res page images, so they get a generous cap; image
+# screenshots are smaller by nature. Both keep a hard safety cap — never unlimited.
+_MAX_DOC_BYTES = 25 * 1024 * 1024     # 25 MB — PDF / DOC / DOCX / TXT documents
+_MAX_IMAGE_BYTES = 10 * 1024 * 1024   # 10 MB — PNG / JPG / WebP / GIF / BMP images
+_MAX_UPLOAD_BYTES = _MAX_DOC_BYTES    # coarse hard cap; nothing may exceed this
+_MB = 1024 * 1024
+
+
+def _upload_limit_for(file_format: str) -> int:
+    """Per-kind size cap in bytes for an uploaded file (by magic-byte format)."""
+    return _MAX_IMAGE_BYTES if file_format == "image" else _MAX_DOC_BYTES
+
+
+def _too_large_message(limit_bytes: int, is_image: bool) -> str:
+    """User-friendly (non-technical) oversize message; never blames CV parsing."""
+    mb = limit_bytes // _MB
+    if is_image:
+        return (
+            f"This image is too large. You can upload screenshots up to {mb}MB. "
+            "Please take a smaller screenshot or compress the image."
+        )
+    return (
+        f"This file is too large. You can upload CV documents up to {mb}MB. "
+        "If your file is larger, please compress it or upload a lighter PDF version."
+    )
 
 router = APIRouter(prefix="/api/v1/rico", tags=["rico"])
 
 
 def _is_production() -> bool:
     """Check if running in production environment."""
-    return (os.getenv("APP_ENV") or os.getenv("ENV") or "").strip().lower() in {
+    return (os.getenv("RICO_ENV") or os.getenv("APP_ENV") or os.getenv("ENV") or "").strip().lower() in {
         "prod",
         "production",
     }
@@ -235,13 +259,26 @@ def _classification_response(classification: Any, filename: str) -> dict[str, An
         f"{score_lines}\n\n"
         "What would you like me to do with it?"
     )
-    return {
+    # CAREER-OS-04: attach a first-class attachment_analysis envelope so the chat UI
+    # can render what the file is. Read-only description — never mutates profile/settings.
+    try:
+        from src.services.attachment_analysis_factory import build_attachment_analysis_dict
+        analysis = build_attachment_analysis_dict(classification, filename)
+        agentic_ui: dict[str, Any] | None = {"attachment_analysis": [analysis]}
+    except Exception:  # pragma: no cover - analysis is additive; never break upload
+        logger.exception("attachment_analysis_build_failed filename=%s", filename)
+        agentic_ui = None
+
+    response: dict[str, Any] = {
         "ok": True,
         "status": "classified",
         "filename": filename,
         **classification.to_dict(),
         "message": msg,
     }
+    if agentic_ui is not None:
+        response["agentic_ui"] = agentic_ui
+    return response
 
 
 def _display_for_type(doc_type: str) -> str:
@@ -281,9 +318,6 @@ def mark_onboarding_complete(user_id: str) -> None:
     onboarding_repo.mark_onboarding_complete(user_id)
 
 
-def _is_valid_public_user_id(value: str) -> bool:
-    """Validate that a user_id matches the expected guest session format."""
-    return is_valid_public_user_id(value)
 
 
 def _resolve_upload_user_id(
@@ -307,7 +341,7 @@ def _resolve_upload_user_id(
     if not user_id:
         raise HTTPException(status_code=422, detail="user_id is required")
 
-    if not _is_valid_public_user_id(user_id):
+    if not is_valid_public_user_id(user_id):
         raise HTTPException(
             status_code=401,
             detail="Authentication or valid public session required"
@@ -1148,7 +1182,10 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
         from src.role_normalization import validate_and_normalize_target_roles
         updates["target_roles"] = validate_and_normalize_target_roles(body.target_roles)
     if body.preferred_cities is not None:
-        updates["preferred_cities"] = [c.strip() for c in body.preferred_cities if c.strip()]
+        from src.services.city_validation import sanitize_cities
+        updates["preferred_cities"] = sanitize_cities(
+            [c.strip() for c in body.preferred_cities if c.strip()]
+        ) or []
     if body.salary_expectation_aed is not None:
         updates["salary_expectation_aed"] = body.salary_expectation_aed
     if body.minimum_salary_aed is not None:
@@ -1246,23 +1283,42 @@ async def rico_upload_cv(
 
     # Enforce per-plan CV quota for authenticated users.
     # Guest/public sessions (public:*) are exempt — they have no plan record.
-    if not _is_valid_public_user_id(resolved_user_id):
+    if not is_valid_public_user_id(resolved_user_id):
         from src.services.subscription_gating import enforce_document_quota
         enforce_document_quota(resolved_user_id, "cv")
 
     try:
+        # Reject clearly-oversized files BEFORE reading the whole body into memory,
+        # using the multipart-declared size when available (coarse hard cap).
+        declared_size = getattr(file, "size", None)
+        if isinstance(declared_size, int) and declared_size > _MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=_too_large_message(_MAX_DOC_BYTES, is_image=False),
+            )
+
         data = await file.read()
-        if len(data) > _MAX_UPLOAD_BYTES:
-            raise HTTPException(status_code=413, detail="File exceeds 10 MB limit")
         if not data:
             raise HTTPException(status_code=422, detail="Uploaded file is empty")
 
         safe_name = _safe_filename(file.filename)
 
+        # Per-kind size cap, enforced from the real magic-byte format BEFORE any
+        # parsing/classification — documents (25 MB) vs images (10 MB). Oversized
+        # uploads are rejected here with a user-friendly message, never blamed on
+        # CV parsing and never asking the user to pointlessly retry.
+        from src.services.document_classifier import classify_document, detect_format
+        upload_format = detect_format(data, safe_name)
+        size_limit = _upload_limit_for(upload_format)
+        if len(data) > size_limit:
+            raise HTTPException(
+                status_code=413,
+                detail=_too_large_message(size_limit, is_image=upload_format == "image"),
+            )
+
         # ── Document Intelligence — classify BEFORE any pipeline ──────────────
         # Every uploaded file is classified first. Only confirmed CVs enter the
         # CV extraction pipeline. All other types return classification + actions.
-        from src.services.document_classifier import classify_document
         loop = asyncio.get_event_loop()
         classification = await loop.run_in_executor(
             None, classify_document, data, safe_name
@@ -1280,8 +1336,72 @@ async def rico_upload_cv(
         if classification.file_format == "executable":
             raise HTTPException(status_code=422, detail="Executable files are not accepted")
 
-        # Images: no text extraction possible — return classification immediately.
+        # Images: try a vision-model transcription so a job-posting / recruiter
+        # screenshot becomes readable, then re-classify the extracted text (a job
+        # screenshot → job_description with real actions). Falls back to the
+        # format-only image response when no vision model is configured or it
+        # returns nothing — the upload is never blocked.
         if classification.file_format == "image":
+            from src.services.image_extractor import extract_text_from_image
+            extracted = await loop.run_in_executor(
+                None, extract_text_from_image, data, safe_name
+            )
+            if extracted and len(extracted.strip()) >= 20:
+                text_classification = await loop.run_in_executor(
+                    None, classify_document, extracted.encode("utf-8"), "image-text.txt"
+                )
+                # Remember the transcription so follow-up chat ("save as target
+                # job", "score against my CV") can reference the screenshot.
+                # Durable store first — survives Render restarts, multiple
+                # instances, and RICO_MEMORY_BACKEND=postgres (where the JSON
+                # memory store below is a no-op). Keyed by the resolved user /
+                # public-session id, so authenticated and public sessions both work.
+                try:
+                    from src.repositories.uploaded_document_repo import set_last_uploaded_document
+                    set_last_uploaded_document(
+                        resolved_user_id,
+                        extracted_text=extracted[:4000],
+                        filename=safe_name,
+                        document_type=text_classification.document_type,
+                        display_label=text_classification.display_label,
+                        source="image",
+                        request_ref=request_ref,
+                    )
+                except Exception:
+                    pass
+                if not is_valid_public_user_id(resolved_user_id):
+                    try:
+                        from src.rico_memory import RicoMemoryStore
+                        _mem = RicoMemoryStore()
+                        _rctx = _mem.get_context(resolved_user_id, "recent_context") or {}
+                        _rctx["last_uploaded_document"] = {
+                            "document_type": text_classification.document_type,
+                            "display_label": text_classification.display_label,
+                            "filename": safe_name,
+                            "source": "image",
+                            "extracted_text": extracted[:4000],
+                            "suggested_actions": list(text_classification.suggested_actions or []),
+                        }
+                        _mem.set_context(resolved_user_id, "recent_context", _rctx)
+                    except Exception:
+                        pass
+                _metrics.record_request((time.time() - start_time) * 1000)
+                logger.info(
+                    "doc_image_extracted user=%s filename=%s type=%s chars=%d request_ref=%s",
+                    resolved_user_id, safe_name, text_classification.document_type,
+                    len(extracted), request_ref,
+                )
+                resp = _classification_response(text_classification, safe_name)
+                preview = extracted.strip()
+                if len(preview) > 600:
+                    preview = preview[:600].rsplit(" ", 1)[0] + "…"
+                resp["message"] = (
+                    f"I read your image — it looks like a **{text_classification.display_label}**. "
+                    f"Here's what I found:\n\n{preview}\n\nWhat would you like me to do with it?"
+                )
+                resp["extracted_text"] = extracted[:4000]
+                resp["source"] = "image"
+                return resp
             _metrics.record_request((time.time() - start_time) * 1000)
             return _classification_response(classification, safe_name)
 
@@ -1303,6 +1423,42 @@ async def rico_upload_cv(
                 ),
             }
 
+        # No-text / image-only documents: a screenshot or scan exported as a PDF,
+        # or an otherwise empty/unreadable file. There is no extractable text, so the
+        # CV parser would only emit a misleading "poor quality" CV preview (#674
+        # residual). Return a clear needs-text response — never the CV pipeline.
+        # (OCR/vision for these is handled separately and is out of scope here.)
+        _NEAR_EMPTY_CHARS = 25
+        _NO_TEXT_MIN_BYTES = 1024
+        extracted_chars = int(classification.metadata.get("chars", 0) or 0)
+        text_bearing_format = classification.file_format in ("pdf", "doc", "docx", "text")
+        if text_bearing_format and len(data) >= _NO_TEXT_MIN_BYTES and (
+            doc_type == "no_text"
+            or (doc_type == "unknown" and confidence <= 0.0 and extracted_chars < _NEAR_EMPTY_CHARS)
+        ):
+            _metrics.record_request((time.time() - start_time) * 1000)
+            logger.info(
+                "doc_classify_no_text user=%s filename=%s format=%s chars=%d request_ref=%s",
+                resolved_user_id, safe_name, classification.file_format,
+                extracted_chars, request_ref,
+            )
+            return {
+                "ok": True,
+                "status": "classified",
+                "document_type": "no_text",
+                "file_format": classification.file_format,
+                "filename": safe_name,
+                "confidence": round(confidence, 3),
+                "suggested_actions": [],
+                "display_label": "Unreadable / Image-only Document",
+                "message": (
+                    "I couldn't find any readable text in this file. It looks like a "
+                    "scan, photo, or screenshot saved as a PDF rather than a text "
+                    "document. I can read text-based PDFs and Word files — if this is "
+                    "your CV, please upload a text-based version."
+                ),
+            }
+
         # Non-CV documents with sufficient confidence → return classification + actions.
         # CV types that also proceed through extraction: "cv", "cover_letter", "unknown"
         _CV_PIPELINE_TYPES = {"cv", "cover_letter", "unknown"}
@@ -1313,6 +1469,23 @@ async def rico_upload_cv(
                 "doc_classify_routed user=%s filename=%s type=%s confidence=%.2f request_ref=%s",
                 resolved_user_id, safe_name, doc_type, confidence, request_ref,
             )
+            # Store classification in session context so Rico can reference the
+            # uploaded document in subsequent chat turns (e.g. "can you review it?").
+            if not is_valid_public_user_id(resolved_user_id):
+                try:
+                    from src.rico_memory import RicoMemoryStore
+                    _mem = RicoMemoryStore()
+                    _rctx = _mem.get_context(resolved_user_id, "recent_context") or {}
+                    _rctx["last_uploaded_document"] = {
+                        "document_type": doc_type,
+                        "display_label": classification.display_label,
+                        "filename": safe_name,
+                        "confidence": round(confidence, 3),
+                        "suggested_actions": list(classification.suggested_actions or []),
+                    }
+                    _mem.set_context(resolved_user_id, "recent_context", _rctx)
+                except Exception:
+                    pass
             return _classification_response(classification, safe_name)
 
         # ── CV extraction pipeline ────────────────────────────────────────────
@@ -1340,7 +1513,7 @@ async def rico_upload_cv(
                 "message": (
                     f"Upload failed. Reference: {request_ref}. "
                     "I could not read this file. "
-                    "Please try a text-based PDF or Word document under 10 MB."
+                    "Please try a text-based PDF or Word document under 25 MB."
                 ),
             }
 
@@ -1418,6 +1591,21 @@ async def rico_upload_cv(
             request_ref,
         )
 
+        if not is_valid_public_user_id(resolved_user_id):
+            try:
+                from src.rico_memory import RicoMemoryStore
+                _mem = RicoMemoryStore()
+                _rctx = _mem.get_context(resolved_user_id, "recent_context") or {}
+                _rctx["last_uploaded_document"] = {
+                    "document_type": doc_type or "cv",
+                    "display_label": "Resume / CV",
+                    "filename": safe_name,
+                    "confidence": round(confidence, 3),
+                    "suggested_actions": [],
+                }
+                _mem.set_context(resolved_user_id, "recent_context", _rctx)
+            except Exception:
+                pass
         return {
             "ok": True,
             "status": "preview_ready",

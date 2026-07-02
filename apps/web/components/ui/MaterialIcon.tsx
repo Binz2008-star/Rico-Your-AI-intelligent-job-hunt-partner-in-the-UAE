@@ -74,6 +74,9 @@ const ICONS: Record<string, IconRenderer> = {
             <path d="m8.5 12 2.2 2.2 4.8-4.8" />
         </>
     ),
+    radio_button_unchecked: () => (
+        <circle cx="12" cy="12" r="9" />
+    ),
     chevron_right: () => (
         <path d="m9 6 6 6-6 6" />
     ),

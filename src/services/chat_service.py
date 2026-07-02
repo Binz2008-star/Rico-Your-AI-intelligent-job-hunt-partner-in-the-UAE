@@ -131,6 +131,31 @@ def send_message(
     profile = get_profile(ctx.user_id)
     profile_present = profile is not None
 
+    # ── Uploaded-document action — deterministic, before the AI/legacy split ───
+    # "Summarize this document", "Extract key information", "Describe this image"
+    # must always read from the freshly uploaded document's transcript. Without
+    # this, the intent router can route one button (extract) down the AI path with
+    # no transcript — which then paraphrases the public job-listing CTA — while
+    # another (summarize) takes the legacy document path and works. Route both the
+    # same way whenever a fresh uploaded_document_context exists for this user.
+    from src.rico_chat_api import RicoChatAPI as _RicoChatAPI
+    if _RicoChatAPI.is_document_action_message(message):
+        _doc_reply = _RicoChatAPI(persist=ctx.can_persist_profile).handle_document_action(
+            ctx.user_id, message, language
+        )
+        if _doc_reply is not None:
+            _doc_reply.setdefault("intent", "document_action")
+            _doc_reply.setdefault("response_source", "document_context")
+            return _doc_reply
+
+    # ── Guard: public/no-profile sessions must never reach the AI for job-listing
+    # requests — the AI has no search tools in this context and will hallucinate
+    # company names, roles, and requirements from training data.
+    if profile is None and not ctx.can_persist_profile:
+        from src.rico.intent.gates import is_explicit_job_listing_request
+        if is_explicit_job_listing_request(message):
+            return _public_job_search_cta()
+
     # ── Existing routing unchanged ────────────────────────────────────────────
     decision = _intent_router.route(
         message=message,
@@ -164,6 +189,30 @@ def send_message(
             result["messages_limit"] = gate.limit
 
     return result
+
+
+def _public_job_search_cta() -> Dict[str, Any]:
+    """Deterministic CTA returned when a public/no-profile user requests job listings.
+
+    The AI path has no search tools and would hallucinate listings — this short-circuits
+    before any model call is made.
+    """
+    return {
+        "message": (
+            "I can only show you **verified, real-time UAE job listings** — not generated ones.\n\n"
+            "To search for live jobs matched to your profile:\n"
+            "1. **Upload your CV** using the Upload CV button above, or\n"
+            "2. **[Sign up at ricohunt.com](https://ricohunt.com)** for a free account\n\n"
+            "Once I know your background I'll match you with real openings from UAE job boards "
+            "and score each one for you."
+        ),
+        "type": "onboarding_cta",
+        "intent": "job_search",
+        "matches": [],
+        "options": [],
+        "success": True,
+        "response_source": "deterministic",
+    }
 
 
 def _unsupported_tool_response(policy: Any) -> Dict[str, Any]:

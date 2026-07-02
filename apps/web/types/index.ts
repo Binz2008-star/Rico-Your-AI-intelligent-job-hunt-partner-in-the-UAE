@@ -62,6 +62,13 @@ export interface Job {
   tags: string[];
   posted_at?: string;
   source_url?: string;
+  /** Canonical link the Apply button should use. Empty when no trusted link. */
+  usable_link?: string;
+  /** True when there is no trusted apply link — render the fallback CTA instead. */
+  link_unavailable?: boolean;
+  link_unavailable_reason?: string;
+  /** Safe fallback actions when link_unavailable (search site / Google / save). */
+  fallback_cta?: Array<{ action: string; label: string; url?: string; text?: string; message?: string }>;
   verification_status?: "live" | "lead_needs_verification" | string;
   match_explanation?: MatchExplanation;
 }

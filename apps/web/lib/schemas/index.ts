@@ -313,6 +313,7 @@ export const RicoAttachmentPurposeSchema = z.enum([
     'contract_or_legalish',
     'company_profile',
     'public_comment',
+    'application_evidence',
     'unknown_document',
 ]);
 

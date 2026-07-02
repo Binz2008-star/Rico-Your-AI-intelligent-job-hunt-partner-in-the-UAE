@@ -1,397 +1,360 @@
 # Current State
 
-_Last updated: 2026-06-20 (sidebar retry verified + UI/UX audit backlog logged)_
+_Last updated: 2026-07-02 — `main` HEAD `f64e7e0` (PR #805 — personalized job-alert emails,
+merged; migration 033 APPLIED to Neon + production dry-run plumbing smoke PASSED; feature
+remains gated/inert, see the "Email job alerts" section directly below). Prior line:
+2026-07-01 — `main` HEAD `ff6c690` (dashboard). BUG-9 through BUG-17 all merged_
+
+## Email job alerts — PR #805 (merged 2026-07-02, gated/inert)
+
+Opt-in personalized job-alert emails. Merged to `main` at `f64e7e0` (squash). **Nothing is
+sending** — the feature is doubly gated and unscheduled:
+
+- opt-in default **off** (`RicoAgentSettings.can_receive_email_alerts=False`)
+- kill-switch `RICO_ENABLE_EMAIL_ALERTS` default **off** (sweep returns `disabled`)
+- cron workflow `job-alert-emails.yml` is **dispatch-only** (no `schedule:`)
+- **migration 033 APPLIED** to Neon (2026-07-02, verified: both tables + `idx_eal_user_sent`
+  / `idx_eut_token` + primary/unique indexes present)
+
+**Production dry-run plumbing smoke PASSED (2026-07-02):** owner ran
+`POST /api/v1/pipeline/job-alert-emails?dry_run=true` (X-Cron-Secret) →
+`{status: ok, users: 0, sent: 0, skipped: 0, failed: 0, dry_run: true}`. Confirms endpoint
+deployed, cron-secret auth works, and dry-run bypasses the kill-switch without sending.
+`users: 0` expected (no opt-ins yet) — validates plumbing, not match quality.
+
+What shipped (16 files): `migrations/033_email_job_alerts.sql` (`email_alert_log`,
+`email_unsubscribe_tokens`); `src/services/email_notifications.py` (opt-in/out, unsubscribe
+tokens, dedup + hours-based frequency helpers); `src/services/email_alert_service.py`
+(sweep + HTML/text digest, reuses `RicoSystem.run_for_profile`, exclusions/dedup/threshold/
+frequency cap/synthetic guard/kill-switch); `src/services/mailer.py` (optional HTML);
+`RicoAgentSettings` email fields; `profile_repo.get_users_with_email_alerts`; settings
+opt-in/out/status endpoints; public `GET /api/v1/email/unsubscribe`; cron-guarded
+`POST /api/v1/pipeline/job-alert-emails?dry_run=`. Tests: `test_email_notifications.py`,
+`test_email_alert_service.py` (90 in the relevant subset, green in CI on `ac9dd52`).
+
+Pre-merge self-review (`/code-review`, Codex was quota-blocked) fixed two findings before
+enable: unsubscribe URL now resolves via the `/proxy` rewrite; daily frequency window is
+hours-based (jitter-tolerant). Deferred to PR-3 (scale-only): sync cron runs live JSearch per
+user sequentially (#3), per-job dedup opens a new DB connection (#5).
+
+**Remaining before activation (owner-gated, not done):** (1) opt in one test/owner account →
+re-run the dry-run for a match-quality smoke (`users:1`, non-zero would-send or a match-related
+skip reason) → (2) set `RICO_ENABLE_EMAIL_ALERTS=true` → enable the daily `schedule:` →
+address #3/#5 → monitor `email_alert_log`; then Arabic localization. Done so far: migration 033
+applied + dry-run plumbing smoke passed. Tracked as TASK-20260702-033 in `TASKS.md`.
+
+---
+
+_Earlier: BUG-9 through BUG-17 all merged
+and deployed since the 2026-06-30 update below (PRs #783–#797), plus two fixes landed directly
+on `main` outside the PR flow: `bd4c4f8` (T7 — verbatim role text) and `77563af` (TASK-030 —
+uploaded-document context injection). Forward focus: land `fix/profile-context-role-selection`
+(T1 search-first fix) to close out TASK-20260622-031 / PR C. See that task in `TASKS.md` for
+detail — this file's BUG-9–BUG-17 history has not yet been backfilled into the tables below._
+
+## PR C / TASK-20260622-031 — status as of 2026-07-01
+
+- **T7** (verbatim role, no silent taxonomy substitution): ✅ fixed, on `main` (`bd4c4f8`).
+- **T1** (search-first for stale profile roles instead of pausing to ask): ✅ fixed, pushed to
+  `fix/profile-context-role-selection` (`48e9cba`), PR not yet opened (no `gh` auth in session —
+  open via https://github.com/Binz2008-star/Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE/pull/new/fix/profile-context-role-selection).
+- Both fixes originated from an unmerged background session (`claude/workflow-progress-check-qycxuo`,
+  now deleted). That branch also carried a stale pre-PR#797 `_build_tracking_message` hunk that
+  was intentionally not ported — see `TASKS.md` TASK-20260622-031 handoff notes.
+
+## QA Cycle 1 — CLOSED 2026-06-27
+
+| Bug | PR | SHA | Deployed | Tests |
+|---|---|---:|---|---|
+| BUG-01 | #757 | `325aa0e` | ✅ | frontend (sidebar cache) |
+| BUG-02 | #759 | `3a9221a` | ✅ | preference sanitization |
+| BUG-03 | #760 | `b6a1196` | ✅ | `test_bug03_source_url_fallback.py` 18/18 |
+| BUG-04 | #761 | `4918f55` | ✅ | frontend (`/pipeline` → `/flow`) |
+| BUG-05 | #762 | `007246b` | ✅ | `test_bug05_confirmation_loop.py` 7/7 |
+| BUG-06 | — | — | 🚫 blocked | no description |
+| BUG-07 | — | — | 🚫 blocked | no description |
+| BUG-08 | #763 | `62ff5ad` | ✅ | `test_bug08_city_declaration.py` 14/14 |
+| BUG-09 | — | `46a7ba7` | ✅ | `test_bug09_keyword_filter_bleed.py` 7/7 |
+| BUG-10 | — | `b776abf` | ✅ | frontend (double-send `sendingRef`) |
+| P0 #764 | #767 | `71466d2` | ✅ | `test_p0_mutation_trust_guard.py` 42/42 |
+
+Regression suite: **104/104 PASS**. 45 pre-existing environment failures (cryptography version, mock log-format, webhook secrets) — none caused by any BUG or P0 change.
+
+## PR #780 + #781 — Chat-OS agentic UI + smoke-test fixes (2026-06-30)
+
+### PR #780 — action cards for `application_status` and `prepare_application`
+Merged at `6863409`. Added `_application_status_actions()` and `_prepare_application_actions()` factories to `agentic_ui_composer.py` and registered them in `_RESPONSE_TYPE_ACTIONS`. Tests: 6 new unit tests in `test_agentic_ui_composer.py`.
+
+| Response type | Action cards |
+|---|---|
+| `application_status` | View Application Flow (navigate /flow) · Add application (chat_continue) |
+| `prepare_application` | View Application Flow (navigate /flow) · Find similar jobs (chat_continue) |
+
+### PR #781 — question-form routing + sidebar nav/count/plan fixes
+Merged at `e4979eb`. Squash commit on `main`.
+
+| Fix | What | Files |
+|---|---|---|
+| Chat routing | Extended `_APPLICATIONS_LIST_RE` to match question-form phrases ("what are my applications?", "how many applications do I have?", etc.) — previously fell to AI path with no action cards | `src/rico_chat_api.py` |
+| Composer mapping | Added `"application_list": _application_status_actions` to `_RESPONSE_TYPE_ACTIONS` so both question-form and tracker-card responses get action cards | `src/services/agentic_ui_composer.py` |
+| BUG-1 (sidebar count) | `useSidebarStatus.ts` now uses `stats.total` from backend rather than summing only `applied+interview+offer+saved+rejected` — previously missed `opened`, `opened_external`, `prepared`, `follow_up_due`, `decision_made` | `apps/web/hooks/useSidebarStatus.ts` |
+| BUG-4 (sidebar nav) | Removed `chatPrompt` from all nav items — sidebar links now always navigate to real pages, never inject `/command?q=…` URLs | `apps/web/components/layout/app-nav.ts` |
+| BUG-5 (plan label) | "Pro Plan" → "My Plan" nav label + `navMyPlan` translation key (EN + AR) — eliminates "Pro Plan / PREMIUM" badge contradiction | `apps/web/components/layout/app-nav.ts`, `AppSidebar.tsx`, `translations.ts` |
 
 ## Production baseline
 
-- **Repository main HEAD:** `2bc48981fea8368c337931cc00323cb66feba703`
-  (#661 duplicate upsert fix). Recent lineage:
-  `2bc489` (#661 duplicate upsert_matches CI fix) ←
-  `518a1a8` (#660 P0 context-loss bugs — 4 fixes) ←
-  `a4f038a` (#658 workspace sync) ←
-  `712be79` (#658 sidebar status retry) ←
-  `f89c555` (#657 BUG-05 public-chat loop).
-- **Production backend deployed SHA:** `f89c555aa969f75f99ee8b7d0296bb7582c272cd`
-  (BUG-05 — last confirmed Render deploy 2026-06-19T~19:15Z).
-  `518a1a8` / `2bc489` backend changes need a Manual Render Deploy to go live.
-- **Deployed to Vercel:** ✅ auto-deploying `2bc489` from main.
+- **Repository main HEAD:** `e4979eb` (PR #781 — chat routing + sidebar fixes). Merge train: `0e0a6aa` (dashboard), `6863409` (PR #780 — Chat-OS action cards), `f0e0cea` (PR #776 — No Dead UI Rule + route cleanup), `744dbec` (PR #775 — P2-A), `78c22857` (PR #770 — Chat-as-interface milestone), `4ad2e29` (PR #767 — P0 mutation trust guard).
+- **Last deploy-verified SHA:** `4ad2e29` — `deploy-render.yml` run #28301440105 succeeded. ✅ (PRs #770, #775, #776, #780, #781 are frontend-only or backend-lightweight; Render deploy auto-triggered for backend changes but not yet re-verified in-session.)
+- **Production deploy verification history:** `4ad2e29` (run #28301440105), `6113123` (run #80), `0d28a08` (#747), `7e0b9ec` (#741), `f202a86` (#739), `a7e294b` (#736), `115adde` (#738), `e214178` (#737).
+- **Pending owner-side smoke:** authenticated save→count flow and #741 screenshot follow-up require `ricohunt.com` login — sandbox cannot reach authenticated production.
+- **Migration 032 (`uploaded_document_context`):** auto-applied on startup via the app.py lifespan runner (idempotent `CREATE TABLE/INDEX IF NOT EXISTS`), targeting the exact branch the production `DATABASE_URL` uses. Direct confirmation of the `migration_ok` log line / table existence needs Render-log or Neon access (unavailable in-session) — the owner re-test is the end-to-end proof.
+- **Image reading reliability:** `OCRSPACE_API_KEY` set on Render as a dependable free OCR backstop behind the (rate-limited) free vision model (OpenRouter/HF).
+- **Render logs:** direct Render MCP log scan unavailable in-session; no error signals from `/health` or deploy workflows.
 
-## P0 Context-Loss Bugs — RESOLVED (2026-06-19, PR #660 + #661)
+## Job-flow stabilization — 2026-06-22 complete
 
-Four adversarial QA failures fixed and merged to main. Root cause: `RICO_MEMORY_BACKEND=postgres`
-sets `_JSON_WRITE_ENABLED=False`, silently neutering all in-process context storage in production.
+Rico's job-search flow was stabilized through a focused merge train. Each PR stayed in one bug category, used mocked tests/fixtures, avoided provider quota burn, and excluded #712 DB migration work, billing changes, landing-page changes, and provider scraping.
 
-| Bug | Symptom | Fix |
+| PR | Category | Merge SHA | Deploy | Tests / notes |
+|---|---|---:|---|---|
+| **#727** | P0 — job-card apply-link integrity + canonical `src/services/job_link.py` | `e1d87fc` | ✅ verified | `test_job_card_apply_link_integrity.py`; no more missing required `link` error |
+| **#724** | P1 — low-cost provider cascade (cache → internal → Jooble → Adzuna → JSearch → degraded CTA) | `5fe9171` | ✅ verified | `test_job_providers.py`, `test_provider_degraded_ux.py` |
+| **#723** | P1 — multi-role parsing (`extract_role_list`, `job_search_multi_role`) | `713ea75` | ✅ verified | `test_multi_role_search_*.py` |
+| **#728** | P0 follow-up — route ordinal apply-link requests past job-detail gate | `c77781a` | ✅ verified | `test_ordinal_apply_link_routing.py` |
+| **#729** | PR B — save the Nth job to pipeline from recent search context | `963e40b` | ✅ verified | `test_save_ordinal_to_pipeline.py` |
+| **#730** | PR D — role parsing edge cases: `only`, jobs-for-A-and-B, CV exclusions, category mapping / not coding | `38fbf5d` | ✅ verified | `test_role_parsing_edge_cases.py` |
+
+## Key production behaviors now live
+
+- `src/services/job_link.py` is the **only canonical apply-link resolver**. Do not reintroduce `src/rico_link_resolver.py`.
+- Job cards and chat apply-link commands share canonical `usable_link` / `link_unavailable` fields.
+- `apply_job` no longer throws `Job payload is missing required 'link' field`; missing trusted links produce safe fallback CTAs.
+- Ordinal apply-link commands work for first/second/last job references from recent search context.
+- Save-to-pipeline works for ordinal references such as "save the second job".
+- Provider cascade is live: cache(24h) → internal → Jooble → Adzuna → JSearch → degraded fallback CTA.
+- `/health` exposes `job_providers` configured/degraded state only; no secret values.
+- Role parsing now handles:
+  - `Technical Product Owner only` → `Technical Product Owner`
+  - `jobs for HSE Manager and QHSE Manager` → both roles
+  - CV-based search with `do not search …` exclusions
+  - `product and technical management jobs, not coding jobs` → allowed management roles + coding exclusions
+
+## Provider env
+
+Set in Render by the owner; presence only is observable via `/health`:
+
+- `JOOBLE_API_KEY`
+- `ADZUNA_APP_ID` + `ADZUNA_APP_KEY` (Adzuna opt-in; both required)
+- `RAPIDAPI_KEY` (JSearch)
+
+No provider keys are hardcoded, committed, or logged.
+
+## Production Tests 1–9 status
+
+| Test | Bug | Status |
 |---|---|---|
-| BUG-A | Ordinal follow-up ("Open the second one") → "No recent job search" | DB fallback in `_handle_job_detail`; `get_recent_matches()` added to `user_job_context_repo` |
-| BUG-B | Bare company name ("Majid Al Futtaim") → "not a job role" | Company-name check against recent context + DB before emitting unknown-role error |
-| BUG-C | "Give me the URL" misrouted to search | Extended `_OPEN_APPLY_LINK_RE` to match natural language URL requests |
-| BUG-D | Apply link silently absent in job detail | `source_url` fallback + explicit "No apply link available" notice |
+| T2 | `Technical Product Owner only` qualifier | ✅ fixed live (#730) |
+| T3 | `HSE Manager and QHSE Manager` jobs-for-A-and-B order | ✅ fixed live (#730) |
+| T4 | 3-role comma list as one role | ✅ fixed live (#723) |
+| T5 | CV-based search + `do not search …` exclusions | ✅ fixed live (#730) |
+| T6 | category mapping `product/technical management` + `not coding` | ✅ fixed live (#730) |
+| T8 | `save the second job to pipeline` not wired to recent context | ✅ fixed live (#729) |
+| T9 | open apply link → missing-link error | ✅ fixed live (#727 + #728) |
+| T1 | strongest CV profile ignored; stale `target_role` | ✅ fixed live (#731 PR C) |
+| T7 | silent role substitution + auth/CV context loss + weak location | ✅ fixed live (#731 PR C) |
 
-Also: `_store_search_matches_context` now calls `upsert_matches` on every search so results
-persist to Neon across workers and process restarts (#660). Duplicate call removed in #661.
+## Merge train after #730 (all live on `main`)
 
-**Live QA validation (2026-06-19):** BUG-A and BUG-B confirmed working against production
-Render endpoint. BUG-C and BUG-D code-confirmed (egress throttle prevented full E2E).
-23 unit tests in `tests/test_p0_context_bugs.py` — all passing in CI.
+| PR | What | Merge SHA | Status |
+|---|---|---:|---|
+| **#731** | PR C — profile-context role selection (T1 & T7): no silent stale/ambiguous search; ambiguity by role-family not raw count; raw role text preserved | `9a9070c` | ✅ merged + deployed |
+| **#733** | Investigation/test-only — production-equivalent live-path tests for T2–T6 role parsing | `ab170e2` | ✅ merged |
+| **#734** | Career-memory identity resolution fix | `5944d72` | ✅ merged |
+| **#735** | Single-role parsing accepts explicit titles like "Technical Product Owner" (live recheck found single-role rejected what multi-role accepted) | `96f415a` | ✅ merged + deployed |
+| **#737** | Attachment/document routing — keep no-text/image-only PDFs out of the CV pipeline (#674 residual, Finding 1) | `e214178` | ✅ merged + deploy-verified |
+| **#738** | Upload size limits — 25 MB docs / 10 MB images, per-kind cap enforced before parsing, friendly type-aware AR/EN oversize messages (fixes the misleading "under 10 MB" CV rejection) | `115adde` | ✅ merged + deploy-verified |
+| **#736** | Image reading (Finding 2) — job-screenshot images transcribed via free VLM (OpenRouter/HF) + OCR.space fallback, re-classified to a readable `classified` response; graceful (never blocks uploads) | `a7e294b` | ✅ merged + deploy-verified |
+| **#739** | Image/document action follow-up — buttons (Describe/Extract/Summarize) answer from the stored transcript via an early interceptor (no CV-draft hijack); transcript injected into AI context for typed questions | `f202a86` | ✅ merged + deploy-verified |
+| **#741** | Durable transcript store (`uploaded_document_context` table + repo) — fixes the postgres-mode bug where the OCR transcript was saved only to the no-op `RicoMemoryStore`; follow-ups now read durably; migration 032 auto-applies on startup | `7e0b9ec` | ✅ merged + deploy-verified (owner re-test pending) |
+| **#747** | Phase-0 job-link trust gate (`src/services/job_link_trust.py`) — View & Apply may only surface a source-backed, non-fake, non-LLM apply URL; rejects recent_context/LLM/sequential-LinkedIn/placeholder URLs; `apply_to_job` restored with safe action errors | `0d28a08` | ✅ merged + deploy-verified |
+| **#749** | Pipeline save/count correctness — chat ordinal "save the Nth job" now persists to the user-scoped counted store (`rico_job_recommendations`), idempotent on a trusted save identity; untrusted recent_context jobs save as leads with no claimed apply link; user-safe save errors (`src/services/job_save.py`) | `6113123` | ✅ merged + deploy-verified (owner-side authenticated smoke pending) |
+| **#755** | Link quality (#721) — `employer_url` + `apply_is_direct` surfaced from JSearch `employer_website` / `job_apply_is_direct`; `apply_is_direct=True` upgrades unknown domains to `live_verified`; aggregator/login/rate-limited never overridden; `employer_url` returned as separate field, never in apply_link/alt_link/usable_link; company-site fallback CTA uses real URL when available (label "Company website" vs "Search company site") | `504c755` | ✅ merged + deploy-verified |
 
-## BUG-04 Unauthorized Profile Mutation — RESOLVED (2026-06-19)
+> Note: `fix/single-role-taxonomy-rejection` was an independent duplicate of the #735 fix built in another session — **abandoned** (not merged). Do not revive it.
 
-**Symptom:** Three code paths silently wrote to Neon via `upsert_profile` without explicit
-user consent: (A) `profile_update` intent persisted before confirming; (B)
-`_target_role_search_response` appended searched role to `target_roles` on every search;
-(C) `resolver._hydrate_from_chat` NER-inferred fields (cities/skills/roles/industries) were
-persisted to DB from chat context.
+## Attachment / Document Intelligence routing — 2026-06-23
 
-**Fix (PR #655, merged `f4bacfa`, 2026-06-19T15:51Z):**
-- **Fix A:** `profile_update` intent now stashes prefs as `_pending_field="confirm_profile_update"`,
-  shows a before-save prompt, and calls `upsert_profile` only on affirmative reply. New
-  `_format_pref_changes` helper. `_resolve_pending_field` handles confirm/cancel/pass-through.
-- **Fix B:** Removed `upsert_profile` call from `_target_role_search_response`. Searching a
-  role no longer promotes it to a standing `target_role`.
-- **Fix C:** `resolver.py` snapshots 4 chat-inferable fields pre-NER, computes `_chat_added`
-  delta, strips only that delta from the DB write. In-memory profile for the current request
-  retains NER enrichment. CV/Jotform/action-derived values unaffected.
-- 13 new tests in `tests/test_bug04_profile_mutation.py`.
-- `test_p0_trust_fixes.py::test_concrete_profile_update_*` updated to assert ask-first behavior
-  (old test was asserting the bug).
+- **Audit:** `AI_WORKSPACE/audits/attachment-document-routing-post-674-677.md` (Findings 1–5). #677 shipped native-image classification on `/command`; the audit found the residual gaps.
+- **#737 (Finding 1, merged):** a screenshot/scan exported as a PDF (image-only PDF, no text layer) used to fall through `unknown@0.0` into CV extraction → misleading "poor quality" CV preview. The classifier now tags a *substantial* (`>= _MIN_DOC_BYTES`, 1 KB) text-bearing file with near-empty text (`< _MIN_TEXT_CHARS`, 25) as `no_text`; `/upload-cv` returns a clear needs-text response (`status="classified"`, `document_type="no_text"`) before the CV pipeline. Tiny stub PDFs still flow normally; native images unchanged; real text CVs unchanged. Tests: `tests/test_no_text_pdf_routing.py`.
+- **#738 (upload size, merged):** documents 25 MB / images 10 MB, per-kind cap enforced from magic-byte format **before** parsing; friendly type-aware oversize message (413) replacing "exceeds 10 MB"; `/command` + `/onboarding` map 413 → localized `cmdCvTooLarge` (AR/EN); `files.py` doc cap also 25 MB. Tests: `tests/test_upload_size_limits.py`, `apps/web/__tests__/cv-upload-size-message.test.ts`.
+- **Open findings (NEXT work):** **Finding 3** — no application-evidence destination (read screenshot → "Save as target job" / "Score against my CV" not wired end-to-end; this is the owner's "link A↔B without buttons" ask). **Finding 4** — `onboarding`/`upload` surfaces still don't honor `status="classified"` for non-CV docs/images (#738 only added 413 size handling). **Finding 5** — dead `CV_THRESHOLD`; stale `CLAUDE.md` `/chat` reference (trivial cleanup).
 
-**Verification:** CI green (pytest ✅ playwright ✅ Vercel ✅). Zero new failures vs main
-baseline (115 pre-existing failures unchanged). Production confirmed at `f4bacfa` via Vercel.
+## Image-reading chain (Finding 2) — COMPLETE & LIVE
 
----
+`#736 → #739 → #741`, all merged + deploy-verified. Flow: upload image → free VLM (OpenRouter/HF) or **OCR.space** fallback transcribes it → re-classify transcript → readable `classified` response. Follow-up buttons (Describe/Extract/Summarize) and typed questions ("what do you think of this job?") answer from the transcript; **never** a CV-draft hijack; honest "no readable document" when nothing was read.
 
-## BUG-03 Google-Intermediary Link — RESOLVED (2026-06-19)
+- **Durability (#741):** the transcript is persisted in the durable `uploaded_document_context` table (migration 032, auto-applied on startup) — fixes the prod bug where it was saved only to the `RICO_MEMORY_BACKEND=postgres`-disabled `RicoMemoryStore`. Read path: `_get_last_uploaded_document` (ephemeral fast-path → durable DB), used by `_handle_uploaded_document_followup` and `_build_openai_context`. Keyed by resolved `user_id` (email / `public:web-*`), one row per user, 180-min freshness window.
+- **Provider env (owner-set on Render):** `OCRSPACE_API_KEY` set (reliable OCR backstop); optional `OPENROUTER_API_KEY` / `OPENROUTER_VISION_MODEL` or a free HF Inference Provider on `HF_TOKEN`.
+- **Pending:** owner re-test in `/command` (upload job screenshot → buttons + typed Qs answer from the text). Sandbox can't reach `onrender.com` / Neon, so the re-test is the end-to-end proof of migration 032 + the durable store.
+- **Tests:** `tests/test_uploaded_document_durable_context.py`, `tests/test_uploaded_image_ai_context.py`, `tests/unit/test_image_extractor.py`, `tests/unit/test_upload_image_vision.py`.
 
-**Symptom:** Job cards showed `google.com/search?...` as the apply/alt link because
-`_format_match` was promoting `job_google_link` into `apply_url`/`source_url` without
-stripping the Google intermediary.
+## Standing guardrails for this work-stream
 
-**Fix (PR #651 `8685458` + hotfix PR #652 `b0807c0`, 2026-06-19):**
-- `source_url` fallback no longer accepts Google search/URL links.
-- `alt_link` Google intermediary cleared at write time.
+- No auth rewrite, no billing changes, no DB migration, no #712 work, no landing-page work, no provider scraping, no repeated real provider searches.
+- Use mocks/fixtures only in tests; no live OpenAI/HF/JSearch/Telegram/Jotform calls in unit tests.
+- Keep `src/services/job_link.py` as the only canonical apply-link resolver; do not reintroduce `src/rico_link_resolver.py`.
 
-**DB cleanup:** Read-only Neon sweep confirmed zero Google URLs in `jobs` or
-`user_job_context`. One `rico_job_recommendations` row (Senior HSE Manager — Events /
-Talent BluePrint, `job_key=6b1e9b6fdca6ad6b`) had empty `apply_url`/`source_url` —
-contamination was display-only, already fixed at write time by #651/#652. No DB write needed.
+## Superseded / duplicate PRs
 
----
+- **#726** — closed as superseded by #727 + #728 + #729. Do not rebase or salvage it.
+- **#722** — degraded job-card fallback CTAs; overlaps #724/#727. Close or rebase only if a new focused gap is proven.
 
-## BUG-02 A/B/C/D Letter-Choice Routing — RESOLVED (2026-06-19)
+## Important older context still relevant
 
-**Symptom:** When Rico presented lettered options (A/B/C/D), user selecting "A" was routed
-to option B, "B" to C, etc. — off-by-one in the index lookup.
+- **#712 DB migration drift:** still separate; do not mix with job-flow work.
+- **System Quality Audit PR #717:** draft/CI-green status was documented earlier; do not merge without separate review.
+- **Migration `030_action_audit_log_hardening.sql`:** applied + verified in production Neon on 2026-06-21.
+- **Migration `021_user_job_context_alt_url.sql`:** applied; issue #710 closed.
+- **Issue #711 drift:** `005 pipeline_runs` and `011 idx_rico_recommendations_user_job_unique` remain not applied unless separately approved.
+- **Canonical handoffs:** `AI_WORKSPACE/HANDOFFS/2026-06-22-job-flow-stabilization-complete.md` (job-flow train through #730), `AI_WORKSPACE/HANDOFFS/2026-06-23-attachment-document-routing.md` (document routing #737 + #736 review).
 
-**Fix (PR #649, merged `631ce7d`, 2026-06-19):** Zero-vs-one-based index corrected in the
-letter-choice router. CI green on merge.
+## Open PRs — triage (6, all stale / pre-session 2026-06-20..22)
 
----
-
-## BUG-01 Cover-Letter Company-Search Guard — RESOLVED (2026-06-19)
-
-**Symptom:** Cover letter prompts like
-"Draft me a cover letter for the HSE MANAGER - DATA CENTERS role at Dutco Group"
-triggered a company job search instead of generating a cover letter.
-
-**Root cause:** Pre-classifier `_COMPANY_SEARCH_RE` pattern-2
-(`\b(?:jobs?|roles?|vacancies|openings?|positions?)\s+at\s+[A-Z][A-Za-z]`) matched
-"role at Dutco Group" before the cover-letter slot extractor ran.
-
-**Fix (PR #648, merged `40636ba6ed2fd15cf135ef38030c6e1d2641ecab`, 2026-06-19T09:34Z):**
-- New early-exit block: when `_COVER_LETTER_COMMAND_RE` matches, extract slots and
-  either generate the letter (title + company present) or ask only for the missing
-  field — before `_COMPANY_SEARCH_RE` is evaluated.
-- Belt-and-suspenders guard: `_COMPANY_SEARCH_RE` check now also requires
-  `not _COVER_LETTER_COMMAND_RE.search(message)`.
-- 5 new regression tests in `TestBug01CoverLetterCompanySearchGuard`
-  (15/15 total in `test_cover_letter_slot_extraction.py`).
-
-**Verification chain:**
-- Pre-merge: 15/15 tests PASS.
-- Render deploy run #29 (09:34Z, SHA `40636ba`): all steps PASS, `/health` 200.
-- bug01-smoke.yml run #1 (27818302534, 09:45Z): **4/4 PASS**
-  - `/version` = `40636ba6ed2fd15cf135ef38030c6e1d2641ecab` ✅
-  - Cover-letter smoke: `type=onboarding` (not `job_results`) ✅
-  - Company-search regression: `type=onboarding` (not `draft_message`/`cover_letter_prompt`) ✅
-  - `/health` = 200 ✅
-- Manual app smoke (user-confirmed 2026-06-19): "Draft me a cover letter for the HSE
-  MANAGER - DATA CENTERS role at Dutco Group" → Rico drafted cover letter, no job_results,
-  no Dutco company search, no unrelated apply links. ✅
-- `/flow` contamination: none — smoke session had no profile, no jobs surfaced or tracked.
-- bug01-smoke.yml cleaned up from main (commit `3e997073`).
-
-## #644 Production Incident — RESOLVED (2026-06-19)
-
-**Symptom:** All DB-backed endpoints broken after #638 merged to main and deployed.
-`POST /pipeline/reminders` returned `{"status":"error"}`. `/rico/profile`,
-`/applications`, `/subscription` also affected.
-
-**Root cause:** `src/rico_db.py` `connect()` did `conn._rico_pool = pool`. psycopg2
-connections have no `__dict__`; this raised `AttributeError` on every `db.connect()` call.
-
-**Fix (PR #644, merged `26124ed180a77658be21cfa499e5629bd6a816ed`, 2026-06-19T07:53Z):**
-- `connect()` no longer assigns any attribute to the connection object.
-- Returns a direct per-request connection (proven pre-overhaul behavior).
-- `_return_or_close()` closes directly.
-- Regression tests added: `tests/test_rico_db_connect.py` (4 tests, slots-only fake conn).
-
-**Why pooling disabled (not just patched):** pool is also incompatible with the many
-`with db.connect() as conn:` callers (subscription_repo / applications_repo / profile_repo)
-that never return connections to a pool. Re-enabling pooling needs a caller-wide
-acquire/release refactor — tracked as a separate follow-up. Pool scaffolding left in place,
-unused.
-
-**Full verification chain:**
-- Pre-merge tests: test_rico_db_connect (4) + test_followup_reminders (10) +
-  test_application_lifecycle (21) = 35 passed. py_compile clean.
-- Render deploy run #27 (07:55Z, SHA `26124ed`): all steps PASS, `/health` 200, `/version` confirmed.
-- Render deploy run #28 (08:01Z, SHA `26124ed`): all steps PASS, `/health` 200, `/version` confirmed.
-- followup-smoke.yml run #2 (08:02Z, SHA `26124ed`): **9/9 PASS** (first post-#644 smoke).
-- Cron double-fire (cron-test.yml, dispatch run 27813559291):
-  run 1 `status="ok"`, run 2 `status="ok"` (idempotent). cron-test.yml then removed.
-
-## #355 Follow-up Reminders Phase 1 — COMPLETE (2026-06-19)
-
-All Phase 1 gates passed:
-
-| Gate | Status |
-|---|---|
-| Migration `027_followup_reminders.sql` applied to Neon | ✅ confirmed |
-| `RICO_CRON_SECRET` set on Render + GitHub secret | ✅ confirmed |
-| Production backend live at `26124ed` | ✅ `/health` 200, `/version` `26124ed` |
-| `POST /pipeline/reminders` returns `status="ok"` | ✅ two consecutive Cron runs confirmed |
-| followup-smoke.yml 9/9 PASS | ✅ run #1 (`27810675201`) and run #2 (`27813425034`) |
-| DB layer restored (no `_rico_pool` error) | ✅ #644 merged + deployed |
-
-**Render Cron configured (do not change command):**
-```
-Schedule: 0 4 * * *
-Command:  curl -fsS -X POST -H "X-Cron-Secret: $RICO_CRON_SECRET" \
-          https://rico-job-automation-api.onrender.com/api/v1/pipeline/reminders
-```
-
-**Phase 2: not started.** (#640 on hold — do not merge. #641 merged 2026-06-20, see below.)
-
-## System overhaul v1+v2 — merged to main (PR #638, commit `9c003a7`)
-
-| Change | Status |
-|---|---|
-| Telegram DM replies fixed (`rico_telegram_webhook.py`) | ✅ on main |
-| Telegram `update_id` deduplication | ✅ on main |
-| 12 DB indexes via `028_performance_indexes.sql` (applied at startup) | ✅ on main |
-| Jobs "Load more" pagination (`apps/web/app/jobs/page.tsx`) | ✅ on main |
-| DB connection pooling (`src/rico_db.py`) | ⚠️ scaffolding present, pooling **disabled by #644** |
-| Email pre-fill after verification (`verify-email/page.tsx`) | ✅ on main |
-| `initialEmail` prop + Suspense on login page | ✅ on main |
-| TagInputField chips for profile page | ✅ on main |
-
-**028_performance_indexes startup warning — FIXED in PR #662:**
-`job_id` → `searched_at DESC` in the `user_job_context` index.
-`user_job_context` never had a `job_id` column; the correct column is `searched_at`.
-
-## On-hold PRs
-
-- **PR #640** — on hold, awaiting explicit approval. Do not merge.
-- ~~**PR #641** — on hold~~ → ✅ **MERGED** `6fac4c0` (2026-06-20T07:59Z): v4 navy/indigo
-  design tokens, live + smoke-PASS. Addresses audit item 6-A (see TASK-028).
-
-## Security — credential redaction (2026-06-19)
-
-An old Neon connection string (`authenticator:npg_R8hdwAMu9cOs`) was found committed in
-`docs/archive/AUDIT_REPORT_2026-05-14.md`. Redacted via PR #656 (merged `e104135`,
-2026-06-19). The credential is believed rotated/invalid (different user, different password
-from current). Current chat-exposed credential (`npg_DI5SJWxO8wVj`, `neondb_owner`) was
-**not** in the repo. Rotation of the current password is left to the owner (Neon console →
-Reset password → update Render `DATABASE_URL` → redeploy).
-
-**Note:** `git filter-repo` purge of the old credential from history is out of scope —
-requires a coordinated force-push. Track separately if needed.
-
----
-
-## #618 Reconciliation — complete (2026-06-19)
-
-Status index posted as GitHub comment (issuecomment-4753155540). #654 absorbed-observations
-note posted (issuecomment-4753155919). #618 remains open as the living tracker for 8 open
-UX tasks. Workflow-class items moved to #654. Resolved items checked off.
-
-**8 open tasks remaining in #618:**
-TASK-010 Pipeline relevance guard (P1) · TASK-011 Match-score explanation (P2) ·
-TASK-013 Application Pipeline V1 status alignment (P1) · TASK-014 Queue Arabic empty state (P2) ·
-TASK-015 Pipeline notes/activity log (P2) · TASK-016 Profile completeness vs readiness (P3,
-sidebar widget loading fixed in #658; metric reconciliation still open) ·
-TASK-017 Daily application-limit explanation (P3) · TASK-018 Telegram Chat-ID validation (P2).
-
----
-
-## Sidebar status-widget retry (TASK-027 / PR #658) — DONE + smoke-PASS (2026-06-20)
-
-Sidebar READINESS/PIPELINE widgets no longer cache failed cold-start loads (the "blank grey
-boxes on navigate-back" bug). Merged `712be79` via **PR #658**, which replaced #653 — that
-branch had 46 stale commits already on main and was **closed/superseded**. Production smoke
-PASS 2026-06-20 (full table on PR #658, issuecomment-4756899519). Tracked as
-**TASK-20260619-027**.
-
-> Earlier chat shorthand called this "TASK-024" — that is incorrect; TASK-024 is BUG-04. The
-> sidebar fix had no ledger ID until TASK-027 was added.
-
----
-
-## UI/UX live-audit backlog (2026-06-19) — logged as TASK-028
-
-The 2026-06-19 live production UI/UX audit (`docs/audits/ui-ux-live-audit-2026-06-19.md`,
-shipped via #658) produced 20 prioritized recommendations across `/command`, `/flow`,
-`/profile`, `/upload`, `/settings`, `/subscription`, and the sidebar. They are now tracked as a
-backlog in **TASK-20260619-028**. Item 1-D (sidebar widgets) is already DONE (TASK-027); each
-remaining item spins into its own scoped TASK-NNN when picked up. Top pick per the audit:
-**1-A** (clickable option buttons — biggest UX win for least effort).
-
----
-
-## Neon production audit — complete (2026-06-19)
-
-| Item | Finding |
-|---|---|
-| Production branch | `br-restless-cherry-amq6wj7o` (primary, default) |
-| Active compute | `ep-long-poetry-am9o9qth` (PostgreSQL 17, aws-us-east-1) |
-| Core Rico tables | All present (rico_users, rico_profiles, rico_chat_history, rico_saved_searches, rico_job_recommendations, rico_webhook_events, applications, application_drafts, user_job_context, user_documents, user_subscriptions, subscription_events, search_context, jobs) |
-| Migration ledger | Inline idempotent (`CREATE TABLE IF NOT EXISTS` + `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`) — no Alembic; current as of `f4bacfa` |
-| Google URLs in DB | Zero — `jobs` and `user_job_context` clean |
-| Stale Neon branches >7 days | None — all closed PRs within 7 days |
-| Live preview branches | 3 expected: pr-640, pr-641, pr-653 |
-
----
-
-## Confirmed production state (as of 2026-06-19, updated post-BUG-04)
-
-| Feature | PR | Status |
+| PR | What | Recommendation |
 |---|---|---|
-| Arabic/English cover-letter slot extraction | #615 | ✅ live |
-| Matching guardrails (Settings + Profile) | #616 | ✅ live |
-| Session job-search history | #617 | ✅ live |
-| CI npm + Playwright browser cache | #619 | ✅ live |
-| CV extraction quality warnings | #621 | ✅ live |
-| Chat composer clip icon fix | #623 | ✅ live |
-| preferred_cities yes/no guard | #625 | ✅ live |
-| Application Pipeline V1 status alignment | #627 | ✅ live |
-| Application Lifecycle Completion (search→opened, prepare→prepared) | #353 | ✅ smoke-PASS |
-| Apply-Link Verification | #354 | ✅ smoke-PASS |
-| Prepare→prepared persistence fix | #634 | ✅ live |
-| Follow-up Reminders Phase 1 | #355/#636 | ✅ **Phase 1 COMPLETE** |
-| System overhaul v1+v2 | #638 | ✅ merged + deployed `26124ed` |
-| DB pool AttributeError hotfix | #644 | ✅ merged + deployed `26124ed` |
-| BUG-01 cover-letter company-search guard | #648 | ✅ merged + deployed `40636ba` |
-| BUG-02 A/B/C/D letter-choice routing | #649 | ✅ merged `631ce7d` |
-| BUG-03 Google-intermediary link | #651/#652 | ✅ merged `b0807c0` |
-| BUG-04 unauthorized profile mutation | #655 | ✅ merged + prod confirmed `f4bacfa` |
-| Archived credential redaction | #656 | ✅ merged `e104135` (docs-only) |
-| BUG-05 public-chat onboarding loop | #657 | ✅ merged `f89c555`, live on Render |
-| P0 context-loss bugs (BUG-A/B/C/D) | #660 + #661 | ✅ merged `518a1a8` + `2bc489`; needs Render deploy |
-| Sidebar status-widget retry (cold-start) | #658 | ✅ merged `712be79`, smoke-PASS 2026-06-20 (TASK-027) |
-| Navy/indigo v4 design tokens | #641 | ✅ merged `6fac4c0`, smoke-PASS 2026-06-20 (audit 6-A / TASK-028) |
+| **#722** | degraded job-card fallback CTAs | **Close** — overlaps merged #724/#727 |
+| **#713** | CI read-only `verify_710` audit job (Draft) | **Close** — #710 verified/closed; diagnostic obsolete |
+| **#698** | docs: agentic vision (Draft, docs only) | keep as reference or close; no runtime code |
+| **#697** | reject "تمام" as a city value | **Salvage** — real small bug; rebase + ship |
+| **#691** | frontend onboarding checklist + help icon | review; needs rebase + `npm run build` |
+| **#688** | frontend `/ask` agentic UX (mock data) | review/park; bigger, mock-only |
 
-## BUG-05 Public-Chat Onboarding Loop — RESOLVED (2026-06-19)
+## Open issues — highlights (29 total)
 
-**Symptom:** Every message sent from the `/command` (Ask Rico) public chat after the first
-returned the identical "Welcome to Rico AI. Upload your CV or tell me your target role…"
-string. Chat never progressed, ignored conversation history, and never routed to real AI.
+- **#732 — Rico over-commits to "Developer" without evidence.** HIGH value, owner-facing: profiles show `Target Roles: Developer` despite the real profile (Technical Product Owner / Operations Manager). Career guidance should be CV-evidence-based.
+- **#712 / #711** — migration drift (`005 pipeline_runs`, `011` indexes missing) — still open, separate.
+- Older epics/backlog (#654, #618, #531, #356, #355, #354, #353, #352, #294, #263, #213, #198, #196, #187, #179, #147, #140, #138, #127, #118, #105, #99, #96) — not urgent.
 
-**Root cause (three-part):**
-1. `IntentRouter` routes "Give me 3 interview questions", fully-specified profile strings,
-   and prompt-injection attempts to the legacy classifier (`should_use_ai=False`), not AI.
-2. The legacy classifier's `process_message` checks `profile is None` → skips `upsert_profile`
-   + `set_onboarding_status` when `_persist=False` (all public sessions) → always falls back
-   to the onboarding welcome string. Since nothing is ever persisted for public users, every
-   turn repeats the welcome.
-3. When the streaming endpoint returns a `"done"` event without any SSE tokens (legacy path),
-   `streamStarted=false` but `responseApplied=true`; the `if (!streamStarted)` guard in the
-   frontend fired a redundant second `sendChatPublic` call.
+## Phase-0 trust + save/count — COMPLETE & LIVE (2026-06-25)
 
-**Fix (PR on branch `claude/ai-workspace-review-vtdjrb`, 2026-06-19):**
-- **Fix A** (`src/services/chat_service.py`): Added `_force_ai` gate — when legacy path is
-  chosen AND `profile is None` AND `ctx.can_persist_profile is False`, redirect to
-  `_conversational_ai_reply` so public users get real responses instead of the welcome loop.
-- **Fix B** (`src/api/routers/rico_chat.py`): `rico_chat_stream_public` only takes the
-  non-streaming legacy path when `profile is not None`. No-profile public users fall through
-  to AI streaming.
-- **Fix C** (`apps/web/app/command/page.tsx`): Streaming fallback changed from
-  `if (!streamStarted)` to `if (!streamStarted && !responseApplied)` to prevent double API
-  call when the legacy path already applied the response via the `"done"` event.
-- 7 unit tests in `tests/test_public_chat_no_profile_loop.py` covering the full routing
-  matrix (public/no-profile/legacy → AI; public/no-profile/AI → AI; public/with-profile →
-  legacy; auth/no-profile → legacy; auth/AI → AI).
+- **#747 (trust gate, live):** `resolve_trusted_apply_url` is the only sanctioned apply-URL resolver. Untrusted origins (`recent_context`, `llm`, `chat`, `search_match`, …) are rejected at Gate 0; placeholder/sequential-LinkedIn/bad-scheme URLs rejected; a trusted provenance marker (`persisted_job_id` / `source_job_id` / `provider`+`source_backed`) is required. `apply_to_job` no longer errors on missing links — safe action messages instead.
+- **#749 (save/count, live):** the chat ordinal save persists to the counted `rico_job_recommendations` (so the application/pipeline count actually increments), idempotent on a trusted save identity (`source_job_id`/`persisted_job_id`, else a `title|company` hash — never the bare `job_id`). A recent_context job is still saved, as a **lead**, with no apply URL persisted and no verified-link claim. Save failures return user-safe messages. No `pipeline_runs` (migration 005 / #711) dependency. Helper: `src/services/job_save.py`; tests: `tests/test_pipeline_save_count_correctness.py`.
+- **Pending:** owner-side authenticated smoke on `ricohunt.com` — search a role, "save the second job to my pipeline" → count +1, repeat → count unchanged. Sandbox cannot reach authenticated production.
 
-**Routing matrix after fix:**
+## Rico Website Hard QA — BUG-01 through BUG-08 (2026-06-27)
 
-| Session | Profile | Router decision | Route taken |
-|---|---|---|---|
-| Public | None | Legacy | **AI** (new _force_ai gate) |
-| Public | None | AI | AI (unchanged) |
-| Public | present | Legacy | Legacy (unchanged) |
-| Public | present | AI | AI (unchanged) |
-| Auth | None | Legacy | Legacy (can persist state) |
-| Auth | None | AI | AI |
+Fixing bugs from the "Rico Website Hard QA Report". Each PR is one bug category, focused diff only. No SQL, no schema migrations, no provider API calls in tests.
+
+| BUG | PR | Merge SHA | Status | Description |
+|---|---|---:|---|---|
+| **BUG-01** | #757 | `325aa0e` | ✅ merged | Bust sidebar cache after chat save; correct `/flow` destination in save copy |
+| **BUG-02** | #758 | `3a9221a` | ✅ merged | Sanitize `preferred_cities` at profile read/write boundary; strip corrupted AI-response values stored as city names |
+| **BUG-03** | #760 | `b6a1196` | ✅ merged | Sidebar nav routing (href not chatPrompt), icon rendering, pipeline counter |
+| **BUG-04** | #761 | `4918f55` | ✅ merged | Redirect `/pipeline` → `/flow` (old route returned 404) |
+| **BUG-05** | #762 | `007246b` | ✅ merged | "Yes, search {role}" quick-reply button caused infinite confirmation loop; interceptor added before role classification in `_handle_active_user_inner` |
+| **BUG-06** | — | — | 🚫 blocked — no description | Description not found in repo, GitHub issues, or any workspace doc. Owner must supply original QA report entry. |
+| **BUG-07** | — | — | 🚫 blocked — no description | Description not found in repo, GitHub issues, or any workspace doc. Owner must supply original QA report entry. |
+| **BUG-08** | #763 | `62ff5ad` | ✅ merged | "My favorite city is Dubai" silently ignored (3 stacked bugs: intent regex, router regex, `preferred_city` vs `preferred_cities`). |
+| **BUG-09** | #791 | `merged` | ✅ merged | Sidebar widgets disappear on `/upload` page — `sidebarProps` was not passed; fixed by threading `onLogout` + `sidebarProps` through the page component |
+| **BUG-10** | #792 | `merged` | ✅ merged | Data quality: years experience displayed as `30.0`; salary displayed without comma (`AED 18000/month`). Fixed `_target_role_search_response` (int rounding) and `_format_pref_changes` (comma-format). Tests: `test_bug10_data_quality_display.py` |
+| **BUG-11** | #793 | `merged` | ✅ merged | Name casing inconsistency — CV names extracted verbatim (ALL CAPS on UAE CVs). `CVParser._extract_name` now returns `line.title()`. Tests: `test_bug11_name_casing.py` |
+| **BUG-12** | — | — | ⏸ not started | Search results body ignores Arabic locale. |
+| **BUG-13** | — | — | ⏸ not started | Profile/role drift across multiple uploaded CVs — wrong role shown after re-upload. |
+| **BUG-14** | — | — | ⏸ not started | No save idempotency on pipeline: second "save this job" shows success but increments counter. |
+| **BUG-15** | #794 | open | 🔄 PR open | Internal API name leaked to user-facing UI ("JSearch API" visible in responses). Fixed in `apps/web/lib/translations.ts`. |
+| **BUG-16** | #794 | open | 🔄 PR open | "Waking up" banner overlaps chat content (CSS z-index). Fixed in `apps/web/app/command/page.tsx` (pt-12/pt-14). |
+| **BUG-17 (pipeline reset)** | — | `61b783b` | ✅ pushed | "Clear them we must start over" misclassified as job role search. Fixed: "clear"/"reset" added to `_NON_ROLE_STARTERS`; `_PIPELINE_RESET_RE` + `_PIPELINE_RESET_IMPLICIT_RE` added; 2-turn Archive/Delete/Cancel confirmation flow. Tests: `test_bug17_pipeline_reset.py` 13/13. |
+| **BUG-18** | — | — | ⏸ not started | `?q=` query-string navigation mutates / resets chat thread. |
+| **BUG-19** | — | — | ⏸ not started | Job-confirmation screenshots not classified as application evidence → "Unrecognized Document"; save falls back to wrong recent-context job. |
+
+> ✅ **QA Cycle 1 is CLOSED.** BUG-01 through BUG-05, BUG-08, BUG-09, BUG-10, and P0 #764 are all confirmed deployed and smoke-tested at `4ad2e29`. BUG-06 and BUG-07 remain blocked until the owner supplies original QA report descriptions.
+
+## PR #756 — Migration drift runbook (docs-only)
+
+- **Status:** ✅ Merged at `2ef4107` (2026-06-27). Content: 606-line `docs/runbooks/production-drift-005-011.md`.
+- **Rollback execution (owner-only):** after G1–G6 signed off, owner applies migrations 011 (Step A) then 005 (Step B) via Neon console.
+
+## Chat-as-Interface milestone — PR #770 (2026-06-28)
+
+Merged at `78c22857`. Squash commit: `feat(chat-as-interface): P2-B delete-saved-jobs + PR-A agentic UI schema + PR-C live action cards`.
+
+| Sub-feature | What shipped |
+|---|---|
+| **P2-B** | 2-turn delete-saved-jobs confirmation (`_handle_pending_delete_saved_jobs`, memory TTL, `delete_saved_jobs_confirm` → `delete_saved_jobs_done`) |
+| **PR-A** | `RicoAgenticUi` Pydantic schema (`src/schemas/chat.py`) — actions, permission_request, proposed_changes, attachment_analysis, progress |
+| **PR-C** | `compose(result, response_dict)` in `src/services/agentic_ui_composer.py` — emits type-based action cards on every real chat response |
+| **MagicMock fix** | `isinstance(ctx, dict)` guard in `_handle_pending_delete_saved_jobs` — fixes 10 previously-failing tests |
+| **Tests** | 38 `test_agentic_ui_composer.py` + 41 `test_attachment_analysis_factory.py` + 2 conversation-state fixes |
+
+Action cards now emitted by type:
+
+| Response type | Actions |
+|---|---|
+| `job_matches` | View all jobs (navigate /flow) + Save search (chat_continue) + Refine search (chat_continue) |
+| `delete_saved_jobs_confirm` | Yes, delete all (high impact, requires_confirmation) + No, keep them |
+| `delete_saved_jobs_done` | Find new jobs (chat_continue) |
+| `profile_update` / `profile_summary` / `cv_first_profile` | View my profile (navigate /profile) |
+| `application_status_update` | Track applications (navigate /applications) |
+| `save_job` | View saved jobs (navigate /flow) |
+| `application_list` / `application_status` | View Application Flow (navigate /flow) + Add application (chat_continue) — **added PR #780/#781** |
+| `prepare_application` | View Application Flow (navigate /flow) + Find similar jobs (chat_continue) — **added PR #780** |
 
 ---
 
-## CI health
+## Route architecture — post-PR #776
 
-- QA Tests (pytest + playwright): green on main (`e104135`).
-- followup-smoke.yml: 9/9 PASS on `26124ed` (run #2, 2026-06-19).
-- bug01-smoke.yml: **4/4 PASS** on `40636ba` (run #1, 2026-06-19). **Removed** after one-shot use.
-- Render deploy: **auto-deploys on every push to `main`** via `deploy-render.yml` (PR #686 added the
-  `push: [main]` trigger). The workflow fires the Render deploy hook, then polls `/version` until the
-  deployed commit (`RENDER_GIT_COMMIT`) matches the merged SHA before it passes — so a green deploy run
-  proves the **new** backend is serving, not merely that the old one is healthy. `workflow_dispatch` is
-  retained for on-demand redeploys. (Render has no native auto-deploy on this service — the workflow is
-  the mechanism; the earlier "auto-deploys from main" note in #668 was incorrect until #686.)
-  Note: `/health` and `/version` return 403 from external networks (Render network-level policy) —
-  verify via the GitHub Actions deploy run or the Render dashboard (not WebFetch / curl from CI containers).
-- cron-test.yml: **removed** (one-off #644 verification, cleaned up 2026-06-19).
+**No Dead UI Rule** adopted (DEC-20260628-001 in `AI_WORKSPACE/DECISIONS.md`, enforced in `OPERATING_RULES.md`):
+a route must be active+reachable, redirect-only with no real page code, or removed.
 
-## Next product roadmap order
+| Route | State | Notes |
+|---|---|---|
+| `/command` | ✅ active | Primary chat surface |
+| `/flow` | ✅ active | Application flow page |
+| `/login`, `/signup`, `/forgot-password` | ✅ active | Auth surfaces |
+| `/chat` | ✅ redirect-only | `next.config.js` → `/command`; stub deleted (Phase A) |
+| `/orchestrate` | ✅ redirect-only | `next.config.js` → `/command`; stub deleted (Phase A) |
+| `/pipeline` | ✅ redirect removed | No page ever existed; redirect had no purpose |
+| `/dashboard` | ⚠️ Phase B | Redirect + 48-line page. Needs product decision: live or strip. |
+| `/onboarding` | ⚠️ Phase B | Redirect + 466-line page. Needs product decision: live or strip. |
+| `/jobs` | ⚠️ Phase B | Redirect + 336-line page. Needs product decision: live or strip. |
+| `/signals` | ⚠️ Phase B | Redirect + 576-line page. Needs product decision: live or strip. |
+| `/archive` | ⚠️ Phase B | Redirect + 162-line page. Needs product decision: live or strip. |
+| `/saved-searches` | ⚠️ Phase B | Redirect + 102-line page. Needs product decision: live or strip. |
 
-Do not start without explicit scope and branch assignment.
+Phase B routes are blocked until each gets an explicit product decision.
 
-1. ~~**#653 (TASK-024)** — sidebar status widget retry~~ — DONE: merged via #658 (`712be79`),
-   production smoke-PASS 2026-06-20. Tracked as TASK-20260619-027.
-2. **TASK-013 Application Pipeline V1** (P1) — end-to-end application submission with approval
-   gate, audit log, Telegram confirmation. Needs dedicated issue + branch.
-3. **TASK-010 Pipeline relevance guard** (P1) — pre-filter pipeline results against active
-   profile before scoring. Needs dedicated issue + branch.
-4. **#355 Phase 2** — per-user interval settings + Telegram DM notifications.
-5. **#356 Inbox Intelligence** — design-only; connector design doc (#566) on `main`.
-6. ~~**028_performance_indexes cleanup**~~ — fixed in #662 (2026-06-19).
-7. **DB pooling re-enable** — caller-wide acquire/release refactor; separate PR after 028 fix.
+## Career Operating System — forward plan
 
-## Carry-over engineering backlog
+Per owner direction (2026-06-28), the next development focus is Career OS / Mission Control, introduced in one PR per phase:
 
-- JWT revocation after password reset (old sessions stay valid after reset)
-- Per-user rate limiting on /apply endpoint
-- Race condition in guest→auth identity merge
-- Settings page keywords tag input (same UX as profile TagInputField)
-- Password complexity validation on register/reset
+1. **Current Mission** — what is Rico working on right now for the user
+2. **Mission Feed** — live updates from the job search pipeline
+3. **Daily Actions** — surfaced tasks Rico recommends each day
+4. **Career Timeline** — application history and progress
+5. **AI Workspace** — Rico's reasoning and plan visible to the user
 
-## Operating target
+Do not open more than one PR per phase. Do not revive Phase B routes until product decision is made.
 
-Use one repeatable workflow:
+## 2026-06-30 Smoke-test bug backlog (new — from owner production testing session)
 
-1. Scope one task.
-2. Write or update the task in `TASKS.md`.
-3. Generate one handoff brief.
-4. Assign exactly one writer for the branch.
-5. Require implementation notes and verification evidence.
-6. Record final decisions and remaining risks.
+These are separate from the QA Cycle 1 BUG-01/19 list above.
 
-## Quality gates
+| ID | Status | Description |
+|---|---|---|
+| **BUG-1** | ✅ fixed (PR #781) | Sidebar pipeline count disagreed with /flow and chat — sidebar was summing subset of statuses, missing opened/prepared/follow_up_due/decision_made |
+| **BUG-2** | ✅ fixed (PR #786, `c8aabd7`) | Self-cancelling keyword filters: `exclude_keywords` was read from a process-global env var instead of per-user settings, and `include_keywords` was never read in scoring at all — fixed in `src/scoring.py` to honor per-user include/exclude keywords (exclude still wins on overlap, by design) |
+| **BUG-3** | ✅ fixed (PR #787, `83e961e2`) | Duplicate board entry: same job appears twice on /flow kanban board |
+| **BUG-4** | ✅ fixed (PR #781) | Sidebar nav links injected `/command?q=…` URLs instead of navigating to real pages |
+| **BUG-5** | ✅ fixed (PR #781) | "Pro Plan / PREMIUM" label contradiction in sidebar |
+| **BUG-6** | ✅ fixed (PR #788, `cc1eed1`) | Status taxonomy mismatch: list view vs kanban board use different status labels — `apps/web/lib/applicationStatus.ts` is now the single source of truth for status list + stage grouping, consumed by list view, board view, StatusBadge, and the chat pipeline summary |
+| **BUG-7** | ⏸ open | Session hydration: user appears logged-out on first load until hard refresh |
+| **BUG-8** | ⏸ open | (details in session history) |
+| **BUG-9** | ⏸ open | Sidebar widgets disappear on /upload page |
+| **BUG-10** | ⏸ open | Data quality: 30.0 years experience displayed, salary inconsistency |
+| **BUG-11** | ⏸ open | Name casing inconsistency in profile |
 
-Use the applicable gates for each task:
+## Recommended next command
 
-- backend tests
-- frontend build
-- local smoke checks
-- deployment verification when applicable
-- no secrets changed
-- no unrelated files changed
-- rollback plan included
+```text
+Rico mode. PR #780/#781 (BUG-1/4/5), #786 (BUG-2 keyword conflict), #787 (BUG-3 duplicate board entry), and #788 (BUG-6 status taxonomy) are all merged and deployed. Open bugs from 2026-06-30 smoke test: BUG-7 (session hydration), BUG-9 (sidebar /upload), BUG-10 (data quality: experience/salary display), BUG-11 (name casing inconsistency). Fix in priority order. One PR per bug group. Do NOT touch /dashboard, /onboarding, /jobs, /signals, /archive, /saved-searches until Phase B product decision. Do NOT run migrations without owner G1–G6 sign-off.
+```

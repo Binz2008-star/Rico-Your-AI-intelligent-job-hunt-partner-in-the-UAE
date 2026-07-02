@@ -23,6 +23,12 @@ from src.agent.intelligence.intent_classifier import (
     classify_intent,
     _LEGACY_INTENT_MAP,
     _map_intent_to_legacy,
+    _OPEN_APPLY_LINK_RE,
+    _OPEN_APPLY_LINK_ORDINAL_RE,
+    _SAVE_JOB_ORDINAL_RE,
+    _SAVE_JOB_ORDINAL_AR_RE,
+    _CV_PROFILE_REF_RE,
+    _clean_role_token,
 )
 from src.agent.intelligence.normalizer import normalize_role
 from src.agent.intelligence.recommender import recommend_adjacent_roles
@@ -74,6 +80,9 @@ FOLLOWUP_BOUNDARY_PUNCT_RE = re.compile(r"^[\s\"'([{]+|[\s\"')\]}.,!?;:]+$")
 # Single-letter choice: exactly one letter A–D (upper or lower) with optional trailing
 # punctuation/whitespace.  "apple", "AB", "a b" do NOT match.
 _LETTER_CHOICE_RE = re.compile(r"^[A-Da-d][.:\s]*$")
+# Single-digit numeric choice: exactly one digit 1–9 with optional trailing
+# punctuation/whitespace.  "30", "3 years", "3.5" do NOT match.
+_NUMBER_CHOICE_RE = re.compile(r"^[1-9][.:\s]*$")
 PROFILE_LIST_SPLIT_RE = re.compile(r"[,;\n\r|]+")
 # Telegram username: @handle (5–32 chars, alphanumeric + underscore)
 TELEGRAM_HANDLE_RE = re.compile(r"^@[A-Za-z0-9_]{5,32}$")
@@ -133,6 +142,108 @@ _CV_IMPROVE_FOLLOWUP_RE = re.compile(
     re.IGNORECASE | re.UNICODE,
 )
 
+# Follow-up requests that act on a just-uploaded image/document — the button
+# payloads from the Document Intelligence layer ("Describe what's in this image.",
+# "Extract any visible text from this image.", "Summarize this document for me.",
+# "Extract the most important information from this document.") plus close natural
+# variants. Handled deterministically from the stored transcript BEFORE the
+# onboarding / CV-builder routing so an image action can never be hijacked into a
+# CV draft. Only fires when a recent uploaded document is in session context.
+_DOC_FOLLOWUP_RE = re.compile(
+    r"\bdescribe\b.{0,30}\b(image|picture|photo|screenshot|document|file|it)\b"
+    r"|\bwhat(?:'?s| is| does)\b.{0,30}\b(in|on|say|says|contain)\b.{0,24}\b(image|picture|photo|screenshot|document|file|it)\b"
+    r"|\bextract\b.{0,40}\b(text|information|info|details)\b"
+    r"|\bsummari[sz]e\b.{0,30}\b(this|the|image|document|file|content|key|it)\b"
+    r"|\b(read|ocr)\b.{0,30}\b(image|picture|photo|screenshot|document|file|text|it)\b",
+    re.IGNORECASE,
+)
+
+# Job-document action regexes — intercept "Save as target job" and "Score against my CV"
+# from the suggested-action buttons (document_classifier._SUGGESTED_ACTIONS["job_description"]).
+# These run inside _handle_uploaded_document_followup BEFORE _DOC_FOLLOWUP_RE so they are
+# never mis-routed to the onboarding / CV-builder / generic AI path.
+# IMPORTANT: keep these narrow enough not to catch ordinal saves ("save the second job").
+_JOB_DOC_SAVE_RE = re.compile(
+    r"\bsave\b.{0,50}\bas\s+(?:a\s+)?target\s+job\b"
+    r"|\bsave\b.{0,20}\bthis\b.{0,30}\b(?:to\s+(?:my\s+)?pipeline|as\s+target)\b"
+    r"|\badd\b.{0,15}\bthis\b.{0,30}\bpipeline\b",
+    re.IGNORECASE,
+)
+_JOB_DOC_SCORE_RE = re.compile(
+    r"\bscore\b.{0,60}\b(?:cv|resume|profile)\b"
+    r"|\b(?:match|compare)\b.{0,40}\b(?:cv|resume|profile)\b"
+    r"|\bfit\s+score\b"
+    r"|\bhow\s+(?:well|good)\b.{0,60}\b(?:fit|match|qualify)\b.{0,40}\b(?:this\s+job|job\s+desc)",
+    re.IGNORECASE,
+)
+# Simple heuristics for extracting job title / company from a raw transcript.
+_JOB_TITLE_FROM_TEXT_RE = re.compile(
+    r"(?:job\s+title|position|role|title)\s*[:\-]\s*([^\n]{3,80})",
+    re.IGNORECASE,
+)
+_JOB_COMPANY_FROM_TEXT_RE = re.compile(
+    r"(?:company|employer|organization|client)\s*[:\-]\s*([^\n]{2,60})",
+    re.IGNORECASE,
+)
+
+# BUG-19: application-confirmation evidence — the "Track this application" button
+# from document_classifier._SUGGESTED_ACTIONS["application_confirmation"] plus close
+# natural variants. Intercepted in _handle_job_doc_action so a confirmation
+# screenshot is tracked from ITS OWN transcript, never a stale recent-context job.
+_TRACK_UPLOADED_APPLICATION_RE = re.compile(
+    r"\b(?:track|log|record)\s+this\s+application\b"
+    r"|\b(?:add|save)\s+this\s+application\b.{0,30}\b(?:pipeline|applications?)\b",
+    re.IGNORECASE,
+)
+# Title + company from confirmation phrasing: "application for X at Y",
+# "applied to the X position at Y", "applying for X at Y".
+_APP_CONF_TITLE_COMPANY_RE = re.compile(
+    r"(?:application|applied|applying)\s+(?:for|to)\s+(?:the\s+)?"
+    r"(?P<title>[^\n,.:]{3,80}?)\s+(?:position|role|job)\s+at\s+"
+    r"(?P<company>[^\n,.!:]{2,60})"
+    r"|(?:application|applied|applying)\s+(?:for|to)\s+(?:the\s+)?"
+    r"(?P<title2>[^\n,.:]{3,80}?)\s+at\s+(?P<company2>[^\n,.!:]{2,60})",
+    re.IGNORECASE,
+)
+# Company-only confirmation phrasing: "your application was sent to Y",
+# "thank you for applying to Y".
+_APP_CONF_COMPANY_RE = re.compile(
+    r"application\s+(?:was\s+|has\s+been\s+)?(?:sent|submitted)\s+to\s+"
+    r"(?P<company>[^\n,.!:]{2,60})"
+    r"|thank\s+you\s+for\s+applying\s+(?:to|at)\s+(?P<company2>[^\n,.!:]{2,60})",
+    re.IGNORECASE,
+)
+
+# Applied-from-screenshot OCR fallback (2026-07-02 smoke failure): when the user
+# reports they applied and the only job context is an uploaded screenshot whose
+# CLASSIFICATION failed, the OCR text itself often still carries a clear job
+# entity (title / company / location). These heuristics recover it — low
+# classification confidence must never invalidate successfully extracted text.
+_ROLE_KEYWORD_RE = re.compile(
+    r"\b(manager|engineer|developer|leader|lead|officer|specialist|coordinator|"
+    r"director|consultant|analyst|executive|supervisor|assistant|head|architect|"
+    r"designer|accountant|technician|advisor|administrator|planner|inspector|"
+    r"scientist|estimator|surveyor|buyer|recruiter|teacher|nurse|chef|barista)\b",
+    re.IGNORECASE,
+)
+_UAE_LOCATION_LINE_RE = re.compile(
+    r"\b(abu\s*dhabi|dubai|sharjah|ajman|ras\s+al[\s-]+khaimah|fujairah|"
+    r"umm\s+al[\s-]+quwain|al\s+ain|united\s+arab\s+emirates|uae)\b",
+    re.IGNORECASE,
+)
+# Job-board UI chrome that must never be mistaken for a company name.
+_SCREENSHOT_NOISE_LINE_RE = re.compile(
+    r"^(?:easy\s+apply|promoted|actively\s+recruiting|be\s+an\s+early\s+applicant|"
+    r"viewed|saved?|apply(?:\s+now)?|remote|on-?site|hybrid|full[-\s]?time|"
+    r"part[-\s]?time|contract|internship|new|featured|sponsored)$"
+    r"|\b\d+\s+(?:applicants?|connections?|alumni|employees?)\b"
+    r"|\b(?:hours?|days?|weeks?|months?)\s+ago\b"
+    r"|\bposted\b|\bsalary\b|^aed\b|^\d+$",
+    re.IGNORECASE,
+)
+# Inline segment separators used by job-board cards ("Company — Title — Location").
+_CARD_SEGMENT_SPLIT_RE = re.compile(r"\s+[—–|·•]\s+|\s{3,}")
+
 # Strings that must never appear inside a deterministic CV draft body.
 # Used as a post-generation guard in _handle_cv_generate_from_profile.
 _CV_PLACEHOLDER_PATTERNS = re.compile(
@@ -183,6 +294,8 @@ _NON_ROLE_STARTERS: frozenset[str] = frozenset({
     "create", "generate", "send", "change", "apply", "submit", "check",
     "review", "save", "build", "prepare", "edit", "add", "remove", "start",
     "open", "try", "set", "use", "share", "update", "improve", "track",
+    # Pipeline / state management verbs — never start a job title
+    "clear", "reset",
     # Gerund forms of the above that were missing
     "creating", "generating", "sending", "changing", "applying", "submitting",
     "checking", "reviewing", "saving", "building", "preparing", "editing",
@@ -353,14 +466,21 @@ _PROFILE_PITCH_RE = re.compile(
 )
 
 # Application list query: "list my applications", "what jobs did I apply to?",
-# "show my applied jobs", "how many applications do I have?"
+# "show my applied jobs", "how many applications do I have?",
+# "what are my applications?", "where are my applications?", "do I have any applications?"
 _APPLICATIONS_LIST_RE = re.compile(
     r"\b(?:list|show|display|view|see)\b.{0,30}"
     r"\b(?:my\s+)?(?:applications?|applied\s+jobs?|jobs?\s+i(?:'ve|\s+have)?\s+applied(?:\s+to)?|submitted(?:\s+applications?)?)\b"
     r"|\b(?:what|which)\s+(?:jobs?|companies?|roles?|positions?)\s+(?:have\s+I|did\s+I|have\s+i)\s+appl(?:ied|y)(?:\s+to)?\b"
     r"|\b(?:my\s+)?application\s+(?:list|history|tracker|overview)\b"
     r"|\bhow\s+many\s+(?:applications?|jobs?\s+(?:have\s+I|did\s+I)\s+applied(?:\s+to)?)\b"
-    r"|\b(?:عرض|أظهر|كم)\b.{0,20}\b(?:طلباتي|التقديمات|وظائف\s+تقدمت\s+إليها)\b",
+    # Conversational question forms — "what are my applications?",
+    # "where are my applications?", "do I have any applications?"
+    r"|\bwhat\s+are\s+my\s+(?:job\s+)?applications?\b"
+    r"|\bwhere\s+are\s+my\s+(?:job\s+)?applications?\b"
+    r"|\bdo\s+i\s+have\s+any\s+(?:job\s+)?applications?\b"
+    r"|\b(?:عرض|أظهر|كم)\b.{0,20}\b(?:طلباتي|التقديمات|وظائف\s+تقدمت\s+إليها)\b"
+    r"|\bما\s+هي\s+طلباتي\b",
     re.IGNORECASE,
 )
 
@@ -399,6 +519,95 @@ _SALARY_READBACK_RE = re.compile(
     r"|\bmy\s+salary\s+(?:expectation|target|requirement|preference)\b"
     r"|\b(?:ما|كم)\b.{0,20}\b(?:راتبي\s+المتوقع|توقعاتي\s+للراتب|الراتب\s+الذي\s+(?:طلبت|حددت))\b",
     re.IGNORECASE,
+)
+
+# Delete saved jobs via chat: "delete all saved jobs", "clear my saved jobs".
+# These CAN be executed after a 2-turn confirmation (P2-B).
+# Intentionally does NOT match preference-removal patterns or application-history patterns.
+_DELETE_SAVED_JOBS_RE = re.compile(
+    r"""
+    (?:
+        # English: destructive verb targeting the saved-jobs list only
+          \b(?:delete|erase|wipe|purge|remove|clear)\b.{0,60}?\b(?:saved\s+jobs?|all\s+(?:my\s+)?(?:saved\s+)?jobs?|my\s+(?:saved\s+jobs?|job\s+list|pipeline))\b
+        |
+        # Arabic: احذف/امسح + saved-jobs noun only (not applications)
+        \b(?:امسح|احذف|امحِ|أزل)\b[^.!?،؟]{0,80}(?:الوظائف(?:\s+المحفوظة)?|وظائف(?:\s+المحفوظة)?|المحفوظات|قائمة\s+الوظائف)
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# Application-history delete via chat: these CANNOT be executed — application records
+# are protected audit history. Rico redirects to the Applications page.
+_DELETE_APPLICATIONS_RE = re.compile(
+    r"""
+    (?:
+        # English: delete/clear/remove targeting application records
+          \b(?:delete|erase|wipe|purge)\b.{0,60}?\b(?:applications?|my\s+records?|my\s+applied)\b
+        | \bremove\b.{0,50}?\b(?:my\s+applications?|all\s+applications?)\b
+        | \bclear\b.{0,50}?\b(?:my\s+applications?|all\s+applications?)\b
+        |
+        # Arabic: احذف + applications noun
+        \b(?:امسح|احذف|امحِ|أزل)\b[^.!?،؟]{0,80}(?:الطلبات|طلباتي|جميع\s+الطلبات)
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# Combined guard: either saved-jobs OR applications delete — kept for the early-check
+# at _handle_active_user_inner so we intercept before the AI fallback.
+_UNSUPPORTED_DELETE_RE = re.compile(
+    r"""
+    (?:
+        # English: explicit destructive verb + saved-jobs or applications noun
+          \b(?:delete|erase|wipe|purge)\b.{0,60}?\b(?:saved\s+jobs?|all\s+(?:my\s+)?jobs?|my\s+(?:jobs?|pipeline|applications?|records?|list)|applications?|pipeline)\b
+        | \bremove\b.{0,50}?\ball\s+(?:my\s+)?(?:saved\s+)?jobs?\b
+        | \bremove\b.{0,50}?\bmy\s+applications?\b
+        | \bremove\b.{0,50}?\ball\s+applications?\b
+        | \bclear\b.{0,50}?\b(?:saved\s+jobs?|all\s+(?:my\s+)?jobs?|my\s+pipeline|my\s+applications?|all\s+applications?)\b
+        |
+        # Arabic: احذف/امسح + saved-jobs or applications noun
+        \b(?:امسح|احذف|امحِ|أزل)\b[^.!?،؟]{0,80}(?:الوظائف(?:\s+المحفوظة)?|جميع\s+(?:الوظائف|الطلبات)|وظائف(?:\s+المحفوظة)?|الطلبات|طلباتي|المحفوظات|قائمة\s+الوظائف)
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# Explicit pipeline / application-list reset intent.
+# Matches: "clear all applications", "reset my pipeline", "archive all applications",
+# "start over", "start fresh", "restart pipeline", "remove all tracked jobs", etc.
+# Does NOT overlap with _DELETE_SAVED_JOBS_RE (which targets saved-jobs only).
+_PIPELINE_RESET_RE = re.compile(
+    r"""
+    (?:
+        # English: destructive/reset verb + pipeline/applications/tracked-jobs noun
+          \b(?:clear|reset|wipe|purge|erase)\b.{0,60}?\b(?:all\s+(?:my\s+)?)?(?:applications?|tracked\s+jobs?|job\s+pipeline|(?:my\s+)?pipeline)\b
+        | \barchive\b.{0,60}?\b(?:all\s+(?:my\s+)?)?applications?\b
+        | \b(?:remove|delete)\b.{0,60}?\ball\s+(?:my\s+)?tracked\s+jobs?\b
+        | \b(?:start\s+(?:over|fresh|from\s+scratch)|restart\s+(?:the\s+)?(?:pipeline|job\s+(?:search|hunt)))\b
+        |
+        # Arabic: امسح/أعد ضبط + pipeline/applications
+        \b(?:امسح|احذف|امحِ|أزل|أعد\s+ضبط)\b[^.!?،؟]{0,80}(?:الطلبات|طلباتي|جميع\s+الطلبات|خط\s+الأنابيب|مساري)
+        | \b(?:ابدأ\s+(?:من\s+جديد|من\s+الصفر)|أعد\s+البدء)\b
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# Implicit pipeline reset — vague phrases like "clear them", "must start over".
+# Only fires when last Rico turn was an application tracking summary (context-aware).
+_PIPELINE_RESET_IMPLICIT_RE = re.compile(
+    r"""
+    (?:
+          \b(?:clear|reset|wipe)\s+(?:them|it\s+all|everything|all\s+of\s+them|it|those)\b
+        | \b(?:must\s+start\s+over|we\s+(?:must\s+)?start\s+over|lets?\s+start\s+(?:over|again|fresh))\b
+        | \b(?:clean\s+slate|fresh\s+start)\b
+        | \b(?:get\s+rid\s+of\s+(?:all\s+of\s+)?(?:them|everything))\b
+        | \b(?:امسح|احذف)\s+(?:كل(?:ها|هم)?|الكل|جميعها)\b
+        | \b(?:ابدأ\s+من\s+جديد|نبدأ\s+من\s+جديد)\b
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
 )
 
 # Granular profile field update: "add Python to my skills", "remove OSHA from my skills",
@@ -1693,7 +1902,7 @@ class RicoChatAPI:
                 "label": d.get("label") or d.get("filename", ""),
                 "is_primary": bool(d.get("is_primary")),
                 "skills_count": d.get("skills_count"),
-                "years_experience": float(d["years_experience"]) if d.get("years_experience") is not None else None,
+                "years_experience": int(float(d["years_experience"])) if d.get("years_experience") is not None else None,
             }
             for d in _docs
         ]
@@ -1911,6 +2120,28 @@ class RicoChatAPI:
                 "profile_exists": True,
                 **{k: v for k, v in raw.items() if k in essential_fields and v not in (None, "", [], {})},
             }
+            # Never surface a corrupted preferred_cities value (a misfiled chat
+            # message) to the model — it confuses location reasoning.
+            if ctx.get("preferred_cities"):
+                from src.services.city_validation import sanitize_cities
+                _clean_cities = sanitize_cities(self._as_list(ctx["preferred_cities"]))
+                if _clean_cities:
+                    ctx["preferred_cities"] = _clean_cities
+                else:
+                    ctx.pop("preferred_cities", None)
+
+            # #732 — flag stale/unevidenced coding target_roles so the AI never
+            # asserts "Developer" when the CV evidence points elsewhere.
+            _ctx_roles = self._as_list(ctx.get("target_roles", []))
+            if _ctx_roles and self._has_cv_profile(profile):
+                try:
+                    if not self._role_is_cv_aligned(profile, str(_ctx_roles[0])):
+                        ctx["target_roles_note"] = (
+                            "STALE — these saved target roles may not reflect the current CV. "
+                            "Do not assert or search these roles without first confirming with the user."
+                        )
+                except Exception:
+                    pass
 
         # Embed last 8 turns so the AI has conversation context for yes/no and follow-ups
         if user_id:
@@ -1924,6 +2155,43 @@ class RicoChatAPI:
                 _entries = self._collect_uploaded_documents(user_id, profile)
                 if _entries:
                     ctx["uploaded_documents"] = _entries
+            except Exception:
+                pass
+
+            # Inject the transcript of the most recently uploaded image/document
+            # (set by the upload route after vision/OCR extraction) — read from the
+            # durable store so it survives RICO_MEMORY_BACKEND=postgres / restarts /
+            # multiple instances. Without this, typed follow-ups like "what do you
+            # think of this job?" reach the AI with no document text. Injected early
+            # (before the long conversation history) so it survives truncation.
+            try:
+                _last_doc = self._get_last_uploaded_document(user_id)
+                _doc_text = (_last_doc or {}).get("extracted_text")
+                if _doc_text:
+                    ctx["last_uploaded_document"] = {
+                        "filename": _last_doc.get("filename"),
+                        "type": _last_doc.get("display_label") or _last_doc.get("document_type"),
+                        "transcribed_text": str(_doc_text)[:4000],
+                    }
+                else:
+                    # Non-CV classified documents (offer letter, contract, cover letter, etc.)
+                    # are stored with metadata only — no extracted text. Inject the metadata
+                    # so the AI can respond contextually to follow-up queries like
+                    # "can you review it?" or "summarize it" without full content.
+                    _meta_doc = (self._get_recent_context(user_id) or {}).get(
+                        "last_uploaded_document"
+                    )
+                    if isinstance(_meta_doc, dict) and _meta_doc.get("document_type"):
+                        _label = _meta_doc.get("display_label") or _meta_doc.get("document_type")
+                        _fname = _meta_doc.get("filename", "")
+                        _conf = _meta_doc.get("confidence")
+                        _conf_str = f" — confidence {round(float(_conf) * 100)}%" if _conf else ""
+                        ctx["last_uploaded_document"] = {
+                            "type": _label,
+                            "filename": _fname,
+                            "note": f"[Uploaded document: {_label} ({_fname}){_conf_str}. "
+                                    "No full text available — describe based on document type.]",
+                        }
             except Exception:
                 pass
 
@@ -2070,6 +2338,221 @@ class RicoChatAPI:
             r for r in roles
             if isinstance(r, str) and r.strip().lower() not in _PLACEHOLDER_ROLE_VALUES
         ]
+
+    @staticmethod
+    def _filter_excluded_roles(roles: list[Any], excluded: list[str]) -> list[Any]:
+        """Drop any role that matches an excluded term (case-insensitive, whole-word
+        or substring), so a "do not search …" guard is never violated.
+
+        e.g. excluded "Backend" removes "Backend Developer"; "Software Engineer"
+        removes "Senior Software Engineer".
+        """
+        _excl = [e.strip().lower() for e in excluded if e and e.strip()]
+        if not _excl:
+            return list(roles)
+        kept: list[Any] = []
+        for r in roles:
+            rl = str(r).strip().lower()
+            if any(e in rl or rl in e for e in _excl):
+                continue
+            kept.append(r)
+        return kept
+
+    def _role_is_cv_aligned(self, profile: Any, role: str) -> bool:
+        """True when *role* matches the user's CV-derived role suggestions.
+
+        Used to spot a stale saved target_role (e.g. a leftover "Software Engineer"
+        from an old onboarding) that no longer reflects the uploaded CV. Falls back
+        to True (treat as valid) whenever alignment cannot be determined, so a data
+        gap never blocks a legitimate search.
+
+        Exception (#732): a coding/software target ("Developer", "Software
+        Engineer") is a strong, specific claim. When the CV yields NO role
+        evidence at all, we must not silently assert it — return False so the
+        caller routes to CV-aligned suggestions/clarification instead of pushing
+        an unevidenced "Developer". Non-coding tracks keep the lenient fallback
+        so an ordinary data gap never blocks a legitimate search.
+        """
+        rl = (role or "").strip().lower()
+        if not rl:
+            return False
+        try:
+            suggestions = self._generate_role_suggestions(
+                self._as_list(self._profile_value(profile, "skills")),
+                self._as_list(self._profile_value(profile, "certifications")),
+                self._profile_value(profile, "years_experience"),
+                self._as_list(self._profile_value(profile, "industries")),
+                self._profile_value(profile, "current_role"),
+            )
+        except Exception:
+            return True
+        if not suggestions:
+            # No CV-derived evidence. Stay lenient for most tracks, but treat an
+            # unevidenced software/coding target as NOT aligned (→ "stale") so
+            # Rico never over-commits to "Developer" without coding evidence.
+            return self._role_family(role) != "software"
+        for s in suggestions:
+            sl = str((s or {}).get("label") or "").strip().lower()
+            if sl and (rl == sl or rl in sl or sl in rl):
+                return True
+        return False
+
+    # Coarse career-family buckets, used ONLY to tell genuinely different tracks
+    # apart (software vs environmental/HSE) — not to finely classify roles. Roles
+    # in one bucket are treated as a single track; 2+ buckets = real ambiguity.
+    _FAMILY_TERMS: "tuple[tuple[str, tuple[str, ...]], ...]" = (
+        ("env_hse", ("environment", "sustainability", "esg", "hse", "qhse", "ehs",
+                     "hsse", "safety", "nebosh", "iso 14001", "iso14001",
+                     "occupational health")),
+        ("software", ("software", "developer", "back end", "backend", "front end",
+                      "frontend", "full stack", "full-stack", "fullstack",
+                      "web develop", "mobile develop", "devops", "sre",
+                      "data scien", "data engineer", "machine learning",
+                      "ml engineer", "ai engineer", "golang", "programmer",
+                      "android", "ios ", "qa engineer", "sdet")),
+    )
+    _FAMILY_GENERIC_WORDS = frozenset({
+        "manager", "officer", "engineer", "specialist", "lead", "coordinator",
+        "director", "analyst", "consultant", "advisor", "executive", "head",
+        "associate", "vp", "president", "senior", "junior", "assistant",
+        "supervisor", "of", "and", "the", "for",
+    })
+
+    def _role_family(self, role: str) -> str:
+        """Coarse career-family bucket for *role* (env_hse / software / subject word)."""
+        rl = " " + (role or "").strip().lower() + " "
+        for fam, terms in self._FAMILY_TERMS:
+            if any(t in rl for t in terms):
+                return fam
+        # Otherwise bucket by the first meaningful (non-generic) subject word so
+        # "Marketing Manager"/"Marketing Lead" group together but differ from "Sales".
+        for w in re.findall(r"[a-z][a-z+&]+", rl):
+            if w not in self._FAMILY_GENERIC_WORDS and len(w) > 2:
+                return w
+        return "general"
+
+    def _resolve_profile_search_role(
+        self, profile: Any, excluded_roles: Optional[list[str]] = None
+    ) -> "tuple[Optional[str], list[str], str]":
+        """Pick which role a 'match my profile' search should target.
+
+        Returns (role, candidates, status):
+          - "single"    → one career track; search candidates[0].
+          - "ambiguous" → candidates span 2+ distinct families (e.g. software AND
+                          environmental); ask the user to choose from *candidates*.
+          - "stale"     → single-track but candidates[0] no longer matches the CV
+                          (a leftover role such as "Software Engineer" on an
+                          environmental CV); confirm with CV-derived suggestions.
+          - "none"      → no usable saved role left.
+
+        Ambiguity is judged by role FAMILY, never raw count: a coherent multi-role
+        profile (Environmental / Sustainability / ESG …) is one track and searches
+        its primary role; only genuinely different tracks force a choice.
+        """
+        roles = self._effective_target_roles(
+            self._as_list(self._profile_value(profile, "target_roles"))
+        )
+        if excluded_roles:
+            roles = self._filter_excluded_roles(roles, excluded_roles)
+        candidates: list[str] = []
+        seen: set[str] = set()
+        for r in roles:
+            raw = str(r).strip()
+            if not raw:
+                continue
+            # De-duplicate by canonical form (so "PM" and "Product Manager" collapse
+            # to one track) but keep the user's ORIGINAL text — the search layer
+            # normalizes downstream, and tests/UX expect the saved wording preserved.
+            try:
+                key = (normalize_role(raw) or raw).lower()
+            except Exception:
+                key = raw.lower()
+            if key not in seen:
+                seen.add(key)
+                candidates.append(raw)
+        if not candidates:
+            return (None, [], "none")
+        if len({self._role_family(c) for c in candidates}) >= 2:
+            return (None, candidates, "ambiguous")
+        role = candidates[0]
+        if self._has_cv_profile(profile) and not self._role_is_cv_aligned(profile, role):
+            return (role, candidates, "stale")
+        return (role, candidates, "single")
+
+    def _profile_search_first_or_suggest(
+        self, user_id: str, profile: Any, role_text: str,
+        resolved_role: Optional[str], *,
+        location: str = "", employment_type_filter: str = "",
+    ) -> dict[str, Any]:
+        """Shared stale/none profile-role resolution.
+
+        Search-first when the CV gives a clear single-family suggestion list;
+        otherwise ask the user to choose. Used wherever a profile-based search
+        resolves to "stale" (saved role no longer matches the CV) or "none" (no
+        usable saved role) so both get the same CV-aware treatment instead of a
+        generic "upload your CV" prompt or a blind search on the stale role.
+        """
+        suggestions = self._generate_role_suggestions(
+            self._as_list(self._profile_value(profile, "skills")),
+            self._as_list(self._profile_value(profile, "certifications")),
+            self._profile_value(profile, "years_experience"),
+            self._as_list(self._profile_value(profile, "industries")),
+            self._profile_value(profile, "current_role"),
+        )
+        families = {
+            self._role_family(s["label"]) for s in suggestions if s.get("label")
+        }
+        if suggestions and len(families) == 1:
+            top = suggestions[0]["label"]
+            response = self._target_role_search_response(
+                user_id, top, profile,
+                location=location, employment_type_filter=employment_type_filter,
+                from_saved_profile=True,
+            )
+            note = (
+                f"Your saved role **{resolved_role}** doesn't match your current CV. "
+                f"I searched for **{top}** based on your skills instead."
+                if resolved_role else
+                f"I used your CV to find the best match: **{top}**."
+            )
+            response["message"] = note + "\n\n" + response.get("message", "")
+            if resolved_role:
+                response["stale_target_role"] = resolved_role
+            self._append_chat(user_id, "assistant", response.get("message", ""))
+            return response
+        suggestion_resp = self._handle_profile_role_suggestions(profile, role_text)
+        if resolved_role:
+            suggestion_resp = {**suggestion_resp, "stale_target_role": resolved_role}
+        self._append_chat(user_id, "assistant", suggestion_resp.get("message", ""))
+        return suggestion_resp
+
+    def _profile_role_choice_response(
+        self, candidates: list[str], message: str = ""
+    ) -> dict[str, Any]:
+        """Clarification asking which career track to match (2+ distinct families)."""
+        arabic = self._is_arabic_text(message)
+        shortlist = candidates[:6]
+        options = [
+            {"action": "search_role", "label": r, "message": f"search {r} jobs in UAE"}
+            for r in shortlist
+        ]
+        if arabic:
+            msg = (
+                "ملفك يشمل أكثر من مسار وظيفي. أي مسار تريد أن أطابقه مع وظائف الإمارات؟\n"
+                + "\n".join(f"• {r}" for r in shortlist)
+            )
+        else:
+            msg = (
+                "Your profile spans more than one career track. Which one should I "
+                "match against UAE jobs?\n"
+                + "\n".join(f"• {r}" for r in shortlist)
+            )
+        return {
+            "type": "clarification",
+            "message": msg,
+            "options": options,
+            "next_action": "select_role_to_search",
+        }
 
     @staticmethod
     def _looks_like_bare_target_role(message: str) -> bool:
@@ -2242,6 +2725,9 @@ class RicoChatAPI:
     # "show applications" / "list applications" (no "my") are intentionally excluded:
     # those bare forms stay in _LIST_FOLLOWUP_PHRASES so they replay lifecycle context
     # when a prior application turn exists, which is the correct contextual behavior.
+    # Conversational question forms ("what are my applications?", "where are my
+    # applications?") are intentionally excluded here — they route via
+    # _APPLICATIONS_LIST_RE to _handle_applications_list instead.
     # English: "show my applications", "my applications", "show my job applications",
     #          "show my job applications and their status", "my jobs", "show my pipeline".
     # Arabic:  "طلباتي", "اعرض طلباتي", etc.
@@ -2781,55 +3267,30 @@ class RicoChatAPI:
             # No scorer ran — emit 0.0 as the canonical "no score" sentinel; frontend checks for 0.0 to hide badge.
             normalized_score = 0.0
 
-        # Preserve URL fields so the frontend can surface apply links and distinguish
-        # verified live postings from leads that still need a working apply URL.
-        # alt_link (job_google_link) is kept separately so the apply-fallback chain
-        # can offer an alternate link when the primary apply URL is unavailable.
-        apply_url = str(
-            m.get("job_apply_link") or m.get("apply_link") or m.get("link") or ""
-        ).strip()
-        alt_link = str(m.get("job_google_link") or m.get("alt_link") or "").strip()
-        source_url = str(
-            m.get("source_url") or alt_link or apply_url
-        ).strip()
+        # Canonical link resolution — the SINGLE source of truth for a job's apply
+        # link, shared with the "open the apply link for the Nth job" chat action so
+        # a card and the chat command can never disagree. ``usable_link`` is the one
+        # trusted URL the Apply button should use; when ``link_unavailable`` is True
+        # the frontend must render the fallback CTA instead of a dead-end Apply.
+        from src.services.job_link import resolve_job_link as _resolve_job_link
+        _lr = _resolve_job_link(m)
+        apply_url = _lr["apply_url"]
+        alt_link = _lr["alt_link"]
+        source_url = _lr["source_url"]
+        employer_url = _lr.get("employer_url", "")
+        usable_link = _lr["usable_link"]
+        link_unavailable = _lr["link_unavailable"]
+        link_unavailable_reason = _lr["reason"]
+        verification_status = _lr["verification_status"]
 
-        # Classify source quality from domain patterns — no network call.
-        # Google Jobs links (jobs.google.com, google.com/search) are search
-        # intermediary pages, not direct apply URLs. Move them to alt_link so
-        # the frontend can offer them as a fallback, but don't present them as
-        # the primary "Apply" action.
+        # Clear an alt_link that is itself a Google search intermediary so the
+        # frontend falls through to the fallback CTA rather than surfacing it.
         try:
-            from src.services.source_quality import (
-                classify_url,
-                is_google_intermediary,
-                classify_company,
-                pick_best_alternate_apply_link,
-            )
-            if apply_url and is_google_intermediary(apply_url):
-                if not alt_link:
-                    alt_link = apply_url
-                apply_url = ""
-                verification_status = "google_intermediary"
-            else:
-                verification_status = classify_url(apply_url or source_url)
-            # source_url and alt_link must never be Google search intermediary pages.
-            # Clear both so the frontend falls through to "Link unavailable" instead
-            # of surfacing google.com/search?q=jobs as View Source or Alt link.
-            if source_url and is_google_intermediary(source_url):
-                source_url = ""
+            from src.services.source_quality import is_google_intermediary, classify_company
             if alt_link and is_google_intermediary(alt_link):
                 alt_link = ""
-            # Apply-options rescue: when no usable alternate survives, pull the
-            # most trustworthy mirror from JSearch's apply_options (raw items
-            # reach here without passing through jsearch_client.normalize_item,
-            # which already does this selection for normalized items).
-            if not alt_link:
-                alt_link = pick_best_alternate_apply_link(
-                    apply_url, m.get("apply_options")
-                )
             company_quality = classify_company(str(m.get("company") or ""))
         except Exception:
-            verification_status = "needs_source_verification" if apply_url else "lead_needs_verification"
             company_quality = "ok"
 
         # Description snippet — first 350 chars of real job description for richer cards.
@@ -2850,6 +3311,12 @@ class RicoChatAPI:
             "apply_url": apply_url,
             "source_url": source_url,
             "alt_link": alt_link,
+            "employer_url": employer_url,
+            # Canonical link the Apply button should use. When empty, the card must
+            # render the fallback CTA instead of a dead-end Apply button.
+            "usable_link": usable_link,
+            "link_unavailable": link_unavailable,
+            "link_unavailable_reason": link_unavailable_reason,
             "verification_status": verification_status,
             "company_quality": company_quality,
             "actions": ["Prepare application", "Save", "Ask why", "Skip"],
@@ -2888,6 +3355,16 @@ class RicoChatAPI:
         why = m.get("rico_explanation")
         if why:
             result["why"] = str(why)
+
+        # No trusted apply link → attach safe fallback CTAs so the card never
+        # renders a dead-end Apply button.
+        if link_unavailable:
+            from src.services.job_link import build_link_fallback_cta
+            result["fallback_cta"] = build_link_fallback_cta(
+                title=result["title"],
+                company=result["company"],
+                location=str(m.get("location") or ""),
+            )
 
         return result
 
@@ -3020,7 +3497,7 @@ class RicoChatAPI:
     ) -> dict[str, Any]:
         """Finalize response with metadata."""
         from src.services.agentic_ui_composer import compose
-        agentic_ui = compose(runtime_result)
+        agentic_ui = compose(runtime_result, response)
         agent = self._get_openai_agent()
 
         # Get Jotform form IDs from environment
@@ -3379,7 +3856,10 @@ class RicoChatAPI:
             _label = labels.get(_k, _k.replace("_", " ").title())
             _val_str = ", ".join(str(x) for x in _v) if isinstance(_v, list) else str(_v)
             if _k == "salary_expectation_aed":
-                _val_str = f"AED {_val_str}/month"
+                try:
+                    _val_str = f"AED {int(float(_v)):,}/month"
+                except (TypeError, ValueError):
+                    _val_str = f"AED {_val_str}/month"
             changes.append(f"**{_label}** \u2192 {_val_str}")
         return changes
 
@@ -4244,10 +4724,48 @@ class RicoChatAPI:
                 save_user_message=False,
             )
         if reminder_signals:
-            return {
-                "type": "reminder_set",
-                "message": "تم ضبط التذكير. سأذكرك بالمتابعة." if "تذكير" in last else "Reminder set. I'll nudge you to follow up.",
-            }
+            # Attempt to set a real reminder against the most recently discussed job.
+            # Only emit success after backend confirmation; never claim a fake reminder.
+            arabic = self._is_arabic_text(message)
+            recent_matches = self._recent_search_matches(user_id)
+            job_for_reminder = recent_matches[0] if recent_matches else None
+            if job_for_reminder:
+                title = str(job_for_reminder.get("title") or "").strip()
+                company = str(job_for_reminder.get("company") or "").strip()
+                try:
+                    result = agent_runtime.handle_action(
+                        user_id=user_id,
+                        action="remind",
+                        job=job_for_reminder,
+                        source="chat",
+                    )
+                    if result.ok:
+                        _label = f"**{title}**" + (f" — {company}" if company else "")
+                        msg = (
+                            f"تم ضبط التذكير لـ {_label}. سأذكّرك بالمتابعة."
+                            if arabic else
+                            f"Reminder set for {_label}. I'll nudge you to follow up."
+                        )
+                        self._append_chat(user_id, "assistant", msg)
+                        return {"type": "reminder_set", "message": msg}
+                except Exception:
+                    pass
+                # Backend call failed — be honest
+                msg = (
+                    "لم أتمكن من ضبط التذكير الآن. حاول مرة أخرى بعد قليل."
+                    if arabic else
+                    "I couldn't set a reminder right now. Please try again in a moment."
+                )
+                self._append_chat(user_id, "assistant", msg)
+                return {"type": "reminder_set_failed", "message": msg}
+            # No job in context — ask which job before claiming anything
+            msg = (
+                "أي وظيفة تريد ضبط تذكير لها؟ أرسل لي اسم الوظيفة أو الشركة."
+                if arabic else
+                "Which job would you like me to set a reminder for? Send me the title or company name."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "intent": "set_reminder", "message": msg}
 
         return None
 
@@ -4279,9 +4797,19 @@ class RicoChatAPI:
         "الفجيرة", "أم القيوين", "العين",
     })
 
-    # Yes/no words that must not be stored as city names
+    # Yes/no/confirmation words that must not be stored as city names.
+    # A bare "تمام" (ok/fine) was being persisted as preferred_cities=["تمام"]
+    # and then rendered in every CV draft. Keep in sync with affirmative/ack
+    # vocabulary used elsewhere.
     _CITY_REJECT_WORDS: frozenset[str] = frozenset({
-        "yes", "no", "ok", "okay", "sure", "نعم", "لا", "اوكي", "موافق",
+        # English
+        "yes", "yeah", "yep", "yup", "ok", "okay", "sure", "fine", "great",
+        "good", "cool", "done", "alright", "please", "thanks", "thank you",
+        "go ahead", "no", "nope", "nah",
+        # Arabic
+        "نعم", "أيوه", "ايوه", "اوك", "اوكي", "اوكيه", "حسنا", "حسناً",
+        "تمام", "تمم", "اكيد", "أكيد", "طبعا", "طبعاً", "تفضل", "يلا",
+        "ماشي", "زين", "كويس", "شكرا", "شكراً", "موافق", "اه", "آه", "لا",
     })
 
     def _resolve_pending_field(
@@ -4378,9 +4906,12 @@ class RicoChatAPI:
             if len(msg.split()) > 6:
                 return None
             # Accept any non-empty text as city input — normalise and save
+            from src.services.city_validation import sanitize_cities
             raw_cities = [c.strip() for c in re.split(r"[,،/|]+", msg) if c.strip()]
-            # Reject yes/no affirmations stored in place of a city name
-            raw_cities = [c for c in raw_cities if c.lower() not in self._CITY_REJECT_WORDS]
+            # Drop affirmations and misfiled chat/document messages (e.g. a
+            # "Summarize this document for me." captured while awaiting a city)
+            # so a non-city value can never be stored as a preferred city.
+            raw_cities = sanitize_cities(raw_cities, known_cities=self._UAE_CITIES)
             if not raw_cities:
                 return None
             # Title-case known UAE cities; keep others as entered
@@ -4521,21 +5052,24 @@ class RicoChatAPI:
 
     @staticmethod
     def _search_jsearch_meta(role: str, location: str = "") -> Any:
-        """Query JSearch for live UAE jobs matching *role*, with cache + retry.
+        """Query live UAE jobs for *role* via the provider cascade (cache → Jooble
+        → Adzuna → JSearch → degraded), with cache + retry + quota protection.
 
         When *location* is given the query targets that specific UAE city instead of
         the generic "UAE" suffix, producing sharper results for city-constrained searches.
 
         Returns a ``jsearch_client.FetchResult`` so the caller can tell a genuine
-        empty result apart from a rate-limited source. Never raises.
+        empty result apart from a rate-limited / quota-exhausted source. Never raises.
+        The method name is retained for backward compatibility with existing callers
+        and tests; it now routes through ``src.job_providers``.
         """
-        from src import jsearch_client
+        from src import job_providers
 
-        query = f"{role} {location}".strip() if location else f"{role} UAE"
-        result = jsearch_client.search(query)
+        result = job_providers.search_jobs(role, location)
         logger.info(
-            "jsearch_direct role=%r location=%r results=%d cache_hit=%s rate_limited=%s",
-            role, location or "UAE", len(result.items), result.cache_hit, result.rate_limited,
+            "provider_search role=%r location=%r provider=%s results=%d cache_hit=%s rate_limited=%s quota=%s",
+            role, location or "UAE", result.provider, len(result.items),
+            result.cache_hit, result.rate_limited, getattr(result, "quota_exhausted", False),
         )
         return result
 
@@ -4544,6 +5078,100 @@ class RicoChatAPI:
         """Backward-compatible list wrapper around :meth:`_search_jsearch_meta`."""
         return RicoChatAPI._search_jsearch_meta(role).items
 
+    def _provider_degraded_response(
+        self, user_id: str, role: str, *,
+        location: str = "",
+        quota_exhausted: bool = False,
+        rate_limited: bool = False,
+        arabic: bool = False,
+    ) -> dict[str, Any]:
+        """Build a safe fallback response when every job provider is degraded.
+
+        Renders actionable CTAs (try later, search company site, Google/LinkedIn
+        search, copy, save) rather than a dead-end "no results" / broken-link card.
+        The external links are plain *search* URLs — Rico never scrapes them.
+        """
+        from urllib.parse import quote_plus
+
+        loc = location or "UAE"
+        google_url = f"https://www.google.com/search?q={quote_plus(f'{role} {loc} jobs')}"
+        linkedin_url = (
+            "https://www.linkedin.com/jobs/search/?"
+            f"keywords={quote_plus(role)}&location={quote_plus(loc)}"
+        )
+
+        if quota_exhausted:
+            provider_state = "quota_exhausted"
+            message = (
+                f"وصلت مصادر التوظيف إلى حد البحث المسموح به الآن، لذا لا يمكنني جلب "
+                f"إعلانات **{role}** الآن. إليك بدائل آمنة للمتابعة:"
+                if arabic else
+                f"Live job providers have reached their search quota for now, so I can't pull "
+                f"fresh **{role}** listings this minute. Here are safe ways to keep moving:"
+            )
+        elif rate_limited:
+            provider_state = "rate_limited"
+            message = (
+                f"مصدر التوظيف مقيّد مؤقتاً، لذا نتائج **{role}** غير متاحة الآن. "
+                f"حاول مجدداً بعد قليل، أو استخدم إحدى هذه البدائل:"
+                if arabic else
+                f"The job source is temporarily rate-limited, so fresh **{role}** results aren't "
+                f"available right now. Try again shortly, or use one of these:"
+            )
+        else:
+            provider_state = "unavailable"
+            message = (
+                f"لم أتمكن من الوصول إلى مصدر التوظيف المباشر لـ **{role}** الآن. "
+                f"إليك بدائل آمنة للمتابعة:"
+                if arabic else
+                f"I couldn't reach a live job source for **{role}** right now. "
+                f"Here are safe ways to keep moving:"
+            )
+
+        if arabic:
+            options = [
+                {"action": "retry_search", "label": "حاول مرة أخرى لاحقاً", "role": role, "location": location},
+                {"action": "open_url", "label": "بحث على Google", "url": google_url},
+                {"action": "open_url", "label": "بحث على LinkedIn", "url": linkedin_url},
+                {"action": "search_company_site", "label": "ابحث في موقع شركة", "role": role},
+                {"action": "copy_text", "label": "نسخ المسمى الوظيفي", "text": role},
+                {"action": "save_role_search", "label": "حفظ هذا البحث", "role": role, "location": location},
+            ]
+        else:
+            options = [
+                {"action": "retry_search", "label": "Try again later", "role": role, "location": location},
+                {"action": "open_url", "label": "Search on Google", "url": google_url},
+                {"action": "open_url", "label": "Search on LinkedIn", "url": linkedin_url},
+                {"action": "search_company_site", "label": "Search a company career site", "role": role},
+                {"action": "copy_text", "label": "Copy role title", "text": role},
+                {"action": "save_role_search", "label": "Save this role search", "role": role, "location": location},
+            ]
+
+        response = {
+            "type": "provider_degraded",
+            "intent": "search_jobs",
+            "message": message,
+            "matches": [],
+            "result_count": 0,
+            "degraded": True,
+            "provider_state": provider_state,
+            "options": options,
+            "links": {"google": google_url, "linkedin": linkedin_url},
+            "next_action": "provider_degraded_fallback",
+        }
+
+        # Arm a pending search so a later "try again" re-runs this exact role once
+        # quota recovers, without the user retyping it.
+        try:
+            self._store_pending_job_search(
+                user_id, role=role, location=location, query_type="provider_degraded",
+            )
+        except Exception:
+            pass
+
+        self._append_chat(user_id, "assistant", message)
+        return response
+
     def _target_role_search_response(
         self, user_id: str, role: str, profile: Any,
         from_saved_profile: bool = False,
@@ -4551,6 +5179,18 @@ class RicoChatAPI:
         employment_type_filter: str = "",
     ) -> dict[str, Any]:
         """Handle target role search with role intelligence integration."""
+        # Detect user's language from the most recent user turn.  This lets all
+        # downstream message builders return Arabic text without any call-site changes.
+        arabic = False
+        try:
+            _recent_msgs = self._get_recent_messages(user_id, limit=5)
+            for _rm in reversed(_recent_msgs):
+                if _rm.get("role") == "user":
+                    arabic = self._is_arabic_text(str(_rm.get("content") or ""))
+                    break
+        except Exception:
+            pass
+
         try:
             normalized_role = normalize_role(role)
         except Exception as e:
@@ -4568,9 +5208,12 @@ class RicoChatAPI:
         operation = self._begin_job_search_operation(user_id, search_role)
         operation_id = str(operation["operation_id"])
 
-        # Primary path: live JSearch query for the exact requested role.
-        # Falls back to the legacy scraper pipeline only when JSearch is unavailable.
+        # Primary path: provider-cascade query for the exact requested role.
+        # Falls back to the legacy scraper pipeline only when providers are empty.
         rate_limited = False
+        quota_exhausted = False
+        fetch_provider = ""
+        fetch_error = ""
         import time as _time
         _search_start = _time.monotonic()
         try:
@@ -4583,10 +5226,14 @@ class RicoChatAPI:
             )
             all_matches = fetch.items
             rate_limited = fetch.rate_limited
+            quota_exhausted = getattr(fetch, "quota_exhausted", False)
+            fetch_provider = getattr(fetch, "provider", "")
+            fetch_error = getattr(fetch, "error", "") or ""
             _search_elapsed = _time.monotonic() - _search_start
             logger.info(
-                "job_search: role=%r results=%d rate_limited=%s elapsed=%.2fs op=%s",
-                search_role, len(all_matches), rate_limited, _search_elapsed, operation_id,
+                "job_search: role=%r results=%d provider=%s rate_limited=%s quota=%s elapsed=%.2fs op=%s",
+                search_role, len(all_matches), fetch_provider, rate_limited,
+                quota_exhausted, _search_elapsed, operation_id,
             )
             if not all_matches:
                 search_profile = (
@@ -4604,11 +5251,38 @@ class RicoChatAPI:
             )
             mark_failed(user_id, operation_id, str(exc))
             _graceful_msg = (
+                "عذراً، لم أتمكن من إتمام البحث الآن. "
+                "حاول تحديد اسم الوظيفة — مثلاً: 'وظائف مدير الامتثال في دبي'."
+                if arabic else
                 "I couldn't complete that search right now. "
                 "Try specifying a role name — for example: 'Compliance Manager jobs in Dubai'."
             )
             self._append_chat(user_id, "assistant", _graceful_msg)
             return {"type": "search_error", "message": _graceful_msg, "intent": "job_search_explicit"}
+
+        # Degraded-provider guard: when no live results AND a *configured* provider
+        # is quota-exhausted / rate-limited / failing, show a safe fallback CTA
+        # instead of an empty/dead-end "results" card. When no providers are
+        # configured at all (e.g. local/test env → error "no_providers_configured")
+        # we deliberately fall through to the existing empty-results handling so
+        # behaviour is unchanged.
+        _provider_failed = (
+            quota_exhausted
+            or rate_limited
+            or fetch_error == "all_providers_unavailable"
+        )
+        if not all_matches and _provider_failed:
+            try:
+                mark_completed(user_id, operation_id, 0)
+            except Exception:
+                pass
+            return self._provider_degraded_response(
+                user_id, normalized_role or search_role,
+                location=location,
+                quota_exhausted=quota_exhausted,
+                rate_limited=rate_limited,
+                arabic=arabic,
+            )
 
         # Filter out already-applied jobs
         try:
@@ -4757,14 +5431,28 @@ class RicoChatAPI:
 
         skills = self._as_list(self._profile_value(profile, "skills"))[:8]
         years = self._profile_value(profile, "years_experience")
-        cities = self._as_list(self._profile_value(profile, "preferred_cities"))
-        city_text = f" in {', '.join(map(str, cities[:2]))}" if cities else " in the UAE"
+        # Drop any corrupted non-city value (e.g. a misfiled chat message) so it
+        # never poisons the search location or fit score.
+        from src.services.city_validation import sanitize_cities
+        cities = sanitize_cities(self._as_list(self._profile_value(profile, "preferred_cities")))
+        if arabic:
+            city_text = f" في {', '.join(map(str, cities[:2]))}" if cities else " في الإمارات"
+        else:
+            city_text = f" in {', '.join(map(str, cities[:2]))}" if cities else " in the UAE"
         basis = []
         if years:
-            basis.append(f"~{years} years experience")
+            try:
+                years_int = int(float(years))
+            except (TypeError, ValueError):
+                years_int = None
+            if years_int is not None:
+                basis.append(f"~{years_int} years experience" if not arabic else f"~{years_int} سنوات خبرة")
         if skills:
-            basis.append("skills: " + ", ".join(map(str, skills[:6])))
-        basis_text = " using your CV profile" + (f" ({'; '.join(basis)})" if basis else "")
+            basis.append(("مهارات: " if arabic else "skills: ") + ", ".join(map(str, skills[:6])))
+        if arabic:
+            basis_text = " بناءً على ملفك الوظيفي" + (f" ({'; '.join(basis)})" if basis else "")
+        else:
+            basis_text = " using your CV profile" + (f" ({'; '.join(basis)})" if basis else "")
 
         role_intelligence_data = self._enrich_with_role_intelligence(
             user_id, normalized_role, profile, skills, years, cities
@@ -4773,6 +5461,7 @@ class RicoChatAPI:
         message = self._build_role_search_message(
             normalized_role, city_text, basis_text, top_matches, role_intelligence_data,
             from_saved_profile=from_saved_profile,
+            arabic=arabic,
         )
 
         response = {
@@ -4792,6 +5481,8 @@ class RicoChatAPI:
 
         if rate_limited:
             response["rate_limit_notice"] = (
+                "هذا المصدر مقيّد مؤقتاً. جرّب الرابط البديل لكل نتيجة، أو أعد البحث بعد قليل."
+                if arabic else
                 "This source is temporarily rate-limited. "
                 "Try the alternate link on each result, or search again shortly."
             )
@@ -4859,12 +5550,18 @@ class RicoChatAPI:
         top_matches: list[Any],
         role_intelligence_data: dict[str, Any] | None,
         from_saved_profile: bool = False,
+        arabic: bool = False,
     ) -> str:
         """Build message for role search response."""
         if from_saved_profile:
-            prefix = f"Searching based on your saved target role: {normalized_role}. "
+            prefix = (
+                f"أبحث بناءً على دورك المحفوظ: {normalized_role}. "
+                if arabic else
+                f"Searching based on your saved target role: {normalized_role}. "
+            )
         else:
             prefix = ""
+
         if top_matches:
             def _has_url(m: Any) -> bool:
                 return bool(
@@ -4873,31 +5570,81 @@ class RicoChatAPI:
             link_count = sum(1 for m in top_matches if _has_url(m))
             lead_count = len(top_matches) - link_count
             total = len(top_matches)
-            if link_count and lead_count:
-                base_message = (
-                    f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
-                    f"I found {total} candidate match(es) from the job source pipeline "
-                    f"({link_count} with provider links, {lead_count} need verification)."
-                )
-            elif link_count:
-                base_message = (
-                    f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
-                    f"I found {link_count} match(es) with provider data available."
+            if arabic:
+                if link_count and lead_count:
+                    base_message = (
+                        f"حسناً — سأستهدف وظائف {normalized_role}{city_text}{basis_text}. "
+                        f"وجدت {total} فرصة من مصادر التوظيف "
+                        f"({link_count} برابط مزود، {lead_count} تحتاج تحقق)."
+                    )
+                elif link_count:
+                    base_message = (
+                        f"حسناً — سأستهدف وظائف {normalized_role}{city_text}{basis_text}. "
+                        f"وجدت {link_count} نتيجة بروابط مزودي البيانات."
+                    )
+                else:
+                    base_message = (
+                        f"حسناً — سأستهدف وظائف {normalized_role}{city_text}{basis_text}. "
+                        f"وجدت {lead_count} فرصة تحتاج تحقق من المصدر."
+                    )
+            else:
+                if link_count and lead_count:
+                    base_message = (
+                        f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
+                        f"I found {total} candidate match(es) from the job source pipeline "
+                        f"({link_count} with provider links, {lead_count} need verification)."
+                    )
+                elif link_count:
+                    base_message = (
+                        f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
+                        f"I found {link_count} match(es) with provider data available."
+                    )
+                else:
+                    base_message = (
+                        f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
+                        f"I found {lead_count} candidate match(es) that need source verification."
+                    )
+        else:
+            base_message = (
+                f"حسناً — سأستهدف وظائف {normalized_role}{city_text}{basis_text}."
+                if arabic else
+                f"Got it — I will target {normalized_role} roles{city_text}{basis_text}."
+            )
+
+        # Adjacent roles are an OPT-IN offer, never a silent substitution. We always
+        # searched the exact requested role (normalized_role); related roles such as
+        # "Environmental Officer" for "Environmental Manager" are only ever proposed
+        # as a question the user must accept — Rico never broadens on its own.
+        _adjacent = (role_intelligence_data or {}).get("adjacent_roles", []) if role_intelligence_data else []
+        _adjacent_names = [r["role"] for r in _adjacent[:3] if r.get("role")]
+        if not top_matches and _adjacent_names:
+            if arabic:
+                base_message += (
+                    f" بحثت عن **{normalized_role}** تحديداً ولم أجد نتائج حالية. "
+                    f"هل تريد أن أبحث أيضاً في {', '.join(_adjacent_names)}؟"
                 )
             else:
-                base_message = (
-                    f"Got it — I will target {normalized_role} roles{city_text}{basis_text}. "
-                    f"I found {lead_count} candidate match(es) that need source verification."
+                base_message += (
+                    f" I searched **{normalized_role}** specifically and didn't find live matches. "
+                    f"Want me to also look at {', '.join(_adjacent_names)}?"
                 )
-        else:
-            base_message = f"Got it — I will target {normalized_role} roles{city_text}{basis_text}."
-
-        if role_intelligence_data and role_intelligence_data.get("fit_score", 1.0) < 0.6:
-            adjacent = role_intelligence_data.get("adjacent_roles", [])
-            role_names = [r["role"] for r in adjacent[:3]]
-            base_message += f" Your CV is also strong for {', '.join(role_names)} roles. I'll search those too if needed."
         elif not top_matches:
-            base_message += " I couldn't retrieve live jobs right now. I can still suggest target searches based on your CV — or try again later."
+            base_message += (
+                " لم أتمكن من استرداد الوظائف الآن. يمكنني اقتراح بحث مناسب بناءً على سيرتك — أو حاول مرة أخرى لاحقاً."
+                if arabic else
+                " I couldn't retrieve live jobs right now. I can still suggest target searches based on your CV — or try again later."
+            )
+        elif _adjacent_names:
+            if arabic:
+                base_message += (
+                    f" هذه وظائف **{normalized_role}**. إن أردت، يمكنني أيضاً البحث في "
+                    f"{', '.join(_adjacent_names)} — قل لي فقط."
+                )
+            else:
+                base_message += (
+                    f" These are **{normalized_role}** roles. If you'd like, I can also look at "
+                    f"{', '.join(_adjacent_names)} — just say the word."
+                )
 
         return prefix + base_message
 
@@ -4971,8 +5718,14 @@ class RicoChatAPI:
         *,
         save_user_message: bool,
         language: str | None = None,
+        prompt_override: str | None = None,
     ) -> dict[str, Any]:
-        """Run the single conversational AI fallback path used by chat routing."""
+        """Run the single conversational AI fallback path used by chat routing.
+
+        ``prompt_override`` lets a caller send the model an augmented prompt (e.g.
+        with an uploaded document's transcript embedded) while still saving the
+        user's ORIGINAL ``message`` to chat history.
+        """
         if save_user_message:
             self._append_chat(user_id, "user", message)
         user_context = self._build_openai_context(profile, user_id=user_id)
@@ -4980,7 +5733,9 @@ class RicoChatAPI:
         if isinstance(user_context, dict):
             user_context["blocked_questions"] = blocked_questions
 
-        ai_response = self._get_openai_agent().respond(message, user_context=user_context, language=language)
+        ai_response = self._get_openai_agent().respond(
+            prompt_override or message, user_context=user_context, language=language
+        )
         raw_ai_message = ai_response.get("message", "")
         filtered_ai_message = self._preserve_ai_message(raw_ai_message, blocked_questions)
         ai_response["message"] = filtered_ai_message
@@ -5068,6 +5823,22 @@ class RicoChatAPI:
         file_list_result = self._handle_file_list_query(user_id, message)
         if file_list_result is not None:
             return self._finalize(file_list_result, self.SOURCE_KEYWORD, profile=None)
+
+        # ── Recent-upload document meta-query ─────────────────────────────────
+        # "what did I upload?" / "what type is the document?" — answers from the
+        # session context (set by the upload route) without an AI call.
+        _doc_reply = self._get_recent_upload_document_reply(user_id, message)
+        if _doc_reply is not None:
+            return self._finalize(_doc_reply, self.SOURCE_KEYWORD, profile=None)
+
+        # ── Recent-upload document ACTION ─────────────────────────────────────
+        # "Describe this image" / "Extract key information" / "Summarize this
+        # document" — answer from the stored transcript BEFORE the onboarding /
+        # CV-builder routing, so an image/document action can never be hijacked
+        # into a CV draft. Returns None unless this is such a request.
+        _doc_action = self._handle_uploaded_document_followup(user_id, message, language)
+        if _doc_action is not None:
+            return _doc_action
 
         completed = is_onboarding_complete(user_id)
 
@@ -5283,6 +6054,47 @@ class RicoChatAPI:
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
+
+        # ── Pending pipeline reset confirmation (P2-B) ───────────────────────
+        # Must run before the pipeline reset guard so a confirmation reply in the
+        # 2-minute window executes the action instead of re-asking.
+        _pending_reset = self._handle_pending_pipeline_reset(user_id, message, profile)
+        if _pending_reset is not None:
+            return self._finalize(_pending_reset, self.SOURCE_KEYWORD, profile=profile)
+
+        # ── Pending saved-jobs deletion confirmation (P2-B) ──────────────────
+        # Must run before the delete guard so a "yes" / "نعم" in the 2-minute
+        # confirmation window executes the real deletion instead of re-asking.
+        _pending_delete = self._handle_pending_delete_saved_jobs(user_id, message)
+        if _pending_delete is not None:
+            return self._finalize(_pending_delete, self.SOURCE_KEYWORD, profile=profile)
+
+        # ── Pipeline reset intent (explicit) ──────────────────────────────────
+        # "clear all applications", "reset my pipeline", "start over", etc.
+        # Fires before role classification to prevent misrouting as a job role.
+        if _PIPELINE_RESET_RE.search(message):
+            return self._finalize(
+                self._handle_pipeline_reset(user_id, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Pipeline reset intent (implicit + context-aware) ──────────────────
+        # "clear them", "must start over" — only when last turn was app tracking.
+        if _PIPELINE_RESET_IMPLICIT_RE.search(message):
+            _last_t = self._get_last_turn(user_id)
+            if _last_t.get("intent") == "application_tracking":
+                return self._finalize(
+                    self._handle_pipeline_reset(user_id, message),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
+
+        # ── Delete mutation guard (P0 trust bug #764 / P2-B) ─────────────────
+        # Saved-jobs → confirmation flow; application history → blocked.
+        _delete_guard = self._intercept_unsupported_delete_mutation(user_id, message)
+        if _delete_guard is not None:
+            return self._finalize(_delete_guard, self.SOURCE_KEYWORD, profile=profile)
 
         # ── Proactive Telegram declaration: "my telegram is @handle" ─────────
         # When the user volunteers their Telegram handle with the keyword "telegram"
@@ -5522,6 +6334,31 @@ class RicoChatAPI:
                     self.SOURCE_KEYWORD,
                     profile=profile,
                 )
+        # ── "Yes, search {role}" quick-reply button handler ──────────────────────
+        # The quick-reply button generated by known_but_off_profile sends the
+        # label "Yes, search {role}" verbatim.  _is_affirmative() only matches
+        # single-word phrases, so the button click falls through to role
+        # extraction, re-triggers the same known_but_off_profile classification,
+        # and shows the confirmation prompt again — an infinite loop (BUG-05).
+        # Intercept here before role classification fires.
+        _yes_search_m = re.match(r'^yes[,\s]+search\s+(.+)$', (message or "").strip(), re.IGNORECASE)
+        if _yes_search_m:
+            try:
+                _ctx_ys = self._get_recent_context(user_id)
+                _pend_ys = _ctx_ys.get("_pending_role_confirmation")
+                if _pend_ys and _pend_ys.get("role"):
+                    _role_ys = _pend_ys["role"]
+                    _ctx_ys.pop("_pending_role_confirmation", None)
+                    self._store_recent_context(user_id, _ctx_ys)
+                    self._clear_pending_job_search(user_id)
+                    return self._finalize(
+                        self._target_role_search_response(user_id, _role_ys, profile),
+                        self.SOURCE_KEYWORD,
+                        profile=profile,
+                    )
+            except Exception:
+                pass
+
         if self._is_negative(message):
             # User declined the offered action — acknowledge and let them continue
             return self._finalize(
@@ -5827,9 +6664,28 @@ class RicoChatAPI:
         # returning match[0] before the ordinal gate fires.
         # Comparison queries ("compare job 1 and job 2") also trigger _ORDINAL_JOB_RE
         # via "job 1" — skip here so _JOB_COMPARE_RE can handle them downstream.
+        # Apply-link requests ("open the apply link for the second job") also contain
+        # an ordinal ("second job") but must NOT be treated as a job-detail lookup —
+        # they belong to the open_apply_link handler. Skip the gate for them so the
+        # ordinal apply-link works for every position, not just "first".
+        # Save requests ("save the second job to my pipeline") also contain an
+        # ordinal but belong to the save_job handler — skip the gate for them too.
         _jd_detail_match = _JOB_DETAIL_RE.search(message)
         _jd_ordinal_match = _ORDINAL_JOB_RE.search(message)
-        if (_jd_detail_match or _jd_ordinal_match) and not _JOB_COMPARE_RE.search(message):
+        _jd_is_apply_link = bool(
+            _OPEN_APPLY_LINK_ORDINAL_RE.search(message)
+            or _OPEN_APPLY_LINK_RE.search(message)
+        )
+        _jd_is_save = bool(
+            _SAVE_JOB_ORDINAL_RE.search(message)
+            or _SAVE_JOB_ORDINAL_AR_RE.search(message)
+        )
+        if (
+            (_jd_detail_match or _jd_ordinal_match)
+            and not _JOB_COMPARE_RE.search(message)
+            and not _jd_is_apply_link
+            and not _jd_is_save
+        ):
             _ord_hint = ""
             if _jd_ordinal_match:
                 _ord_hint = (
@@ -7106,18 +7962,57 @@ class RicoChatAPI:
             target_roles = self._effective_target_roles(
                 self._as_list(self._profile_value(profile, "target_roles"))
             )
+            # Honour a "do not search …" exclusion guard carried on the intent
+            # ("find jobs based on my CV, but do not search Software Engineer, …"):
+            # filter excluded roles out of the candidates so they are never searched
+            # or suggested, and persist the guard for this session.
+            _pm_excluded = [
+                str(e).strip()
+                for e in ((getattr(intent_result, "entities", None) or {}).get("excluded_roles") or [])
+                if str(e).strip()
+            ]
+            if _pm_excluded:
+                target_roles = self._filter_excluded_roles(target_roles, _pm_excluded)
+                try:
+                    _pm_ctx = self._get_recent_context(user_id)
+                    _pm_ctx["excluded_roles"] = _pm_excluded
+                    self._store_recent_context(user_id, _pm_ctx)
+                except Exception:
+                    pass
             logger.info(
-                "rico_profile_match_search user=%s target_roles=%s has_cv=%s",
-                user_id, target_roles, has_cv,
+                "rico_profile_match_search user=%s target_roles=%s excluded=%s has_cv=%s",
+                user_id, target_roles, _pm_excluded, has_cv,
             )
-            role = target_roles[0] if target_roles else "your profile"
-            return self._finalize(
-                self._target_role_search_response(
-                    user_id, role, profile, from_saved_profile=bool(target_roles)
-                ),
-                self.SOURCE_KEYWORD,
-                profile=profile,
+            # Never blindly search target_roles[0] — it may be one of several saved
+            # tracks, or a stale role that no longer matches the CV. Resolve the
+            # single CV-aligned role, or ask the user to choose first.
+            _pm_role, _pm_candidates, _pm_status = self._resolve_profile_search_role(
+                profile, excluded_roles=_pm_excluded
             )
+            if _pm_status == "ambiguous":
+                _pm_choice = self._profile_role_choice_response(_pm_candidates, message)
+                self._append_chat(user_id, "assistant", _pm_choice["message"])
+                return self._finalize(_pm_choice, self.SOURCE_KEYWORD, profile=profile)
+            if _pm_status in ("none", "stale"):
+                # Search-first: if the CV has a clear single-track suggestion list,
+                # search the top CV-evidenced role immediately with an explanatory
+                # note rather than asking the user to choose (or, for "none",
+                # falsely implying no CV exists). Falls back to ask-to-choose when
+                # CV suggestions are empty or span 2+ families.
+                _pm_response = self._profile_search_first_or_suggest(
+                    user_id, profile, message,
+                    _pm_role if _pm_status == "stale" else None,
+                )
+                if _pm_excluded and _pm_response.get("type") != "profile_role_suggestions":
+                    _pm_response["excluded_roles"] = _pm_excluded
+                return self._finalize(_pm_response, self.SOURCE_KEYWORD, profile=profile)
+            # status == "single": exactly one CV-aligned saved role → search it.
+            _pm_response = self._target_role_search_response(
+                user_id, _pm_role, profile, from_saved_profile=True
+            )
+            if _pm_excluded:
+                _pm_response["excluded_roles"] = _pm_excluded
+            return self._finalize(_pm_response, self.SOURCE_KEYWORD, profile=profile)
 
         # Profile update — route BEFORE role-change fallback
         if legacy_intent == "profile_update":
@@ -7220,6 +8115,29 @@ class RicoChatAPI:
                     actions=[_submit_action],
                 ),
             )
+
+        # Multi-role search list — "search for A, B and C roles, do not search X, Y".
+        # Recognise every requested role, persist the exclusion guard for this
+        # session, then search the primary (first) role now while offering the rest
+        # as one-tap alternatives. Without this the whole comma list reaches
+        # _classified_role_search as a single token and is rejected as unknown.
+        if legacy_intent == "job_search_multi_role":
+            _ml_entities = getattr(intent_result, "entities", None) or {}
+            _ml_roles = [str(r).strip() for r in (_ml_entities.get("roles") or []) if str(r).strip()]
+            _ml_excluded = [str(r).strip() for r in (_ml_entities.get("excluded_roles") or []) if str(r).strip()]
+            _ml_location = _ml_entities.get("location", "")
+            _ml_emp_type = _ml_entities.get("employment_type", "")
+            if _ml_roles:
+                return self._finalize(
+                    self._multi_role_search_response(
+                        user_id, _ml_roles, profile,
+                        excluded_roles=_ml_excluded,
+                        location=_ml_location,
+                        employment_type_filter=_ml_emp_type,
+                    ),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
 
         # Role change — extract role and classify
         if legacy_intent == "role_change" and intent_result.extracted_role:
@@ -7373,6 +8291,20 @@ class RicoChatAPI:
                 }
                 self._append_chat(user_id, "assistant", response["message"])
                 return self._finalize(response, routed.source, profile=profile)
+
+            # target_roles is present but may be stale (no longer matches the
+            # CV) — never blindly search it without checking CV alignment
+            # first, same guard job_search_profile_match already has.
+            _js_role, _js_candidates, _js_status = self._resolve_profile_search_role(profile)
+            if _js_status == "stale":
+                return self._finalize(
+                    self._profile_search_first_or_suggest(
+                        user_id, profile, message, _js_role,
+                        location=_js_location, employment_type_filter=_js_emp_type,
+                    ),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
 
             # Removed fast-path override to prevent intent interception
             # Previously: generic job searches without job_title were intercepted by profile suggestions
@@ -7754,10 +8686,11 @@ class RicoChatAPI:
                 self._append_chat(user_id, "assistant", msg)
                 return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
 
-            # Evidence confirmed — clear the pending flag and write the record.
+            # Evidence confirmed — clear the pending flags and write the record.
             try:
                 ctx = self._get_recent_context(user_id)
                 ctx.pop("_pending_confirm_apply", None)
+                ctx.pop("_pending_confirm_apply_options", None)
                 self._store_recent_context(user_id, ctx)
             except Exception:
                 pass
@@ -7861,6 +8794,18 @@ class RicoChatAPI:
 
         # Open apply link — show URL only; never triggers apply confirmation
         if legacy_intent == "open_apply_link":
+            # Ordinal form ("open the apply link for the first/Nth job") — resolve
+            # the job from recent search context and use the SAME canonical link
+            # field as the card, returning a safe fallback CTA when there is no
+            # usable link. Never raises the "missing required 'link' field" error.
+            _oal_entities = getattr(intent_result, "entities", None) or {}
+            _ordinal = _oal_entities.get("ordinal")
+            if _ordinal is not None:
+                return self._finalize(
+                    self._open_apply_link_by_ordinal(user_id, int(_ordinal), profile),
+                    self.SOURCE_KEYWORD, profile=profile,
+                )
+
             title = getattr(intent_result, "extracted_title", None) or ""
             company = getattr(intent_result, "extracted_company", None) or ""
             apply_url = None
@@ -8146,6 +9091,17 @@ class RicoChatAPI:
 
         # Save job
         if legacy_intent == "save_job":
+            # Ordinal save ("save the second job to my pipeline" / "احفظ ثاني وظيفة")
+            # — resolve the Nth job from recent search results and persist it,
+            # confirming only after persistence succeeds.
+            _save_entities = getattr(intent_result, "entities", None) or {}
+            _save_ordinal = _save_entities.get("ordinal")
+            if _save_ordinal is not None:
+                return self._finalize(
+                    self._save_job_by_ordinal(user_id, int(_save_ordinal), profile),
+                    self.SOURCE_KEYWORD, profile=profile,
+                )
+
             # "Save — {title} at {company}" comes from a Rico-generated job card.
             # Resolve the job from recent results / persisted context so the user
             # is never asked for a URL to save something Rico itself produced.
@@ -8795,6 +9751,253 @@ class RicoChatAPI:
         except Exception:
             return None
 
+    def _recent_search_matches(self, user_id: str) -> list[dict[str, Any]]:
+        """Return the user's recent search matches (session context, DB fallback).
+
+        Shared by the ordinal "open the apply link for the Nth job" resolver so it
+        sees the exact same ordered list the cards were rendered from.
+        """
+        try:
+            ctx = self._get_recent_context(user_id)
+            matches = ctx.get("recent_search_matches") or []
+            if matches:
+                return list(matches)
+        except Exception:
+            pass
+        try:
+            from src.repositories.user_job_context_repo import get_recent_matches as _grm
+            return list(_grm(user_id, limit=10, max_age_minutes=60) or [])
+        except Exception:
+            return []
+
+    def _apply_link_fallback_response(
+        self, user_id: str, title: str, company: str,
+        location: str = "", reason: str = "no_link",
+    ) -> dict[str, Any]:
+        """Safe fallback CTA when a job has no usable apply link.
+
+        Returned instead of ever surfacing "Job payload is missing required 'link'
+        field" to the user. Offers company-site / Google / LinkedIn search, copy,
+        and save-to-pipeline — all plain search links, never scraped.
+        """
+        from src.services.job_link import build_link_fallback_cta
+
+        label = f"**{title}**" + (f" at **{company}**" if company else "")
+        if reason == "expired":
+            lead = f"The apply link for {label} appears to be expired."
+        elif reason == "google_intermediary_only":
+            lead = f"I only have a search link for {label}, not a direct apply page."
+        else:
+            lead = f"I don't have a verified apply link for {label} yet."
+        msg = f"{lead} Here are safe ways to apply:"
+
+        response = {
+            "type": "open_apply_link",
+            "intent": "open_apply_link",
+            "message": msg,
+            "apply_url": None,
+            "usable_link": "",
+            "link_unavailable": True,
+            "link_unavailable_reason": reason,
+            "options": build_link_fallback_cta(title, company, location),
+            "next_action": "apply_link_fallback",
+        }
+        self._append_chat(user_id, "assistant", msg)
+        return response
+
+    def _save_job_by_ordinal(
+        self, user_id: str, ordinal: int, profile: Any,
+    ) -> dict[str, Any]:
+        """Save the first/second/Nth/last job from recent search results to the
+        user's pipeline.
+
+        - Resolves the job from ``recent_search_matches`` (the same ordered list
+          the cards were rendered from), using the canonical link fields.
+        - Persists via ``agent_runtime.handle_action(action="save")``.
+        - Confirms ONLY after persistence succeeds; if it fails, says it could not
+          be saved (never a false success).
+        - If there is no recent search context, asks which job instead of
+          pretending success.
+        """
+        from src.services.job_link import resolve_job_link
+
+        matches = self._recent_search_matches(user_id)
+        if not matches:
+            msg = (
+                "I don't have a recent job list to save from yet. Search for a role first, "
+                "then say 'save the first job to my pipeline'."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "intent": "save_job", "message": msg}
+
+        idx = len(matches) - 1 if ordinal == -1 else ordinal - 1
+        if idx < 0 or idx >= len(matches):
+            n = len(matches)
+            msg = (
+                f"You have {n} job{'s' if n != 1 else ''} in your recent list. "
+                f"Which one should I save? Pick a number between 1 and {n}."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "intent": "save_job", "message": msg}
+
+        job = matches[idx]
+        title = str(job.get("title") or "").strip()
+        company = str(job.get("company") or "").strip()
+        if not title:
+            msg = "I couldn't read that job's details to save it. Try 'save <title> at <company>'."
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "clarification", "intent": "save_job", "message": msg}
+
+        from src.services.job_save import resolve_save_decision
+
+        link = resolve_job_link(job)
+        # The job came from recent_search_matches — an untrusted origin under the
+        # #747 trust gate. Resolve a trusted save identity + apply URL: a job with
+        # no trusted apply link is still saved (as a lead), never with a claimed
+        # verified link, and the bare LLM/session job_id is never used as the key.
+        decision = resolve_save_decision(job, origin="recent_context")
+        _label = f"**{title}**" + (f" at **{company}**" if company else "")
+        job_dict = {
+            "title": title,
+            "company": company,
+            # Only surface a trusted apply URL; otherwise leave it blank so the
+            # saved record never carries an LLM/recent_context-generated link.
+            "apply_url": decision.apply_url or "",
+            "source_url": link["source_url"],
+            "alt_url": link["alt_link"],
+            "verification_status": link["verification_status"],
+        }
+
+        # Persist to the user-scoped, counted recommendations table (idempotent
+        # upsert keyed on the trusted save identity) so the saved job actually
+        # appears in the pipeline/application count. Previously the ordinal save
+        # went only through the agent save_job tool (legacy JSON) and never
+        # incremented the user's count.
+        persisted = False
+        try:
+            from src.repositories import applications_repo
+            persisted = bool(
+                applications_repo.create(
+                    job_id=decision.save_key,
+                    title=title,
+                    company=company,
+                    url=decision.apply_url or "",
+                    status="saved",
+                    source="chat",
+                    user_id=user_id,
+                )
+            )
+        except Exception as exc:
+            # Subscription gate / DB unavailable / any failure → user-safe message,
+            # never a raw error or stack trace.
+            detail = getattr(exc, "detail", None)
+            safe = detail.get("message") if isinstance(detail, dict) else None
+            logger.warning(
+                "rico_chat: ordinal save persist failed user=%s err=%s",
+                user_id, type(exc).__name__,
+            )
+            msg = safe or (
+                f"I couldn't save {_label} to your pipeline right now. Please try again in a "
+                "moment, or open your Applications tab to add it manually."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "save_job_error", "intent": "save_job", "message": msg,
+                "entities": {"title": title, "company": company},
+            }
+
+        # Best-effort side-effects (audit log, learning signals, career memory).
+        # Never let a side-effect failure turn a successful save into an error.
+        try:
+            agent_runtime.handle_action(
+                user_id=user_id, action="save", job=job_dict,
+                job_key=decision.save_key, source="chat",
+            )
+        except Exception:
+            logger.debug("rico_chat: ordinal save side-effects failed", exc_info=True)
+
+        if persisted:
+            if decision.verified:
+                msg = f"Saved {_label} to your pipeline. [View your pipeline →](/flow)"
+            else:
+                msg = (
+                    f"Saved {_label} to your pipeline as a lead. I don't have a verified apply "
+                    "link for it yet — open the role on the source site to confirm it's live "
+                    "before applying. [View your pipeline →](/flow)"
+                )
+            response = {
+                "type": "save_job", "intent": "save_job", "message": msg,
+                "entities": {"title": title, "company": company},
+                "verification_status": link["verification_status"],
+                "verified_apply_link": decision.verified,
+            }
+            self._append_chat(user_id, "assistant", msg)
+            return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+
+        # Persistence reported no write — do NOT claim success.
+        msg = (
+            f"I couldn't save {_label} to your pipeline right now. Please try again in a moment, "
+            "or open your Applications tab to add it manually."
+        )
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "save_job_error", "intent": "save_job", "message": msg,
+            "entities": {"title": title, "company": company},
+        }
+
+    def _open_apply_link_by_ordinal(
+        self, user_id: str, ordinal: int, profile: Any,
+    ) -> dict[str, Any]:
+        """Resolve "open the apply link for the first/Nth/last job" from recent
+        search context and open it via the canonical link field.
+
+        Never raises a missing-link error: when there is no usable link it returns
+        the safe fallback CTA.
+        """
+        from src.services.job_link import resolve_job_link
+
+        matches = self._recent_search_matches(user_id)
+        if not matches:
+            msg = (
+                "I don't have a recent job list to open yet. Search for a role first, "
+                "then say 'open the apply link for the first job'."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "open_apply_link", "intent": "open_apply_link",
+                "message": msg, "apply_url": None,
+            }
+
+        idx = len(matches) - 1 if ordinal == -1 else ordinal - 1
+        if idx < 0 or idx >= len(matches):
+            n = len(matches)
+            msg = (
+                f"You have {n} job{'s' if n != 1 else ''} in your recent list. "
+                f"Pick a number between 1 and {n}."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "open_apply_link", "intent": "open_apply_link",
+                "message": msg, "apply_url": None,
+            }
+
+        job = matches[idx]
+        title = str(job.get("title") or "")
+        company = str(job.get("company") or "")
+        link = resolve_job_link(job)
+
+        if not link["link_unavailable"] and link["usable_link"]:
+            return self._handle_open_apply_link_path(
+                user_id=user_id, title=title, company=company,
+                apply_url=link["usable_link"], profile=profile,
+            )
+
+        return self._apply_link_fallback_response(
+            user_id, title, company,
+            location=str(job.get("location") or ""),
+            reason=link["reason"],
+        )
+
     def _handle_open_apply_link_path(
         self,
         user_id: str,
@@ -8999,6 +10202,27 @@ class RicoChatAPI:
             ):
                 return candidate
 
+        # BUG-19: a freshly uploaded application-confirmation screenshot is the
+        # strongest evidence of WHICH job the user applied to. When one is on
+        # record, resolve from its transcript instead of guessing from recent
+        # search context. When its title/company can't be extracted, return None
+        # so the caller asks for details rather than tracking the wrong job.
+        evidence_doc = self._get_last_uploaded_document(user_id)
+        if (
+            isinstance(evidence_doc, dict)
+            and str(evidence_doc.get("document_type") or "") == "application_confirmation"
+        ):
+            _ev_title, _ev_company = self._extract_application_meta_from_text(
+                str(evidence_doc.get("extracted_text") or "")
+            )
+            if _ev_title and _ev_company:
+                return {
+                    "title": _ev_title,
+                    "company": _ev_company,
+                    "source": "upload_evidence",
+                }
+            return None
+
         if candidates:
             return candidates[0]
 
@@ -9157,6 +10381,12 @@ class RicoChatAPI:
             }
 
         if not job or not title or not company:
+            # 2026-07-02 smoke failure: before asking "which job?", try the OCR
+            # text of the last uploaded screenshot — it often carries the job
+            # entity even when document classification failed at 0% confidence.
+            fallback = self._applied_from_screenshot_fallback(user_id, arabic)
+            if fallback is not None:
+                return fallback
             msg = (
                 "أي وظيفة تقصد؟ أرسل اسم الوظيفة أو الشركة لكي أسجلها كطلب تم تقديمه."
                 if arabic else
@@ -9224,6 +10454,630 @@ class RicoChatAPI:
             return self.memory.get_context(user_id, "recent_context") or {}
         except Exception:
             return {}
+
+    def _get_last_uploaded_document(self, user_id: str) -> dict[str, Any] | None:
+        """Return the latest uploaded image/document transcript for a user.
+
+        Tries the in-process recent_context fast-path first (works in json/local
+        mode), then the durable DB store. The durable store is essential in
+        production: ``RicoMemoryStore`` is a no-op under
+        ``RICO_MEMORY_BACKEND=postgres`` and is wiped by restarts / multiple
+        instances, so the transcript saved at upload time only survives in the DB.
+        Returns ``None`` when no transcript with text is on record.
+        """
+        try:
+            doc = (self._get_recent_context(user_id) or {}).get("last_uploaded_document")
+            if isinstance(doc, dict) and str(doc.get("extracted_text") or "").strip():
+                return doc
+        except Exception:
+            pass
+        try:
+            from src.repositories.uploaded_document_repo import get_last_uploaded_document
+            durable = get_last_uploaded_document(user_id)
+            if isinstance(durable, dict) and str(durable.get("extracted_text") or "").strip():
+                return durable
+        except Exception:
+            pass
+        return None
+
+    # ── Recent-upload document context (TASK-030) ────────────────────────────
+
+    _UPLOAD_DOC_QUERY_RE = re.compile(
+        r"\b(?:what(?:\s+(?:did|do)\s+i)?\s+upload(?:ed)?|"
+        r"what\s+(?:type|kind)\s+(?:is|of)\s+(?:the\s+)?(?:document|file)|"
+        r"(?:document|file)\s+(?:type|kind)|"
+        r"what\s+(?:is|was)\s+(?:the\s+)?(?:document|file)\s+(?:i\s+(?:just\s+)?)?upload(?:ed)?|"
+        r"the\s+(?:document|file)\s+(?:i\s+)?upload(?:ed)|"
+        r"(?:uploaded|just\s+sent)\s+(?:a\s+)?(?:document|file))\b",
+        re.IGNORECASE,
+    )
+
+    def _get_recent_upload_document_reply(self, user_id: str, message: str) -> dict[str, Any] | None:
+        """Return a document-context reply when the user explicitly asks about their last upload.
+
+        Only fires for unambiguous document-meta queries (e.g. 'what did I upload?').
+        Broader document analysis flows through the normal AI pipeline (TASK-030).
+        """
+        if not self._UPLOAD_DOC_QUERY_RE.search(message):
+            return None
+        try:
+            ctx = self._get_recent_context(user_id)
+            doc = ctx.get("last_uploaded_document")
+            if not doc:
+                return None
+            label = doc.get("display_label") or doc.get("document_type", "document").replace("_", " ").title()
+            filename = doc.get("filename") or "your file"
+            pct = int(round(doc.get("confidence", 0) * 100))
+            actions = doc.get("suggested_actions") or []
+            actions_str = ""
+            if actions:
+                labels = [a.get("label", str(a)) if isinstance(a, dict) else str(a) for a in actions[:4]]
+                actions_str = "\n\nHere's what I can help you with:\n" + "\n".join(f"- {lbl}" for lbl in labels)
+            reply = (
+                f"The last document you uploaded was **{filename}**, "
+                f"which I identified as a **{label}** ({pct}% confidence).{actions_str}\n\n"
+                "Would you like to do anything specific with it?"
+            )
+            self._append_chat(user_id, "assistant", reply)
+            return {"type": "document_context", "message": reply}
+        except Exception:
+            return None
+
+    @staticmethod
+    def is_document_action_message(message: str) -> bool:
+        """True when *message* is an uploaded-image/document action — describe /
+        extract / summarize / read this document. Cheap (regex only); used by the
+        chat service to detect document follow-ups before the AI/legacy split."""
+        return bool(_DOC_FOLLOWUP_RE.search(message or ""))
+
+    def handle_document_action(
+        self, user_id: str, message: str, language: str | None = None
+    ) -> dict[str, Any] | None:
+        """Public entry point for the document-read path.
+
+        Answers a document action ("summarize this document", "extract key
+        information", "describe this image") from the stored transcript, but only
+        when a FRESH uploaded document is on record for the user. Returns None when
+        the message is not a document action, or when no fresh transcript exists,
+        so the caller's normal routing proceeds unchanged.
+
+        Invoked by chat_service BEFORE the AI/legacy intent split so summarize and
+        extract always take the same deterministic document path — neither can be
+        misrouted into the public job-listing CTA or an AI reply that never
+        received the transcript.
+        """
+        if not self.is_document_action_message(message):
+            return None
+        if not self._get_last_uploaded_document(user_id):
+            return None
+        return self._handle_uploaded_document_followup(user_id, message, language)
+
+    def _handle_uploaded_document_followup(
+        self, user_id: str, message: str, language: str | None = None
+    ) -> dict[str, Any] | None:
+        """Answer an image/document ACTION ("describe this image", "extract key
+        information", "summarize this document") from the stored transcript.
+
+        Also handles the job-doc action buttons "Save as target job" and "Score
+        against my CV" (Finding 3) — these run first so they are never mis-routed
+        to the CV-builder or generic AI path.
+
+        Runs BEFORE onboarding / CV-builder / AI routing so these requests can
+        never be hijacked into a CV draft. The transcript is read from the durable
+        store (survives ``RICO_MEMORY_BACKEND=postgres`` / restarts / multiple
+        instances). Returns ``None`` only when the message is not such a request,
+        so normal routing handles non-document chat.
+        """
+        # Finding 3: job-doc save / score actions — handle before the describe/summarize path.
+        _job_action = self._handle_job_doc_action(user_id, message, language)
+        if _job_action is not None:
+            return _job_action
+
+        if not _DOC_FOLLOWUP_RE.search(message or ""):
+            return None
+
+        doc = self._get_last_uploaded_document(user_id)
+        text = str((doc or {}).get("extracted_text") or "").strip() if doc else ""
+        label = str((doc or {}).get("display_label") or (doc or {}).get("document_type") or "document")
+        _is_ar = (language == "ar") or bool(re.search(r"[؀-ۿ]", message or ""))
+
+        if not text:
+            # A document action with no readable transcript on record. Be honest —
+            # never hijack into a CV draft, never claim to have read something.
+            reply = (
+                "لا يوجد لدي مستند مقروء منك حتى الآن. ارفع لقطة شاشة واضحة أو ملف PDF "
+                "وسأقرأه ثم أساعدك في تلخيصه أو استخراج أهم المعلومات منه."
+                if _is_ar else
+                "I don't have a readable document from you yet. Upload a clear "
+                "screenshot or a PDF and I'll read it, then I can summarize it or "
+                "pull out the key information for you."
+            )
+            self._append_chat(user_id, "assistant", reply)
+            return {"type": "document_context", "message": reply, "success": True}
+
+        # We have the transcript → let the AI answer the specific request from it.
+        profile = self._resolve_profile(user_id)
+        augmented = (
+            f"{message}\n\n"
+            f"[Transcribed text of the {label} the user just uploaded — file "
+            f"'{doc.get('filename') or 'upload'}']\n"
+            f'"""\n{text[:4000]}\n"""\n'
+            "Answer the user's request using ONLY the transcribed text above. Do not "
+            "invent details, and do not produce a CV or resume unless the transcribed "
+            "text itself is a CV."
+        )
+        return self._answer_with_ai_fallback(
+            user_id, message, profile,
+            save_user_message=True, language=language, prompt_override=augmented,
+        )
+
+    # ── Finding 3: job-doc save / score actions ───────────────────────────────
+
+    def _handle_job_doc_action(
+        self, user_id: str, message: str, language: str | None,
+    ) -> "dict[str, Any] | None":
+        """Intercept 'Save as target job' and 'Score against my CV' when a job
+        description document is the most recently uploaded file.
+
+        Returns None when the message is not one of these actions so that normal
+        routing continues. Called before the describe/summarize path so these
+        actions are never mis-routed into a CV draft or generic AI reply.
+        """
+        is_track = bool(_TRACK_UPLOADED_APPLICATION_RE.search(message or ""))
+        is_save = bool(_JOB_DOC_SAVE_RE.search(message or ""))
+        is_score = bool(_JOB_DOC_SCORE_RE.search(message or ""))
+        if not is_track and not is_save and not is_score:
+            return None
+
+        _is_ar = (language == "ar") or bool(re.search(r"[؀-ۿ]", message or ""))
+        doc = self._get_last_uploaded_document(user_id)
+
+        # BUG-19: "Track this application" acts on a fresh application-confirmation
+        # transcript — the screenshot's own job, never a stale recent-context one.
+        # Without such a transcript, fall through to normal routing (the manual
+        # applied-status flow) instead of claiming a missing job document.
+        if is_track:
+            _doc_type = str((doc or {}).get("document_type") or "") if doc else ""
+            _doc_text = str((doc or {}).get("extracted_text") or "").strip() if doc else ""
+            if _doc_type == "application_confirmation" and _doc_text:
+                return self._track_uploaded_application(user_id, _doc_text, _is_ar)
+            if not is_save and not is_score:
+                return None
+
+        if not doc:
+            reply = (
+                "لا يوجد لدي مستند مرفوع منك حتى الآن. "
+                "ارفع وصف الوظيفة أو لقطة الشاشة أولاً."
+                if _is_ar else
+                "I don't have an uploaded job document yet. "
+                "Upload the job description or screenshot first, then I can save or score it."
+            )
+            self._append_chat(user_id, "assistant", reply)
+            return {"type": "document_context", "message": reply, "success": False}
+
+        text = str(doc.get("extracted_text") or "").strip()
+        if not text:
+            # Image uploaded but OCR hasn't run yet — guide user to extract first.
+            reply = (
+                "الصورة المرفوعة لم تُقرأ بعد. "
+                "اضغط على **'استخراج النص (OCR)'** أو **'وصف هذه الصورة'** أولاً — "
+                "بعد قراءتها سأتمكن من حفظها كوظيفة مستهدفة أو تقييمها مقابل سيرتك الذاتية."
+                if _is_ar else
+                "The uploaded image hasn't been read yet. "
+                "First click **'Extract text (OCR)'** or **'Describe this image'** — "
+                "once I've read it, I can save it as a target job or score it against your CV."
+            )
+            self._append_chat(user_id, "assistant", reply)
+            return {"type": "document_context", "message": reply, "success": False}
+
+        if is_save:
+            return self._save_uploaded_job_to_pipeline(user_id, doc, text, _is_ar)
+        return self._score_uploaded_job_against_cv(user_id, doc, text, _is_ar, language)
+
+    @staticmethod
+    def _extract_job_meta_from_text(text: str) -> "tuple[str, str]":
+        """Best-effort title and company extraction from a job description transcript."""
+        title_m = _JOB_TITLE_FROM_TEXT_RE.search(text[:1000])
+        company_m = _JOB_COMPANY_FROM_TEXT_RE.search(text[:1000])
+        title = title_m.group(1).strip() if title_m else ""
+        company = company_m.group(1).strip() if company_m else ""
+        if not title:
+            for line in text[:500].splitlines():
+                line = line.strip()
+                if 3 <= len(line) <= 80:
+                    title = line
+                    break
+        return title or "Uploaded job description", company
+
+    @staticmethod
+    def _extract_application_meta_from_text(text: str) -> "tuple[str, str]":
+        """Best-effort title and company from an application-confirmation transcript (BUG-19)."""
+        head = (text or "")[:1200]
+        title = company = ""
+        m = _APP_CONF_TITLE_COMPANY_RE.search(head)
+        if m:
+            title = (m.group("title") or m.group("title2") or "").strip()
+            company = (m.group("company") or m.group("company2") or "").strip()
+        if not title:
+            tm = _JOB_TITLE_FROM_TEXT_RE.search(head)
+            if tm:
+                title = tm.group(1).strip()
+        if not company:
+            cm = _JOB_COMPANY_FROM_TEXT_RE.search(head)
+            if cm:
+                company = cm.group(1).strip()
+        if not company:
+            cm = _APP_CONF_COMPANY_RE.search(head)
+            if cm:
+                company = (cm.group("company") or cm.group("company2") or "").strip()
+        # Trim confirmation verbiage that runs into the captured company
+        # ("Emaar Properties has been submitted" → "Emaar Properties").
+        company = re.sub(
+            r"\s+(?:has|have|was|were|is|are|successfully)\b.*$",
+            "", company, flags=re.IGNORECASE,
+        ).strip()
+        return title, company
+
+    @classmethod
+    def _extract_job_entities_from_transcript(
+        cls, text: str, max_entities: int = 3,
+    ) -> "list[dict[str, str]]":
+        """Extract (title, company) job entities from an OCR transcript.
+
+        Handles labelled fields (Position:/Company:), confirmation phrasing
+        ("application for T at C"), single-line board cards
+        ("Company — Title — Location"), and stacked card lines
+        (Title / Company / Location on adjacent lines). Conservative: an entity
+        needs BOTH a role-keyword title and a plausible company line; UI chrome
+        (Easy Apply, "3 days ago", applicant counts) is never a company.
+        """
+        head = (text or "")[:2500]
+        entities: list[dict[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+
+        def _clean(value: str) -> str:
+            value = re.sub(
+                r"\s+(?:has|have|was|were|is|are|successfully)\b.*$",
+                "", value.strip(" \t-—–·|,."), flags=re.IGNORECASE,
+            ).strip()
+            return value
+
+        def _add(title: str, company: str) -> None:
+            title, company = _clean(title), _clean(company)
+            if not (3 <= len(title) <= 80 and 2 <= len(company) <= 60):
+                return
+            if _SCREENSHOT_NOISE_LINE_RE.search(company) or _UAE_LOCATION_LINE_RE.search(company):
+                return
+            key = (title.lower(), company.lower())
+            if key in seen:
+                return
+            seen.add(key)
+            entities.append({"title": title, "company": company})
+
+        # 1) Labelled fields / confirmation phrasing (single-entity styles).
+        _lt, _lc = cls._extract_application_meta_from_text(head)
+        if _lt and _lc and _lt != "Uploaded job description":
+            _add(_lt, _lc)
+
+        # 2) Line scan for board-card layouts.
+        lines = [ln.strip() for ln in head.splitlines() if ln.strip()]
+        for idx, line in enumerate(lines):
+            if len(entities) >= max_entities:
+                break
+            segments = [s for s in _CARD_SEGMENT_SPLIT_RE.split(line) if s.strip()]
+            if len(segments) >= 2:
+                # Single-line card: "Company — Title — Dept — Location".
+                title_seg = next(
+                    (s for s in segments
+                     if _ROLE_KEYWORD_RE.search(s) and not _UAE_LOCATION_LINE_RE.search(s)),
+                    None,
+                )
+                if title_seg:
+                    company_seg = next(
+                        (s for s in segments
+                         if s is not title_seg
+                         and not _UAE_LOCATION_LINE_RE.search(s)
+                         and not _SCREENSHOT_NOISE_LINE_RE.search(s)),
+                        None,
+                    )
+                    if company_seg:
+                        _add(title_seg, company_seg)
+                continue
+            # Stacked card: a title line with the company on an adjacent line.
+            if not _ROLE_KEYWORD_RE.search(line):
+                continue
+            if _UAE_LOCATION_LINE_RE.search(line) or _SCREENSHOT_NOISE_LINE_RE.search(line):
+                continue
+            if not (2 <= len(line.split()) <= 8):
+                continue
+            for neighbor_idx in (idx + 1, idx - 1):
+                if not (0 <= neighbor_idx < len(lines)):
+                    continue
+                neighbor = lines[neighbor_idx]
+                if (
+                    _ROLE_KEYWORD_RE.search(neighbor)
+                    or _UAE_LOCATION_LINE_RE.search(neighbor)
+                    or _SCREENSHOT_NOISE_LINE_RE.search(neighbor)
+                ):
+                    continue
+                _add(line, neighbor)
+                break
+
+        return entities[:max_entities]
+
+    def _applied_from_screenshot_fallback(
+        self, user_id: str, arabic: bool,
+    ) -> "dict[str, Any] | None":
+        """Recover the applied-to job from the last uploaded transcript's OCR text.
+
+        Fires when an applied-status report could not be resolved to a job. The
+        document CLASSIFICATION verdict is deliberately ignored here — low
+        classification confidence must not invalidate successfully extracted
+        text (2026-07-02 smoke failure). CVs and identity documents are the
+        only excluded transcript types (their role lines are work history, not
+        an applied-to job). Returns None when no entity can be extracted so the
+        caller's normal clarification proceeds.
+        """
+        doc = self._get_last_uploaded_document(user_id)
+        if not isinstance(doc, dict):
+            return None
+        if str(doc.get("document_type") or "") in ("cv", "identity_document"):
+            return None
+        text = str(doc.get("extracted_text") or "").strip()
+        if not text:
+            return None
+        entities = self._extract_job_entities_from_transcript(text)
+        if not entities:
+            return None
+
+        # Arm one-click confirmation: the user already asserted they applied,
+        # so the button click must persist immediately (no second confirm turn).
+        try:
+            ctx = self._get_recent_context(user_id)
+            if len(entities) == 1:
+                ctx["_pending_confirm_apply"] = dict(entities[0])
+            else:
+                ctx["_pending_confirm_apply_options"] = [dict(e) for e in entities]
+            self._store_recent_context(user_id, ctx)
+        except Exception:
+            pass
+
+        options = [
+            {
+                "action": "confirm_mark_applied",
+                "label": (f"{e['title']} — {e['company']}" if len(entities) > 1
+                          else ("نعم، سجّل التقديم" if arabic else "Yes, I applied to this")),
+                "message": f"Mark as applied — {e['title']} at {e['company']}",
+            }
+            for e in entities
+        ]
+        if len(entities) == 1:
+            e = entities[0]
+            msg = (
+                f"قرأت من الصورة المرفوعة: **{e['title']}** في **{e['company']}**. "
+                "هل هذه هي الوظيفة التي تقدمت عليها؟ "
+                "إن لم تكن هي، أرسل اسم الوظيفة والشركة."
+                if arabic else
+                f"From your uploaded screenshot I read: **{e['title']}** at **{e['company']}**. "
+                "Is this the job you applied to? "
+                "If not, send me the job title and company name."
+            )
+        else:
+            listing = "\n".join(f"- **{e['title']}** — {e['company']}" for e in entities)
+            msg = (
+                "قرأت أكثر من وظيفة في الصورة المرفوعة — على أي وظيفة تقدمت؟\n\n"
+                f"{listing}\n\n"
+                "اختر من الأزرار، أو أرسل اسم الوظيفة والشركة إن كانت وظيفة أخرى."
+                if arabic else
+                "I read more than one job in your uploaded screenshot — which one did you apply to?\n\n"
+                f"{listing}\n\n"
+                "Pick one below, or send the job title and company if it's a different one."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "clarification",
+            "intent": "application_status_update",
+            "message": msg,
+            "options": options,
+            "next_action": "confirm_application_from_upload",
+        }
+
+    def _track_uploaded_application(
+        self, user_id: str, text: str, is_ar: bool,
+    ) -> "dict[str, Any]":
+        """Track the uploaded application-confirmation as an applied application (BUG-19)."""
+        if str(user_id or "").startswith("public:"):
+            msg = (
+                "سجّل الدخول أولاً لكي أحفظ طلباتك في Applications."
+                if is_ar else
+                "Sign in first so I can save this in Applications."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "clarification",
+                "intent": "application_status_update",
+                "message": msg,
+                "next_action": "sign_in_required",
+            }
+
+        title, company = self._extract_application_meta_from_text(text)
+        if not title or not company:
+            msg = (
+                "قرأت لقطة تأكيد التقديم، لكن لم أتمكن من تحديد اسم الوظيفة والشركة بوضوح. "
+                "أرسل لي اسم الوظيفة والشركة لكي أسجل الطلب."
+                if is_ar else
+                "I read your application confirmation, but I couldn't clearly identify "
+                "the job title and company. Send me the job title and company name and "
+                "I'll track it in Applications."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "clarification",
+                "intent": "application_status_update",
+                "message": msg,
+                "next_action": "provide_manual_application_details",
+            }
+
+        job = {"title": title, "company": company, "source": "upload_evidence"}
+        persisted, job_id = self._persist_confirmed_application_status(user_id=user_id, job=job)
+        if persisted:
+            self._store_application_status_context(user_id, job=job, job_id=job_id)
+            msg = (
+                "تم تسجيل التقديم من لقطة التأكيد. يمكنك متابعته من صفحة Applications (/applications).\n\n"
+                f"{title} - {company}"
+                if is_ar else
+                "Tracked from your confirmation — application marked as submitted. "
+                "You can follow it in Applications (/applications).\n\n"
+                f"{title} at {company}"
+            )
+            response_type = "application_status_update"
+            next_action = "view_applications"
+        else:
+            msg = (
+                "فهمت أنك قدمت على هذه الوظيفة، لكن لم أستطع حفظها الآن. حاول مرة أخرى بعد قليل."
+                if is_ar else
+                "I understand you submitted this application, but I could not save it right now. "
+                "Please try again shortly."
+            )
+            response_type = "application_status_update_failed"
+            next_action = "retry_application_status_update"
+
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": response_type,
+            "intent": "application_status_update",
+            "message": msg,
+            "job_id": job_id,
+            "job_title": title,
+            "job_company": company,
+            "job_status": "applied" if persisted else None,
+            "target_route": "/applications",
+            "next_action": next_action,
+        }
+
+    def _save_uploaded_job_to_pipeline(
+        self, user_id: str, doc: "dict[str, Any]", text: str, is_ar: bool,
+    ) -> "dict[str, Any]":
+        """Persist the uploaded job description as a lead in the user's pipeline."""
+        title, company = self._extract_job_meta_from_text(text)
+        from src.services.job_save import resolve_save_decision
+        job_dict = {"title": title, "company": company, "apply_url": "", "source_url": ""}
+        decision = resolve_save_decision(job_dict, origin="upload")
+        _label = f"**{title}**" + (f" at **{company}**" if company else "")
+
+        persisted = False
+        try:
+            from src.repositories import applications_repo
+            persisted = bool(
+                applications_repo.create(
+                    job_id=decision.save_key,
+                    title=title,
+                    company=company,
+                    url="",
+                    status="saved",
+                    source="upload",
+                    user_id=user_id,
+                )
+            )
+        except Exception as exc:
+            detail = getattr(exc, "detail", None)
+            safe = detail.get("message") if isinstance(detail, dict) else None
+            logger.warning(
+                "rico_chat: upload job save failed user=%s err=%s",
+                user_id, type(exc).__name__,
+            )
+            msg = safe or (
+                f"لم أتمكن من حفظ الوظيفة في خط الأنابيب. حاول مرة أخرى لاحقاً."
+                if is_ar else
+                f"I couldn't save {_label} to your pipeline right now. "
+                "Please try again or add it manually in your Applications tab."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {"type": "save_job_error", "intent": "save_uploaded_job", "message": msg}
+
+        if persisted:
+            msg = (
+                f"تم حفظ **{title}** في خط أنابيب الوظائف كفرصة. "
+                "لا يوجد رابط تقديم موثوق بعد — ستجده في قائمة الوظائف المحفوظة."
+                if is_ar else
+                f"Saved {_label} to your pipeline as a lead. "
+                "There's no verified apply link yet — you'll find it in your tracked jobs "
+                "and can add the link manually."
+            )
+        else:
+            msg = (
+                f"**{title}** موجود بالفعل في خط الأنابيب."
+                if is_ar else
+                f"{_label} is already in your pipeline."
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "save_job",
+            "intent": "save_uploaded_job",
+            "message": msg,
+            "entities": {"title": title, "company": company, "source": "upload"},
+        }
+
+    def _score_uploaded_job_against_cv(
+        self, user_id: str, doc: "dict[str, Any]", text: str,
+        is_ar: bool, language: "str | None",
+    ) -> "dict[str, Any]":
+        """Score the uploaded job description against the user's stored CV text."""
+        cv_text = ""
+        try:
+            from src.rico_db import RicoDB
+            _db = RicoDB()
+            bundle = _db.get_user_bundle(user_id)
+            if bundle:
+                cv_text = (bundle.get("cv_text") or "").strip()
+        except Exception:
+            pass
+
+        if not cv_text:
+            profile = self._resolve_profile(user_id)
+            cv_text = (
+                self._profile_value(profile, "cv_text")
+                or self._profile_value(profile, "pasted_cv_text")
+                or ""
+            ).strip()
+
+        if not cv_text:
+            msg = (
+                "أحتاج إلى سيرتك الذاتية أولاً. "
+                "ارفعها من ملفك الشخصي أو الصقها في المحادثة."
+                if is_ar else
+                "I need your CV to score this job against it. "
+                "Upload your CV from your profile or paste it here, then ask again."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "clarification",
+                "intent": "score_job_vs_cv",
+                "message": msg,
+                "next_action": "upload_cv",
+            }
+
+        filename = str(doc.get("filename") or "uploaded document")
+        augmented = (
+            "Score this job description against my current CV and give a detailed fit analysis.\n\n"
+            f"[Job description — '{filename}']\n\"\"\"\n{text[:3000]}\n\"\"\"\n\n"
+            f"[My current CV]\n\"\"\"\n{cv_text[:3000]}\n\"\"\"\n\n"
+            "Provide:\n"
+            "1. Overall fit score (0–100) with a brief justification.\n"
+            "2. Strong matches — skills, experience, or qualifications that align well.\n"
+            "3. Gaps — what the job requires that the CV currently lacks.\n"
+            "4. Recommendation: worth applying? What to tailor?\n"
+            "Use ONLY the texts above. Do not invent details."
+        )
+        profile = self._resolve_profile(user_id)
+        return self._answer_with_ai_fallback(
+            user_id,
+            message="Score this job description against my current CV.",
+            profile=profile,
+            save_user_message=True,
+            language=language,
+            prompt_override=augmented,
+        )
 
     # ── Letter-choice resolver (BUG-02) ──────────────────────────────────────
 
@@ -9293,20 +11147,24 @@ class RicoChatAPI:
         return {**result, "agentic_ui": updated_ui}
 
     def _resolve_letter_choice(self, user_id: str, message: str) -> str | None:
-        """Map a single-letter reply (A/B/C/D) to the nth pending option's message.
+        """Map a single-letter (A/B/C/D) or single-digit (1/2/3/4) reply to the
+        nth pending option's message.
 
         Returns the chosen option's message string, or None when:
-          - message is not exactly one letter A–D (case-insensitive),
+          - message is not exactly one letter A–D or digit 1–9,
           - no pending options are stored, or
           - the index is out of range.
 
-        Consuming the options list clears it so a second bare letter does not
+        Consuming the options list clears it so a second bare choice does not
         accidentally re-use the same menu.
         """
-        if not _LETTER_CHOICE_RE.match(message.strip()):
+        stripped = message.strip()
+        if _LETTER_CHOICE_RE.match(stripped):
+            idx = ord(stripped[0].upper()) - ord("A")   # A→0, B→1, C→2, D→3
+        elif _NUMBER_CHOICE_RE.match(stripped):
+            idx = int(stripped[0]) - 1   # "1"→0, "2"→1, "3"→2, …
+        else:
             return None
-        letter = message.strip()[0].upper()
-        idx = ord(letter) - ord("A")   # A→0, B→1, C→2, D→3
         try:
             ctx = self._get_recent_context(user_id)
             options: list = ctx.get("_pending_options") or []
@@ -9369,6 +11227,16 @@ class RicoChatAPI:
                 and pending.get("company", "").lower() == company.lower()
             ):
                 return True
+            # Screenshot-fallback disambiguation: any job the user was offered
+            # counts as explicitly confirmed once they pick it (they already
+            # asserted they applied — the button click chooses which job).
+            for offered in ctx.get("_pending_confirm_apply_options") or []:
+                if (
+                    isinstance(offered, dict)
+                    and offered.get("title", "").lower() == title.lower()
+                    and offered.get("company", "").lower() == company.lower()
+                ):
+                    return True
             # URL evidence from a prior open_apply_link or application_tracking action
             recent_app = ctx.get("recent_application") or {}
             if (
@@ -9593,22 +11461,33 @@ class RicoChatAPI:
 
         offers = by_status.get("offer", [])
         interviews = by_status.get("interview", [])
-        applied = by_status.get("applied", []) + by_status.get("opened", [])
+        applied = by_status.get("applied", [])
+        follow_up_due = by_status.get("follow_up_due", [])
+        prepared = by_status.get("prepared", [])
         saved = by_status.get("saved", [])
         rejected = by_status.get("rejected", [])
+        # "opened"/"opened_external" = user clicked through to the listing but has
+        # not yet marked the application as submitted — distinct from "applied".
+        opened = by_status.get("opened", []) + by_status.get("opened_external", [])
         follow_up = [a for a in apps if a.get("needs_follow_up")]
 
         stage_parts = []
         if offers:
-            stage_parts.append(f"{len(offers)} offer")
+            stage_parts.append(f"{len(offers)} offer{'s' if len(offers) != 1 else ''}")
         if interviews:
-            stage_parts.append(f"{len(interviews)} interview")
+            stage_parts.append(f"{len(interviews)} interview{'s' if len(interviews) != 1 else ''}")
         if applied:
             stage_parts.append(f"{len(applied)} applied")
+        if follow_up_due:
+            stage_parts.append(f"{len(follow_up_due)} follow-up due")
+        if prepared:
+            stage_parts.append(f"{len(prepared)} prepared")
         if saved:
             stage_parts.append(f"{len(saved)} saved")
         if rejected:
             stage_parts.append(f"{len(rejected)} rejected")
+        if opened:
+            stage_parts.append(f"{len(opened)} link{'s' if len(opened) != 1 else ''} opened")
         stage_line = ", ".join(stage_parts) if stage_parts else f"{total} tracked"
 
         sentences = [
@@ -9745,6 +11624,355 @@ class RicoChatAPI:
 
         self._append_chat(user_id, "assistant", msg)
         return {"type": "learning_profile_summary", "message": msg}
+
+    _PENDING_DELETE_SAVED_JOBS_KEY: str = "pending_delete_saved_jobs"
+    _PENDING_PIPELINE_RESET_KEY: str = "pending_pipeline_reset"
+
+    def _handle_pipeline_reset(self, user_id: str, message: str) -> dict[str, Any]:
+        """Detect pipeline/application-list reset intent and ask for confirmation.
+
+        Never executes immediately.  Stores a 2-minute pending state and returns
+        a confirmation prompt with three options: Archive (default) / Delete / Cancel.
+        """
+        arabic = self._is_arabic_text(message)
+        try:
+            import time
+            self.memory.set_context(user_id, self._PENDING_PIPELINE_RESET_KEY, {
+                "pending": True,
+                "expires_at": int(time.time()) + 120,
+            })
+        except Exception:
+            pass
+
+        if arabic:
+            msg = (
+                "يبدو أنك تريد إعادة ضبط سجلات طلباتك. ماذا تريد أن تفعل؟\n\n"
+                "• اكتب **أرشفة** — لأرشفة جميع الطلبات (مستحسن، يمكن التراجع عنه)\n"
+                "• اكتب **حذف** — للحذف النهائي (انتقل إلى صفحة الطلبات)\n"
+                "• اكتب **إلغاء** — لإلغاء العملية والبقاء كما هو"
+            )
+        else:
+            msg = (
+                "It looks like you want to reset your tracked applications. What would you like to do?\n\n"
+                "• Type **archive** — Archive all applications (recommended, reversible)\n"
+                "• Type **delete** — Permanently delete (manage from the Applications page)\n"
+                "• Type **cancel** — Keep everything as-is"
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "pipeline_reset_confirm",
+            "intent": "pipeline_reset",
+            "message": msg,
+            "next_action": "await_confirmation",
+        }
+
+    def _handle_pending_pipeline_reset(
+        self, user_id: str, message: str, profile: Any = None,
+    ) -> dict[str, Any] | None:
+        """Execute or cancel a pending pipeline reset based on the user's choice.
+
+        Returns a response dict if there is a live pending reset waiting for
+        confirmation, else None so the caller continues normal routing.
+        """
+        try:
+            import time
+            ctx = self.memory.get_context(user_id, self._PENDING_PIPELINE_RESET_KEY)
+            if not isinstance(ctx, dict):
+                return None
+        except Exception:
+            return None
+
+        if not ctx.get("pending") or ctx.get("expires_at", 0) < (
+            __import__("time").time()
+        ):
+            return None
+
+        def _clear():
+            try:
+                self.memory.set_context(user_id, self._PENDING_PIPELINE_RESET_KEY, {})
+            except Exception:
+                pass
+
+        arabic = self._is_arabic_text(message)
+        lower = (message or "").strip().lower()
+
+        # Archive choice (recommended default)
+        if re.search(r"\b(?:archive|أرشف|أرشفة)\b", lower, re.IGNORECASE):
+            _clear()
+            if arabic:
+                msg = (
+                    "لأرشفة جميع طلباتك، توجّه إلى **صفحة الطلبات** واستخدم خيار الأرشفة الجماعية.\n\n"
+                    "→ /applications"
+                )
+            else:
+                msg = (
+                    "To archive all your tracked applications, head to the **Applications page** "
+                    "and use the bulk-archive option there.\n\n"
+                    "→ /applications"
+                )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "pipeline_reset_archive",
+                "intent": "pipeline_reset",
+                "message": msg,
+                "target_route": "/applications",
+                "next_action": "navigate_to_page",
+            }
+
+        # Permanent delete choice
+        if re.search(r"\b(?:delete|حذف|del)\b", lower, re.IGNORECASE):
+            _clear()
+            if arabic:
+                msg = (
+                    "لحذف السجلات نهائياً، انتقل إلى **صفحة الطلبات** حيث يمكنك "
+                    "إدارة كل سجل على حدة.\n\n"
+                    "→ /applications"
+                )
+            else:
+                msg = (
+                    "To permanently remove records, go to the **Applications page** where "
+                    "you can manage each entry individually.\n\n"
+                    "→ /applications"
+                )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "pipeline_reset_delete_redirect",
+                "intent": "pipeline_reset",
+                "message": msg,
+                "target_route": "/applications",
+                "next_action": "navigate_to_page",
+            }
+
+        # Cancel / negative
+        if RicoChatAPI._is_negative(message) or re.search(
+            r"\b(?:cancel|إلغاء|ألغ)\b", lower, re.IGNORECASE
+        ):
+            _clear()
+            if arabic:
+                msg = "تم الإلغاء — لم يتغيّر شيء."
+            else:
+                msg = "Cancelled — nothing was changed."
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "pipeline_reset_cancelled",
+                "intent": "pipeline_reset",
+                "message": msg,
+            }
+
+        # Latest user intent cancels a stale, low-risk pending flow: this
+        # confirmation never executes a direct mutation either way (archive
+        # and delete both just redirect to /applications), so if the message
+        # is not an attempt to answer it and clearly starts something else,
+        # drop the pending state and let normal dispatch handle the new
+        # request instead of trapping the user in an endless
+        # archive/delete/cancel re-prompt.
+        try:
+            _new_intent = classify_intent(
+                message, has_cv_profile=self._has_cv_profile(profile)
+            )
+        except Exception:
+            _new_intent = None
+        if (
+            _new_intent is not None
+            and _new_intent.confidence >= 0.8
+            and _new_intent.legacy_intent not in (
+                None, "unknown", "nonsense", "acknowledgement", "smalltalk", "help",
+            )
+        ):
+            _clear()
+            return None
+
+        # Ambiguous — re-prompt
+        if arabic:
+            msg = (
+                "اكتب **أرشفة** أو **حذف** أو **إلغاء** للاختيار."
+            )
+        else:
+            msg = "Please type **archive**, **delete**, or **cancel** to choose."
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "pipeline_reset_confirm",
+            "intent": "pipeline_reset",
+            "message": msg,
+            "next_action": "await_confirmation",
+        }
+
+    def _intercept_unsupported_delete_mutation(
+        self, user_id: str, message: str
+    ) -> dict[str, Any] | None:
+        """Route chat-driven delete intents to the correct handler.
+
+        Saved-jobs deletes → 2-turn confirmation flow (P2-B).
+        Application-history deletes → capability_limitation (those records are protected).
+
+        Returns a response dict if the message matches a delete pattern, else None.
+        """
+        if not _UNSUPPORTED_DELETE_RE.search(message):
+            return None
+
+        arabic = self._is_arabic_text(message)
+
+        # ── Application-history: permanently blocked ──────────────────────────
+        if _DELETE_APPLICATIONS_RE.search(message) and not _DELETE_SAVED_JOBS_RE.search(message):
+            if arabic:
+                msg = (
+                    "سجلات طلباتك محمية — لا يمكن حذفها حتى من خلال المحادثة.\n\n"
+                    "يمكنك الاطلاع عليها من صفحة **Applications** ← /applications"
+                )
+            else:
+                msg = (
+                    "Application records are protected history and cannot be deleted.\n\n"
+                    "You can view them at **Applications** → /applications"
+                )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "capability_limitation",
+                "intent": "protected_application_history",
+                "message": msg,
+                "target_route": "/applications",
+                "next_action": "navigate_to_page",
+            }
+
+        # ── Saved-jobs: ask for confirmation (P2-B) ───────────────────────────
+        if _DELETE_SAVED_JOBS_RE.search(message):
+            try:
+                import time
+                self.memory.set_context(user_id, self._PENDING_DELETE_SAVED_JOBS_KEY, {
+                    "pending": True,
+                    "expires_at": int(time.time()) + 120,  # 2-minute window
+                })
+            except Exception:
+                pass
+            if arabic:
+                msg = (
+                    "هل أنت متأكد أنك تريد حذف **جميع** وظائفك المحفوظة؟\n\n"
+                    "هذا الإجراء لا يمكن التراجع عنه. اكتب **نعم** للمتابعة أو **لا** للإلغاء."
+                )
+            else:
+                msg = (
+                    "Are you sure you want to delete **all** your saved jobs?\n\n"
+                    "This cannot be undone. Type **yes** to confirm or **no** to cancel."
+                )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "delete_saved_jobs_confirm",
+                "intent": "delete_saved_jobs",
+                "message": msg,
+                "next_action": "await_confirmation",
+            }
+
+        # ── Fallback: mixed/ambiguous pattern — still block ───────────────────
+        if arabic:
+            msg = (
+                "لا أستطيع حذف الوظائف أو الطلبات من خلال المحادثة.\n\n"
+                "يمكنك إدارتها مباشرةً من:\n"
+                "• صفحة **Saved Jobs** ← /flow\n"
+                "• صفحة **Applications** ← /applications"
+            )
+        else:
+            msg = (
+                "I can't delete records through chat.\n\n"
+                "You can manage them directly from:\n"
+                "• **Saved Jobs** page → /flow\n"
+                "• **Applications** page → /applications"
+            )
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "capability_limitation",
+            "intent": "unsupported_delete_mutation",
+            "message": msg,
+            "target_route": "/flow",
+            "next_action": "navigate_to_page",
+        }
+
+    def _handle_pending_delete_saved_jobs(
+        self, user_id: str, message: str
+    ) -> dict[str, Any] | None:
+        """Execute or cancel a pending saved-jobs deletion based on user confirmation.
+
+        Returns a response dict if there is a live pending deletion waiting for
+        confirmation, else None so the caller continues normal routing.
+        """
+        try:
+            import time
+            ctx = self.memory.get_context(user_id, self._PENDING_DELETE_SAVED_JOBS_KEY)
+            if not isinstance(ctx, dict):
+                return None
+        except Exception:
+            return None
+
+        if not ctx.get("pending") or ctx.get("expires_at", 0) < (
+            __import__("time").time()
+        ):
+            return None
+
+        def _clear():
+            try:
+                self.memory.set_context(user_id, self._PENDING_DELETE_SAVED_JOBS_KEY, {})
+            except Exception:
+                pass
+
+        arabic = self._is_arabic_text(message)
+
+        if RicoChatAPI._is_affirmative(message):
+            _clear()
+            try:
+                from src.rico_db import RicoDB as _RicoDB
+                db = _RicoDB()
+                deleted = db.delete_saved_jobs(user_id)
+                logger.info("rico_chat: delete_saved_jobs executed user=%s deleted=%d", user_id, deleted)
+                if deleted > 0:
+                    if arabic:
+                        msg = f"تم حذف **{deleted}** وظيفة محفوظة بنجاح."
+                    else:
+                        msg = f"Done — **{deleted}** saved job{'s' if deleted != 1 else ''} deleted."
+                else:
+                    if arabic:
+                        msg = "لا توجد وظائف محفوظة لحذفها."
+                    else:
+                        msg = "No saved jobs found to delete."
+                self._append_chat(user_id, "assistant", msg)
+                return {
+                    "type": "delete_saved_jobs_done",
+                    "deleted_count": deleted,
+                    "message": msg,
+                }
+            except Exception as exc:
+                logger.error("rico_chat: delete_saved_jobs failed user=%s err=%s", user_id, exc)
+                if arabic:
+                    msg = "حدث خطأ أثناء الحذف. يرجى المحاولة مرة أخرى لاحقاً."
+                else:
+                    msg = "Something went wrong while deleting. Please try again later."
+                self._append_chat(user_id, "assistant", msg)
+                return {
+                    "type": "delete_saved_jobs_failed",
+                    "message": msg,
+                }
+
+        if RicoChatAPI._is_negative(message):
+            _clear()
+            if arabic:
+                msg = "تم الإلغاء — لم يتم حذف أي وظيفة محفوظة."
+            else:
+                msg = "Cancelled — no saved jobs were deleted."
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "delete_saved_jobs_cancelled",
+                "message": msg,
+            }
+
+        # Ambiguous reply — re-prompt
+        if arabic:
+            msg = "اكتب **نعم** لتأكيد الحذف أو **لا** للإلغاء."
+        else:
+            msg = "Please type **yes** to confirm deletion or **no** to cancel."
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": "delete_saved_jobs_confirm",
+            "intent": "delete_saved_jobs",
+            "message": msg,
+            "next_action": "await_confirmation",
+        }
 
     def _handle_preference_correction(
         self, user_id: str, message: str, profile: Any
@@ -10053,6 +12281,11 @@ class RicoChatAPI:
         arabic = self._is_arabic_text(message)
 
         if has_cv and target_roles:
+            _, _, status = self._resolve_profile_search_role(profile)
+            if status == "stale":
+                # Saved role is not CV-aligned — surface evidence-based options
+                # instead of asserting it (#732: no unevidenced coding role assertion)
+                return self._handle_profile_role_suggestions(profile, message)
             chosen_role = target_roles[0]
             return {
                 "type": "job_search_explicit",
@@ -10098,8 +12331,8 @@ class RicoChatAPI:
         """Handle 'keep going / كمل / continue' after CV upload or profile-building.
 
         Priority:
-        1. Profile has target_roles → search with the first one.
-        2. Profile has CV → suggest roles and ask user to choose.
+        1. Profile has target_roles AND they are CV-aligned → search with the first one.
+        2. Profile has CV (or stale target_roles) → suggest roles and ask user to choose.
         3. No context → ask one concise question.
         """
         has_cv = bool(profile and self._profile_value(profile, "cv_status") == "parsed")
@@ -10107,6 +12340,9 @@ class RicoChatAPI:
 
         if target_roles:
             chosen_role = target_roles[0]
+            # #732 — skip stale/unevidenced coding role; surface CV-derived suggestions.
+            if has_cv and not self._role_is_cv_aligned(profile, chosen_role):
+                return self._handle_profile_role_suggestions(profile, message)
             return self._classified_role_search(user_id, chosen_role, profile)
 
         if has_cv:
@@ -10639,7 +12875,14 @@ class RicoChatAPI:
         if cv_ok:
             lines.append("📄 CV uploaded and parsed")
         if target_roles:
-            lines.append(f"🎯 **Target roles:** {', '.join(target_roles[:3])}")
+            role_display = ', '.join(target_roles[:3])
+            if cv_ok and not self._role_is_cv_aligned(profile, target_roles[0]):
+                lines.append(
+                    f"🎯 **Target roles:** {role_display} "
+                    f"*(may not match your CV — say \"suggest roles from my CV\" to update)*"
+                )
+            else:
+                lines.append(f"🎯 **Target roles:** {role_display}")
         if cities:
             lines.append(f"📍 **Preferred cities:** {', '.join(cities[:3])}")
         if exp is not None:
@@ -15896,20 +18139,44 @@ class RicoChatAPI:
         }
 
     def _handle_application_tracking(self, user_id: str, intent: str = "application_tracking", message: str = "") -> dict[str, Any]:
-        """Route application tracking requests to the applications repository."""
+        """Route application tracking requests to the applications repository.
+
+        Always reads from the same canonical, user-scoped repo that
+        /applications and /flow use (src.repositories.applications_repo) so
+        chat, sidebar, and /flow never disagree on tracked-application counts.
+        On a genuine DB failure this surfaces an honest "temporarily
+        unavailable" message instead of silently substituting the legacy,
+        non-user-scoped JSON file — that fallback previously made chat show
+        different (and stale, cross-user) data than /flow.
+        """
+        arabic = self._is_arabic_text(message)
         try:
             from src.repositories.applications_repo import get_all, get_stats
             apps = get_all(user_id=user_id)
             stats = get_stats(user_id=user_id)
         except Exception:
-            # Fallback to legacy file-based store
-            from src.applications import get_applied_jobs, get_application_stats
-            apps = get_applied_jobs()
-            stats = get_application_stats()
+            logger.exception(
+                "_handle_application_tracking: canonical repo failed for user_id=%s", user_id
+            )
+            unavailable_msg = (
+                "تعذّر الوصول إلى بيانات طلباتك المحفوظة مؤقتاً. حاول مرة أخرى خلال لحظات، "
+                "أو افتح صفحة /applications مباشرة."
+                if arabic else
+                "I'm temporarily unable to reach your applications data. "
+                "Please try again in a moment, or open /applications directly."
+            )
+            return {
+                "type": "application_status",
+                "message": unavailable_msg,
+                "applications": [],
+                "stats": {},
+                "follow_up_needed": [],
+                "unavailable": True,
+            }
 
         enriched = self._enrich_applications(self._sort_applications_recent(apps))
         follow_up_needed = [a for a in enriched if a.get("needs_follow_up")]
-        msg = self._build_tracking_message(enriched, stats, arabic=self._is_arabic_text(message))
+        msg = self._build_tracking_message(enriched, stats, arabic=arabic)
         if enriched:
             latest = enriched[0]
             self._store_recent_context(
@@ -16164,6 +18431,125 @@ class RicoChatAPI:
             for r in result.get("roles", [])
         ]
 
+    def _multi_role_search_response(
+        self, user_id: str, roles: list[str], profile: Any,
+        excluded_roles: list[str] | None = None,
+        location: str = "", employment_type_filter: str = "",
+    ) -> dict[str, Any]:
+        """Handle a multi-role search request (e.g. "search for A, B and C roles").
+
+        Recognises every requested role, persists the recognised list + the
+        "do not search …" exclusion guard for this session, then searches the
+        primary (first) role immediately and offers the remaining roles as
+        one-tap alternatives so the user can re-prioritise. JSearch accepts one
+        role per query, so the rest are queued rather than fanned out in a single
+        turn — this satisfies both "search sequentially" and "ask which to
+        prioritise" without an extra round-trip before the first results.
+        """
+        excluded_roles = [r for r in (excluded_roles or []) if r]
+        roles = [r for r in roles if r]
+        if not roles:
+            # Defensive: should never happen (caller gates on roles), but never
+            # fall through to an unknown-role error for an empty list.
+            return self._classified_role_search(
+                user_id, "", profile,
+                location=location, employment_type_filter=employment_type_filter,
+            )
+
+        primary = roles[0]
+        alternates = roles[1:]
+
+        # Persist recognised roles + exclusion guard so a follow-up selection
+        # searches directly (bypassing taxonomy rejection) and so future searches
+        # this session can honour the "do not search …" constraint.
+        try:
+            ctx = self._get_recent_context(user_id)
+            ctx["multi_role_candidates"] = roles
+            ctx["excluded_roles"] = excluded_roles
+            ctx["recent_search_role"] = primary
+            self._store_recent_context(user_id, ctx)
+        except Exception:
+            pass
+
+        response = self._target_role_search_response(
+            user_id, primary, profile,
+            location=location, employment_type_filter=employment_type_filter,
+        )
+
+        # Prepend a recognition line so the user can see every role was understood
+        # (not rejected), then surface the alternates as quick re-prioritise options.
+        recognised = ", ".join(roles)
+        preamble = (
+            f"I recognised {len(roles)} target roles: {recognised}."
+        )
+        if excluded_roles:
+            preamble += (
+                f" I'll keep out {', '.join(excluded_roles)} unless you ask for coding jobs."
+            )
+        if alternates:
+            preamble += (
+                f" Starting with **{primary}** — tap another role below to prioritise it instead."
+            )
+        else:
+            preamble += f" Searching **{primary}**."
+
+        base_msg = (response.get("message") or "").strip()
+        response["message"] = f"{preamble}\n\n{base_msg}".strip() if base_msg else preamble
+        response["recognized_roles"] = roles
+        response["excluded_roles"] = excluded_roles
+        response["primary_role"] = primary
+
+        if alternates:
+            alt_options = [{"action": r, "label": f"Search {r}"} for r in alternates]
+            existing_options = response.get("options") or []
+            response["options"] = alt_options + existing_options
+            response.setdefault("next_action", "select_role_to_search")
+
+        # Note: _target_role_search_response already recorded the assistant turn;
+        # do not append again here or the turn is duplicated in chat history.
+        return response
+
+    # Occupational head-nouns that mark a phrase as a real job title even when it
+    # is absent from the taxonomy. Mirrors the leniency of multi-role parsing so a
+    # single explicit title like "Technical Product Owner" is searched, not bounced.
+    _ROLE_HEAD_NOUNS = frozenset({
+        "owner", "manager", "director", "officer", "lead", "specialist",
+        "consultant", "advisor", "adviser", "coordinator", "executive", "head",
+        "analyst", "engineer", "associate", "president", "architect", "designer",
+        "developer", "administrator", "supervisor", "controller", "planner",
+        "strategist", "scientist", "technician", "representative", "auditor",
+        "accountant", "partner", "agent", "buyer", "surveyor", "estimator",
+        "recruiter", "nurse", "teacher", "trainer", "chef", "pilot", "secretary",
+        "generalist", "expert", "principal",
+    })
+    # Prose/filler words that never sit inside a real job title — their presence
+    # means the phrase is not an explicit role (mirrors the multi-role guard).
+    _NON_TITLE_WORDS = frozenset({
+        "my", "your", "our", "their", "his", "her", "me", "i", "we", "you",
+        "cv", "resume", "profile", "experience", "that", "which", "match",
+        "matching", "based", "jobs", "job", "roles", "role", "position",
+        "positions", "please", "kindly", "anything", "something", "best",
+    })
+
+    def _is_explicit_job_title(self, role_text: str) -> bool:
+        """True when *role_text* is a plausible multi-word job title ending in a
+        known occupational noun (e.g. "Technical Product Owner").
+
+        Lets a single explicit title be searched directly instead of being bounced
+        as "I do not recognize ...", matching how multi-role parsing already
+        accepts the same titles — while still rejecting bare domain words like
+        "software" or prose like "my cv".
+        """
+        words = [w.strip(".,!?;:").lower() for w in (role_text or "").split()]
+        words = [w for w in words if w]
+        if not (2 <= len(words) <= 5):
+            return False
+        if any(w in self._NON_TITLE_WORDS for w in words):
+            return False
+        if any(ch.isdigit() for w in words for ch in w):
+            return False
+        return words[-1] in self._ROLE_HEAD_NOUNS
+
     def _classified_role_search(
         self, user_id: str, role_text: str, profile: Any,
         location: str = "", employment_type_filter: str = "",
@@ -16178,15 +18564,41 @@ class RicoChatAPI:
         profile_relevant without running them through the taxonomy classifier,
         because they are already derived from the user's CV.
         """
-        # Location guard: if role_text is just a location (UAE, Dubai, etc.) redirect to
-        # profile-based search rather than returning a misleading "I don't recognise X as a role".
+        # Location/self-reference guard: if role_text is just a location (UAE,
+        # Dubai, etc.) or a CV/profile self-reference that isn't a real job
+        # title ("my strongest profile"), redirect to profile-based search
+        # rather than returning a misleading "I don't recognise X as a role".
         role_tokens = role_text.strip().lower().split()
         _loc_fillers = {"jobs", "job", "roles", "role", "in", "the", "a", "an", "for"}
-        if role_tokens and all(t in _LOCATION_TERMS or t in _loc_fillers for t in role_tokens):
-            saved_roles = self._as_list(self._profile_value(profile, "target_roles"))
-            if saved_roles:
+        _is_location_only = bool(role_tokens) and all(
+            t in _LOCATION_TERMS or t in _loc_fillers for t in role_tokens
+        )
+        _is_profile_self_ref = bool(_CV_PROFILE_REF_RE.search(role_text)) and not _clean_role_token(role_text)
+        if _is_location_only or _is_profile_self_ref:
+            # A location-only or self-referential "role" means a profile-based
+            # search (e.g. "find UAE jobs that match my profile" extracts "UAE"
+            # as the role; "find jobs for my strongest profile" extracts "my
+            # strongest profile"). Resolve the profile role properly — never
+            # blindly search saved target_roles[0].
+            _lg_role, _lg_candidates, _lg_status = self._resolve_profile_search_role(profile)
+            if _lg_status == "ambiguous":
+                _lg_choice = self._profile_role_choice_response(_lg_candidates, role_text)
+                self._append_chat(user_id, "assistant", _lg_choice["message"])
+                return _lg_choice
+            if _lg_status in ("none", "stale"):
+                # Search-first: if the CV has a clear single-track suggestion
+                # list, search immediately with an explanatory note — or, for
+                # "none", falsely implying no CV exists via a generic "upload
+                # CV" prompt. Falls back to ask-to-choose when CV suggestions
+                # are empty or span 2+ families.
+                return self._profile_search_first_or_suggest(
+                    user_id, profile, role_text,
+                    _lg_role if _lg_status == "stale" else None,
+                    location=location, employment_type_filter=employment_type_filter,
+                )
+            if _lg_status == "single":
                 return self._target_role_search_response(
-                    user_id, str(saved_roles[0]), profile,
+                    user_id, _lg_role, profile,
                     location=location, employment_type_filter=employment_type_filter,
                 )
             response = {
@@ -16224,6 +18636,24 @@ class RicoChatAPI:
         # Roles already in the user's target_roles are always profile_relevant.
         target_roles = self._as_list(self._profile_value(profile, "target_roles"))
         role_lower = role_text.strip().lower()
+
+        # Multi-role list candidates from a prior "search for A, B and C" turn are
+        # explicit user-requested roles — when the user later taps/repeats one of
+        # them, search directly without taxonomy gating so it is never bounced back
+        # as "I do not recognize '<role>'".
+        try:
+            _mrc = {
+                str(r).strip().lower()
+                for r in (self._get_recent_context(user_id).get("multi_role_candidates") or [])
+            }
+            if role_lower in _mrc:
+                return self._target_role_search_response(
+                    user_id, role_text.strip(), profile,
+                    location=location, employment_type_filter=employment_type_filter,
+                )
+        except Exception:
+            pass
+
         if self._is_broad_manager_role(role_text):
             return self._broad_manager_clarification(user_id)
 
@@ -16253,7 +18683,7 @@ class RicoChatAPI:
 
         if classification == "profile_relevant" and canonical_role:
             return self._target_role_search_response(
-                user_id, canonical_role, profile,
+                user_id, role_text.strip(), profile,
                 location=location, employment_type_filter=employment_type_filter,
             )
 
@@ -16302,6 +18732,16 @@ class RicoChatAPI:
                 )
         except Exception:
             pass
+
+        # Multi-role parsing accepts any plausible job title without taxonomy
+        # gating; mirror that for a single explicit title so "Technical Product
+        # Owner" searches directly instead of bouncing back as "I do not recognize
+        # ..." and falling back to a stale saved target_role (e.g. "Developer").
+        if self._is_explicit_job_title(role_text):
+            return self._target_role_search_response(
+                user_id, role_text.strip(), profile,
+                location=location, employment_type_filter=employment_type_filter,
+            )
 
         target_roles = self._as_list(self._profile_value(profile, "target_roles"))
         suggestion = ""

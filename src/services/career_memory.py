@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -26,38 +26,72 @@ _MAX_ENTRIES = 200
 
 # ── Internal DB helpers ──────────────────────────────────────────────────────
 
-def _read_settings(user_id: str) -> dict:
+def _new_db() -> Any:
+    from src.rico_db import RicoDB
+
+    return RicoDB()
+
+
+def _resolve_store(user_id: str) -> Optional[Tuple[Any, str, dict]]:
+    """Resolve an external identity to the canonical Rico user UUID.
+
+    ``rico_agent_settings.user_id`` is a UUID foreign key. Callers of this
+    service use external identities such as email addresses, so writing the
+    external value directly fails with an invalid UUID error. Resolve through
+    ``get_user_bundle`` first and keep the resolved UUID paired with the
+    settings loaded from that same user row.
+    """
     try:
-        from src.rico_db import RicoDB
-        db = RicoDB()
+        db = _new_db()
         if not db.available:
-            return {}
+            logger.debug("career_memory: database unavailable")
+            return None
+
         bundle = db.get_user_bundle(user_id)
-        if bundle is None:
-            return {}
-        return dict(bundle.get("settings") or {})
+        if not bundle:
+            logger.warning("career_memory: canonical user resolution returned no row")
+            return None
+
+        db_user_id = str(bundle.get("id") or "").strip()
+        if not db_user_id:
+            logger.warning("career_memory: canonical user row is missing id")
+            return None
+
+        return db, db_user_id, dict(bundle.get("settings") or {})
     except Exception:
-        logger.debug("career_memory: read_settings failed", exc_info=True)
-        return {}
+        logger.warning("career_memory: canonical user resolution failed", exc_info=True)
+        return None
 
 
-def _write_memory(user_id: str, entries: list) -> None:
+def _read_settings(user_id: str) -> dict:
+    resolved = _resolve_store(user_id)
+    return resolved[2] if resolved else {}
+
+
+def _write_memory(db: Any, db_user_id: str, entries: list) -> bool:
     try:
-        from src.rico_db import RicoDB
-        db = RicoDB()
-        if not db.available:
-            return
-        db.upsert_settings(user_id, {_MEMORY_KEY: entries})
+        db.upsert_settings(db_user_id, {_MEMORY_KEY: entries})
+        return True
     except Exception:
-        logger.debug("career_memory: write_memory failed", exc_info=True)
+        logger.warning("career_memory: memory write failed", exc_info=True)
+        return False
 
 
 # ── Public API ──────────────────────────────────────────────────────────────
 
-def record_action(user_id: str, action: str, job: Dict[str, Any]) -> None:
-    """Record that the user took an action on a job. Fire-and-forget — never raises."""
+def record_action(user_id: str, action: str, job: Dict[str, Any]) -> bool:
+    """Record an action for a canonical user. Never raises.
+
+    Returns ``True`` only when the memory update reaches the database. Existing
+    callers may continue treating this as fire-and-forget, while logs and tests
+    can now distinguish a successful write from a skipped/failed one.
+    """
     try:
-        settings = _read_settings(user_id)
+        resolved = _resolve_store(user_id)
+        if not resolved:
+            return False
+
+        db, db_user_id, settings = resolved
         entries: list = list(settings.get(_MEMORY_KEY) or [])
         entries.append({
             "ts": int(time.time()),
@@ -66,9 +100,10 @@ def record_action(user_id: str, action: str, job: Dict[str, Any]) -> None:
             "ti": str(job.get("title") or ""),
             "jk": str(job.get("id") or job.get("job_key") or ""),
         })
-        _write_memory(user_id, entries[-_MAX_ENTRIES:])
+        return _write_memory(db, db_user_id, entries[-_MAX_ENTRIES:])
     except Exception:
-        logger.debug("career_memory: record_action failed", exc_info=True)
+        logger.warning("career_memory: record_action failed", exc_info=True)
+        return False
 
 
 def get_memory(user_id: str) -> List[Dict[str, Any]]:

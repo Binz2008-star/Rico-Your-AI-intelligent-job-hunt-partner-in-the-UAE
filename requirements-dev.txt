@@ -7,3 +7,4 @@ safety
 locust
 httpx
 pytest-asyncio
+rapidfuzz>=3.0.0

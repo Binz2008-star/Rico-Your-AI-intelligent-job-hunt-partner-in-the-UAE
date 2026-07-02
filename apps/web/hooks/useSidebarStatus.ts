@@ -48,6 +48,12 @@ const TTL_MS = 60_000;
 let cache: { at: number; data: StatusData } | null = null;
 let inflight: Promise<StatusData> | null = null;
 
+/** Drop the module-level sidebar cache so the next render fetches fresh stats.
+ *  Call this after any action that changes pipeline counts (e.g. chat save). */
+export function bustSidebarCache(): void {
+    cache = null;
+}
+
 function clampPct(v: number | null | undefined): number | null {
     if (v == null) return null;
     const n = v > 1 ? v : v * 100; // accept 0–1 or 0–100
@@ -99,12 +105,17 @@ async function loadStatus(): Promise<StatusData> {
         const offer = stats.offer ?? 0;
         const saved = stats.saved ?? 0;
         const rejected = stats.rejected ?? 0;
+        // Use the authoritative total from the backend (includes all statuses:
+        // saved, opened, prepared, applied, follow_up_due, interview, offer,
+        // rejected, decision_made) rather than summing the 5 explicit fields.
+        const total = typeof stats.total === "number" ? stats.total
+            : applied + interview + offer + saved + rejected;
         pipeline = {
             applied,
             interview,
             offer,
             saved,
-            total: applied + interview + offer + saved + rejected,
+            total,
         };
     }
 

@@ -36,11 +36,13 @@ from src.api.routers.jobs import router as jobs_router
 from src.api.routers.onboarding import router as onboarding_router
 from src.api.routers.pipeline import router as pipeline_router
 from src.api.routers.settings import router as settings_router
+from src.api.routers.email_alerts import router as email_alerts_router
 from src.api.routers.stats import router as stats_router
 from src.api.routers.subscription import router as subscription_router
 from src.api.routers.admin_subscriptions import router as admin_subscriptions_router
 from src.api.routers.job_lifecycle import router as job_lifecycle_router
 from src.api.routers.apply_queue import router as apply_queue_router
+from src.api.routers.mission import router as mission_router
 from src.api.routers.user import router as user_router
 from src.api.routers.files import router as files_router
 
@@ -177,6 +179,32 @@ def _apply_performance_indexes() -> None:
     _apply_sql_migration("028_performance_indexes", sql)
 
 
+def _apply_audit_helper_tables() -> None:
+    sql_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "migrations", "031_audit_helper_tables.sql"
+    )
+    sql_path = os.path.normpath(sql_path)
+    if not os.path.exists(sql_path):
+        logger.warning("audit_helper_tables_migration not found at %s", sql_path)
+        return
+    with open(sql_path) as f:
+        sql = f.read()
+    _apply_sql_migration("031_audit_helper_tables", sql)
+
+
+def _apply_uploaded_document_context() -> None:
+    sql_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "migrations", "032_uploaded_document_context.sql"
+    )
+    sql_path = os.path.normpath(sql_path)
+    if not os.path.exists(sql_path):
+        logger.warning("uploaded_document_context_migration not found at %s", sql_path)
+        return
+    with open(sql_path) as f:
+        sql = f.read()
+    _apply_sql_migration("032_uploaded_document_context", sql)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
@@ -195,6 +223,8 @@ async def lifespan(app: FastAPI):
 
     _check_critical_tables()
     _apply_performance_indexes()
+    _apply_audit_helper_tables()
+    _apply_uploaded_document_context()
     yield
 
 
@@ -271,19 +301,32 @@ app.include_router(applications_router)
 app.include_router(link_verification_router)
 app.include_router(stats_router)
 app.include_router(settings_router)
+app.include_router(email_alerts_router)
 app.include_router(onboarding_router)
 app.include_router(pipeline_router)
 app.include_router(subscription_router)
 app.include_router(admin_subscriptions_router)
 app.include_router(job_lifecycle_router)
 app.include_router(apply_queue_router)
+app.include_router(mission_router)
 
 
 @app.get("/health")
 @app.head("/health")
 def health_check() -> Dict[str, Any]:
-    """Health check endpoint for load balancers and monitoring."""
-    return {"status": "ok", "service": "Job Automation Platform API"}
+    """Health check endpoint for load balancers and monitoring.
+
+    Includes a job-provider health indicator (configured/degraded only — never
+    secret values) so quota/rate-limit issues are observable without log diving.
+    """
+    payload: Dict[str, Any] = {"status": "ok", "service": "Job Automation Platform API"}
+    try:
+        from src import job_providers
+        payload["job_providers"] = job_providers.provider_health()
+    except Exception:
+        # Health must never fail because of the provider indicator.
+        pass
+    return payload
 
 
 @app.get("/version")

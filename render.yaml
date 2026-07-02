@@ -47,11 +47,20 @@ services:
         value: "info@ricohunt.com"
 
       # ── Telegram (secrets) ────────────────────────────────────────────────────
+      # User-facing bot/chat — job & career notifications only.
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_CHAT_ID
         sync: false
       - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
+      # Admin/dev channel — technical alerts only (CI, deploy, errors, provider
+      # quota). Never falls back to TELEGRAM_CHAT_ID; dropped+logged if unset.
+      - key: TELEGRAM_ADMIN_CHAT_ID
+        sync: false
+      - key: TELEGRAM_DEV_CHAT_ID
+        sync: false
+      - key: TELEGRAM_ADMIN_BOT_TOKEN
         sync: false
 
       # ── AI providers (secrets) ────────────────────────────────────────────────
@@ -119,9 +128,6 @@ services:
         value: "https://ricohunt.com"
       - key: RESET_BASE_URL
         value: "https://ricohunt.com"
-      - key: DEPLOYED_AT
-        value: "2026-05-23T15:21:00Z"
-
       # ── Cookies / CORS ────────────────────────────────────────────────────────
       - key: COOKIE_SECURE
         value: "true"

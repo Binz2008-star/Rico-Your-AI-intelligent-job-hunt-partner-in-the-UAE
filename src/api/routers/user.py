@@ -11,22 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 def _fetch_display_name(email: str) -> str | None:
-    """Best-effort lookup of the user's display name from rico_users."""
+    """Best-effort lookup of the user's display name via RicoDB (same connection as profile endpoints)."""
     try:
-        from src.db import get_db_connection
-        conn = get_db_connection()
-        if not conn:
-            return None
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT name FROM rico_users WHERE email = %s LIMIT 1",
-                    (email,),
-                )
-                row = cur.fetchone()
-                return row[0] if row and row[0] else None
-        finally:
-            conn.close()
+        from src.rico_db import RicoDB
+        db = RicoDB()
+        bundle = db.get_user_bundle(email)
+        return bundle.get("name") if bundle else None
     except Exception:
         logger.debug("me_name_lookup_failed email=%s", email)
         return None

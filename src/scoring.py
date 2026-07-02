@@ -297,9 +297,29 @@ def score_job_for_user(job, user_id):
 
     # Convert to scoring format
     candidate_profile = _convert_user_profile_to_scoring_format(user_profile)
+    _attach_user_keyword_settings(candidate_profile, user_id)
 
     # Use the existing scoring logic with user's profile
     return _score_job_with_profile(job, candidate_profile)
+
+
+def _attach_user_keyword_settings(candidate_profile, user_id):
+    """Merge this user's saved include/exclude keyword settings into the scoring profile.
+
+    Callers fetch this once per scoring batch (see score_jobs_for_user), not once
+    per job, to avoid an N+1 settings-DB read when scoring large job windows.
+    """
+    try:
+        from src.services.settings_service import get_settings
+        settings = get_settings(user_id=user_id)
+    except Exception:
+        settings = {}
+    candidate_profile["exclude_keywords"] = [
+        str(kw).strip().lower() for kw in (settings.get("exclude_keywords") or []) if str(kw).strip()
+    ]
+    candidate_profile["include_keywords"] = [
+        str(kw).strip().lower() for kw in (settings.get("include_keywords") or []) if str(kw).strip()
+    ]
 
 
 def _score_job_with_profile(job, candidate_profile):
@@ -316,9 +336,12 @@ def _score_job_with_profile(job, candidate_profile):
     description = str(job.get("description", "") or "").lower()
     job_text = f"{title} {description}"
 
-    # STEP 0: ENV excludes - immediate disqualification
-    exclude_keywords_str = os.getenv("EXCLUDE_KEYWORDS", "")
-    exclude_keywords = [kw.strip().lower() for kw in exclude_keywords_str.split(",") if kw.strip()]
+    # STEP 0: Exclude keywords - immediate disqualification.
+    # This user's effective list, as resolved by settings_service.get_settings()
+    # (their own saved exclude_keywords if set, else the process-level
+    # EXCLUDE_KEYWORDS env default) — not the raw env var directly, so a user's
+    # own "hidden" promise on the Settings page is actually honored.
+    exclude_keywords = candidate_profile.get("exclude_keywords") or []
     if exclude_keywords:
         # Contextual filtering: don't let an excluded keyword that overlaps this user's
         # own target role silently block a job that matches that role (e.g. excluding
@@ -329,8 +352,8 @@ def _score_job_with_profile(job, candidate_profile):
         exclude_matches = [kw for kw in effective_excludes if kw in job_text]
         if exclude_matches:
             job["score"] = 0
-            job["score_details"] = [f"Hard reject (ENV): {exclude_matches}"]
-            job["hard_reject_reason"] = f"ENV exclude: {exclude_matches}"
+            job["score_details"] = [f"Hard reject (exclude): {exclude_matches}"]
+            job["hard_reject_reason"] = f"Exclude: {exclude_matches}"
             return 0
         if suppressed:
             score_details.append(
@@ -401,6 +424,16 @@ def _score_job_with_profile(job, candidate_profile):
 
     if matched_skills:
         score_details.extend(matched_skills)
+
+    # STEP 4.5: Include keywords - user's explicit "prioritize these" boost.
+    # Honors the Settings page promise ("Jobs matching these are prioritized")
+    # which previously had no effect on scoring at all.
+    include_keywords = candidate_profile.get("include_keywords") or []
+    include_matches = [kw for kw in include_keywords if kw in job_text]
+    if include_matches:
+        include_bonus = min(len(include_matches) * 15, 45)
+        score += include_bonus
+        score_details.append(f"Included keywords: {include_matches} (+{include_bonus})")
 
     # STEP 5: Seniority bonus
     seniority_matches = [kw for kw in seniority_keywords if kw in title]
@@ -515,8 +548,11 @@ def _get_profile_match_explanation_for_user(job, score_details, candidate_profil
 
 def score_jobs_for_user(jobs, user_id):
     """Score a list of jobs using a specific user's profile."""
+    user_profile = get_user_profile(user_id)
+    candidate_profile = _convert_user_profile_to_scoring_format(user_profile)
+    _attach_user_keyword_settings(candidate_profile, user_id)
     for job in jobs:
-        score_job_for_user(job, user_id)
+        _score_job_with_profile(job, candidate_profile)
     return jobs
 
 

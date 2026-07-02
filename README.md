@@ -34,6 +34,20 @@ See [`OWNERSHIP.md`](OWNERSHIP.md) for project ownership and governance rules.
 
 ---
 
+## Intellectual Property
+
+RicoHunt is proprietary software.
+
+Unless explicitly stated otherwise in a written agreement, all source code, AI prompts, workflows, algorithms, documentation, product concepts, designs, brand assets, and related materials are protected and owned by Roben Edwan.
+
+No part of this repository may be copied, redistributed, published, modified, used to create derivative products, or used commercially without written permission from the owner.
+
+Authorized AI tools, automation agents, and contributors may access the repository only to help build, maintain, review, test, deploy, or operate RicoHunt for the owner.
+
+See [`LICENSE`](LICENSE) and [`PROJECT_NOTICE.md`](PROJECT_NOTICE.md).
+
+---
+
 ## Public Quick Start
 
 Primary public onboarding form:
@@ -390,4 +404,6 @@ Still required for full production:
 
 ## License
 
-MIT
+Proprietary. All rights reserved.
+
+See [`LICENSE`](LICENSE). This repository is not licensed under MIT, Apache, GPL, or any other open-source license unless the owner later adds a separate written license file that explicitly says so.

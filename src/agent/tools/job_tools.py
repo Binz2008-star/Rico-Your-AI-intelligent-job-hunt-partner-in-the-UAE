@@ -69,12 +69,27 @@ def apply_job(job: Dict[str, Any]) -> ToolExecutionResult:
     in apply_to_job is bypassed. All other callers receive approval_required so Rico can
     never auto-apply without explicit user confirmation.
     """
-    if not job.get("link"):
+    # Accept the apply link under ANY of the provider field names (not just the
+    # legacy ``link`` key) so a job that carries its URL under apply_url /
+    # job_apply_link / source_url is no longer rejected. When there is genuinely
+    # no link at all, return a clear, user-safe code instead of the raw
+    # "missing required 'link' field" message.
+    _link = str(
+        job.get("link")
+        or job.get("apply_url")
+        or job.get("job_apply_link")
+        or job.get("apply_link")
+        or job.get("source_url")
+        or ""
+    ).strip()
+    if not _link:
         return ToolExecutionResult(
             success=False,
             tool_name="apply_job",
-            error="Job payload is missing required 'link' field",
+            error="no_apply_link_available",
         )
+    if not job.get("link"):
+        job = {**job, "link": _link}
     from src.services.apply_service import apply_to_job
     start = time.monotonic()
     pre_approved = bool(job.get("_approved", False))

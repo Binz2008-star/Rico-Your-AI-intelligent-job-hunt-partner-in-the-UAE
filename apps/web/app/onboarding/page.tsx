@@ -1,6 +1,6 @@
 "use client";
 
-import { fetchMe, submitOnboarding, uploadCV, type OnboardingPayload, type ParsedCV } from "@/lib/api";
+import { ApiError, fetchMe, submitOnboarding, uploadCV, type OnboardingPayload, type ParsedCV } from "@/lib/api";
 import { buildAuthHref } from "@/lib/redirect";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTranslation, type TranslationKey } from "@/lib/translations";
@@ -195,7 +195,13 @@ export default function OnboardingPage() {
   }, [router, signUpHref, t]);
 
   const handleFile = useCallback(async (file: File) => {
-    if (file.type !== "application/pdf") {
+    const ACCEPTED_TYPES = [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "image/jpeg", "image/png", "image/webp",
+    ];
+    if (!ACCEPTED_TYPES.includes(file.type)) {
       setErrorMsg(t("onboardingErrPdfOnly"));
       return;
     }
@@ -203,6 +209,12 @@ export default function OnboardingPage() {
     setErrorMsg("");
     try {
       const res = await uploadCV(file);
+      // Finding 4: reject non-CV classified files (job descriptions, images, etc.)
+      if (res.status === "classified" && res.document_type !== "cv") {
+        setErrorMsg(t("onboardingErrNotCv"));
+        setPageState("upload");
+        return;
+      }
       setParsed(res.parsed ?? null);
       const skills = res.parsed?.skills ?? [];
       if (skills.length > 0) {
@@ -217,7 +229,11 @@ export default function OnboardingPage() {
         router.replace(loginHref);
         return;
       }
-      setErrorMsg(err instanceof Error ? err.message : t("onboardingErrUpload"));
+      if (err instanceof ApiError && err.statusCode === 413) {
+        setErrorMsg(t("cmdCvTooLarge"));   // file too large — localized size message
+      } else {
+        setErrorMsg(err instanceof Error ? err.message : t("onboardingErrUpload"));
+      }
       setPageState("upload");
     }
   }, [loginHref, router, t]);
@@ -302,7 +318,7 @@ export default function OnboardingPage() {
                 onDrop={handleDrop}
                 className="w-full rounded-xl border-2 border-dashed border-border-medium p-10 text-center transition-colors hover:border-gold/40"
               >
-                <input type="file" accept="application/pdf" onChange={handleFileInput} className="hidden" id="cv-upload" />
+                <input type="file" accept="application/pdf,.doc,.docx,image/jpeg,image/png,image/webp" onChange={handleFileInput} className="hidden" id="cv-upload" />
                 <label htmlFor="cv-upload" className="flex flex-col items-center gap-3 cursor-pointer">
                   <div className="w-12 h-12 rounded-full bg-gold/10 flex items-center justify-center">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gold">
