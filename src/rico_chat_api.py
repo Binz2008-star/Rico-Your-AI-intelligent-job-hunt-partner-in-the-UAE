@@ -158,6 +158,26 @@ _DOC_FOLLOWUP_RE = re.compile(
     re.IGNORECASE,
 )
 
+# ── Arabic conversational guard (BUG #6 / BUG #5) ────────────────────────────
+# Explicit Arabic search-command triggers. If any of these appear, the message
+# is a real search request and the guard must NOT intercept it.
+#   ابحث / بحث = "search", دور عن / دوّر = "look for", ساعدني في إيجاد = "help me find"
+_ARABIC_SEARCH_TRIGGER_RE = re.compile(
+    r"(ابحث|بحث|دوّر|دور\s+عن|ساعدني\s+في\s+(?:إيجاد|ايجاد)|هل\s+(?:يوجد|في)\s+وظائف)",
+)
+# Resolved legacy intents that route to the (expensive) job-search path. Only a
+# message classified into one of these is a guard candidate — structured Arabic
+# commands (save_job, profile_update, skip, apply, …) classify elsewhere and are
+# left untouched so they reach their own handlers.
+_ARABIC_GUARD_SEARCH_INTENTS = frozenset({
+    "job_search",
+    "job_search_explicit",
+    "job_search_profile_match",
+    "job_search_multi_role",
+    "job_matches",
+    "no_results_recovery",
+})
+
 # Job-document action regexes — intercept "Save as target job" and "Score against my CV"
 # from the suggested-action buttons (document_classifier._SUGGESTED_ACTIONS["job_description"]).
 # These run inside _handle_uploaded_document_followup BEFORE _DOC_FOLLOWUP_RE so they are
@@ -7430,38 +7450,6 @@ class RicoChatAPI:
                 profile=profile,
             )
 
-        # ── Arabic conversational guard (BUG #6 / BUG #5) ─────────────────────
-        # Arabic input that contains a job-adjacent word (وظيفة, أريد, راتب) but
-        # NO explicit search-trigger keyword (ابحث, بحث, وظيف as a standalone
-        # noun) was falling through to the job-search classifier, which fired a
-        # backend search that either (a) cold-started Render and hung for 2+ min
-        # or (b) returned irrelevant results for a conversational statement.
-        #
-        # Fix: if the message is Arabic AND does NOT contain an explicit search
-        # command keyword, short-circuit to the AI conversational fallback
-        # (answer_with_ai_fallback) BEFORE the job-search classifier runs.
-        # This preserves "ابحث عن وظيفة" (explicit search) while routing
-        # "أريد وظيفة في دبي مع راتب 50000 درهم" (declarative) to conversation.
-        _ARABIC_SEARCH_TRIGGER_RE = re.compile(
-            r"\b(ابحث|بحث|دوّر|دور\s+عن|ساعدني\s+في\s+إيجاد|أيجاد\s+وظيف|\bهل\s+في\s+وظائف\b)",
-        )
-        if self._is_arabic_text(message) and not _ARABIC_SEARCH_TRIGGER_RE.search(message):
-            # Let normal structured intents (save/skip/apply/help/acknowledgement)
-            # still run through classify_intent — only intercept pure conversational
-            # Arabic that would otherwise be misread as a job-search command.
-            from src.rico_intent_router import _SEARCH_PATTERNS as _ROUTER_SEARCH_PAT
-            if not _ROUTER_SEARCH_PAT.search(message):
-                logger.info(
-                    "rico_arabic_conversational_guard user=%s msg=%r — routing to AI fallback",
-                    user_id, message,
-                )
-                return self._answer_with_ai_fallback(
-                    user_id=user_id,
-                    message=message,
-                    profile=profile,
-                    save_user_message=False,
-                )
-
         # ── Step 1: Unified intent classification ────────────────────────────
         if has_cv and self._looks_like_career_execution_request(message):
             return self._finalize(
@@ -7480,6 +7468,32 @@ class RicoChatAPI:
             "rico_intent user=%s intent=%s legacy_intent=%s confidence=%.2f source=%s",
             user_id, intent, legacy_intent, intent_result.confidence, intent_result.source,
         )
+
+        # ── Arabic conversational guard (BUG #6 / BUG #5) ─────────────────────
+        # Conversational Arabic that contains a job-adjacent word (وظيفة, أريد,
+        # راتب) but NO explicit search-trigger keyword (ابحث, بحث, دور عن) was
+        # being classified as a job search, firing a backend search that either
+        # (a) cold-started Render and hung for 2+ min or (b) returned irrelevant
+        # results for what was really a declarative statement.
+        #
+        # Fix: run classification FIRST, then intercept only when the resolved
+        # intent is search-like AND the message is Arabic AND carries no explicit
+        # search command — routing it to the AI conversational fallback instead.
+        # Running after classification is essential: structured Arabic commands
+        # ("احفظ أول وظيفة" → save_job, "تحديث ملفي" → profile_update) classify
+        # to their own intents and must reach their handlers, not this guard.
+        if legacy_intent in _ARABIC_GUARD_SEARCH_INTENTS and self._is_arabic_text(message) \
+                and not _ARABIC_SEARCH_TRIGGER_RE.search(message):
+            logger.info(
+                "rico_arabic_conversational_guard user=%s intent=%s — routing to AI fallback",
+                user_id, legacy_intent,
+            )
+            return self._answer_with_ai_fallback(
+                user_id=user_id,
+                message=message,
+                profile=profile,
+                save_user_message=False,
+            )
 
         # ── Step 2: Route by intent ──────────────────────────────────────────
 

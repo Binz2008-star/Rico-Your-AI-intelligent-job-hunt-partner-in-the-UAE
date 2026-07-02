@@ -354,15 +354,14 @@ class AgentRuntime:
         action: str, ok: bool, data: Dict[str, Any], error: Optional[str]
     ) -> str:
         if not ok:
-            # Never leak internal error codes to the chat surface.
-            # Resolve to a human-readable message; fall back to a generic
-            # one when the code is unrecognised.
-            safe_msg = AgentRuntime._ERROR_MESSAGES.get(
-                error or "",
-                "Something didn't work as expected. Please try again "
-                "or use the apply link on the job card directly.",
-            )
-            return safe_msg
+            # Map KNOWN internal error codes to user-safe messages so they
+            # never leak to the chat surface (BUG #15). Unknown/free-text
+            # errors keep the original operator-facing format — they are not
+            # internal codes and are surfaced verbatim for diagnosis.
+            code = error or ""
+            if code in AgentRuntime._ERROR_MESSAGES:
+                return AgentRuntime._ERROR_MESSAGES[code]
+            return f"Action failed: {error or 'unknown error'}"
 
         # Actions whose reply comes from tool output
         if action == "draft":
