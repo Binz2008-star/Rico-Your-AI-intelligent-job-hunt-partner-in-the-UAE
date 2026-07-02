@@ -253,14 +253,16 @@ def log_email_alert(user_id: str, job_key: str, alert_type: str = _EMAIL_ALERT_T
         conn.close()
 
 
-def emailed_within_days(user_id: str, days: int, alert_type: str = _EMAIL_ALERT_TYPE) -> bool:
-    """Return True if any alert email was logged for the user within *days*.
+def emailed_within_hours(user_id: str, hours: int, alert_type: str = _EMAIL_ALERT_TYPE) -> bool:
+    """Return True if any alert email was logged for the user within *hours*.
 
-    Backs the frequency cap: daily users skip if emailed in the last ~1 day,
-    weekly users if emailed in the last ~7 days. Fails open to False (allow
-    sending) on DB error so a transient failure never permanently mutes a user.
+    Backs the frequency cap. The window is expressed in hours (not days) and set
+    shorter than the nominal cadence so a ~24h daily / ~7d weekly cron with normal
+    jitter is not skipped when the previous send lands just inside a same-length
+    window. Fails open to False (allow sending) on DB error so a transient failure
+    never permanently mutes a user.
     """
-    if not user_id or days <= 0:
+    if not user_id or hours <= 0:
         return False
     from src.db import get_db_connection
 
@@ -274,14 +276,14 @@ def emailed_within_days(user_id: str, days: int, alert_type: str = _EMAIL_ALERT_
                 SELECT 1 FROM email_alert_log
                  WHERE user_id = %s
                    AND alert_type = %s
-                   AND sent_at >= NOW() - (%s * INTERVAL '1 day')
+                   AND sent_at >= NOW() - (%s * INTERVAL '1 hour')
                  LIMIT 1
                 """,
-                (user_id, alert_type, days),
+                (user_id, alert_type, hours),
             )
             return cur.fetchone() is not None
     except Exception:
-        logger.debug("email_notifications.emailed_within_days failed user=%s", user_id, exc_info=True)
+        logger.debug("email_notifications.emailed_within_hours failed user=%s", user_id, exc_info=True)
         return False
     finally:
         conn.close()

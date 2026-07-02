@@ -161,6 +161,32 @@ class TestUnsubscribeTokens:
 
 
 # ---------------------------------------------------------------------------
+# Frequency window helper (hours-based; fix #2)
+# ---------------------------------------------------------------------------
+
+class TestEmailedWithinHours:
+    def test_query_uses_hour_interval_and_passes_window(self):
+        conn, cur = _mock_conn([(1,)])  # a row exists → within window
+        with patch("src.db.get_db_connection", return_value=conn):
+            assert en.emailed_within_hours("u@x.com", 20) is True
+        sql, params = cur.execute.call_args.args
+        assert "INTERVAL '1 hour'" in sql
+        assert "INTERVAL '1 day'" not in sql
+        # window value is passed as a bound param (no string interpolation)
+        assert 20 in params
+
+    def test_no_recent_row_is_false(self):
+        conn, cur = _mock_conn([None])
+        with patch("src.db.get_db_connection", return_value=conn):
+            assert en.emailed_within_hours("u@x.com", 20) is False
+
+    def test_non_positive_hours_short_circuits(self):
+        with patch("src.db.get_db_connection") as gc:
+            assert en.emailed_within_hours("u@x.com", 0) is False
+            gc.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # Mailer HTML support
 # ---------------------------------------------------------------------------
 

@@ -34,12 +34,24 @@ MIN_JOBS = int(os.getenv("RICO_EMAIL_ALERT_MIN_JOBS", "3"))
 MAX_JOBS = int(os.getenv("RICO_EMAIL_ALERT_MAX_JOBS", "5"))
 DEFAULT_MIN_SCORE = int(os.getenv("RICO_EMAIL_ALERT_MIN_SCORE", "50"))
 MAX_USERS_PER_RUN = int(os.getenv("RICO_EMAIL_ALERT_MAX_USERS", "500"))
-# Frequency windows (days). A daily user is skipped if emailed within the last
-# ~1 day; a weekly user within the last ~7 days (6 to tolerate cron jitter).
-_FREQ_WINDOW_DAYS = {"daily": 1, "weekly": 6}
+# Frequency windows (hours). Deliberately shorter than the nominal cadence so a
+# ~24h (daily) or ~7d (weekly) cron with normal jitter stays eligible instead of
+# being skipped when the previous send lands just inside a same-length window.
+# Daily 20h: a 24h-spaced run is always outside it, but two runs the same day are
+# still de-duplicated. Weekly 144h (6d) leaves a day of slack under 7d.
+_FREQ_WINDOW_HOURS = {"daily": 20, "weekly": 144}
+_DEFAULT_FREQ_WINDOW_HOURS = 20
 
 _APP_BASE_URL = os.getenv("RESET_BASE_URL", "https://ricohunt.com").rstrip("/")
-_API_BASE_URL = os.getenv("RICO_PUBLIC_API_URL", _APP_BASE_URL).rstrip("/")
+# The unsubscribe endpoint lives on the FastAPI backend, but the link is clicked
+# from an email and must resolve on the public web. The frontend proxies
+# ``/proxy/*`` to the backend (see apps/web/next.config.js), so we route the link
+# through that path on the app domain by default — no onrender host leaked, works
+# with the existing rewrite. ``RICO_UNSUBSCRIBE_BASE_URL`` overrides for deploys
+# that expose the backend directly (set it to the backend origin in that case).
+_UNSUBSCRIBE_BASE_URL = os.getenv(
+    "RICO_UNSUBSCRIBE_BASE_URL", f"{_APP_BASE_URL}/proxy"
+).rstrip("/")
 
 
 def _enabled() -> bool:
@@ -153,7 +165,7 @@ def _display_name(name: Optional[str], email: str) -> str:
 def _unsubscribe_url(token: Optional[str]) -> str:
     if not token:
         return f"{_APP_BASE_URL}/settings"
-    return f"{_API_BASE_URL}/api/v1/email/unsubscribe?token={token}"
+    return f"{_UNSUBSCRIBE_BASE_URL}/api/v1/email/unsubscribe?token={token}"
 
 
 def _subject(jobs: List[Dict[str, Any]]) -> str:
@@ -261,7 +273,7 @@ def send_alert_email(
     Returns a per-user outcome dict: {status, jobs, ...}. Never raises.
     """
     from src.services.email_notifications import (
-        emailed_within_days,
+        emailed_within_hours,
         ensure_unsubscribe_token,
         log_email_alert,
     )
@@ -279,8 +291,10 @@ def send_alert_email(
         return {"status": "skipped_synthetic", "jobs": 0}
 
     # Frequency cap — skip if we already emailed within the cadence window.
-    window = _FREQ_WINDOW_DAYS.get(frequency, 1)
-    if emailed_within_days(user_id, window):
+    # Window is in hours and deliberately shorter than the nominal cadence so a
+    # ~24h/~7d cron with normal jitter is not skipped (see _FREQ_WINDOW_HOURS).
+    window_hours = _FREQ_WINDOW_HOURS.get(frequency, _DEFAULT_FREQ_WINDOW_HOURS)
+    if emailed_within_hours(user_id, window_hours):
         return {"status": "skipped_frequency", "jobs": 0}
 
     profile = get_profile(user_id)

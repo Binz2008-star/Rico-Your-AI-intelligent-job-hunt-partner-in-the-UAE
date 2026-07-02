@@ -102,7 +102,7 @@ class TestSendAlertEmail:
         """Common patch context for send_alert_email; returns an ExitStack-like list."""
         return {
             "syn": patch("src.services.profile_nudge_service._is_synthetic_email", return_value=synthetic),
-            "freq": patch("src.services.email_notifications.emailed_within_days", return_value=recent),
+            "freq": patch("src.services.email_notifications.emailed_within_hours", return_value=recent),
             "prof": patch("src.repositories.profile_repo.get_profile", return_value=profile),
             "match": patch.object(eas, "_find_matches", return_value=matches if matches is not None else []),
         }
@@ -255,6 +255,72 @@ class TestRender:
         # The recipient's own email should not be embedded in the marketing body
         assert "jane@gmail.com" not in html
         assert "curriculum" not in html.lower() and "cv text" not in html.lower()
+
+
+# ---------------------------------------------------------------------------
+# Fix #1 — unsubscribe URL resolves in production
+# ---------------------------------------------------------------------------
+
+class TestUnsubscribeUrl:
+    def test_url_routes_through_frontend_proxy(self):
+        # Default (no RICO_UNSUBSCRIBE_BASE_URL): link must go through the /proxy
+        # path the frontend rewrites to the backend, NOT the bare /api/v1 path
+        # that only exists on the backend host and 404s on the app domain.
+        url = eas._unsubscribe_url("tok")
+        assert "/proxy/api/v1/email/unsubscribe?token=tok" in url
+        # Regression guard for finding #1: the segment right after the host must
+        # be /proxy, never /api (the previously-broken form).
+        assert "ricohunt.com/api/v1/email" not in url
+        assert url.startswith(eas._APP_BASE_URL + "/proxy/")
+
+    def test_proxy_suffix_matches_registered_backend_route(self):
+        # The path proxied to the backend must equal a real backend route,
+        # otherwise the rewrite lands on a 404.
+        from src.api.routers.email_alerts import router
+
+        route_paths = {r.path for r in router.routes}
+        assert "/api/v1/email/unsubscribe" in route_paths
+        url = eas._unsubscribe_url("tok")
+        proxied_path = url.split("/proxy", 1)[1].split("?", 1)[0]
+        assert proxied_path in route_paths
+
+    def test_no_token_falls_back_to_settings(self):
+        url = eas._unsubscribe_url(None)
+        assert url.endswith("/settings")
+
+
+# ---------------------------------------------------------------------------
+# Fix #2 — daily cadence tolerates ~24h cron jitter
+# ---------------------------------------------------------------------------
+
+class TestFrequencyWindow:
+    def test_daily_window_is_under_24h(self):
+        # A 24h-spaced cron must fall OUTSIDE the window, so daily users stay
+        # eligible every run instead of being skipped every other day.
+        assert eas._FREQ_WINDOW_HOURS["daily"] < 24
+
+    def test_weekly_window_is_under_7_days(self):
+        assert eas._FREQ_WINDOW_HOURS["weekly"] < 24 * 7
+
+    def test_send_uses_daily_window_not_full_day(self):
+        captured = {}
+
+        def _fake_within_hours(user_id, hours, *a, **k):
+            captured["hours"] = hours
+            return False  # 24h-old send is outside a <24h window → eligible
+
+        with patch("src.services.profile_nudge_service._is_synthetic_email", return_value=False), \
+             patch("src.services.email_notifications.emailed_within_hours", side_effect=_fake_within_hours), \
+             patch("src.repositories.profile_repo.get_profile", return_value=object()), \
+             patch.object(eas, "_find_matches", return_value=_jobs(3)), \
+             patch("src.services.email_notifications.ensure_unsubscribe_token", return_value="tok"), \
+             patch("src.services.mailer.send_email", return_value=True), \
+             patch("src.services.email_notifications.log_email_alert"):
+            out = eas.send_alert_email(_user(freq="daily"))
+        # Called with the daily window, which must be < 24h, and the user proceeds.
+        assert captured["hours"] == eas._FREQ_WINDOW_HOURS["daily"]
+        assert captured["hours"] < 24
+        assert out["status"] == "sent"
 
 
 if __name__ == "__main__":
