@@ -76,6 +76,68 @@ class TestNormalize:
         assert job["location"] == "UAE"
 
 
+# ── apply_options alternate selection ─────────────────────────────────────────
+
+class TestApplyOptionsAlternate:
+    """alt_link prefers a trusted apply_options mirror over job_google_link."""
+
+    _GOOGLE = "https://google.com/search?q=env+manager"
+
+    def _item(self, apply_options):
+        return {
+            "job_title": "Env Manager",
+            "employer_name": "Acme",
+            "job_apply_link": "https://www.gulftalent.com/uae/job/1",  # login-walled
+            "job_google_link": self._GOOGLE,
+            "apply_options": apply_options,
+        }
+
+    def test_trusted_board_mirror_wins_over_google_link(self):
+        job = jsearch_client.normalize_item(self._item([
+            {"publisher": "LinkedIn", "apply_link": "https://www.linkedin.com/jobs/view/123", "is_direct": False},
+        ]))
+        assert job["alt_link"] == "https://www.linkedin.com/jobs/view/123"
+
+    def test_is_direct_employer_link_beats_trusted_board(self):
+        job = jsearch_client.normalize_item(self._item([
+            {"publisher": "LinkedIn", "apply_link": "https://www.linkedin.com/jobs/view/123", "is_direct": False},
+            {"publisher": "Employer", "apply_link": "https://acme-careers.example.com/apply/9", "is_direct": True},
+        ]))
+        assert job["alt_link"] == "https://acme-careers.example.com/apply/9"
+
+    def test_bad_and_google_options_fall_back_to_google_link(self):
+        job = jsearch_client.normalize_item(self._item([
+            {"publisher": "Trabajo", "apply_link": "https://ae.trabajo.org/job-1", "is_direct": False},
+            {"publisher": "Jobrapido", "apply_link": "https://ae.jobrapido.com/jobpr/2", "is_direct": False},
+            {"publisher": "Google", "apply_link": self._GOOGLE, "is_direct": False},
+        ]))
+        # No trustworthy mirror — legacy behavior preserved.
+        assert job["alt_link"] == self._GOOGLE
+
+    def test_unknown_domain_not_promoted(self):
+        job = jsearch_client.normalize_item(self._item([
+            {"publisher": "Mystery", "apply_link": "https://random-board.example.net/j/5", "is_direct": False},
+        ]))
+        assert job["alt_link"] == self._GOOGLE
+
+    def test_option_equal_to_primary_skipped(self):
+        job = jsearch_client.normalize_item(self._item([
+            {"publisher": "GulfTalent", "apply_link": "https://www.gulftalent.com/uae/job/1", "is_direct": True},
+        ]))
+        assert job["alt_link"] == self._GOOGLE
+
+    def test_junk_apply_options_tolerated(self):
+        for junk in (None, "nope", 42, [None, "x", {"publisher": "P"}, {"apply_link": ""}]):
+            job = jsearch_client.normalize_item(self._item(junk))
+            assert job["alt_link"] == self._GOOGLE
+
+    def test_absent_apply_options_keeps_google_link(self):
+        item = self._item([])
+        del item["apply_options"]
+        job = jsearch_client.normalize_item(item)
+        assert job["alt_link"] == self._GOOGLE
+
+
 # ── UAE geo filter ────────────────────────────────────────────────────────────
 
 def _payload_with(*jobs: dict) -> dict:

@@ -69,13 +69,20 @@ def resolve_job_link(job: Dict[str, Any]) -> Dict[str, Any]:
     Never raises.
     """
     try:
-        from src.services.source_quality import classify_url, is_google_intermediary
+        from src.services.source_quality import (
+            classify_url,
+            is_google_intermediary,
+            pick_best_alternate_apply_link,
+        )
     except Exception:  # pragma: no cover - defensive; source_quality is always present
         def classify_url(_u: str) -> str:  # type: ignore
             return "needs_source_verification"
 
         def is_google_intermediary(_u: str) -> bool:  # type: ignore
             return False
+
+        def pick_best_alternate_apply_link(_p: str, _o: object) -> str:  # type: ignore
+            return ""
 
     if not isinstance(job, dict):
         return {
@@ -113,6 +120,15 @@ def resolve_job_link(job: Dict[str, Any]) -> Dict[str, Any]:
         source_url = ""
     if alt_link and is_google_intermediary(alt_link):
         alt_link = ""
+
+    # Apply-options rescue: when no usable alternate survives, pull the most
+    # trustworthy mirror of the same posting from JSearch's apply_options
+    # (LinkedIn/Indeed/direct ATS). Only provider-returned URLs, trust-gated in
+    # pick_best_alternate_apply_link — never invented, so a job with no trusted
+    # mirror still falls through to the fallback CTA exactly as before.
+    # (jsearch_client.normalize_item does this at ingest; raw items land here.)
+    if not alt_link:
+        alt_link = pick_best_alternate_apply_link(apply_url, job.get("apply_options"))
 
     if apply_was_google and not apply_url:
         verification_status = "google_intermediary"

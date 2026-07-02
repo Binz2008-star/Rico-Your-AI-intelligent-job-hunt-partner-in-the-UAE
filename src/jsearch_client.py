@@ -9,7 +9,7 @@ Responsibilities (none of which existed before this module):
   * 429 / 5xx retry with exponential backoff and a hard retry cap.
   * Normalization that preserves BOTH apply and alternate links:
         apply_link  ← job_apply_link
-        alt_link    ← job_google_link
+        alt_link    ← best trusted apply_options mirror, else job_google_link
   * Structured logging that never leaks user data — only query text, cache
     hit/miss, retry count, status codes, and result counts.
 
@@ -28,6 +28,8 @@ from dataclasses import dataclass, field
 from threading import RLock
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote_plus
+
+from src.services.source_quality import pick_best_alternate_apply_link
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +103,13 @@ def normalize_item(item: Dict[str, Any]) -> Dict[str, Any]:
     straight to the employer/ATS without an intermediate page.
     """
     apply_link = str(item.get("job_apply_link") or "").strip()
-    alt_link = str(item.get("job_google_link") or "").strip()
+    # Best trusted mirror from apply_options beats the Google intermediary,
+    # which downstream (resolve_job_link) blanks anyway. Google link stays as
+    # the legacy fallback when no trusted mirror exists.
+    alt_link = (
+        pick_best_alternate_apply_link(apply_link, item.get("apply_options"))
+        or str(item.get("job_google_link") or "").strip()
+    )
     employer_url = str(item.get("employer_website") or "").strip()
     apply_is_direct = bool(item.get("job_apply_is_direct"))
     location = ", ".join(filter(None, [

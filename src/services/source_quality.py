@@ -192,6 +192,51 @@ def _matches_domain(hostname: str, domain_set: frozenset[str]) -> bool:
     return False
 
 
+# Statuses that must never be offered as the alternate apply link
+_BAD_ALTERNATE_STATUSES: frozenset[str] = frozenset(
+    {"login_required", "rate_limited", "aggregator_untrusted"}
+)
+
+
+def pick_best_alternate_apply_link(primary_url: str, apply_options: object) -> str:
+    """Return the most trustworthy alternate apply link from JSearch's
+    ``apply_options`` array, or "" when none qualifies.
+
+    JSearch returns one ``job_apply_link`` plus an ``apply_options`` list of
+    the same posting on other publishers (``{"publisher", "apply_link",
+    "is_direct"}``). When the primary link is login-walled or rate-limited,
+    one of those mirrors is often directly usable — surfacing it keeps the
+    card's fallback chain honest instead of dead-ending at "Link unavailable".
+
+    Truthfulness rules (never invent a URL):
+      * only provider-returned links are considered
+      * skip empty links, the primary itself, and Google intermediaries
+      * skip links classified login_required / rate_limited / aggregator_untrusted
+      * prefer ``is_direct`` options (employer-hosted apply page), then
+        ``live_verified`` domains (trusted ATS / major job boards)
+      * unknown domains are NOT promoted — trust must be positive
+    """
+    if not isinstance(apply_options, list):
+        return ""
+    primary = (primary_url or "").strip()
+    direct_pick = ""
+    trusted_pick = ""
+    for option in apply_options:
+        if not isinstance(option, dict):
+            continue
+        link = str(option.get("apply_link") or "").strip()
+        if not link or link == primary or is_google_intermediary(link):
+            continue
+        status = classify_url(link)
+        if status in _BAD_ALTERNATE_STATUSES:
+            continue
+        if option.get("is_direct") is True and not direct_pick:
+            direct_pick = link
+        elif status == "live_verified" and not trusted_pick:
+            trusted_pick = link
+    return direct_pick or trusted_pick
+
+
 # ---------------------------------------------------------------------------
 # Company name quality classification  (pre-existing, must not be removed)
 # ---------------------------------------------------------------------------
