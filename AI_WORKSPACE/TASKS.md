@@ -56,6 +56,43 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260702-035 — JobFromAttachmentService: first-class job entities from attachments
+
+Status: proposed (owner architecture note, 2026-07-02)
+Owner: unassigned
+Branch: —
+Issue/PR: follows merged PR #807 (`c7d8343`)
+
+#### Objective
+Replace the #807 heuristic fallback with a first-class service that turns any attachment
+transcript into a job entity and links it to the user's pipeline. Owner-sketched design:
+`JobFromAttachmentService(attachment_text, user_id)` → `extract_job_entities` (company,
+title, location — NER or stronger regex) → fuzzy/trigram match against the user's existing
+pipeline jobs → create a new `JobAd` (`source_type="screenshot"`) when no match → build a
+`JobApplication` with `confidence_source="user_confirmed_from_screenshot"` on user
+confirmation.
+
+#### Context
+- PR #807 shipped the interim behavior: `_applied_from_screenshot_fallback` +
+  `_extract_job_entities_from_transcript` in `src/rico_chat_api.py` (heuristics; one-click
+  confirm / disambiguation buttons; no pipeline matching, no new entities).
+- Known limits of the interim fix this service should close: no fuzzy match against
+  already-tracked jobs (can create near-duplicates), heuristic extraction (role-keyword
+  lists), no `source_type` provenance on the created record beyond `source="chat"`.
+
+#### Constraints
+- Keep `src/rico_safety.py` guardrails and the mark-applied confirmation gate.
+- No schema change without owner sign-off (JobAd/JobApplication entities imply migrations).
+- False-positive guard: never create an application without explicit user confirmation.
+
+#### Acceptance criteria
+- [ ] Screenshot of an already-tracked job matches the existing pipeline row (no duplicate).
+- [ ] Screenshot of a new job creates one record with screenshot provenance.
+- [ ] Multi-job screenshot produces a disambiguation step (parity with #807).
+- [ ] CV / identity transcripts never produce job entities.
+
+---
+
 ### TASK-20260702-033 — Enable personalized job-alert emails (PR-3, owner-gated)
 
 Status: in_progress (migration applied + plumbing smoke done; activation still owner-gated)
@@ -186,10 +223,10 @@ the assistant feel significantly more responsive and aligned with user intent."
 
 ### TASK-20260622-031 — PR C: strongest CV/profile selection + session-context retention
 
-Status: review
+Status: done (merged as PR #801 `b94ec1f` on 2026-07-01, deployed; branch deleted)
 Owner: Claude
-Branch: `fix/profile-context-role-selection` (pushed, PR not yet opened — no `gh` auth in session)
-Issue/PR: PR C not opened yet — open via https://github.com/Binz2008-star/Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE/pull/new/fix/profile-context-role-selection
+Branch: `fix/profile-context-role-selection` (merged + deleted)
+Issue/PR: PR #801
 
 #### Objective
 Fix the remaining production Tests 1 and 7 after the job-flow stabilization train (#727/#724/#723/#728/#729/#730).
@@ -244,15 +281,16 @@ instead of the taxonomy canonical alias.
 - [x] Read-only map where role substitution happens.
 - [x] Report the smallest safe implementation plan before large edits.
 - [x] Add regression tests for T1 and T7.
-- [ ] Open Draft PR (branch pushed; PR creation needs `gh auth login` or manual open via GitHub UI).
+- [x] Open PR (merged as #801).
 - [x] Run focused tests and related chat/profile tests — 27/27 in
       `tests/unit/test_profile_context_role_selection.py`; 143/143 across
       `test_bug17_pipeline_reset.py`, `test_bug12_arabic_search_locale.py`,
       `test_arabic_context_retention.py`, `test_apply_tracking_and_freshness.py`,
       `test_manual_application_tracking.py`, `test_lifecycle_followup.py`,
       `test_application_tracking_intelligence.py`, `test_p0_trust_fixes.py`.
-- [ ] Merge only if CI is green and scope is clean.
-- [ ] Verify `/version` and `/health` after deploy.
+- [x] Merge only if CI is green and scope is clean (merged #801, CI green).
+- [x] Verify `/version` and `/health` after deploy (verified through the #806/#807/#808
+      deploy chain — production at `a2a53b4`, health ok, 2026-07-02).
 
 #### Handoff notes
 - Latest full handoff: `AI_WORKSPACE/HANDOFFS/2026-06-22-job-flow-stabilization-complete.md`.
