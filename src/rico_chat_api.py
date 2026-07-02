@@ -2799,7 +2799,12 @@ class RicoChatAPI:
         # the frontend can offer them as a fallback, but don't present them as
         # the primary "Apply" action.
         try:
-            from src.services.source_quality import classify_url, is_google_intermediary, classify_company
+            from src.services.source_quality import (
+                classify_url,
+                is_google_intermediary,
+                classify_company,
+                pick_best_alternate_apply_link,
+            )
             if apply_url and is_google_intermediary(apply_url):
                 if not alt_link:
                     alt_link = apply_url
@@ -2814,6 +2819,14 @@ class RicoChatAPI:
                 source_url = ""
             if alt_link and is_google_intermediary(alt_link):
                 alt_link = ""
+            # Apply-options rescue: when no usable alternate survives, pull the
+            # most trustworthy mirror from JSearch's apply_options (raw items
+            # reach here without passing through jsearch_client.normalize_item,
+            # which already does this selection for normalized items).
+            if not alt_link:
+                alt_link = pick_best_alternate_apply_link(
+                    apply_url, m.get("apply_options")
+                )
             company_quality = classify_company(str(m.get("company") or ""))
         except Exception:
             verification_status = "needs_source_verification" if apply_url else "lead_needs_verification"

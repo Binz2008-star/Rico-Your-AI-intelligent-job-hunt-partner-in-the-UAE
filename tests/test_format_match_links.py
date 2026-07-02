@@ -55,3 +55,60 @@ class TestFormatMatchLinks:
             "job_apply_link": "https://a/apply", "job_google_link": "https://g/x",
         })
         assert out["source_url"] == "https://g/x"
+
+
+class TestApplyOptionsFallback:
+    """Raw items reaching _format_match get the apply_options rescue: a trusted
+    provider-returned mirror fills alt_link when the primary is login-walled or
+    rate-limited and job_google_link was (correctly) blanked."""
+
+    def test_login_walled_primary_gets_trusted_mirror_as_alt(self):
+        out = _fmt({
+            "title": "Env Manager", "company": "Global Corporation",
+            "job_apply_link": "https://www.gulftalent.com/uae/job/1",
+            "job_google_link": "https://google.com/search?q=env+manager",
+            "apply_options": [
+                {"publisher": "LinkedIn", "apply_link": "https://www.linkedin.com/jobs/view/123", "is_direct": False},
+            ],
+        })
+        assert out["verification_status"] == "login_required"
+        assert out["apply_url"] == "https://www.gulftalent.com/uae/job/1"
+        assert out["alt_link"] == "https://www.linkedin.com/jobs/view/123"
+
+    def test_rate_limited_primary_without_trusted_mirror_stays_unavailable(self):
+        # BUG-03 invariant intact: no trustworthy mirror → alt_link stays empty.
+        out = _fmt({
+            "title": "Env Manager", "company": "Compass",
+            "job_apply_link": "https://ae.trabajo.org/job-333",
+            "job_google_link": "https://google.com/search?q=jobs",
+            "apply_options": [
+                {"publisher": "Jobrapido", "apply_link": "https://ae.jobrapido.com/jobpr/9", "is_direct": False},
+                {"publisher": "Google", "apply_link": "https://google.com/search?q=jobs2", "is_direct": False},
+            ],
+        })
+        assert out["verification_status"] == "rate_limited"
+        assert out["alt_link"] == ""
+
+    def test_existing_real_alt_link_not_overridden(self):
+        out = _fmt({
+            "title": "Eng", "company": "AESG",
+            "job_apply_link": "https://www.gulftalent.com/uae/job/1",
+            "job_google_link": "https://naukrigulf.com/job/999",
+            "apply_options": [
+                {"publisher": "LinkedIn", "apply_link": "https://www.linkedin.com/jobs/view/123", "is_direct": False},
+            ],
+        })
+        # Rescue only fills an EMPTY alt_link — an existing real one is kept.
+        assert out["alt_link"] == "https://naukrigulf.com/job/999"
+
+    def test_google_primary_rescued_by_direct_mirror(self):
+        out = _fmt({
+            "title": "Eng", "company": "AESG",
+            "job_apply_link": "https://google.com/search?q=aesg+eng",
+            "apply_options": [
+                {"publisher": "Employer", "apply_link": "https://careers.aesg.com/apply/7", "is_direct": True},
+            ],
+        })
+        assert out["verification_status"] == "google_intermediary"
+        assert out["apply_url"] == ""
+        assert out["alt_link"] == "https://careers.aesg.com/apply/7"

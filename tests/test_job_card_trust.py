@@ -83,10 +83,13 @@ class TestLinkTruthfulness:
         assert result["apply_url"] == ""
 
     def test_source_url_fallback_to_alt_link(self):
+        # BUG-03 hotfix: Google intermediary links must never survive into
+        # alt_link/source_url (see test_bug03_source_url_fallback.py). This
+        # test predated the hotfix and used to expect the google link kept.
         job = _make_job(job_google_link="https://jobs.google.com/abc")
         result = _format(job)
-        # Google link goes to alt_link; apply_url cleared
-        assert result["alt_link"] == "https://jobs.google.com/abc"
+        assert result["alt_link"] == ""
+        assert result["source_url"] == ""
 
     def test_verification_status_unverified_when_no_url(self):
         """When no URL is provided, verification_status must not claim the job is live."""
