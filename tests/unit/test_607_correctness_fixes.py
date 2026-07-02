@@ -61,11 +61,25 @@ class TestApplyReplyMessage:
         msg = AgentRuntime._build_message("apply", True, {}, None)
         assert msg == _REPLY["apply"]
 
-    def test_apply_failure_path_unchanged(self):
+    def test_apply_failure_path_uses_safe_message(self):
+        """PR #813 replaced the raw 'Action failed: <code>' format with user-safe
+        messages.  Unknown internal codes must produce the generic safe fallback,
+        not expose the raw string.  The old assertion 'Action failed: engine down'
+        is intentionally replaced here — it was testing the broken behaviour."""
         from src.agent.runtime import AgentRuntime
 
         msg = AgentRuntime._build_message("apply", False, {}, "engine down")
-        assert msg == "Action failed: engine down"
+        # Must NOT use the old raw-code format
+        assert msg != "Action failed: engine down", (
+            "PR #813 replaced 'Action failed: <code>' with user-safe messages. "
+            "This test must reflect the new contract."
+        )
+        # Must NOT leak the raw error string to the user
+        assert "engine down" not in msg, (
+            f"Raw error string 'engine down' leaked into user message: {msg!r}"
+        )
+        # Must be a non-empty human-readable string
+        assert isinstance(msg, str) and len(msg) > 10
 
 
 class TestNotRelevantIdempotency:
