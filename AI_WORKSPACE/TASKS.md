@@ -56,6 +56,48 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260702-033 — Enable personalized job-alert emails (PR-3, owner-gated)
+
+Status: in_progress (migration applied + plumbing smoke done; activation still owner-gated)
+Owner: unassigned (owner-gated enable steps)
+Branch: —
+Issue/PR: follows merged PR #805 (`f64e7e0`)
+
+#### Objective
+Turn on the opt-in job-alert emails shipped inert in PR #805. No new feature code required to
+start; this is the enable + harden pass.
+
+#### Context
+- Feature merged and gated/inert. See `CURRENT_STATE.md` → "Email job alerts — PR #805".
+- Key files: `src/services/email_alert_service.py`, `src/services/email_notifications.py`,
+  `migrations/033_email_job_alerts.sql`, `.github/workflows/job-alert-emails.yml`.
+
+#### Enable steps (in order)
+- [x] Apply `migrations/033` to Neon (done 2026-07-02; both tables + idx_eal_user_sent /
+      idx_eut_token + primary/unique indexes verified).
+- [x] Plumbing smoke: `POST /api/v1/pipeline/job-alert-emails?dry_run=true` (X-Cron-Secret) →
+      `{status: ok, users: 0, sent: 0, dry_run: true}` (2026-07-02). Endpoint deployed + cron
+      auth OK + dry-run bypasses kill-switch without sending. (Optional GitHub-workflow path
+      still needs `RICO_API_URL` / `RICO_CRON_SECRET` repo secrets if run via CI instead.)
+- [ ] Match-quality smoke: opt in one test/owner account (`POST /api/v1/settings/email/opt-in`),
+      re-run the dry-run; expect `users:1` and non-zero would-send or a match-related skip reason.
+- [ ] Set `RICO_ENABLE_EMAIL_ALERTS=true` on Render.
+- [ ] Enable the daily `schedule:` in `job-alert-emails.yml`.
+- [ ] Monitor `email_alert_log` for the first sends; verify unsubscribe link end-to-end.
+
+#### Hardening (address before/with scale — review findings #3/#5)
+- [ ] #3 — cron runs live JSearch per user sequentially in a sync request: move to async/batched
+      or a queue so large opt-in volume doesn't time out or exhaust JSearch quota.
+- [ ] #5 — dedup opens a new DB connection per candidate job: fetch the user's already-sent
+      job_keys once per user instead of per-job.
+
+#### Follow-on
+- [ ] Arabic (RTL) email localization (English-only in MVP).
+
+#### Rollback
+Unset `RICO_ENABLE_EMAIL_ALERTS` (runtime off), disable the workflow schedule; migration 033 is
+additive and code tolerates the tables being present.
+
 ### TASK-20260630-032 — Rico UX Improvements: Search & Intent Flow (engineering spec, owner-authored)
 
 Status: proposed (tracking task — spin each item into its own TASK-NNN when picked up)

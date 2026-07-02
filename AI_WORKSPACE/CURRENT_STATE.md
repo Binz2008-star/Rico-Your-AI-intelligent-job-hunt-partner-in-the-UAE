@@ -1,6 +1,51 @@
 # Current State
 
-_Last updated: 2026-07-01 — `main` HEAD `ff6c690` (dashboard). BUG-9 through BUG-17 all merged
+_Last updated: 2026-07-02 — `main` HEAD `f64e7e0` (PR #805 — personalized job-alert emails,
+merged; migration 033 APPLIED to Neon + production dry-run plumbing smoke PASSED; feature
+remains gated/inert, see the "Email job alerts" section directly below). Prior line:
+2026-07-01 — `main` HEAD `ff6c690` (dashboard). BUG-9 through BUG-17 all merged_
+
+## Email job alerts — PR #805 (merged 2026-07-02, gated/inert)
+
+Opt-in personalized job-alert emails. Merged to `main` at `f64e7e0` (squash). **Nothing is
+sending** — the feature is doubly gated and unscheduled:
+
+- opt-in default **off** (`RicoAgentSettings.can_receive_email_alerts=False`)
+- kill-switch `RICO_ENABLE_EMAIL_ALERTS` default **off** (sweep returns `disabled`)
+- cron workflow `job-alert-emails.yml` is **dispatch-only** (no `schedule:`)
+- **migration 033 APPLIED** to Neon (2026-07-02, verified: both tables + `idx_eal_user_sent`
+  / `idx_eut_token` + primary/unique indexes present)
+
+**Production dry-run plumbing smoke PASSED (2026-07-02):** owner ran
+`POST /api/v1/pipeline/job-alert-emails?dry_run=true` (X-Cron-Secret) →
+`{status: ok, users: 0, sent: 0, skipped: 0, failed: 0, dry_run: true}`. Confirms endpoint
+deployed, cron-secret auth works, and dry-run bypasses the kill-switch without sending.
+`users: 0` expected (no opt-ins yet) — validates plumbing, not match quality.
+
+What shipped (16 files): `migrations/033_email_job_alerts.sql` (`email_alert_log`,
+`email_unsubscribe_tokens`); `src/services/email_notifications.py` (opt-in/out, unsubscribe
+tokens, dedup + hours-based frequency helpers); `src/services/email_alert_service.py`
+(sweep + HTML/text digest, reuses `RicoSystem.run_for_profile`, exclusions/dedup/threshold/
+frequency cap/synthetic guard/kill-switch); `src/services/mailer.py` (optional HTML);
+`RicoAgentSettings` email fields; `profile_repo.get_users_with_email_alerts`; settings
+opt-in/out/status endpoints; public `GET /api/v1/email/unsubscribe`; cron-guarded
+`POST /api/v1/pipeline/job-alert-emails?dry_run=`. Tests: `test_email_notifications.py`,
+`test_email_alert_service.py` (90 in the relevant subset, green in CI on `ac9dd52`).
+
+Pre-merge self-review (`/code-review`, Codex was quota-blocked) fixed two findings before
+enable: unsubscribe URL now resolves via the `/proxy` rewrite; daily frequency window is
+hours-based (jitter-tolerant). Deferred to PR-3 (scale-only): sync cron runs live JSearch per
+user sequentially (#3), per-job dedup opens a new DB connection (#5).
+
+**Remaining before activation (owner-gated, not done):** (1) opt in one test/owner account →
+re-run the dry-run for a match-quality smoke (`users:1`, non-zero would-send or a match-related
+skip reason) → (2) set `RICO_ENABLE_EMAIL_ALERTS=true` → enable the daily `schedule:` →
+address #3/#5 → monitor `email_alert_log`; then Arabic localization. Done so far: migration 033
+applied + dry-run plumbing smoke passed. Tracked as TASK-20260702-033 in `TASKS.md`.
+
+---
+
+_Earlier: BUG-9 through BUG-17 all merged
 and deployed since the 2026-06-30 update below (PRs #783–#797), plus two fixes landed directly
 on `main` outside the PR flow: `bd4c4f8` (T7 — verbatim role text) and `77563af` (TASK-030 —
 uploaded-document context injection). Forward focus: land `fix/profile-context-role-selection`
