@@ -47,6 +47,7 @@ class RicoAttachmentPurpose(str, Enum):
     contract_or_legalish = "contract_or_legalish"
     company_profile = "company_profile"
     public_comment = "public_comment"
+    application_evidence = "application_evidence"
     unknown_document = "unknown_document"
 
 

@@ -34,6 +34,7 @@ _PURPOSE_MAP: dict[str, RicoAttachmentPurpose] = {
     "invoice": RicoAttachmentPurpose.contract_or_legalish,
     "company_profile": RicoAttachmentPurpose.company_profile,
     "public_comment": RicoAttachmentPurpose.public_comment,
+    "application_confirmation": RicoAttachmentPurpose.application_evidence,
 }
 
 
