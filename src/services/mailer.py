@@ -15,8 +15,20 @@ from email.message import EmailMessage
 logger = logging.getLogger(__name__)
 
 
-def send_email(*, to_email: str, subject: str, body: str) -> bool:
-    """Send a plain-text email. Returns False when delivery is not configured or fails."""
+def send_email(
+    *,
+    to_email: str,
+    subject: str,
+    body: str,
+    html: str | None = None,
+) -> bool:
+    """Send an email. Returns False when delivery is not configured or fails.
+
+    ``body`` is always the plain-text part. When ``html`` is provided the message
+    is sent as multipart/alternative (plain-text + HTML) so clients that block or
+    can't render HTML still show the text fallback. Existing callers that pass no
+    ``html`` keep sending plain text unchanged.
+    """
     # Support both legacy and new SMTP config
     smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
     smtp_port = int(os.getenv("SMTP_PORT", "465"))
@@ -33,6 +45,8 @@ def send_email(*, to_email: str, subject: str, body: str) -> bool:
 
     msg = EmailMessage()
     msg.set_content(body)
+    if html:
+        msg.add_alternative(html, subtype="html")
     msg["Subject"] = subject
     msg["From"] = f"{email_from_name} <{email_from}>"
     msg["To"] = to_email

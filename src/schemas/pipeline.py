@@ -33,3 +33,12 @@ class ProfileNudgeResponse(BaseModel):
     nudges_failed: int = 0
     skipped: int = 0
     skipped_synthetic: int = 0
+
+
+class JobAlertEmailsResponse(BaseModel):
+    status: str
+    users: int = 0
+    sent: int = 0
+    skipped: int = 0
+    failed: int = 0
+    dry_run: bool = False

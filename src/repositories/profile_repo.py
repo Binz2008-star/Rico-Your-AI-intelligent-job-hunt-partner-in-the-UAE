@@ -79,6 +79,7 @@ _BOOLEAN_SETTINGS = {
     "can_send_follow_up_reminders",
     "can_create_weekly_report",
     "can_receive_telegram_notifications",
+    "can_receive_email_alerts",
 }
 
 
@@ -131,6 +132,8 @@ def _bundle_to_profile(bundle: dict[str, Any]) -> RicoProfile:
         can_send_follow_up_reminders=sdata.get("can_send_follow_up_reminders", True),
         can_create_weekly_report=sdata.get("can_create_weekly_report", True),
         can_receive_telegram_notifications=sdata.get("can_receive_telegram_notifications", False),
+        can_receive_email_alerts=sdata.get("can_receive_email_alerts", False),
+        email_alert_frequency=sdata.get("email_alert_frequency", "daily"),
     )
 
     # Build profile with proper type conversion
@@ -902,6 +905,49 @@ def get_users_with_telegram_alerts() -> list[dict[str, Any]]:
             conn.close()
     except Exception:
         logger.exception("profile_repo: get_users_with_telegram_alerts failed")
+        return []
+
+
+# ============================================================================
+# Email alert roster
+# ============================================================================
+
+def get_users_with_email_alerts() -> list[dict[str, Any]]:
+    """Return all users who have opted in to email job alerts.
+
+    A user is opted-in when rico_agent_settings.settings->>'can_receive_email_alerts'
+    is true AND they have a non-empty email. Returns a list of plain dicts with
+    keys: external_user_id, name, email, email_alert_frequency. Returns [] on DB
+    unavailability. Never raises.
+    """
+    db = _db()
+    if not db:
+        return []
+    try:
+        conn = db.connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT u.external_user_id,
+                           u.name,
+                           u.email,
+                           COALESCE(s.settings->>'email_alert_frequency', 'daily')
+                               AS email_alert_frequency
+                      FROM rico_users u
+                      JOIN rico_agent_settings s ON s.user_id = u.id
+                     WHERE (s.settings->>'can_receive_email_alerts')::boolean IS TRUE
+                       AND u.email IS NOT NULL
+                       AND u.email <> ''
+                     ORDER BY u.updated_at DESC
+                    """
+                )
+                # RicoDB.connect() uses RealDictCursor — rows are dicts.
+                return [dict(row) for row in cur.fetchall()]
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("profile_repo: get_users_with_email_alerts failed")
         return []
 
 

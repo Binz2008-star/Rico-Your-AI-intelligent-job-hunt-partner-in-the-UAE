@@ -36,6 +36,7 @@ from src.api.routers.jobs import router as jobs_router
 from src.api.routers.onboarding import router as onboarding_router
 from src.api.routers.pipeline import router as pipeline_router
 from src.api.routers.settings import router as settings_router
+from src.api.routers.email_alerts import router as email_alerts_router
 from src.api.routers.stats import router as stats_router
 from src.api.routers.subscription import router as subscription_router
 from src.api.routers.admin_subscriptions import router as admin_subscriptions_router
@@ -300,6 +301,7 @@ app.include_router(applications_router)
 app.include_router(link_verification_router)
 app.include_router(stats_router)
 app.include_router(settings_router)
+app.include_router(email_alerts_router)
 app.include_router(onboarding_router)
 app.include_router(pipeline_router)
 app.include_router(subscription_router)
