@@ -16,6 +16,7 @@ const PURPOSE_LABELS: Record<string, string> = {
     contract_or_legalish: "Contract / Legal Document",
     company_profile: "Company Profile",
     public_comment: "Public Comment",
+    application_evidence: "Application Confirmation",
     unknown_document: "Unrecognized Document",
 };
 

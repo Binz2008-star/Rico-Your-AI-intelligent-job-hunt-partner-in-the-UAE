@@ -162,6 +162,17 @@ _SIGNALS: dict[str, list[str]] = {
         "place of birth", "issuing authority", "رقم جواز السفر",
         "الهوية الإماراتية", "رقم بطاقة الهوية",
     ],
+    "application_confirmation": [
+        "application submitted", "application sent", "application received",
+        "application has been submitted", "application was sent", "application was submitted",
+        "we have received your application", "we've received your application",
+        "thank you for applying", "thanks for applying", "thank you for your application",
+        "successfully applied", "your application to", "your application for",
+        "application is under review", "application confirmation",
+        "application id", "application reference", "application number",
+        "your application was sent to",
+        "تم إرسال طلبك", "تم استلام طلبك", "تم تقديم طلبك", "شكراً لتقديمك",
+    ],
     "company_profile": [
         "company profile", "corporate profile", "company overview", "corporate overview",
         "our mission", "our vision", "our values", "our culture",
@@ -183,6 +194,7 @@ _DISPLAY_LABELS: dict[str, str] = {
     "certificate":       "Certificate / License",
     "identity_document": "Identity Document",
     "company_profile":   "Company Profile",
+    "application_confirmation": "Application Confirmation",
     "invoice":           "Invoice",
     "image":             "Image",
     "no_text":           "Unreadable / Image-only Document",
@@ -248,6 +260,16 @@ _SUGGESTED_ACTIONS: dict[str, list[dict[str, str]]] = {
     ],
     "identity_document": [],  # Blocked for security — no actions offered
     "no_text": [],            # No readable text — router returns a needs-text message
+    # BUG-19: a job-application confirmation (screenshot/email) is application
+    # EVIDENCE — offer tracking, never generic "Summarize" dead-ends.
+    "application_confirmation": [
+        {"label": "Track this application",   "kind": "chat_continue",
+         "message": "Track this application in my pipeline."},
+        {"label": "View my applications",     "kind": "chat_continue",
+         "message": "Show my applications."},
+        {"label": "Set a follow-up reminder", "kind": "chat_continue",
+         "message": "Set a follow-up reminder for this application."},
+    ],
     "company_profile": [
         {"label": "Summarize",              "kind": "chat_continue",
          "message": "Summarize this company profile."},
@@ -441,6 +463,21 @@ class DocumentClassifier:
         ):
             top_type = "identity_document"
             confidence = 0.92
+
+        # Hard override (BUG-19): application confirmations are short, highly
+        # specific texts ("your application was sent to …", "thank you for
+        # applying"). Two or more distinct confirmation signals in a non-CV text
+        # decisively identify application evidence — the ratio score alone stays
+        # too low against larger signal banks (e.g. job_description).
+        _conf_signals = _SIGNALS["application_confirmation"]
+        _conf_hits = sum(1 for s in _conf_signals if s in lower)
+        if (
+            _conf_hits >= 2
+            and top_type != "identity_document"
+            and raw_scores.get("cv", 0) < 0.15
+        ):
+            top_type = "application_confirmation"
+            confidence = 0.9
 
         non_zero = {k: round(v, 3) for k, v in raw_scores.items() if v > 0}
         return self._make(

@@ -186,6 +186,34 @@ _JOB_COMPANY_FROM_TEXT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# BUG-19: application-confirmation evidence — the "Track this application" button
+# from document_classifier._SUGGESTED_ACTIONS["application_confirmation"] plus close
+# natural variants. Intercepted in _handle_job_doc_action so a confirmation
+# screenshot is tracked from ITS OWN transcript, never a stale recent-context job.
+_TRACK_UPLOADED_APPLICATION_RE = re.compile(
+    r"\b(?:track|log|record)\s+this\s+application\b"
+    r"|\b(?:add|save)\s+this\s+application\b.{0,30}\b(?:pipeline|applications?)\b",
+    re.IGNORECASE,
+)
+# Title + company from confirmation phrasing: "application for X at Y",
+# "applied to the X position at Y", "applying for X at Y".
+_APP_CONF_TITLE_COMPANY_RE = re.compile(
+    r"(?:application|applied|applying)\s+(?:for|to)\s+(?:the\s+)?"
+    r"(?P<title>[^\n,.:]{3,80}?)\s+(?:position|role|job)\s+at\s+"
+    r"(?P<company>[^\n,.!:]{2,60})"
+    r"|(?:application|applied|applying)\s+(?:for|to)\s+(?:the\s+)?"
+    r"(?P<title2>[^\n,.:]{3,80}?)\s+at\s+(?P<company2>[^\n,.!:]{2,60})",
+    re.IGNORECASE,
+)
+# Company-only confirmation phrasing: "your application was sent to Y",
+# "thank you for applying to Y".
+_APP_CONF_COMPANY_RE = re.compile(
+    r"application\s+(?:was\s+|has\s+been\s+)?(?:sent|submitted)\s+to\s+"
+    r"(?P<company>[^\n,.!:]{2,60})"
+    r"|thank\s+you\s+for\s+applying\s+(?:to|at)\s+(?P<company2>[^\n,.!:]{2,60})",
+    re.IGNORECASE,
+)
+
 # Strings that must never appear inside a deterministic CV draft body.
 # Used as a post-generation guard in _handle_cv_generate_from_profile.
 _CV_PLACEHOLDER_PATTERNS = re.compile(
@@ -10143,6 +10171,27 @@ class RicoChatAPI:
             ):
                 return candidate
 
+        # BUG-19: a freshly uploaded application-confirmation screenshot is the
+        # strongest evidence of WHICH job the user applied to. When one is on
+        # record, resolve from its transcript instead of guessing from recent
+        # search context. When its title/company can't be extracted, return None
+        # so the caller asks for details rather than tracking the wrong job.
+        evidence_doc = self._get_last_uploaded_document(user_id)
+        if (
+            isinstance(evidence_doc, dict)
+            and str(evidence_doc.get("document_type") or "") == "application_confirmation"
+        ):
+            _ev_title, _ev_company = self._extract_application_meta_from_text(
+                str(evidence_doc.get("extracted_text") or "")
+            )
+            if _ev_title and _ev_company:
+                return {
+                    "title": _ev_title,
+                    "company": _ev_company,
+                    "source": "upload_evidence",
+                }
+            return None
+
         if candidates:
             return candidates[0]
 
@@ -10537,13 +10586,27 @@ class RicoChatAPI:
         routing continues. Called before the describe/summarize path so these
         actions are never mis-routed into a CV draft or generic AI reply.
         """
+        is_track = bool(_TRACK_UPLOADED_APPLICATION_RE.search(message or ""))
         is_save = bool(_JOB_DOC_SAVE_RE.search(message or ""))
         is_score = bool(_JOB_DOC_SCORE_RE.search(message or ""))
-        if not is_save and not is_score:
+        if not is_track and not is_save and not is_score:
             return None
 
         _is_ar = (language == "ar") or bool(re.search(r"[؀-ۿ]", message or ""))
         doc = self._get_last_uploaded_document(user_id)
+
+        # BUG-19: "Track this application" acts on a fresh application-confirmation
+        # transcript — the screenshot's own job, never a stale recent-context one.
+        # Without such a transcript, fall through to normal routing (the manual
+        # applied-status flow) instead of claiming a missing job document.
+        if is_track:
+            _doc_type = str((doc or {}).get("document_type") or "") if doc else ""
+            _doc_text = str((doc or {}).get("extracted_text") or "").strip() if doc else ""
+            if _doc_type == "application_confirmation" and _doc_text:
+                return self._track_uploaded_application(user_id, _doc_text, _is_ar)
+            if not is_save and not is_score:
+                return None
+
         if not doc:
             reply = (
                 "لا يوجد لدي مستند مرفوع منك حتى الآن. "
@@ -10588,6 +10651,108 @@ class RicoChatAPI:
                     title = line
                     break
         return title or "Uploaded job description", company
+
+    @staticmethod
+    def _extract_application_meta_from_text(text: str) -> "tuple[str, str]":
+        """Best-effort title and company from an application-confirmation transcript (BUG-19)."""
+        head = (text or "")[:1200]
+        title = company = ""
+        m = _APP_CONF_TITLE_COMPANY_RE.search(head)
+        if m:
+            title = (m.group("title") or m.group("title2") or "").strip()
+            company = (m.group("company") or m.group("company2") or "").strip()
+        if not title:
+            tm = _JOB_TITLE_FROM_TEXT_RE.search(head)
+            if tm:
+                title = tm.group(1).strip()
+        if not company:
+            cm = _JOB_COMPANY_FROM_TEXT_RE.search(head)
+            if cm:
+                company = cm.group(1).strip()
+        if not company:
+            cm = _APP_CONF_COMPANY_RE.search(head)
+            if cm:
+                company = (cm.group("company") or cm.group("company2") or "").strip()
+        # Trim confirmation verbiage that runs into the captured company
+        # ("Emaar Properties has been submitted" → "Emaar Properties").
+        company = re.sub(
+            r"\s+(?:has|have|was|were|is|are|successfully)\b.*$",
+            "", company, flags=re.IGNORECASE,
+        ).strip()
+        return title, company
+
+    def _track_uploaded_application(
+        self, user_id: str, text: str, is_ar: bool,
+    ) -> "dict[str, Any]":
+        """Track the uploaded application-confirmation as an applied application (BUG-19)."""
+        if str(user_id or "").startswith("public:"):
+            msg = (
+                "سجّل الدخول أولاً لكي أحفظ طلباتك في Applications."
+                if is_ar else
+                "Sign in first so I can save this in Applications."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "clarification",
+                "intent": "application_status_update",
+                "message": msg,
+                "next_action": "sign_in_required",
+            }
+
+        title, company = self._extract_application_meta_from_text(text)
+        if not title or not company:
+            msg = (
+                "قرأت لقطة تأكيد التقديم، لكن لم أتمكن من تحديد اسم الوظيفة والشركة بوضوح. "
+                "أرسل لي اسم الوظيفة والشركة لكي أسجل الطلب."
+                if is_ar else
+                "I read your application confirmation, but I couldn't clearly identify "
+                "the job title and company. Send me the job title and company name and "
+                "I'll track it in Applications."
+            )
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "clarification",
+                "intent": "application_status_update",
+                "message": msg,
+                "next_action": "provide_manual_application_details",
+            }
+
+        job = {"title": title, "company": company, "source": "upload_evidence"}
+        persisted, job_id = self._persist_confirmed_application_status(user_id=user_id, job=job)
+        if persisted:
+            self._store_application_status_context(user_id, job=job, job_id=job_id)
+            msg = (
+                "تم تسجيل التقديم من لقطة التأكيد. يمكنك متابعته من صفحة Applications (/applications).\n\n"
+                f"{title} - {company}"
+                if is_ar else
+                "Tracked from your confirmation — application marked as submitted. "
+                "You can follow it in Applications (/applications).\n\n"
+                f"{title} at {company}"
+            )
+            response_type = "application_status_update"
+            next_action = "view_applications"
+        else:
+            msg = (
+                "فهمت أنك قدمت على هذه الوظيفة، لكن لم أستطع حفظها الآن. حاول مرة أخرى بعد قليل."
+                if is_ar else
+                "I understand you submitted this application, but I could not save it right now. "
+                "Please try again shortly."
+            )
+            response_type = "application_status_update_failed"
+            next_action = "retry_application_status_update"
+
+        self._append_chat(user_id, "assistant", msg)
+        return {
+            "type": response_type,
+            "intent": "application_status_update",
+            "message": msg,
+            "job_id": job_id,
+            "job_title": title,
+            "job_company": company,
+            "job_status": "applied" if persisted else None,
+            "target_route": "/applications",
+            "next_action": next_action,
+        }
 
     def _save_uploaded_job_to_pipeline(
         self, user_id: str, doc: "dict[str, Any]", text: str, is_ar: bool,
