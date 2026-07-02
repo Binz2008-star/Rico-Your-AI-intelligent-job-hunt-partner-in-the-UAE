@@ -67,6 +67,25 @@ class TestApplyReplyMessage:
         msg = AgentRuntime._build_message("apply", False, {}, "engine down")
         assert msg == "Action failed: engine down"
 
+    def test_known_internal_error_code_is_mapped_not_leaked(self):
+        # QA BUG #15: raw internal codes like no_apply_link_available must never
+        # reach the chat UI — they are mapped to a user-safe message.
+        from src.agent.runtime import AgentRuntime
+
+        msg = AgentRuntime._build_message("apply", False, {}, "no_apply_link_available")
+        assert "no_apply_link_available" not in msg
+        assert "Action failed" not in msg
+        assert msg  # non-empty, human-facing
+
+    def test_unknown_error_still_raw_for_operators(self):
+        # Regression guard: free-text/unknown errors keep the existing format.
+        from src.agent.runtime import AgentRuntime
+
+        assert (
+            AgentRuntime._build_message("apply", False, {}, "engine down")
+            == "Action failed: engine down"
+        )
+
 
 class TestNotRelevantIdempotency:
     """``not_relevant`` shares the negative-learning side effect with ``skip``,
