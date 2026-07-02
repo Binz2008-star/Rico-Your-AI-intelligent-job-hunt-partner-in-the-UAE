@@ -186,12 +186,9 @@ class TestFindMatches:
         excluded = excluded or []
         already = set(already_emailed or [])
 
-        def _was_sent(user_id, job_key, *a, **k):
-            return job_key in already
-
         with patch("src.rico_repo_adapter.RicoSystem", return_value=system), \
              patch("src.repositories.user_job_context_repo.get_by_status", return_value=excluded), \
-             patch("src.services.email_notifications.was_email_alert_sent", side_effect=_was_sent), \
+             patch("src.services.email_notifications.get_sent_job_keys", return_value=already), \
              patch("src.services.settings_service.get_settings", return_value={"score_threshold_watch": threshold}):
             return eas._find_matches(profile=MagicMock(), user_id="u@x.com")
 

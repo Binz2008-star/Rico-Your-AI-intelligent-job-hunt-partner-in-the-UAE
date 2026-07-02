@@ -220,6 +220,35 @@ def was_email_alert_sent(user_id: str, job_key: str, alert_type: str = _EMAIL_AL
         conn.close()
 
 
+def get_sent_job_keys(user_id: str, alert_type: str = _EMAIL_ALERT_TYPE) -> set[str]:
+    """Return the set of job_keys already emailed to *user_id* for *alert_type*.
+
+    One query for the whole per-user dedup check, replacing a per-candidate
+    ``was_email_alert_sent`` round trip (each of which opened its own connection).
+    Fails open to an empty set on DB error so a transient failure never blocks a
+    send. Never raises.
+    """
+    if not user_id:
+        return set()
+    from src.db import get_db_connection
+
+    conn = get_db_connection()
+    if not conn:
+        return set()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT job_key FROM email_alert_log WHERE user_id=%s AND alert_type=%s",
+                (user_id, alert_type),
+            )
+            return {row[0] for row in cur.fetchall()}
+    except Exception:
+        logger.debug("email_notifications.get_sent_job_keys failed user=%s", user_id, exc_info=True)
+        return set()
+    finally:
+        conn.close()
+
+
 def log_email_alert(user_id: str, job_key: str, alert_type: str = _EMAIL_ALERT_TYPE) -> bool:
     """Record that a job was emailed. Returns True if newly inserted (not a dup)."""
     if not user_id or not job_key:
