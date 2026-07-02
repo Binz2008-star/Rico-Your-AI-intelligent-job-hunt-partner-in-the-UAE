@@ -56,6 +56,44 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260702-033 — Enable personalized job-alert emails (PR-3, owner-gated)
+
+Status: proposed
+Owner: unassigned (owner-gated enable steps)
+Branch: —
+Issue/PR: follows merged PR #805 (`f64e7e0`)
+
+#### Objective
+Turn on the opt-in job-alert emails shipped inert in PR #805. No new feature code required to
+start; this is the enable + harden pass.
+
+#### Context
+- Feature merged and gated/inert. See `CURRENT_STATE.md` → "Email job alerts — PR #805".
+- Key files: `src/services/email_alert_service.py`, `src/services/email_notifications.py`,
+  `migrations/033_email_job_alerts.sql`, `.github/workflows/job-alert-emails.yml`.
+
+#### Enable steps (in order)
+- [ ] Apply `migrations/033` to Neon (additive/idempotent; owner G-signoff per migration policy).
+- [ ] Set backend secrets: `RICO_API_URL`, confirm `RICO_CRON_SECRET`.
+- [ ] Smoke: run the `Job Alert Emails (manual)` workflow with `dry_run=true`; confirm `status="ok"`
+      and sane match counts, zero sends.
+- [ ] Set `RICO_ENABLE_EMAIL_ALERTS=true` on Render.
+- [ ] Enable the daily `schedule:` in `job-alert-emails.yml`.
+- [ ] Monitor `email_alert_log` for the first sends; verify unsubscribe link end-to-end.
+
+#### Hardening (address before/with scale — review findings #3/#5)
+- [ ] #3 — cron runs live JSearch per user sequentially in a sync request: move to async/batched
+      or a queue so large opt-in volume doesn't time out or exhaust JSearch quota.
+- [ ] #5 — dedup opens a new DB connection per candidate job: fetch the user's already-sent
+      job_keys once per user instead of per-job.
+
+#### Follow-on
+- [ ] Arabic (RTL) email localization (English-only in MVP).
+
+#### Rollback
+Unset `RICO_ENABLE_EMAIL_ALERTS` (runtime off), disable the workflow schedule; migration 033 is
+additive and code tolerates the tables being present.
+
 ### TASK-20260630-032 — Rico UX Improvements: Search & Intent Flow (engineering spec, owner-authored)
 
 Status: proposed (tracking task — spin each item into its own TASK-NNN when picked up)
