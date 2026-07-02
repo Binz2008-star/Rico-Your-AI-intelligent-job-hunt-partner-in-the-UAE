@@ -1,9 +1,13 @@
 # Current State
 
-_Last updated: 2026-07-02 — `main` HEAD `f64e7e0` (PR #805 — personalized job-alert emails,
-merged; migration 033 APPLIED to Neon + production dry-run plumbing smoke PASSED; feature
-remains gated/inert, see the "Email job alerts" section directly below). Prior line:
-2026-07-01 — `main` HEAD `ff6c690` (dashboard). BUG-9 through BUG-17 all merged_
+_Last updated: 2026-07-02 — `main` HEAD `a2a53b4`, deploy-verified on Render
+(`/version.commit` match + `/health` ok). Merged today: #805 (email alerts, gated/inert),
+#806 (BUG-19 — confirmation screenshots = application evidence), #807 (applied-from-screenshot
+OCR fallback — 2026-07-02 smoke failure), #808 (email-alerts docs sync). See the
+"Screenshot → application evidence" section below for #806/#807 detail and smoke status.
+Earlier merge train #800–#804: T1/PR C search-first (#801, closes TASK-20260622-031),
+profile-evidenced CV search (#802), Track Application modal + sticky header (#803),
+stale pipeline-reset confirmation cancel (#804)._
 
 ## Email job alerts — PR #805 (merged 2026-07-02, gated/inert)
 
@@ -45,22 +49,54 @@ applied + dry-run plumbing smoke passed. Tracked as TASK-20260702-033 in `TASKS.
 
 ---
 
-_Earlier: BUG-9 through BUG-17 all merged
-and deployed since the 2026-06-30 update below (PRs #783–#797), plus two fixes landed directly
-on `main` outside the PR flow: `bd4c4f8` (T7 — verbatim role text) and `77563af` (TASK-030 —
-uploaded-document context injection). Forward focus: land `fix/profile-context-role-selection`
-(T1 search-first fix) to close out TASK-20260622-031 / PR C. See that task in `TASKS.md` for
-detail — this file's BUG-9–BUG-17 history has not yet been backfilled into the tables below._
+## Screenshot → application evidence — PRs #806 + #807 (merged + deployed 2026-07-02)
 
-## PR C / TASK-20260622-031 — status as of 2026-07-01
+**#806 (BUG-19, `70e7c48`):** job-confirmation screenshots ("Your application was sent…")
+used to classify `unknown` → "Unrecognized Document" with dead-end actions, and tracking fell
+back to the wrong recent-context job. Now: `application_confirmation` classifier type (EN+AR
+signal bank, ≥2-specific-signals override), `application_evidence` attachment purpose through
+the whole chain (backend enums, factory, frontend zod + card label), "Track this application"
+action persisting from the screenshot's own extracted title/company, and
+`_resolve_application_status_job` prefers a fresh confirmation transcript over the blind
+recent-context fallback (asks instead of guessing when meta is unreadable). Tests:
+`test_bug19_application_evidence.py` 19/19.
 
-- **T7** (verbatim role, no silent taxonomy substitution): ✅ fixed, on `main` (`bd4c4f8`).
-- **T1** (search-first for stale profile roles instead of pausing to ask): ✅ fixed, pushed to
-  `fix/profile-context-role-selection` (`48e9cba`), PR not yet opened (no `gh` auth in session —
-  open via https://github.com/Binz2008-star/Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE/pull/new/fix/profile-context-role-selection).
-- Both fixes originated from an unmerged background session (`claude/workflow-progress-check-qycxuo`,
-  now deleted). That branch also carried a stale pre-PR#797 `_build_tracking_message` hunk that
-  was intentionally not ported — see `TASKS.md` TASK-20260622-031 handoff notes.
+**#807 (owner smoke failure, `c7d8343`):** the owner's re-smoke used a job-LISTINGS screenshot
+(2 jobs) + Arabic "لقد قمت بالتقديم عليها ارجوك احفظها" → classifier said `unknown@0%`, the
+Arabic phrasing itself classified `unknown`, and the successfully-extracted OCR text was
+discarded. Owner ruling: functional bug — OCR results must not be invalidated by low
+classification confidence. Now: Arabic applied-report regex covers "قمت بالتقديم عليها" /
+"تقدمت عليها" forms, and `_applied_from_screenshot_fallback` mines the last uploaded
+transcript's OCR text for job entities regardless of classification verdict (CV / identity
+docs excluded) — one entity → one-click confirm, several → disambiguation buttons (pre-armed
+so a single click persists via the existing mark-applied gate), none → previous clarification
+unchanged. Tests: `test_applied_screenshot_ocr_fallback.py` 16/16 (includes the exact owner
+transcript + phrase).
+
+**Production smoke status (2026-07-02):**
+- ✅ Live-verified on the public surface (anonymous session, generated screenshots):
+  confirmation upload → `application_confirmation@0.9` + "Application Confirmation" label +
+  Track/View/Remind actions + `application_evidence` purpose; listings upload → OCR transcript
+  intact with both job entities (classified `unknown` — exactly the case #807 handles).
+- ⏳ Owner 2-minute authenticated check remains (public sessions correctly hit the sign-in
+  gate; a scripted account can't pass email verification): (1) listings screenshot +
+  "لقد قمت بالتقديم عليها ارجوك احفظها" → job buttons → one click → correct row in
+  `/applications` as applied; (2) confirmation screenshot → "Track this application" →
+  correct row. Both paths are covered end-to-end by 366 mocked tests.
+- Housekeeping: 4 disposable smoke accounts `rico.smoke.20260702*@ricohunt-smoke.test` exist
+  in the users table (unverified — cannot log in); safe to delete anytime.
+
+Future work logged as TASK-20260702-035: full `JobFromAttachmentService` (NER + fuzzy
+pipeline match, owner architecture note).
+
+## PR C / TASK-20260622-031 — CLOSED (merged as #801, 2026-07-01)
+
+- **T7** (verbatim role, no silent taxonomy substitution): ✅ on `main` (`bd4c4f8`).
+- **T1** (search-first for stale profile roles instead of pausing to ask): ✅ merged via
+  PR #801 (`b94ec1f`), branch `fix/profile-context-role-selection` deleted.
+- History: both fixes originated from an unmerged background session
+  (`claude/workflow-progress-check-qycxuo`, deleted); a stale pre-PR#797
+  `_build_tracking_message` hunk was intentionally not ported.
 
 ## QA Cycle 1 — CLOSED 2026-06-27
 
@@ -258,14 +294,14 @@ Fixing bugs from the "Rico Website Hard QA Report". Each PR is one bug category,
 | **BUG-09** | #791 | `merged` | ✅ merged | Sidebar widgets disappear on `/upload` page — `sidebarProps` was not passed; fixed by threading `onLogout` + `sidebarProps` through the page component |
 | **BUG-10** | #792 | `merged` | ✅ merged | Data quality: years experience displayed as `30.0`; salary displayed without comma (`AED 18000/month`). Fixed `_target_role_search_response` (int rounding) and `_format_pref_changes` (comma-format). Tests: `test_bug10_data_quality_display.py` |
 | **BUG-11** | #793 | `merged` | ✅ merged | Name casing inconsistency — CV names extracted verbatim (ALL CAPS on UAE CVs). `CVParser._extract_name` now returns `line.title()`. Tests: `test_bug11_name_casing.py` |
-| **BUG-12** | — | — | ⏸ not started | Search results body ignores Arabic locale. |
+| **BUG-12** | — | merged | ✅ fixed | Search results body ignores Arabic locale. Fixed pre-#796; `test_bug12_arabic_search_locale.py` green on `main`. |
 | **BUG-13** | — | — | ⏸ not started | Profile/role drift across multiple uploaded CVs — wrong role shown after re-upload. |
 | **BUG-14** | — | — | ⏸ not started | No save idempotency on pipeline: second "save this job" shows success but increments counter. |
-| **BUG-15** | #794 | open | 🔄 PR open | Internal API name leaked to user-facing UI ("JSearch API" visible in responses). Fixed in `apps/web/lib/translations.ts`. |
-| **BUG-16** | #794 | open | 🔄 PR open | "Waking up" banner overlaps chat content (CSS z-index). Fixed in `apps/web/app/command/page.tsx` (pt-12/pt-14). |
+| **BUG-15** | #794 | merged | ✅ merged 2026-06-30 | Internal API name leaked to user-facing UI ("JSearch API" visible in responses). Fixed in `apps/web/lib/translations.ts`. |
+| **BUG-16** | #794 | merged | ✅ merged 2026-06-30 | "Waking up" banner overlaps chat content (CSS z-index). Fixed in `apps/web/app/command/page.tsx` (pt-12/pt-14). |
 | **BUG-17 (pipeline reset)** | — | `61b783b` | ✅ pushed | "Clear them we must start over" misclassified as job role search. Fixed: "clear"/"reset" added to `_NON_ROLE_STARTERS`; `_PIPELINE_RESET_RE` + `_PIPELINE_RESET_IMPLICIT_RE` added; 2-turn Archive/Delete/Cancel confirmation flow. Tests: `test_bug17_pipeline_reset.py` 13/13. |
 | **BUG-18** | — | — | ⏸ not started | `?q=` query-string navigation mutates / resets chat thread. |
-| **BUG-19** | — | — | ⏸ not started | Job-confirmation screenshots not classified as application evidence → "Unrecognized Document"; save falls back to wrong recent-context job. |
+| **BUG-19** | #806 | `70e7c48` | ✅ merged + deployed | Job-confirmation screenshots not classified as application evidence → "Unrecognized Document"; save falls back to wrong recent-context job. See "Screenshot → application evidence" section; follow-up #807 (`c7d8343`) added the OCR fallback for unclassified screenshots. |
 
 > ✅ **QA Cycle 1 is CLOSED.** BUG-01 through BUG-05, BUG-08, BUG-09, BUG-10, and P0 #764 are all confirmed deployed and smoke-tested at `4ad2e29`. BUG-06 and BUG-07 remain blocked until the owner supplies original QA report descriptions.
 
@@ -347,14 +383,22 @@ These are separate from the QA Cycle 1 BUG-01/19 list above.
 | **BUG-4** | ✅ fixed (PR #781) | Sidebar nav links injected `/command?q=…` URLs instead of navigating to real pages |
 | **BUG-5** | ✅ fixed (PR #781) | "Pro Plan / PREMIUM" label contradiction in sidebar |
 | **BUG-6** | ✅ fixed (PR #788, `cc1eed1`) | Status taxonomy mismatch: list view vs kanban board use different status labels — `apps/web/lib/applicationStatus.ts` is now the single source of truth for status list + stage grouping, consumed by list view, board view, StatusBadge, and the chat pipeline summary |
-| **BUG-7** | ⏸ open | Session hydration: user appears logged-out on first load until hard refresh |
-| **BUG-8** | ⏸ open | (details in session history) |
-| **BUG-9** | ⏸ open | Sidebar widgets disappear on /upload page |
-| **BUG-10** | ⏸ open | Data quality: 30.0 years experience displayed, salary inconsistency |
-| **BUG-11** | ⏸ open | Name casing inconsistency in profile |
+| **BUG-7** | ✅ fixed (PR #790, `6381680`) | Session hydration: user appears logged-out on first load until hard refresh |
+| **BUG-8** | ⏸ open | (details in session history — owner must supply) |
+| **BUG-9** | ✅ fixed (PR #791) | Sidebar widgets disappear on /upload page |
+| **BUG-10** | ✅ fixed (PR #792) | Data quality: 30.0 years experience displayed, salary inconsistency |
+| **BUG-11** | ✅ fixed (PR #793) | Name casing inconsistency in profile |
 
 ## Recommended next command
 
 ```text
-Rico mode. PR #780/#781 (BUG-1/4/5), #786 (BUG-2 keyword conflict), #787 (BUG-3 duplicate board entry), and #788 (BUG-6 status taxonomy) are all merged and deployed. Open bugs from 2026-06-30 smoke test: BUG-7 (session hydration), BUG-9 (sidebar /upload), BUG-10 (data quality: experience/salary display), BUG-11 (name casing inconsistency). Fix in priority order. One PR per bug group. Do NOT touch /dashboard, /onboarding, /jobs, /signals, /archive, /saved-searches until Phase B product decision. Do NOT run migrations without owner G1–G6 sign-off.
+Rico mode. Everything through #808 is merged and deployed (main a2a53b4, deploy-verified).
+Remaining open bugs: BUG-8 (no description — owner must supply), BUG-13 (profile/role drift
+across multiple CVs — verify what #802 already covered), BUG-14 (pipeline save idempotency —
+verify against #749), BUG-18 (?q= navigation mutates chat thread). Owner-side 2-minute
+authenticated smoke for #806/#807 pending (see "Screenshot → application evidence").
+Email alerts remain gated — activation sequence in TASK-20260702-033 (opt-in test → dry-run →
+enable → schedule), owner-gated. Backlog: TASK-20260702-035 (JobFromAttachmentService),
+TASK-20260630-032 (Search & Intent Flow UX spec — item 2 largely landed via #801/#802).
+One PR per bug group. Do NOT touch Phase B routes. Do NOT run migrations without owner sign-off.
 ```
