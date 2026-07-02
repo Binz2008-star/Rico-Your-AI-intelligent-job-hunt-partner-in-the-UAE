@@ -120,7 +120,7 @@ The repo combines three layers:
 
 ## Key Frontend Files
 
-- `apps/web/app/chat/page.tsx` — public chat UI
+- `apps/web/app/command/page.tsx` — public chat UI (primary chat surface; `/chat` redirects here)
 - `apps/web/app/signup/page.tsx` — self-signup UI
 - `apps/web/app/login/page.tsx` — login UI
 - `apps/web/app/onboarding/page.tsx` — guided onboarding / CV-first flow
@@ -174,7 +174,7 @@ Do not add a parallel `webhook_events_repo` idempotency layer unless intentional
 The live CV upload path is:
 
 ```text
-apps/web/app/chat/page.tsx or apps/web/app/onboarding/page.tsx
+apps/web/app/command/page.tsx or apps/web/app/onboarding/page.tsx
 → apps/web/lib/api.ts
 → /proxy/api/v1/rico/upload-cv
 → src/api/routers/rico_chat.py
@@ -183,7 +183,7 @@ apps/web/app/chat/page.tsx or apps/web/app/onboarding/page.tsx
 ## Public Chat Flow
 
 ```text
-apps/web/app/chat/page.tsx
+apps/web/app/command/page.tsx
 → sendChatPublic() in apps/web/lib/api.ts
 → /proxy/api/v1/rico/chat/public
 → src/api/routers/rico_chat.py
