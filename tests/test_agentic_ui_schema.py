@@ -177,10 +177,17 @@ class TestRicoProposedChange:
 class TestRicoAttachmentAnalysis:
 
     def test_all_purpose_categories(self):
-        purposes = [p for p in RicoAttachmentPurpose]
-        assert len(purposes) == 10  # exactly the 10 documented categories
-        assert RicoAttachmentPurpose.cv_resume in purposes
-        assert RicoAttachmentPurpose.unknown_document in purposes
+        # Assert the exact documented taxonomy rather than a bare count, so adding
+        # or removing a category is a deliberate, visible change. `application_evidence`
+        # was added for job-confirmation screenshots (BUG-19 / #806).
+        expected = {
+            "cv_resume", "job_post", "recruiter_message", "application_form",
+            "certificate", "offer_letter", "contract_or_legalish", "company_profile",
+            "public_comment", "application_evidence", "unknown_document",
+        }
+        assert {p.value for p in RicoAttachmentPurpose} == expected
+        assert RicoAttachmentPurpose.cv_resume in RicoAttachmentPurpose
+        assert RicoAttachmentPurpose.unknown_document in RicoAttachmentPurpose
 
     def test_basic_attachment_analysis(self):
         aa = RicoAttachmentAnalysis(
