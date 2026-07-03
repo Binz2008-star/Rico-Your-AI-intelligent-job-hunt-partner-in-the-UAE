@@ -118,7 +118,20 @@ def _handle_start(message: Dict[str, Any]) -> Dict[str, Any]:
 def _handle_stop(message: Dict[str, Any]) -> Dict[str, Any]:
     """Disable notifications for this Telegram user."""
     chat_id = str(message.get("chat", {}).get("id") or message.get("from", {}).get("id") or "")
-    user_id = chat_id  # for Telegram users, chat_id == Rico user_id
+    username = (message.get("from", {}).get("username") or "").strip().lstrip("@").lower()
+
+    # Mirror /start lookup: WebApp users are bound by username → email user_id.
+    # Without this lookup, /stop would write to a chat_id-keyed profile instead
+    # of the WebApp user's email-keyed profile, leaving notifications enabled.
+    user_id = chat_id  # default for native Telegram users
+
+    if username:
+        try:
+            matches = find_profiles_by_telegram_username(username)
+            if matches:
+                user_id = matches[0].user_id
+        except Exception as exc:
+            logger.warning("telegram_stop: lookup failed username=%s: %s", username, exc)
 
     stopped = False
     if chat_id:
