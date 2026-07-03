@@ -33,6 +33,12 @@ _UTC = timezone.utc
 _DEDUP_CACHE: Dict[str, Tuple[float, str]] = {}
 _DEDUP_TTL_S = 3600   # 1 hour
 _DEDUP_LOCK  = threading.Lock()
+# Once the in-memory cache exceeds this many entries, _mem_seed opportunistically
+# drops entries older than the TTL. Without this, a long-lived process that never
+# re-queries a given action_id accumulates them unbounded (audit finding D2).
+# Expired entries are already treated as non-duplicates, so eviction is a pure
+# memory reclaim with no behavioral change.
+_DEDUP_SWEEP_THRESHOLD = 2048
 
 # Only these action types are subject to idempotency enforcement
 IDEMPOTENT_ACTION_TYPES = frozenset({"apply", "skip", "save", "block", "not_relevant"})
@@ -158,8 +164,13 @@ def _mem_seed(log: ActionLog) -> None:
     action_id = log.get("action_id", "")
     if not action_id:
         return
+    now = time.monotonic()
     with _DEDUP_LOCK:
-        _DEDUP_CACHE[action_id] = (time.monotonic(), log.get("result_status", ""))
+        # Opportunistic sweep of expired entries so the cache stays bounded (D2).
+        if len(_DEDUP_CACHE) >= _DEDUP_SWEEP_THRESHOLD:
+            for k in [k for k, (ts, _) in _DEDUP_CACHE.items() if now - ts > _DEDUP_TTL_S]:
+                del _DEDUP_CACHE[k]
+        _DEDUP_CACHE[action_id] = (now, log.get("result_status", ""))
 
 
 # ── General audit log write (for profile questions, etc.) ───────────────────
