@@ -331,11 +331,20 @@ class TestFullTurnPendingSearch:
         result = api._resolve_pending_intent("u1", "تمام", _PROFILE)
         assert result is None
 
-    def test_promise_only_reply_arms_pending_search_in_ai_fallback(self):
-        """_answer_with_ai_fallback must arm pending search when AI produces a hollow promise."""
+    def test_promise_only_reply_to_explicit_search_executes_immediately(self):
+        """Contract upgraded (live-QA 2026-07-03): when the user's message is an
+        explicit job-listing request ("ابحث لي عن وظائف") and the AI replies with a
+        hollow promise, _answer_with_ai_fallback must EXECUTE the search in the
+        same turn — not merely arm the pending slot. The conversational path has
+        no later turn that redeems an armed slot, so arming alone stranded the
+        search forever in production. Arming is still the behavior for promise
+        replies to NON-search messages (covered in
+        tests/unit/test_search_execution_contract_convergence.py).
+        """
         api = self._make_api()
         promise_text = "جاري البحث، ثواني وأرجع لك"
         ai_resp = {"message": promise_text, "type": "chat", "response_source": "openai"}
+        search_payload = {"type": "job_matches", "message": "Found 2 jobs", "matches": [{}]}
 
         agent_mock = MagicMock()
         agent_mock.respond.return_value = ai_resp
@@ -352,17 +361,21 @@ class TestFullTurnPendingSearch:
              patch.object(api, "_append_chat"), \
              patch.object(api, "_source_for_openai_response", return_value="openai"), \
              patch.object(api, "_finalize", side_effect=lambda r, s, **kw: r), \
+             patch.object(api, "_classified_role_search", return_value=dict(search_payload)) as search, \
              patch.object(api, "_profile_value", side_effect=lambda p, k: p.get(k)):
-            api._answer_with_ai_fallback(
+            result = api._answer_with_ai_fallback(
                 user_id="u1",
                 message="ابحث لي عن وظائف",
                 profile=_PROFILE,
                 save_user_message=False,
             )
 
+        search.assert_called_once()
+        assert search.call_args[0][1] == "Environmental Manager"
+        assert result.get("type") == "job_matches", "hollow promise must not be the returned payload"
+        # Slot must be left cleared — the search already ran.
         stored = api._store.get(("u1", RicoChatAPI._PENDING_JOB_SEARCH_KEY))
-        assert stored is not None, "_store_pending_job_search not called after promise-only AI reply"
-        assert stored["role"] == "Environmental Manager"
+        assert not stored, "pending slot must not remain armed after immediate execution"
 
 
 # ── wiring: search-offer responses store a pending search ─────────────────────

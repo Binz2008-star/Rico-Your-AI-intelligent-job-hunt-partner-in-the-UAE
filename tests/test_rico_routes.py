@@ -1169,7 +1169,13 @@ class TestVersionRoute:
         r = client.get("/api/v1/version")
 
         assert r.status_code == 200
-        assert r.json() == {
+        body = r.json()
+        # started_at is runtime-computed (process boot, ISO-8601) — assert shape,
+        # not value. It exists so deploy verification has a signal that cannot go
+        # stale the way the env-driven deployed_at can.
+        started_at = body.pop("started_at")
+        assert isinstance(started_at, str) and started_at.startswith("20")
+        assert body == {
             "app": "ricohunt",
             "version": "1.0.0",
             "commit": "abc123",
