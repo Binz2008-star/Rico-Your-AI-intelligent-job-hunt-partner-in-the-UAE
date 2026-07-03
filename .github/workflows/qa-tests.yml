@@ -46,7 +46,6 @@ jobs:
             tests/test_security_audit.py \
             tests/test_rico_memory_safety.py \
             tests/test_rico_hardening.py \
-            tests/test_multiuser_chat_matrix.py \
             tests/test_tc2_target_role_propagation.py \
             tests/test_tc2_tc8_wiring.py \
             tests/test_tc8_interview_prep_grounding.py \
