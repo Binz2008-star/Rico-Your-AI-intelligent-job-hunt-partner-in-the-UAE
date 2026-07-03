@@ -41,7 +41,10 @@ def test_030_checks_both_column_and_trigger():
 # Migrations with no DB-detectable object (comment/doc-only) — legitimately not
 # in CHECKS. Everything else MUST be covered, or the daily drift job would go
 # green while the migration was never applied to Neon.
-_NO_OBJECT_MIGRATIONS = {"020"}  # 020_user_job_context_gap_filler: comment-only
+_NO_OBJECT_MIGRATIONS = {
+    "020",  # 020_user_job_context_gap_filler: comment-only
+    "034",  # 034_drop_redundant_indexes: DROP-only, creates no detectable object
+}
 
 
 def test_every_migration_file_is_covered():
