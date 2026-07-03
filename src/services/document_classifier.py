@@ -339,9 +339,6 @@ class DocumentClassifier:
     per-type score breakdown, suggested actions, and display label.
     """
 
-    # CV pipeline only runs when the top classification is cv AND confidence ≥ this.
-    CV_THRESHOLD = 0.50
-
     def classify(self, data: bytes, filename: str = "") -> ClassificationResult:
         file_format = detect_format(data, filename)
 
