@@ -29,15 +29,22 @@ Merged today (GitHub session, deploy verified via `deploy-render.yml`):
    in `rico_chat_api.py`). Declarative Arabic still guarded (no cold-start hang);
    explicit-search and structured commands reach their own handlers.
 
-### BUG-14 (pipeline save idempotency) — diagnosed, owner-gated
-Root cause confirmed: the ordinal-save upsert (`rico_db.upsert_recommendation`) uses
-`ON CONFLICT (user_id, job_key) WHERE job_key IS NOT NULL`, which requires the partial
-unique index from **migration 011** (`idx_rico_recommendations_user_job_unique`) — still
-**NOT applied** in production (#711 drift). Separately, `jobs_service.save_job/skip/block`
-still dedups via the JSON-file `is_applied()` (always False for DB-backed SaaS users) —
-fixed only in **draft PR #784** (unmerged). True fix = apply migration 011 to Neon
-(owner, at console — runbook `docs/runbooks/production-drift-005-011.md` Step A) + merge
-#784. Tracked as **TASK-20260703-036**.
+### BUG-14 (pipeline save idempotency) — migration 011 APPLIED; #784 remaining
+**Update 2026-07-03:** owner verified `idx_rico_recommendations_user_job_unique` **exists in
+production Neon** (`SELECT indexname FROM pg_indexes …` returned one row). Migration 011 is
+**applied** — this corrects the earlier "#711 drift: 011 not applied" note (011 is now closed;
+005 pipeline_runs is separate). Because a `CREATE UNIQUE INDEX` only succeeds with no dupes,
+the index being present also means the table is dedup-clean.
+
+Effect: the **chat ordinal-save** path (`_save_job_by_ordinal` → `applications_repo.create`
+→ `rico_db.upsert_recommendation`, `ON CONFLICT (user_id, job_key) WHERE job_key IS NOT NULL`)
+is now **idempotent** — re-saving the same job updates in place instead of inserting a dupe.
+
+Remaining: the **other** save path — `jobs_service.save_job/skip/block` — still dedups via
+the JSON-file `is_applied()` (always False for DB-backed SaaS users), fixed only in **draft
+PR #784** (unmerged). Close BUG-14 by: (1) merge #784, (2) owner authenticated smoke
+("save the second job" twice → count +1 then unchanged, on both the chat and action paths).
+Tracked as **TASK-20260703-036**.
 
 ---
 
@@ -292,7 +299,7 @@ No provider keys are hardcoded, committed, or logged.
 - **System Quality Audit PR #717:** draft/CI-green status was documented earlier; do not merge without separate review.
 - **Migration `030_action_audit_log_hardening.sql`:** applied + verified in production Neon on 2026-06-21.
 - **Migration `021_user_job_context_alt_url.sql`:** applied; issue #710 closed.
-- **Issue #711 drift:** `005 pipeline_runs` and `011 idx_rico_recommendations_user_job_unique` remain not applied unless separately approved.
+- **Issue #711 drift:** `011 idx_rico_recommendations_user_job_unique` is **APPLIED** in production (owner-verified 2026-07-03 via `pg_indexes`). `005 pipeline_runs` remains not applied unless separately approved.
 - **Canonical handoffs:** `AI_WORKSPACE/HANDOFFS/2026-06-22-job-flow-stabilization-complete.md` (job-flow train through #730), `AI_WORKSPACE/HANDOFFS/2026-06-23-attachment-document-routing.md` (document routing #737 + #736 review).
 
 ## Open PRs — triage (6, all stale / pre-session 2026-06-20..22)
