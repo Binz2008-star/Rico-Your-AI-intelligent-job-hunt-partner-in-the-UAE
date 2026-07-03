@@ -680,6 +680,19 @@ _COMPANY_SEARCH_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Interview-prep request guard: used to stop an interview-prep message that names
+# a company ("prepare me for an interview … role at Richemont") from being
+# hijacked by the company-openings search. A genuine company job search never
+# asks to prepare/practise for an interview.
+_INTERVIEW_REQUEST_RE = re.compile(
+    r"\b(?:prepare|prep|practi[sc]e|get\s+ready|coach|rehearse)\b[^.?!]{0,40}\binterview\b"
+    r"|\binterview\b[^.?!]{0,40}\b(?:prep(?:aration)?|practi[sc]e|coaching|questions?|tips?|advice)\b"
+    r"|\bfor\s+(?:an?|my|the)\s+interview\b"
+    r"|تحضير\S*[^.?!]{0,20}(?:مقابلة|انترفيو)"
+    r"|\bمقابلة\s+عمل\b",
+    re.IGNORECASE,
+)
+
 # Salary-filtered job search: "find HSE jobs paying above 20k AED",
 # "QHSE roles with salary above 25000", "jobs paying more than 30k".
 _SALARY_SEARCH_RE = re.compile(
@@ -4964,6 +4977,18 @@ class RicoChatAPI:
 
             if self._is_affirmative(msg) and pending:
                 upsert_profile(user_id=user_id, updates=pending)
+                # When the target roles change, invalidate any cached "recent
+                # search role" so the very next bare "search for jobs now" uses
+                # the NEW targets instead of the stale role from an earlier
+                # search (TC-2: job_search_explicit prefers recent_search_role
+                # over profile target_roles).
+                if pending.get("target_roles"):
+                    _cleared = False
+                    for _rk in ("recent_search_role", "recent_role", "recent_job"):
+                        if ctx.pop(_rk, None) is not None:
+                            _cleared = True
+                    if _cleared:
+                        self._store_recent_context(user_id, ctx)
                 _changes = self._format_pref_changes(pending)
                 if arabic:
                     reply = (
@@ -6816,7 +6841,16 @@ class RicoChatAPI:
 
         # ── Company-targeted job search ───────────────────────────────────────
         # "find jobs at ADNOC", "jobs at Emirates NBD", "any openings at DEWA".
-        if _COMPANY_SEARCH_RE.search(message) and not _COVER_LETTER_COMMAND_RE.search(message):
+        # Guard: an interview-prep request such as "prepare me for an interview
+        # for the Retail Operations Manager role at Richemont" contains
+        # "role at <Company>" and would otherwise be hijacked into a company
+        # openings list (TC-8). Interview prep is coaching, not a job search — let
+        # it fall through to the grounded interview_prep path.
+        if (
+            _COMPANY_SEARCH_RE.search(message)
+            and not _COVER_LETTER_COMMAND_RE.search(message)
+            and not _INTERVIEW_REQUEST_RE.search(message)
+        ):
             return self._finalize(
                 self._handle_company_search(user_id, profile, message),
                 self.SOURCE_KEYWORD,
