@@ -19,6 +19,49 @@ Follow `CLAUDE.md` for the full project architecture, routes, auth rules, safety
 9. Do not mutate Neon or any production database without explicit approval.
 10. Never expose secrets, cookies, tokens, passwords, or private environment values.
 
+## Cost and Token Governance
+
+Optimize for the owner's cost, time, and review control. Use the cheapest safe path that produces enough evidence to make a decision.
+
+Do not launch any of the following unless the owner explicitly approves it first:
+
+- multi-agent or fan-out reviews
+- broad background investigations
+- repeated verifier agents reading the same files
+- long-running integration suites beyond the focused scope
+- open-ended searches or exploratory refactors
+- any workflow expected to use unusually high tokens, tool calls, or runtime
+
+Before requesting approval for expensive work, state:
+
+1. expected token or cost range
+2. expected runtime
+3. why the work is needed
+4. cheaper alternative
+5. concrete output expected
+
+No approval means do not run it.
+
+For PRs around 150 changed lines or less, use the lightweight path:
+
+1. run focused tests first
+2. do one focused review using an explicit checklist
+3. fix confirmed low-risk issues only
+4. report concise results
+5. stop when enough evidence exists
+
+Do not use multi-agent fan-out for small PRs.
+
+Scale review cost to both diff size and blast radius, not to tool availability or mode flags. Deeper review may be appropriate for authentication, payments, billing, database migrations, public API contracts, cross-service deployment changes, or security-sensitive user data flows, but it still requires explicit owner approval first.
+
+Stop and ask the owner before continuing when:
+
+- the task becomes broader than approved
+- tests exceed the expected runtime
+- token or tool usage is becoming high
+- findings are speculative rather than confirmed
+- the same files are being re-read repeatedly by multiple agents
+
 ## Plan Mode Required
 
 Use Plan Mode before any task involving:
@@ -66,6 +109,18 @@ Direct execution is allowed only for small, low-risk work such as:
 - For backend changes, run relevant `pytest` tests.
 - For deployment-related work, verify `/version`, `/health`, and proxy health before smoke tests.
 
+## Reporting Format
+
+When work is done, report only:
+
+- PR number and branch
+- changed files
+- exact behavior before and after
+- tests run and results
+- CI status
+- known risks
+- recommended next action
+
 ## Production Safety
 
 - Protected routes must derive identity from JWT, not request body `user_id`.
@@ -73,6 +128,15 @@ Direct execution is allowed only for small, low-risk work such as:
 - High-impact actions must respect approval mode.
 - Auto-apply must not bypass `RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true`.
 - Do not reintroduce old parallel implementations that conflict with current `main`.
+
+## Prohibited Without Explicit Owner Approval
+
+- auto-merge
+- production deploy
+- rotating credentials
+- changing payment or funding details
+- exposing personal data
+- adding bank details or secrets to the public repository
 
 ## Failure Rule
 
