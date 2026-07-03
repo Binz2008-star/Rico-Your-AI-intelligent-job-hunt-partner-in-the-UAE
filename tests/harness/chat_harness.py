@@ -23,9 +23,10 @@ The harness is deliberately thin and assertion-free: tests own the assertions.
 """
 from __future__ import annotations
 
+import os
 from contextlib import ExitStack
 from typing import Any, Optional
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 
 from src.jsearch_client import FetchResult
 from src.rico_agent import RicoProfile
@@ -193,6 +194,25 @@ class ChatHarness:
 
         with ExitStack() as stack:
             p = stack.enter_context
+            # Hermetic guarantee: force every repo path onto its in-memory
+            # fallback by making RicoDB report unavailable. Repos gate on
+            # ``RicoDB.available`` (== bool(DATABASE_URL and psycopg2)) and return
+            # ``None`` / raise instantly when it is False. Without this, an ambient
+            # or CI ``DATABASE_URL`` pointing at an unreachable Postgres makes
+            # untouched paths (tracked-application lookup, chat history) attempt
+            # real connections and hang on timeouts — turning "offline" tests into
+            # 30s+ network-bound ones. Patching the property (not just the env) is
+            # cache-proof: modules that captured the DSN at import time still see
+            # the DB as unavailable. Also drop REDIS_URL so slowapi stays in-memory.
+            # Rico has two independent DB layers, each with its own DSN gate:
+            #   * src.rico_db.RicoDB  -> the ``available`` property
+            #   * src.db              -> the module-level ``DB_ENABLED`` flag
+            # Both must be forced off, or the untouched layer keeps calling
+            # psycopg2.connect against the (unreachable) CI DSN.
+            p(patch("src.rico_db.RicoDB.available", new_callable=PropertyMock, return_value=False))
+            p(patch("src.db.DB_ENABLED", False))
+            p(patch.dict("os.environ", {}, clear=False))
+            os.environ.pop("REDIS_URL", None)
             p(patch("src.rico_chat_api.get_profile", side_effect=self._get_profile))
             p(patch("src.repositories.profile_repo.get_profile", side_effect=self._get_profile))
             p(patch("src.rico_chat_api.upsert_profile", side_effect=self._upsert_profile))
