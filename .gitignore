@@ -47,8 +47,8 @@ apps/web/.vercel/
 .vercel/
 *.tsbuildinfo
 
-# Local tooling (skills are shared; only settings/secrets stay local)
-.claude/settings.json
+# Local tooling (skills + shared settings/hooks are committed; personal
+# overrides and secrets stay local)
 .claude/settings.local.json
 .claude/todos.md
 
