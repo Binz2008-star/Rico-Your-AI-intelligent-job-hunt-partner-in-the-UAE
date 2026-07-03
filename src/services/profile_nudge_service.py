@@ -110,6 +110,7 @@ def run_profile_nudge_sweep() -> Dict[str, Any]:
             """)
             if not cur.fetchone():
                 logger.warning("profile_nudge_sweep: migration 029 not applied — skipping")
+                conn.close()
                 return {"status": "migration_pending", "nudges_sent": 0, "nudges_failed": 0, "skipped": 0}
 
             # Join chain: users → rico_users (via external_user_id) → rico_profiles
