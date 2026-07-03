@@ -56,6 +56,34 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260703-037 — Neon redundant-index cleanup (migrations 034 + 035)
+
+Status: done
+Owner: Claude (GitHub session)
+Branch: claude/neon-db-index-cleanup-67ewh9
+Issue/PR: #826 (034, merged), #828 (035, merged), #827 (closed dup)
+
+#### Objective
+Drop write-amplifying redundant duplicate/subset indexes on the Neon hot per-user
+tables, and codify the covering full-UNIQUE that production carried but the repo
+never created.
+
+#### Outcome
+- #826 merged: 034 drops 6 redundant indexes (each covered by a surviving index);
+  `034` added to `_NO_OBJECT_MIGRATIONS`.
+- #828 merged: 035 codifies `rico_job_recommendations_user_id_job_key_key`
+  (idempotent) + adds a drift-check entry for it.
+- Production apply owner-verified on Neon `production` branch: 0 redundant indexes
+  remain (diff query); covering uniques present.
+- Migration Drift Check workflow green on `b021273` (live DB has all signature
+  objects incl. 035's constraint).
+- Load-bearing indexes preserved: partial-unique arbiter (BUG-14),
+  `idx_user_job_context_user_searched_at` (028 drift signature).
+
+#### Follow-up
+- [ ] Confirm any other Neon branch Render's `DATABASE_URL` may use also shows 0 rows.
+- [ ] #712 005 remainder (keyword tables / view / enum / trigger) still to verify.
+
 ### TASK-20260703-036 — BUG-14: pipeline save idempotency (owner-gated migration)
 
 Status: in_progress (migration 011 APPLIED 2026-07-03; only draft PR #784 + smoke remain)

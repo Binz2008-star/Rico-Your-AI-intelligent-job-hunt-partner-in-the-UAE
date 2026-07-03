@@ -1,5 +1,51 @@
 # Current State
 
+## 2026-07-03 — Neon index-cleanup train (034 + 035) live; drift resolved
+
+_`main` HEAD `b021273`. Backend verified live on `b021273` via deploy-rico
+(`/version.commit` match, `/health` 200, Vercel proxy + root 200)._
+
+A read-optimization audit of the Neon hot per-user tables found the DB correctly
+indexed for reads (no missing indexes / no seq scans on hot paths) but carrying
+redundant duplicate/subset indexes that only taxed writes. Two owner-gated
+migrations (applied manually at Neon; not auto-deployed):
+
+- **#826** (`034_drop_redundant_indexes.sql`) — drops 6 redundant indexes, each
+  covered by an index that stays (a UNIQUE constraint, a superset composite, or a
+  byte-for-byte twin): `idx_rico_job_recommendations_user_job_key`,
+  `idx_rico_recommendations_user_job_key`, `idx_rico_profiles_user_id`,
+  `rico_saved_searches_user_id_idx`, `idx_ujc_user_searched`, `idx_users_email`.
+  Adds `034` to `_NO_OBJECT_MIGRATIONS` (DROP-only → no drift signature).
+- **#828** (`035_rico_recommendations_full_unique.sql`) — codifies the full
+  `UNIQUE (user_id, job_key)` constraint (`rico_job_recommendations_user_id_job_key_key`)
+  that production already carried but the repo never created; 034's twin-drops
+  rely on it for read coverage. Idempotent (no-op where present). Adds drift check
+  `("035","constraint","rico_job_recommendations_user_id_job_key_key")`.
+- **#827** — CLOSED as duplicate (proposed dropping 8; the 2 extras were unsafe —
+  `idx_rico_recommendations_user_status` is re-created on every startup by the
+  `rico_db.py` runtime DDL, so a migration DROP would not persist).
+
+**Preserved (load-bearing):** `idx_rico_recommendations_user_job_unique` — the
+partial-UNIQUE arbiter for `ON CONFLICT (user_id, job_key) WHERE job_key IS NOT NULL`
+in `rico_db.upsert_recommendation` (BUG-14 idempotency); `idx_user_job_context_user_searched_at`
+— migration 028's drift signature (kept over its twin `idx_ujc_user_searched`).
+
+**Production apply (owner, Neon `production` branch, owner-verified 2026-07-03):**
+all 6 redundant indexes dropped (diff query → 0 rows); covering uniques
+`rico_job_recommendations_user_id_job_key_key` + `rico_profiles_user_id_key` present.
+The 6 drops landed in two passes (4 + 2 stragglers) — re-running the full 034 set
+(`DROP … IF EXISTS`) is the foolproof way to land any branch at 0 rows. The
+**Migration Drift Check** workflow (`workflow_dispatch`, `b021273`) is green — the
+live DB behind the GitHub `DATABASE_URL` secret has every migration signature
+object incl. 035's constraint, 011's unique index, and 005 `pipeline_runs`.
+
+### #712 (005/011 drift) — 011 half resolved
+The 011 unique index is confirmed present in production (owner `pg_indexes` query +
+green drift check). The `pipeline_runs` signature for 005 is also present. #712's
+broader 005 scope (keyword tables, `latest_pipeline_run` view, `pipeline_status`
+enum, `settings` trigger) is not covered by the drift checker and remains
+unverified — #712 stays open until those are confirmed.
+
 ## 2026-07-03 — merge train (safety fixes live) + BUG-14 diagnosis
 
 _`main` HEAD `ee36c18`. #813 verified live via deploy-render run **#149**
