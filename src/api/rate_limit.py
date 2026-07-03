@@ -38,16 +38,18 @@ def client_ip_key(request: Request) -> str:
     """Resolve the real client IP for rate-limiting.
 
     Behind Render's proxy the TCP peer is the load balancer, so ``request.client.host`` is
-    identical for every user — using it would collapse all clients into a single bucket
-    (so one noisy client could 429 everyone, or the limit could be effectively bypassed).
-    Render forwards the originating client in ``X-Forwarded-For``; use its first entry when
-    present, falling back to the direct peer (correct for local/dev with no proxy).
+    identical for every user — using it would collapse all clients into a single bucket.
+    Standard reverse-proxy behavior (nginx/Render) APPENDS the real client IP to the right
+    of X-Forwarded-For — the leftmost entry is client-supplied and can be spoofed to bypass
+    rate limiting. We take the rightmost (last) entry, which is the IP Render added at the
+    TCP boundary and cannot be forged by the caller.
+    Falls back to the direct peer for local/dev with no proxy.
     """
     forwarded = request.headers.get("x-forwarded-for", "")
     if forwarded:
-        first = forwarded.split(",")[0].strip()
-        if first:
-            return first
+        last = forwarded.split(",")[-1].strip()
+        if last:
+            return last
     return get_remote_address(request)
 
 
