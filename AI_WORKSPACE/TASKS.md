@@ -56,6 +56,40 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260703-036 — BUG-14: pipeline save idempotency (owner-gated migration)
+
+Status: blocked (owner-gated Neon migration + draft PR #784)
+Owner: owner (Neon console) + a coder for #784
+Branch: — (fix spans migration 011 apply + PR #784)
+Issue/PR: BUG-14; draft PR #784; migration drift #711
+
+#### Objective
+Make a second "save this job" a no-op (no counter increment) on both save paths.
+
+#### Context
+- Diagnosed 2026-07-03. The chat ordinal-save persists via
+  `rico_db.upsert_recommendation`, whose `ON CONFLICT (user_id, job_key) WHERE job_key
+  IS NOT NULL` requires the partial unique index from **migration 011**
+  (`idx_rico_recommendations_user_job_unique`) — **not applied** in production (#711).
+- The non-ordinal `jobs_service.save_job/skip/block` path dedups via the JSON-file
+  `is_applied()`, which returns False for DB-backed SaaS users → duplicates. Fixed only
+  in **draft PR #784** (`skip/save/block` → `applications_repo.find_by_job_id`), unmerged.
+- Runbook for applying migration 011 safely (dedup DELETE + partial unique index):
+  `docs/runbooks/production-drift-005-011.md` (Step A).
+
+#### Constraints
+- Migration is owner-gated and includes a destructive dedupe `DELETE` — apply only at the
+  Neon console after the runbook's pre-checks. Sandbox cannot reach Neon.
+- No new idempotency scheme; reuse the existing `save_key` / unique-index design.
+
+#### Acceptance criteria
+- [ ] Migration 011 applied to production Neon (unique index present).
+- [ ] PR #784 reviewed + merged (non-ordinal path uses `applications_repo`).
+- [ ] Owner smoke: "save the second job" twice → count +1 then unchanged; repeat on the
+      non-ordinal save path.
+
+---
+
 ### TASK-20260702-035 — JobFromAttachmentService: first-class job entities from attachments
 
 Status: proposed (owner architecture note, 2026-07-02)

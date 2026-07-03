@@ -1,5 +1,46 @@
 # Current State
 
+## 2026-07-03 — merge train (safety fixes live) + BUG-14 diagnosis
+
+_`main` HEAD `ee36c18`. #813 verified live via deploy-render run **#149**
+(`5ad208a`, `/version.commit` match); cumulative run **#151** (`ee36c18`) rolls
+the #817 cleanup + #814 tests on top of the already-verified #813._
+
+Merged today (GitHub session, deploy verified via `deploy-render.yml`):
+
+- **#813** (`5ad208a`) — backend safety from the 2026-07-02 stress test: Arabic
+  conversational guard (BUG #6/#5), UAE-phone PII redaction (BUG #13),
+  `emotional_support` intent (BUG #9), known-code-only error mapping (BUG #15).
+  **Live & verified** (deploy-render run #149 success).
+- **#817** (`c36a97f`) — cleanup: removed dead `DocumentClassifier.CV_THRESHOLD`;
+  repointed 3 stale `apps/web/app/chat/page.tsx` refs in `CLAUDE.md` to `/command`.
+- **#814** (`ee36c18`) — 71-test regression suite for #813, reconciled to the
+  shipped error-message contract.
+- **#816** — CLOSED, absorbed into #813 (duplicate BUG #15 fix; #813 is canonical).
+
+### #813 pre-merge fixes (branch was red on 3 tests)
+1. `runtime._build_message` mapped ALL failure errors (incl. free-text) to a
+   generic message, breaking the pre-existing `test_607` contract. Now: KNOWN
+   internal codes → user-safe string; unknown/free-text → `Action failed: <error>`
+   (operator format, matches #816). #814's tests were reconciled to this contract.
+2. The Arabic guard ran BEFORE `classify_intent` and swallowed structured Arabic
+   commands (`احفظ أول وظيفة` save, `تحديث ملفي` profile-update). Moved AFTER
+   classification; intercepts only search-like intents (`_ARABIC_GUARD_SEARCH_INTENTS`
+   in `rico_chat_api.py`). Declarative Arabic still guarded (no cold-start hang);
+   explicit-search and structured commands reach their own handlers.
+
+### BUG-14 (pipeline save idempotency) — diagnosed, owner-gated
+Root cause confirmed: the ordinal-save upsert (`rico_db.upsert_recommendation`) uses
+`ON CONFLICT (user_id, job_key) WHERE job_key IS NOT NULL`, which requires the partial
+unique index from **migration 011** (`idx_rico_recommendations_user_job_unique`) — still
+**NOT applied** in production (#711 drift). Separately, `jobs_service.save_job/skip/block`
+still dedups via the JSON-file `is_applied()` (always False for DB-backed SaaS users) —
+fixed only in **draft PR #784** (unmerged). True fix = apply migration 011 to Neon
+(owner, at console — runbook `docs/runbooks/production-drift-005-011.md` Step A) + merge
+#784. Tracked as **TASK-20260703-036**.
+
+---
+
 _Last updated: 2026-07-02 — `main` HEAD `a2a53b4`, deploy-verified on Render
 (`/version.commit` match + `/health` ok). Merged today: #805 (email alerts, gated/inert),
 #806 (BUG-19 — confirmation screenshots = application evidence), #807 (applied-from-screenshot
