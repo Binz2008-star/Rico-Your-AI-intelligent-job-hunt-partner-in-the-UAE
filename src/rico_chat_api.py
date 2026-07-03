@@ -3915,12 +3915,15 @@ class RicoChatAPI:
             "current_company": "Current company",
             "notice_period": "Notice period",
         }
-        profile_dict: dict = profile if isinstance(profile, dict) else (vars(profile) if profile else {})
+        # `profile` may be a dict, a RicoProfile, or a frozen/slots ProfileContext
+        # (which has no __dict__, so vars() raises TypeError). Read each field via
+        # the type-agnostic accessor so the confirmation card is built without
+        # crashing the profile-update flow into the generic fallback.
         changes: list[dict] = []
         for field, proposed_value in (prefs or {}).items():
             changes.append({
                 "field": labels.get(field, field.replace("_", " ").title()),
-                "current_value": profile_dict.get(field),
+                "current_value": RicoChatAPI._profile_value(profile, field),
                 "proposed_value": proposed_value,
                 "source": "chat",
             })
