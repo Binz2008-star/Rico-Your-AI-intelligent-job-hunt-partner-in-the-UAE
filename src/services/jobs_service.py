@@ -12,8 +12,6 @@ from typing import Any, Dict, Optional
 from src.applications import (
     get_applied_jobs,
     get_job_id,
-    is_applied,
-    mark_applied,
 )
 from src.db import is_db_available
 from src.repositories import jobs_repo
@@ -240,9 +238,27 @@ def skip_job(job: Dict[str, Any], user_id: Optional[str] = None) -> bool:
     if not user_id:
         raise ValueError("user_id is required for authenticated access")
 
-    if is_applied(job, user_id=user_id):
+    # Dedup against the SAME store the write uses (applications_repo → DB for SaaS
+    # users). The old is_applied()/mark_applied() read/wrote the legacy JSON file,
+    # which is never consulted for DB-backed users, so re-skips always duplicated
+    # (BUG-14). Key on the canonical get_job_id() so the check and write agree.
+    from src.repositories import applications_repo
+
+    job_key = get_job_id(job)
+    if applications_repo.find_by_job_id(job_key, user_id=user_id):
         return False
-    return mark_applied(job, status="decision_made", notes="Skipped via API", user_id=user_id)
+    return bool(
+        applications_repo.create(
+            job_id=job_key,
+            title=job.get("title", ""),
+            company=job.get("company", ""),
+            location=job.get("location", ""),
+            url=job.get("link", ""),
+            status="decision_made",
+            source="api",
+            user_id=user_id,
+        )
+    )
 
 
 def save_job(job: Dict[str, Any], user_id: Optional[str] = None) -> bool:
@@ -250,22 +266,26 @@ def save_job(job: Dict[str, Any], user_id: Optional[str] = None) -> bool:
     if not user_id:
         raise ValueError("user_id is required for authenticated access")
 
-    if is_applied(job, user_id=user_id):
+    # Route both the dedup read and the write through applications_repo so they
+    # share one store (DB when available) — previously the dedup used the legacy
+    # JSON is_applied() while the write went to the DB, so a re-save was never
+    # detected and the counter kept incrementing (BUG-14). The repo enforces the
+    # saved-jobs limit internally when status=="saved".
+    from src.repositories import applications_repo
+
+    job_key = get_job_id(job)
+    if applications_repo.find_by_job_id(job_key, user_id=user_id):
         return False
-
-    # Route through applications_repo so writes and count_saved_jobs reads use
-    # the same store (DB when available). The repo enforces the saved-jobs limit
-    # internally when status=="saved", so no separate gate call is needed here.
-    from src.repositories.applications_repo import create as _repo_create
-
-    return _repo_create(
-        job_id=job.get("job_id", ""),
-        title=job.get("title", ""),
-        company=job.get("company", ""),
-        location=job.get("location", ""),
-        url=job.get("link", ""),
-        status="saved",
-        user_id=user_id,
+    return bool(
+        applications_repo.create(
+            job_id=job_key,
+            title=job.get("title", ""),
+            company=job.get("company", ""),
+            location=job.get("location", ""),
+            url=job.get("link", ""),
+            status="saved",
+            user_id=user_id,
+        )
     )
 
 
@@ -282,8 +302,21 @@ def block_company(job: Dict[str, Any], user_id: Optional[str] = None) -> str:
     if not company:
         raise ValueError("Job missing company field")
 
-    if not is_applied(job, user_id=user_id):
-        mark_applied(job, status="decision_made", notes="Company blocked via API", user_id=user_id)
+    # Same store for dedup read and write (BUG-14) — see skip_job/save_job.
+    from src.repositories import applications_repo
+
+    job_key = get_job_id(job)
+    if not applications_repo.find_by_job_id(job_key, user_id=user_id):
+        applications_repo.create(
+            job_id=job_key,
+            title=job.get("title", ""),
+            company=job.get("company", ""),
+            location=job.get("location", ""),
+            url=job.get("link", ""),
+            status="decision_made",
+            source="api",
+            user_id=user_id,
+        )
 
     _persist_blocked_company(user_id, company)
     logger.info("block_company: user=%s blocked company=%r", user_id, company)
