@@ -73,10 +73,24 @@ presence of a company/role token. Verb/sentence structure must decide the intent
 #### Context
 - Relevant files: `src/rico_chat_api.py` (`classify_intent` + `legacy_intent` dispatch from ~L7485).
 - Existing behavior: company/role keywords appear to force `job_search` regardless of verb.
+- TC-11 portion **shipped** (PR #832, merged): `_PROFILE_QUERY_RE` in the intent classifier.
+
+#### Measured finding — TC-8 is dispatch/handler, not classification (2026-07-03)
+Trace: `AI_WORKSPACE/EVALS/2026-07-03-tc2-tc8-path-trace.md`.
+- TC-8 already classifies as `interview_prep` on `main` (verified, PR #832).
+- The active `_handle_interview_prep` (`rico_chat_api.py:16133`) **ignores the message**:
+  it keys prep off `profile.target_roles[0]`, never parses "Richemont"/the role, and never
+  looks up a tracked application. Richemont interview-prep is therefore a **static template**,
+  neither an exact tracked-role lookup nor a company-openings search.
+- **Duplicate-method shadow bug:** `_handle_interview_prep` is defined twice
+  (`:14532` richer, `:16133` static); Python keeps the later `:16133`, so the richer handler
+  is dead code. Consolidate before any behavioral change.
 
 #### Acceptance criteria
 - [ ] "prepare me for an interview for <role> at <company>" routes to interview/coaching, not search.
-- [ ] "what is my profile?" does not flash a search first (TC-11).
+- [x] "what is my profile?" does not flash a search first (TC-11) — shipped in #832.
+- [ ] Interview-prep handler consumes company + role from the message and any tracked application
+      before falling back to `target_roles[0]`; duplicate handler resolved.
 - [ ] Explicit search verbs (search/find/ابحث) still route to search.
 - [ ] Regression: existing intent tests (#814 suite) stay green.
 
@@ -105,14 +119,35 @@ conversation context instead of re-running extraction.
 
 ### TASK-20260703-040 — Relevance scoring + nationality-gate filtering (P1)
 
-Status: proposed
+Status: investigation — TC-2 reframed as query-generation/propagation, NOT a scorer fix
 Owner: unassigned
 Branch: TBD
-Issue/PR: chat-QA 2026-07-03 (TC-2, TC-1)
+Issue/PR: chat-QA 2026-07-03 (TC-2, TC-1); trace `AI_WORKSPACE/EVALS/2026-07-03-tc2-tc8-path-trace.md`
 
-#### Objective
-Rank by function + seniority + skills overlap, not job-title keyword presence; flag/deprioritize
-UAE-national-gated roles when the profile does not confirm eligibility.
+#### Measured finding (2026-07-03, measure-first)
+TC-2 is **not** a scorer bug. Two independent characterizations show the relevance
+engines rank correctly when given the confirmed targets + a candidate set with
+relevant jobs:
+- `src/scoring.py::score_jobs_for_user` (the `/jobs` REST scorer) — earlier characterization.
+- `src/llm_scorer.py::rank_by_profile_fit` (the **actual chat-path ranker**) —
+  ESG target → ESG Manager 76, Compliance 40, ServiceNow/Field/HR/Operations 0.
+  Pinned in `tests/test_tc2_ordering_characterization.py`.
+
+The chat path does **not** call `score_jobs_for_user`; it uses `rank_by_profile_fit`
+then a coarse `_quality_key` re-sort (20-pt fit bands + source quality + learned
+preference) at `rico_chat_api.py:5445`. TC-2 reproduces only via:
+- **A. stale target roles** (profile still Operations/Admin → ranker floats Operations 66,
+  HR 16 above ESG 0), or
+- **B. wrong candidate set** (query built from stale role → provider returns no ESG jobs →
+  all fit=0 → downstream quality/learned-pref ordering resurfaces Operations/Admin).
+
+#### Next steps (require full app / live-test env — no blind hot-path edits)
+- [ ] Instrument: log `search_role` and the `target_roles` passed to `rank_by_profile_fit`
+      (`rico_chat_api.py:5383`) and diff against the confirmed target; log `fetch.provider`
+      + returned titles (`rico_chat_api.py:5247`).
+- [ ] Verify an in-session target switch (Ops → ESG/Compliance) persists to the profile row
+      the *next* turn loads (overlaps TC-4), rather than reusing a stale cached profile.
+- [ ] Only after the trace confirms the layer: fix query generation / target propagation.
 
 #### Acceptance criteria
 - [ ] ESG/Compliance profile no longer surfaces software-engineering roles in top results (TC-2).
