@@ -28,6 +28,36 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260703-001 — Keep partial-unique as ON CONFLICT arbiter; codify full-unique for read coverage
+
+Status: accepted
+Date: 2026-07-03
+Owner: Claude (GitHub session)
+Related task: TASK-20260703-037
+
+#### Context
+`rico_job_recommendations` carries both a partial-UNIQUE
+(`idx_rico_recommendations_user_job_unique`, WHERE job_key IS NOT NULL — migration 011)
+and a full-UNIQUE (`rico_job_recommendations_user_id_job_key_key`) in production.
+Migration 034 dropped the two plain `(user_id, job_key)` indexes; something must cover
+their read role, and the upsert's ON CONFLICT targets a specific arbiter.
+
+#### Decision
+Keep the partial-UNIQUE as the named `ON CONFLICT (user_id, job_key) WHERE job_key IS NOT NULL`
+arbiter (do not replace it). Codify the full-UNIQUE in migration 035 so a fresh DB matches
+production and covers general `(user_id, job_key)` lookups after 034's drops. Chose #826's
+6-drop set over #827's 8: the 2 extra drops were unsafe — `idx_rico_recommendations_user_status`
+is re-created by the `rico_db.py` runtime DDL on every startup, so a migration DROP would not stick.
+
+#### Consequences
+- Positive: less write amplification on hot tables; code and production schema agree; BUG-14
+  idempotency arbiter untouched; drift checker now verifies the full-unique constraint.
+- Negative/trade-off: production briefly carried a schema object (the full-unique) the repo
+  did not declare; 035 closes that gap retroactively rather than at table-create time.
+
+#### Follow-up
+- [ ] Verify remaining 005 objects for #712 before closing it.
+
 ### DEC-20260628-001 — No Dead UI Rule
 
 Status: accepted
