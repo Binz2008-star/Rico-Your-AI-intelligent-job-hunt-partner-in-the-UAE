@@ -9408,13 +9408,29 @@ class RicoChatAPI:
         # Type is forced to "interview_prep" so the frontend renders the correct UI
         # regardless of which provider (or keyword fallback) handled the response.
         if legacy_intent == "interview_prep":
+            # Ground the AI on the exact role/company the user named and any
+            # tracked application for it, so "prepare me for an interview for the
+            # Retail Operations Manager role at Richemont" preps for that role
+            # instead of drifting to generic tips or company openings (TC-8).
+            _ip_prompt = None
+            _ip_target: "dict[str, Any]" = {}
+            try:
+                _ip_target = self._resolve_interview_prep_target(user_id, message, profile)
+                _ip_prompt = _ip_target.get("prompt_override")
+            except Exception:
+                _ip_prompt = None
             _ip_resp = self._answer_with_ai_fallback(
                 user_id=user_id,
                 message=message,
                 profile=profile,
                 save_user_message=False,
+                prompt_override=_ip_prompt,
             )
             _ip_resp["type"] = "interview_prep"
+            if _ip_target.get("target_role"):
+                _ip_resp["target_role"] = _ip_target["target_role"]
+            if _ip_target.get("company"):
+                _ip_resp["company"] = _ip_target["company"]
             return _ip_resp
 
         # Nonsense — do NOT search
@@ -14529,104 +14545,6 @@ class RicoChatAPI:
             "message": counter_advice,
         }
 
-    def _handle_interview_prep(
-        self, user_id: str, profile: Any, message: str
-    ) -> dict[str, Any]:
-        """Return UAE-context interview preparation advice, personalised by role.
-
-        Detects: "how do I prepare for an interview?", "common interview questions",
-        "interview tips for HSE", "what to wear to a UAE interview?".
-        """
-        import re as _re
-
-        arabic = self._is_arabic_text(message)
-
-        target_roles = self._as_list(self._profile_value(profile, "target_roles"))
-        role = target_roles[0] if target_roles else ""
-
-        # Try to extract a role from the message itself
-        _role_m = _re.search(
-            r"interview\s+(?:tips?|questions?|prep(?:aration)?|advice|help)\s+for\s+([A-Za-z][A-Za-z\s]{2,30}?)(?:\s+(?:role|job|position|in\b)|\??$)",
-            message, _re.IGNORECASE,
-        )
-        if _role_m:
-            role = _role_m.group(1).strip()
-
-        role_line = f" for **{role}** roles" if role else ""
-
-        is_attire = bool(_re.search(r"\bwear|attire|dress\s+code|what\s+to\s+bring\b", message, _re.IGNORECASE))
-        is_questions = bool(_re.search(r"\bquestions?\b", message, _re.IGNORECASE))
-
-        if is_attire:
-            advice = (
-                "**UAE Interview Dress Code:**\n\n"
-                "• **Business formal** is the default for first interviews in UAE corporates and government.\n"
-                "• Men: suit and tie (dark colours preferred) or smart blazer + trousers.\n"
-                "• Women: modest professional attire — covered shoulders, knee-length or longer. "
-                "This is especially important in government, banking, and oil & gas sectors.\n"
-                "• Tech startups and creative agencies accept smart-casual, but it's always safer to overdress.\n"
-                "• Bring: printed CV copies (2-3), certifications folder, notebook, pen.\n"
-                "• Arrive 10–15 minutes early — UAE traffic is unpredictable and punctuality signals respect."
-            )
-        elif is_questions:
-            questions_block = (
-                f"\n\n**Common{role_line} Interview Questions in UAE:**\n\n"
-                "1. Tell me about yourself. *(Keep it professional, 2-3 minutes, UAE-relevant)*\n"
-                "2. Why do you want to work in the UAE / with this company?\n"
-                "3. What is your current / expected salary? *(Research market rates first)*\n"
-                "4. What is your notice period?\n"
-                "5. Describe a challenge you overcame at work.\n"
-                "6. Where do you see yourself in 5 years?\n"
-                "7. Why are you leaving your current job?\n"
-                + (f"8. Walk me through a specific {role} project or achievement.\n" if role else "")
-                + "\n💡 **Tip:** In the UAE, interviewers often ask about visa status and notice period upfront — have both answers ready."
-            )
-            advice = (
-                f"**Interview Preparation Guide{role_line}:**\n\n"
-                "• Research the company's projects, clients, and recent news — especially in UAE context.\n"
-                "• Prepare 2-3 STAR-format examples (Situation, Task, Action, Result).\n"
-                "• Know your numbers: salary expectation, years of experience, and notice period."
-                + questions_block
-            )
-        else:
-            advice = (
-                f"**Interview Preparation Tips{role_line} — UAE Context:**\n\n"
-                "**Before the interview:**\n"
-                "• Research the company's UAE projects and presence — LinkedIn, their website, news.\n"
-                "• Prepare 2-3 strong STAR stories (Situation → Task → Action → Result).\n"
-                "• Know your salary expectation and be ready to state it confidently.\n"
-                "• Confirm the interview format: in-person, Teams/Zoom, or panel.\n\n"
-                "**During the interview:**\n"
-                "• Greet formally — handshakes are standard in professional UAE settings.\n"
-                "• Let the interviewer set the pace; don't rush.\n"
-                "• Be ready for 'Why UAE?' — interviewers want to know you're committed to staying.\n"
-                "• Avoid bad-mouthing previous employers — UAE is a small professional community.\n\n"
-                "**After the interview:**\n"
-                "• Send a thank-you email within 24 hours — not expected everywhere, but always noticed.\n"
-                "• Follow up after 5–7 business days if you haven't heard.\n\n"
-                + (f"Say **'common {role} interview questions'** for role-specific questions." if role
-                   else "Say **'common interview questions'** for the most asked questions.")
-            )
-
-        if arabic:
-            advice = (
-                f"**نصائح المقابلة الوظيفية{' لـ ' + role if role else ''} في الإمارات:**\n\n"
-                "• ابحث عن الشركة ومشاريعها في الإمارات قبل المقابلة.\n"
-                "• جهّز 2-3 أمثلة بأسلوب STAR (الموقف، المهمة، الإجراء، النتيجة).\n"
-                "• اعرف توقعاتك الراتبية وفترة إشعارك.\n"
-                "• الزي الرسمي هو المعيار في معظم بيئات العمل الإماراتية.\n"
-                "• أرسل رسالة شكر بعد 24 ساعة من المقابلة."
-            )
-
-        self._append_chat(user_id, "assistant", advice)
-        return {
-            "type": "interview_prep",
-            "role": role or None,
-            "is_attire_query": is_attire,
-            "is_questions_query": is_questions,
-            "message": advice,
-        }
-
     def _handle_rejection(
         self, user_id: str, profile: Any, message: str
     ) -> dict[str, Any]:
@@ -16129,6 +16047,166 @@ class RicoChatAPI:
         }
 
     # ── Interview preparation ────────────────────────────────────────────────────
+
+    @staticmethod
+    def _extract_interview_context(message: str) -> "tuple[str, str]":
+        """Parse an interview-prep request for the role and company it names.
+
+        Handles "prepare me for an interview for the Retail Operations Manager
+        role at Richemont", "... for a Compliance Manager at ADNOC", "interview
+        at Richemont". Returns ``(role, company)`` with empty strings when a
+        part is absent. Deterministic — no model call.
+        """
+        if not message:
+            return "", ""
+        role = ""
+        company = ""
+        # "interview for [a|an|the] <role> [role|position|job] at <company>".
+        # Anchored on "interview for" so the leading "for an interview" is not
+        # mistaken for the role clause.
+        _role_m = re.search(
+            r"\binterview\s+for\s+(?:an?\s+|the\s+|my\s+)?(.+?)\s+(?:\bat\b|\bwith\b|@)\s+(.+?)(?:[.?!]|$)",
+            message, re.IGNORECASE,
+        )
+        if _role_m:
+            role = _role_m.group(1).strip(" .-")
+            # strip a trailing "role"/"position"/"job" noun ("... Manager role")
+            role = re.sub(r"\s+(?:roles?|positions?|jobs?)$", "", role, flags=re.IGNORECASE).strip(" .-")
+            company = _role_m.group(2).strip(" .-")
+        else:
+            # company only: "interview at Richemont", "interview with ADNOC"
+            _co_m = re.search(
+                r"\binterview\b.{0,30}?(?:\bat\b|\bwith\b|@)\s+(.+?)(?:[.?!]|$)",
+                message, re.IGNORECASE,
+            )
+            if _co_m:
+                company = _co_m.group(1).strip(" .-")
+        # Guard against run-on captures.
+        if len(role) > 60:
+            role = ""
+        if len(company) > 60:
+            company = ""
+        return role, company
+
+    def _resolve_interview_prep_target(
+        self, user_id: str, message: str, profile: Any
+    ) -> "dict[str, Any]":
+        """Resolve the exact role/company an interview-prep request is about, and
+        whether it matches a tracked application, then build a grounded prompt.
+
+        Resolution order for the role: role named in the message → role of a
+        tracked application at the named company → the user's first target role.
+        Best-effort: the tracked-application lookup degrades to None on any error
+        so the prep still runs.
+        """
+        role, company = self._extract_interview_context(message)
+
+        tracked: "dict[str, Any] | None" = None
+        if company or role:
+            try:
+                from src.repositories import applications_repo
+                apps = applications_repo.get_all(user_id=user_id) or []
+                tracked = self._match_tracked_application(apps, role, company)
+            except Exception:
+                tracked = None
+
+        def _tv(obj: Any, *keys: str) -> str:
+            for k in keys:
+                v = obj.get(k) if isinstance(obj, dict) else getattr(obj, k, None)
+                if v:
+                    return str(v)
+            return ""
+
+        resolved_role = role or (_tv(tracked, "role", "title", "job_title") if tracked else "")
+        if not resolved_role:
+            _targets = self._as_list(self._profile_value(profile, "target_roles"))
+            resolved_role = str(_targets[0]) if _targets else ""
+        resolved_company = company or (_tv(tracked, "company") if tracked else "")
+
+        prompt = self._build_interview_prompt_override(
+            message, resolved_role, resolved_company, tracked
+        )
+        return {
+            "target_role": resolved_role,
+            "company": resolved_company,
+            "tracked": bool(tracked),
+            "prompt_override": prompt,
+        }
+
+    @staticmethod
+    def _match_tracked_application(
+        apps: "list[Any]", role: str, company: str
+    ) -> "dict[str, Any] | None":
+        """Find the tracked application that best matches the named role/company.
+
+        Prefers a company+role match, then company, then role. Returns the raw
+        application record (dict-like) or None.
+        """
+        role_l = (role or "").strip().lower()
+        company_l = (company or "").strip().lower()
+
+        def _f(app: Any, *keys: str) -> str:
+            for k in keys:
+                v = app.get(k) if isinstance(app, dict) else getattr(app, k, None)
+                if v:
+                    return str(v).lower()
+            return ""
+
+        best = None
+        best_rank = 0
+        for app in apps or []:
+            a_role = _f(app, "role", "title", "job_title")
+            a_co = _f(app, "company")
+            co_hit = bool(company_l) and company_l in a_co
+            role_hit = bool(role_l) and (role_l in a_role or a_role in role_l)
+            rank = (2 if co_hit and role_hit else 1 if (co_hit or role_hit) else 0)
+            if rank > best_rank:
+                best, best_rank = app, rank
+        return best if best_rank > 0 else None
+
+    @staticmethod
+    def _build_interview_prompt_override(
+        message: str, role: str, company: str, tracked: "dict[str, Any] | None"
+    ) -> str:
+        """Build a grounded LLM instruction for interview prep.
+
+        Pins the exact role/company, states plainly when the role is not tracked,
+        and forbids listing job openings (interview prep is coaching, not search).
+        """
+        def _tv(obj: Any, *keys: str) -> str:
+            for k in keys:
+                v = obj.get(k) if isinstance(obj, dict) else getattr(obj, k, None)
+                if v:
+                    return str(v)
+            return ""
+
+        lines = [
+            f'The user asked: "{message.strip()}"',
+            "",
+            "Task: prepare the user for a job INTERVIEW (coaching). "
+            "Do NOT list, search for, or recommend job openings — this is not a job search.",
+            f"Target role: {role or 'not specified'}",
+            f"Company: {company or 'not specified'}",
+        ]
+        if tracked:
+            _stage = _tv(tracked, "status", "stage")
+            lines.append(
+                "This matches a job the user is already tracking"
+                + (f" (status: {_stage})" if _stage else "")
+                + ". Tailor the preparation to that specific role and company."
+            )
+        elif role and company:
+            lines.append(
+                f"The user is NOT currently tracking a {role} role at {company}. "
+                f"Say so in one short sentence, then give focused interview preparation "
+                f"for a {role} role at {company} anyway."
+            )
+        lines.append(
+            "Provide: company/role research pointers, the most likely interview "
+            "questions for this role, 2-3 STAR examples to prepare, and smart "
+            "questions for the user to ask. Keep it specific to the role above."
+        )
+        return "\n".join(lines)
 
     def _handle_interview_prep(self, user_id: str, profile: Any, message: str) -> dict[str, Any]:
         target_role = ""

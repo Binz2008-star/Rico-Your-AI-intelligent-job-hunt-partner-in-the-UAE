@@ -115,7 +115,9 @@ _EXPLAIN_PATTERNS = re.compile(
 )
 _PREFS_PATTERNS = re.compile(
     r"\b(update|change|set|modify|adjust)\b.{0,40}"
-    r"\b(salary|city|location|preference|role|title|industry|experience|notice|telegram)\b"
+    # roles?/titles? — plural target updates must classify as a preference
+    # change so the extractor runs (TC-2). Singular still matches.
+    r"\b(salary|city|location|preference|roles?|titles?|industry|experience|notice|telegram)\b"
     r"|\b(i (want|prefer|need|am looking for)|my (preference|target|goal) is)\b"
     # Declarative city statements: "My favorite city is Dubai", "I live in Dubai"
     r"|\bmy\s+(?:favorite|preferred|home|base|target)?\s*city\s+is\b"
@@ -234,6 +236,19 @@ def _extract_entities(message: str) -> Dict[str, Any]:
                 entities["job_title"] = phrase.title()
                 break
 
+    # Multi-role target update: "set/update my target roles to X and Y",
+    # "my target roles are X, Y". The canonical profile field is target_roles
+    # (a list); a single job_title alone loses the second role (TC-2).
+    _tr_m = re.search(
+        r"\btarget\s+roles?\b\s*(?:to|are|as|:|=|of)?\s+(.+?)(?:[.?!]|$)",
+        message,
+        re.IGNORECASE,
+    )
+    if _tr_m:
+        _roles = _split_target_roles(_tr_m.group(1))
+        if _roles:
+            entities["target_roles"] = _roles
+
     ordinal_match = _ORDINAL_REF_RE.search(lower)
     if ordinal_match:
         token = ordinal_match.group(1).lower()
@@ -241,6 +256,36 @@ def _extract_entities(message: str) -> Dict[str, Any]:
         entities["job_index"] = _ORDINAL_MAP.get(token)
 
     return entities
+
+
+def _split_target_roles(raw: str) -> list[str]:
+    """Split a target-role clause ("ESG Manager and Compliance Manager") into a
+    clean, de-duplicated list of Title-Cased role names.
+
+    Splits on commas / "and" / "&", strips a trailing "role(s)"/"job(s)"/
+    "position(s)" noun, and drops empty or over-long fragments so a run-on
+    sentence can't poison the list.
+    """
+    if not raw:
+        return []
+    parts = re.split(r"\s*(?:,|/|&|\band\b)\s*", raw, flags=re.IGNORECASE)
+    roles: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        cleaned = re.sub(
+            r"\b(roles?|jobs?|positions?|please|now|thanks?)\b",
+            "",
+            part,
+            flags=re.IGNORECASE,
+        ).strip(" .-\t")
+        if not cleaned or len(cleaned) > 60:
+            continue
+        key = cleaned.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        roles.append(cleaned.title())
+    return roles
 
 
 # ── Fast-path keyword classifier ──────────────────────────────────────────────
@@ -381,8 +426,15 @@ def _build_tool_args(
             prefs["preferred_cities"] = [entities["city"]]
         if entities.get("salary_raw"):
             prefs["salary_hint"] = entities["salary_raw"]
-        if entities.get("job_title"):
-            prefs["target_role"] = entities["job_title"]
+        # Canonical profile field is target_roles (List[str]). RicoProfile has
+        # no singular `target_role`, so a singular key is silently dropped by
+        # upsert_profile's field whitelist and never persisted (TC-2, BUG-08
+        # class). Always emit the list form: an explicit multi-role clause when
+        # present, else the single extracted job_title as a one-item list.
+        if entities.get("target_roles"):
+            prefs["target_roles"] = entities["target_roles"]
+        elif entities.get("job_title"):
+            prefs["target_roles"] = [entities["job_title"]]
         args["preferences"] = prefs
 
     return args
