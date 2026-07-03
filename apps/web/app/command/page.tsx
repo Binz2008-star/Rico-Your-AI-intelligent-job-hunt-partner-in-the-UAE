@@ -7,6 +7,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import type { ChatApiResponse, JobMatch, NextAction, ProfilePreview, ProfileUpdatePayload, RicoOption, UploadCVResponse } from "@/lib/api";
 import type { RicoAgenticUi, RicoChatAction, RicoProposedChange, RicoAttachmentAnalysis, ExecuteAllowedAction } from "@/lib/schemas";
 import { EXECUTE_ALLOWED_ACTIONS } from "@/lib/schemas";
+import { stripDeepLinkParams } from "@/lib/deepLinkPrompt";
 import { bustSidebarCache } from "@/hooks/useSidebarStatus";
 import { ChatActionsRow } from "@/components/ui/rico/ChatActionCard";
 import { RicoMarkdownContent } from "@/components/ui/rico/RicoMarkdownContent";
@@ -815,9 +816,18 @@ export default function CommandPage() {
     // cvReady=false / prompt=null, preventing a hydration mismatch.
     // Supports ?prompt= (legacy) and ?q= (CAREER-OS-10 sidebar deep-links).
     useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        setCvReady(params.get("cv") === "ready");
-        setPrompt(params.get("prompt") ?? params.get("q") ?? null);
+        setCvReady(new URLSearchParams(window.location.search).get("cv") === "ready");
+
+        // BUG-18: ?q=/?prompt= are one-shot action params. Capture the prompt, then
+        // strip it from the URL so a page refresh or back-navigation does not re-fire
+        // the same prompt and re-inject it into an already-active chat thread. The
+        // captured value still drives the single send below via `prompt` state;
+        // every other param (e.g. cv=ready) is preserved.
+        const { prompt: deepLinkPrompt, cleanSearch, changed } = stripDeepLinkParams(window.location.search);
+        setPrompt(deepLinkPrompt);
+        if (changed && typeof window.history?.replaceState === "function") {
+            window.history.replaceState(null, "", window.location.pathname + cleanSearch + window.location.hash);
+        }
     }, []);
 
     const messagesContainerRef = useRef<HTMLDivElement>(null);
