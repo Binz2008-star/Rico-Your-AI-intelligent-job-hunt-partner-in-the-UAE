@@ -512,7 +512,8 @@ def list_saved_searches(user_id: str, limit: int = 20) -> list[dict[str, Any]]:
 
         db_user_id = str(bundle["id"])
 
-        with db.connect() as conn:
+        conn = db.connect()
+        try:
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -525,6 +526,8 @@ def list_saved_searches(user_id: str, limit: int = 20) -> list[dict[str, Any]]:
                     (db_user_id, limit),
                 )
                 rows = cur.fetchall()
+        finally:
+            conn.close()
 
         searches = []
         for row in rows:
@@ -554,7 +557,8 @@ def delete_search(user_id: str, search_id: str) -> bool:
 
         db_user_id = str(bundle["id"])
 
-        with db.connect() as conn:
+        conn = db.connect()
+        try:
             with conn.cursor() as cur:
                 cur.execute(
                     "DELETE FROM rico_saved_searches WHERE id = %s AND user_id = %s",
@@ -562,6 +566,8 @@ def delete_search(user_id: str, search_id: str) -> bool:
                 )
                 deleted = cur.rowcount > 0
             conn.commit()
+        finally:
+            conn.close()
 
         if deleted:
             logger.info("profile_repo: deleted search user_id=%s search_id=%s", user_id, search_id)
@@ -586,7 +592,8 @@ def get_search_by_id(user_id: str, search_id: str) -> dict[str, Any] | None:
 
         db_user_id = str(bundle["id"])
 
-        with db.connect() as conn:
+        conn = db.connect()
+        try:
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -597,6 +604,8 @@ def get_search_by_id(user_id: str, search_id: str) -> dict[str, Any] | None:
                     (search_id, db_user_id)
                 )
                 row = cur.fetchone()
+        finally:
+            conn.close()
 
         if row:
             search = dict(row)
@@ -622,7 +631,8 @@ def get_profiles_by_role(target_role: str, limit: int = 100) -> list[RicoProfile
         return []
 
     try:
-        with db.connect() as conn:
+        conn = db.connect()
+        try:
             with conn.cursor() as cur:
                 # Use JSONB array contains operator for proper array matching
                 cur.execute(
@@ -637,6 +647,8 @@ def get_profiles_by_role(target_role: str, limit: int = 100) -> list[RicoProfile
                     (target_role, limit)
                 )
                 rows = cur.fetchall()
+        finally:
+            conn.close()
 
         profiles = []
         for row in rows:
@@ -712,24 +724,28 @@ def find_profiles_by_email(email: str) -> list[Any]:
 
     db = _db()
     if db:
+        conn = None
         try:
-            with db.connect() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        SELECT u.*, p.profile as profile_data, s.settings as settings_data
-                        FROM rico_users u
-                        LEFT JOIN rico_profiles p ON p.user_id = u.id
-                        LEFT JOIN rico_agent_settings s ON s.user_id = u.id
-                        WHERE LOWER(u.email) = %s
-                        LIMIT 10
-                        """,
-                        (email_norm,)
-                    )
-                    rows = cur.fetchall()
-                    candidates.extend(_bundle_rows_to_profiles(rows))
+            conn = db.connect()
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT u.*, p.profile as profile_data, s.settings as settings_data
+                    FROM rico_users u
+                    LEFT JOIN rico_profiles p ON p.user_id = u.id
+                    LEFT JOIN rico_agent_settings s ON s.user_id = u.id
+                    WHERE LOWER(u.email) = %s
+                    LIMIT 10
+                    """,
+                    (email_norm,)
+                )
+                rows = cur.fetchall()
+                candidates.extend(_bundle_rows_to_profiles(rows))
         except Exception:
             logger.exception("profile_repo: find_profiles_by_email failed email=%s", email_norm)
+        finally:
+            if conn:
+                conn.close()
 
     # Memory fallback — linear scan over JSON profiles
     if not candidates:
@@ -753,25 +769,29 @@ def find_profiles_by_phone(phone: str) -> list[Any]:
 
     db = _db()
     if db:
+        conn = None
         try:
-            with db.connect() as conn:
-                with conn.cursor() as cur:
-                    # Remove non-digits from stored phone and compare last N digits
-                    cur.execute(
-                        """
-                        SELECT u.*, p.profile as profile_data, s.settings as settings_data
-                        FROM rico_users u
-                        LEFT JOIN rico_profiles p ON p.user_id = u.id
-                        LEFT JOIN rico_agent_settings s ON s.user_id = u.id
-                        WHERE REGEXP_REPLACE(u.phone, '[^0-9]', '', 'g') LIKE %s
-                        LIMIT 10
-                        """,
-                        (f"%{digits}",)
-                    )
-                    rows = cur.fetchall()
-                    candidates.extend(_bundle_rows_to_profiles(rows))
+            conn = db.connect()
+            with conn.cursor() as cur:
+                # Remove non-digits from stored phone and compare last N digits
+                cur.execute(
+                    """
+                    SELECT u.*, p.profile as profile_data, s.settings as settings_data
+                    FROM rico_users u
+                    LEFT JOIN rico_profiles p ON p.user_id = u.id
+                    LEFT JOIN rico_agent_settings s ON s.user_id = u.id
+                    WHERE REGEXP_REPLACE(u.phone, '[^0-9]', '', 'g') LIKE %s
+                    LIMIT 10
+                    """,
+                    (f"%{digits}",)
+                )
+                rows = cur.fetchall()
+                candidates.extend(_bundle_rows_to_profiles(rows))
         except Exception:
             logger.exception("profile_repo: find_profiles_by_phone failed phone=%s", digits)
+        finally:
+            if conn:
+                conn.close()
 
     # Memory fallback
     if not candidates:
@@ -796,27 +816,31 @@ def find_profiles_by_telegram_username(username: str) -> list[Any]:
 
     db = _db()
     if db:
+        conn = None
         try:
-            with db.connect() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        SELECT u.*, p.profile as profile_data, s.settings as settings_data
-                        FROM rico_users u
-                        LEFT JOIN rico_profiles p ON p.user_id = u.id
-                        LEFT JOIN rico_agent_settings s ON s.user_id = u.id
-                        WHERE LOWER(u.telegram_username) = %s
-                        LIMIT 10
-                        """,
-                        (username_norm,)
-                    )
-                    rows = cur.fetchall()
-                    candidates.extend(_bundle_rows_to_profiles(rows))
+            conn = db.connect()
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT u.*, p.profile as profile_data, s.settings as settings_data
+                    FROM rico_users u
+                    LEFT JOIN rico_profiles p ON p.user_id = u.id
+                    LEFT JOIN rico_agent_settings s ON s.user_id = u.id
+                    WHERE LOWER(u.telegram_username) = %s
+                    LIMIT 10
+                    """,
+                    (username_norm,)
+                )
+                rows = cur.fetchall()
+                candidates.extend(_bundle_rows_to_profiles(rows))
         except Exception:
             logger.exception(
                 "profile_repo: find_profiles_by_telegram_username failed username=%s",
                 username_norm,
             )
+        finally:
+            if conn:
+                conn.close()
 
     # Memory fallback
     if not candidates:
@@ -902,9 +926,12 @@ def health_check() -> dict[str, Any]:
         return {"status": "degraded", "db_available": False, "fallback_active": True}
 
     try:
-        with db.connect() as conn:
+        conn = db.connect()
+        try:
             with conn.cursor() as cur:
                 cur.execute("SELECT 1")
+        finally:
+            conn.close()
         return {"status": "healthy", "db_available": True, "fallback_active": False}
     except Exception as e:
         return {"status": "unhealthy", "db_available": False, "error": str(e), "fallback_active": True}
