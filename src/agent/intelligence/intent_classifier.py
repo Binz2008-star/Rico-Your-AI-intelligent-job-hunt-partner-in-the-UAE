@@ -368,6 +368,28 @@ _PROFILE_SUMMARY_PHRASES = frozenset([
     "ما هو اسمي", "ما اسمي", "اسمي", "من انا", "ما هو ملفي",
 ])
 
+# Self-profile attribute queries — "what is my current role?", "tell me my role,
+# years of experience and skills", "how many years of experience do I have?".
+# These ask Rico to READ the user's own profile and must route to profile.show,
+# never to job search. The call site additionally guards against job-search
+# phrasing (jobs/match/apply) so "what jobs match my experience" still searches.
+_PROFILE_QUERY_RE = re.compile(
+    r"\b(?:what(?:'?s| is| are)?|tell\s+me|remind\s+me|show\s+me)\b[^?]{0,40}?\bmy\b\s*"
+    r"(?:current\s+|present\s+)?"
+    r"(?:role|job\s+title|title|position|seniority|profile|background|"
+    r"years?\s+of\s+experience|experience\s+level|skill\s*set)\b"
+    r"|\bhow\s+many\s+years?\b[^?]{0,25}\bexperience\b"
+    r"|\bwhat\s+do\s+you\s+know\s+about\s+my\s+(?:background|experience|role|profile|skills?)\b",
+    re.IGNORECASE,
+)
+
+# Job-search signal used to veto _PROFILE_QUERY_RE — if the message is really
+# asking for jobs/matches, it is a search, not a profile read.
+_PROFILE_QUERY_VETO_RE = re.compile(
+    r"\b(jobs?|vacanc|opening|match|matches|matching|apply|applying)\b",
+    re.IGNORECASE,
+)
+
 # ── Learning profile summary phrases ─────────────────────────────────────────
 # User wants to see what Rico has learned from their behavior.
 
@@ -1758,6 +1780,13 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
     # Application tracking regex (looser than exact phrases)
     if _APPLICATION_TRACKING_RE.search(text) and not _JOB_SEARCH_EXPLICIT_RE.search(text):
         return IntentResult("application_tracking", 0.8, "regex")
+
+    # Self-profile attribute query ("what is my current role?", "how many years of
+    # experience do I have?") — read the profile, never search. Vetoed when the
+    # message really asks for jobs/matches so profile-match search still wins.
+    if _PROFILE_QUERY_RE.search(text) and not _PROFILE_QUERY_VETO_RE.search(text) \
+            and not _JOB_SEARCH_EXPLICIT_RE.search(text):
+        return IntentResult("profile_summary", 0.85, "regex")
 
     # ── 4. Job search patterns ───────────────────────────────────────────
     # 4a-0. Descriptive category → concrete allowed roles ("I want product and
