@@ -52,6 +52,9 @@ CHECKS: list[tuple[str, str, object]] = [
     ("029", "column", ("users", "profile_nudge_sent_at")),
     ("030", "column", ("action_audit_log", "event_type")),
     ("030", "trigger", "trg_action_audit_log_append_only"),
+    ("031", "table", "learning_signals_audit"),
+    ("032", "table", "uploaded_document_context"),
+    ("033", "table", "email_alert_log"),
 ]
 
 

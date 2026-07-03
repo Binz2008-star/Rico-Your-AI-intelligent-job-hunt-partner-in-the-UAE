@@ -36,3 +36,21 @@ def test_030_checks_both_column_and_trigger():
     objs = {(kind, ident) for migration, kind, ident in CHECKS if migration == "030"}
     assert ("column", ("action_audit_log", "event_type")) in objs
     assert ("trigger", "trg_action_audit_log_append_only") in objs
+
+
+# Migrations with no DB-detectable object (comment/doc-only) — legitimately not
+# in CHECKS. Everything else MUST be covered, or the daily drift job would go
+# green while the migration was never applied to Neon.
+_NO_OBJECT_MIGRATIONS = {"020"}  # 020_user_job_context_gap_filler: comment-only
+
+
+def test_every_migration_file_is_covered():
+    on_disk = {p.name[:3] for p in _MIGRATIONS_DIR.glob("*.sql")}
+    covered = {m for m, _, _ in CHECKS}
+    uncovered = on_disk - covered - _NO_OBJECT_MIGRATIONS
+    assert not uncovered, (
+        f"migration file(s) {sorted(uncovered)} have no CHECKS entry — the drift "
+        "job would pass even if they were never applied to Neon. Add a signature "
+        "object to scripts/check_migration_drift.py (or, if comment-only, to "
+        "_NO_OBJECT_MIGRATIONS here)."
+    )

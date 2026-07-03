@@ -1,4 +1,4 @@
--- Migration 027: Add missing performance indexes on high-traffic FK and lookup columns.
+-- Migration 028: Add missing performance indexes on high-traffic FK and lookup columns.
 --
 -- These columns are queried on every chat session, job load, and application lookup
 -- but had no dedicated indexes. The DDL in rico_db.py only created indexes on
