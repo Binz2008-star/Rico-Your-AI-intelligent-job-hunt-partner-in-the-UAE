@@ -5807,6 +5807,52 @@ class RicoChatAPI:
         result.setdefault("success", True)
         return result
 
+    def _conversational_unavailable_response(
+        self, message: str, *, debug_id: str, language: str | None = None
+    ) -> dict[str, Any]:
+        """Deterministic reply when the conversational AI path fails unexpectedly.
+
+        This path is the ONLY route for public/guest sessions (chat_service
+        forces them onto the AI path), so an error envelope here turns any
+        AI-path exception into a dead public chat — "Something went wrong" for
+        every message. Degrade to a friendly retry message instead: a CV/signup
+        CTA for public sessions, a "deterministic features still work" nudge for
+        authenticated users. Never expose provider internals or stack traces.
+        """
+        arabic = (language == "ar") or self._is_arabic_text(message)
+        if getattr(self, "_persist", True):
+            # Authenticated session — deterministic features still work.
+            reply = (
+                "تعذّر الوصول إلى مساعد الذكاء الاصطناعي الآن — حاول مرة أخرى بعد لحظات. "
+                "في هذه الأثناء يمكنني البحث عن وظائف بالمسمى الوظيفي، "
+                "مراجعة طلباتك، أو تحديث ملفك الشخصي."
+                if arabic else
+                "I couldn't reach the AI assistant just now — please try again in a "
+                "moment. Meanwhile I can still search jobs by title, review your "
+                "applications, or update your profile."
+            )
+        else:
+            # Public/guest session — guide toward CV upload / signup.
+            reply = (
+                "تعذّر الوصول إلى مساعد الذكاء الاصطناعي الآن — حاول مرة أخرى بعد لحظات. "
+                "يمكنك خلال ذلك **رفع سيرتك الذاتية** أو "
+                "**[التسجيل في ricohunt.com](https://ricohunt.com)** لأطابقك مع وظائف حقيقية في الإمارات."
+                if arabic else
+                "I couldn't reach the AI assistant just now — please try again in a "
+                "moment. Meanwhile you can **upload your CV** or "
+                "**[sign up at ricohunt.com](https://ricohunt.com)** so I can match "
+                "you with real UAE job openings."
+            )
+        return {
+            "type": "provider_degraded",
+            "message": reply,
+            "success": True,
+            "response_source": "deterministic",
+            "provider_state": "unavailable",
+            "next_action": "provider_degraded_fallback",
+            "debug_id": debug_id,
+        }
+
     def answer_conversationally(self, user_id: str, message: str, profile: Any, language: str | None = None) -> dict[str, Any]:
         """Route directly to the existing conversational AI fallback path."""
         debug_id = _generate_debug_id()
@@ -5854,11 +5900,19 @@ class RicoChatAPI:
                 result.setdefault("success", True)
             return result
         except Exception as exc:
-            return build_error_response(
-                "Something went wrong processing your message.",
-                debug_id=debug_id,
-                log_exc=exc,
-                user_id=user_id,
+            # Keep full server-side logging (same signal build_error_response
+            # emits), but answer the user deterministically — see
+            # _conversational_unavailable_response for why type=error is wrong
+            # on this path.
+            logger.error(
+                "rico_conversational_ai_failed debug_id=%s user=%s error=%s",
+                debug_id,
+                user_id,
+                str(exc),
+                exc_info=exc,
+            )
+            return self._conversational_unavailable_response(
+                message, debug_id=debug_id, language=language
             )
 
     def _process_message_inner(self, user_id: str, message: str, language: str | None = None) -> dict[str, Any]:
