@@ -639,7 +639,11 @@ _CV_GENERATE_RE = re.compile(
 
 _PROFILE_UPDATE_RE = re.compile(
     r"\b(update|change|set|modify|adjust)\b.{0,40}"
-    r"\b(salary|city|location|preference|role|title|industry|experience|notice|email|phone|telegram)\b"
+    # roles?/titles? so a *plural* update ("set my target roles to X and Y")
+    # routes to profile_update instead of falling through to `unknown` (TC-2:
+    # multi-role target updates never persisted, so the next search used the
+    # stale role). Singular still matches.
+    r"\b(salary|city|location|preference|roles?|titles?|industry|experience|notice|email|phone|telegram)\b"
     # Declarative city statements: "My favorite city is Dubai", "I live in Dubai"
     r"|\bmy\s+(?:favorite|preferred|home|base|target)?\s*city\s+is\b"
     r"|\bi\s+(?:live|work|am\s+based|reside)\s+in\b",
