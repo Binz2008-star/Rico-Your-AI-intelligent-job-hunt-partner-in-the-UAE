@@ -56,6 +56,117 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+<!-- Chat live-QA 2026-07-03 remediation (see AI_WORKSPACE/EVALS/2026-07-03-chat-live-qa.md). -->
+
+### TASK-20260703-038 — Chat intent router over-triggers job_search (P0)
+
+Status: proposed
+Owner: unassigned
+Branch: TBD
+Issue/PR: chat-QA 2026-07-03 (TC-8, TC-11; contributes TC-4/TC-5)
+
+#### Objective
+Stop the intent dispatcher in `src/rico_chat_api.py` from routing to `job_search` on the mere
+presence of a company/role token. Verb/sentence structure must decide the intent
+("prepare me for an interview …" → coaching, not search).
+
+#### Context
+- Relevant files: `src/rico_chat_api.py` (`classify_intent` + `legacy_intent` dispatch from ~L7485).
+- Existing behavior: company/role keywords appear to force `job_search` regardless of verb.
+
+#### Acceptance criteria
+- [ ] "prepare me for an interview for <role> at <company>" routes to interview/coaching, not search.
+- [ ] "what is my profile?" does not flash a search first (TC-11).
+- [ ] Explicit search verbs (search/find/ابحث) still route to search.
+- [ ] Regression: existing intent tests (#814 suite) stay green.
+
+### TASK-20260703-039 — Application tracking from plain text + OCR (P0)
+
+Status: proposed
+Owner: unassigned
+Branch: TBD
+Issue/PR: chat-QA 2026-07-03 (TC-7, TC-6)
+
+#### Objective
+Classify structured tracking text ("Position: X. Company: Y. Track it.") into the existing
+`application_tracking` intent, and feed OCR-extracted entities into the tracking tool from
+conversation context instead of re-running extraction.
+
+#### Context
+- `application_tracking` intent handler already exists (`rico_chat_api.py:4462`) — this is a
+  classify/extract gap, NOT a missing feature. Do not build a parallel tracking path.
+- OCR already extracts company/title (TC-6) but the tool call ignores it.
+
+#### Acceptance criteria
+- [ ] "Position: X. Company: Y. Track it." saves to the pipeline without a UI button.
+- [ ] Screenshot OCR entities are consumed by the tracking call (no "couldn't identify" when the
+      data is present in context).
+- [ ] Idempotent save (respects the BUG-14 upsert arbiter).
+
+### TASK-20260703-040 — Relevance scoring + nationality-gate filtering (P1)
+
+Status: proposed
+Owner: unassigned
+Branch: TBD
+Issue/PR: chat-QA 2026-07-03 (TC-2, TC-1)
+
+#### Objective
+Rank by function + seniority + skills overlap, not job-title keyword presence; flag/deprioritize
+UAE-national-gated roles when the profile does not confirm eligibility.
+
+#### Acceptance criteria
+- [ ] ESG/Compliance profile no longer surfaces software-engineering roles in top results (TC-2).
+- [ ] "Priority for UAE nationals" roles carry a badge and drop out of top-ranked results unless
+      eligibility is known (TC-1).
+
+### TASK-20260703-041 — Search session cache + dedup + render idempotency (P1)
+
+Status: proposed
+Owner: unassigned
+Branch: TBD
+Issue/PR: chat-QA 2026-07-03 (TC-10, TC-3)
+
+#### Objective
+Cache search results per session/query, dedup against already-shown jobs, and add an idempotency
+key on message render to kill the double-render risk.
+
+#### Acceptance criteria
+- [ ] Repeat "search again" does not return a fully disjoint set with no explanation (TC-10).
+- [ ] Already-shown jobs are not re-shown as new within a session.
+- [ ] Message render is idempotent (no duplicate render on stream completing twice) (TC-3).
+
+### TASK-20260703-042 — Per-message language detection (P1)
+
+Status: proposed
+Owner: unassigned
+Branch: TBD
+Issue/PR: chat-QA 2026-07-03 (TC-9)
+
+#### Objective
+Detect language on the latest user message and reply in that language; add a persistent language
+override in settings. Confirm this is not a regression from the #813 Arabic-guard move.
+
+#### Acceptance criteria
+- [ ] Switching to English mid-session gets English replies (TC-9).
+- [ ] Arabic cold-start guard behavior (#813) is preserved.
+
+### TASK-20260703-043 — Conversational UX gates (P2)
+
+Status: proposed
+Owner: unassigned
+Branch: TBD
+Issue/PR: chat-QA 2026-07-03 (TC-4, TC-5, TC-12)
+
+#### Objective
+Confirm active targets before the first search after a target update (TC-4); re-ask disambiguation
+on a bare "search" when target ambiguity was raised (TC-5); make "what can you do?" onboarding-safe
+for cold-start/first-message users while keeping contextual answers when session data exists (TC-12).
+
+#### Acceptance criteria
+- [ ] First search after target update confirms the active targets.
+- [ ] Bare "ابحث"/"search" re-triggers disambiguation when ambiguity is open.
+- [ ] Cold-start "what can you do?" returns a structured capability overview.
+
 ### TASK-20260703-037 — Neon redundant-index cleanup (migrations 034 + 035)
 
 Status: done
