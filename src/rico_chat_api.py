@@ -158,6 +158,26 @@ _DOC_FOLLOWUP_RE = re.compile(
     re.IGNORECASE,
 )
 
+# ── Arabic conversational guard (BUG #6 / BUG #5) ────────────────────────────
+# Explicit Arabic search-command triggers. If any of these appear, the message
+# is a real search request and the guard must NOT intercept it.
+#   ابحث / بحث = "search", دور عن / دوّر = "look for", ساعدني في إيجاد = "help me find"
+_ARABIC_SEARCH_TRIGGER_RE = re.compile(
+    r"(ابحث|بحث|دوّر|دور\s+عن|ساعدني\s+في\s+(?:إيجاد|ايجاد)|هل\s+(?:يوجد|في)\s+وظائف)",
+)
+# Resolved legacy intents that route to the (expensive) job-search path. Only a
+# message classified into one of these is a guard candidate — structured Arabic
+# commands (save_job, profile_update, skip, apply, …) classify elsewhere and are
+# left untouched so they reach their own handlers.
+_ARABIC_GUARD_SEARCH_INTENTS = frozenset({
+    "job_search",
+    "job_search_explicit",
+    "job_search_profile_match",
+    "job_search_multi_role",
+    "job_matches",
+    "no_results_recovery",
+})
+
 # Job-document action regexes — intercept "Save as target job" and "Score against my CV"
 # from the suggested-action buttons (document_classifier._SUGGESTED_ACTIONS["job_description"]).
 # These run inside _handle_uploaded_document_followup BEFORE _DOC_FOLLOWUP_RE so they are
@@ -7449,6 +7469,32 @@ class RicoChatAPI:
             user_id, intent, legacy_intent, intent_result.confidence, intent_result.source,
         )
 
+        # ── Arabic conversational guard (BUG #6 / BUG #5) ─────────────────────
+        # Conversational Arabic that contains a job-adjacent word (وظيفة, أريد,
+        # راتب) but NO explicit search-trigger keyword (ابحث, بحث, دور عن) was
+        # being classified as a job search, firing a backend search that either
+        # (a) cold-started Render and hung for 2+ min or (b) returned irrelevant
+        # results for what was really a declarative statement.
+        #
+        # Fix: run classification FIRST, then intercept only when the resolved
+        # intent is search-like AND the message is Arabic AND carries no explicit
+        # search command — routing it to the AI conversational fallback instead.
+        # Running after classification is essential: structured Arabic commands
+        # ("احفظ أول وظيفة" → save_job, "تحديث ملفي" → profile_update) classify
+        # to their own intents and must reach their handlers, not this guard.
+        if legacy_intent in _ARABIC_GUARD_SEARCH_INTENTS and self._is_arabic_text(message) \
+                and not _ARABIC_SEARCH_TRIGGER_RE.search(message):
+            logger.info(
+                "rico_arabic_conversational_guard user=%s intent=%s — routing to AI fallback",
+                user_id, legacy_intent,
+            )
+            return self._answer_with_ai_fallback(
+                user_id=user_id,
+                message=message,
+                profile=profile,
+                save_user_message=False,
+            )
+
         # ── Step 2: Route by intent ──────────────────────────────────────────
 
         # Help / menu — context-aware options based on profile state
@@ -7463,6 +7509,40 @@ class RicoChatAPI:
             response = {"type": "acknowledgement", "message": ack_text}
             self._append_chat(user_id, "assistant", ack_text)
             return self._finalize(response, self.SOURCE_KEYWORD, profile=profile)
+
+        # Emotional support / frustration (BUG #9) — empathetic reply before any action.
+        # Never jump straight to a job search when the user is expressing frustration.
+        # Route via AI fallback so the reply is context-aware, not a canned string.
+        if legacy_intent == "emotional_support" or intent == "emotional_support":
+            _is_ar = self._is_arabic_text(message)
+            _empathy_prefix = (
+                "أسمعك! أعلم أن البحث عن عمل قد يكون مرهقاً، خاصة في الإمارات. "
+                "دعني أرى ما يمكنني فعله لمساعدتك الآن."
+                if _is_ar else
+                "I hear you — job searching in the UAE can be genuinely tough, and it makes sense to feel frustrated. "
+                "Let me see what I can do to help right now."
+            )
+            logger.info("rico_emotional_support user=%s", user_id)
+            # Inject the empathy prefix into the message context for the AI fallback
+            # so it responds in a supportive tone rather than defaulting to job-search mode.
+            _augmented = (
+                f"[Context: The user is expressing frustration. Respond empathetically first, "
+                f"then offer the most relevant next action based on their profile. "
+                f"Do NOT immediately trigger a job search.]\n\n{message}"
+            )
+            result = self._answer_with_ai_fallback(
+                user_id=user_id,
+                message=_augmented,
+                profile=profile,
+                save_user_message=False,
+            )
+            # Prepend the deterministic empathy prefix so the user always
+            # gets an immediate warm acknowledgement even if the AI call is slow.
+            _ai_reply = result.get("message", "")
+            if _ai_reply and not _ai_reply.startswith(_empathy_prefix[:20]):
+                result["message"] = f"{_empathy_prefix}\n\n{_ai_reply}"
+            self._append_chat(user_id, "assistant", result.get("message", _empathy_prefix))
+            return self._finalize(result, self.SOURCE_KEYWORD, profile=profile)
 
         # Positive job feedback — record learning signal and acknowledge
         if legacy_intent == "job_feedback_positive":

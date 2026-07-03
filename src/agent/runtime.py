@@ -316,11 +316,51 @@ class AgentRuntime:
                 pass
         return {"id": job_key} if job_key else {}
 
+    # Maps internal error codes (from tool layer) to user-safe messages.
+    # Never expose internal codes to the chat surface — all unknown codes
+    # fall through to the generic message at the bottom of _build_message.
+    _ERROR_MESSAGES: Dict[str, str] = {
+        "no_apply_link_available": (
+            "This job doesn't have a direct apply link. "
+            "Use the link on the job card to apply manually on the employer's site."
+        ),
+        "apply_url_untrusted": (
+            "Rico can't auto-apply to this job because the apply link "
+            "hasn't been verified as safe. Use the link on the job card to apply directly."
+        ),
+        "subscription_limit": (
+            "Auto-apply is available on the Pro plan. "
+            "Upgrade to let Rico submit applications on your behalf."
+        ),
+        "tool_not_found": (
+            "This action isn't available right now. Please try again shortly."
+        ),
+        "job_not_found": (
+            "Rico couldn't find that job in your session. "
+            "Try searching again and selecting the job from fresh results."
+        ),
+        "approval_required": (
+            "Rico needs your explicit approval before submitting this application. "
+            "Use the Approve button on the job card."
+        ),
+        "manual_required": (
+            "Automated apply isn't available for this job. "
+            "Use the apply link on the card to apply directly on the employer's site."
+        ),
+    }
+
     @staticmethod
     def _build_message(
         action: str, ok: bool, data: Dict[str, Any], error: Optional[str]
     ) -> str:
         if not ok:
+            # Map KNOWN internal error codes to user-safe messages so they
+            # never leak to the chat surface (BUG #15). Unknown/free-text
+            # errors keep the original operator-facing format — they are not
+            # internal codes and are surfaced verbatim for diagnosis.
+            code = error or ""
+            if code in AgentRuntime._ERROR_MESSAGES:
+                return AgentRuntime._ERROR_MESSAGES[code]
             return f"Action failed: {error or 'unknown error'}"
 
         # Actions whose reply comes from tool output
