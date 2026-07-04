@@ -6,6 +6,29 @@ This repository is Rico Hunt / Rico AI: a UAE-focused AI career companion and jo
 
 Treat this as production code. Do not add pseudo-code, placeholder implementations, or unrelated rewrites. Prefer small, safe patches that preserve the live production behavior.
 
+## Cost Optimization Rules (base directive — always in force)
+
+Powerful model or not, optimize for the owner's cost.
+
+Do NOT launch multi-agent workflows, broad background reviews, or repeated
+verifier agents unless the owner explicitly approves the estimated cost first.
+
+For every task, use the cheapest safe path:
+
+- focused tests first
+- one focused review pass
+- concise report
+- stop when enough evidence exists
+
+If a deep review seems needed, ask first and give:
+
+1. expected token range
+2. expected dollar cost
+3. reason
+4. cheaper alternative
+
+No approval = do not run it.
+
 ## AI Workspace Entry Point
 
 For new Rico work sessions, start from `AI_WORKSPACE/START_HERE.md`.

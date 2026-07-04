@@ -298,8 +298,8 @@ def get_profile(user_id: str):
     return profile_repo.get_profile(user_id)
 
 
-def upsert_profile(user_id: str, updates: dict[str, Any]):
-    return profile_repo.upsert_profile(user_id=user_id, updates=updates)
+def upsert_profile(user_id: str, updates: dict[str, Any], cv_text: str | None = None):
+    return profile_repo.upsert_profile(user_id=user_id, updates=updates, cv_text=cv_text)
 
 
 def list_saved_searches(user_id: str, limit: int = 20):
@@ -1603,6 +1603,14 @@ async def rico_upload_cv(
                     "confidence": round(confidence, 3),
                     "suggested_actions": [],
                 }
+                # Stash the parsed CV text server-side so confirm-cv-profile can
+                # persist it to rico_profiles.cv_text without the frontend having
+                # to round-trip the full text. Capped to bound the context size.
+                if cv_text:
+                    _rctx["last_uploaded_cv_text"] = {
+                        "filename": safe_name,
+                        "text": cv_text[:100_000],
+                    }
                 _mem.set_context(resolved_user_id, "recent_context", _rctx)
             except Exception:
                 pass
@@ -1704,8 +1712,26 @@ async def confirm_cv_profile(
             filtered_updates["name"] = profile_updates["name"]
         profile_updates = filtered_updates
 
+        # Recover the parsed CV text stashed by the upload step so the raw text
+        # is persisted alongside the structured summary. Without this the chat
+        # layer can show extracted skills yet truthfully report "I don't have
+        # the parsed text from that file" — and apply-tailoring has no CV body.
+        confirmed_cv_text: str | None = None
+        if not is_valid_public_user_id(resolved_user_id):
+            try:
+                from src.rico_memory import RicoMemoryStore as _MemStore
+                _cv_ctx = (_MemStore().get_context(resolved_user_id, "recent_context") or {}).get(
+                    "last_uploaded_cv_text"
+                ) or {}
+                _stashed = str(_cv_ctx.get("text") or "")
+                # Only trust the stash when it belongs to the file being confirmed.
+                if _stashed and _cv_ctx.get("filename") == payload.filename:
+                    confirmed_cv_text = _stashed
+            except Exception:
+                confirmed_cv_text = None
+
         # Update permanent profile
-        upsert_profile(user_id=resolved_user_id, updates=profile_updates)
+        upsert_profile(user_id=resolved_user_id, updates=profile_updates, cv_text=confirmed_cv_text)
         record_profile_optimization_usage(resolved_user_id)
 
         # Only mark onboarding complete for authenticated users (not public sessions)

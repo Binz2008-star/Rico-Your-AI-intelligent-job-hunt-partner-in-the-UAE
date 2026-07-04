@@ -226,8 +226,14 @@ def get_profile(user_id: str) -> RicoProfile | None:
     return profile
 
 
-def upsert_profile(user_id: str, updates: dict[str, Any]) -> RicoProfile:
-    """Write profile to DB (primary) and JSON (fallback mirror) with transaction safety."""
+def upsert_profile(user_id: str, updates: dict[str, Any], *, cv_text: str | None = None) -> RicoProfile:
+    """Write profile to DB (primary) and JSON (fallback mirror) with transaction safety.
+
+    ``cv_text`` (optional) is the raw parsed CV text. It is persisted to
+    ``rico_profiles.cv_text`` with COALESCE semantics (a NULL never wipes an
+    existing value) so chat and apply-tailoring flows can ground on the actual
+    uploaded CV rather than only the structured summary.
+    """
     import logging
     logger = logging.getLogger(__name__)
 
@@ -308,14 +314,17 @@ def upsert_profile(user_id: str, updates: dict[str, Any]) -> RicoProfile:
                 db_user_id = str(user_row["id"])
             logger.info("profile_repo.upsert_profile: db_user_id=%s", db_user_id)
 
-            # 2. Upsert profile JSONB
+            # 2. Upsert profile JSONB (+ raw CV text when provided)
             profile_data = {
                 k: v for k, v in filtered_updates.items()
                 if k in _PROFILE_JSONB_FIELDS
             }
-            if profile_data:
-                logger.info("profile_repo.upsert_profile: db_user_id=%s profile_data=%s", db_user_id, profile_data)
-                db.upsert_profile(db_user_id, profile_data, conn=conn)
+            if profile_data or cv_text:
+                logger.info(
+                    "profile_repo.upsert_profile: db_user_id=%s profile_data=%s cv_text_chars=%d",
+                    db_user_id, list(profile_data.keys()), len(cv_text or ""),
+                )
+                db.upsert_profile(db_user_id, profile_data, cv_text=cv_text, conn=conn)
 
             # 3. Upsert settings
             settings_data = {}

@@ -61,6 +61,14 @@ def _first_env(*names: str, default: str = "") -> str:
     return default
 
 
+# Captured at import time — every deploy restarts the process, so this is a
+# trustworthy "this build went live no earlier than" signal. The env-driven
+# deployed_at below is a static var that operators rarely update; verifying a
+# deploy against it alone is misleading (it once lagged main by six weeks).
+from datetime import datetime, timezone as _tz
+_PROCESS_STARTED_AT = datetime.now(_tz.utc).isoformat()
+
+
 def version_metadata() -> Dict[str, Any]:
     """Deployment metadata shared by legacy and versioned routes."""
     return {
@@ -81,7 +89,11 @@ def version_metadata() -> Dict[str, Any]:
             "VERCEL_ENV",
             default="production" if os.getenv("RENDER") else "development",
         ),
+        # Static env metadata — may be stale; prefer started_at + commit when
+        # verifying that a deploy is actually live.
         "deployed_at": _first_env("DEPLOYED_AT", "BUILD_TIME", "BUILD_TIMESTAMP"),
+        # Runtime-computed: when this process booted (resets on every deploy).
+        "started_at": _PROCESS_STARTED_AT,
     }
 
 

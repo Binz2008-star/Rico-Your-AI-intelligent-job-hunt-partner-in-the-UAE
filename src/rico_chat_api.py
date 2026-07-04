@@ -5944,6 +5944,23 @@ class RicoChatAPI:
             if self._is_promise_only_reply(filtered_ai_message) and profile:
                 _promise_roles = self._as_list(self._profile_value(profile, "target_roles"))
                 if _promise_roles:
+                    # Search-execution contract: when the user's own message was an
+                    # explicit job-listing request, a promise is a broken contract —
+                    # execute the real search NOW instead of returning the hollow
+                    # reply. The conversational path has no later turn that redeems
+                    # the armed slot, so arming alone strands the search forever.
+                    from src.rico.intent.gates import is_explicit_job_listing_request as _is_listing_req
+                    if _is_listing_req(message):
+                        self._clear_pending_job_search(user_id)
+                        _search_result = self._classified_role_search(
+                            user_id, str(_promise_roles[0]), profile
+                        )
+                        if isinstance(_search_result, dict):
+                            _search_result.setdefault("success", True)
+                            _search_result.setdefault("response_source", "search_contract")
+                            return _search_result
+                    # Ambiguous promise (user message wasn't an explicit search
+                    # request) — keep the original arm-the-slot behavior.
                     self._store_pending_job_search(user_id, role=str(_promise_roles[0]))
 
         result = self._finalize(
@@ -6004,6 +6021,33 @@ class RicoChatAPI:
         """Route directly to the existing conversational AI fallback path."""
         debug_id = _generate_debug_id()
         try:
+            # Priority-0 (conversational path): redeem a pending job search armed by
+            # an earlier promise-only reply. Mirrors _resolve_pending_intent's
+            # Priority-0 in the legacy path — without this, an "ok/تمام" that the
+            # intent router sends to the AI path re-promises forever instead of
+            # executing the stored search.
+            if profile is not None:
+                try:
+                    _pending_js = self._get_pending_job_search(user_id)
+                except Exception:
+                    _pending_js = {}
+                if _pending_js.get("role") and (
+                    self._is_affirmative(message)
+                    or self._is_continuation_intent(message)
+                ):
+                    self._append_chat(user_id, "user", message)
+                    self._clear_pending_job_search(user_id)
+                    _redeemed = self._classified_role_search(
+                        user_id,
+                        str(_pending_js["role"]),
+                        profile,
+                        location=str(_pending_js.get("location", "")),
+                    )
+                    if isinstance(_redeemed, dict):
+                        _redeemed.setdefault("debug_id", debug_id)
+                        _redeemed.setdefault("success", True)
+                        _redeemed.setdefault("response_source", "search_contract")
+                        return _redeemed
             result = self._answer_with_ai_fallback(
                 user_id=user_id,
                 message=message,
