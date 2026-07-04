@@ -38,6 +38,56 @@ Use one role per pass. Do not mix planning, coding, reviewing, and deployment ve
 - Do not include unrelated formatting, renames, refactors, or generated churn.
 - If a branch contains unrelated files, stop and report the scope issue before merging.
 
+## Product Generalization Rule
+
+Rico is a global SaaS product for all users. Smoke-test findings are evidence of product behavior; they are not product logic.
+
+Every fix must be:
+
+- global
+- user-agnostic
+- data-driven
+- tested with synthetic users where possible
+
+Do not special-case:
+
+- one live user account
+- one owner/test account
+- one profile state
+- one target-role list
+- one saved search
+- one session state
+- one language path
+- one provider result set
+- one smoke-test dataset
+
+For every investigation or fix, identify the affected scope:
+
+1. one user only
+2. one profile state
+3. one language or locale
+4. one provider or integration
+5. all users
+
+Fix the underlying product/system behavior, not one account.
+
+If a bug is discovered through a smoke-test account, the report must state:
+
+> The smoke-test account exposed the bug, but the fix is global.
+
+If a proposed fix only improves one live account or one sampled dataset, stop and mark it invalid.
+
+Use synthetic users and synthetic profile data unless the owner explicitly approves production smoke testing.
+
+Where relevant, cover:
+
+- complete-profile user
+- no-profile / no-CV user
+- guest/public session
+- Arabic input
+- English input
+- multiple unrelated target roles, not only the role that exposed the bug
+
 ## Pull Request Audit Checklist
 
 Before recommending merge, verify:
@@ -168,6 +218,10 @@ PR/head: <sha>
 CI: <result>
 Deploy: <Render/Vercel sha and status>
 Smoke: <what passed/failed/not run>
+Affected scope: <one user / one profile state / one language / one provider / all users>
+Product generalization: <confirm fix is global and user-agnostic>
+Synthetic users used: <yes / no / n-a>
+No owner-account special-casing: <confirmed>
 Risks: <remaining risk>
 Recommendation: <merge / do not merge / deploy / investigate>
 ```
