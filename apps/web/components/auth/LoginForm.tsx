@@ -15,6 +15,7 @@ import React, { useState } from 'react';
 export function LoginForm({ initialEmail = '' }: { initialEmail?: string }) {
     const [email, setEmail] = useState(initialEmail);
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [failedAttempts, setFailedAttempts] = useState(0);
     const [showUnverified, setShowUnverified] = useState(false);
@@ -116,15 +117,27 @@ export function LoginForm({ initialEmail = '' }: { initialEmail?: string }) {
                                     {t('forgotPassword')}
                                 </a>
                             </div>
-                            <input
-                                id="password"
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="w-full bg-surface-container border border-white/10 rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:border-primary transition-all"
-                                placeholder="••••••••"
-                                required
-                            />
+                            <div className="relative">
+                                <input
+                                    id="password"
+                                    type={showPassword ? 'text' : 'password'}
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    className="w-full bg-surface-container border border-white/10 rounded-lg px-4 py-3 pr-12 text-on-surface focus:outline-none focus:border-primary transition-all"
+                                    placeholder="••••••••"
+                                    required
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword((prev) => !prev)}
+                                    aria-label={showPassword ? t('hidePassword') : t('showPassword')}
+                                    aria-pressed={showPassword}
+                                    tabIndex={0}
+                                    className="absolute inset-y-0 right-0 flex items-center px-3 text-on-surface-variant hover:text-primary transition-colors focus:outline-none focus-visible:text-primary"
+                                >
+                                    <MaterialIcon icon={showPassword ? 'visibility_off' : 'visibility'} className="text-lg" />
+                                </button>
+                            </div>
                         </div>
 
                         <button
