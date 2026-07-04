@@ -5220,6 +5220,72 @@ class RicoChatAPI:
         self._append_chat(user_id, "assistant", message)
         return response
 
+    # Ultra-generic vocabulary that must never, on its own, qualify a job as a
+    # relevance match for an explicit-title search (would over-match unrelated roles).
+    _FLOOR_STOP_TERMS = frozenset({"management", "leadership", "reporting"})
+
+    def _requested_domain_terms(self, requested_role: str) -> tuple[set[str], set[str]]:
+        """Domain vocabulary for the explicit-title relevance floor.
+
+        Returns ``(single_word_terms, multi_word_phrases)`` built from the
+        requested role's own meaningful tokens plus its taxonomy-family synonyms
+        (``src/data/job_role_taxonomy.json``), with ultra-generic words removed.
+        Fully data-driven — no per-role or per-account hardcoding. Returns empty
+        sets when the role is blank or yields no discriminating vocabulary, in
+        which case the caller skips the floor rather than over-filtering.
+        """
+        req = (requested_role or "").strip().lower()
+        if not req:
+            return set(), set()
+        try:
+            from src.llm_scorer import _meaningful_role_tokens, _GENERIC_ROLE_TOKENS
+        except Exception:
+            return set(), set()
+        terms: set[str] = set(_meaningful_role_tokens(req))
+        try:
+            from src.agent.intelligence.role_classifier import (
+                resolve_taxonomy_role as _rtr,
+                _role_family_terms as _rft,
+            )
+            canonical = _rtr(requested_role)
+            if canonical:
+                terms |= {str(t).lower() for t in _rft(canonical)}
+                terms |= _meaningful_role_tokens(canonical.lower())
+        except Exception:
+            pass
+        terms = {
+            t for t in terms
+            if t and t not in _GENERIC_ROLE_TOKENS and t not in self._FLOOR_STOP_TERMS
+        }
+        singles = {t for t in terms if " " not in t}
+        phrases = {t for t in terms if " " in t}
+        return singles, phrases
+
+    @staticmethod
+    def _job_matches_requested_domain(
+        job: dict[str, Any], single_terms: set[str], phrase_terms: set[str]
+    ) -> bool:
+        """True when the job TITLE strongly matches the requested domain vocabulary.
+
+        Token-level match for single words (so "tax" never matches "taxi") and
+        substring match for multi-word phrases. Title-only by design: a
+        description mention of a family word (e.g. "compliance") must not pull an
+        off-title job into an explicit-title result set.
+        """
+        try:
+            from src.llm_scorer import _TOKEN_RE
+        except Exception:
+            return True  # cannot evaluate → do not drop
+        title = str(job.get("title") or "").lower()
+        if not title:
+            return False
+        title_tokens = set(_TOKEN_RE.findall(title))
+        if single_terms and (title_tokens & single_terms):
+            return True
+        if phrase_terms and any(p in title for p in phrase_terms):
+            return True
+        return False
+
     def _target_role_search_response(
         self, user_id: str, role: str, profile: Any,
         from_saved_profile: bool = False,
@@ -5408,9 +5474,19 @@ class RicoChatAPI:
             _profile_deal_breakers = self._as_list(
                 self._profile_value(profile, "deal_breakers")
             )
+            # Requested title is the PRIMARY ranking signal for an explicit
+            # search: rank the role the user actually asked for first, with the
+            # saved profile roles kept only as a tiebreaker. This stops a stale
+            # profile target (e.g. "Operations Manager") from floating off-title
+            # jobs above the role the user requested.
+            _requested_for_rank = (normalized_role or role or "").strip()
+            _ranking_roles: list[str] = [_requested_for_rank] if _requested_for_rank else []
+            for _r in _profile_target_roles:
+                if _r and str(_r).strip().lower() != _requested_for_rank.lower():
+                    _ranking_roles.append(str(_r))
             all_matches = _rbpf(
                 all_matches,
-                target_roles=[str(r) for r in _profile_target_roles if r],
+                target_roles=_ranking_roles,
                 skills=[str(s) for s in _profile_skills if s],
                 deal_breakers=[str(d) for d in _profile_deal_breakers if d],
             )
@@ -5474,7 +5550,35 @@ class RicoChatAPI:
         except Exception:
             pass
 
-        top_matches = all_matches[:5]
+        # Relevance floor: an explicit-title search must return jobs that actually
+        # match the requested title or its taxonomy-family synonyms. Off-title
+        # provider noise (broad keyword hits from the cascade) is dropped rather
+        # than presented as a false "match". If nothing clears the floor we fall
+        # through to an honest "no strong matches — broaden?" reply instead of
+        # showing irrelevant jobs. Data-driven via job_role_taxonomy.json; no
+        # per-role or per-account hardcoding.
+        _floor_singles, _floor_phrases = self._requested_domain_terms(
+            normalized_role or search_role
+        )
+        if _floor_singles or _floor_phrases:
+            _relevant = [
+                m for m in all_matches
+                if self._job_matches_requested_domain(m, _floor_singles, _floor_phrases)
+            ]
+        else:
+            _relevant = all_matches  # degenerate/unknown role → do not over-filter
+        # True only when live results existed but none matched the requested title,
+        # so the message builder can say so honestly rather than claiming matches.
+        _off_title_only = bool(
+            (_floor_singles or _floor_phrases) and all_matches and not _relevant
+        )
+        if _off_title_only:
+            logger.info(
+                "relevance_floor: role=%r dropped all %d off-title results op=%s",
+                search_role, len(all_matches), operation_id,
+            )
+
+        top_matches = _relevant[:5]
         formatted = [self._format_match(m, profile) for m in top_matches]
 
         skills = self._as_list(self._profile_value(profile, "skills"))[:8]
@@ -5510,6 +5614,7 @@ class RicoChatAPI:
             normalized_role, city_text, basis_text, top_matches, role_intelligence_data,
             from_saved_profile=from_saved_profile,
             arabic=arabic,
+            filtered_off_title=_off_title_only,
         )
 
         response = {
@@ -5599,6 +5704,7 @@ class RicoChatAPI:
         role_intelligence_data: dict[str, Any] | None,
         from_saved_profile: bool = False,
         arabic: bool = False,
+        filtered_off_title: bool = False,
     ) -> str:
         """Build message for role search response."""
         if from_saved_profile:
@@ -5665,7 +5771,26 @@ class RicoChatAPI:
         # as a question the user must accept — Rico never broadens on its own.
         _adjacent = (role_intelligence_data or {}).get("adjacent_roles", []) if role_intelligence_data else []
         _adjacent_names = [r["role"] for r in _adjacent[:3] if r.get("role")]
-        if not top_matches and _adjacent_names:
+        if not top_matches and filtered_off_title:
+            # Live results existed but none strongly matched the requested title.
+            # Be honest about it and offer to broaden — never present off-title jobs.
+            if _adjacent_names:
+                base_message += (
+                    f" بحثت عن **{normalized_role}** تحديداً، لكن النتائج الحالية لا تطابق هذا المسمى بقوة. "
+                    f"هل أوسّع البحث ليشمل {', '.join(_adjacent_names)}؟"
+                    if arabic else
+                    f" I searched **{normalized_role}** specifically, but the current live results didn't strongly "
+                    f"match that title, so I'm not showing them. Want me to broaden to {', '.join(_adjacent_names)}?"
+                )
+            else:
+                base_message += (
+                    " بحثت عن هذا المسمى تحديداً، لكن النتائج الحالية لا تطابقه بقوة. "
+                    "هل تريد توسيع البحث لأدوار قريبة، أو تجربة مسمى مختلف؟"
+                    if arabic else
+                    " I searched that title specifically, but the current live results didn't strongly match it, "
+                    "so I'm not showing them. Want me to broaden to related roles, or try a different title?"
+                )
+        elif not top_matches and _adjacent_names:
             if arabic:
                 base_message += (
                     f" بحثت عن **{normalized_role}** تحديداً ولم أجد نتائج حالية. "
