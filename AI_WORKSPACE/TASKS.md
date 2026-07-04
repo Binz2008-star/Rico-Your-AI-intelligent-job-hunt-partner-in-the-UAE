@@ -88,7 +88,7 @@ presence of a company/role token. Verb/sentence structure must decide the intent
 
 ### TASK-20260703-039 — Application tracking from plain text + OCR (P0)
 
-Status: proposed (verified 2026-07-04: TC-6 screenshot slice landed; TC-7 plain-text slice open)
+Status: proposed (verified 2026-07-04: TC-6 applied-confirmation OCR path partial — not the general acceptance; TC-7 plain-text slice open)
 Owner: unassigned
 Branch: TBD
 Issue/PR: chat-QA 2026-07-03 (TC-7, TC-6) — TC-6 slice landed via #806/#807
@@ -106,10 +106,11 @@ conversation context instead of re-running extraction.
 #### Acceptance criteria
 - [ ] "Position: X. Company: Y. Track it." saves to the pipeline without a UI button (TC-7) —
       not verified as of 2026-07-04; still open.
-- [x] Screenshot OCR entities are consumed by the tracking call for the "applied" confirmation
-      case (TC-6) — #807 "use screenshot OCR text for applied reports despite failed
-      classification". Not re-verified whether this generalizes beyond the applied-confirmation
-      path.
+- [~] Screenshot OCR entities are consumed by the tracking call for the "applied" confirmation
+      case (TC-6) — partially addressed by #806/#807 "use screenshot OCR text for applied
+      reports despite failed classification". This proves ONLY the applied-confirmation OCR
+      entity path, NOT the general "OCR entities consumed by the tracking call" acceptance.
+      Partially addressed; needs broader verification/test beyond the applied-confirmation path.
 - [ ] Idempotent save (respects the BUG-14 upsert arbiter) — not independently re-verified here.
 
 ### TASK-20260703-040 — Relevance scoring + nationality-gate filtering (P1)
@@ -133,7 +134,7 @@ UAE-national-gated roles when the profile does not confirm eligibility.
 
 ### TASK-20260703-041 — Search session cache + dedup + render idempotency (P1)
 
-Status: proposed (verified 2026-07-04: TC-3 render dedup done; TC-10 session cache still open)
+Status: proposed (verified 2026-07-04: TC-3 render idempotency partial — diff-only, no test; TC-10 session cache still open)
 Owner: unassigned
 Branch: TBD
 Issue/PR: chat-QA 2026-07-03 (TC-10, TC-3) — TC-3 landed via #815
@@ -147,10 +148,11 @@ key on message render to kill the double-render risk.
       not implemented; existing dedup (`rico_chat_api.py:5460`) is scoped to a single search
       call, not cached/deduped across the session. Still open.
 - [ ] Already-shown jobs are not re-shown as new within a session (TC-10, same gap as above).
-- [x] Message render is idempotent (no duplicate render on stream completing twice) (TC-3) —
+- [~] Message render is idempotent (no duplicate render on stream completing twice) (TC-3) —
       abort button + request dedup + 45s hard-timeout, #815
-      (`apps/web/app/command/page.tsx`). Frontend-only change; no backend pytest coverage to
-      cite, verified by reading the merged diff.
+      (`apps/web/app/command/page.tsx`). Partially addressed: supported by diff inspection of
+      the merged frontend change, but there is NO automated test proving render idempotency on
+      double stream-complete. Partially addressed; needs broader verification/test.
 
 ### TASK-20260703-042 — Per-message language detection (P1)
 
