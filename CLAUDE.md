@@ -27,6 +27,51 @@ That file is the canonical operational checklist for:
 
 If `CLAUDE.md`, `CURRENT_STATE.md`, `TASKS.md`, and live GitHub/deploy state disagree, stop and report the conflict instead of guessing.
 
+## Product Generalization Rule
+
+Rico is a global SaaS product for all users. Smoke-test findings are evidence of product behavior; they are not product logic.
+
+Every fix must be global, user-agnostic, and data-driven.
+
+Do not special-case:
+
+- one live user account
+- one owner/test account
+- one profile state
+- one saved target-role list
+- one saved search
+- one session state
+- one language path
+- one provider result set
+- one smoke-test dataset
+
+For every investigation or fix, identify whether the issue affects:
+
+1. one user only
+2. one profile state
+3. one language or locale
+4. one provider or integration
+5. all users
+
+Fix the underlying product/system behavior, not one account.
+
+If a bug is discovered through a smoke-test account, state:
+
+> The smoke-test account exposed the bug, but the fix is global.
+
+If a proposed fix only improves one live account or one smoke-test dataset, stop and report it as invalid.
+
+Tests must use synthetic users and synthetic profile data unless the owner explicitly approves a production smoke check.
+
+Where relevant, cover:
+
+- user with a complete profile
+- user without a profile or CV
+- guest/public session
+- Arabic input
+- English input
+- multiple unrelated target roles, not only the role that exposed the bug
+
 ## Current Live Stack
 
 - Frontend: Next.js 14 / TypeScript / Tailwind in `apps/web`

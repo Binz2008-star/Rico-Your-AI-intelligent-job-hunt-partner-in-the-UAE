@@ -62,6 +62,56 @@ Stop and ask the owner before continuing when:
 - findings are speculative rather than confirmed
 - the same files are being re-read repeatedly by multiple agents
 
+## Product Generalization Rule
+
+Rico is a global SaaS product for all users. Smoke-test findings are evidence of product behavior; they are not product logic.
+
+Every fix must be:
+
+- global
+- user-agnostic
+- data-driven
+- tested with synthetic users where possible
+
+Agents must not special-case:
+
+- one live user account
+- one owner/test account
+- one profile state
+- one target-role list
+- one saved search
+- one session state
+- one language path
+- one provider result set
+- one smoke-test dataset
+
+For every investigation or fix, agents must identify the affected scope:
+
+1. one user only
+2. one profile state
+3. one language or locale
+4. one provider or integration
+5. all users
+
+Fix the underlying product/system behavior, not one account.
+
+If a bug is discovered through a smoke-test account, the report must state:
+
+> The smoke-test account exposed the bug, but the fix is global.
+
+If a proposed fix only improves one live account or one sampled dataset, stop and mark it invalid.
+
+Use synthetic users and synthetic profile data unless the owner explicitly approves production smoke testing.
+
+Where relevant, cover:
+
+- complete-profile user
+- no-profile / no-CV user
+- guest/public session
+- Arabic input
+- English input
+- multiple unrelated target roles, not only the role that exposed the bug
+
 ## Plan Mode Required
 
 Use Plan Mode before any task involving:
@@ -120,6 +170,13 @@ When work is done, report only:
 - CI status
 - known risks
 - recommended next action
+
+Every PR report must also include:
+
+- affected scope (one user / one profile state / one language / one provider / all users)
+- product-generalization confirmation (the fix is global and user-agnostic)
+- whether synthetic users were used
+- confirmation of no owner-account special-casing
 
 ## Production Safety
 
