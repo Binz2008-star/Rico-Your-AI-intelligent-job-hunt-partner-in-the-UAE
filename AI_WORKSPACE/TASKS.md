@@ -60,10 +60,10 @@ Issue/PR: <link or number>
 
 ### TASK-20260703-038 — Chat intent router over-triggers job_search (P0)
 
-Status: proposed
+Status: proposed (verified 2026-07-04: TC-8 slice done; TC-11 + general fix still open)
 Owner: unassigned
 Branch: TBD
-Issue/PR: chat-QA 2026-07-03 (TC-8, TC-11; contributes TC-4/TC-5)
+Issue/PR: chat-QA 2026-07-03 (TC-8, TC-11; contributes TC-4/TC-5) — TC-8 landed via #834/#835
 
 #### Objective
 Stop the intent dispatcher in `src/rico_chat_api.py` from routing to `job_search` on the mere
@@ -75,17 +75,23 @@ presence of a company/role token. Verb/sentence structure must decide the intent
 - Existing behavior: company/role keywords appear to force `job_search` regardless of verb.
 
 #### Acceptance criteria
-- [ ] "prepare me for an interview for <role> at <company>" routes to interview/coaching, not search.
-- [ ] "what is my profile?" does not flash a search first (TC-11).
-- [ ] Explicit search verbs (search/find/ابحث) still route to search.
+- [x] "prepare me for an interview for <role> at <company>" routes to interview/coaching, not
+      search — `_INTERVIEW_REQUEST_RE` guard + `_resolve_interview_prep_target`
+      (`rico_chat_api.py`); confirmed green 2026-07-04 via
+      `tests/test_tc8_interview_prep_grounding.py` + `tests/test_tc2_tc8_wiring.py`.
+- [ ] "what is my profile?" does not flash a search first (TC-11) — not verified; frontend
+      heuristic in `apps/web/app/command/page.tsx` was being reproduced when last checked,
+      no confirmed verdict either way. Still open.
+- [ ] Explicit search verbs (search/find/ابحث) still route to search — not independently
+      re-verified against the TC-8 change.
 - [ ] Regression: existing intent tests (#814 suite) stay green.
 
 ### TASK-20260703-039 — Application tracking from plain text + OCR (P0)
 
-Status: proposed
+Status: proposed (verified 2026-07-04: TC-6 applied-confirmation OCR path partial — not the general acceptance; TC-7 plain-text slice open)
 Owner: unassigned
 Branch: TBD
-Issue/PR: chat-QA 2026-07-03 (TC-7, TC-6)
+Issue/PR: chat-QA 2026-07-03 (TC-7, TC-6) — TC-6 slice landed via #806/#807
 
 #### Objective
 Classify structured tracking text ("Position: X. Company: Y. Track it.") into the existing
@@ -98,46 +104,61 @@ conversation context instead of re-running extraction.
 - OCR already extracts company/title (TC-6) but the tool call ignores it.
 
 #### Acceptance criteria
-- [ ] "Position: X. Company: Y. Track it." saves to the pipeline without a UI button.
-- [ ] Screenshot OCR entities are consumed by the tracking call (no "couldn't identify" when the
-      data is present in context).
-- [ ] Idempotent save (respects the BUG-14 upsert arbiter).
+- [ ] "Position: X. Company: Y. Track it." saves to the pipeline without a UI button (TC-7) —
+      not verified as of 2026-07-04; still open.
+- [~] Screenshot OCR entities are consumed by the tracking call for the "applied" confirmation
+      case (TC-6) — partially addressed by #806/#807 "use screenshot OCR text for applied
+      reports despite failed classification". This proves ONLY the applied-confirmation OCR
+      entity path, NOT the general "OCR entities consumed by the tracking call" acceptance.
+      Partially addressed; needs broader verification/test beyond the applied-confirmation path.
+- [ ] Idempotent save (respects the BUG-14 upsert arbiter) — not independently re-verified here.
 
 ### TASK-20260703-040 — Relevance scoring + nationality-gate filtering (P1)
 
-Status: proposed
+Status: proposed (verified 2026-07-04: TC-2 done; TC-1 badge still open)
 Owner: unassigned
 Branch: TBD
-Issue/PR: chat-QA 2026-07-03 (TC-2, TC-1)
+Issue/PR: chat-QA 2026-07-03 (TC-2, TC-1) — TC-2 landed via #834/#835/#844
 
 #### Objective
 Rank by function + seniority + skills overlap, not job-title keyword presence; flag/deprioritize
 UAE-national-gated roles when the profile does not confirm eligibility.
 
 #### Acceptance criteria
-- [ ] ESG/Compliance profile no longer surfaces software-engineering roles in top results (TC-2).
+- [x] ESG/Compliance profile no longer surfaces software-engineering roles in top results (TC-2)
+      — `relevance_floor` in `rico_chat_api.py` (~L5589); confirmed green 2026-07-04 via
+      `tests/test_tc2_target_role_propagation.py` + `tests/test_search_title_relevance_floor.py`.
 - [ ] "Priority for UAE nationals" roles carry a badge and drop out of top-ranked results unless
-      eligibility is known (TC-1).
+      eligibility is known (TC-1) — `is_uae_national` gate logic exists (`rico_chat_api.py:5424`)
+      but no explicit badge/deprioritization confirmed. Still open.
 
 ### TASK-20260703-041 — Search session cache + dedup + render idempotency (P1)
 
-Status: proposed
+Status: proposed (verified 2026-07-04: TC-3 render idempotency partial — diff-only, no test; TC-10 session cache still open)
 Owner: unassigned
 Branch: TBD
-Issue/PR: chat-QA 2026-07-03 (TC-10, TC-3)
+Issue/PR: chat-QA 2026-07-03 (TC-10, TC-3) — TC-3 landed via #815
 
 #### Objective
 Cache search results per session/query, dedup against already-shown jobs, and add an idempotency
 key on message render to kill the double-render risk.
 
 #### Acceptance criteria
-- [ ] Repeat "search again" does not return a fully disjoint set with no explanation (TC-10).
-- [ ] Already-shown jobs are not re-shown as new within a session.
-- [ ] Message render is idempotent (no duplicate render on stream completing twice) (TC-3).
+- [ ] Repeat "search again" does not return a fully disjoint set with no explanation (TC-10) —
+      not implemented; existing dedup (`rico_chat_api.py:5460`) is scoped to a single search
+      call, not cached/deduped across the session. Still open.
+- [ ] Already-shown jobs are not re-shown as new within a session (TC-10, same gap as above).
+- [~] Message render is idempotent (no duplicate render on stream completing twice) (TC-3) —
+      abort button + request dedup + 45s hard-timeout, #815
+      (`apps/web/app/command/page.tsx`). Partially addressed: supported by diff inspection of
+      the merged frontend change, but there is NO automated test proving render idempotency on
+      double stream-complete. Partially addressed; needs broader verification/test.
 
 ### TASK-20260703-042 — Per-message language detection (P1)
 
-Status: proposed
+Status: proposed (re-verified 2026-07-04: genuinely open — no per-message override found;
+`_is_arabic_text` runs per-message for deterministic routing, but the LLM/conversational path
+has no `detect_language`/language-override mechanism)
 Owner: unassigned
 Branch: TBD
 Issue/PR: chat-QA 2026-07-03 (TC-9)
@@ -152,7 +173,7 @@ override in settings. Confirm this is not a regression from the #813 Arabic-guar
 
 ### TASK-20260703-043 — Conversational UX gates (P2)
 
-Status: proposed
+Status: proposed (re-verified 2026-07-04: genuinely open, no partial coverage found)
 Owner: unassigned
 Branch: TBD
 Issue/PR: chat-QA 2026-07-03 (TC-4, TC-5, TC-12)
