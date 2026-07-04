@@ -5220,6 +5220,74 @@ class RicoChatAPI:
         self._append_chat(user_id, "assistant", message)
         return response
 
+    def _no_strong_matches_response(
+        self, user_id: str, role: str, *,
+        location: str = "",
+        arabic: bool = False,
+        had_raw_results: bool = False,
+    ) -> dict[str, Any]:
+        """Honest response when no result clears the requested-role relevance floor.
+
+        The provider may have returned listings, but none genuinely match the
+        role the user asked for. Rather than pad a "matches" card with unrelated
+        jobs, we say so plainly and offer to broaden the search. Applies to every
+        user and every role — no account/profile special-casing.
+        """
+        loc = location or ("الإمارات" if arabic else "the UAE")
+        if had_raw_results:
+            message = (
+                f"عثرت على بعض النتائج، لكن لا يوجد تطابق قوي مع **{role}** في {loc} الآن. "
+                f"أفضّل ألا أعرض وظائف غير مطابقة. هل أوسّع البحث لأدوار قريبة أو مواقع أخرى؟"
+                if arabic else
+                f"I found some listings, but none are a strong match for **{role}** in {loc} "
+                f"right now. I'd rather not show jobs that don't fit. "
+                f"Want me to broaden the search to related roles or other locations?"
+            )
+        else:
+            message = (
+                f"لم أجد وظائف مطابقة لـ **{role}** في {loc} الآن. "
+                f"هل أوسّع البحث لأدوار قريبة أو مواقع أخرى؟"
+                if arabic else
+                f"I couldn't find matching **{role}** jobs in {loc} right now. "
+                f"Want me to broaden the search to related roles or other locations?"
+            )
+
+        if arabic:
+            options = [
+                {"action": "broaden_search", "label": "وسّع البحث", "role": role, "location": location},
+                {"action": "retry_search", "label": "حاول مرة أخرى", "role": role, "location": location},
+                {"action": "change_role", "label": "جرّب مسمى وظيفي آخر"},
+            ]
+        else:
+            options = [
+                {"action": "broaden_search", "label": "Broaden the search", "role": role, "location": location},
+                {"action": "retry_search", "label": "Try again", "role": role, "location": location},
+                {"action": "change_role", "label": "Try a different title"},
+            ]
+
+        response = {
+            "type": "no_strong_matches",
+            "intent": "search_jobs",
+            "message": message,
+            "matches": [],
+            "result_count": 0,
+            "broadened": False,
+            "search_query": role,
+            "options": options,
+            "next_action": "broaden_or_refine_search",
+        }
+
+        # Arm a pending search so a later "broaden"/"try again" re-runs this role.
+        try:
+            self._store_pending_job_search(
+                user_id, role=role, location=location, query_type="no_strong_matches",
+            )
+        except Exception:
+            pass
+
+        self._append_chat(user_id, "assistant", message)
+        return response
+
     def _target_role_search_response(
         self, user_id: str, role: str, profile: Any,
         from_saved_profile: bool = False,
@@ -5394,6 +5462,17 @@ class RicoChatAPI:
                 deduped.append(m)
         all_matches = deduped
 
+        # Requested-role relevance (PRIMARY signal for explicit-title search):
+        # score every result against the role the user actually asked for, not
+        # against whatever roles are saved on the profile. Saved target_roles
+        # remain secondary context only (see profile-fit ranking below). This is
+        # a global, user-agnostic taxonomy match — never tuned to one account.
+        try:
+            from src.services.role_relevance import annotate_role_relevance
+            annotate_role_relevance(all_matches, search_role)
+        except Exception:
+            pass
+
         # Profile-fit ranking: score each result against the user's target roles,
         # skills, and deal-breakers. Zero-latency (pure keyword matching) so it
         # doesn't add round-trip time to the chat response.
@@ -5474,7 +5553,44 @@ class RicoChatAPI:
         except Exception:
             pass
 
-        top_matches = all_matches[:5]
+        # Requested role is the PRIMARY ranking signal: stable-sort by relevance
+        # so the role the user asked for dominates, while profile-fit/source
+        # quality (computed above) break ties within an equal-relevance band.
+        try:
+            all_matches.sort(key=lambda m: -int(m.get("role_relevance_score", 0)))
+        except Exception:
+            pass
+
+        # Relevance floor: only surface jobs that genuinely match the requested
+        # role/family. Below the floor a listing is noise for THIS search, so we
+        # never pad the card with it or claim it as a match.
+        try:
+            from src.services.role_relevance import RELEVANCE_FLOOR as _REL_FLOOR
+        except Exception:
+            _REL_FLOOR = 50
+        relevant_matches = [
+            m for m in all_matches
+            if int(m.get("role_relevance_score", 0)) >= _REL_FLOOR
+        ]
+
+        # Honest fallback: when the provider DID return results but none clear
+        # the relevance floor, do not fabricate a "N matches" card from
+        # irrelevant listings — tell the user plainly and offer to broaden.
+        # (A genuinely empty result set keeps the existing broadened path below.)
+        if all_matches and not relevant_matches:
+            try:
+                mark_completed(user_id, operation_id, 0)
+            except Exception:
+                pass
+            return self._no_strong_matches_response(
+                user_id,
+                normalized_role or search_role,
+                location=location,
+                arabic=arabic,
+                had_raw_results=True,
+            )
+
+        top_matches = relevant_matches[:5]
         formatted = [self._format_match(m, profile) for m in top_matches]
 
         skills = self._as_list(self._profile_value(profile, "skills"))[:8]
