@@ -5319,6 +5319,18 @@ class RicoChatAPI:
             target_roles.append(normalized_role)
 
         search_role = normalized_role or role
+
+        # Requested location drives BOTH the provider query and the reply text.
+        # Country-level scope ("UAE") is the provider's default, so it is mapped to
+        # an empty provider location — byte-identical to an unlocated search — while
+        # still being shown to the user as "the UAE". A specific city passes through
+        # unchanged. Data-driven / global; no city or account is special-cased.
+        _requested_location = (location or "").strip()
+        _country_scope = _requested_location.lower() in {
+            "uae", "u.a.e", "u.a.e.", "united arab emirates", "the uae",
+        }
+        _provider_location = "" if _country_scope else _requested_location
+
         operation = self._begin_job_search_operation(user_id, search_role)
         operation_id = str(operation["operation_id"])
 
@@ -5334,8 +5346,8 @@ class RicoChatAPI:
             # Pass location only when set — keeps single-arg monkeypatched
             # stand-ins (tests) and any legacy overrides working unchanged.
             fetch = (
-                self._search_jsearch_meta(search_role, location)
-                if location
+                self._search_jsearch_meta(search_role, _provider_location)
+                if _provider_location
                 else self._search_jsearch_meta(search_role)
             )
             all_matches = fetch.items
@@ -5587,7 +5599,17 @@ class RicoChatAPI:
         # never poisons the search location or fit score.
         from src.services.city_validation import sanitize_cities
         cities = sanitize_cities(self._as_list(self._profile_value(profile, "preferred_cities")))
-        if arabic:
+        # Show the location the user actually requested; fall back to the profile's
+        # preferred cities ONLY when no location was requested (so a requested
+        # "Dubai"/"UAE" is never silently replaced by the profile's default city).
+        if _requested_location:
+            if _country_scope:
+                city_text = " في الإمارات" if arabic else " in the UAE"
+            elif arabic:
+                city_text = f" في {_requested_location}"
+            else:
+                city_text = f" in {_requested_location}"
+        elif arabic:
             city_text = f" في {', '.join(map(str, cities[:2]))}" if cities else " في الإمارات"
         else:
             city_text = f" in {', '.join(map(str, cities[:2]))}" if cities else " in the UAE"
@@ -6575,11 +6597,14 @@ class RicoChatAPI:
                 _pend_ys = _ctx_ys.get("_pending_role_confirmation")
                 if _pend_ys and _pend_ys.get("role"):
                     _role_ys = _pend_ys["role"]
+                    _loc_ys = _pend_ys.get("location", "") or ""
                     _ctx_ys.pop("_pending_role_confirmation", None)
                     self._store_recent_context(user_id, _ctx_ys)
                     self._clear_pending_job_search(user_id)
                     return self._finalize(
-                        self._target_role_search_response(user_id, _role_ys, profile),
+                        self._target_role_search_response(
+                            user_id, _role_ys, profile, location=_loc_ys,
+                        ),
                         self.SOURCE_KEYWORD,
                         profile=profile,
                     )
@@ -8183,10 +8208,13 @@ class RicoChatAPI:
                 _pending_role = _ctx2.get("_pending_role_confirmation")
                 if _pending_role and _pending_role.get("role"):
                     _role = _pending_role["role"]
+                    _pending_loc = _pending_role.get("location", "") or ""
                     _ctx2.pop("_pending_role_confirmation", None)
                     self._store_recent_context(user_id, _ctx2)
                     return self._finalize(
-                        self._target_role_search_response(user_id, _role, profile),
+                        self._target_role_search_response(
+                            user_id, _role, profile, location=_pending_loc,
+                        ),
                         self.SOURCE_KEYWORD,
                         profile=profile,
                     )
@@ -19076,7 +19104,7 @@ class RicoChatAPI:
             self._append_chat(user_id, "assistant", response["message"])
             try:
                 _ctx = self._get_recent_context(user_id)
-                _ctx["_pending_role_confirmation"] = {"role": canonical_role}
+                _ctx["_pending_role_confirmation"] = {"role": canonical_role, "location": location}
                 self._store_recent_context(user_id, _ctx)
             except Exception:
                 pass

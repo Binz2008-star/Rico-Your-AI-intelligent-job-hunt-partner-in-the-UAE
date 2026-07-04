@@ -48,7 +48,9 @@ class TestOffProfileContextStorage:
 
         assert result["type"] == "clarification"
         stored_ctx = api._store_recent_context.call_args[0][1]
-        assert stored_ctx.get("_pending_role_confirmation") == {"role": "Software Engineer"}
+        # The requested location is stored alongside the role so the confirmed
+        # search preserves it (empty here — no location was requested).
+        assert stored_ctx.get("_pending_role_confirmation") == {"role": "Software Engineer", "location": ""}
 
     def test_pending_not_stored_when_profile_relevant(self):
         api = _make_api()

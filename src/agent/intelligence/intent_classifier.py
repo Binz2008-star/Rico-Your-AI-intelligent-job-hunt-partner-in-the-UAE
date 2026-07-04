@@ -1299,6 +1299,32 @@ _ARABIC_LOCATION_TERMS = frozenset({
     "الخليج", "الشرق الاوسط",
 })
 
+# Arabic emirate/country names → the English location string used for search
+# entities, mirroring the English path. Country-level names map to "UAE" (the
+# default scope). Full UAE coverage — no single city is special-cased.
+_ARABIC_LOCATION_TO_ENGLISH: dict = {
+    "الامارات": "UAE", "الإمارات": "UAE", "الامارات العربيه المتحده": "UAE",
+    "دبي": "Dubai",
+    "ابوظبي": "Abu Dhabi", "أبوظبي": "Abu Dhabi",
+    "الشارقه": "Sharjah", "الشارقة": "Sharjah",
+    "عجمان": "Ajman",
+    "راس الخيمه": "Ras Al Khaimah",
+    "الفجيره": "Fujairah",
+    "ام القيوين": "Umm Al Quwain",
+    "العين": "Al Ain",
+}
+
+
+def _extract_arabic_location(normalized_text: str) -> Optional[str]:
+    """English location name for a UAE emirate/country named in an Arabic search
+    message, or None. Longest key first so multi-word names win over substrings.
+    """
+    for ar in sorted(_ARABIC_LOCATION_TO_ENGLISH, key=len, reverse=True):
+        if ar in normalized_text:
+            return _ARABIC_LOCATION_TO_ENGLISH[ar]
+    return None
+
+
 # Arabic job nouns / connectors stripped from the edges of a captured role phrase.
 # Also includes profile-reference phrases like "بمجالي" (in my field) that should
 # not be treated as a role — they imply profile-based search with no explicit role.
@@ -1392,13 +1418,28 @@ def _is_arabic_job_search(normalized_lower: str, *, has_cv: bool = False) -> boo
 
 
 def _extract_english_role_from_mixed(text: str) -> Optional[str]:
-    """Extract a trailing English role phrase from a mixed Arabic+English message."""
-    m = re.search(r"([A-Za-z][A-Za-z\s/()\-]{1,50}[A-Za-z])\s*$", text.strip())
-    if m:
-        role = m.group(1).strip()
-        if 1 <= len(role.split()) <= _MAX_WORD_COUNT_FOR_ROLE:
-            return role
-    return None
+    """Extract an English role phrase from a mixed Arabic+English message.
+
+    Prefers a trailing English role ("...وظيفة HSE Manager"). When the English
+    role sits mid-string before an Arabic tail — e.g. a location clause such as
+    "...وظائف ESG Manager في دبي" — fall back to the first embedded Latin phrase
+    so the requested role is not dropped (dropping it routes the search to the
+    profile-based fallback instead of the explicit-title path). A bare location
+    word ("UAE", "Dubai", ...) is a scope qualifier, not a role, and is rejected.
+    """
+    stripped = text.strip()
+    m = (
+        re.search(r"([A-Za-z][A-Za-z\s/()\-]{1,50}[A-Za-z])\s*$", stripped)
+        or re.search(r"([A-Za-z][A-Za-z\s/()\-]{1,50}[A-Za-z])", stripped)
+    )
+    if not m:
+        return None
+    role = m.group(1).strip()
+    if not (1 <= len(role.split()) <= _MAX_WORD_COUNT_FOR_ROLE):
+        return None
+    if _UAE_CITY_EXTRACT_RE.fullmatch(role):
+        return None
+    return role
 
 
 def _extract_role_before_noun(text: str) -> Optional[str]:
@@ -1926,9 +1967,13 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         # Extract location and employment_type entities for richer search queries.
         _search_entities: dict = {}
         _city_m = _UAE_CITY_EXTRACT_RE.search(text)
-        # "UAE" is the default search scope, not a city constraint — skip it.
-        if _city_m and _city_m.group(1).strip().lower() != "uae":
-            _search_entities["location"] = _city_m.group(1).strip().title()
+        if _city_m:
+            _loc = _city_m.group(1).strip()
+            # Country-level "UAE" is captured as the requested scope (so the reply
+            # can show it instead of the profile's default city); the search layer
+            # maps it back to the default provider scope, leaving provider
+            # behaviour unchanged. A specific city is title-cased.
+            _search_entities["location"] = "UAE" if _loc.lower() == "uae" else _loc.title()
         _emp_m = _EMPLOYMENT_TYPE_EXTRACT_RE.search(text)
         if _emp_m:
             _search_entities["employment_type"] = _emp_m.group(1).lower()
@@ -1946,7 +1991,14 @@ def classify_intent(message: str, *, has_cv_profile: bool = False) -> IntentResu
         # Map known Arabic role names to English so JSearch receives a recognisable title.
         if role:
             role = _ARABIC_TO_ENGLISH_ROLE_MAP.get(role, role)
-        return IntentResult("job_search_explicit", 0.85, "regex", extracted_role=role)
+        # Preserve the requested location ("...في دبي" -> "Dubai") so the search
+        # targets and the reply reflect it instead of the profile's default city.
+        _ar_location = _extract_arabic_location(lower)
+        _ar_entities = {"location": _ar_location} if _ar_location else None
+        return IntentResult(
+            "job_search_explicit", 0.85, "regex",
+            extracted_role=role, entities=_ar_entities,
+        )
 
     # ── 4b. Search-confirmation fast-path (Stage 1 fix) ──────────────────
     # "Yes, search Software Engineer" / "go ahead find Technical Product Owner" /
