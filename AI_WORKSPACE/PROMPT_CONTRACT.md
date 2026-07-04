@@ -16,6 +16,24 @@ Every task brief must include:
 - required verification
 - expected output format
 
+## Product generalization requirement
+
+Every Rico task must treat smoke-test findings as evidence of product behavior, not as product logic.
+
+A task brief must state the affected scope:
+
+- one user state
+- one profile state
+- one language or locale
+- one provider or integration
+- all users
+
+Implementation must fix the underlying product/system behavior and must not special-case one sampled state, one role list, one saved search, one session state, or one smoke-test dataset.
+
+Required verification should use synthetic users and synthetic profile data unless the owner explicitly approves a production smoke check. Where relevant, include English, Arabic, complete-profile, no-profile/no-CV, and guest/public-session coverage.
+
+If a proposed fix only improves one sampled state or one smoke-test dataset, the task is invalid and must stop before coding.
+
 ## Model roles
 
 - ChatGPT: planning, decomposition, review, rewrite, prompt normalization.
@@ -64,3 +82,4 @@ A handoff is not complete until it includes:
 - risks
 - rollback plan
 - no-scope-creep confirmation
+- product-generalization confirmation
