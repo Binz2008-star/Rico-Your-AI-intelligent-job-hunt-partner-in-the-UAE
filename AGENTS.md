@@ -19,6 +19,31 @@ Follow `CLAUDE.md` for the full project architecture, routes, auth rules, safety
 9. Do not mutate Neon or any production database without explicit approval.
 10. Never expose secrets, cookies, tokens, passwords, or private environment values.
 
+## Product Generalization Rule
+
+Rico is a global SaaS product for all users. Smoke-test findings are evidence of product behavior; they are not product logic.
+
+Every fix must be global, user-agnostic, and data-driven. Do not special-case a live user's profile, role list, saved searches, language, session state, or observed smoke-test data.
+
+For every investigation or fix, identify whether the issue affects:
+
+1. one user only
+2. one profile state
+3. one language or locale
+4. one provider or integration
+5. all users
+
+Fix the underlying product/system behavior, not one account. If a proposed fix only improves one live account or one smoke-test dataset, stop and report it as invalid.
+
+Tests must use synthetic users and synthetic profile data unless the task explicitly requires an owner-approved production smoke check. Where relevant, cover:
+
+- user with a complete profile
+- user without a profile or CV
+- guest/public session
+- Arabic input
+- English input
+- multiple unrelated target roles, not only the role that exposed the bug
+
 ## Cost and Token Governance
 
 Optimize for the owner's cost, time, and review control. Use the cheapest safe path that produces enough evidence to make a decision.
