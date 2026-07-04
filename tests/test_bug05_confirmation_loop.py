@@ -120,7 +120,7 @@ class TestYesSearchButtonFix:
         result, _, _, mock_search, _ = self._call_inner(
             "Software Engineer", "Yes, search Software Engineer"
         )
-        mock_search.assert_called_once_with("test@example.com", "Software Engineer", ANY)
+        mock_search.assert_called_once_with("test@example.com", "Software Engineer", ANY, location=ANY)
         assert result["type"] == "job_listings"
 
     def test_button_click_clears_pending_role_confirmation(self):
@@ -140,7 +140,7 @@ class TestYesSearchButtonFix:
         """Confirm the fix handles any role name in the button label."""
         for role in ("Data Analyst", "HSE Manager", "Marketing Director"):
             result, _, _, mock_search, _ = self._call_inner(role, f"Yes, search {role}")
-            mock_search.assert_called_once_with("test@example.com", role, ANY)
+            mock_search.assert_called_once_with("test@example.com", role, ANY, location=ANY)
             assert result["type"] == "job_listings"
 
     def test_case_insensitive_prefix(self):
@@ -171,7 +171,7 @@ class TestYesSearchButtonFix:
                     user_id="test@example.com",
                     message=f"{prefix} {role}",
                 )
-            mock_search.assert_called_once_with("test@example.com", role, ANY)
+            mock_search.assert_called_once_with("test@example.com", role, ANY, location=ANY)
 
 
 # ===========================================================================
