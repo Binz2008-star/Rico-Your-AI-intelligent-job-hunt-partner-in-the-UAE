@@ -1,6 +1,6 @@
 "use client";
 
-import LandingPageNocturne from "@/components/LandingPageNocturne";
+import LandingPageV2 from "@/components/LandingPageV2";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -15,5 +15,5 @@ export default function HomePage() {
         }
     }, [ready, user, router]);
 
-    return <LandingPageNocturne />;
+    return <LandingPageV2 />;
 }
