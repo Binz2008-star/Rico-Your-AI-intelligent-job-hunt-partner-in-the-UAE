@@ -30,11 +30,17 @@ AUTH_UID = "user@example.com"
 PUBLIC_UID = "public:web:anon-123"
 
 
-def _api_with_pending():
-    """RicoChatAPI with an active pending pipeline-reset, memory mocked."""
+def _api_with_pending(can_mutate_applications: bool = True):
+    """RicoChatAPI with an active pending pipeline-reset, memory mocked.
+
+    Defaults to an authenticated capability (can_mutate_applications=True) so
+    existing archive-execution tests exercise an authenticated session, mirroring
+    how chat_service.py sets it from ctx.auth_type == "authenticated". Tests for
+    the public/unauthenticated path pass can_mutate_applications=False explicitly.
+    """
     from src.rico_chat_api import RicoChatAPI
 
-    api = RicoChatAPI()
+    api = RicoChatAPI(can_mutate_applications=can_mutate_applications)
     api.memory = MagicMock()
     pending = {"pending": True, "expires_at": int(time.time()) + 120}
     api.memory.get_context.side_effect = lambda uid, key: (
@@ -149,7 +155,7 @@ def test_delete_does_not_permanently_delete_from_chat():
 # 8. Public/anonymous session must not archive under a public id -------------
 
 def test_public_session_does_not_archive_under_public_id():
-    api = _api_with_pending()
+    api = _api_with_pending(can_mutate_applications=False)
     with patch.object(api, "_append_chat"), \
          patch("src.rico_db.RicoDB") as mock_db_cls, \
          patch("src.repositories.applications_repo._provision_db_user_id") as mock_resolve:
@@ -159,6 +165,70 @@ def test_public_session_does_not_archive_under_public_id():
     # No DB archive is ever attempted for a public/anonymous user.
     mock_db_cls.return_value.archive_all_applications.assert_not_called()
     mock_resolve.assert_not_called()
+
+
+# 8b. Public session with an unverified EMAIL-SHAPED user_id must still be
+# blocked — auth must never be inferred from the shape of user_id. This is
+# the exact cross-user mutation risk: /chat/public lets a caller set user_id
+# to any string, including one that looks like a real account's email, while
+# auth_type stays "public".
+
+def test_public_session_with_email_shaped_user_id_cannot_archive():
+    api = _api_with_pending(can_mutate_applications=False)
+    with patch.object(api, "_append_chat"), \
+         patch("src.rico_db.RicoDB") as mock_db_cls, \
+         patch("src.repositories.applications_repo._provision_db_user_id") as mock_resolve, \
+         patch("src.repositories.user_job_context_repo.bulk_archive_active") as mock_ctx_archive:
+        result = api._handle_pending_pipeline_reset(AUTH_UID, "archive")
+
+    assert result["type"] == "pipeline_reset_archive_requires_auth"
+    mock_resolve.assert_not_called()
+    mock_db_cls.return_value.archive_all_applications.assert_not_called()
+    mock_ctx_archive.assert_not_called()
+
+
+def test_authenticated_session_can_archive_with_email_user_id():
+    """Sanity counterpart: the same email-shaped id DOES archive once the
+    caller has actually verified auth_type == 'authenticated'."""
+    api = _api_with_pending(can_mutate_applications=True)
+    with patch.object(api, "_append_chat"), \
+         patch("src.rico_db.RicoDB") as mock_db_cls, \
+         patch("src.repositories.applications_repo._provision_db_user_id") as mock_resolve:
+        mock_resolve.return_value = "db-uuid-789"
+        mock_db_cls.return_value.archive_all_applications.return_value = 2
+        result = api._handle_pending_pipeline_reset(AUTH_UID, "archive")
+
+    mock_resolve.assert_called_once()
+    mock_db_cls.return_value.archive_all_applications.assert_called_once_with("db-uuid-789")
+    assert result["type"] == "pipeline_reset_archived"
+
+
+def test_archive_dont_delete_still_archives():
+    """'archive, don't delete' must archive — negation must be scoped to the
+    word it negates, not cancel on any negative word anywhere in the message."""
+    api = _api_with_pending(can_mutate_applications=True)
+    with patch.object(api, "_append_chat"), \
+         patch("src.rico_db.RicoDB") as mock_db_cls, \
+         patch("src.repositories.applications_repo._provision_db_user_id") as mock_resolve:
+        mock_resolve.return_value = "db-uuid-321"
+        mock_db_cls.return_value.archive_all_applications.return_value = 4
+        result = api._handle_pending_pipeline_reset(AUTH_UID, "archive, don't delete")
+
+    assert result["type"] == "pipeline_reset_archived"
+    mock_db_cls.return_value.archive_all_applications.assert_called_once_with("db-uuid-321")
+
+
+def test_archive_do_not_delete_still_archives():
+    api = _api_with_pending(can_mutate_applications=True)
+    with patch.object(api, "_append_chat"), \
+         patch("src.rico_db.RicoDB") as mock_db_cls, \
+         patch("src.repositories.applications_repo._provision_db_user_id") as mock_resolve:
+        mock_resolve.return_value = "db-uuid-654"
+        mock_db_cls.return_value.archive_all_applications.return_value = 1
+        result = api._handle_pending_pipeline_reset(AUTH_UID, "archive, do not delete")
+
+    assert result["type"] == "pipeline_reset_archived"
+    mock_db_cls.return_value.archive_all_applications.assert_called_once_with("db-uuid-654")
 
 
 # 7. Negative/cancel intent cancels without DB call -----------------------------

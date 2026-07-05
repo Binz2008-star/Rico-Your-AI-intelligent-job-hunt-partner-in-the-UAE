@@ -1793,12 +1793,19 @@ class RicoChatAPI:
         "keep everything",
     })
 
-    def __init__(self, *, persist: bool = True) -> None:
+    def __init__(self, *, persist: bool = True, can_mutate_applications: bool = False) -> None:
         self.memory = RicoMemoryStore()
         self.agent = RicoAgent(profile_store=self.memory)
         self.system = RicoSystem()
         self.openai_agent = RicoOpenAIAgent()
         self._persist = persist
+        # Capability gate for destructive/bulk mutations (e.g. chat-driven bulk
+        # archive). Must be set explicitly by the caller from a verified auth
+        # context (ctx.auth_type == "authenticated") — never inferred from the
+        # shape of user_id (e.g. "looks like an email") and never derived from
+        # `persist`/`can_persist_profile`, both of which are also true for
+        # jotform-derived sessions with an email-shaped user_id.
+        self._can_mutate_applications = can_mutate_applications
         self._current_operation_id: str | None = None
 
     @staticmethod
@@ -12080,10 +12087,28 @@ class RicoChatAPI:
         arabic = self._is_arabic_text(message)
         lower = (message or "").strip().lower()
 
+        # Negation must be scoped to the word it negates, not "any negative word
+        # anywhere in the message". Otherwise "archive, don't delete" (archive
+        # intent + a negation of the *other* option) would be wrongly cancelled.
+        _has_archive_word = bool(
+            re.search(r"\b(?:archive|أرشف|أرشفة)\b", lower, re.IGNORECASE)
+        )
+        _archive_negated = bool(
+            re.search(
+                r"\b(?:don'?t|do not|no|cancel|إلغاء|ألغ)\b(?:\s+\w+){0,2}?\s*"
+                r"(?:archive|أرشف|أرشفة)\b",
+                lower, re.IGNORECASE,
+            )
+        )
+
         # Cancel / negative — MUST be evaluated before archive intent to prevent
         # accidental archiving when user says "don't archive", "cancel archive", etc.
-        if RicoChatAPI._is_negative(message) or re.search(
-            r"\b(?:cancel|no|don'?t|do not|إلغاء|ألغ)\b", lower, re.IGNORECASE
+        # A bare negative word that does NOT target "archive" (e.g. plain
+        # "cancel", "no", "don't") still cancels the whole pending flow.
+        if RicoChatAPI._is_negative(message) or _archive_negated or (
+            not _has_archive_word and re.search(
+                r"\b(?:cancel|no|don'?t|do not|إلغاء|ألغ)\b", lower, re.IGNORECASE
+            )
         ):
             _clear()
             if arabic:
@@ -12100,13 +12125,16 @@ class RicoChatAPI:
         # Archive choice (recommended default) — execute a bulk
         # archive for the authenticated user NOW. The confirmed choice must
         # complete in-chat; never punt the user to /applications to finish it.
-        if re.search(r"\b(?:archive|أرشف|أرشفة)\b", lower, re.IGNORECASE):
+        if _has_archive_word:
             _clear()
-            # Authenticated users only. Public/anonymous sessions have no
-            # persisted tracked applications and must never write under a
-            # public id. (Auth identity = has an email-form id, not "public:".)
-            _uid = str(user_id or "")
-            if _uid.startswith("public:") or "@" not in _uid:
+            # Authenticated (JWT) sessions only. This must be a verified
+            # capability set by the caller from the request's auth context —
+            # never inferred from the shape of user_id (an "@" does not prove
+            # identity; a public chat session can set user_id to any
+            # unverified, attacker-chosen email-shaped string) and never
+            # derived from can_persist_profile (true for non-authenticated
+            # jotform-derived sessions too).
+            if not self._can_mutate_applications:
                 if arabic:
                     msg = (
                         "الأرشفة الجماعية متاحة بعد تسجيل الدخول. سجّل الدخول لإدارة طلباتك المتتبعة."
