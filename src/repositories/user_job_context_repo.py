@@ -613,3 +613,57 @@ def update_verification_status(
             pass
     finally:
         conn.close()
+
+
+def bulk_archive_active(user_id: str) -> int:
+    """Reversibly archive every active row in the user's funnel-memory store.
+
+    The chat's lifecycle lists (saved / applied / opened-but-not-applied) are
+    read from ``user_job_context`` — NOT from ``rico_job_recommendations`` —
+    so a "clear them / start fresh" archive that only touches the
+    recommendations table leaves these lists visibly intact. This archives the
+    funnel-memory side too, so the confirmed reset actually clears what the
+    user sees in chat.
+
+    Sets ``status = 'archived'`` on every row for this user that is not already
+    archived (canonical status, see src/job_lifecycle.py). REVERSIBLE — no row
+    is deleted, only its status changes. Idempotent: already-archived rows are
+    excluded, so re-running archives nothing and returns 0. Scoped to the single
+    ``user_id`` (per-user isolation). Returns the number of rows newly archived,
+    or ``-1`` if the DB is unavailable or the write fails (caller must treat -1
+    as "no context rows archived" and never claim success on it).
+    """
+    if not user_id:
+        return -1
+    from src.db import get_db_connection
+
+    conn = get_db_connection()
+    if not conn:
+        logger.debug("user_job_context_repo: DB unavailable, skipping bulk archive user=%s", user_id)
+        return -1
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE user_job_context
+                   SET status         = 'archived',
+                       last_action    = 'archive',
+                       last_action_at = NOW()
+                 WHERE user_id = %s
+                   AND status <> 'archived'
+                """,
+                (user_id,),
+            )
+            count = cur.rowcount or 0
+        conn.commit()
+        logger.info("user_job_context_repo: bulk_archive_active user=%s archived=%d", user_id, count)
+        return count
+    except Exception:
+        logger.exception("user_job_context_repo_bulk_archive_failed user=%s", user_id)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return -1
+    finally:
+        conn.close()

@@ -12132,6 +12132,29 @@ class RicoChatAPI:
                     "intent": "pipeline_reset",
                     "message": msg,
                 }
+            # Also archive the funnel-memory store. The chat's lifecycle lists
+            # (saved / applied / opened-but-not-applied) are read from
+            # user_job_context, NOT rico_job_recommendations, so archiving only
+            # the recommendations table above leaves those lists intact and the
+            # "start fresh" reset looks like it did nothing. Best-effort: a
+            # failure here (-1) must never undo or misreport the recommendations
+            # archive that already committed — we simply add nothing to the count.
+            try:
+                from src.repositories.user_job_context_repo import (
+                    bulk_archive_active as _bulk_archive_context,
+                )
+                ctx_archived = _bulk_archive_context(user_id)
+                if ctx_archived > 0:
+                    archived += ctx_archived
+                logger.info(
+                    "rico_chat: user_job_context bulk archive user=%s ctx_archived=%d",
+                    user_id, ctx_archived,
+                )
+            except Exception as exc:
+                logger.error(
+                    "rico_chat: user_job_context bulk archive failed user=%s err=%s",
+                    user_id, exc,
+                )
             # Confirm the count ONLY after persistence succeeded.
             if archived > 0:
                 if arabic:
