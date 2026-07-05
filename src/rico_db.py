@@ -938,6 +938,29 @@ class RicoDB:
                 )
                 return cur.rowcount or 0
 
+    def archive_all_applications(self, user_id: str) -> int:
+        """Reversibly archive all of the user's active tracked applications.
+
+        Sets ``status = 'archived'`` (the canonical archived lifecycle status,
+        see src/job_lifecycle.py) on every row for this user that is not already
+        archived. This is REVERSIBLE — no row is deleted, only its status
+        changes, so the records can be restored later. Idempotent: rows already
+        at ``archived`` are excluded, so re-running archives nothing and returns
+        0. Scoped to the single ``user_id`` (per-user isolation). Returns the
+        number of rows newly archived.
+        """
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE rico_job_recommendations
+                    SET status = 'archived', updated_at = now()
+                    WHERE user_id = %s AND status <> 'archived'
+                    """,
+                    (user_id,),
+                )
+                return cur.rowcount or 0
+
     def mark_followups_due(self, interval_days: int = 7) -> int:
         """Transition aged ``applied`` jobs to ``follow_up_due`` (Issue #355).
 
