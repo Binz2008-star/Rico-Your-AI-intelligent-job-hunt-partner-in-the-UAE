@@ -103,10 +103,12 @@ class TestBulkArchiveActiveContextRepo:
 
 # ─── Handler: _handle_pending_pipeline_reset archives BOTH stores ────────────
 
-def _api_with_pending():
+def _api_with_pending(can_mutate_applications: bool = True):
+    """can_mutate_applications defaults to True (authenticated session), mirroring
+    chat_service.py setting it from ctx.auth_type == "authenticated"."""
     from src.rico_chat_api import RicoChatAPI
 
-    api = RicoChatAPI()
+    api = RicoChatAPI(can_mutate_applications=can_mutate_applications)
     api.memory = MagicMock()
     pending = {"pending": True, "expires_at": int(time.time()) + 120}
     api.memory.get_context.side_effect = lambda uid, key: (
@@ -192,7 +194,7 @@ class TestHandlerArchivesBothStores:
         mock_ctx.assert_not_called()
 
     def test_public_session_archives_neither_store(self):
-        api = _api_with_pending()
+        api = _api_with_pending(can_mutate_applications=False)
         with patch.object(api, "_append_chat"), \
              patch("src.rico_db.RicoDB") as mock_db_cls, \
              patch(_CTX_ARCHIVE) as mock_ctx:

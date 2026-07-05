@@ -140,7 +140,10 @@ def send_message(
     # same way whenever a fresh uploaded_document_context exists for this user.
     from src.rico_chat_api import RicoChatAPI as _RicoChatAPI
     if _RicoChatAPI.is_document_action_message(message):
-        _doc_reply = _RicoChatAPI(persist=ctx.can_persist_profile).handle_document_action(
+        _doc_reply = _RicoChatAPI(
+            persist=ctx.can_persist_profile,
+            can_mutate_applications=(ctx.auth_type == "authenticated"),
+        ).handle_document_action(
             ctx.user_id, message, language
         )
         if _doc_reply is not None:
@@ -496,7 +499,10 @@ def _legacy_send_message(
     """Run the existing Rico chat pipeline unchanged."""
     from src.rico_chat_api import RicoChatAPI
 
-    return RicoChatAPI(persist=ctx.can_persist_profile).process_message(
+    return RicoChatAPI(
+        persist=ctx.can_persist_profile,
+        can_mutate_applications=(ctx.auth_type == "authenticated"),
+    ).process_message(
         user_id=ctx.user_id,
         message=message,
         operation_id=operation_id,
@@ -514,7 +520,10 @@ def _conversational_ai_reply(
     """Use the existing Rico conversational AI fallback path directly."""
     from src.rico_chat_api import RicoChatAPI
 
-    result = RicoChatAPI(persist=ctx.can_persist_profile).answer_conversationally(
+    result = RicoChatAPI(
+        persist=ctx.can_persist_profile,
+        can_mutate_applications=(ctx.auth_type == "authenticated"),
+    ).answer_conversationally(
         user_id=ctx.user_id,
         message=message,
         profile=profile,

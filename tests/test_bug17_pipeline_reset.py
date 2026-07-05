@@ -182,11 +182,13 @@ class TestConfirmationFlowRequiresExplicitChoice:
     """Archive and delete must only execute after an explicit user choice in turn 2."""
 
     def _api_with_pending(self):
-        """Build an API instance with an active pending pipeline reset."""
+        """Build an authenticated API instance with an active pending pipeline
+        reset. can_mutate_applications=True mirrors chat_service.py setting it
+        from ctx.auth_type == "authenticated" for a real logged-in session."""
         from src.rico_chat_api import RicoChatAPI
         import time
 
-        api = RicoChatAPI()
+        api = RicoChatAPI(can_mutate_applications=True)
         api.memory = MagicMock()
         pending = {"pending": True, "expires_at": int(time.time()) + 120}
         api.memory.get_context.side_effect = lambda uid, key: (
@@ -220,7 +222,9 @@ class TestConfirmationFlowRequiresExplicitChoice:
 
         with patch.object(api, "_append_chat"), \
              patch("src.rico_db.RicoDB") as mock_db_cls, \
+             patch("src.repositories.applications_repo._provision_db_user_id") as mock_resolve, \
              patch("src.rico_chat_api.upsert_profile") as mock_upsert:
+            mock_resolve.return_value = "db-uuid-999"
             mock_db_cls.return_value.archive_all_applications.return_value = 3
             result = api._handle_pending_pipeline_reset("u@example.com", "archive")
 
@@ -229,7 +233,9 @@ class TestConfirmationFlowRequiresExplicitChoice:
         assert result.get("archived_count") == 3
         # The confirmed archive completes in chat — no redirect as the only path.
         assert result.get("target_route") != "/applications"
-        mock_db_cls.return_value.archive_all_applications.assert_called_once_with("u@example.com")
+        # Archives using the resolved DB UUID, never the raw chat user_id.
+        mock_resolve.assert_called_once()
+        mock_db_cls.return_value.archive_all_applications.assert_called_once_with("db-uuid-999")
         mock_upsert.assert_not_called()
 
     def test_cancel_clears_pending_and_takes_no_action(self):
@@ -285,7 +291,7 @@ class TestLatestIntentCancelsStalePendingReset:
         from src.rico_chat_api import RicoChatAPI
         import time
 
-        api = RicoChatAPI()
+        api = RicoChatAPI(can_mutate_applications=True)
         api.memory = MagicMock()
         pending = {"pending": True, "expires_at": int(time.time()) + 120}
         api.memory.get_context.side_effect = lambda uid, key: (
@@ -345,7 +351,9 @@ class TestLatestIntentCancelsStalePendingReset:
 
         with patch.object(api, "_append_chat"), \
              patch("src.rico_db.RicoDB") as mock_db_cls, \
+             patch("src.repositories.applications_repo._provision_db_user_id") as mock_resolve, \
              patch("src.rico_chat_api.upsert_profile") as mock_upsert:
+            mock_resolve.return_value = "db-uuid-111"
             mock_db_cls.return_value.archive_all_applications.return_value = 1
             result = api._handle_pending_pipeline_reset("u@example.com", "archive")
 
