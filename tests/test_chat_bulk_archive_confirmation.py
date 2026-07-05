@@ -65,19 +65,22 @@ def test_clear_them_lets_start_fresh_asks_confirmation():
 
 # 2. "archive" after pending -> archives active tracked applications ---------
 
-def test_archive_executes_reversible_bulk_archive_for_authenticated_user():
+def test_archive_executes_bulk_archive_for_authenticated_user():
     api = _api_with_pending()
     with patch.object(api, "_append_chat"), \
-         patch("src.rico_db.RicoDB") as mock_db_cls:
+         patch("src.rico_db.RicoDB") as mock_db_cls, \
+         patch("src.repositories.applications_repo._provision_db_user_id") as mock_resolve:
+        mock_resolve.return_value = "db-uuid-123"
         mock_db_cls.return_value.archive_all_applications.return_value = 5
         result = api._handle_pending_pipeline_reset(AUTH_UID, "archive")
 
-    # Executed the bulk archive against the DB for this exact authenticated user.
-    mock_db_cls.return_value.archive_all_applications.assert_called_once_with(AUTH_UID)
+    # Resolved DB user ID before archive
+    mock_resolve.assert_called_once()
+    # Executed the bulk archive against the DB with resolved UUID
+    mock_db_cls.return_value.archive_all_applications.assert_called_once_with("db-uuid-123")
     assert result["type"] == "pipeline_reset_archived"
     # Completes in chat — does NOT punt the user to /applications as the only path.
     assert result.get("target_route") != "/applications"
-    assert "/applications" not in result["message"] or "restore" in result["message"].lower()
 
 
 # 3. Confirmation includes archived count ------------------------------------
@@ -85,7 +88,9 @@ def test_archive_executes_reversible_bulk_archive_for_authenticated_user():
 def test_archive_confirmation_reports_the_count():
     api = _api_with_pending()
     with patch.object(api, "_append_chat"), \
-         patch("src.rico_db.RicoDB") as mock_db_cls:
+         patch("src.rico_db.RicoDB") as mock_db_cls, \
+         patch("src.repositories.applications_repo._provision_db_user_id") as mock_resolve:
+        mock_resolve.return_value = "db-uuid-123"
         mock_db_cls.return_value.archive_all_applications.return_value = 7
         result = api._handle_pending_pipeline_reset(AUTH_UID, "archive")
 
@@ -98,7 +103,9 @@ def test_archive_confirmation_reports_the_count():
 def test_archive_db_failure_makes_no_success_claim():
     api = _api_with_pending()
     with patch.object(api, "_append_chat"), \
-         patch("src.rico_db.RicoDB") as mock_db_cls:
+         patch("src.rico_db.RicoDB") as mock_db_cls, \
+         patch("src.repositories.applications_repo._provision_db_user_id") as mock_resolve:
+        mock_resolve.return_value = "db-uuid-123"
         mock_db_cls.return_value.archive_all_applications.side_effect = RuntimeError("db down")
         result = api._handle_pending_pipeline_reset(AUTH_UID, "archive")
 
@@ -115,13 +122,15 @@ def test_archive_db_failure_makes_no_success_claim():
 def test_cancel_performs_no_mutation():
     api = _api_with_pending()
     with patch.object(api, "_append_chat"), \
-         patch("src.rico_db.RicoDB") as mock_db_cls:
+         patch("src.rico_db.RicoDB") as mock_db_cls, \
+         patch("src.repositories.applications_repo._provision_db_user_id") as mock_resolve:
         result = api._handle_pending_pipeline_reset(AUTH_UID, "cancel")
 
     assert result["type"] == "pipeline_reset_cancelled"
     assert "nothing was changed" in result["message"].lower()
     # The DB is never touched on cancel.
     mock_db_cls.assert_not_called()
+    mock_resolve.assert_not_called()
 
 
 # 6. "delete" -> does NOT permanently delete from chat -----------------------
@@ -142,9 +151,95 @@ def test_delete_does_not_permanently_delete_from_chat():
 def test_public_session_does_not_archive_under_public_id():
     api = _api_with_pending()
     with patch.object(api, "_append_chat"), \
-         patch("src.rico_db.RicoDB") as mock_db_cls:
+         patch("src.rico_db.RicoDB") as mock_db_cls, \
+         patch("src.repositories.applications_repo._provision_db_user_id") as mock_resolve:
         result = api._handle_pending_pipeline_reset(PUBLIC_UID, "archive")
 
     assert result["type"] == "pipeline_reset_archive_requires_auth"
     # No DB archive is ever attempted for a public/anonymous user.
     mock_db_cls.return_value.archive_all_applications.assert_not_called()
+    mock_resolve.assert_not_called()
+
+
+# 7. Negative/cancel intent cancels without DB call -----------------------------
+
+def test_dont_archive_cancels_without_db_call():
+    api = _api_with_pending()
+    with patch.object(api, "_append_chat"), \
+         patch("src.rico_db.RicoDB") as mock_db_cls, \
+         patch("src.repositories.applications_repo._provision_db_user_id") as mock_resolve:
+        result = api._handle_pending_pipeline_reset(AUTH_UID, "don't archive")
+
+    assert result["type"] == "pipeline_reset_cancelled"
+    assert "nothing was changed" in result["message"].lower()
+    # DB is never touched when user says "don't archive"
+    mock_db_cls.assert_not_called()
+    mock_resolve.assert_not_called()
+
+
+def test_cancel_archive_cancels_without_db_call():
+    api = _api_with_pending()
+    with patch.object(api, "_append_chat"), \
+         patch("src.rico_db.RicoDB") as mock_db_cls, \
+         patch("src.repositories.applications_repo._provision_db_user_id") as mock_resolve:
+        result = api._handle_pending_pipeline_reset(AUTH_UID, "cancel archive")
+
+    assert result["type"] == "pipeline_reset_cancelled"
+    assert "nothing was changed" in result["message"].lower()
+    # DB is never touched when user cancels
+    mock_db_cls.assert_not_called()
+    mock_resolve.assert_not_called()
+
+
+# 8. DB user resolution safety -------------------------------------------------
+
+def test_archive_resolves_db_user_id_before_update():
+    api = _api_with_pending()
+    with patch.object(api, "_append_chat"), \
+         patch("src.rico_db.RicoDB") as mock_db_cls, \
+         patch("src.repositories.applications_repo._provision_db_user_id") as mock_resolve:
+        mock_resolve.return_value = "resolved-db-uuid-456"
+        mock_db_cls.return_value.archive_all_applications.return_value = 3
+        result = api._handle_pending_pipeline_reset(AUTH_UID, "archive")
+
+    # DB user ID is resolved before archive
+    mock_resolve.assert_called_once()
+    # Archive uses resolved UUID, not raw email
+    mock_db_cls.return_value.archive_all_applications.assert_called_once_with("resolved-db-uuid-456")
+    assert result["type"] == "pipeline_reset_archived"
+
+
+def test_archive_db_user_resolution_failure_is_safe():
+    api = _api_with_pending()
+    with patch.object(api, "_append_chat"), \
+         patch("src.rico_db.RicoDB") as mock_db_cls, \
+         patch("src.repositories.applications_repo._provision_db_user_id") as mock_resolve:
+        mock_resolve.return_value = None  # Resolution fails
+        result = api._handle_pending_pipeline_reset(AUTH_UID, "archive")
+
+    assert result["type"] == "pipeline_reset_archive_failed"
+    # No DB write when resolution fails
+    mock_db_cls.return_value.archive_all_applications.assert_not_called()
+    low = result["message"].lower()
+    assert "couldn't" in low or "could not" in low or "تعذّر" in result["message"]
+
+
+# 9. Success message does not claim restore ------------------------------------
+
+def test_archive_success_message_does_not_claim_restore():
+    api = _api_with_pending()
+    with patch.object(api, "_append_chat"), \
+         patch("src.rico_db.RicoDB") as mock_db_cls, \
+         patch("src.repositories.applications_repo._provision_db_user_id") as mock_resolve:
+        mock_resolve.return_value = "db-uuid-123"
+        mock_db_cls.return_value.archive_all_applications.return_value = 5
+        result = api._handle_pending_pipeline_reset(AUTH_UID, "archive")
+
+    assert result["type"] == "pipeline_reset_archived"
+    msg = result["message"].lower()
+    # Should not claim reversibility or restore capability
+    assert "reversible" not in msg
+    assert "restore" not in msg
+    assert "قابلة للعكس" not in result["message"]
+    # Should mention viewing archive instead
+    assert "view" in msg or "عرض" in result["message"]
