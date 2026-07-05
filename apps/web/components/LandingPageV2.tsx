@@ -330,30 +330,137 @@ function MarqueeRow({ items, reverse }: { items: string[]; reverse?: boolean }) 
     );
 }
 
-function FeatureCard({ feature }: { feature: typeof FEATURES[0] }) {
+/* ─── Feature-card motifs ──────────────────────────────────────────────────────
+   Line-art SVG headers, viewBox 0 0 300 150, stroke/fill = currentColor (color is
+   set by the .fx-media--a / --b variant). Adapted from the approved "Rico Hunt V2"
+   mock; the Approval-Safeguards shield is authored in the same style (the mock has
+   no shield). Purely decorative → the media SVG is aria-hidden. */
+const FEATURE_MOTIFS: Record<string, React.ReactNode> = {
+    // Score gauge + spokes to matched nodes → the engine scoring & pairing roles.
+    "AI Match Engine": (
+        <>
+            <g stroke="currentColor" fill="none" strokeWidth={1.4} opacity={0.75}>
+                <circle cx={150} cy={80} r={34} />
+                <path d="M150 46 A34 34 0 0 1 182 100" strokeWidth={2.6} />
+                <line x1={150} y1={80} x2={214} y2={42} strokeWidth={1.3} />
+                <line x1={150} y1={80} x2={96} y2={120} strokeWidth={1.3} />
+                <line x1={150} y1={80} x2={228} y2={112} strokeWidth={1.3} />
+            </g>
+            <g fill="currentColor">
+                <circle cx={150} cy={80} r={2.6} />
+                <circle cx={214} cy={42} r={2.8} />
+                <circle cx={96} cy={120} r={2.2} />
+                <circle cx={228} cy={112} r={2.4} opacity={0.7} />
+                <circle cx={182} cy={100} r={3.2} />
+            </g>
+        </>
+    ),
+    // Document + parsed field-lines + a brighter scan sweep → reading your CV.
+    "CV Intelligence": (
+        <>
+            <g stroke="currentColor" fill="none" strokeWidth={1.4} opacity={0.75}>
+                <rect x={108} y={20} width={84} height={106} rx={6} />
+                <line x1={122} y1={44} x2={176} y2={44} />
+                <line x1={122} y1={60} x2={182} y2={60} />
+                <line x1={122} y1={76} x2={164} y2={76} />
+                <line x1={122} y1={92} x2={174} y2={92} />
+                <line x1={122} y1={108} x2={150} y2={108} />
+                <line x1={100} y1={70} x2={200} y2={70} strokeWidth={2} opacity={0.9} />
+            </g>
+            <g fill="currentColor">
+                <circle cx={200} cy={70} r={2.6} />
+            </g>
+        </>
+    ),
+    // Pipeline timeline, last stage checked → application stages (verbatim from mock).
+    "Application Tracker": (
+        <>
+            <g stroke="currentColor" fill="none" strokeWidth={1.4} opacity={0.7}>
+                <line x1={38} y1={80} x2={262} y2={80} />
+                <circle cx={60} cy={80} r={9} />
+                <circle cx={120} cy={80} r={9} />
+                <circle cx={180} cy={80} r={9} />
+                <circle cx={240} cy={80} r={11} />
+                <path d="M234 80 l4 5 l8 -11" strokeWidth={2.2} />
+            </g>
+            <g fill="currentColor">
+                <circle cx={60} cy={80} r={3} />
+                <circle cx={120} cy={80} r={3} />
+                <circle cx={180} cy={80} r={3} />
+            </g>
+        </>
+    ),
+    // Paper-plane + dashed trail + ping rings → notifications (verbatim from mock).
+    "Smart Alerts": (
+        <>
+            <g stroke="currentColor" fill="none" strokeWidth={1.4} opacity={0.7}>
+                <path d="M36 128 C92 118 118 58 208 44" strokeDasharray="3 6" />
+                <path d="M196 28 L232 44 L204 60 L204 47 Z" strokeWidth={1.6} />
+                <circle cx={208} cy={44} r={20} opacity={0.5} />
+                <circle cx={208} cy={44} r={32} opacity={0.28} />
+            </g>
+            <g fill="currentColor">
+                <circle cx={36} cy={128} r={2.4} />
+                <circle cx={204} cy={46} r={2} />
+            </g>
+        </>
+    ),
+    // Two chat bubbles + Arabic glyph + typing dots → bilingual chat (verbatim from mock).
+    "Bilingual Chat": (
+        <>
+            <g stroke="currentColor" fill="none" strokeWidth={1.4} opacity={0.72}>
+                <path d="M66 38 h78 a10 10 0 0 1 10 10 v32 a10 10 0 0 1 -10 10 h-50 l-18 15 v-15 h-10 a10 10 0 0 1 -10 -10 v-32 a10 10 0 0 1 10 -10 z" />
+                <path d="M150 76 h72 a10 10 0 0 1 10 10 v26 a10 10 0 0 1 -10 10 h-8 v13 l-15 -13 h-49 a10 10 0 0 1 -10 -10 v-26 a10 10 0 0 1 10 -10 z" />
+            </g>
+            <g fill="currentColor">
+                <circle cx={88} cy={64} r={2.4} />
+                <circle cx={104} cy={64} r={2.4} />
+                <circle cx={120} cy={64} r={2.4} />
+            </g>
+            <text x={176} y={104} fontFamily="'IBM Plex Sans', sans-serif" fontSize={16} fill="currentColor" opacity={0.85}>ع</text>
+        </>
+    ),
+    // Shield + checkmark → approval / you stay in control (authored to match the family).
+    "Approval Safeguards": (
+        <>
+            <g stroke="currentColor" fill="none" strokeWidth={1.4} opacity={0.72}>
+                <path d="M150 30 L192 46 V84 C192 108 174 122 150 132 C126 122 108 108 108 84 V46 Z" />
+                <path d="M134 82 l12 12 l22 -26" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
+            </g>
+            <g fill="currentColor">
+                <circle cx={150} cy={30} r={2.6} />
+                <circle cx={108} cy={46} r={2} opacity={0.7} />
+                <circle cx={192} cy={46} r={2} opacity={0.7} />
+            </g>
+        </>
+    ),
+};
+
+function FeatureMedia({ feature }: { feature: typeof FEATURES[0] }) {
     const isCyan = feature.accent === "cyan";
     return (
-        <div className="group relative rounded-2xl border border-white/10 bg-white/[0.03] p-6 hover:border-white/20 hover:bg-white/[0.06] transition-all duration-300 cursor-default overflow-hidden">
-            {/* Animated glow on hover */}
-            <div
-                className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-2xl ${isCyan ? "shadow-[inset_0_0_40px_rgba(0,218,243,0.06)]" : "shadow-[inset_0_0_40px_rgba(255,72,149,0.06)]"}`}
-            />
-            {/* Streak line */}
-            <div
-                className={`absolute top-0 left-0 right-0 h-px opacity-0 group-hover:opacity-100 transition-opacity duration-300 ${isCyan ? "bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent" : "bg-gradient-to-r from-transparent via-pink-400/50 to-transparent"}`}
-            />
-            {/* Dot grid */}
-            <div className="absolute inset-0 opacity-0 group-hover:opacity-20 transition-opacity duration-500 pointer-events-none"
-                style={{
-                    backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.3) 1px, transparent 1px)",
-                    backgroundSize: "24px 24px",
-                }}
-            />
-            <div className={`mb-4 inline-flex p-2.5 rounded-xl ${isCyan ? "bg-cyan-500/10 text-cyan-400" : "bg-pink-500/10 text-pink-400"}`}>
+        <div className={`fx-media ${isCyan ? "fx-media--a" : "fx-media--b"}`} aria-hidden="true">
+            <span className="fx-media__glow" />
+            <span className="fx-media__dots" />
+            <svg className="fx-media__net" viewBox="0 0 300 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                {FEATURE_MOTIFS[feature.title]}
+            </svg>
+            <span className="fx-media__streak" />
+            <span className={`fx-media__icon ${isCyan ? "text-cyan-300" : "text-pink-300"}`}>
                 {feature.icon}
+            </span>
+        </div>
+    );
+}
+
+function FeatureCard({ feature }: { feature: typeof FEATURES[0] }) {
+    return (
+        <div className="fx-card group relative rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden hover:border-white/20 hover:bg-white/[0.05] transition-all duration-300 cursor-default">
+            <FeatureMedia feature={feature} />
+            <div className="p-6">
+                <h3 className="text-base font-semibold text-white mb-2">{feature.title}</h3>
+                <p className="text-sm text-white/50 leading-relaxed">{feature.desc}</p>
             </div>
-            <h3 className="text-base font-semibold text-white mb-2">{feature.title}</h3>
-            <p className="text-sm text-white/50 leading-relaxed">{feature.desc}</p>
         </div>
     );
 }
@@ -426,6 +533,34 @@ export default function LandingPageV2() {
                 @keyframes marqueeRev { from { transform: translateX(-50%) } to { transform: translateX(0) } }
                 @media (prefers-reduced-motion: reduce) {
                     [style*="marquee"] { animation: none !important; }
+                }
+
+                /* ── Feature-card cinematic media headers (adapted from approved mock) ── */
+                @keyframes fx-streak {
+                    0% { transform: translateX(-160%) skewX(-14deg); opacity: 0; }
+                    22% { opacity: 0.85; }
+                    70% { opacity: 0.85; }
+                    100% { transform: translateX(320%) skewX(-14deg); opacity: 0; }
+                }
+                .fx-media { position: relative; height: 132px; overflow: hidden; background: radial-gradient(140% 120% at 72% 0%, #0a1519 0%, #050506 62%); border-bottom: 0.5px solid rgba(255,255,255,0.06); }
+                .fx-media__glow { position: absolute; inset: -35%; filter: blur(4px); opacity: 0.85; transform: scale(1.06); transform-origin: 72% 22%; transition: opacity 550ms cubic-bezier(0.16,1,0.3,1), transform 750ms cubic-bezier(0.16,1,0.3,1), filter 550ms cubic-bezier(0.16,1,0.3,1); background: radial-gradient(38% 52% at 78% 20%, rgba(0,218,243,0.42), transparent 60%), radial-gradient(46% 64% at 20% 90%, rgba(255,72,149,0.16), transparent 62%), conic-gradient(from 210deg at 74% 24%, transparent 0deg, rgba(0,218,243,0.16) 42deg, transparent 120deg); }
+                .fx-card:hover .fx-media__glow { opacity: 1; transform: scale(1.16); filter: blur(4px) brightness(1.28); }
+                .fx-media__dots { position: absolute; inset: 0; background-image: radial-gradient(rgba(190,244,255,0.55) 0.6px, transparent 0.7px); background-size: 13px 13px; opacity: 0.13; -webkit-mask-image: radial-gradient(78% 100% at 78% 22%, #000, transparent 72%); mask-image: radial-gradient(78% 100% at 78% 22%, #000, transparent 72%); transition: opacity 550ms cubic-bezier(0.16,1,0.3,1); }
+                .fx-card:hover .fx-media__dots { opacity: 0.22; }
+                .fx-media__streak { position: absolute; top: -20%; bottom: -20%; left: 0; width: 34%; background: linear-gradient(90deg, transparent, rgba(190,244,255,0.32), transparent); filter: blur(3px); opacity: 0; }
+                .fx-card:hover .fx-media__streak { animation: fx-streak 1.9s cubic-bezier(0.16,1,0.3,1); }
+                .fx-media__icon { position: absolute; left: 18px; bottom: 14px; width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: rgba(6,10,12,0.5); border: 0.5px solid rgba(255,255,255,0.14); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+                .fx-media__icon svg { width: 20px; height: 20px; }
+                .fx-media__net { position: absolute; inset: 0; width: 100%; height: 100%; color: #00daf3; opacity: 0.5; pointer-events: none; transition: opacity 550ms cubic-bezier(0.16,1,0.3,1); filter: drop-shadow(0 0 4px rgba(0,218,243,0.35)); -webkit-mask-image: linear-gradient(175deg, #000 52%, transparent 92%); mask-image: linear-gradient(175deg, #000 52%, transparent 92%); }
+                .fx-card:hover .fx-media__net { opacity: 0.82; }
+                .fx-media--b { background: radial-gradient(140% 120% at 28% 0%, #170a12 0%, #050506 62%); }
+                .fx-media--b .fx-media__glow { background: radial-gradient(40% 54% at 24% 22%, rgba(255,72,149,0.34), transparent 60%), radial-gradient(48% 66% at 82% 88%, rgba(0,218,243,0.14), transparent 62%), conic-gradient(from 150deg at 28% 24%, transparent 0deg, rgba(255,72,149,0.16) 42deg, transparent 120deg); }
+                .fx-media--b .fx-media__dots { -webkit-mask-image: radial-gradient(78% 100% at 24% 22%, #000, transparent 72%); mask-image: radial-gradient(78% 100% at 24% 22%, #000, transparent 72%); }
+                .fx-media--b .fx-media__net { color: #ff4895; filter: drop-shadow(0 0 4px rgba(255,72,149,0.35)); }
+                @media (max-width: 640px) { .fx-media { height: 116px; } }
+                @media (prefers-reduced-motion: reduce) {
+                    .fx-card:hover .fx-media__glow { transform: scale(1.04); }
+                    .fx-card:hover .fx-media__streak { animation: none; }
                 }
             `}</style>
 
