@@ -12038,7 +12038,7 @@ class RicoChatAPI:
         else:
             msg = (
                 "It looks like you want to reset your tracked applications. What would you like to do?\n\n"
-                "• Type **archive** — Archive all applications (recommended, reversible)\n"
+                "• Type **archive** — Archive all applications (recommended)\n"
                 "• Type **delete** — Permanently delete (manage from the Applications page)\n"
                 "• Type **cancel** — Keep everything as-is"
             )
@@ -12080,7 +12080,24 @@ class RicoChatAPI:
         arabic = self._is_arabic_text(message)
         lower = (message or "").strip().lower()
 
-        # Archive choice (recommended default) — execute a reversible bulk
+        # Cancel / negative — MUST be evaluated before archive intent to prevent
+        # accidental archiving when user says "don't archive", "cancel archive", etc.
+        if RicoChatAPI._is_negative(message) or re.search(
+            r"\b(?:cancel|no|don'?t|do not|إلغاء|ألغ)\b", lower, re.IGNORECASE
+        ):
+            _clear()
+            if arabic:
+                msg = "تم الإلغاء — لم يتغيّر شيء."
+            else:
+                msg = "Cancelled — nothing was changed."
+            self._append_chat(user_id, "assistant", msg)
+            return {
+                "type": "pipeline_reset_cancelled",
+                "intent": "pipeline_reset",
+                "message": msg,
+            }
+
+        # Archive choice (recommended default) — execute a bulk
         # archive for the authenticated user NOW. The confirmed choice must
         # complete in-chat; never punt the user to /applications to finish it.
         if re.search(r"\b(?:archive|أرشف|أرشفة)\b", lower, re.IGNORECASE):
@@ -12105,10 +12122,33 @@ class RicoChatAPI:
                     "intent": "pipeline_reset",
                     "message": msg,
                 }
+            # Resolve authenticated chat user to persisted DB UUID before any DB writes.
+            # This matches the same resolver/provision path used by application writes.
+            archived = 0
             try:
+                from src.repositories.applications_repo import _provision_db_user_id
                 from src.rico_db import RicoDB as _RicoDB
                 db = _RicoDB()
-                archived = db.archive_all_applications(user_id)
+                db_user_id = _provision_db_user_id(db, user_id)
+                if not db_user_id:
+                    logger.error(
+                        "rico_chat: failed to resolve DB user_id for archive user=%s",
+                        user_id,
+                    )
+                    if arabic:
+                        msg = "تعذّر تحديد هويتك في قاعدة البيانات. لم يتم الأرشفة."
+                    else:
+                        msg = (
+                            "I couldn't verify your identity in the database, so nothing was archived. "
+                            "Please try again."
+                        )
+                    self._append_chat(user_id, "assistant", msg)
+                    return {
+                        "type": "pipeline_reset_archive_failed",
+                        "intent": "pipeline_reset",
+                        "message": msg,
+                    }
+                archived = db.archive_all_applications(db_user_id)
                 logger.info(
                     "rico_chat: archive_all_applications executed user=%s archived=%d",
                     user_id, archived,
@@ -12160,13 +12200,13 @@ class RicoChatAPI:
                 if arabic:
                     msg = (
                         f"تمت أرشفة **{archived}** من طلباتك المتتبعة. "
-                        "العملية قابلة للعكس — يمكنك استعادتها من صفحة الطلبات."
+                        "يمكنك عرض الأرشيف من صفحة الطلبات."
                     )
                 else:
                     msg = (
                         f"Done — archived **{archived}** tracked application"
-                        f"{'s' if archived != 1 else ''}. This is reversible; you can "
-                        "restore them anytime from the Applications page."
+                        f"{'s' if archived != 1 else ''}. You can view the archive "
+                        "from the Applications page."
                     )
             else:
                 if arabic:
@@ -12205,25 +12245,7 @@ class RicoChatAPI:
                 "next_action": "navigate_to_page",
             }
 
-        # Cancel / negative
-        if RicoChatAPI._is_negative(message) or re.search(
-            r"\b(?:cancel|إلغاء|ألغ)\b", lower, re.IGNORECASE
-        ):
-            _clear()
-            if arabic:
-                msg = "تم الإلغاء — لم يتغيّر شيء."
-            else:
-                msg = "Cancelled — nothing was changed."
-            self._append_chat(user_id, "assistant", msg)
-            return {
-                "type": "pipeline_reset_cancelled",
-                "intent": "pipeline_reset",
-                "message": msg,
-            }
-
-        # Latest user intent cancels a stale, low-risk pending flow: this
-        # confirmation never executes a direct mutation either way (archive
-        # and delete both just redirect to /applications), so if the message
+        # Latest user intent cancels a stale, low-risk pending flow: if the message
         # is not an attempt to answer it and clearly starts something else,
         # drop the pending state and let normal dispatch handle the new
         # request instead of trapping the user in an endless
