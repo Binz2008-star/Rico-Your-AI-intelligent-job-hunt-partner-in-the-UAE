@@ -564,6 +564,48 @@ def get_opened_not_applied(user_id: str, limit: int = 25) -> list[dict]:
         conn.close()
 
 
+def bulk_archive_active(user_id: str) -> int:
+    """Set status = 'archived' for all non-archived rows belonging to user_id.
+
+    Returns the number of rows updated. Returns -1 if the DB write fails so the
+    caller can distinguish "nothing to archive" (0) from "write error" (-1).
+    Never raises.
+    """
+    if not user_id:
+        return -1
+    from src.db import get_db_connection
+
+    conn = get_db_connection()
+    if not conn:
+        return -1
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE user_job_context
+                   SET status         = 'archived',
+                       last_action    = 'archive',
+                       last_action_at = NOW()
+                 WHERE user_id = %s
+                   AND status  <> 'archived'
+                """,
+                (user_id,),
+            )
+            count = cur.rowcount
+        conn.commit()
+        logger.debug("user_job_context_repo: bulk_archive_active count=%d user=%s", count, user_id)
+        return count
+    except Exception:
+        logger.exception("user_job_context_repo_bulk_archive_failed user=%s", user_id)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return -1
+    finally:
+        conn.close()
+
+
 def update_verification_status(
     user_id: str,
     title: str,

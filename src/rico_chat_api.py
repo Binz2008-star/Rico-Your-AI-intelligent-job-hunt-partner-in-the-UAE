@@ -120,6 +120,18 @@ _MARK_APPLIED_CARD_ACTION_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Bulk-archive request: "clear them", "reset all", "start fresh", "wipe my applications".
+# Guards: must reference applications/tracking context OR be paired with "start fresh" / "reset".
+_BULK_ARCHIVE_REQUEST_RE = re.compile(
+    r"\b(?:clear|wipe|reset|remove|delete|erase)\s+(?:all\s+(?:my\s+)?|them|my\s+)?(?:applications?|tracked\s+jobs?|job\s+tracks?|tracking)\b"
+    r"|\b(?:start|begin)\s+(?:over|fresh|again|from\s+scratch)\b"
+    r"|\bclear\s+them\b"
+    r"|\bwipe\s+(?:it|them)\s+all\b"
+    r"|\bرجّع\s+من\s+البداية\b"
+    r"|\b(?:امسح|احذف|مسح|حذف)\s+(?:كل\s+)?(?:طلباتي|التتبع|الوظائف\s+المتتبعة)\b",
+    re.IGNORECASE,
+)
+
 # CV improvement follow-up phrases — used ONLY when last_flow_state == "cv_builder".
 # Never apply this pattern without flow-state context or it will misfire on
 # "improve my cover letter", "enhance it" for other content, etc.
@@ -5025,6 +5037,81 @@ class RicoChatAPI:
             # so let the new message route normally through intent classification.
             return None
 
+        # ── Bulk-archive confirmation ──────────────────────────────────────────
+        # Set when the user asked to "clear all" / "start fresh" and Rico asked
+        # for "archive / delete / cancel" confirmation.
+        if pending_field == "confirm_bulk_archive":
+            ctx.pop("_pending_field", None)
+            self._store_recent_context(user_id, ctx)
+            arabic = self._is_arabic_text(msg)
+            lower_msg = msg.lower().strip()
+
+            if lower_msg == "cancel" or self._is_negative(msg):
+                reply = (
+                    "تمام — لم أغيّر أي شيء."
+                    if arabic
+                    else "OK — nothing changed."
+                )
+                self._append_chat(user_id, "assistant", reply)
+                return {"type": "info", "message": reply}
+
+            if lower_msg == "delete":
+                reply = (
+                    "لا أستطيع حذف السجلات نهائياً من المحادثة. "
+                    "إذا أردت الأرشفة فقل **أرشفة**، أو **إلغاء** للتراجع."
+                    if arabic
+                    else
+                    "I don't permanently delete application records from chat. "
+                    "Reply **archive** to archive them all, or **cancel** to do nothing."
+                )
+                ctx["_pending_field"] = "confirm_bulk_archive"
+                self._store_recent_context(user_id, ctx)
+                self._append_chat(user_id, "assistant", reply)
+                return {"type": "info", "message": reply}
+
+            if lower_msg == "archive" or self._is_affirmative(msg):
+                from src.repositories.user_job_context_repo import bulk_archive_active
+                count = bulk_archive_active(user_id)
+                if count < 0:
+                    reply = (
+                        "حدث خطأ أثناء الأرشفة — لم تُغيَّر أي سجلات. حاول مرة أخرى لاحقاً."
+                        if arabic
+                        else
+                        "Something went wrong — no records were archived. Please try again later."
+                    )
+                    self._append_chat(user_id, "assistant", reply)
+                    return {"type": "error", "message": reply}
+                if count == 0:
+                    reply = (
+                        "لا توجد تطبيقات نشطة لأرشفتها."
+                        if arabic
+                        else "There are no active tracked applications to archive."
+                    )
+                    self._append_chat(user_id, "assistant", reply)
+                    return {"type": "info", "message": reply}
+                reply = (
+                    f"تم. أرشفت **{count}** {'تطبيق' if count == 1 else 'تطبيقات'} بنجاح. "
+                    "يمكنك بدء بحث جديد الآن."
+                    if arabic
+                    else
+                    f"Done. Archived **{count}** application{'s' if count != 1 else ''} successfully. "
+                    "You're ready to start fresh."
+                )
+                self._append_chat(user_id, "assistant", reply)
+                return {"type": "info", "message": reply, "archived_count": count}
+
+            # Unrecognised reply — re-prompt once, keep the pending state alive
+            ctx["_pending_field"] = "confirm_bulk_archive"
+            self._store_recent_context(user_id, ctx)
+            re_prompt = (
+                "اختر: **أرشفة** لأرشفة كل التطبيقات النشطة، **حذف** (غير متاح)، أو **إلغاء** للتراجع."
+                if arabic
+                else
+                "Please reply **archive** to archive all active applications, **delete** (not supported), or **cancel** to do nothing."
+            )
+            self._append_chat(user_id, "assistant", re_prompt)
+            return {"type": "info", "message": re_prompt}
+
         return None
 
     def _resolve_settings_command(
@@ -6325,6 +6412,30 @@ class RicoChatAPI:
         pending_field_result = self._resolve_pending_field(user_id, message, profile)
         if pending_field_result is not None:
             return self._finalize(pending_field_result, self.SOURCE_KEYWORD, profile=profile)
+
+        # ── Bulk-archive intent: "CLEAR THEM LETS START FRESH" ──────────────
+        # Authenticated users only. Asks for archive/delete/cancel before
+        # touching any data; the reply is handled by _resolve_pending_field on
+        # the next turn via the confirm_bulk_archive pending field.
+        if _BULK_ARCHIVE_REQUEST_RE.search(message):
+            _ar = self._is_arabic_text(message)
+            _confirm_prompt = (
+                "هل تريد **أرشفة** كل الطلبات النشطة، **حذفها** (غير متاح في المحادثة)، "
+                "أو **إلغاء** والتراجع؟"
+                if _ar
+                else
+                "Do you want to **archive** all active tracked applications, "
+                "**delete** (not supported from chat), or **cancel**?"
+            )
+            _ctx = self._get_recent_context(user_id)
+            _ctx["_pending_field"] = "confirm_bulk_archive"
+            self._store_recent_context(user_id, _ctx)
+            self._append_chat(user_id, "assistant", _confirm_prompt)
+            return self._finalize(
+                {"type": "info", "message": _confirm_prompt},
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
 
         # ── Letter-choice resolver (BUG-02) ──────────────────────────────────
         # When the last response contained an options list and the user replies
