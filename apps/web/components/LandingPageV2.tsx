@@ -522,7 +522,7 @@ export default function LandingPageV2() {
                             Start with Rico
                         </Link>
                         <Link
-                            href="/onboarding"
+                            href="/upload"
                             className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-full border border-white/20 text-white/80 text-xs font-medium uppercase tracking-[0.14em] hover:bg-white/[0.06] hover:border-white/35 transition-all"
                         >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
