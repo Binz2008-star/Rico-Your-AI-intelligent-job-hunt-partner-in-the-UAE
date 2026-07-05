@@ -213,17 +213,23 @@ class TestConfirmationFlowRequiresExplicitChoice:
         # Response is a confirmation prompt, not an execution receipt
         assert result["type"] == "pipeline_reset_confirm"
 
-    def test_archive_confirmation_redirects_to_applications(self):
-        """Typing 'archive' in turn 2 redirects to /applications (no immediate DB op)."""
+    def test_archive_confirmation_executes_bulk_archive(self):
+        """Typing 'archive' in turn 2 executes a reversible bulk archive in-chat
+        (BUG A.1) — it must NOT punt the user to /applications to finish."""
         api = self._api_with_pending()
 
         with patch.object(api, "_append_chat"), \
+             patch("src.rico_db.RicoDB") as mock_db_cls, \
              patch("src.rico_chat_api.upsert_profile") as mock_upsert:
+            mock_db_cls.return_value.archive_all_applications.return_value = 3
             result = api._handle_pending_pipeline_reset("u@example.com", "archive")
 
         assert result is not None
-        assert result["type"] == "pipeline_reset_archive"
-        assert result.get("target_route") == "/applications"
+        assert result["type"] == "pipeline_reset_archived"
+        assert result.get("archived_count") == 3
+        # The confirmed archive completes in chat — no redirect as the only path.
+        assert result.get("target_route") != "/applications"
+        mock_db_cls.return_value.archive_all_applications.assert_called_once_with("u@example.com")
         mock_upsert.assert_not_called()
 
     def test_cancel_clears_pending_and_takes_no_action(self):
@@ -338,9 +344,11 @@ class TestLatestIntentCancelsStalePendingReset:
         api = self._api_with_pending()
 
         with patch.object(api, "_append_chat"), \
+             patch("src.rico_db.RicoDB") as mock_db_cls, \
              patch("src.rico_chat_api.upsert_profile") as mock_upsert:
+            mock_db_cls.return_value.archive_all_applications.return_value = 1
             result = api._handle_pending_pipeline_reset("u@example.com", "archive")
 
         assert result is not None
-        assert result["type"] == "pipeline_reset_archive"
+        assert result["type"] == "pipeline_reset_archived"
         mock_upsert.assert_not_called()

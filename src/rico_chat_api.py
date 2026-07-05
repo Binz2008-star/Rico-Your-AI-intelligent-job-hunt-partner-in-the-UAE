@@ -12080,27 +12080,82 @@ class RicoChatAPI:
         arabic = self._is_arabic_text(message)
         lower = (message or "").strip().lower()
 
-        # Archive choice (recommended default)
+        # Archive choice (recommended default) — execute a reversible bulk
+        # archive for the authenticated user NOW. The confirmed choice must
+        # complete in-chat; never punt the user to /applications to finish it.
         if re.search(r"\b(?:archive|أرشف|أرشفة)\b", lower, re.IGNORECASE):
             _clear()
-            if arabic:
-                msg = (
-                    "لأرشفة جميع طلباتك، توجّه إلى **صفحة الطلبات** واستخدم خيار الأرشفة الجماعية.\n\n"
-                    "→ /applications"
+            # Authenticated users only. Public/anonymous sessions have no
+            # persisted tracked applications and must never write under a
+            # public id. (Auth identity = has an email-form id, not "public:".)
+            _uid = str(user_id or "")
+            if _uid.startswith("public:") or "@" not in _uid:
+                if arabic:
+                    msg = (
+                        "الأرشفة الجماعية متاحة بعد تسجيل الدخول. سجّل الدخول لإدارة طلباتك المتتبعة."
+                    )
+                else:
+                    msg = (
+                        "Bulk archive is available once you're signed in. Log in to manage "
+                        "your tracked applications."
+                    )
+                self._append_chat(user_id, "assistant", msg)
+                return {
+                    "type": "pipeline_reset_archive_requires_auth",
+                    "intent": "pipeline_reset",
+                    "message": msg,
+                }
+            try:
+                from src.rico_db import RicoDB as _RicoDB
+                db = _RicoDB()
+                archived = db.archive_all_applications(user_id)
+                logger.info(
+                    "rico_chat: archive_all_applications executed user=%s archived=%d",
+                    user_id, archived,
                 )
+            except Exception as exc:
+                # DB write failed — nothing was changed. Say so; claim nothing.
+                logger.error(
+                    "rico_chat: archive_all_applications failed user=%s err=%s",
+                    user_id, exc,
+                )
+                if arabic:
+                    msg = "تعذّرت الأرشفة ولم يتغيّر أي شيء. يرجى المحاولة مرة أخرى لاحقاً."
+                else:
+                    msg = (
+                        "I couldn't archive your applications, so nothing was changed. "
+                        "Please try again in a moment."
+                    )
+                self._append_chat(user_id, "assistant", msg)
+                return {
+                    "type": "pipeline_reset_archive_failed",
+                    "intent": "pipeline_reset",
+                    "message": msg,
+                }
+            # Confirm the count ONLY after persistence succeeded.
+            if archived > 0:
+                if arabic:
+                    msg = (
+                        f"تمت أرشفة **{archived}** من طلباتك المتتبعة. "
+                        "العملية قابلة للعكس — يمكنك استعادتها من صفحة الطلبات."
+                    )
+                else:
+                    msg = (
+                        f"Done — archived **{archived}** tracked application"
+                        f"{'s' if archived != 1 else ''}. This is reversible; you can "
+                        "restore them anytime from the Applications page."
+                    )
             else:
-                msg = (
-                    "To archive all your tracked applications, head to the **Applications page** "
-                    "and use the bulk-archive option there.\n\n"
-                    "→ /applications"
-                )
+                if arabic:
+                    msg = "لا توجد طلبات نشطة لأرشفتها."
+                else:
+                    msg = "You don't have any active tracked applications to archive."
             self._append_chat(user_id, "assistant", msg)
             return {
-                "type": "pipeline_reset_archive",
+                "type": "pipeline_reset_archived",
                 "intent": "pipeline_reset",
+                "archived_count": archived,
                 "message": msg,
-                "target_route": "/applications",
-                "next_action": "navigate_to_page",
             }
 
         # Permanent delete choice
