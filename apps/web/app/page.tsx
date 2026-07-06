@@ -3,16 +3,14 @@
 /**
  * page.tsx
  *
- * Only change from previous version:
- *   - import LandingPageV2  →  import LandingPageV3
+ * Hotfix: restored LandingPageV2 as homepage.
+ * LandingPageV3 and landing/ components remain in the repo.
  *
- * Auth redirect is preserved VERBATIM:
+ * Auth redirect preserved VERBATIM:
  *   if (ready && user) router.replace("/command")
- *
- * LandingPageV2 is NOT deleted — this file simply no longer imports it.
  */
 
-import LandingPageV3 from "@/components/LandingPageV3";
+import LandingPageV2 from "@/components/LandingPageV2";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -27,5 +25,5 @@ export default function HomePage() {
         }
     }, [ready, user, router]);
 
-    return <LandingPageV3 />;
+    return <LandingPageV2 />;
 }
