@@ -6,6 +6,14 @@ description: "UI/UX design intelligence. 67 styles, 96 palettes, 57 font pairing
 
 Comprehensive design guide for web and mobile applications. Contains 67 styles, 96 color palettes, 57 font pairings, 99 UX guidelines, and 25 chart types across 13 technology stacks. Searchable database with priority-based recommendations.
 
+## Rico Hunt-specific notes
+
+This repo already has a **ratified** design system — "Nocturne" (navy/near-black canvas, gold/indigo/sky-blue/teal accents, glass panels, Space Grotesk + Inter + IBM Plex), defined in `apps/web/tailwind.config.ts` + `apps/web/app/globals.css`. The product owner approved this as the production source of truth on 2026-07-06 — check whether that's recorded as `AI_WORKSPACE/DECISIONS.md` DEC-20260706-001 and detailed in `design-system/rico-hunt/design.md` before citing either as a committed reference; if neither exists yet in the repo, treat this note as the authoritative summary on its own.
+
+- **Do not run `--persist` against this repo.** That flag is what originally generated `design-system/rico-hunt/MASTER.md` (2026-06-03) — a flat/cream/gold system that was never implemented and is now explicitly not-source-of-truth per the decision above. Re-running it would regenerate or duplicate a conflict that has already been resolved.
+- **Use `--domain` / `--stack` searches for supplementary lookups only** (a chart type, a font-pairing idea, a specific UX guideline) — not as the primary driver for redesigning an existing Rico page. For that, prefer the `redesign-existing-projects` skill, which is audit-first and works with the existing stack rather than generating a fresh system.
+- If a recommendation from this skill's data (a palette, a font pairing, a style) would replace or override the shipped Nocturne tokens, flag that explicitly and confirm with the user before applying it — do not silently swap fonts/colors that are already a deliberate, ratified choice.
+
 ## When to Apply
 
 Reference these guidelines when:
