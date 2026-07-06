@@ -573,7 +573,7 @@ export default function LandingPageV2() {
                 @keyframes marquee { from { transform: translateX(0) } to { transform: translateX(-50%) } }
                 @keyframes marqueeRev { from { transform: translateX(-50%) } to { transform: translateX(0) } }
                 @media (prefers-reduced-motion: reduce) {
-                    [style*="marquee"] { animation: none !important; }
+                    [style*=marquee] { animation: none !important; }
                 }
 
                 /* ── Feature-card cinematic media headers (adapted from approved mock) ── */
@@ -965,7 +965,7 @@ export default function LandingPageV2() {
                             </div>
                             <span className="text-sm font-semibold text-white/70">Rico AI</span>
                         </div>
-                        <p className="text-xs text-white/25 text-center">
+                        <p className="text-xs text-white/25 text-center" suppressHydrationWarning>
                             &copy; {new Date().getFullYear()} Rico Hunt. All rights reserved.
                         </p>
                         <div className="flex items-center gap-5 text-xs text-white/30">
