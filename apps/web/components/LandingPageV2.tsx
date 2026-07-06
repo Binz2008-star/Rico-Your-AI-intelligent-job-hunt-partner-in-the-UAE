@@ -112,7 +112,17 @@ function useRibbonCanvas(canvasRef: React.RefObject<HTMLCanvasElement | null>) {
         }
 
         resize();
-        const ro = new ResizeObserver(resize);
+        // ResizeObserver.observe() schedules an implicit async initial callback
+        // (per spec) shortly after attaching, even with no real size change.
+        // Assigning canvas.width/height inside resize() always clears the
+        // bitmap, so under reduced motion that async callback was wiping the
+        // one-time static frame moments after mount. Redraw on every resize
+        // when reduced so the static frame survives it; no-op change for the
+        // animated path (the rAF loop already redraws every frame regardless).
+        const ro = new ResizeObserver(() => {
+            resize();
+            if (reduced) draw();
+        });
         ro.observe(canvas);
 
         // Reduced motion → render ONE static frame, never animate.
