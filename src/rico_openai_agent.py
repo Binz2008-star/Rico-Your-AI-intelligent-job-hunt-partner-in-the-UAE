@@ -31,6 +31,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from decimal import Decimal
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
@@ -47,6 +48,17 @@ from src.rico_openai_runtime import (
 from src.rico_safety import RicoSafetyGuard
 
 logger = logging.getLogger(__name__)
+
+# Minimal, local Arabic-script detector for the terminal/HF fallback paths
+# only. Kept local (not imported from RicoChatAPI) to avoid a circular
+# import: rico_chat_api.py already imports this module.
+_ARABIC_RE = re.compile(r"[؀-ۿ]")
+
+
+def _wants_arabic(language: Optional[str], user_message: Optional[str]) -> bool:
+    if language == "ar":
+        return True
+    return bool(_ARABIC_RE.search(user_message or ""))
 
 
 @dataclass
@@ -130,10 +142,10 @@ class RicoOpenAIAgent:
         # Default path: HF is the primary provider (zero OpenAI cost)
         if not self._use_openai and not self._use_deepseek:
             if self.hf_available:
-                hf_result = self._call_hf_free(user_message, user_context)
+                hf_result = self._call_hf_free(user_message, user_context, language=language)
                 if hf_result:
                     return hf_result
-            return self._fallback_response()
+            return self._fallback_response(language=language, user_message=user_message)
 
         # Premium path: RICO_AI_PROVIDER=openai|deepseek explicitly set
         provider = "deepseek" if self._use_deepseek else "openai"
@@ -168,7 +180,7 @@ class RicoOpenAIAgent:
 
         # Premium provider failed — cascade to HF
         if self.hf_available:
-            hf_result = self._call_hf_free(user_message, user_context)
+            hf_result = self._call_hf_free(user_message, user_context, language=language)
             if hf_result:
                 return hf_result
 
@@ -222,7 +234,10 @@ class RicoOpenAIAgent:
         return f"User message:\n{user_message}\n\nKnown Rico context:\n{context}"
 
     def _call_hf_free(
-        self, user_message: str, user_context: Optional[Dict[str, Any]]
+        self,
+        user_message: str,
+        user_context: Optional[Dict[str, Any]],
+        language: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Delegate to rico_hf_client.generate_text for a consistent, configurable HF call.
 
@@ -239,6 +254,8 @@ class RicoOpenAIAgent:
             "Answer clearly, practically, and briefly. "
             "Help users find jobs, prepare applications, and track opportunities in the UAE."
         )
+        if _wants_arabic(language, user_message):
+            system += " IMPORTANT: The user is writing in Arabic. Reply entirely in Arabic."
 
         # Build a structured chat-style prompt so the model sees conversation turns
         # rather than a raw JSON blob it cannot parse.
@@ -280,13 +297,22 @@ class RicoOpenAIAgent:
             "model": model,
         }
 
-    def _fallback_response(self) -> Dict[str, Any]:
-        return {
-            "type": "fallback_response",
-            "message": (
+    def _fallback_response(
+        self, language: Optional[str] = None, user_message: Optional[str] = None
+    ) -> Dict[str, Any]:
+        if _wants_arabic(language, user_message):
+            message = (
+                "أنا هنا لمساعدتك في البحث عن وظيفة في الإمارات. "
+                "ارفع سيرتك الذاتية للبدء، أو اسألني عن الوظائف أو الطلبات أو التحضير للمقابلة."
+            )
+        else:
+            message = (
                 "I'm here to help with your UAE job search. "
                 "Upload your CV to get started, or ask me about jobs, applications, or interview prep."
-            ),
+            )
+        return {
+            "type": "fallback_response",
+            "message": message,
             "provider": "fallback",
         }
 

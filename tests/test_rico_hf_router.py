@@ -301,6 +301,62 @@ class TestRicoAgentHFPrimary:
         assert "OpenAI advanced reasoning" not in result["message"]
         assert "UAE job search" in result["message"] or "configured AI provider" in result["message"]
 
+    def test_terminal_fallback_returns_arabic_for_arabic_message(self):
+        """Arabic script in the user message must yield an Arabic terminal fallback."""
+        env_clean = {
+            "RICO_AI_PROVIDER": "hf",
+            **{k: "" for k in ["HF_API_TOKEN", "HF_TOKEN", "HF_API_KEY", "HUGGINGFACE_API_KEY", "OPENAI_API_KEY"]},
+        }
+        with patch.dict(os.environ, env_clean):
+            from src.rico_openai_agent import RicoOpenAIAgent
+            agent = RicoOpenAIAgent()
+            result = agent.respond("ابحث عن وظائف")
+        assert result["type"] == "fallback_response"
+        assert "أنا هنا" in result["message"]
+        assert "UAE job search" not in result["message"]
+
+    def test_terminal_fallback_stays_english_for_english_or_unset_language(self):
+        """English text / unset language must keep the existing English fallback (no regression)."""
+        env_clean = {
+            "RICO_AI_PROVIDER": "hf",
+            **{k: "" for k in ["HF_API_TOKEN", "HF_TOKEN", "HF_API_KEY", "HUGGINGFACE_API_KEY", "OPENAI_API_KEY"]},
+        }
+        with patch.dict(os.environ, env_clean):
+            from src.rico_openai_agent import RicoOpenAIAgent
+            agent = RicoOpenAIAgent()
+            result_unset = agent.respond("find me jobs")
+            result_en = agent.respond("find me jobs", language="en")
+        for result in (result_unset, result_en):
+            assert result["type"] == "fallback_response"
+            assert "UAE job search" in result["message"]
+            assert "أنا هنا" not in result["message"]
+
+    def test_hf_system_prompt_includes_arabic_instruction_for_arabic(self):
+        """The HF fallback's system prompt must instruct an Arabic reply when Arabic is detected."""
+        env = {"RICO_AI_PROVIDER": "hf", "HF_API_TOKEN": "fake-token"}
+        with patch.dict(os.environ, env):
+            with patch("src.rico_hf_client.is_available", return_value=True), \
+                 patch("src.rico_hf_client.generate_text", return_value="مرحبا") as gen_mock:
+                from src.rico_openai_agent import RicoOpenAIAgent
+                agent = RicoOpenAIAgent()
+                result = agent.respond("ابحث عن وظائف")
+        assert result.get("provider") == "huggingface"
+        system_arg = gen_mock.call_args.kwargs.get("system", "")
+        assert "Arabic" in system_arg
+
+    def test_hf_system_prompt_omits_arabic_instruction_for_english(self):
+        """The HF fallback's system prompt must NOT mention Arabic for an English message."""
+        env = {"RICO_AI_PROVIDER": "hf", "HF_API_TOKEN": "fake-token"}
+        with patch.dict(os.environ, env):
+            with patch("src.rico_hf_client.is_available", return_value=True), \
+                 patch("src.rico_hf_client.generate_text", return_value="Hello") as gen_mock:
+                from src.rico_openai_agent import RicoOpenAIAgent
+                agent = RicoOpenAIAgent()
+                result = agent.respond("find me jobs")
+        assert result.get("provider") == "huggingface"
+        system_arg = gen_mock.call_args.kwargs.get("system", "")
+        assert "Arabic" not in system_arg
+
     def test_respond_uses_hf_when_available(self):
         env = {"RICO_AI_PROVIDER": "hf", "HF_API_TOKEN": "fake-token"}
         with patch.dict(os.environ, env):
