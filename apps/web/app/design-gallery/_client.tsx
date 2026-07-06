@@ -8,12 +8,13 @@
  * NOT indexed (noindex set in page.tsx metadata).
  *
  * Variants:
- *  - Current Production  → LandingPageV2  (what app/page.tsx renders)
+ *  - Current Production  → LandingPageV2  (what app/page.tsx renders today)
+ *  - V3 Redesign         → LandingPageV3  (bold/modern redesign, no pricing — PR #866)
  *  - Classic             → LandingPage
  *  - Nocturne            → LandingPageNocturne
  *
  * LandingPage and LandingPageNocturne require LanguageProvider context — wrapped below.
- * LandingPageV2 is standalone (no context dependency).
+ * LandingPageV2 and LandingPageV3 are standalone (no context dependency).
  * All three are dynamically imported (ssr: false) because they are client-only components
  * with canvas, framer-motion, and window-dependent hooks.
  */
@@ -37,6 +38,11 @@ const LandingPageNocturne = dynamic(
   { ssr: false, loading: () => <LoadingShell /> }
 );
 
+const LandingPageV3 = dynamic(
+  () => import("@/components/LandingPageV3"),
+  { ssr: false, loading: () => <LoadingShell /> }
+);
+
 const RicoAlivePrototype = dynamic(
   () => import("@/components/design-gallery/RicoAlivePrototype"),
   { ssr: false, loading: () => <LoadingShell /> }
@@ -50,7 +56,7 @@ function LoadingShell() {
   );
 }
 
-type VariantKey = "v2" | "classic" | "nocturne" | "rico-alive";
+type VariantKey = "v2" | "v3" | "classic" | "nocturne" | "rico-alive";
 
 interface Variant {
   key: VariantKey;
@@ -68,6 +74,15 @@ const VARIANTS: Variant[] = [
     key: "v2",
     label: "Current Production",
     description: "LandingPageV2 — what / renders today",
+  },
+  {
+    key: "v3",
+    label: "V3 Redesign",
+    description: "LandingPageV3 — bold/modern redesign, no pricing (PR #866)",
+    status: "draft",
+    category: "landing",
+    riskLevel: "none",
+    productionSafeNotes: "Component exists in repo. Not currently rendered at /. Gallery preview only.",
   },
   {
     key: "classic",
@@ -234,6 +249,8 @@ export default function DesignGalleryClient() {
             <LandingPage />
           </LanguageProvider>
         )}
+
+        {active === "v3" && <LandingPageV3 />}
 
         {active === "nocturne" && (
           <LanguageProvider>
