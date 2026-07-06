@@ -674,62 +674,73 @@ export default function LandingPageV2() {
 
                 {/* ── Hero ── */}
                 <section className="relative min-h-[100svh] flex flex-col items-center justify-center px-4 pt-28 pb-20 text-center">
-                    {/* Badge chip */}
-                    <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-cyan-400/30 bg-cyan-400/[0.08] mb-8">
+                    {/* Eyebrow — minimal dot + label (mock style) */}
+                    <div className="inline-flex items-center gap-2.5 mb-8">
                         <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                        <span className="text-xs font-medium text-cyan-400 tracking-wide">UAE&apos;s AI-Powered Job Search</span>
+                        <span className="text-[11px] font-medium uppercase tracking-[0.22em] text-cyan-400/90">
+                            AI Career Operator · United Arab Emirates
+                        </span>
                     </div>
 
-                    <h1 className="max-w-3xl text-4xl sm:text-5xl md:text-6xl font-light text-white leading-[1.08] tracking-tight mb-6">
-                        Your AI career assistant{" "}
-                        <span className="font-semibold bg-gradient-to-r from-cyan-400 to-cyan-300 bg-clip-text text-transparent">
-                            for UAE jobs
-                        </span>
+                    <h1 className="max-w-4xl text-[2.6rem] leading-[1.05] sm:text-6xl sm:leading-[1.04] md:text-7xl lg:text-[5.25rem] lg:leading-[1.02] font-extralight text-white/90 tracking-tight mb-7">
+                        Your AI career assistant for UAE jobs
                     </h1>
 
-                    <p className="max-w-xl text-base sm:text-lg text-white/50 leading-relaxed mb-10 font-light">
-                        Upload your CV. Rico matches you to the right UAE roles, tracks your applications, and guides your next move — in English and Arabic.
+                    <p className="max-w-xl text-base sm:text-lg text-white/45 leading-relaxed mb-9 font-light">
+                        Upload your CV, find matching UAE roles, and let Rico guide your next move — quietly, in the background, in English or <span className="text-white/60">العربية</span>.
                     </p>
 
-                    <div className="flex flex-col sm:flex-row items-center gap-3 mb-16">
+                    <div className="flex flex-col sm:flex-row items-center gap-3 mb-6">
                         <Link
                             href="/signup"
-                            className="px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-400 text-black font-semibold text-sm hover:brightness-110 transition-all shadow-[0_0_32px_rgba(0,218,243,0.25)]"
+                            className="inline-flex items-center justify-center px-7 py-3.5 rounded-full bg-white text-black text-xs font-semibold uppercase tracking-[0.14em] hover:bg-white/90 transition-all shadow-[0_0_32px_rgba(255,255,255,0.12)]"
                         >
-                            Start for free
+                            Start with Rico
                         </Link>
                         <Link
-                            href="/chat"
-                            className="px-6 py-3 rounded-xl border border-white/20 text-white/80 font-medium text-sm hover:bg-white/[0.06] hover:border-white/30 transition-all"
+                            href="/upload"
+                            className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-full border border-white/20 text-white/80 text-xs font-medium uppercase tracking-[0.14em] hover:bg-white/[0.06] hover:border-white/35 transition-all"
                         >
-                            Try the chat
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+                            </svg>
+                            Upload CV
                         </Link>
                     </div>
 
-                    {/* Demo match card */}
+                    {/* Trust row */}
+                    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 mb-16 text-[10px] font-medium uppercase tracking-[0.18em] text-white/35">
+                        <span>English &amp; <span className="text-cyan-400/80">العربية</span></span>
+                        <span className="text-white/15" aria-hidden="true">·</span>
+                        <span>Telegram-first</span>
+                        <span className="text-white/15" aria-hidden="true">·</span>
+                        <span>No spam, ever</span>
+                    </div>
+
+                    {/* Illustrative sample — not a live listing */}
                     <div className="relative mx-auto max-w-sm w-full rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-sm p-5 text-left">
                         <div className="flex items-start justify-between mb-3">
                             <div>
-                                <p className="text-xs text-white/40 font-mono uppercase tracking-widest mb-1">Top Match</p>
-                                <p className="text-sm font-semibold text-white">Senior Product Manager</p>
-                                <p className="text-xs text-white/50">TALENTMATE · Dubai, UAE</p>
+                                <p className="flex items-center gap-1.5 text-xs text-pink-400/80 font-mono uppercase tracking-widest mb-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-pink-400/80" />
+                                    Match Analysis
+                                </p>
+                                <p className="text-sm font-semibold text-white">Senior Manager — Audit Programs</p>
+                                <p className="text-xs text-white/50">TALENTMATE · Abu Dhabi, UAE</p>
                             </div>
                             <div className="text-right">
                                 <p className="text-2xl font-bold text-cyan-400 leading-none">0.91</p>
-                                <p className="text-[10px] text-white/30 font-mono">match score</p>
+                                <p className="text-[10px] text-white/30 font-mono uppercase tracking-wide">Confidence</p>
                             </div>
                         </div>
                         <div className="flex flex-wrap gap-1.5 mb-4">
-                            {["Product Strategy", "Agile", "UAE Market"].map(t => (
+                            {["Audit", "Risk & Controls", "UAE Market"].map(t => (
                                 <span key={t} className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.06] border border-white/10 text-white/50">{t}</span>
                             ))}
                         </div>
                         <div className="flex items-center justify-between text-xs">
                             <span className="text-white/30">AED 28,000 – 35,000 / mo</span>
-                            <span className="text-cyan-400/70 flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse" />
-                                Live listing
-                            </span>
+                            <span className="text-[10px] font-mono uppercase tracking-widest text-white/25">Sample match</span>
                         </div>
                     </div>
                 </section>
