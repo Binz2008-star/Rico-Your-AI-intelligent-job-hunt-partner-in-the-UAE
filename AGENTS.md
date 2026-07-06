@@ -186,6 +186,26 @@ Every PR report must also include:
 - Auto-apply must not bypass `RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS=true`.
 - Do not reintroduce old parallel implementations that conflict with current `main`.
 
+## Landing Page Production Freeze
+
+### Incident
+
+PR #866 changed `apps/web/app/page.tsx` to render `LandingPageV3` as the production homepage. The new design did not pass the owner's live review, so PR #870 reverted the change to restore `LandingPageV2`.
+
+### Rule
+
+Until the owner explicitly lifts this freeze, **no agent may change `apps/web/app/page.tsx` to swap the production landing component** (`LandingPageV2`, `LandingPageV3`, or any successor) without explicit owner approval.
+
+Any new landing design or homepage variant must follow this path:
+
+1. Land in `design-handoffs/` as a prototype package.
+2. Move to `/design-gallery` as a reviewable draft if approved.
+3. Run browser smoke tests against the gallery variant.
+4. Receive explicit owner approval.
+5. Only then create a separate, minimal production PR that swaps the landing component.
+
+This rule applies to all direct or indirect changes that replace the component rendered on `/`. It does not apply to copy-only or bug-fix changes inside the current production component.
+
 ## Prohibited Without Explicit Owner Approval
 
 - auto-merge
@@ -194,6 +214,7 @@ Every PR report must also include:
 - changing payment or funding details
 - exposing personal data
 - adding bank details or secrets to the public repository
+- swapping the production landing page component (`apps/web/app/page.tsx`)
 
 ## Failure Rule
 
