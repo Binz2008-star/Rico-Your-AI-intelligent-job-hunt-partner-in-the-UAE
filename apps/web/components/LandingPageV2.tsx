@@ -8,15 +8,10 @@ function useRibbonCanvas(canvasRef: React.RefObject<HTMLCanvasElement | null>) {
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
-        const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        if (reduced) return;
-
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
-        let W = 0, H = 0;
-        let lines: RibbonLine[] = [];
-        let timer: ReturnType<typeof setInterval>;
+        const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
         interface RibbonLine {
             segs: { x: number; y: number }[];
@@ -26,6 +21,13 @@ function useRibbonCanvas(canvasRef: React.RefObject<HTMLCanvasElement | null>) {
             alpha: number;
         }
 
+        let W = 0, H = 0;
+        let lines: RibbonLine[] = [];
+        let raf = 0;
+        let last = 0;
+        let running = false;
+        let t = 0;
+
         function resize() {
             W = canvas!.width = canvas!.offsetWidth;
             H = canvas!.height = canvas!.offsetHeight;
@@ -33,7 +35,7 @@ function useRibbonCanvas(canvasRef: React.RefObject<HTMLCanvasElement | null>) {
         }
 
         function buildLines() {
-            const n = W < 700 ? 22 : 42;
+            const n = W < 700 ? 22 : 42;                 // low-density mobile mode
             const SX = W * 0.96;
             const SY = H * 0.04;
             lines = [];
@@ -59,10 +61,8 @@ function useRibbonCanvas(canvasRef: React.RefObject<HTMLCanvasElement | null>) {
             }
         }
 
-        let t = 0;
         function draw() {
             ctx!.clearRect(0, 0, W, H);
-            t += 1;
             for (const L of lines) {
                 const len = L.segs.length;
                 const head = ((t * L.spd + L.phase) % (len + 70));
@@ -80,26 +80,57 @@ function useRibbonCanvas(canvasRef: React.RefObject<HTMLCanvasElement | null>) {
                     ctx!.lineTo(b.x, b.y);
                     ctx!.lineWidth = dist < tailN ? 1.5 + (1 - dist / tailN) * 1.5 : 1;
                     if (L.isMag) {
-                        ctx!.strokeStyle = dist < 4
-                            ? `rgba(255,150,190,${alpha})`
-                            : `rgba(255,72,149,${alpha})`;
+                        ctx!.strokeStyle = dist < 4 ? `rgba(255,150,190,${alpha})` : `rgba(255,72,149,${alpha})`;
                     } else {
-                        ctx!.strokeStyle = dist < 4
-                            ? `rgba(150,240,255,${alpha})`
-                            : `rgba(0,218,243,${alpha})`;
+                        ctx!.strokeStyle = dist < 4 ? `rgba(150,240,255,${alpha})` : `rgba(0,218,243,${alpha})`;
                     }
                     ctx!.stroke();
                 }
             }
         }
 
+        // requestAnimationFrame, throttled to ~30fps so motion speed is IDENTICAL
+        // to the previous setInterval(draw, 33) implementation.
+        const FRAME_MS = 33;
+        function loop(now: number) {
+            if (!running) return;
+            raf = requestAnimationFrame(loop);
+            if (now - last < FRAME_MS) return;
+            last = now;
+            t += 1;
+            draw();
+        }
+        function start() {
+            if (running || reduced || document.hidden) return;
+            running = true;
+            last = performance.now();
+            raf = requestAnimationFrame(loop);
+        }
+        function stop() {
+            running = false;
+            cancelAnimationFrame(raf);
+        }
+
         resize();
-        timer = setInterval(draw, 33);
         const ro = new ResizeObserver(resize);
         ro.observe(canvas);
 
+        // Reduced motion → render ONE static frame, never animate.
+        if (reduced) {
+            t = 120;
+            draw();
+            return () => ro.disconnect();
+        }
+
+        // Pause when the tab/page is hidden; resume when visible.
+        const onVisibility = () => (document.hidden ? stop() : start());
+        document.addEventListener("visibilitychange", onVisibility);
+
+        start();
+
         return () => {
-            clearInterval(timer);
+            stop();
+            document.removeEventListener("visibilitychange", onVisibility);
             ro.disconnect();
         };
     }, [canvasRef]);
