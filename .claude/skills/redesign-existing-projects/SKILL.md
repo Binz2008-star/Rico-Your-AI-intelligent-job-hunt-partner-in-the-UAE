@@ -7,9 +7,10 @@ description: Upgrades existing websites and apps to premium quality. Audits curr
 
 ## Rico Hunt-specific notes
 
-This repo already has a ratified design system — "Nocturne" (navy/near-black canvas, gold/indigo/sky-blue/teal accents, glass panels, Space Grotesk + Inter + IBM Plex), defined in `apps/web/tailwind.config.ts` + `apps/web/app/globals.css` and confirmed as source of truth in `AI_WORKSPACE/DECISIONS.md` (DEC-20260706-001). `design-system/rico-hunt/design.md` is the current audit/reference doc — read it before auditing a Rico Hunt page, since it already lists known inconsistencies and a prioritized fix list.
+This repo already has a ratified design system — "Nocturne" (navy/near-black canvas, gold/indigo/sky-blue/teal accents, glass panels, Space Grotesk + Inter + IBM Plex), defined in `apps/web/tailwind.config.ts` + `apps/web/app/globals.css`. The product owner approved this as the production source of truth on 2026-07-06 — check whether that's recorded as `AI_WORKSPACE/DECISIONS.md` DEC-20260706-001 and detailed in `design-system/rico-hunt/design.md` before citing either as a committed reference; if neither exists yet in the repo, treat this note as the authoritative summary on its own. If `design.md` is present, read it before auditing a Rico Hunt page, since it already lists known inconsistencies and a prioritized fix list.
 
-Two of the generic bias rules below can misfire against Rico Hunt specifically if applied without checking the actual tokens first:
+Three of the generic bias rules below can misfire against Rico Hunt specifically if applied without checking the actual tokens first:
+- **"Browser default fonts or Inter everywhere... Replace with a font that has character"** — Rico's shipped body font *is* Inter, paired deliberately with Space Grotesk for display. This is the ratified pairing, not a default to replace.
 - **"Purple/blue AI gradient aesthetic... replace with neutral + considered accent"** — Rico's indigo/magenta secondary accent is the ratified choice, not an unconsidered AI default. Do not "fix" it back toward neutral without an explicit new decision.
 - **"Pure `#000000` background... replace with off-black"** — already satisfied; Rico's canvas is navy (`rgb(11,13,28)`), not pure black.
 

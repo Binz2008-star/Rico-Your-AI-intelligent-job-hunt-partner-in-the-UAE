@@ -12,12 +12,14 @@ description: Anti-slop frontend skill for landing pages, portfolios, and redesig
 
 ## Rico Hunt-specific notes
 
-This repo already has a ratified design system — "Nocturne" (navy/near-black canvas, gold/indigo/sky-blue/teal accents, glass panels, Space Grotesk + Inter + IBM Plex), defined in `apps/web/tailwind.config.ts` + `apps/web/app/globals.css` and confirmed as source of truth in `AI_WORKSPACE/DECISIONS.md` (DEC-20260706-001). `design-system/rico-hunt/design.md` is the current audit/reference doc.
+This repo already has a ratified design system — "Nocturne" (navy/near-black canvas, gold/indigo/sky-blue/teal accents, glass panels, Space Grotesk + Inter + IBM Plex), defined in `apps/web/tailwind.config.ts` + `apps/web/app/globals.css`. The product owner approved this as the production source of truth on 2026-07-06 — check whether that's recorded as `AI_WORKSPACE/DECISIONS.md` DEC-20260706-001 and detailed in `design-system/rico-hunt/design.md` before citing either as a committed reference; if neither exists yet in the repo, treat this note as the authoritative summary on its own.
 
-Per Section 13 below, this skill already correctly scopes itself to landing/portfolio/marketing surfaces (Rico's `/` and parts of `/command`), not the dense product UI (`/dashboard`, `/jobs`, `/applications`, `/settings`). Within that scope, three generic anti-pattern rules can misfire against Rico Hunt specifically if applied without checking the shipped tokens first:
+Per Section 13 below, this skill already correctly scopes itself to landing/portfolio/marketing surfaces (Rico's `/` and parts of `/command`), not the dense product UI (`/dashboard`, `/jobs`, `/applications`, `/settings`). Within that scope, five points from this skill can misfire against Rico Hunt specifically if applied without checking the shipped tokens and stack first:
 - **Section 9.B "AVOID Inter as default"** — Rico's shipped body font *is* Inter, paired deliberately with Space Grotesk for display. This is a ratified pairing, not an unconsidered default — do not swap it out.
 - **Section 4.2 "THE LILA RULE" (avoid AI-purple/blue glow)** — Rico's indigo/magenta secondary accent is the ratified choice, not an AI-default glow. Leave it.
 - **Section 9.A "NO pure black"** — already satisfied; Rico's canvas is navy (`rgb(11,13,28)`), not pure black.
+- **Section 3.A animation library default (`motion/react`)** — `apps/web` only has `framer-motion` installed (no `motion` package; confirm with `apps/web/package.json` before assuming otherwise). Keep using `import { motion } from "framer-motion"` unless a deliberate dependency migration is approved — don't add a second animation library or an import that fails to resolve.
+- **Section 4.8 "last resort" placeholder slots** — leaving `<!-- TODO: hero product photo... -->` markers conflicts with `CLAUDE.md`'s production-code rule ("Do not add pseudo-code, placeholder implementations"). For Rico, skip the TODO-comment placeholder; stop and ask the user for the real asset or explicit approval instead.
 
 If a brief seems to call for changing any of the above, treat it as a brand-migration question and confirm with the user before applying — see the "no rewrites without measurable benefit" constraint in `design.md`.
 
