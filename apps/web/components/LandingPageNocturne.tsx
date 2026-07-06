@@ -26,6 +26,20 @@ function FadeUp({ children, delay = 0, className = "" }: { children: React.React
     );
 }
 
+// Reusable fade-up that triggers on scroll into viewport
+function FadeUpInView({ children, delay = 0, className = "" }: { children: React.ReactNode; delay?: number; className?: string }) {
+    const ref = useRef<HTMLDivElement>(null);
+    const inView = useInView(ref, { once: true, margin: "-60px" });
+    return (
+        <motion.div ref={ref}
+            initial={{ opacity: 0, y: 24 }}
+            animate={inView ? { opacity: 1, y: 0 } : { opacity: 0, y: 24 }}
+            transition={{ duration: 0.55, delay, ease: [0.22, 0.61, 0.36, 1] }}
+            className={className}
+        >{children}</motion.div>
+    );
+}
+
 // Animated counter that counts up when it enters the viewport
 function CountUp({ to, duration = 1.4 }: { to: number; duration?: number }) {
     const ref = useRef<HTMLSpanElement>(null);
@@ -298,12 +312,12 @@ export default function LandingPageNocturne() {
 
             <main className="relative z-10">
                 {/* Hero */}
-                <section className="py-16 md:py-[78px] pb-12 md:pb-[70px]">
-                    <div className="max-w-[1140px] mx-auto px-4 sm:px-6 grid lg:grid-cols-[1.05fr_0.95fr] gap-8 md:gap-14 items-center">
+                <section className="py-16 md:py-[86px] pb-14 md:pb-[76px]">
+                    <div className="max-w-[1140px] mx-auto px-4 sm:px-6 grid lg:grid-cols-[1.08fr_0.92fr] gap-10 md:gap-16 items-center">
                         <FadeUp>
-                            <Eyebrow className="mb-6">{t.eyebrow}</Eyebrow>
-                            <h1 className="font-display font-semibold text-[clamp(2.3rem,5.6vw,4.2rem)] leading-[1.03] tracking-[-0.028em]">
-                                <span className="bg-gradient-to-b from-text-primary to-text-secondary bg-clip-text text-transparent">
+                            <Eyebrow className="mb-5">{t.eyebrow}</Eyebrow>
+                            <h1 className="font-display font-semibold text-[clamp(2.5rem,5.8vw,4.5rem)] leading-[1.02] tracking-[-0.03em] text-balance">
+                                <span className="text-text-primary">
                                     {t.headline1.split(" ").map((word, i, arr) => (
                                         <motion.span
                                             key={`h1-${i}`}
@@ -315,7 +329,7 @@ export default function LandingPageNocturne() {
                                     ))}
                                 </span>
                                 <br />
-                                <span className="bg-gradient-to-b from-ember-bright to-ember bg-clip-text text-transparent">
+                                <span className="relative inline-block"><span aria-hidden="true" className="absolute -inset-3 blur-2xl bg-ember/12 rounded-full pointer-events-none" /><span className="relative bg-gradient-to-r from-ember-bright via-ember to-[rgb(var(--gold)/0.75)] bg-clip-text text-transparent">
                                     {t.headline2.split(" ").map((word, i, arr) => (
                                         <motion.span
                                             key={`h2-${i}`}
@@ -325,23 +339,27 @@ export default function LandingPageNocturne() {
                                             className="inline-block"
                                         >{word}{i < arr.length - 1 ? " " : ""}</motion.span>
                                     ))}
-                                </span>
+                                </span></span>
                             </h1>
-                            <p className="mt-6 max-w-[42ch] text-lg leading-relaxed text-text-secondary">{t.subtitle}</p>
+                            <p className="mt-6 max-w-[44ch] text-[1.05rem] leading-[1.72] text-text-secondary text-pretty">{t.subtitle}</p>
                             <div className="mt-9 flex flex-wrap gap-3">
                                 <Link href="/upload"><RicoButton variant="primary" size="md">{t.ctaUpload}</RicoButton></Link>
                                 <Link href="#how"><RicoButton variant="ghost" size="md">{t.ctaHow}</RicoButton></Link>
                             </div>
                             <div className="mt-8 flex flex-wrap gap-2">
-                                {[t.trust1, t.trust2, t.trust3].map((item, i) => (
+                                {[
+                                    { label: t.trust1, dot: "bg-ember shadow-[0_0_5px_rgb(var(--gold)/0.55)]" },
+                                    { label: t.trust2, dot: "bg-aura shadow-[0_0_5px_rgb(var(--aura)/0.55)]" },
+                                    { label: t.trust3, dot: "bg-success shadow-[0_0_5px_rgb(var(--success)/0.55)]" },
+                                ].map(({ label, dot }, i) => (
                                     <motion.span
-                                        key={item}
+                                        key={label}
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
-                                        transition={{ duration: 0.4, delay: 0.45 + i * 0.06, ease: "easeOut" }}
-                                        className="inline-flex items-center gap-1.5 font-mono text-[11px] text-text-tertiary border border-overlay/7 rounded-full px-3 py-1.5 bg-surface/30"
+                                        transition={{ duration: 0.4, delay: 0.48 + i * 0.07, ease: "easeOut" }}
+                                        className="inline-flex items-center gap-1.5 font-mono text-[11px] text-text-tertiary border border-overlay/7 rounded-full px-3 py-1.5 bg-surface/40 backdrop-blur-sm"
                                     >
-                                        <span className="h-1 w-1 rounded-full bg-aura shadow-[0_0_6px_rgb(var(--aura)/0.5)]" />{item}
+                                        <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />{label}
                                     </motion.span>
                                 ))}
                             </div>
@@ -393,7 +411,12 @@ export default function LandingPageNocturne() {
                 {/* Trust Bar */}
                 <div className="border-y border-overlay/7 py-4 md:py-6 bg-surface/30 backdrop-blur-sm">
                     <div className="max-w-[1140px] mx-auto px-4 sm:px-6 flex flex-wrap justify-center md:justify-between gap-4 md:gap-6">
-                        {[t.trustBar1, t.trustBar2, t.trustBar3, t.trustBar4].map((item, i) => (
+                        {[
+                            { label: t.trustBar1, icon: <ShieldIcon />,    cls: "border-ember/25 text-ember" },
+                            { label: t.trustBar2, icon: <CheckIcon />,     cls: "border-success/25 text-success" },
+                            { label: t.trustBar3, icon: <GlobeIcon />,     cls: "border-aura/25 text-aura" },
+                            { label: t.trustBar4, icon: <LanguagesIcon />, cls: "border-magenta/25 text-magenta" },
+                        ].map(({ label, icon, cls }, i) => (
                             <motion.div
                                 key={i}
                                 initial={{ opacity: 0, y: 16 }}
@@ -401,31 +424,37 @@ export default function LandingPageNocturne() {
                                 transition={{ duration: 0.45, delay: i * 0.08, ease: "easeOut" }}
                                 className="flex items-center gap-2.5 text-sm text-text-secondary"
                             >
-                                <span className="w-[34px] h-[34px] rounded-[10px] bg-surface border border-overlay/7 flex items-center justify-center text-ember">
-                                    {i === 0 && <ShieldIcon />}{i === 1 && <CheckIcon />}{i === 2 && <GlobeIcon />}{i === 3 && <LanguagesIcon />}
-                                </span>{item}
+                                <span className={`w-[34px] h-[34px] rounded-[10px] bg-surface border flex items-center justify-center ${cls}`}>
+                                    {icon}
+                                </span>{label}
                             </motion.div>
                         ))}
                     </div>
                 </div>
 
                 {/* Steps */}
-                <section id="how" className="py-16 md:py-24">
+                <section id="how" className="py-20 md:py-28">
                     <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
-                        <FadeUp className="max-w-[600px] mb-8 md:mb-12">
+                        <FadeUpInView className="max-w-[600px] mb-8 md:mb-12">
                             <Eyebrow className="mb-4">{t.stepsEyebrow}</Eyebrow>
-                            <h2 className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.stepsTitle}</h2>
+                            <h2 className="font-display font-semibold text-[clamp(1.6rem,3.8vw,2.8rem)] leading-[1.08] tracking-[-0.025em] mb-3 text-balance">{t.stepsTitle}</h2>
                             <p className="text-text-secondary text-sm md:text-base">{t.stepsSubtitle}</p>
-                        </FadeUp>
+                        </FadeUpInView>
                         <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-5">
                             <motion.div initial={{ opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px" }} transition={{ duration: 0.55, delay: 0, ease: [0.22, 0.61, 0.36, 1] }}>
                             <GlassCard className="p-6" role="article" aria-label={t.step1Title}>
                                 <span className="font-mono text-xs text-ember tracking-[0.2em]">{t.step1Num}</span>
                                 <h3 className="font-display font-semibold text-lg mt-3 mb-2">{t.step1Title}</h3>
                                 <p className="text-sm text-text-secondary">{t.step1Body}</p>
-                                <div className="mt-5 h-24 rounded-xl bg-surface border border-overlay/7 flex items-center justify-center">
-                                    <div className="flex flex-col gap-1.5 w-[60%]">
-                                        <div className="h-1.5 rounded bg-overlay/12 w-[80%]" /><div className="h-1.5 rounded bg-overlay/12 w-full" /><div className="h-1.5 rounded bg-overlay/12 w-[55%]" /><div className="h-1.5 rounded bg-ember/50 w-[90%]" />
+                                <div className="mt-5 h-24 rounded-xl bg-surface border border-overlay/7 flex items-center justify-center gap-3 overflow-hidden relative">
+                                    <div aria-hidden="true" className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_100%,rgb(var(--gold)/0.07),transparent_70%)]" />
+                                    <div className="w-9 h-9 rounded-xl bg-ember/10 border border-ember/30 flex items-center justify-center text-ember flex-shrink-0 relative">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                                    </div>
+                                    <div className="flex flex-col gap-1.5 flex-1 relative">
+                                        <div className="h-1.5 rounded-full bg-overlay/12 w-[90%]" />
+                                        <div className="h-1.5 rounded-full bg-overlay/12 w-[70%]" />
+                                        <div className="h-1.5 rounded-full bg-ember/40 w-[80%]" />
                                     </div>
                                 </div>
                             </GlassCard>
@@ -461,11 +490,11 @@ export default function LandingPageNocturne() {
                 {/* Phase 4 - Product Window / Command UI */}
                 <section id="command" className="py-16 md:py-24 pt-0" aria-labelledby="command-heading">
                     <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
-                        <FadeUp className="max-w-[600px] mb-8 md:mb-12">
+                        <FadeUpInView className="max-w-[600px] mb-8 md:mb-12">
                             <Eyebrow className="mb-4">{t.cmdEyebrow}</Eyebrow>
-                            <h2 id="command-heading" className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.cmdTitle}</h2>
+                            <h2 id="command-heading" className="font-display font-semibold text-[clamp(1.6rem,3.8vw,2.8rem)] leading-[1.08] tracking-[-0.025em] mb-3 text-balance">{t.cmdTitle}</h2>
                             <p className="text-text-secondary text-sm md:text-base">{t.cmdSubtitle}</p>
-                        </FadeUp>
+                        </FadeUpInView>
                         {/* Window Frame */}
                         <FadeUp delay={0.12}>
                         <div className="rounded-rico-lg overflow-hidden border border-overlay/12 shadow-[0_40px_120px_rgba(0,0,0,0.6)]" role="img" aria-label="Rico command center interface preview">
@@ -523,11 +552,11 @@ export default function LandingPageNocturne() {
                 {/* Phase 4 - Dashboard Preview */}
                 <section className="py-16 md:py-24 pt-0" aria-labelledby="dashboard-heading">
                     <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
-                        <FadeUp className="max-w-[600px] mb-8 md:mb-12">
+                        <FadeUpInView className="max-w-[600px] mb-8 md:mb-12">
                             <Eyebrow className="mb-4">{t.dashEyebrow}</Eyebrow>
-                            <h2 id="dashboard-heading" className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.dashTitle}</h2>
+                            <h2 id="dashboard-heading" className="font-display font-semibold text-[clamp(1.6rem,3.8vw,2.8rem)] leading-[1.08] tracking-[-0.025em] mb-3 text-balance">{t.dashTitle}</h2>
                             <p className="text-text-secondary text-sm md:text-base">{t.dashSubtitle}</p>
-                        </FadeUp>
+                        </FadeUpInView>
                         <GlassCard className="p-6 md:p-8 overflow-x-auto">
                             <div className="min-w-[600px]">
                                 {/* Dashboard Header */}
@@ -593,10 +622,10 @@ export default function LandingPageNocturne() {
                 {/* Phase 4 - Pricing */}
                 <section id="pricing" className="py-16 md:py-24 pt-0" aria-labelledby="pricing-heading">
                     <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
-                        <FadeUp className="max-w-[600px] mb-8 md:mb-12 md:mx-auto md:text-center">
+                        <FadeUpInView className="max-w-[600px] mb-8 md:mb-12 md:mx-auto md:text-center">
                             <Eyebrow className="mb-4 md:justify-center">{t.pricingEyebrow}</Eyebrow>
-                            <h2 id="pricing-heading" className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-3">{t.pricingTitle}</h2>
-                        </FadeUp>
+                            <h2 id="pricing-heading" className="font-display font-semibold text-[clamp(1.6rem,3.8vw,2.8rem)] leading-[1.08] tracking-[-0.025em] mb-3 text-balance">{t.pricingTitle}</h2>
+                        </FadeUpInView>
                         <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-5">
                             {/* Free */}
                             <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px" }} transition={{ duration: 0.5, delay: 0, ease: [0.22, 0.61, 0.36, 1] }}>
@@ -615,7 +644,7 @@ export default function LandingPageNocturne() {
                             </motion.div>
                             {/* Pro - Featured */}
                             <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px" }} transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 0.61, 0.36, 1] }}>
-                            <GlassCard className="p-6 flex flex-col relative border-ember/30">
+                            <GlassCard className="p-6 flex flex-col relative border-ember/40 shadow-[0_0_40px_-8px_rgb(var(--gold)/0.18)]">
                                 <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-ember text-void text-xs font-mono font-semibold">{t.popular}</span>
                                 <div className="mb-6">
                                     <p className="font-mono text-xs uppercase tracking-[0.16em] text-ember">{t.proName}</p>
@@ -647,22 +676,22 @@ export default function LandingPageNocturne() {
                             </GlassCard>
                             </motion.div>
                         </div>
-                        <p className="text-center text-sm text-text-tertiary mt-6">{t.cancelAnytime}</p>
+                        <p className="text-center text-[13px] text-text-tertiary mt-6 font-mono tracking-[0.02em]">{t.cancelAnytime}</p>
                     </div>
                 </section>
 
                 {/* Phase 5 - Credibility */}
                 <section className="py-16 md:py-24 pt-0" aria-labelledby="credibility-heading">
                     <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
-                        <FadeUp>
+                        <FadeUpInView>
                         <GlassCard className="p-6 md:p-8 lg:p-10">
                             <div className="grid md:grid-cols-2 gap-10 items-center">
                                 <div>
                                     <Eyebrow className="mb-4">{t.credEyebrow}</Eyebrow>
-                                    <h2 id="credibility-heading" className="font-display font-semibold text-[clamp(1.5rem,3vw,2rem)] leading-[1.15] tracking-[-0.02em] mb-4">{t.credTitle}</h2>
+                                    <h2 id="credibility-heading" className="font-display font-semibold text-[clamp(1.6rem,3.2vw,2.2rem)] leading-[1.1] tracking-[-0.025em] mb-4 text-balance">{t.credTitle}</h2>
                                     <p className="text-text-secondary mb-6">{t.credSubtitle}</p>
-                                    <div className="flex items-center gap-3 p-3 rounded-xl bg-surface border border-overlay/7">
-                                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-ember/30 to-ember/10 flex items-center justify-center text-ember font-bold text-lg">RE</div>
+                                    <div className="flex items-center gap-3 p-4 rounded-xl bg-surface border border-ember/20 shadow-[0_0_24px_-4px_rgb(var(--gold)/0.12)]">
+                                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-ember/40 via-ember/20 to-ember/5 flex items-center justify-center text-ember font-bold text-lg border border-ember/25 shadow-[0_0_12px_rgb(var(--gold)/0.25)]">RE</div>
                                         <div>
                                             <p className="font-semibold text-sm">{t.founderLabel}</p>
                                             <p className="text-xs text-text-tertiary">{t.founderMeta}</p>
@@ -694,17 +723,17 @@ export default function LandingPageNocturne() {
                                 </div>
                             </div>
                         </GlassCard>
-                        </FadeUp>
+                        </FadeUpInView>
                     </div>
                 </section>
 
                 {/* Phase 5 - FAQ */}
                 <section id="faq" className="py-16 md:py-24 pt-0" aria-labelledby="faq-heading">
                     <div className="max-w-[720px] mx-auto px-4 sm:px-6">
-                        <FadeUp className="mb-8 md:mb-10 text-center">
+                        <FadeUpInView className="mb-8 md:mb-10 text-center">
                             <Eyebrow className="mb-4 justify-center">{t.faqEyebrow}</Eyebrow>
-                            <h2 id="faq-heading" className="font-display font-semibold text-[clamp(1.5rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em]">{t.faqTitle}</h2>
-                        </FadeUp>
+                            <h2 id="faq-heading" className="font-display font-semibold text-[clamp(1.6rem,3.8vw,2.8rem)] leading-[1.08] tracking-[-0.025em] text-balance">{t.faqTitle}</h2>
+                        </FadeUpInView>
                         <div className="space-y-3">
                             {[
                                 { q: t.faq1Q, a: t.faq1A },
@@ -714,7 +743,7 @@ export default function LandingPageNocturne() {
                             ].map((faq, i) => (
                                 <GlassCard key={i} className="p-0 overflow-hidden">
                                     <button
-                                        className="w-full flex items-center justify-between p-5 text-start"
+                                        className="w-full flex items-center justify-between p-5 text-start hover:bg-surface/50 transition-colors duration-150"
                                         onClick={() => setOpenFaq(openFaq === i ? null : i)}
                                         aria-expanded={openFaq === i}
                                         aria-controls={`faq-answer-${i}`}
@@ -744,23 +773,24 @@ export default function LandingPageNocturne() {
                 </section>
 
                 {/* Phase 5 - Final CTA */}
-                <section className="py-16 md:py-24" aria-labelledby="final-cta-heading">
-                    <FadeUp className="max-w-[600px] mx-auto px-4 sm:px-6 text-center">
+                <section className="py-16 md:py-28 relative overflow-hidden" aria-labelledby="final-cta-heading">
+                    <div aria-hidden="true" className="absolute inset-0 bg-[radial-gradient(ellipse_60%_55%_at_50%_50%,rgb(var(--gold)/0.06),transparent_70%)] pointer-events-none" />
+                    <FadeUpInView className="max-w-[600px] mx-auto px-4 sm:px-6 text-center relative z-10">
                         <div className="mb-6 flex justify-center">
                             <Aura size="md" variant="ember" aria-hidden="true" />
                         </div>
-                        <h2 id="final-cta-heading" className="font-display font-semibold text-[clamp(1.7rem,3.6vw,2.6rem)] leading-[1.1] tracking-[-0.02em] mb-4">{t.finalTitle}</h2>
+                        <h2 id="final-cta-heading" className="font-display font-semibold text-[clamp(1.9rem,3.8vw,2.9rem)] leading-[1.08] tracking-[-0.025em] mb-4 text-balance">{t.finalTitle}</h2>
                         <p className="text-text-secondary mb-8">{t.finalSubtitle}</p>
                         <Link href="/upload"><RicoButton variant="primary" size="lg">{t.finalCta}</RicoButton></Link>
-                    </FadeUp>
+                    </FadeUpInView>
                 </section>
             </main>
 
             {/* Phase 5 - Footer */}
-            <footer className="relative z-10 border-t border-overlay/7 py-8 md:py-12" role="contentinfo">
+            <footer className="relative z-10 border-t border-overlay/10 py-8 md:py-12 bg-surface/20 backdrop-blur-sm" role="contentinfo">
                 <div className="max-w-[1140px] mx-auto px-4 sm:px-6">
                     <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                        <Link href="/" className="flex items-center gap-2 font-display font-bold text-lg">
+                        <Link href="/" className="flex items-center gap-2.5 font-display font-bold text-lg tracking-tight">
                             <RicoLogoMark animate={false} />
                             <span>Rico<span className="text-ember font-bold"> Hunt</span></span>
                         </Link>
