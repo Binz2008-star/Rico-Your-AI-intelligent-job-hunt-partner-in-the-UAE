@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body { background: #080D1C; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; color: #EAF0FF; }
+  ::-webkit-scrollbar { width: 9px; }
+  ::-webkit-scrollbar-thumb { background: rgba(159,184,255,0.16); border-radius: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  input::placeholder { color: #5E6A8C; }
+  @keyframes rn-spin { to { transform: rotate(360deg); } }
+  @keyframes rn-glow { 0%,100% { opacity:.4 } 50% { opacity:1 } }
+  @keyframes rn-msgIn { from { opacity:0; transform: translateY(12px); } to { opacity:1; transform:none; } }
+  @keyframes rn-grow { from { width:0 !important; } }
+  @keyframes rn-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+  @keyframes rn-typing { 0%,60%,100% { transform: translateY(0); opacity:.4; } 30% { transform: translateY(-4px); opacity:1; } }
+  .rn-msg { animation: rn-msgIn .5s cubic-bezier(0.16,1,0.3,1) both; }
+  .rn-bar > span { animation: rn-grow 1.1s cubic-bezier(0.16,1,0.3,1) both; }
+  .chip { transition: border-color .2s, background .2s, transform .2s; }
+  .chip:hover { border-color: rgba(52,224,208,0.5) !important; background: rgba(52,224,208,0.08) !important; transform: translateY(-1px); }
+  .rel:hover { color:#fff !important; }
+  .send { transition: transform .2s, filter .2s; }
+  .send:hover { transform: scale(1.05); filter: brightness(1.05); }
+  .jobbtn { transition: transform .2s, filter .2s; }
+  .jobbtn:hover { transform: translateY(-1px); filter: brightness(1.06); }
+  @media (prefers-reduced-motion: reduce) { .rn-msg, .rn-bar > span, [data-anim] { animation: none !important; } }
+</style>
+</helmet>
+
+<div style="position:relative; height:100vh; display:flex; flex-direction:column; overflow:hidden; background:radial-gradient(120% 70% at 50% -8%, #0C1430 0%, #080D1C 55%);">
+
+  <!-- aura glows -->
+  <div aria-hidden="true" data-anim style="position:absolute; top:-140px; left:58%; width:560px; height:560px; border-radius:50%; background:radial-gradient(circle, rgba(52,224,208,0.14), transparent 62%); filter:blur(64px); animation:rn-float 10s ease-in-out infinite; pointer-events:none;"></div>
+  <div aria-hidden="true" style="position:absolute; bottom:-120px; left:4%; width:460px; height:460px; border-radius:50%; background:radial-gradient(circle, rgba(245,166,35,0.10), transparent 64%); filter:blur(72px); pointer-events:none;"></div>
+
+  <!-- HEADER -->
+  <header style="position:relative; z-index:3; flex-shrink:0; display:flex; align-items:center; gap:13px; padding:15px 22px; border-bottom:1px solid rgba(159,184,255,0.10); background:rgba(8,13,28,0.6); backdrop-filter:blur(14px);">
+    <div style="position:relative; width:40px; height:40px; flex-shrink:0;">
+      <span data-anim style="position:absolute; inset:0; border-radius:12px; background:conic-gradient(from 0deg, transparent, #34E0D0, #F5A623, transparent); filter:blur(1px); animation:rn-spin 7s linear infinite;"></span>
+      <span style="position:absolute; inset:2px; border-radius:10px; background:#0A1024; display:flex; align-items:center; justify-content:center;"><svg viewBox="0 0 16 16" fill="none" style="width:17px; height:17px;"><path d="M8 2L14 6v4L8 14 2 10V6L8 2z" fill="#34E0D0"></path></svg></span>
+    </div>
+    <div style="min-width:0;">
+      <p style="margin:0; font-size:15px; font-weight:600; color:#EAF0FF;">ريكو <span style="color:#5E6A8C; font-weight:400;">/ المساعد المهني</span></p>
+      <div style="display:flex; align-items:center; gap:7px; margin-top:2px;"><span data-anim style="width:6px; height:6px; border-radius:50%; background:#34E0D0; box-shadow:0 0 7px #34E0D0; animation:rn-glow 1.5s ease-in-out infinite;"></span><span style="font-size:11px; font-family:ui-monospace,monospace; color:#93A0C4;">{{ statusText }}</span></div>
+    </div>
+    <span style="margin-inline-start:auto; font-size:9px; font-weight:600; letter-spacing:0.08em; padding:5px 9px; border-radius:7px; background:rgba(245,166,35,0.14); border:1px solid rgba(245,166,35,0.36); color:#F6C560; font-family:ui-monospace,monospace;">SAMPLE / DEMO</span>
+  </header>
+
+  <!-- THREAD -->
+  <main ref="{{ threadRef }}" dir="rtl" style="position:relative; z-index:2; flex:1; overflow-y:auto; padding:26px 0 20px;">
+    <div style="max-width:720px; margin:0 auto; padding:0 22px; display:flex; flex-direction:column; gap:20px;">
+
+      <!-- WELCOME -->
+      <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ true }}">
+        <div style="text-align:center; padding:36px 0 8px;">
+          <div data-anim style="width:66px; height:66px; margin:0 auto; position:relative;">
+            <span data-anim style="position:absolute; inset:0; border-radius:20px; background:conic-gradient(from 0deg, transparent, #34E0D0, #F5A623, transparent); filter:blur(2px); animation:rn-spin 8s linear infinite;"></span>
+            <span style="position:absolute; inset:3px; border-radius:17px; background:#0A1024; display:flex; align-items:center; justify-content:center;"><svg viewBox="0 0 16 16" fill="none" style="width:28px; height:28px;"><path d="M8 2L14 6v4L8 14 2 10V6L8 2z" fill="#34E0D0"></path></svg></span>
+          </div>
+          <h1 style="font-size:30px; font-weight:700; letter-spacing:-0.02em; margin:22px 0 0; color:#EAF0FF;">مرحبًا، أنا ريكو.</h1>
+          <p style="font-size:16px; line-height:1.7; color:#93A0C4; margin:12px auto 0; max-width:440px;">لا تبحث عن الوظائف — اطلب مني أن أصطادها لك. أخبرني بما تريد بكلماتك، وسأفحص المصادر الموثوقة وأعود لك بما يستحق وقتك فقط. لن أتقدّم بأي طلب دون موافقتك.</p>
+          <div style="display:flex; flex-wrap:wrap; gap:9px; justify-content:center; margin-top:26px;">
+            <sc-for list="{{ suggestions }}" as="s" hint-placeholder-count="3">
+              <button type="button" onClick="{{ s.send }}" class="chip" style="font-family:inherit; font-size:13.5px; font-weight:500; color:#C7D2F0; border:1px solid rgba(159,184,255,0.14); background:rgba(148,172,255,0.05); backdrop-filter:blur(14px); padding:10px 16px; border-radius:9999px; cursor:pointer; display:inline-flex; align-items:center; gap:7px;"><span style="color:#34E0D0;">◆</span>{{ s.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- TURNS -->
+      <sc-for list="{{ turns }}" as="turn" hint-placeholder-count="0">
+        <div class="rn-msg" style="display:flex; flex-direction:column; gap:14px;">
+
+          <!-- user bubble -->
+          <div style="align-self:flex-start; max-width:82%; display:flex; align-items:flex-start; gap:10px; flex-direction:row-reverse;">
+            <span style="width:28px; height:28px; border-radius:9px; background:rgba(159,184,255,0.10); color:#93A0C4; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:11px; font-weight:700; font-family:ui-monospace,monospace;">أنت</span>
+            <div dir="{{ turn.dir }}" style="background:linear-gradient(135deg, rgba(245,166,35,0.16), rgba(245,166,35,0.06)); border:1px solid rgba(245,166,35,0.24); border-radius:15px; padding:11px 15px; font-size:15px; line-height:1.5; color:#F4E4C4;">{{ turn.query }}</div>
+          </div>
+
+          <!-- rico response -->
+          <div style="display:flex; align-items:flex-start; gap:11px;">
+            <span style="width:32px; height:32px; border-radius:10px; background:linear-gradient(140deg,#34E0D0,#1FA79A); display:flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow:0 8px 20px -8px #34E0D0;"><svg viewBox="0 0 16 16" fill="none" style="width:15px; height:15px;"><path d="M8 2L14 6v4L8 14 2 10V6L8 2z" fill="#062018"></path></svg></span>
+            <div style="min-width:0; flex:1;">
+
+              <!-- plan -->
+              <sc-if value="{{ turn.hasSteps }}" hint-placeholder-val="{{ false }}">
+                <div style="border-radius:14px; background:rgba(52,224,208,0.05); border:1px solid rgba(52,224,208,0.22); padding:13px 15px; margin-bottom:12px;">
+                  <div style="display:flex; align-items:center; gap:9px; margin-bottom:11px;">
+                    <span style="font-size:10px; font-family:ui-monospace,monospace; letter-spacing:0.12em; color:#7CEFE4;">خطة ريكو</span>
+                    <span style="flex:1; height:1px; background:rgba(159,184,255,0.10);"></span>
+                    <sc-if value="{{ turn.working }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px; font-family:ui-monospace,monospace; color:#7CEFE4; display:inline-flex; align-items:center; gap:6px;"><span data-anim style="width:11px; height:11px; border:2px solid rgba(52,224,208,0.3); border-top-color:#34E0D0; border-radius:50%; animation:rn-spin 0.7s linear infinite;"></span>يعمل</span></sc-if>
+                    <sc-if value="{{ turn.done }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px; font-family:ui-monospace,monospace; color:#7CEFE4;">✓ تم</span></sc-if>
+                  </div>
+                  <div style="display:flex; flex-direction:column;">
+                    <sc-for list="{{ turn.steps }}" as="st" hint-placeholder-count="2">
+                      <div style="display:flex; gap:11px;">
+                        <div style="display:flex; flex-direction:column; align-items:center; flex-shrink:0;">
+                          <span style="width:22px; height:22px; border-radius:7px; display:flex; align-items:center; justify-content:center; background:rgba(52,224,208,0.12); border:1px solid rgba(52,224,208,0.3);">
+                            <sc-if value="{{ st.isActive }}" hint-placeholder-val="{{ false }}"><span data-anim style="width:11px; height:11px; border:2px solid rgba(52,224,208,0.3); border-top-color:#34E0D0; border-radius:50%; animation:rn-spin 0.7s linear infinite;"></span></sc-if>
+                            <sc-if value="{{ st.isDone }}" hint-placeholder-val="{{ true }}"><span style="color:#34E0D0; font-size:11px; font-weight:700;">✓</span></sc-if>
+                          </span>
+                          <sc-if value="{{ st.hasLine }}" hint-placeholder-val="{{ true }}"><span style="width:1.5px; flex:1; min-height:12px; margin:2px 0; background:rgba(52,224,208,0.3);"></span></sc-if>
+                        </div>
+                        <div style="min-width:0; padding:1px 0 11px;">
+                          <p style="font-size:13px; font-weight:500; margin:0; color:{{ st.color }};">{{ st.label }}</p>
+                          <sc-if value="{{ st.hasDetail }}" hint-placeholder-val="{{ false }}"><p style="font-size:11px; color:#5E6A8C; margin:2px 0 0; font-family:ui-monospace,monospace;" dir="ltr">{{ st.detail }}</p></sc-if>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-if>
+
+              <!-- sources -->
+              <sc-if value="{{ turn.hasSources }}" hint-placeholder-val="{{ false }}">
+                <div class="rn-msg" style="margin-bottom:12px; padding:12px 14px; border-radius:13px; background:rgba(52,224,208,0.05); border:1px solid rgba(52,224,208,0.22);">
+                  <div style="display:flex; align-items:center; gap:8px; margin-bottom:9px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#34E0D0" stroke-width="1.9"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg><span style="font-size:11.5px; color:#C7D2F0;">{{ turn.sourceLine }}</span></div>
+                  <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                    <sc-for list="{{ turn.sources }}" as="src" hint-placeholder-count="3">
+                      <span dir="ltr" style="font-size:11px; color:#C7D2F0; background:rgba(159,184,255,0.06); border:1px solid rgba(159,184,255,0.12); padding:4px 10px; border-radius:8px; display:inline-flex; align-items:center; gap:6px;"><span style="width:5px; height:5px; border-radius:50%; background:#34E0D0;"></span>{{ src }}</span>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-if>
+
+              <!-- answer -->
+              <sc-if value="{{ turn.hasAnswer }}" hint-placeholder-val="{{ false }}">
+                <div class="rn-msg">
+                  <sc-if value="{{ turn.hasTag }}" hint-placeholder-val="{{ false }}">
+                    <span style="display:inline-flex; align-items:center; gap:5px; font-size:10px; font-weight:600; letter-spacing:0.04em; padding:3px 9px; border-radius:9999px; margin-bottom:9px; {{ turn.tagStyle }}"><span>{{ turn.tagGlyph }}</span>{{ turn.tagLabel }}</span>
+                  </sc-if>
+                  <div dir="{{ turn.dir }}" style="background:rgba(148,172,255,0.05); border:1px solid rgba(159,184,255,0.14); border-radius:15px; padding:13px 16px; font-size:14.5px; line-height:1.65; color:#C7D2F0;">{{ turn.answer }}</div>
+
+                  <!-- job card -->
+                  <sc-if value="{{ turn.hasJob }}" hint-placeholder-val="{{ false }}">
+                    <div style="margin-top:12px; border-radius:15px; background:rgba(148,172,255,0.08); border:1px solid rgba(159,184,255,0.14); padding:17px;">
+                      <div style="display:flex; align-items:flex-start; gap:13px; flex-direction:row-reverse;">
+                        <div style="flex:1; min-width:0;">
+                          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; flex-direction:row-reverse; justify-content:flex-end;">
+                            <p style="font-size:17px; font-weight:600; color:#EAF0FF; margin:0;" dir="ltr">{{ turn.job.role }}</p>
+                            <span dir="ltr" style="display:inline-flex; align-items:center; gap:4px; font-size:10px; font-family:ui-monospace,monospace; color:#7CEFE4; background:rgba(52,224,208,0.12); border:1px solid rgba(52,224,208,0.3); padding:3px 8px; border-radius:7px;">✓ {{ turn.job.verified }}</span>
+                          </div>
+                          <p style="font-size:12px; color:#93A0C4; margin:5px 0 0;" dir="ltr">{{ turn.job.meta }}</p>
+                        </div>
+                        <div style="position:relative; width:58px; height:58px; flex-shrink:0; border-radius:50%; background:conic-gradient(#34E0D0 {{ turn.job.ring }}, rgba(159,184,255,0.12) 0);"><div style="position:absolute; inset:5px; border-radius:50%; background:#0A1024; display:flex; flex-direction:column; align-items:center; justify-content:center;"><span style="font-size:16px; font-weight:700; color:#EAF0FF; line-height:1;">{{ turn.job.fit }}</span><span style="font-size:7px; color:#5E6A8C; font-family:ui-monospace,monospace;">FIT</span></div></div>
+                      </div>
+                      <div style="margin-top:14px;">
+                        <p style="font-size:10px; font-family:ui-monospace,monospace; letter-spacing:0.1em; color:#5E6A8C; margin:0 0 9px;">لماذا تناسبك</p>
+                        <div style="display:flex; flex-direction:column; gap:8px;">
+                          <sc-for list="{{ turn.job.reasons }}" as="r" hint-placeholder-count="3">
+                            <div class="rn-bar">
+                              <div style="display:flex; justify-content:space-between; gap:8px; margin-bottom:4px;"><span style="font-size:12px; color:#C7D2F0;">{{ r.label }}</span><span dir="ltr" style="font-size:10.5px; font-family:ui-monospace,monospace; color:#7CEFE4;">{{ r.pctLabel }}</span></div>
+                              <div style="height:6px; border-radius:6px; background:rgba(159,184,255,0.10); overflow:hidden;"><span style="display:block; width:{{ r.width }}; height:100%; border-radius:6px; background:linear-gradient(90deg,#34E0D0,#7CEFE4);"></span></div>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </div>
+                      <div style="margin-top:15px; padding-top:13px; border-top:1px solid rgba(159,184,255,0.08); display:flex; flex-wrap:wrap; gap:8px;">
+                        <sc-for list="{{ turn.job.actions }}" as="a" hint-placeholder-count="2">
+                          <button type="button" onClick="{{ a.click }}" class="jobbtn" style="font-family:inherit; font-size:12.5px; font-weight:600; padding:9px 14px; border-radius:10px; cursor:pointer; border:0; {{ a.style }}">{{ a.label }}</button>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </sc-if>
+
+                  <!-- insight card -->
+                  <sc-if value="{{ turn.hasInsight }}" hint-placeholder-val="{{ false }}">
+                    <div style="margin-top:12px; border-radius:15px; background:rgba(148,172,255,0.08); border:1px solid rgba(159,184,255,0.14); padding:17px;">
+                      <p style="font-size:10px; font-family:ui-monospace,monospace; letter-spacing:0.1em; color:#5E6A8C; margin:0 0 11px;" dir="ltr">{{ turn.insight.title }}</p>
+                      <div style="display:flex; align-items:flex-end; gap:9px; margin-bottom:13px; flex-direction:row-reverse; justify-content:flex-end;"><span dir="ltr" style="font-size:32px; font-weight:700; color:#EAF0FF; line-height:1;">{{ turn.insight.band }}</span><span style="font-size:12px; color:#93A0C4; margin-bottom:4px;">{{ turn.insight.unit }}</span></div>
+                      <div style="display:flex; flex-direction:column; gap:8px;">
+                        <sc-for list="{{ turn.insight.rows }}" as="r" hint-placeholder-count="3">
+                          <div class="rn-bar">
+                            <div style="display:flex; justify-content:space-between; gap:8px; margin-bottom:4px;"><span style="font-size:12px; color:#C7D2F0;">{{ r.label }}</span><span dir="ltr" style="font-size:10.5px; font-family:ui-monospace,monospace; color:#7CEFE4;">{{ r.value }}</span></div>
+                            <div style="height:6px; border-radius:6px; background:rgba(159,184,255,0.10); overflow:hidden;"><span style="display:block; width:{{ r.width }}; height:100%; border-radius:6px; background:linear-gradient(90deg,#34E0D0,#7CEFE4);"></span></div>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </sc-if>
+
+                  <!-- roles -->
+                  <sc-if value="{{ turn.hasRoles }}" hint-placeholder-val="{{ false }}">
+                    <div style="margin-top:12px; display:flex; flex-direction:column; gap:8px;">
+                      <sc-for list="{{ turn.roles }}" as="ro" hint-placeholder-count="2">
+                        <div style="display:flex; align-items:center; gap:11px; padding:12px 14px; border-radius:13px; background:rgba(148,172,255,0.05); border:1px solid rgba(159,184,255,0.14); flex-direction:row-reverse;">
+                          <div style="flex:1; min-width:0; text-align:start;"><p style="margin:0; font-size:13.5px; font-weight:600; color:#EAF0FF;">{{ ro.role }}</p><p style="margin:3px 0 0; font-size:11.5px; color:#93A0C4;">{{ ro.meta }}</p></div>
+                          <span dir="ltr" style="font-size:15px; font-weight:700; color:#34E0D0;">{{ ro.fit }}</span>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+
+                  <!-- note -->
+                  <sc-if value="{{ turn.hasNote }}" hint-placeholder-val="{{ false }}">
+                    <div class="rn-msg" style="margin-top:11px; display:inline-flex; align-items:center; gap:8px; font-size:12px; padding:9px 13px; border-radius:10px; {{ turn.noteStyle }}">{{ turn.noteText }}</div>
+                  </sc-if>
+
+                  <!-- related -->
+                  <sc-if value="{{ turn.hasRelated }}" hint-placeholder-val="{{ false }}">
+                    <div style="margin-top:14px;">
+                      <p style="font-size:10px; font-family:ui-monospace,monospace; letter-spacing:0.1em; color:#5E6A8C; margin:0 0 8px;">أسئلة ذات صلة</p>
+                      <div style="display:flex; flex-direction:column; gap:5px;">
+                        <sc-for list="{{ turn.related }}" as="rel" hint-placeholder-count="2">
+                          <button type="button" onClick="{{ rel.send }}" class="rel" style="display:flex; align-items:center; gap:9px; width:100%; text-align:start; font-family:inherit; font-size:13px; color:#C7D2F0; background:transparent; border:0; padding:6px 0; cursor:pointer; flex-direction:row-reverse; justify-content:flex-end;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34E0D0" stroke-width="2" style="flex-shrink:0;"><path d="M12 5v14M5 12h14"></path></svg>{{ rel.label }}</button>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </main>
+
+  <!-- COMPOSER -->
+  <footer style="position:relative; z-index:3; flex-shrink:0; padding:14px 22px 20px; border-top:1px solid rgba(159,184,255,0.10); background:rgba(8,13,28,0.6); backdrop-filter:blur(14px);">
+    <div style="max-width:720px; margin:0 auto;">
+      <div style="display:flex; align-items:center; gap:9px; padding:9px 9px 9px 14px; border-radius:16px; background:rgba(148,172,255,0.06); border:1px solid rgba(159,184,255,0.16);">
+        <button type="button" onClick="{{ attachCv }}" aria-label="إرفاق السيرة الذاتية" style="width:38px; height:38px; border-radius:11px; border:1px solid rgba(159,184,255,0.14); background:rgba(159,184,255,0.05); color:#93A0C4; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"></path></svg></button>
+        <input ref="{{ askRef }}" type="text" value="{{ inputText }}" onInput="{{ onInput }}" onKeyDown="{{ onKey }}" dir="auto" placeholder="اكتب لريكو… مثال: ابحث عن وظيفة مدير سلامة في دبي" style="flex:1; min-width:0; background:transparent; border:0; outline:0; color:#EAF0FF; font-size:15.5px; font-family:inherit;">
+        <button type="button" onClick="{{ doSend }}" aria-label="إرسال" class="send" style="width:42px; height:42px; border-radius:12px; border:0; cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:{{ sendInk }}; background:{{ sendBg }}; box-shadow:{{ sendShadow }};"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg></button>
+      </div>
+      <sc-if value="{{ hasStaged }}" hint-placeholder-val="{{ false }}">
+        <div class="rn-msg" style="margin-top:9px; display:inline-flex; align-items:center; gap:9px; padding:7px 11px; border-radius:10px; background:rgba(148,172,255,0.06); border:1px solid rgba(52,224,208,0.3);">
+          <span style="width:22px; height:22px; border-radius:6px; background:rgba(52,224,208,0.12); color:#7CEFE4; display:flex; align-items:center; justify-content:center; font-size:8px; font-family:ui-monospace,monospace; font-weight:600;">PDF</span>
+          <span dir="ltr" style="font-size:12.5px; color:#C7D2F0;">{{ stagedName }} <span style="color:#5E6A8C;">· demo</span></span>
+          <button type="button" onClick="{{ removeStaged }}" aria-label="إزالة" style="width:20px; height:20px; border-radius:6px; border:0; background:transparent; color:#5E6A8C; cursor:pointer;">✕</button>
+        </div>
+      </sc-if>
+      <p style="text-align:center; font-size:11px; color:#5E6A8C; margin:11px 0 0; font-family:ui-monospace,monospace;">بيانات تجريبية · ريكو لا يتقدّم بأي طلب دون موافقتك</p>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:900,&quot;height&quot;:760}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.askRef = React.createRef();
+    this.threadRef = React.createRef();
+    this.state = { inputText: "", staged: null, turns: [] };
+    this._timers = [];
+    this._seq = 0;
+    this.FLOWS = this._flows();
+  }
+  componentWillUnmount() { this._clear(); if (this._raf) cancelAnimationFrame(this._raf); }
+  _clear() { this._timers.forEach(clearTimeout); this._timers = []; }
+  _after(ms, fn) { const id = setTimeout(fn, ms); this._timers.push(id); return id; }
+  _scroll() { requestAnimationFrame(() => { const el = this.threadRef.current; if (el) el.scrollTop = el.scrollHeight; }); }
+
+  onInput(e) { this.setState({ inputText: e.target.value }); }
+  onKey(e) { if (e.key === "Enter") { e.preventDefault(); this.doSend(); } }
+  attachCv() { this.setState({ staged: { name: "Sample_CV_2026.pdf" } }); }
+  removeStaged() { this.setState({ staged: null }); }
+
+  doSend() {
+    const txt = this.state.inputText.trim();
+    if (!txt && !this.state.staged) return;
+    if (this.state.staged && !txt) return this._run("cv", "أرفقت سيرتي الذاتية — اقرأها وأخبرني أين أقف.");
+    this._run("typed", txt);
+  }
+  runSuggestion(id, label) { this._run(id, label); }
+
+  _updateTurn(id, patch) {
+    this.setState((s) => ({ turns: s.turns.map((t) => (t.id === id ? Object.assign({}, t, patch) : t)) }));
+  }
+
+  _run(flowId, queryText) {
+    this._clear();
+    if (this._raf) cancelAnimationFrame(this._raf);
+    const flow = this.FLOWS[flowId] || this.FLOWS.typed;
+    const rtl = /[\u0600-\u06FF]/.test(queryText);
+    const id = ++this._seq;
+    const turn = { id: id, query: queryText, rtl: rtl, working: true, done: false,
+      steps: [], sources: [], sourceLine: "", answer: "", tagKind: null, payload: null, fitShown: 0, note: null, related: [] };
+    this.setState((s) => ({ turns: s.turns.concat([turn]), inputText: "", staged: null }));
+    this._scroll();
+
+    const steps = flow.steps;
+    const runStep = (i) => {
+      if (i >= steps.length) {
+        const done = steps.map((s) => ({ label: s.label, detail: s.detail || "", state: "done" }));
+        this._updateTurn(id, { steps: done, working: false, done: true });
+        this._after(260, () => this._reveal(id, flow));
+        return;
+      }
+      const built = steps.slice(0, i).map((s) => ({ label: s.label, detail: s.detail || "", state: "done" }))
+        .concat([{ label: steps[i].label, detail: steps[i].detail || "", state: "active" }]);
+      this._updateTurn(id, { steps: built });
+      this._scroll();
+      this._after(steps[i].dur || 850, () => runStep(i + 1));
+    };
+    this._after(360, () => runStep(0));
+  }
+
+  _reveal(id, flow) {
+    if (flow.sources) this._updateTurn(id, { sources: flow.sources, sourceLine: flow.sourceLine || "" });
+    this._after(240, () => {
+      this._updateTurn(id, { answer: flow.answer, tagKind: flow.tag || null, payload: flow.payload || null, related: flow.related || [] });
+      this._scroll();
+      if (flow.payload && flow.payload.type === "job") this._animateFit(id, flow.payload.fit);
+    });
+  }
+
+  _animateFit(id, target) {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { this._updateTurn(id, { fitShown: target }); return; }
+    const t0 = performance.now();
+    const step = (now) => {
+      const p = Math.min(1, (now - t0) / 950);
+      this._updateTurn(id, { fitShown: Math.round(target * (1 - Math.pow(1 - p, 3))) });
+      if (p < 1) this._raf = requestAnimationFrame(step);
+    };
+    this._raf = requestAnimationFrame(step);
+  }
+
+  _jobAction(id, kind) {
+    let note;
+    if (kind === "apply") note = { ok: true, text: "✓  (تجريبي) يفتح صفحة صاحب العمل الموثوقة في تبويب جديد — أنت من يتقدّم، وريكو لا يفعل أبدًا." };
+    else if (kind === "save") note = { ok: true, text: "✓  (تجريبي) حُفظت في قائمتك. في النسخة الحقيقية يؤكّد ريكو فقط بعد نجاح الحفظ فعليًا." };
+    else note = { ok: false, text: "تمام — سأعرض عليك أقل من هذا النوع. ملاحظتك تضبط البحث القادم. (تجريبي)" };
+    this._updateTurn(id, { note: note });
+    this._scroll();
+  }
+
+  _flows() {
+    const jobPayload = { type: "job", role: "HSE Manager", meta: "Confidential employer · Dubai · Full-time · 2d ago", verified: "Verified source", fit: 88,
+      reasons: [ { label: "عمق الامتثال للسلامة في الإمارات", pct: 94 }, { label: "التفتيش وإعداد التقارير", pct: 88 }, { label: "قيادة الفريق", pct: 76 } ],
+      actions: [ { label: "افتح رابط التقديم — أنت من يتقدّم", kind: "apply" }, { label: "احفظ في القائمة", kind: "save" }, { label: "غير مناسب", kind: "skip" } ] };
+    return {
+      hse: {
+        steps: [ { label: "أفهم طلبك", detail: "HSE · Dubai · full-time", dur: 750 }, { label: "أفحص مصادر إماراتية موثوقة", detail: "247 sample listings", dur: 1050 }, { label: "أطابق مع ملفك", detail: "8 yrs UAE compliance", dur: 900 }, { label: "أرتّب حسب الملاءمة الحقيقية", detail: "ranking 12 candidates", dur: 950 }, { label: "أتحقّق من رابط التقديم", detail: "1 verified source", dur: 800 } ],
+        sources: ["Bayt", "GulfTalent", "LinkedIn UAE", "Naukrigulf", "Company careers", "Dubai Careers"],
+        sourceLine: "فُحص 247 إعلانًا تجريبيًا عبر 6 مصادر (تجريبي)",
+        tag: "suggested",
+        answer: "أفضّل أن أحضر لك وظيفة واحدة تقبلها فعلًا على عشرٍ تتخطّاها. سوق السلامة في دبي يكافئ عمق التفتيش أكثر من المسمّى الوظيفي حاليًا، وهكذا رجّحت الاختيار. واحدة تتميّز عن البقية:",
+        payload: jobPayload,
+        related: [ { id: "salary", label: "كم الراتب المعتاد لهذه الوظيفة؟" }, { id: "fit", label: "ما الوظائف التي تناسب خلفيتي فعلًا؟" }, { id: "cv", label: "اقرأ سيرتي وتأكّد أنني جاهز للتقديم" } ],
+      },
+      fit: {
+        steps: [ { label: "أراجع مسارك المهني", detail: "last 3 roles", dur: 850 }, { label: "أقارن مع الطلب في الإمارات", detail: "compliance + ops", dur: 950 }, { label: "أصيغ خيارات صادقة", detail: "no fluff", dur: 800 } ],
+        tag: "honest",
+        answer: "قراءة صادقة، لا خطاب مبيعات: خلفيتك تميل للسلامة والامتثال، لكن تحرّكاتك الأخيرة اتجهت نحو العمليات. معظم الأدوات تعتبر هذا ملفًا غير واضح. أنا أقرأه عكس ذلك — في الإمارات، عمق الامتثال مع خبرة عمليات حقيقية أمرٌ نادر ومدفوع جيدًا. أمامك اتجاهان الآن:",
+        payload: { type: "roles", roles: [ { role: "مدير سلامة / امتثال", meta: "جهات منظّمة · دبي وأبوظبي", fit: "88%" }, { role: "قائد عمليات وجودة وسلامة", meta: "صناعي ولوجستي · أبوظبي", fit: "81%" } ] },
+        related: [ { id: "hse", label: "ابحث عن وظائف مدير سلامة في دبي" }, { id: "salary", label: "الراتب المعتاد لوظائف الامتثال؟" } ],
+      },
+      salary: {
+        steps: [ { label: "أفهم طلبك", detail: "salary · compliance · UAE", dur: 750 }, { label: "أجمع نطاقات موثوقة", detail: "182 data points", dur: 1000 }, { label: "أعدّل حسب أقدميتك", detail: "8 yrs · manager", dur: 850 } ],
+        sources: ["GulfTalent salary data", "Bayt insights", "Michael Page UAE", "Cooper Fitch"],
+        sourceLine: "جُمعت 182 نقطة بيانات تجريبية (تجريبي)",
+        tag: "insight",
+        answer: "هذا هو النطاق التجريبي لمدير امتثال / سلامة بأقدميتك في الإمارات — شهريًا وشاملًا. يرتفع في القطاعات المنظّمة والصناعية، وأبوظبي غالبًا تتفوّق على دبي في هذه الأدوار.",
+        payload: { type: "insight", title: "Compliance / HSE Manager · monthly, AED", band: "28k – 42k", unit: "شامل البدلات", rows: [ { label: "الصناعة والطاقة", value: "34–42k", pct: 100 }, { label: "الإنشاءات والعقار", value: "28–36k", pct: 80 }, { label: "الشركات العامة", value: "24–30k", pct: 62 } ] },
+        related: [ { id: "hse", label: "ابحث عن وظائف مدير سلامة في دبي" }, { id: "fit", label: "ما الوظائف التي تناسب خلفيتي فعلًا؟" } ],
+      },
+      cv: {
+        steps: [ { label: "أقرأ سيرتك الذاتية", detail: "privately, on your side", dur: 1050 }, { label: "أستخرج الخبرات", detail: "roles · dates · skills", dur: 950 }, { label: "أبني ملفك", detail: "2 gaps found", dur: 850 } ],
+        tag: "done",
+        answer: "قرأت سيرتك التجريبية — بخصوصية. هذا ما لديّ: مدير سلامة / امتثال، 8 سنوات في الإمارات، قوي في التدقيق والعمليات البيئية وتقارير التفتيش. تنقصني حقيقتان قبل أن أشغّل بحثًا يستحق وقتك: فترة الإشعار، والحد الأدنى للراتب. أعطني إياهما وأوجّه الصيد بدقة.",
+        payload: null,
+        related: [ { id: "hse", label: "ابحث عن وظائف مدير سلامة في دبي" }, { id: "salary", label: "كم يجب أن أتوقّع أن أكسب؟" } ],
+      },
+      typed: {
+        steps: [ { label: "أفهم طلبك", detail: "parsing intent", dur: 800 }, { label: "أتحقّق ممّا يمكنني تأكيده", detail: "profile + sources", dur: 900 } ],
+        tag: "needsok",
+        answer: "سمعتك. الملاءمة أهم من الكمّ، فدعني أوجّه هذا بدقة بدل أن أغرقك بقائمة. أي مدينة إماراتية تستهدف، وما الحد الأدنى لراتبك؟ هاتان الإجابتان تغيّران كل ما أحضره لك — أو أرفق سيرتك وسأقرأ مسارك أولًا.",
+        payload: null,
+        related: [ { id: "hse", label: "ابحث عن وظائف مدير سلامة في دبي" }, { id: "fit", label: "ما الوظائف التي تناسب خلفيتي فعلًا؟" }, { id: "salary", label: "الراتب المعتاد لوظائف الامتثال؟" } ],
+      },
+    };
+  }
+
+  _tag(kind) {
+    const map = {
+      suggested: { glyph: "→", label: "ترشيح مطابق", c: "#7CEFE4", bg: "rgba(52,224,208,0.12)", bd: "rgba(52,224,208,0.30)" },
+      honest: { glyph: "◉", label: "قراءة صادقة", c: "#F6C560", bg: "rgba(245,166,35,0.14)", bd: "rgba(245,166,35,0.36)" },
+      insight: { glyph: "◐", label: "رؤية سوقية", c: "#7CEFE4", bg: "rgba(52,224,208,0.12)", bd: "rgba(52,224,208,0.30)" },
+      done: { glyph: "✓", label: "قُرئت السيرة", c: "#7CEFE4", bg: "rgba(52,224,208,0.12)", bd: "rgba(52,224,208,0.30)" },
+      needsok: { glyph: "?", label: "بانتظار موافقتك", c: "#F6C560", bg: "rgba(245,166,35,0.14)", bd: "rgba(245,166,35,0.36)" },
+    };
+    const d = map[kind]; if (!d) return null;
+    return { glyph: d.glyph, label: d.label, style: "color:" + d.c + "; background:" + d.bg + "; border:1px solid " + d.bd + ";" };
+  }
+
+  _actionStyle(kind) {
+    if (kind === "apply") return "color:#1A1204; background:linear-gradient(90deg,#F5A623,#F6C560);";
+    if (kind === "save") return "color:#7CEFE4; background:rgba(52,224,208,0.12); border:1px solid rgba(52,224,208,0.3);";
+    return "color:#93A0C4; background:transparent; border:1px solid rgba(159,184,255,0.14);";
+  }
+
+  renderVals() {
+    const st = this.state;
+    const turns = st.turns.map((t) => {
+      const steps = t.steps.map((s, i) => {
+        const active = s.state === "active";
+        return { label: s.label, detail: s.detail, hasDetail: !!s.detail, isActive: active, isDone: !active,
+          hasLine: i < t.steps.length - 1, color: active ? "#EAF0FF" : "#C7D2F0" };
+      });
+      const tag = t.tagKind ? this._tag(t.tagKind) : null;
+      const pl = t.payload || {};
+      const isJob = pl.type === "job", isInsight = pl.type === "insight", isRoles = pl.type === "roles";
+      const job = isJob ? { role: pl.role, meta: pl.meta, verified: pl.verified, fit: t.fitShown, ring: t.fitShown + "%",
+        reasons: (pl.reasons || []).map((r) => ({ label: r.label, pctLabel: r.pct + "%", width: r.pct + "%" })),
+        actions: (pl.actions || []).map((a) => ({ label: a.label, style: this._actionStyle(a.kind), click: () => this._jobAction(t.id, a.kind) })) } : { reasons: [], actions: [] };
+      const insight = isInsight ? { title: pl.title, band: pl.band, unit: pl.unit, rows: (pl.rows || []).map((r) => ({ label: r.label, value: r.value, width: r.pct + "%" })) } : { rows: [] };
+      const roles = isRoles ? (pl.roles || []) : [];
+      return {
+        id: t.id, query: t.query, dir: t.rtl ? "rtl" : "ltr",
+        working: t.working, done: t.done, hasSteps: t.steps.length > 0, steps: steps,
+        hasSources: t.sources.length > 0, sources: t.sources, sourceLine: t.sourceLine,
+        hasAnswer: !!t.answer, answer: t.answer,
+        hasTag: !!tag, tagGlyph: tag ? tag.glyph : "", tagLabel: tag ? tag.label : "", tagStyle: tag ? tag.style : "",
+        hasJob: isJob, job: job, hasInsight: isInsight, insight: insight, hasRoles: isRoles, roles: roles,
+        hasNote: !!t.note, noteText: t.note ? t.note.text : "",
+        noteStyle: t.note && t.note.ok ? "color:#7CEFE4; background:rgba(52,224,208,0.12); border:1px solid rgba(52,224,208,0.3);" : "color:#F6C560; background:rgba(245,166,35,0.14); border:1px solid rgba(245,166,35,0.36);",
+        hasRelated: t.related.length > 0,
+        related: t.related.map((r) => ({ label: r.label, send: () => this.runSuggestion(r.id, r.label) })),
+      };
+    });
+
+    const suggestions = [
+      { id: "hse", label: "ابحث عن وظائف مدير سلامة في دبي" },
+      { id: "fit", label: "ما الوظائف التي تناسبني فعلًا؟" },
+      { id: "salary", label: "الراتب المعتاد لوظائف الامتثال؟" },
+    ];
+    const anyWorking = st.turns.some((t) => t.working);
+    const canSend = !!(st.inputText.trim() || st.staged);
+
+    return {
+      inputText: st.inputText,
+      onInput: (e) => this.onInput(e), onKey: (e) => this.onKey(e), doSend: () => this.doSend(),
+      attachCv: () => this.attachCv(), removeStaged: () => this.removeStaged(),
+      askRef: this.askRef, threadRef: this.threadRef,
+      isEmpty: st.turns.length === 0, turns: turns,
+      hasStaged: !!st.staged, stagedName: st.staged ? st.staged.name : "",
+      statusText: anyWorking ? "يعمل الآن…" : "متصل · مصادر موثوقة",
+      sendBg: canSend ? "linear-gradient(90deg,#F5A623,#F6C560)" : "rgba(159,184,255,0.08)",
+      sendInk: canSend ? "#1A1204" : "#5E6A8C",
+      sendShadow: canSend ? "0 10px 24px -10px #F5A623" : "none",
+      suggestions: suggestions.map((s) => ({ label: s.label, send: () => this.runSuggestion(s.id, s.label) })),
+    };
+  }
+}
+</script>
+</body>
+</html>

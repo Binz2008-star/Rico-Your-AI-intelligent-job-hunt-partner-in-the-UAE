@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.1.14/dist/lenis.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{background:#08080B;}
+  body{cursor:auto;}
+  .ml-root{font-family:'Space Grotesk',sans-serif;color:#F2F1EC;background:#08080B;}
+  ::selection{background:#E8FF59;color:#08080B;}
+  .ml-swiper .swiper-slide{width:340px;height:460px;border-radius:4px;overflow:hidden;}
+  .ml-swiper .swiper-slide img{width:100%;height:100%;object-fit:cover;display:block;}
+  .ml-char,.ml-word{display:inline-block;will-change:transform,opacity;}
+  .ml-magnet{will-change:transform;}
+  .ml-tile{will-change:transform,opacity;}
+  @keyframes ml-preout{0%{clip-path:inset(0 0 0 0);}100%{clip-path:inset(0 0 100% 0);}}
+  @keyframes ml-spin3d{from{transform:rotateX(-18deg) rotateY(0deg);}to{transform:rotateX(-18deg) rotateY(360deg);}}
+  @keyframes ml-count{0%{opacity:0;}10%,90%{opacity:1;}100%{opacity:0;}}
+  .ml-cube{animation:ml-spin3d 16s linear infinite;}
+  @media (prefers-reduced-motion: reduce){
+    .ml-cube{animation:none;}
+    .ml-char,.ml-word,.ml-tile{opacity:1 !important;transform:none !important;}
+  }
+</style>
+</helmet>
+<div class="ml-root" style="position:relative;overflow-x:hidden;">
+
+  <!-- custom cursor -->
+  <div class="ml-cursor-ring" aria-hidden="true" style="position:fixed;top:0;left:0;width:38px;height:38px;border:1px solid rgba(232,255,89,0.9);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:9999;mix-blend-mode:difference;transition:width .25s cubic-bezier(.16,1,.3,1),height .25s cubic-bezier(.16,1,.3,1);"></div>
+  <div class="ml-cursor-dot" aria-hidden="true" style="position:fixed;top:0;left:0;width:5px;height:5px;background:#E8FF59;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:9999;"></div>
+
+  <!-- preloader / page transition -->
+  <div class="ml-pre" style="position:fixed;inset:0;z-index:9000;background:#E8FF59;display:flex;align-items:flex-end;justify-content:space-between;padding:48px clamp(24px,5vw,72px);animation:ml-preout 1s cubic-bezier(.76,0,.24,1) 1.5s forwards;pointer-events:none;">
+    <span style="font-family:'Anton',sans-serif;font-size:clamp(48px,12vw,140px);line-height:.82;color:#08080B;letter-spacing:-.02em;">MOTION</span>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#08080B;letter-spacing:.2em;">LOADING°</span>
+  </div>
+
+  <!-- nav -->
+  <nav style="position:fixed;top:0;left:0;right:0;z-index:400;display:flex;align-items:center;justify-content:space-between;padding:22px clamp(24px,5vw,72px);mix-blend-mode:difference;">
+    <span style="font-family:'Anton',sans-serif;font-size:20px;letter-spacing:.02em;color:#fff;">MOTION/LAB</span>
+    <button class="ml-menu-open ml-magnet" style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#fff;background:transparent;border:1px solid rgba(255,255,255,.4);padding:10px 18px;border-radius:2px;cursor:pointer;">Index +</button>
+  </nav>
+
+  <!-- fullscreen menu overlay -->
+  <div class="ml-menu" style="position:fixed;inset:0;z-index:800;background:#0C0C10;display:flex;flex-direction:column;justify-content:center;padding:0 clamp(24px,7vw,120px);clip-path:inset(0 0 100% 0);pointer-events:none;">
+    <button class="ml-menu-close" style="position:absolute;top:22px;right:clamp(24px,5vw,72px);font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.18em;color:#F2F1EC;background:transparent;border:1px solid rgba(255,255,255,.3);padding:10px 18px;border-radius:2px;cursor:pointer;">Close ×</button>
+    <a class="ml-menu-link" href="#hero" style="font-family:'Anton',sans-serif;font-size:clamp(38px,7vw,92px);color:#F2F1EC;text-decoration:none;line-height:1.02;letter-spacing:-.01em;opacity:0;transform:translateY(30px);">Hero & Shaders</a>
+    <a class="ml-menu-link" href="#scroll" style="font-family:'Anton',sans-serif;font-size:clamp(38px,7vw,92px);color:#F2F1EC;text-decoration:none;line-height:1.02;letter-spacing:-.01em;opacity:0;transform:translateY(30px);">Scroll & Type</a>
+    <a class="ml-menu-link" href="#grid" style="font-family:'Anton',sans-serif;font-size:clamp(38px,7vw,92px);color:#F2F1EC;text-decoration:none;line-height:1.02;letter-spacing:-.01em;opacity:0;transform:translateY(30px);">Grid & Slider</a>
+    <a class="ml-menu-link" href="#play" style="font-family:'Anton',sans-serif;font-size:clamp(38px,7vw,92px);color:#F2F1EC;text-decoration:none;line-height:1.02;letter-spacing:-.01em;opacity:0;transform:translateY(30px);">3D & Physics</a>
+  </div>
+
+  <!-- ============ HERO : WebGL shader bg + split text ============ -->
+  <section id="hero" data-screen-label="Hero" style="position:relative;min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:0 clamp(24px,5vw,72px);overflow:hidden;">
+    <canvas class="ml-shader" aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;z-index:0;"></canvas>
+    <div aria-hidden="true" style="position:absolute;inset:0;z-index:1;background:radial-gradient(120% 90% at 50% 60%,transparent 30%,rgba(8,8,11,.55) 75%,#08080B 100%);pointer-events:none;"></div>
+    <div style="position:relative;z-index:2;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.3em;text-transform:uppercase;color:#E8FF59;margin-bottom:26px;">WebGL · GSAP · Lenis · three.js · Matter · Swiper</div>
+      <h1 class="ml-hero-title" style="font-family:'Anton',sans-serif;font-size:clamp(64px,15vw,220px);line-height:.86;letter-spacing:-.03em;color:#F2F1EC;text-transform:uppercase;">Make it<br>move.</h1>
+      <p style="max-width:46ch;margin-top:30px;font-size:clamp(15px,1.5vw,19px);line-height:1.6;color:#A7A7B0;">A working toolkit of the animation techniques that separate a template from a piece of craft. Every section below is live — scroll, drag, click, throw.</p>
+      <div style="margin-top:40px;display:flex;gap:14px;flex-wrap:wrap;">
+        <a href="#scroll" class="ml-magnet" style="display:inline-block;font-weight:700;font-size:15px;color:#08080B;background:#E8FF59;padding:16px 30px;border-radius:2px;text-decoration:none;">Begin the descent ↓</a>
+      </div>
+    </div>
+    <div style="position:absolute;bottom:26px;left:clamp(24px,5vw,72px);z-index:2;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;color:#6E6E78;">FRAGMENT SHADER · 60FPS</div>
+  </section>
+
+  <!-- ============ SCROLL + TEXT ============ -->
+  <section id="scroll" data-screen-label="Scroll" style="position:relative;padding:clamp(120px,20vh,240px) clamp(24px,5vw,72px);">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.24em;color:#E8FF59;margin-bottom:40px;">01 — SCROLL-TRIGGERED TYPE</div>
+    <h2 class="ml-reveal" style="font-family:'Anton',sans-serif;font-size:clamp(40px,6.5vw,104px);line-height:1.0;letter-spacing:-.02em;max-width:16ch;text-transform:uppercase;">Type that assembles itself as the page moves beneath it.</h2>
+    <div style="margin-top:80px;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:2px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.08);">
+      <div class="ml-stat" style="background:#08080B;padding:34px;"><div style="font-family:'Anton',sans-serif;font-size:clamp(40px,5vw,68px);color:#E8FF59;">14</div><div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#8A8A94;margin-top:8px;letter-spacing:.1em;">TECHNIQUES</div></div>
+      <div class="ml-stat" style="background:#08080B;padding:34px;"><div style="font-family:'Anton',sans-serif;font-size:clamp(40px,5vw,68px);color:#E8FF59;">6</div><div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#8A8A94;margin-top:8px;letter-spacing:.1em;">LIBRARIES</div></div>
+      <div class="ml-stat" style="background:#08080B;padding:34px;"><div style="font-family:'Anton',sans-serif;font-size:clamp(40px,5vw,68px);color:#E8FF59;">0</div><div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#8A8A94;margin-top:8px;letter-spacing:.1em;">BUILD STEP</div></div>
+      <div class="ml-stat" style="background:#08080B;padding:34px;"><div style="font-family:'Anton',sans-serif;font-size:clamp(40px,5vw,68px);color:#E8FF59;">∞</div><div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#8A8A94;margin-top:8px;letter-spacing:.1em;">REUSE</div></div>
+    </div>
+  </section>
+
+  <!-- ============ GRID + SLIDER ============ -->
+  <section id="grid" data-screen-label="Grid" style="position:relative;padding:clamp(60px,10vh,120px) clamp(24px,5vw,72px);">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.24em;color:#E8FF59;margin-bottom:40px;">02 — STAGGERED GRID + HOVER</div>
+    <div class="ml-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;">
+    </div>
+
+    <div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.24em;color:#E8FF59;margin:110px 0 34px;">03 — COVERFLOW SLIDER (SWIPER)</div>
+    <div class="swiper ml-swiper" style="width:100%;padding:20px 0 40px;">
+      <div class="swiper-wrapper">
+        <div class="swiper-slide"><img src="https://picsum.photos/seed/mla/680/920" alt="" loading="lazy"></div>
+        <div class="swiper-slide"><img src="https://picsum.photos/seed/mlb/680/920" alt="" loading="lazy"></div>
+        <div class="swiper-slide"><img src="https://picsum.photos/seed/mlc/680/920" alt="" loading="lazy"></div>
+        <div class="swiper-slide"><img src="https://picsum.photos/seed/mld/680/920" alt="" loading="lazy"></div>
+        <div class="swiper-slide"><img src="https://picsum.photos/seed/mle/680/920" alt="" loading="lazy"></div>
+        <div class="swiper-slide"><img src="https://picsum.photos/seed/mlf/680/920" alt="" loading="lazy"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3D + PHYSICS ============ -->
+  <section id="play" data-screen-label="Play" style="position:relative;padding:clamp(80px,14vh,160px) clamp(24px,5vw,72px);display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:60px;align-items:center;">
+    <div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.24em;color:#E8FF59;margin-bottom:40px;">04 — CSS 3D + SVG DRAW</div>
+      <div style="perspective:900px;height:300px;display:flex;align-items:center;justify-content:center;margin-bottom:50px;">
+        <div class="ml-cube" style="position:relative;width:150px;height:150px;transform-style:preserve-3d;">
+          <div style="position:absolute;inset:0;background:rgba(232,255,89,.08);border:1px solid #E8FF59;transform:translateZ(75px);"></div>
+          <div style="position:absolute;inset:0;background:rgba(232,255,89,.08);border:1px solid #E8FF59;transform:rotateY(180deg) translateZ(75px);"></div>
+          <div style="position:absolute;inset:0;background:rgba(232,255,89,.05);border:1px solid rgba(232,255,89,.6);transform:rotateY(90deg) translateZ(75px);"></div>
+          <div style="position:absolute;inset:0;background:rgba(232,255,89,.05);border:1px solid rgba(232,255,89,.6);transform:rotateY(-90deg) translateZ(75px);"></div>
+          <div style="position:absolute;inset:0;background:rgba(232,255,89,.03);border:1px solid rgba(232,255,89,.4);transform:rotateX(90deg) translateZ(75px);"></div>
+          <div style="position:absolute;inset:0;background:rgba(232,255,89,.03);border:1px solid rgba(232,255,89,.4);transform:rotateX(-90deg) translateZ(75px);"></div>
+        </div>
+      </div>
+      <svg class="ml-svg" viewBox="0 0 400 80" style="width:100%;max-width:420px;overflow:visible;">
+        <path class="ml-draw" d="M4 60 C 60 4, 90 4, 130 40 S 200 76, 240 40 S 320 4, 396 44" fill="none" stroke="#E8FF59" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+      <p style="margin-top:24px;max-width:40ch;color:#8A8A94;font-size:14px;line-height:1.6;">Rotating cube on CSS 3D transforms; the line draws itself on scroll via stroke-dashoffset.</p>
+    </div>
+
+    <div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.24em;color:#E8FF59;margin-bottom:40px;">05 — PHYSICS SANDBOX (MATTER.JS)</div>
+      <div class="ml-phys-wrap" style="position:relative;width:100%;height:420px;border:1px solid rgba(255,255,255,.12);border-radius:4px;overflow:hidden;background:#0C0C10;">
+        <canvas class="ml-phys" style="display:block;width:100%;height:100%;"></canvas>
+        <div style="position:absolute;bottom:14px;left:14px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.14em;color:#6E6E78;pointer-events:none;">CLICK TO DROP BODIES →</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- footer -->
+  <footer style="padding:clamp(80px,16vh,180px) clamp(24px,5vw,72px) 60px;border-top:1px solid rgba(255,255,255,.08);">
+    <h2 style="font-family:'Anton',sans-serif;font-size:clamp(48px,12vw,180px);line-height:.86;letter-spacing:-.03em;text-transform:uppercase;color:#F2F1EC;">Now go<br>build.</h2>
+    <div style="margin-top:40px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:20px;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.14em;color:#6E6E78;">
+      <span>MOTION/LAB — INTEGRATED TOOLKIT</span>
+      <a href="#hero" class="ml-magnet" style="color:#E8FF59;text-decoration:none;">BACK TO TOP ↑</a>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  componentDidMount() {
+    this.reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this._cleanups = [];
+    this.root = this.container || document;
+    this._buildGrid();
+    this._cursor();
+    this._magnetic();
+    this._menu();
+    // libs may still be loading — poll for each, init independently so one failure never blocks another
+    this._when(() => window.gsap, () => this._scroll());
+    this._when(() => window.THREE, () => this._shader());
+    this._when(() => window.Matter, () => this._physics());
+    this._when(() => window.Swiper, () => this._slider());
+    this._when(() => window.Lenis, () => this._lenis());
+  }
+  componentWillUnmount() { (this._cleanups || []).forEach(fn => { try { fn(); } catch (e) {} }); }
+
+  _when(cond, cb, tries = 100) {
+    if (cond()) { try { cb(); } catch (e) { console.warn('Motion Lab init skipped:', e); } return; }
+    if (tries <= 0) return;
+    const id = setTimeout(() => this._when(cond, cb, tries - 1), 70);
+    this._cleanups.push(() => clearTimeout(id));
+  }
+  $(s) { return this.root.querySelector(s); }
+  $$(s) { return Array.from(this.root.querySelectorAll(s)); }
+
+  // ---- staggered image grid ----
+  _buildGrid() {
+    const g = this.$('.ml-grid'); if (!g) return;
+    const seeds = ['g1','g2','g3','g4','g5','g6','g7','g8'];
+    seeds.forEach((s, i) => {
+      const a = document.createElement('div');
+      a.className = 'ml-tile';
+      const tall = (i % 3 === 0);
+      a.style.cssText = 'position:relative;overflow:hidden;border-radius:4px;opacity:0;transform:translateY(40px);grid-row:span ' + (tall ? 2 : 1) + ';aspect-ratio:' + (tall ? '3/4' : '4/3') + ';';
+      const img = document.createElement('img');
+      img.src = 'https://picsum.photos/seed/' + s + '/600/700';
+      img.loading = 'lazy';
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;transition:transform .6s cubic-bezier(.16,1,.3,1),filter .6s;filter:grayscale(1) brightness(.8);';
+      const tag = document.createElement('div');
+      tag.textContent = String(i + 1).padStart(2, '0');
+      tag.style.cssText = "position:absolute;top:12px;left:12px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#fff;mix-blend-mode:difference;";
+      a.appendChild(img); a.appendChild(tag);
+      a.addEventListener('mouseenter', () => { img.style.transform = 'scale(1.08)'; img.style.filter = 'grayscale(0) brightness(1)'; });
+      a.addEventListener('mouseleave', () => { img.style.transform = 'scale(1)'; img.style.filter = 'grayscale(1) brightness(.8)'; });
+      g.appendChild(a);
+    });
+  }
+
+  // ---- custom cursor ----
+  _cursor() {
+    if (this.reduce || matchMedia('(hover:none)').matches) return;
+    const ring = this.$('.ml-cursor-ring'), dot = this.$('.ml-cursor-dot');
+    if (!ring || !dot) return;
+    let mx = innerWidth / 2, my = innerHeight / 2, rx = mx, ry = my, raf;
+    const move = e => { mx = e.clientX; my = e.clientY; dot.style.transform = 'translate(' + mx + 'px,' + my + 'px) translate(-50%,-50%)'; };
+    const loop = () => { rx += (mx - rx) * 0.16; ry += (my - ry) * 0.16; ring.style.transform = 'translate(' + rx + 'px,' + ry + 'px) translate(-50%,-50%)'; raf = requestAnimationFrame(loop); };
+    window.addEventListener('mousemove', move); loop();
+    const grow = () => { ring.style.width = '64px'; ring.style.height = '64px'; };
+    const shrink = () => { ring.style.width = '38px'; ring.style.height = '38px'; };
+    this.$$('a,button,.ml-magnet,.ml-tile').forEach(el => { el.addEventListener('mouseenter', grow); el.addEventListener('mouseleave', shrink); });
+    this._cleanups.push(() => { window.removeEventListener('mousemove', move); cancelAnimationFrame(raf); });
+  }
+
+  // ---- magnetic buttons ----
+  _magnetic() {
+    if (this.reduce || matchMedia('(hover:none)').matches) return;
+    this.$$('.ml-magnet').forEach(el => {
+      const mv = e => { const r = el.getBoundingClientRect(); const x = e.clientX - r.left - r.width / 2, y = e.clientY - r.top - r.height / 2; el.style.transform = 'translate(' + x * 0.3 + 'px,' + y * 0.4 + 'px)'; };
+      const lv = () => { el.style.transform = 'translate(0,0)'; el.style.transition = 'transform .4s cubic-bezier(.16,1,.3,1)'; };
+      const en = () => { el.style.transition = 'transform .1s linear'; };
+      el.addEventListener('mouseenter', en); el.addEventListener('mousemove', mv); el.addEventListener('mouseleave', lv);
+    });
+  }
+
+  // ---- fullscreen menu (page-transition clip reveal) ----
+  _menu() {
+    const menu = this.$('.ml-menu'), open = this.$('.ml-menu-open'), close = this.$('.ml-menu-close');
+    const links = this.$$('.ml-menu-link');
+    if (!menu) return;
+    const g = window.gsap;
+    const show = () => {
+      menu.style.pointerEvents = 'auto';
+      if (g) { g.to(menu, { clipPath: 'inset(0 0 0% 0)', duration: .7, ease: 'power4.inOut' }); g.to(links, { opacity: 1, y: 0, duration: .6, stagger: .07, delay: .25, ease: 'power3.out' }); }
+      else { menu.style.clipPath = 'inset(0 0 0% 0)'; links.forEach(l => { l.style.opacity = 1; l.style.transform = 'none'; }); }
+    };
+    const hide = () => {
+      if (g) { g.to(links, { opacity: 0, y: 20, duration: .3 }); g.to(menu, { clipPath: 'inset(0 0 100% 0)', duration: .6, ease: 'power4.inOut', delay: .1, onComplete: () => menu.style.pointerEvents = 'none' }); }
+      else { menu.style.clipPath = 'inset(0 0 100% 0)'; menu.style.pointerEvents = 'none'; }
+    };
+    open && open.addEventListener('click', show);
+    close && close.addEventListener('click', hide);
+    links.forEach(l => l.addEventListener('click', () => setTimeout(hide, 120)));
+  }
+
+  // ---- Lenis smooth scroll, wired to ScrollTrigger ----
+  _lenis() {
+    if (this.reduce) return;
+    const lenis = new window.Lenis({ duration: 1.1, smoothWheel: true });
+    // keep Lenis on its OWN rAF — never drive it off gsap.ticker (a throw there
+    // would freeze every gsap tween at its initial hidden state)
+    const raf = t => { lenis.raf(t); this._lraf = requestAnimationFrame(raf); };
+    this._lraf = requestAnimationFrame(raf);
+    this._lenisObj = lenis;
+    this._cleanups.push(() => { cancelAnimationFrame(this._lraf); lenis.destroy(); });
+  }
+
+  // ---- GSAP reveals, triggered by IntersectionObserver (no ScrollTrigger:
+  //      the preview's transform scaling breaks ST's scroll math). ----
+  _scroll() {
+    const g = window.gsap;
+    const split = el => {
+      const out = [];
+      Array.from(el.childNodes).forEach(n => {
+        if (n.nodeType === 3) {                    // text node → wrap each char
+          const frag = document.createDocumentFragment();
+          n.textContent.split('').forEach(ch => {
+            const s = document.createElement('span');
+            s.className = 'ml-char'; s.style.display = 'inline-block';
+            s.textContent = ch === ' ' ? '\u00A0' : ch;
+            frag.appendChild(s); out.push(s);
+          });
+          el.replaceChild(frag, n);
+        }                                          // element nodes (e.g. <br>) left intact
+      });
+      return out;
+    };
+    // self-computed viewport check (reliable even when an ancestor is transform-scaled)
+    const pending = [];
+    const io = (el, fn) => { if (el) pending.push({ el, fn }); };
+    const check = () => {
+      for (let i = pending.length - 1; i >= 0; i--) {
+        const r = pending[i].el.getBoundingClientRect();
+        if (r.top < window.innerHeight * 0.9 && r.bottom > 0) { const fn = pending[i].fn; pending.splice(i, 1); fn(); }
+      }
+    };
+    this._revealCheck = check;
+
+    // hero reveal on load (no trigger)
+    const hero = this.$('.ml-hero-title');
+    if (hero) {
+      const chars = split(hero);
+      if (this.reduce) g.set(chars, { yPercent: 0, opacity: 1 });
+      else g.fromTo(chars, { yPercent: 120, opacity: 0 }, { yPercent: 0, opacity: 1, duration: 1, ease: 'power4.out', stagger: 0.03, delay: 1.6 });
+    }
+
+    // scroll-in headline (char stagger)
+    this.$$('.ml-reveal').forEach(el => {
+      const chars = split(el);
+      if (this.reduce) { g.set(chars, { opacity: 1 }); return; }
+      g.set(chars, { yPercent: 110, opacity: 0 });
+      io(el, () => g.to(chars, { yPercent: 0, opacity: 1, duration: .8, ease: 'power3.out', stagger: 0.012 }));
+    });
+
+    // stats
+    this.$$('.ml-stat').forEach((s, i) => {
+      if (this.reduce) return;
+      g.set(s, { y: 50, opacity: 0 });
+      io(s, () => g.to(s, { y: 0, opacity: 1, duration: .7, ease: 'power3.out', delay: i * 0.04 }));
+    });
+
+    // grid stagger
+    const grid = this.$('.ml-grid'), tiles = this.$$('.ml-tile');
+    if (tiles.length) {
+      if (this.reduce) g.set(tiles, { opacity: 1, y: 0 });
+      else io(grid || tiles[0], () => g.to(tiles, { opacity: 1, y: 0, duration: .9, ease: 'power3.out', stagger: 0.08 }));
+    }
+
+    // svg self-draw
+    const path = this.$('.ml-draw');
+    if (path) {
+      const len = path.getTotalLength();
+      path.style.strokeDasharray = len; path.style.strokeDashoffset = this.reduce ? 0 : len;
+      if (!this.reduce) io(path, () => g.to(path, { strokeDashoffset: 0, duration: 1.6, ease: 'power2.inOut' }));
+    }
+
+    // per-frame visibility check until everything has revealed, then stop.
+    // (Doesn't care which element is the scroller — robust in the scaled preview.)
+    const tick = () => { check(); if (pending.length) this._revealRaf = requestAnimationFrame(tick); };
+    tick();
+    this._cleanups.push(() => cancelAnimationFrame(this._revealRaf));
+  }
+
+  // ---- three.js fragment-shader background ----
+  _shader() {
+    const cv = this.$('.ml-shader'); if (!cv) return;
+    const THREE = window.THREE;
+    const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    const scene = new THREE.Scene();
+    const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const uniforms = { t: { value: 0 }, r: { value: new THREE.Vector2(1, 1) } };
+    const mat = new THREE.ShaderMaterial({
+      uniforms,
+      vertexShader: 'void main(){gl_Position=vec4(position,1.0);}',
+      fragmentShader: [
+        'precision highp float;uniform float t;uniform vec2 r;',
+        'void main(){',
+        ' vec2 uv=gl_FragCoord.xy/r.xy;',
+        ' vec2 p=(uv-0.5); p.x*=r.x/r.y;',
+        ' float d=0.0;',
+        ' for(float i=1.0;i<6.0;i++){',
+        '  p.x+=0.32/i*sin(i*3.0*p.y+t*0.35);',
+        '  p.y+=0.30/i*cos(i*2.6*p.x+t*0.30);',
+        '  d+=0.55/i*sin((p.x+p.y)*3.0+t*0.4);',
+        ' }',
+        ' vec3 dark=vec3(0.031,0.031,0.043);',
+        ' vec3 acc=vec3(0.91,1.0,0.35);',
+        ' vec3 col=mix(dark,acc*0.5,smoothstep(-0.3,1.4,d)*0.32);',
+        ' col=mix(col,dark,length(uv-0.5)*0.9);',
+        ' gl_FragColor=vec4(col,1.0);',
+        '}'
+      ].join('\n')
+    });
+    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
+    scene.add(quad);
+    const resize = () => { const w = cv.clientWidth, h = cv.clientHeight; renderer.setSize(w, h, false); uniforms.r.value.set(w * Math.min(devicePixelRatio, 2), h * Math.min(devicePixelRatio, 2)); };
+    resize(); window.addEventListener('resize', resize);
+    let raf, running = true;
+    const clock = new THREE.Clock();
+    const loop = () => { if (!running) return; uniforms.t.value = clock.getElapsedTime(); renderer.render(scene, cam); raf = requestAnimationFrame(loop); };
+    if (this.reduce) { uniforms.t.value = 2.0; renderer.render(scene, cam); }
+    else loop();
+    const vis = () => { running = !document.hidden; if (running) loop(); };
+    document.addEventListener('visibilitychange', vis);
+    this._cleanups.push(() => { running = false; cancelAnimationFrame(raf); window.removeEventListener('resize', resize); document.removeEventListener('visibilitychange', vis); renderer.dispose(); });
+  }
+
+  // ---- Matter.js physics sandbox ----
+  _physics() {
+    if (this.reduce) return;
+    const M = window.Matter, wrap = this.$('.ml-phys-wrap'), cv = this.$('.ml-phys');
+    if (!wrap || !cv) return;
+    const W = wrap.clientWidth, H = wrap.clientHeight;
+    const engine = M.Engine.create(); engine.gravity.y = 0.9;
+    const render = M.Render.create({ canvas: cv, engine, options: { width: W, height: H, wireframes: false, background: 'transparent', pixelRatio: Math.min(devicePixelRatio, 2) } });
+    const wallOpt = { isStatic: true, render: { visible: false } };
+    const walls = [
+      M.Bodies.rectangle(W / 2, H + 30, W + 60, 60, wallOpt),
+      M.Bodies.rectangle(-30, H / 2, 60, H * 2, wallOpt),
+      M.Bodies.rectangle(W + 30, H / 2, 60, H * 2, wallOpt),
+    ];
+    M.Composite.add(engine.world, walls);
+    const colors = ['#E8FF59', '#F2F1EC', '#8A8A94'];
+    const drop = (x, y) => {
+      const k = Math.random();
+      const col = colors[Math.floor(Math.random() * colors.length)];
+      const opt = { restitution: 0.5, friction: 0.05, render: { fillStyle: col } };
+      let b;
+      if (k < 0.4) b = M.Bodies.circle(x, y, 14 + Math.random() * 16, opt);
+      else if (k < 0.7) b = M.Bodies.rectangle(x, y, 30 + Math.random() * 22, 30 + Math.random() * 22, opt);
+      else b = M.Bodies.polygon(x, y, 3 + Math.floor(Math.random() * 4), 20 + Math.random() * 14, opt);
+      M.Composite.add(engine.world, b);
+    };
+    for (let i = 0; i < 7; i++) drop(60 + Math.random() * (W - 120), 40 + Math.random() * 80);
+    const onClick = e => { const r = cv.getBoundingClientRect(); drop(e.clientX - r.left, e.clientY - r.top); };
+    wrap.addEventListener('click', onClick);
+    const mouse = M.Mouse.create(cv);
+    const mc = M.MouseConstraint.create(engine, { mouse, constraint: { stiffness: 0.2, render: { visible: false } } });
+    M.Composite.add(engine.world, mc);
+    const runner = M.Runner.create(); M.Runner.run(runner, engine); M.Render.run(render);
+    this._cleanups.push(() => { wrap.removeEventListener('click', onClick); M.Render.stop(render); M.Runner.stop(runner); M.Engine.clear(engine); });
+  }
+
+  // ---- Swiper coverflow slider ----
+  _slider() {
+    const el = this.$('.ml-swiper'); if (!el) return;
+    this._swiper = new window.Swiper(el, {
+      effect: 'coverflow', grabCursor: true, centeredSlides: true, slidesPerView: 'auto', loop: true,
+      coverflowEffect: { rotate: 26, stretch: 0, depth: 140, modifier: 1, slideShadows: false },
+      speed: 600,
+    });
+    this._cleanups.push(() => { try { this._swiper.destroy(); } catch (e) {} });
+  }
+}
+</script>
+</body>
+</html>

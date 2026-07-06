@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body { background: #06070f; font-family: "IBM Plex Sans", sans-serif; -webkit-font-smoothing: antialiased; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 8px; }
+  @keyframes dotpulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  @keyframes msgIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes reading { 0% { transform: translateX(-100%); } 100% { transform: translateX(320%); } }
+  .msg { animation: msgIn 0.45s cubic-bezier(0.16,1,0.3,1); }
+  .lift { transition: background .2s, color .2s, border-color .2s, transform .2s, filter .2s; }
+  .railbtn:hover { color: #fff !important; background: rgba(255,255,255,0.05) !important; }
+  .chip:hover { background: rgba(34,211,238,0.14) !important; color: #fff !important; border-color: rgba(34,211,238,0.5) !important; }
+  @media (prefers-reduced-motion: reduce) { .msg { animation: none; } [data-pulse]{ animation: none !important; } }
+  @media (max-width: 760px) { .rail { display: none !important; } .memory { display: none !important; } }
+</style>
+</helmet>
+<div style="position:relative; height:100vh; display:flex; overflow:hidden; background:radial-gradient(120% 90% at 78% -10%, #0d1430 0%, #06070f 60%); color:#fff;">
+
+  <canvas ref="{{ canvasRef }}" aria-hidden="true" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:0; opacity:0.55;"></canvas>
+
+  <!-- LEFT RAIL -->
+  <aside class="rail" style="position:relative; z-index:2; width:70px; flex-shrink:0; border-right:1px solid rgba(255,255,255,0.07); background:rgba(8,10,20,0.6); backdrop-filter:blur(16px); display:flex; flex-direction:column; align-items:center; padding:18px 0; gap:8px;">
+    <div style="width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg,#22d3ee,#6fe9d0); display:flex; align-items:center; justify-content:center; margin-bottom:14px;">
+      <svg viewBox="0 0 16 16" fill="none" style="width:18px; height:18px;"><path d="M8 2L14 6v4L8 14 2 10V6L8 2z" fill="#06070f" fill-opacity="0.85"></path></svg>
+    </div>
+    <span style="width:40px; height:40px; border-radius:11px; display:flex; align-items:center; justify-content:center; color:#22d3ee; background:rgba(34,211,238,0.12); border:1px solid rgba(34,211,238,0.3);"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path stroke-linecap="round" stroke-linejoin="round" d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"></path></svg></span>
+    <span class="railbtn lift" style="width:40px; height:40px; border-radius:11px; display:flex; align-items:center; justify-content:center; color:rgba(255,255,255,0.4); cursor:pointer;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg></span>
+    <span class="railbtn lift" style="width:40px; height:40px; border-radius:11px; display:flex; align-items:center; justify-content:center; color:rgba(255,255,255,0.4); cursor:pointer;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21l-7-4-7 4V5a2 2 0 012-2h10a2 2 0 012 2z"></path></svg></span>
+    <span class="railbtn lift" style="width:40px; height:40px; border-radius:11px; display:flex; align-items:center; justify-content:center; color:rgba(255,255,255,0.4); cursor:pointer;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="4"></circle><path d="M4 21v-1a6 6 0 0112 0v1"></path></svg></span>
+    <span style="margin-top:auto;" class="railbtn lift"><span style="width:40px; height:40px; border-radius:11px; display:flex; align-items:center; justify-content:center; color:rgba(255,255,255,0.4); cursor:pointer;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"></path></svg></span></span>
+  </aside>
+
+  <!-- MAIN COLUMN -->
+  <div style="position:relative; z-index:1; flex:1; display:flex; flex-direction:column; min-width:0;">
+
+    <!-- TOP BAR: what Rico knows right now -->
+    <header style="flex-shrink:0; display:flex; align-items:center; gap:16px; padding:14px 22px; border-bottom:1px solid rgba(255,255,255,0.07); background:rgba(8,10,20,0.35); backdrop-filter:blur(12px);">
+      <div>
+        <p style="font-size:14px; font-weight:600; color:#fff; margin:0; letter-spacing:-0.01em;">Command</p>
+        <p style="font-size:11px; color:rgba(255,255,255,0.4); margin:2px 0 0; font-family:'IBM Plex Mono',monospace;">Rico is working in the background</p>
+      </div>
+      <div style="margin-inline-start:auto; display:flex; align-items:center; gap:8px;">
+        <sc-for list="{{ statusPills }}" as="p" hint-placeholder-count="3">
+          <span style="display:inline-flex; align-items:center; gap:7px; font-size:11.5px; padding:6px 11px; border-radius:9px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);">
+            <span style="width:6px; height:6px; border-radius:50%; background:{{ p.dot }};"></span>
+            <span style="color:rgba(255,255,255,0.45);">{{ p.label }}</span>
+            <span style="color:{{ p.tone }}; font-weight:500;">{{ p.value }}</span>
+          </span>
+        </sc-for>
+      </div>
+    </header>
+
+    <!-- THREAD -->
+    <div ref="{{ threadRef }}" style="flex:1; overflow-y:auto; padding:28px 22px 12px;">
+      <div style="max-width:760px; margin:0 auto; display:flex; flex-direction:column; gap:18px;">
+        <sc-for list="{{ messages }}" as="m" hint-placeholder-count="2">
+
+          <!-- FILE BUBBLE -->
+          <sc-if value="{{ m.isFile }}" hint-placeholder-val="{{ false }}">
+            <div class="msg" style="display:flex; justify-content:flex-end;">
+              <div style="display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:14px 14px 5px 14px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); max-width:70%;">
+                <span style="width:38px; height:38px; border-radius:9px; background:rgba(34,211,238,0.12); border:1px solid rgba(34,211,238,0.28); color:#22d3ee; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:11px; font-family:'IBM Plex Mono',monospace; font-weight:600;">{{ m.file.ext }}</span>
+                <div style="min-width:0;"><p style="font-size:13px; font-weight:500; color:#fff; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" dir="ltr">{{ m.file.name }}</p><p style="font-size:11px; color:rgba(255,255,255,0.4); margin:2px 0 0;">{{ m.file.size }}</p></div>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- USER BUBBLE -->
+          <sc-if value="{{ m.isUser }}" hint-placeholder-val="{{ false }}">
+            <div class="msg" style="display:flex; justify-content:flex-end;">
+              <div dir="{{ m.dir }}" style="max-width:76%; padding:12px 16px; font-size:14.5px; line-height:1.55; border-radius:16px 16px 5px 16px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); color:rgba(255,255,255,0.92);">{{ m.text }}</div>
+            </div>
+          </sc-if>
+
+          <!-- READING STATE -->
+          <sc-if value="{{ m.isReading }}" hint-placeholder-val="{{ false }}">
+            <div class="msg" style="display:flex; justify-content:flex-start;">
+              <div style="max-width:76%; padding:14px 16px; border-radius:16px 16px 16px 5px; background:rgba(34,211,238,0.06); border:1px solid rgba(34,211,238,0.18);">
+                <p style="font-size:13.5px; color:rgba(255,255,255,0.75); margin:0 0 10px;">Reading your CV — privately.</p>
+                <div style="height:3px; border-radius:3px; background:rgba(255,255,255,0.08); overflow:hidden;"><div style="width:34%; height:100%; background:linear-gradient(90deg,transparent,#22d3ee,transparent); animation:reading 1.2s ease-in-out infinite;"></div></div>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- TYPING INDICATOR -->
+          <sc-if value="{{ m.isTyping }}" hint-placeholder-val="{{ false }}">
+            <div class="msg" style="display:flex; justify-content:flex-start;">
+              <div style="padding:15px 18px; border-radius:16px 16px 16px 5px; background:linear-gradient(135deg, rgba(34,211,238,0.10), rgba(34,211,238,0.03)); border:1px solid rgba(34,211,238,0.2); display:flex; gap:5px; align-items:center;">
+                <span data-pulse style="width:7px; height:7px; border-radius:50%; background:#22d3ee; animation:dotpulse 1.1s ease-in-out infinite;"></span>
+                <span data-pulse style="width:7px; height:7px; border-radius:50%; background:#22d3ee; animation:dotpulse 1.1s ease-in-out 0.18s infinite;"></span>
+                <span data-pulse style="width:7px; height:7px; border-radius:50%; background:#22d3ee; animation:dotpulse 1.1s ease-in-out 0.36s infinite;"></span>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- RICO BUBBLE -->
+          <sc-if value="{{ m.isRico }}" hint-placeholder-val="{{ true }}">
+            <div class="msg" style="display:flex; justify-content:flex-start;">
+              <div dir="{{ m.dir }}" style="max-width:82%; padding:15px 17px; border-radius:16px 16px 16px 5px; background:linear-gradient(135deg, rgba(34,211,238,0.10), rgba(34,211,238,0.03)); border:1px solid rgba(34,211,238,0.2); color:rgba(255,255,255,0.92);">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:9px; flex-wrap:wrap;">
+                  <span style="display:inline-flex; align-items:center; gap:6px; font-family:'IBM Plex Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:0.14em; color:rgba(34,211,238,0.9);"><span style="width:6px; height:6px; border-radius:50%; background:#22d3ee; box-shadow:0 0 6px #22d3ee;"></span>Rico</span>
+                  <sc-if value="{{ m.hasTag }}" hint-placeholder-val="{{ false }}">
+                    <span style="display:inline-flex; align-items:center; gap:5px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; padding:3px 9px; border-radius:9999px; {{ m.tag.style }}"><span aria-hidden="true">{{ m.tag.glyph }}</span>{{ m.tag.label }}</span>
+                  </sc-if>
+                </div>
+                <div style="font-size:14.5px; line-height:1.6;">{{ m.text }}</div>
+
+                <!-- JOB CARD -->
+                <sc-if value="{{ m.hasJob }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:13px; border-radius:13px; border:1px solid rgba(255,255,255,0.1); background:rgba(0,0,0,0.32); padding:15px;">
+                    <div style="display:flex; align-items:flex-start; gap:14px;">
+                      <div style="flex:1; min-width:0;">
+                        <p style="font-size:14px; font-weight:600; color:#fff; margin:0;">{{ m.job.role }}</p>
+                        <p style="font-size:11.5px; color:rgba(255,255,255,0.45); margin:3px 0 0;">{{ m.job.meta }}</p>
+                      </div>
+                      <div style="position:relative; width:54px; height:54px; flex-shrink:0; border-radius:50%; background:conic-gradient(#22d3ee {{ m.job.score }}%, rgba(255,255,255,0.08) 0);"><div style="position:absolute; inset:5px; border-radius:50%; background:#0a0e18; display:flex; flex-direction:column; align-items:center; justify-content:center;"><span style="font-size:14px; font-weight:700; color:#fff; line-height:1;">{{ m.job.score }}</span><span style="font-size:7.5px; color:rgba(255,255,255,0.4); font-family:'IBM Plex Mono',monospace;">FIT</span></div></div>
+                    </div>
+                    <div style="margin-top:12px; display:flex; flex-direction:column; gap:6px;">
+                      <sc-for list="{{ m.job.reasons }}" as="r" hint-placeholder-count="3">
+                        <div style="display:flex; align-items:center; gap:8px; font-size:12.5px; color:rgba(255,255,255,0.65);"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6fe9d0" stroke-width="2.6" style="flex-shrink:0;"><path d="M20 6L9 17l-5-5"></path></svg>{{ r }}</div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- CV SUMMARY CARD -->
+                <sc-if value="{{ m.hasCv }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:13px; border-radius:13px; border:1px solid rgba(255,255,255,0.1); background:rgba(0,0,0,0.32); padding:15px;">
+                    <p style="font-size:14px; font-weight:600; color:#fff; margin:0;">{{ m.cv.name }}</p>
+                    <p style="font-size:11.5px; color:rgba(34,211,238,0.85); margin:3px 0 12px; font-family:'IBM Plex Mono',monospace;">{{ m.cv.headline }}</p>
+                    <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px;">
+                      <sc-for list="{{ m.cv.facts }}" as="f" hint-placeholder-count="3">
+                        <div style="display:flex; align-items:center; gap:8px; font-size:12.5px; color:rgba(255,255,255,0.7);"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6fe9d0" stroke-width="2.6" style="flex-shrink:0;"><path d="M20 6L9 17l-5-5"></path></svg>{{ f }}</div>
+                      </sc-for>
+                    </div>
+                    <div style="border-top:1px solid rgba(255,255,255,0.08); padding-top:11px; display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+                      <span style="font-size:11px; color:rgba(244,180,90,0.9); font-family:'IBM Plex Mono',monospace;">Missing:</span>
+                      <sc-for list="{{ m.cv.missing }}" as="x" hint-placeholder-count="2">
+                        <span style="font-size:11.5px; color:rgba(255,255,255,0.75); border:1px solid rgba(244,180,90,0.35); background:rgba(244,180,90,0.08); padding:3px 9px; border-radius:8px;">{{ x }}</span>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- ACTION BUTTONS -->
+                <sc-if value="{{ m.hasActions }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:13px; display:flex; flex-wrap:wrap; gap:8px;">
+                    <sc-for list="{{ m.actions }}" as="a" hint-placeholder-count="2">
+                      <span style="display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:8px 14px; border-radius:9px; {{ a.style }}">{{ a.label }}</span>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+            </div>
+          </sc-if>
+
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- COMPOSER -->
+    <div style="flex-shrink:0; padding:14px 22px calc(18px + env(safe-area-inset-bottom)); border-top:1px solid rgba(255,255,255,0.07); background:rgba(8,10,20,0.5); backdrop-filter:blur(14px);">
+      <div style="max-width:760px; margin:0 auto;">
+
+        <!-- quick prompts -->
+        <sc-if value="{{ hasQuick }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+            <sc-for list="{{ quick }}" as="q" hint-placeholder-count="3">
+              <button type="button" onClick="{{ q.send }}" class="chip lift" style="font-size:12.5px; color:rgba(255,255,255,0.75); border:1px solid rgba(34,211,238,0.28); background:rgba(34,211,238,0.06); padding:8px 13px; border-radius:9999px; cursor:pointer;">{{ q.label }}</button>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <!-- staged attachment chip -->
+        <sc-if value="{{ hasStaged }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-bottom:10px; display:flex; align-items:center; gap:12px; padding:11px 13px; border-radius:12px; {{ staged.wrapStyle }}">
+            <span style="width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:10px; font-family:'IBM Plex Mono',monospace; font-weight:600; {{ staged.glyphStyle }}">{{ staged.ext }}</span>
+            <div style="min-width:0; flex:1;">
+              <p style="font-size:13px; font-weight:500; color:#fff; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" dir="ltr">{{ staged.name }}</p>
+              <p style="font-size:11px; margin:2px 0 0; {{ staged.subStyle }}">{{ staged.sub }}</p>
+            </div>
+            <sc-if value="{{ staged.isError }}" hint-placeholder-val="{{ false }}">
+              <button type="button" onClick="{{ attachCv }}" class="lift" style="font-size:11.5px; font-weight:600; color:#22d3ee; background:transparent; border:1px solid rgba(34,211,238,0.35); padding:6px 11px; border-radius:8px; cursor:pointer; white-space:nowrap;">Choose another</button>
+            </sc-if>
+            <button type="button" onClick="{{ removeStaged }}" aria-label="Remove attached file" class="lift" style="width:28px; height:28px; border-radius:8px; border:1px solid rgba(255,255,255,0.12); background:transparent; color:rgba(255,255,255,0.6); cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"></path></svg></button>
+          </div>
+        </sc-if>
+
+        <!-- input row -->
+        <div style="display:flex; align-items:center; gap:10px; padding:8px 8px 8px 12px; border-radius:15px; background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.1);">
+          <button type="button" onClick="{{ attachCv }}" aria-label="Attach CV or job document" class="lift" style="width:38px; height:38px; border-radius:10px; border:1px solid rgba(255,255,255,0.1); background:transparent; color:rgba(255,255,255,0.55); cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;" style-hover="color:#22d3ee; border-color:rgba(34,211,238,0.4);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"></path></svg></button>
+          <button type="button" onClick="{{ attachShot }}" aria-label="Attach a job screenshot" class="lift" style="width:38px; height:38px; border-radius:10px; border:1px solid rgba(255,255,255,0.1); background:transparent; color:rgba(255,255,255,0.55); cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;" style-hover="color:#22d3ee; border-color:rgba(34,211,238,0.4);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg></button>
+          <input type="text" value="{{ inputText }}" onInput="{{ onInput }}" onKeyDown="{{ onKey }}" placeholder="Ask Rico anything about your job search…" style="flex:1; min-width:0; background:transparent; border:0; outline:0; color:#fff; font-size:14.5px; font-family:'IBM Plex Sans',sans-serif;">
+          <button type="button" onClick="{{ doSend }}" aria-label="Send" class="lift" style="width:40px; height:40px; border-radius:11px; display:flex; align-items:center; justify-content:center; flex-shrink:0; cursor:pointer; border:0; {{ sendStyle }}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"></path></svg></button>
+        </div>
+        <p style="font-size:10.5px; color:rgba(255,255,255,0.28); margin:9px 2px 0; text-align:center; font-family:'IBM Plex Mono',monospace;">PDF · DOCX · TXT or PNG/JPG, under 5 MB · Rico never applies without your ok</p>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+    constructor(props) {
+        super(props);
+        this.canvasRef = React.createRef();
+        this.threadRef = React.createRef();
+this._scripts = {
+            idea: {
+                user: "Give me your honest read on where I'm heading.",
+                bubbles: [
+                    { text: "Alright — honest read, not a sales pitch. Your CV leans HSE and compliance leadership, but your last two moves drifted toward operations. Most tools would call that a muddy profile." },
+                    { text: "I read it the opposite way. In the UAE market, compliance depth plus real operations experience is rare — and it's exactly the blend regulated employers overpay for. Your \"inconsistency\" is your edge." },
+                    { tag: "needsok", text: "So here's the fork before I surface anything: do you want me aiming at compliance-led roles, operations-led roles, or the hybrid that leans on both? That one choice changes everything I bring you." },
+                ],
+            },
+            hse: {
+                user: "Find HSE Manager jobs in Dubai.",
+                bubbles: [
+                    { text: "Give me a second — I'd rather bring you one role you'd actually take than ten you'd scroll past. The Dubai HSE market right now rewards inspection depth over titles, so that's what I'm weighting." },
+                    { tag: "suggested", text: "One stands out. HSE Manager, 88% fit — your UAE compliance and inspection background is exactly what it asks for. Worth a proper look. I can't submit for you, though — opening the apply link is your call.",
+                        job: { role: "HSE Manager", meta: "Dubai · Full-time · Posted 2d ago", score: 88, reasons: ["UAE HSE compliance background", "Inspection & reporting", "Team leadership"] },
+                        actions: [{ label: "Open apply link", kind: "needsok" }, { label: "Save to pipeline", kind: "ghost" }] },
+                ],
+            },
+            know: {
+                user: "What do you know about me right now?",
+                bubbles: [
+                    { tag: "memory", text: "Honest snapshot: CV — not uploaded, Profile — partial (target role & salary floor missing), Job search — idle. I'd rather tell you that than pretend I've read something I haven't." },
+                    { text: "Upload your CV and I'll read your trajectory first — where you've been, not just your keywords — and then we can talk about where it should go next.", actions: [{ label: "Upload CV", kind: "primary" }] },
+                ],
+            },
+            ar: {
+                user: "اقترح لي وظائف عمليات في أبوظبي.",
+                bubbles: [
+                    { rtl: true, text: "قبل أن أبحث — أفضّل أن أفهمك أولاً بدل أن أغرقك بقوائم. سوق العمليات في أبوظبي يقدّر الخبرة التشغيلية الحقيقية أكثر من المسمّى الوظيفي." },
+                    { rtl: true, tag: "needsok_ar", text: "سؤال واحد يغيّر كل شيء: ما الحد الأدنى للراتب الذي تستهدفه، وهل تفضّل دواماً كاملاً؟ أخبرني وأبدأ البحث بدقّة." },
+                ],
+            },
+        };
+        this.state = {
+            inputText: "",
+            staged: null,
+            usedQuick: {},
+            messages: [
+                { role: "rico", tag: null, text: "I'm Rico — your career operator. I work the search in the background and only surface what matters. Right now your CV isn't uploaded yet — attach it and I'll read your trajectory first, or tell me a role and a UAE city." },
+            ],
+        };
+    }
+
+    componentDidMount() { this.initRibbon(); }
+    componentWillUnmount() { if (this._cleanup) this._cleanup(); }
+
+    _scroll() {
+        requestAnimationFrame(() => { const el = this.threadRef.current; if (el) el.scrollTop = el.scrollHeight; });
+    }
+    _push(msg) { this.setState({ messages: this.state.messages.concat([msg]) }); this._scroll(); }
+
+    sendPrompt(id) {
+        if (this.state.usedQuick[id]) return;
+        const s = this._scripts[id];
+        const used = Object.assign({}, this.state.usedQuick); used[id] = true;
+        const rtlUser = !!(s.bubbles[0] && s.bubbles[0].rtl);
+        this.setState({ usedQuick: used, messages: this.state.messages.concat([{ role: "user", text: s.user, rtl: rtlUser }]) });
+        this._scroll();
+        this._runSequence(s.bubbles, 0);
+    }
+
+    _runSequence(bubbles, i) {
+        if (i >= bubbles.length) return;
+        this._push({ role: "typing" });
+        const prev = bubbles[i - 1];
+        const delay = i === 0 ? 720 : Math.min(1700, 650 + (prev && prev.text ? prev.text.length * 7 : 400));
+        setTimeout(() => {
+            const msgs = this.state.messages.filter((m) => m.role !== "typing");
+            this.setState({ messages: msgs.concat([Object.assign({ role: "rico" }, bubbles[i])]) });
+            this._scroll();
+            this._runSequence(bubbles, i + 1);
+        }, delay);
+    }
+
+    attachCv() { this.setState({ staged: { name: "Candidate_CV_2026.pdf", size: "240 KB", ext: "PDF", kind: "pdf", error: null } }); }
+    attachShot() { this.setState({ staged: { name: "job_posting_screenshot.png", size: "1.2 MB", ext: "IMG", kind: "image", error: null } }); }
+    removeStaged() { this.setState({ staged: null }); }
+
+    onInput(e) { this.setState({ inputText: e.target.value }); }
+    onKey(e) { if (e.key === "Enter") { e.preventDefault(); this.doSend(); } }
+
+    doSend() {
+        const st = this.state.staged;
+        if (st && !st.error) { this._sendFile(st); return; }
+        const t = this.state.inputText.trim();
+        if (!t) return;
+        this.setState({ inputText: "", messages: this.state.messages.concat([{ role: "user", text: t }]) });
+        this._scroll();
+        this._runSequence([
+            { text: "I hear you. Before I run anything — a good match is about fit, not volume, so let me aim it properly rather than dump a list on you." },
+            { tag: "needsok", text: "Which UAE city are you targeting, and what's your salary floor? Those two answers change everything I bring back." },
+        ], 0);
+    }
+
+    _sendFile(st) {
+        this.setState({ staged: null, messages: this.state.messages.concat([{ role: "file", file: { name: st.name, size: st.size, ext: st.ext } }]) });
+        this._scroll();
+        if (st.kind === "pdf") {
+            setTimeout(() => { this._push({ role: "reading" }); }, 350);
+            setTimeout(() => {
+                const msgs = this.state.messages.filter((m) => m.role !== "reading");
+                this.setState({ messages: msgs.concat([{ role: "rico", tag: "done", tagLabel: "CV read", text: "Read your CV — privately. Here's what I have. Two facts are still missing before I search.",
+                    cv: { name: "Alex Demo", headline: "HSE / COMPLIANCE MANAGER · 8 YRS UAE", facts: ["UAE compliance & audit", "Environmental operations", "Inspection & reporting"], missing: ["Notice period", "Salary floor"] },
+                    actions: [{ label: "Add the two facts", kind: "needsok" }, { label: "Search matching jobs", kind: "primary" }] }]) });
+                this._scroll();
+            }, 2050);
+        } else {
+            setTimeout(() => { this._push({ role: "rico", tag: "needsok", text: "That looks like a job screenshot — I won't guess it. Tell me the role title or paste the posting link and I'll match it against your profile." }); }, 700);
+        }
+    }
+
+    initRibbon() {
+        const canvas = this.canvasRef.current; if (!canvas) return;
+        const ctx = canvas.getContext("2d"); if (!ctx) return;
+        const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        let W = 0, H = 0, lines = [], raf = 0, last = 0, running = false, t = 0;
+        function build() {
+            const n = W < 700 ? 14 : 26; const SX = W * 0.98, SY = H * 0.02; lines = [];
+            for (let i = 0; i < n; i++) {
+                const spread = (i - n / 2) * 0.06; const segs = []; let cx = SX, cy = SY;
+                let ang = Math.PI + spread * 0.006 + (Math.random() - 0.5) * 0.05;
+                for (let s = 0; s < 260; s++) { segs.push({ x: cx, y: cy }); ang += (Math.random() - 0.5) * 0.02; cx += Math.cos(ang) * 8; cy += Math.sin(ang) * 8; }
+                lines.push({ segs, spd: 0.4 + Math.random() * 0.6, phase: Math.random() * 300, alpha: 0.14 + Math.random() * 0.16 });
+            }
+        }
+        function resize() { W = canvas.width = canvas.offsetWidth; H = canvas.height = canvas.offsetHeight; build(); }
+        function draw() {
+            ctx.clearRect(0, 0, W, H);
+            for (const L of lines) { const len = L.segs.length; const head = ((t * L.spd + L.phase) % (len + 70)); const tailN = 26;
+                for (let s = 1; s < len; s++) { const a = L.segs[s - 1], b = L.segs[s]; const dist = Math.abs(s - head);
+                    let alpha = L.alpha * 0.35, glow = 0;
+                    if (dist < tailN) { const br = 1 - dist / tailN; alpha = L.alpha * (0.4 + br * 1.5); glow = br * 7; }
+                    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+                    ctx.lineWidth = dist < tailN ? 1.4 + (1 - dist / tailN) * 1.8 : 0.9;
+                    ctx.strokeStyle = dist < 5 ? "rgba(150,245,240," + alpha + ")" : "rgba(34,211,238," + alpha + ")";
+                    ctx.shadowBlur = glow; ctx.shadowColor = glow > 0 ? ctx.strokeStyle : "transparent"; ctx.stroke(); ctx.shadowBlur = 0;
+                }
+            }
+        }
+        function loop(now) { if (!running) return; raf = requestAnimationFrame(loop); if (now - last < 33) return; last = now; t += 1; draw(); }
+        function start() { if (running || reduced || document.hidden) return; running = true; last = performance.now(); raf = requestAnimationFrame(loop); }
+        function stop() { running = false; cancelAnimationFrame(raf); }
+        resize();
+        const ro = new ResizeObserver(() => { resize(); if (reduced) draw(); }); ro.observe(canvas);
+        if (reduced) { t = 110; draw(); this._cleanup = () => ro.disconnect(); return; }
+        const onVis = () => (document.hidden ? stop() : start());
+        document.addEventListener("visibilitychange", onVis); start();
+        this._cleanup = () => { stop(); document.removeEventListener("visibilitychange", onVis); ro.disconnect(); };
+    }
+
+    _tag(kind, override) {
+        const map = {
+            done: { glyph: "✓", label: "Done", color: "#34d399", bg: "rgba(16,185,129,0.14)", border: "rgba(16,185,129,0.4)" },
+            suggested: { glyph: "→", label: "Suggested next", color: "#22d3ee", bg: "rgba(34,211,238,0.12)", border: "rgba(34,211,238,0.32)" },
+            needsok: { glyph: "?", label: "Needs your ok", color: "#f472b6", bg: "rgba(244,114,182,0.12)", border: "rgba(244,114,182,0.34)" },
+            needsok_ar: { glyph: "?", label: "بحاجة لموافقتك", color: "#f472b6", bg: "rgba(244,114,182,0.12)", border: "rgba(244,114,182,0.34)" },
+            memory: { glyph: "◦", label: "Session memory", color: "rgba(255,255,255,0.6)", bg: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.16)" },
+        };
+        const d = map[kind]; if (!d) return null;
+        return { glyph: d.glyph, label: override || d.label, style: "color:" + d.color + "; background:" + d.bg + "; border:1px solid " + d.border + ";" };
+    }
+
+    _actionStyle(kind) {
+        if (kind === "primary") return "color:#000; background:linear-gradient(90deg,#06b6d4,#22d3ee);";
+        if (kind === "needsok") return "color:#f9a8d4; background:rgba(244,114,182,0.1); border:1px solid rgba(244,114,182,0.35);";
+        return "color:rgba(255,255,255,0.75); background:transparent; border:1px solid rgba(255,255,255,0.16);";
+    }
+
+    renderVals() {
+        const messages = this.state.messages.map((m) => {
+            const tag = m.tag ? this._tag(m.tag, m.tagLabel) : null;
+            return {
+                text: m.text || "",
+                dir: m.rtl ? "rtl" : "ltr",
+                isUser: m.role === "user",
+                isRico: m.role === "rico",
+                isFile: m.role === "file",
+                isReading: m.role === "reading",
+                isTyping: m.role === "typing",
+                file: m.file || {},
+                hasTag: !!tag, tag: tag || {},
+                hasJob: !!m.job, job: m.job || { reasons: [] },
+                hasCv: !!m.cv, cv: m.cv || { facts: [], missing: [] },
+                hasActions: !!(m.actions && m.actions.length),
+                actions: (m.actions || []).map((a) => ({ label: a.label, style: this._actionStyle(a.kind) })),
+            };
+        });
+
+        const st = this.state.staged;
+        let staged = {};
+        if (st) {
+            const err = !!st.error;
+            staged = {
+                name: st.name, ext: st.ext, isError: err,
+                sub: err ? st.error : st.size,
+                wrapStyle: err ? "background:rgba(244,114,182,0.08); border:1px solid rgba(244,114,182,0.3);" : "background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1);",
+                glyphStyle: err ? "background:rgba(244,114,182,0.14); border:1px solid rgba(244,114,182,0.35); color:#f472b6;" : "background:rgba(34,211,238,0.12); border:1px solid rgba(34,211,238,0.3); color:#22d3ee;",
+                subStyle: err ? "color:#f472b6;" : "color:rgba(255,255,255,0.4);",
+            };
+        }
+        const canSend = (this.state.inputText.trim().length > 0) || (st && !st.error);
+
+        const quickDefs = [
+            { id: "idea", label: "Give me your honest read" },
+            { id: "hse", label: "Find HSE Manager jobs in Dubai" },
+            { id: "know", label: "What do you know about me?" },
+            { id: "ar", label: "اسألني بالعربية" },
+        ].filter((q) => !this.state.usedQuick[q.id]);
+
+        return {
+            canvasRef: this.canvasRef,
+            threadRef: this.threadRef,
+            messages,
+            statusPills: [
+                { label: "CV", value: "not uploaded", tone: "rgba(255,255,255,0.85)", dot: "rgba(255,255,255,0.3)" },
+                { label: "Profile", value: "partial", tone: "#f4b45a", dot: "#f4b45a" },
+                { label: "Job search", value: "idle", tone: "rgba(255,255,255,0.85)", dot: "rgba(255,255,255,0.3)" },
+            ],
+            inputText: this.state.inputText,
+            onInput: (e) => this.onInput(e),
+            onKey: (e) => this.onKey(e),
+            doSend: () => this.doSend(),
+            attachCv: () => this.attachCv(),
+            attachShot: () => this.attachShot(),
+            removeStaged: () => this.removeStaged(),
+            hasStaged: !!st,
+            staged,
+            sendStyle: canSend ? "color:#000; background:linear-gradient(90deg,#06b6d4,#22d3ee);" : "color:rgba(255,255,255,0.3); background:rgba(255,255,255,0.06);",
+            quick: quickDefs.map((q) => ({ label: q.label, send: () => this.sendPrompt(q.id) })),
+            hasQuick: quickDefs.length > 0,
+        };
+    }
+}
+</script>
+</body>
+</html>
