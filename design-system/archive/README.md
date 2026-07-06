@@ -6,8 +6,9 @@ Files here are kept for historical reference, offline review, or design inspirat
 
 ## Contents
 
-- `rico-hunt-v2-offline.html` — bundled offline design prototype with embedded assets
-- `motion-lab-dc.html` — motion/animation exploration using external libraries (CDNs)
+- `rico-hunt-v2-offline.html` — bundled offline design prototype with embedded assets. Profile data has been sanitized to a synthetic persona.
+- `motion-lab-dc.html` — motion/animation exploration using external libraries (CDNs). Requires `support.js` for the minimal DC runtime stub.
+- `support.js` — minimal DC runtime stub so `motion-lab-dc.html` can be opened directly for review. Not the full DC framework.
 
 ## Rules
 
