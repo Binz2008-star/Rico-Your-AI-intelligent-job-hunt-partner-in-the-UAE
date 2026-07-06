@@ -5,6 +5,16 @@ description: Upgrades existing websites and apps to premium quality. Audits curr
 
 # Redesign Skill
 
+## Rico Hunt-specific notes
+
+This repo already has a ratified design system — "Nocturne" (navy/near-black canvas, gold/indigo/sky-blue/teal accents, glass panels, Space Grotesk + Inter + IBM Plex), defined in `apps/web/tailwind.config.ts` + `apps/web/app/globals.css` and confirmed as source of truth in `AI_WORKSPACE/DECISIONS.md` (DEC-20260706-001). `design-system/rico-hunt/design.md` is the current audit/reference doc — read it before auditing a Rico Hunt page, since it already lists known inconsistencies and a prioritized fix list.
+
+Two of the generic bias rules below can misfire against Rico Hunt specifically if applied without checking the actual tokens first:
+- **"Purple/blue AI gradient aesthetic... replace with neutral + considered accent"** — Rico's indigo/magenta secondary accent is the ratified choice, not an unconsidered AI default. Do not "fix" it back toward neutral without an explicit new decision.
+- **"Pure `#000000` background... replace with off-black"** — already satisfied; Rico's canvas is navy (`rgb(11,13,28)`), not pure black.
+
+This skill remains the primary tool for auditing/improving *existing* Rico Hunt pages (as opposed to `ui-ux-pro-max`, which is better used for supplementary reference lookups — chart types, font-pairing ideas — not as the primary redesign driver here).
+
 ## How This Works
 
 When applied to an existing project, follow this sequence:
