@@ -51,6 +51,11 @@ apps/web/.vercel/
 # overrides and secrets stay local)
 .claude/settings.local.json
 .claude/todos.md
+.claude/launch.json
+
+# Superseded, historical-only landing mock (~2 MB self-contained export).
+# Not the design source of truth per DEC-20260706-001 — kept locally only.
+design-system/rico-hunt/Rico Hunt V2 - Offline.html
 
 # Gmail OAuth credentials
 credentials.json
