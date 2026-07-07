@@ -8,6 +8,15 @@ This is the entrypoint for new Rico AI work sessions.
 Rico mode. Start from AI_WORKSPACE/START_HERE.md.
 ```
 
+## Current execution gate
+
+Before starting any new Rico work, read:
+
+1. `AI_WORKSPACE/EXECUTION_BRIEF_2026-07-08.md` — current execution posture, active PRs, branch/commit naming standard, and immediate next action.
+2. `AI_WORKSPACE/AUDITS/2026-07-08-production-hardening-audit.md` — operational-memory-first hardening gate.
+
+Current priority: finish `#885` / `feat/rico-memory-list` before starting new production work.
+
 ## Latest handoff
 
 Before starting new Rico work, read the latest rollout handoff:
@@ -24,13 +33,15 @@ Before starting new Rico work, read the latest rollout handoff:
 Start with the current repository state, then read:
 
 1. `CLAUDE.md`
-2. `AI_WORKSPACE/PROJECT_BRIEF.md`
-3. `AI_WORKSPACE/ARCHITECTURE.md`
-4. `AI_WORKSPACE/CURRENT_STATE.md`
-5. `AI_WORKSPACE/TASKS.md`
-6. `AI_WORKSPACE/OPERATING_RULES.md`
-7. `AI_WORKSPACE/DECISIONS.md`
-8. `AI_WORKSPACE/PROMPT_CONTRACT.md`
+2. `AI_WORKSPACE/EXECUTION_BRIEF_2026-07-08.md`
+3. `AI_WORKSPACE/AUDITS/2026-07-08-production-hardening-audit.md`
+4. `AI_WORKSPACE/PROJECT_BRIEF.md`
+5. `AI_WORKSPACE/ARCHITECTURE.md`
+6. `AI_WORKSPACE/CURRENT_STATE.md`
+7. `AI_WORKSPACE/TASKS.md`
+8. `AI_WORKSPACE/OPERATING_RULES.md`
+9. `AI_WORKSPACE/DECISIONS.md`
+10. `AI_WORKSPACE/PROMPT_CONTRACT.md`
 
 Optional context bundle:
 
@@ -42,6 +53,7 @@ python scripts/sync_context.py
 
 ```text
 Task entry
+  -> execution brief
   -> handoff brief
   -> operating rules
   -> one branch
@@ -72,5 +84,5 @@ Use one writer per branch. Other tools or reviewers can inspect and comment with
 ## Standard handoff prompt
 
 ```text
-Rico mode. Start from AI_WORKSPACE/START_HERE.md. Read the latest handoff, current state, current task in AI_WORKSPACE/TASKS.md, AI_WORKSPACE/OPERATING_RULES.md, and AI_WORKSPACE/PROMPT_CONTRACT.md. Use one branch and return summary, changed files, commands run, test results, CI/deploy status, risks, rollback plan, and open questions.
+Rico mode. Start from AI_WORKSPACE/START_HERE.md. Read AI_WORKSPACE/EXECUTION_BRIEF_2026-07-08.md, the production hardening audit, the latest handoff, current state, current task in AI_WORKSPACE/TASKS.md, AI_WORKSPACE/OPERATING_RULES.md, and AI_WORKSPACE/PROMPT_CONTRACT.md. Use one branch and return summary, changed files, commands run, test results, CI/deploy status, risks, rollback plan, and open questions.
 ```
