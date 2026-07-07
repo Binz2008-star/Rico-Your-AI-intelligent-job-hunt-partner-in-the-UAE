@@ -14,6 +14,7 @@ describe("pickOperationState (TC-11)", () => {
   it.each([
     "what is my current role?",
     "what's my role?",
+    "what is my position?",
     "show me my target roles",
     "my position at the company",
     "what is my profile?",
@@ -27,6 +28,7 @@ describe("pickOperationState (TC-11)", () => {
 
   it.each([
     "what is my current role?",
+    "what is my position?",
     "review my profile",
     "my experience and skills",
   ])("routes a profile self-query to the reading/profile chip: %s", (msg) => {
@@ -42,6 +44,10 @@ describe("pickOperationState (TC-11)", () => {
     "find jobs from my CV",
     "show me job openings",
     "developer roles in Dubai", // bare role noun, no self-reference
+    "find me HSE Officer roles in Dubai",
+    "sales manager position in Dubai based on my CV", // CV modifier, still a search
+    "cybersecurity career role in Dubai", // "career" + role, still a search
+    "finance career roles in Abu Dhabi",
   ])("still flashes search for an explicit job hunt: %s", (msg) => {
     expect(pickOperationState(msg.toLowerCase())).toEqual({
       state: "searching",
@@ -63,6 +69,7 @@ describe("isJobSearchIntent — timeout/retry guard (TC-11 item 7)", () => {
   it.each([
     "what is my current role?",
     "what is my profile?",
+    "what is my position?",
     "review my profile",
     "my position at the company",
     "show me my target roles",
@@ -70,11 +77,15 @@ describe("isJobSearchIntent — timeout/retry guard (TC-11 item 7)", () => {
     expect(isJobSearchIntent(msg)).toBe(false);
   });
 
-  // Explicit job hunts (English + Arabic) must still retry as a search.
+  // Explicit job hunts (English + Arabic) must still retry as a search — including
+  // CV-based and career-role phrasing (Codex P2 regression fix).
   it.each([
-    "find HSE Officer roles in Dubai",
+    "find me HSE Officer roles in Dubai",
     "search for developer jobs",
     "developer roles in Dubai",
+    "sales manager position in Dubai based on my CV",
+    "cybersecurity career role in Dubai",
+    "finance career roles in Abu Dhabi",
     "ابحث عن وظائف", // Arabic: "search for jobs"
   ])("treats an explicit job hunt as a job search: %s", (msg) => {
     expect(isJobSearchIntent(msg)).toBe(true);
