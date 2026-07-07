@@ -7,6 +7,11 @@ from src.api.routers import job_lifecycle
 UTC = timezone.utc
 
 
+def _call_list_followups(**kwargs):
+    handler = getattr(job_lifecycle.list_followups, "__wrapped__", job_lifecycle.list_followups)
+    return handler(**kwargs)
+
+
 def test_list_followups_returns_applied_jobs_ready_to_revisit(monkeypatch):
     rows = [
         {
@@ -33,7 +38,7 @@ def test_list_followups_returns_applied_jobs_ready_to_revisit(monkeypatch):
 
     monkeypatch.setattr(job_lifecycle.repo, "get_by_status", fake_get_by_status)
 
-    response = job_lifecycle.list_followups(
+    response = _call_list_followups(
         request=None,
         min_days_since_applied=7,
         limit=25,
@@ -57,7 +62,7 @@ def test_list_followups_is_read_only_when_no_candidates(monkeypatch):
 
     monkeypatch.setattr(job_lifecycle.repo, "get_by_status", fake_get_by_status)
 
-    response = job_lifecycle.list_followups(
+    response = _call_list_followups(
         request=None,
         min_days_since_applied=7,
         limit=25,
