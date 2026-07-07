@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { pickOperationState } from "@/app/command/operationState";
+import { isJobSearchIntent, pickOperationState } from "@/app/command/operationState";
 
 describe("pickOperationState (TC-11)", () => {
   it.each([
@@ -55,5 +55,28 @@ describe("pickOperationState (TC-11)", () => {
     expect(pickOperationState("what should i do next in my career")?.state).toBe("extracting");
     expect(pickOperationState("help me prep for an interview")?.state).toBe("extracting");
     expect(pickOperationState("hello there")).toBeNull();
+  });
+});
+
+describe("isJobSearchIntent — timeout/retry guard (TC-11 item 7)", () => {
+  // Profile/career self-queries must NOT be retried as a search ("Retrying search…").
+  it.each([
+    "what is my current role?",
+    "what is my profile?",
+    "review my profile",
+    "my position at the company",
+    "show me my target roles",
+  ])("does NOT treat a profile/career self-query as a job search: %s", (msg) => {
+    expect(isJobSearchIntent(msg)).toBe(false);
+  });
+
+  // Explicit job hunts (English + Arabic) must still retry as a search.
+  it.each([
+    "find HSE Officer roles in Dubai",
+    "search for developer jobs",
+    "developer roles in Dubai",
+    "ابحث عن وظائف", // Arabic: "search for jobs"
+  ])("treats an explicit job hunt as a job search: %s", (msg) => {
+    expect(isJobSearchIntent(msg)).toBe(true);
   });
 });

@@ -22,7 +22,7 @@ import { buildAuthHref } from "@/lib/redirect";
 import { getJobFallbackActions, buildCopyText } from "@/lib/job-fallback";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
 import { translations, useTranslation, type TranslationKey } from "@/lib/translations";
-import { pickOperationState } from "./operationState";
+import { pickOperationState, isJobSearchIntent } from "./operationState";
 import { APPLICATION_STATUSES } from "@/lib/applicationStatus";
 import type { ApplicationStatus } from "@/types";
 import Link from "next/link";
@@ -1149,8 +1149,9 @@ export default function CommandPage() {
                 if (err.name === "AbortError") {
                     // For job-search queries, retry once with a longer timeout
                     // before giving up so cold-start Render delays don't drop results.
-                    const isJobSearch = /\b(job|find|search|vacanc|opening|role|position|hiring)\b/i.test(trimmed)
-                        || /ابحث|وظيف|بحث/.test(trimmed);
+                    // Uses the shared classifier so profile/career questions ("what is
+                    // my current role?") are never retried as a search (TC-11).
+                    const isJobSearch = isJobSearchIntent(trimmed);
                     if (isJobSearch) {
                         const retryId = nextId();
                         setMessages((prev) => [...prev, { id: retryId, role: "rico", text: t("cmdRetryingSearch") }]);

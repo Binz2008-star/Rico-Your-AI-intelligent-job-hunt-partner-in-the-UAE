@@ -55,3 +55,18 @@ export function pickOperationState(
   }
   return null;
 }
+
+/**
+ * Whether a message should be treated as a job-search intent by the
+ * timeout/retry path (which shows "Retrying search…" and retries once with a
+ * longer timeout). Routed through the same classifier as the pre-send chip so a
+ * profile/career question ("what is my current role?") is never retried as a
+ * search (TC-11), while keeping the Arabic search tokens the English classifier
+ * does not cover.
+ */
+export function isJobSearchIntent(text: string): boolean {
+  return (
+    pickOperationState(text.toLowerCase())?.state === "searching"
+    || /ابحث|وظيف|بحث/.test(text)
+  );
+}
