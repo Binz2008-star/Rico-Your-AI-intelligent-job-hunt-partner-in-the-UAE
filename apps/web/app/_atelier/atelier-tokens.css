@@ -36,12 +36,20 @@
      * serif + Arabic families come from a route-scoped next/font var when the
      * island's route provides one (e.g. the gallery specimen sets
      * --font-atl-display); otherwise they gracefully fall back to a serif /
-     * system-Arabic stack. */
-    --atl-font-display: var(--font-atl-display), Georgia, "Times New Roman", serif;
-    --atl-font-body: var(--font-body), system-ui, -apple-system, sans-serif;
-    --atl-font-mono: var(--font-mono), ui-monospace, "SFMono-Regular", monospace;
-    --atl-font-display-ar: var(--font-atl-display-ar), "Amiri", serif;
-    --atl-font-body-ar: var(--font-atl-body-ar), system-ui, sans-serif;
+     * system-Arabic stack.
+     *
+     * The fallback stacks MUST live INSIDE var() (the second var() argument).
+     * On routes that don't emit the route-scoped var (e.g. /terms, which does
+     * not define --font-atl-display / --font-atl-display-ar / --font-atl-body-ar),
+     * an undefined var() with no inline fallback is invalid-at-computed-value
+     * time and would invalidate the downstream `font-family` — silently
+     * inheriting the global font. Keeping the fallback inside var() makes the
+     * serif / Arabic stacks apply as intended. (Codex #879 P2.) */
+    --atl-font-display: var(--font-atl-display, Georgia, "Times New Roman", serif);
+    --atl-font-body: var(--font-body, system-ui, -apple-system, sans-serif);
+    --atl-font-mono: var(--font-mono, ui-monospace, "SFMono-Regular", monospace);
+    --atl-font-display-ar: var(--font-atl-display-ar, "Amiri", serif);
+    --atl-font-body-ar: var(--font-atl-body-ar, system-ui, sans-serif);
 
     background: var(--paper);
     color: var(--ink);
