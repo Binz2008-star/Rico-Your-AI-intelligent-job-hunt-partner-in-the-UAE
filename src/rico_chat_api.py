@@ -559,11 +559,26 @@ _APPLICATIONS_LIST_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Saved-jobs lifecycle listing: "show my saved jobs", "اعرض الوظائف المحفوظة",
+# "ورجيني الوظائف اللي حفظتها". Routes to _handle_lifecycle_query(lifecycle_show_saved).
+# Deliberately does NOT match "saved searches" or profile nouns (saved experience/skills).
+_SAVED_JOBS_LIST_RE = re.compile(
+    r"\b(?:show|list|view|display|see|get)\b.{0,20}\bsaved\s+jobs?\b"
+    r"|\bmy\s+saved\s+jobs?\b"
+    r"|\b(?:jobs?|وظائف)\s+(?:i|that\s+i)\s+saved\b"
+    r"|(?:اعرض|أعرض|اظهر|أظهر|ورجيني|وريني|شوفني)\s+(?:لي\s+)?الوظائف\s+(?:المحفوظة|المحفوظه)"
+    r"|الوظائف\s+(?:اللي|التي)\s+(?:حفظتها|حفظتهم|قمت\s+بحفظها)"
+    r"|وظائفي\s+(?:المحفوظة|المحفوظه)",
+    re.IGNORECASE,
+)
+
 # Profile data readback: "what skills do you have for me?", "what do you know about me?",
 # "show my profile data". Distinct from _PROFILE_PITCH_RE (which generates a bio).
+# "saved"/"stored" must not swallow saved-jobs lifecycle phrases ("show my saved
+# jobs" → lifecycle_show_saved), so those alternatives reject a following "job(s)".
 _PROFILE_READBACK_RE = re.compile(
     r"\b(?:what|show|display|tell\s+me)\b.{0,25}"
-    r"\b(?:(?:on\s+)?(?:my\s+)?(?:file|saved|stored|in\s+(?:my\s+)?profile)|my\s+profile\s+(?:data|info(?:rmation)?))\b"
+    r"\b(?:(?:on\s+)?(?:my\s+)?(?:file|(?:saved|stored)(?!\s+jobs?\b)|in\s+(?:my\s+)?profile)|my\s+profile\s+(?:data|info(?:rmation)?))\b"
     r"|\b(?:what\s+(?:skills?|experience|data|info(?:rmation)?))\s+(?:do\s+you|have\s+you|did\s+you)\s+(?:have|got|store|save|know)\b"
     r"|\bwhat\s+do\s+you\s+know\s+about\s+me\b"
     r"|\b(?:show|list|display)\s+(?:all\s+)?my\s+(?:skills?|certifications?|profile\s+info(?:rmation)?|saved\s+experience)\b"
@@ -7143,6 +7158,17 @@ class RicoChatAPI:
         if _APPLICATIONS_LIST_RE.search(message):
             return self._finalize(
                 self._handle_applications_list(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Saved-jobs lifecycle listing ──────────────────────────────────────
+        # "show my saved jobs" / "اعرض الوظائف المحفوظة" → enumerate the saved-jobs
+        # funnel from user_job_context. Must run before profile readback so
+        # "saved jobs" phrases are never answered with a profile summary.
+        if _SAVED_JOBS_LIST_RE.search(message):
+            return self._finalize(
+                self._handle_lifecycle_query(user_id, "lifecycle_show_saved", message=message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )

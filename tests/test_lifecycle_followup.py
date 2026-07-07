@@ -181,3 +181,65 @@ class TestListFollowupFlow:
 
         lc = stored.get(("user@test.com", "lifecycle_query_context"))
         assert lc == {"last_query_type": "lifecycle_show_saved"}
+
+
+# ── saved-jobs routing vs profile readback ────────────────────────────────────
+
+from src.rico_chat_api import _PROFILE_READBACK_RE, _SAVED_JOBS_LIST_RE  # noqa: E402
+
+
+class TestSavedJobsListRouting:
+    """Saved-jobs list phrases must route to the lifecycle handler, never to
+    profile readback, job search, or applied-jobs handling."""
+
+    @pytest.mark.parametrize("phrase", [
+        "show my saved jobs",
+        "show saved jobs",
+        "list saved jobs",
+        "display my saved jobs",
+        "my saved jobs",
+        # Arabic
+        "اعرض الوظائف المحفوظة",
+        "اعرض الوظائف المحفوظه",
+        "ورجيني الوظائف اللي حفظتها",
+        "وظائفي المحفوظة",
+    ])
+    def test_saved_jobs_phrases_match_lifecycle(self, phrase):
+        assert _SAVED_JOBS_LIST_RE.search(phrase), f"{phrase!r} should match saved-jobs list"
+
+    @pytest.mark.parametrize("phrase", [
+        "show my applied jobs",          # applied lifecycle, not saved
+        "show my saved searches",        # saved searches are not saved jobs
+        "what is saved in my profile",   # profile readback
+        "show my saved experience",      # profile readback
+        "find me hse officer jobs in dubai",  # job search
+        "delete all saved jobs",         # destructive — handled by delete guard
+        "show my profile data",          # profile readback
+    ])
+    def test_non_saved_jobs_phrases_do_not_match(self, phrase):
+        assert not _SAVED_JOBS_LIST_RE.search(phrase)
+
+    @pytest.mark.parametrize("phrase", [
+        "show my saved jobs",
+        "show my saved job",
+        "display my saved jobs",
+        "list my saved jobs",
+    ])
+    def test_profile_readback_no_longer_swallows_saved_jobs(self, phrase):
+        assert not _PROFILE_READBACK_RE.search(phrase)
+
+    @pytest.mark.parametrize("phrase", [
+        "what is saved in my profile",
+        "show my saved experience",
+        "show my profile data",
+        "what do you know about me",
+        "what is stored on file",
+    ])
+    def test_profile_readback_still_matches_profile_phrases(self, phrase):
+        assert _PROFILE_READBACK_RE.search(phrase)
+
+    def test_classifier_routes_saved_and_applied_separately(self):
+        from src.agent.intelligence.intent_classifier import classify_intent
+
+        assert classify_intent("show my saved jobs").intent == "lifecycle_show_saved"
+        assert classify_intent("show my applied jobs").intent == "lifecycle_show_applied"
