@@ -101,6 +101,42 @@ Neon PostgreSQL + Telegram + dashboard/report output
 - `apps/web/lib/api.ts` — canonical frontend API helper
 - `apps/web/services/*` — older service wrappers
 
+## Target architecture (phased maturation)
+
+Rico is maturing from a job board into an **AI career operator**. The current stack is valid but
+mixes request handling, temporary chat memory, and the job-search script in one process, and has
+historically relied on Render's ephemeral disk for state that must be durable. See
+`DECISIONS.md` → DEC-20260707-001 for the full decision and rationale.
+
+End-state (reached in ordered phases, not a big-bang migration):
+
+```text
+Vercel            Next.js frontend
+API service       FastAPI (requests only): Rico chat controller, auth/session, job/application API
+Worker service    job scans, follow-up checks, alerts, link verification, scheduled tasks
+Neon              users, profiles, job_context, applications, memory, billing/subscription
+Redis / Queue     background tasks, retries, rate guards
+Telegram / Email  notifications only
+```
+
+Principles:
+- Separate API from worker logic (FastAPI serves requests only; workers own background/scheduled work).
+- Neon is the single source of truth — persist job search results, apply links, application state,
+  target role, chat-derived preferences, and follow-up state. No important state lives only in
+  memory or on Render disk.
+- Keep the Vercel frontend; move the backend to Railway first (Cloud Run later if scale grows).
+- Do not redesign the UI while operational state is unstable.
+
+Phase / PR order (each an independently reviewable slice from current `main`):
+
+1. API / client consolidation
+2. Persist job context + apply links (top-priority reliability fix)
+3. Application lifecycle cleanup
+4. Worker / cron separation
+5. Move backend from Render to Railway
+6. Add monitoring / logging
+7. UI redesign (only after 1–6 land)
+
 ## Architecture rules
 
 - Preserve the existing Rico architecture unless the task explicitly approves changing it.

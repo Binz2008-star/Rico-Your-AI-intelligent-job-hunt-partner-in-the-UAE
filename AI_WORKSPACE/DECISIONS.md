@@ -28,6 +28,87 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260707-001 — Split Rico's architecture maturation into phases; persist state before any migration or redesign
+
+Status: accepted
+Date: 2026-07-07
+Owner: Roben / Claude
+Related task: TASK-20260707-001 (phased architecture roadmap)
+
+#### Context
+Rico's current architecture is valid but not mature. It works as a stable production stack
+(Vercel frontend → `/proxy` → Render FastAPI → Rico chat/NLU/safety/job logic → Neon), but
+several backend responsibilities are still mixed: request handling, temporary chat memory, and
+the job-search script share the same process, and some important state (job search results,
+apply links, follow-up state) has historically been unreliable on Render's ephemeral disk.
+
+Rico is evolving from a job board into an **AI career operator**. The product direction is
+strong; the weak point is **operational state**. The clearest warning is the apply-link problem:
+Rico can find a job but lose the apply URL because job context was not reliably persisted to Neon.
+
+Concrete risks:
+| Area | Risk |
+| --- | --- |
+| Render | ephemeral disk, weaker worker/cron story |
+| Memory | job context previously unreliable on Render |
+| Frontend | proxy/env mismatch can break auth state |
+| Product logic | chat, job search, applications, and memory overlap |
+| AI | too much depends on intent-routing correctness |
+| UI | redesign branches can break stable production |
+
+#### Decision
+Mature the architecture in **ordered phases**, smallest-safe first, and do not redesign the UI
+or migrate the whole platform while operational state is still unstable.
+
+Target architecture (end state, not a big-bang migration):
+
+```text
+Vercel            Next.js frontend
+API service       FastAPI (requests only): Rico chat controller, auth/session, job/application API
+Worker service    job scans, follow-up checks, alerts, link verification, scheduled tasks
+Neon              users, profiles, job_context, applications, memory, billing/subscription
+Redis / Queue     background tasks, retries, rate guards
+Telegram / Email  notifications only
+```
+
+Guiding principles:
+1. **Separate API from worker logic.** FastAPI handles requests only; workers own job scans,
+   email alerts, follow-ups, link verification, and scheduled tasks.
+2. **Neon is the single source of truth.** No important state lives only in memory or on Render
+   disk. Must persist: job search results, apply links, application state, target role,
+   chat-derived preferences, follow-up state.
+3. **Keep the Vercel frontend; move the backend later.** Migration target is Railway first,
+   Google Cloud Run later if scale grows. Do not migrate everything at once.
+4. **Do not redesign while the architecture is unstable.** Safe near-term work is shell cleanup,
+   API consolidation, job-lifecycle persistence, application-lifecycle cleanup, and worker/cron
+   structure — not theme switching or a big UI replacement.
+
+Recommended PR / phase order (each an independently reviewable slice):
+1. API / client consolidation
+2. Persist job context + apply links
+3. Application lifecycle cleanup
+4. Worker / cron separation
+5. Move backend from Render to Railway
+6. Add monitoring / logging
+7. UI redesign (only after 1–6 land)
+
+#### Consequences
+- Positive: reliability-first ordering — Rico stops forgetting what it found, what the user
+  opened, what was applied, and what needs follow-up, before any risky migration or redesign.
+- Positive: each phase is a small, reviewable PR from current `main`; production stays stable.
+- Negative/trade-off: the desired UI redesign is deliberately deferred behind operational work;
+  the Render→Railway move is sequenced late, so ephemeral-disk risk persists until phases 2–4
+  reduce reliance on process-local state.
+
+#### Follow-up
+- [ ] Phase 1: audit API/client surface for duplicate/legacy paths (see `apps/web/services/*`
+      vs `apps/web/lib/api.ts`) and consolidate.
+- [ ] Phase 2: confirm job-context + apply-link persistence to Neon end-to-end (this is the
+      top-priority reliability fix; ties into DEC-20260703-001 recommendation-table work).
+- [ ] Phase 3: define the application lifecycle states and reconcile router/runtime writes.
+- [ ] Phase 4: scope the worker/cron service boundary (job scans, follow-ups, link verify).
+- [ ] Phases 5–7 (Railway move, monitoring, UI redesign) stay proposed until 1–4 land.
+
 ### DEC-20260703-001 — Keep partial-unique as ON CONFLICT arbiter; codify full-unique for read coverage
 
 Status: accepted

@@ -56,6 +56,42 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260707-001 — Phased architecture maturation roadmap (state-first, then migration/redesign)
+
+Status: scoped (roadmap; each phase becomes its own scoped task + PR)
+Owner: Roben / Claude
+Branch: per-phase (this entry is the roadmap, not a single PR)
+Issue/PR: DECISIONS.md → DEC-20260707-001
+
+#### Objective
+Mature Rico from a mixed-responsibility backend into a clean API + worker split with Neon as the
+single source of truth, in ordered phases. Fix operational state (Rico must never forget what it
+found, what the user opened, what was applied, and what needs follow-up) **before** any platform
+migration or UI redesign.
+
+#### Context
+- Relevant docs: `AI_WORKSPACE/ARCHITECTURE.md` (Target architecture section), DEC-20260707-001.
+- Existing behavior: FastAPI on Render mixes request handling, temporary chat memory, and the
+  job-search script; apply links / job context historically unreliable on Render's ephemeral disk.
+
+#### Constraints
+- Smallest-safe-first; one phase per PR from current `main`.
+- Do not start the UI redesign or the Render→Railway move until phases 1–4 land.
+- Fixes must be global and user-agnostic (Product Generalization Rule), not per-account.
+
+#### Phase order (each becomes its own scoped task)
+- [ ] Phase 1 — API / client consolidation
+- [ ] Phase 2 — Persist job context + apply links (top-priority reliability fix)
+- [ ] Phase 3 — Application lifecycle cleanup
+- [ ] Phase 4 — Worker / cron separation
+- [ ] Phase 5 — Move backend from Render to Railway
+- [ ] Phase 6 — Add monitoring / logging
+- [ ] Phase 7 — UI redesign (only after 1–6)
+
+#### Required verification
+- [ ] Per phase: focused unit tests + `apps/web` build where frontend changes; deploy smoke when
+      runtime changes (per OPERATING_RULES.md).
+
 <!-- Chat live-QA 2026-07-03 remediation (see AI_WORKSPACE/EVALS/2026-07-03-chat-live-qa.md). -->
 
 ### TASK-20260703-038 — Chat intent router over-triggers job_search (P0)
