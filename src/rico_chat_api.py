@@ -206,6 +206,61 @@ _JOB_COMPANY_FROM_TEXT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# TC-7: structured plain-text tracking — "Position: X. Company: Y. Track it."
+# The trigger requires an explicit track/save instruction so plain searches or
+# pasted postings never fire it; the field regexes stop at sentence punctuation
+# so a single-line message never swallows "Company: Y. Track it." into the title.
+_MANUAL_TRACK_TRIGGER_RE = re.compile(
+    r"\btrack\s+(?:it|this|that)\b"
+    r"|\b(?:add|save)\s+(?:it|this|that)\b.{0,30}\b(?:pipeline|applications?)\b"
+    r"|\u062a\u062a\u0628\u0639\u0647\u0627|\u062a\u062a\u0628\u0639\u0647|\u062a\u062a\u0628\u0639\s+\u0647\u0630\u0627",
+    re.IGNORECASE,
+)
+# A negated instruction ("don't track it" / "\u0644\u0627 \u0623\u0631\u064a\u062f \u062a\u062a\u0628\u0639\u0647\u0627" / "\u0645\u0634 \u0628\u062f\u064a" /
+# "\u0628\u062f\u0648\u0646 \u062a\u062a\u0628\u0639") must never fire the intercept.
+_MANUAL_TRACK_NEGATION_RE = re.compile(
+    r"\b(?:do\s*n[o']?t|never|stop|without)\b[^.\n]{0,30}\b(?:track|sav\w*|add)\b"
+    r"|\u0644\u0627\s+(?:\u062a\u062a\u0628\u0639|\u062a\u062d\u0641\u0638|\u062a\u0633\u062c\u0644)"
+    r"|\u0644\u0627\s+[\u0623\u0627]\u0631\u064a\u062f[^.\n]{0,40}(?:\u062a\u062a\u0628\u0639|\u062d\u0641\u0638|\u062a\u0633\u062c\u064a\u0644)"
+    r"|\u0645\u0634\s+\u0628\u062f\u064a[^.\n]{0,40}(?:\u062a\u062a\u0628\u0639|\u062d\u0641\u0638|\u062a\u0633\u062c\u064a\u0644)"
+    r"|\u0628\u062f\u0648\u0646\s+(?:\u062a\u062a\u0628\u0639|\u062d\u0641\u0638|\u062a\u0633\u062c\u064a\u0644)",
+    re.IGNORECASE,
+)
+# Captures allow internal punctuation ("Sr. HSE Officer", "Senior Manager, HSE",
+# "Acme, Inc.", "QHSE Manager - Oil & Gas") and terminate only at a newline, the
+# next field label, a trailing track/save instruction, or end of message.
+_MANUAL_TRACK_TITLE_RE = re.compile(
+    r"(?:job\s+title|position|role|title|\u0627\u0644\u0645\u0633\u0645\u0649 \u0627\u0644\u0648\u0638\u064a\u0641\u064a|\u0627\u0644\u0648\u0638\u064a\u0641\u0629|\u0627\u0644\u0645\u0646\u0635\u0628)\s*[:\-]\s*"
+    r"([^\n]{3,80}?)"
+    r"(?=\n|[.,;\u060c]?\s*(?:company|employer|organization|\u0627\u0644\u0634\u0631\u0643\u0629|\u062c\u0647\u0629 \u0627\u0644\u0639\u0645\u0644)\s*[:\-]|[.,;\u060c]?\s+(?:track|save|add)\b|[.,;\u060c]?\s*\u062a\u062a\u0628\u0639|[.,;\u060c]?\s*$)",
+    re.IGNORECASE,
+)
+_MANUAL_TRACK_COMPANY_RE = re.compile(
+    r"(?:company|employer|organization|\u0627\u0644\u0634\u0631\u0643\u0629|\u062c\u0647\u0629 \u0627\u0644\u0639\u0645\u0644)\s*[:\-]\s*"
+    r"([^\n]{2,60}?)"
+    r"(?=\n|[.,;\u060c]?\s+(?:track|save|add)\b|[.,;\u060c]?\s*\u062a\u062a\u0628\u0639|[.,;\u060c]?\s*$)",
+    re.IGNORECASE,
+)
+
+# Abbreviations conventionally written with a trailing dot: when a captured
+# field ends with one of these and the message has a "." right after the
+# capture, the dot belongs to the name ("Acme, Inc."), not the sentence.
+_MANUAL_TRACK_ABBREV_DOT_RE = re.compile(
+    r"\b(?:inc|ltd|co|corp|jr|sr|st)$", re.IGNORECASE
+)
+
+
+def _manual_track_field(match: "re.Match[str]", message: str) -> str:
+    value = match.group(1).strip()
+    end = match.end(1)
+    if (
+        end < len(message)
+        and message[end] == "."
+        and _MANUAL_TRACK_ABBREV_DOT_RE.search(value)
+    ):
+        value += "."
+    return value
+
 # BUG-19: application-confirmation evidence — the "Track this application" button
 # from document_classifier._SUGGESTED_ACTIONS["application_confirmation"] plus close
 # natural variants. Intercepted in _handle_job_doc_action so a confirmation
@@ -6140,6 +6195,19 @@ class RicoChatAPI:
         if _doc_action is not None:
             return _doc_action
 
+        # ── Structured plain-text tracking (TC-7) — pre-onboarding ──────────────
+        # A structured track instruction must not be swallowed by the onboarding
+        # welcome or the minimum-profile gate on a fresh account's first turn.
+        # Route it straight to the active handler, which enforces the auth gate
+        # and honest persistence.
+        if (
+            _MANUAL_TRACK_TRIGGER_RE.search(message)
+            and not _MANUAL_TRACK_NEGATION_RE.search(message)
+            and _MANUAL_TRACK_TITLE_RE.search(message)
+            and _MANUAL_TRACK_COMPANY_RE.search(message)
+        ):
+            return self._handle_active_user(user_id, message)
+
         completed = is_onboarding_complete(user_id)
 
         if completed:
@@ -6395,6 +6463,50 @@ class RicoChatAPI:
         _delete_guard = self._intercept_unsupported_delete_mutation(user_id, message)
         if _delete_guard is not None:
             return self._finalize(_delete_guard, self.SOURCE_KEYWORD, profile=profile)
+
+        # ── Structured plain-text tracking (TC-7) ────────────────────────────────
+        # "Position: X. Company: Y. Track it." must save to the pipeline without
+        # a UI button. Requires BOTH structured fields plus an explicit track
+        # instruction, so a pasted posting or a search phrase never triggers it.
+        if _MANUAL_TRACK_TRIGGER_RE.search(message) and not _MANUAL_TRACK_NEGATION_RE.search(message):
+            _mt_title = _MANUAL_TRACK_TITLE_RE.search(message)
+            _mt_company = _MANUAL_TRACK_COMPANY_RE.search(message)
+            if _mt_title and _mt_company:
+                # Authenticated (JWT) sessions only — this is a DB write path.
+                # Same verified-capability rule as the bulk-archive guard: never
+                # inferred from the shape of user_id (public chat can supply an
+                # arbitrary email-shaped string).
+                if not self._can_mutate_applications:
+                    if self._is_arabic_text(message):
+                        _mt_msg = (
+                            "\u062a\u062a\u0628\u0639 \u0627\u0644\u0637\u0644\u0628\u0627\u062a \u0645\u062a\u0627\u062d \u0628\u0639\u062f \u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644. "
+                            "\u0633\u062c\u0651\u0644 \u0627\u0644\u062f\u062e\u0648\u0644 \u0644\u062d\u0641\u0638 \u0647\u0630\u0647 \u0627\u0644\u0648\u0638\u064a\u0641\u0629 \u0641\u064a \u0645\u062a\u0627\u0628\u0639\u0629 \u0637\u0644\u0628\u0627\u062a\u0643."
+                        )
+                    else:
+                        _mt_msg = (
+                            "Application tracking is available once you're signed in. "
+                            "Log in to save this job to your pipeline."
+                        )
+                    self._append_chat(user_id, "assistant", _mt_msg)
+                    return self._finalize(
+                        {
+                            "type": "track_job_requires_auth",
+                            "intent": "track_job",
+                            "message": _mt_msg,
+                        },
+                        self.SOURCE_KEYWORD,
+                        profile=profile,
+                    )
+                return self._finalize(
+                    self._handle_manual_application_track(
+                        user_id,
+                        _manual_track_field(_mt_title, message),
+                        _manual_track_field(_mt_company, message),
+                        arabic=self._is_arabic_text(message),
+                    ),
+                    self.SOURCE_KEYWORD,
+                    profile=profile,
+                )
 
         # ── Proactive Telegram declaration: "my telegram is @handle" ─────────
         # When the user volunteers their Telegram handle with the keyword "telegram"
@@ -11601,6 +11713,104 @@ class RicoChatAPI:
                 or ""
             ).strip()
         return ""
+
+    def _handle_manual_application_track(
+        self, user_id: str, title: str, company: str, *, arabic: bool = False
+    ) -> "dict[str, Any]":
+        """Save a structured plain-text tracking request (TC-7).
+
+        Reuses the same manual-application save path as the job-card buttons so
+        chat, /applications, and /flow stay consistent. Never claims success
+        unless the DB write returns True.
+        """
+        from fastapi import HTTPException as _HTTPException
+
+        from src.repositories.applications_repo import create_manual as _create_manual_app
+
+        saved = False
+        try:
+            saved = _create_manual_app(title=title, company=company, status="saved", user_id=user_id)
+        except _HTTPException as exc:
+            if exc.status_code == 402:
+                # Saved-jobs quota reached — not transient, so tell the user to
+                # upgrade or free a slot instead of asking them to retry.
+                if arabic:
+                    msg = (
+                        f"لقد وصلت إلى حد الوظائف المحفوظة في خطتك، لذا لم أتمكن من حفظ **{title}** في **{company}**. "
+                        "قم بترقية اشتراكك أو أزل وظيفة محفوظة من صفحة الطلبات (/applications) ثم حاول مجددًا."
+                    )
+                else:
+                    msg = (
+                        f"You've reached your plan's saved-jobs limit, so I couldn't save **{title}** at **{company}**. "
+                        "Upgrade your plan or remove a saved job from Applications (/applications), then try again."
+                    )
+                self._append_chat(user_id, "assistant", msg)
+                return {
+                    "type": "track_job_limit_reached",
+                    "intent": "track_job",
+                    "message": msg,
+                    "job_title": title,
+                    "job_company": company,
+                    "job_status": None,
+                    "target_route": "/subscription",
+                    "next_action": "upgrade_subscription",
+                }
+            logger.exception(
+                "manual_track save failed user=%s title=%r company=%r", user_id, title, company
+            )
+        except Exception:
+            logger.exception(
+                "manual_track save failed user=%s title=%r company=%r", user_id, title, company
+            )
+        if saved:
+            if arabic:
+                msg = (
+                    f"\u062a\u0645 \u2014 \u062d\u0641\u0638\u062a **{title}** \u0641\u064a **{company}** \u0636\u0645\u0646 \u0645\u062a\u0627\u0628\u0639\u0629 \u0637\u0644\u0628\u0627\u062a\u0643. "
+                    "\u064a\u0645\u0643\u0646\u0643 \u0645\u062a\u0627\u0628\u0639\u062a\u0647\u0627 \u0645\u0646 \u0635\u0641\u062d\u0629 \u0627\u0644\u0637\u0644\u0628\u0627\u062a (/applications)."
+                )
+            else:
+                msg = (
+                    f"Tracked \u2014 **{title}** at **{company}** saved to your pipeline. "
+                    "You can follow it from Applications (/applications)."
+                )
+            self._store_recent_context(
+                user_id,
+                self._build_recent_application_context(
+                    title=title, company=company, status="saved", action="track_job",
+                ),
+            )
+            response = {
+                "type": "track_job",
+                "intent": "track_job",
+                "message": msg,
+                "job_title": title,
+                "job_company": company,
+                "job_status": "saved",
+                "target_route": "/applications",
+                "next_action": "review_or_mark_applied",
+            }
+        else:
+            if arabic:
+                msg = (
+                    f"\u0641\u0647\u0645\u062a \u0623\u0646\u0643 \u062a\u0631\u064a\u062f \u0645\u062a\u0627\u0628\u0639\u0629 **{title}** \u0641\u064a **{company}**\u060c "
+                    "\u0644\u0643\u0646 \u0644\u0645 \u0623\u062a\u0645\u0643\u0646 \u0645\u0646 \u062d\u0641\u0638\u0647\u0627 \u0627\u0644\u0622\u0646. \u062d\u0627\u0648\u0644 \u0645\u0631\u0629 \u0623\u062e\u0631\u0649 \u0628\u0639\u062f \u0642\u0644\u064a\u0644."
+                )
+            else:
+                msg = (
+                    f"I understood you want to track **{title}** at **{company}**, "
+                    "but I couldn't save it right now. Please try again shortly."
+                )
+            response = {
+                "type": "track_job_failed",
+                "intent": "track_job",
+                "message": msg,
+                "job_title": title,
+                "job_company": company,
+                "job_status": None,
+                "next_action": "retry_track_job",
+            }
+        self._append_chat(user_id, "assistant", msg)
+        return response
 
     def _has_apply_evidence(self, user_id: str, title: str, company: str) -> bool:
         """Return True when there is evidence the user opened an apply link for title/company.
