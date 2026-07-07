@@ -8,25 +8,44 @@ Implementation mode: **docs-only audit/control artifact first**
 
 Runtime changes: **none in this PR**
 
-This audit exists to stabilize Rico before additional feature work, redesign work, worker separation, or Render → Railway migration.
+This audit exists to stabilize Rico production quality before additional feature work, redesign work, or large architectural changes.
+
+Infrastructure migration is **not** the objective of this audit. Render remains the current production backend unless a separate future decision explicitly approves migration.
 
 ---
 
-## Why this exists
+## Core product invariant
 
-Rico is no longer just a job-search chat surface. It is becoming an AI career operations system. Before adding more capability or moving infrastructure, production behavior must be proven across the core lifecycle:
+Rico must never forget what it found, what the user opened, what was applied, and what needs follow-up.
+
+That means Rico must preserve operational memory across:
+
+```text
+chat turns → browser refreshes → new sessions → backend restarts → deploys
+```
+
+The core user lifecycle is:
 
 ```text
 search job → preserve job context → open apply link → save/track → mark applied → follow up
 ```
 
-The current architectural priority is production reliability, not new features.
+A Rico response must not claim success unless the relevant state was actually persisted or safely recoverable.
+
+---
+
+## Why this exists
+
+Rico is no longer just a job-search chat surface. It is becoming an AI career operations system. Before adding more capability, production behavior must be proven across the operational lifecycle.
+
+The current architectural priority is production reliability and memory correctness, not new features.
 
 ---
 
 ## Non-negotiable rules
 
-- Do not migrate from Render to Railway until this audit is complete.
+- Render stays as the production backend for now.
+- Do not start infrastructure migration work from this audit.
 - Do not redesign `/command` during this audit.
 - Do not combine unrelated fixes in one PR.
 - Do not change auth, billing, provider routing, CV parsing, or database schema unless the specific audit finding requires it.
@@ -112,7 +131,27 @@ found → saved/opened → prepared → applied is visible and persistent for th
 
 ---
 
-### Phase 4 — AI routing and memory quality
+### Phase 4 — Follow-up readiness
+
+Required checks:
+
+- [ ] Applied jobs have enough persisted data for later follow-up.
+- [ ] `applied_at` or equivalent timestamp exists when status becomes applied.
+- [ ] Opened-but-not-applied jobs can be listed.
+- [ ] Applied-with-no-response jobs can be listed later without re-searching.
+- [ ] Follow-up candidates are user-scoped.
+- [ ] Rico can explain why a job needs follow-up.
+- [ ] No notification or email is sent automatically unless a separate approved workflow exists.
+
+Acceptance:
+
+```text
+Rico can identify what needs follow-up from persisted state without relying on chat memory only.
+```
+
+---
+
+### Phase 5 — AI routing and memory quality
 
 Required checks:
 
@@ -133,7 +172,7 @@ Intent routing preserves the user task across follow-up turns and does not silen
 
 ---
 
-### Phase 5 — Frontend stability
+### Phase 6 — Frontend stability
 
 Required checks:
 
@@ -155,7 +194,7 @@ Core surfaces are stable on desktop and mobile without visual regressions that b
 
 ---
 
-### Phase 6 — Backend/API reliability
+### Phase 7 — Backend/API reliability
 
 Required checks:
 
@@ -177,7 +216,7 @@ Backend failures are safe, observable, and do not create false user confirmation
 
 ---
 
-### Phase 7 — Security and privacy
+### Phase 8 — Security and privacy
 
 Required checks:
 
@@ -198,22 +237,22 @@ No obvious data isolation, auth, or secret-leak regression exists in current pro
 
 ---
 
-### Phase 8 — Infra migration readiness
+### Phase 9 — Infrastructure readiness, not migration
 
-Required checks before Render → Railway:
+Required checks:
 
 - [ ] API/worker responsibilities are separated or explicitly documented.
 - [ ] Background jobs are not dependent on request lifecycle.
 - [ ] Monitoring/logging exists for API and worker.
 - [ ] Production smoke suite is repeatable.
-- [ ] Rollback path to Render is documented.
-- [ ] Vercel envs can switch backend URL safely.
+- [ ] Render rollback/redeploy path is documented.
+- [ ] Vercel backend URL handling is safe.
 - [ ] Neon remains the source of truth.
 
 Acceptance:
 
 ```text
-Railway migration can be done as a controlled infrastructure PR, not as a rescue operation.
+The current Render-based production system is observable, recoverable, and stable enough to operate.
 ```
 
 ---
@@ -267,17 +306,17 @@ Do not start these until the relevant audit finding is proven.
 PR 1 — Fix any P0 production smoke failures
 PR 2 — Fix apply-link/session persistence regressions if found
 PR 3 — Fix application lifecycle false-confirmation issues if found
-PR 4 — Fix AI routing/context recovery issues
-PR 5 — Add/repair repeatable smoke tooling
-PR 6 — Add monitoring/logging improvements
-PR 7 — Worker/cron separation
-PR 8 — Render → Railway migration
+PR 4 — Fix follow-up readiness gaps if found
+PR 5 — Fix AI routing/context recovery issues
+PR 6 — Add/repair repeatable smoke tooling
+PR 7 — Add monitoring/logging improvements
+PR 8 — Worker/cron separation only if audit proves it is needed now
 ```
 
 ---
 
 ## Current decision
 
-Proceed with production hardening audit.
+Proceed with production hardening audit centered on Rico operational memory.
 
-Do not start Railway migration, visual redesign, or new agent features until the audit report classifies current production risks and the P0/P1 fixes are complete.
+Do not start infrastructure migration, visual redesign, or new agent features until the audit report classifies current production risks and the P0/P1 fixes are complete.
