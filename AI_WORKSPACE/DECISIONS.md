@@ -38,6 +38,26 @@ Date: 2026-07-07
 Owner: Roben / Claude
 Related task: TASK-20260707-001 (phased architecture roadmap)
 
+#### Relationship to the production hardening audit gate (2026-07-08)
+This decision is the **architecture-level roadmap**. The **near-term execution authority is the
+production hardening audit gate**: `AI_WORKSPACE/AUDITS/2026-07-08-production-hardening-audit.md`
+(+ Codex follow-up `AI_WORKSPACE/AUDITS/2026-07-08-audit-gate-codex-followup.md`). Agents must
+read that audit before starting any feature, redesign, worker, notification, or infrastructure
+work; it controls immediate stabilization, and its Phase 2 (job context & apply-link lifecycle)
+governs the near-term work this decision calls "PR A".
+
+The two do not compete: DEC-20260707-001 keeps the higher-level sequence (including the deferred
+Railway/worker/UI phases the audit explicitly does **not** authorize yet); the audit gate is how
+the near-term operational-memory phases actually get proven and shipped. Render stays the current
+production backend; no infrastructure migration work starts from either document now.
+
+**PR A is verify-first, not rebuild-first.** The persistence layer already exists on `main`
+(`user_job_context_repo.py`, migrations 018–022, the `rico_chat_api.py` write/read paths, and the
+lifecycle routers). PR A therefore means: prove the specific gap first (Audit Phase 2 checks),
+then ship the smallest safe fix for a **proven** gap only. Do not build a second implementation of
+job persistence. Verification and any fix use **synthetic users and synthetic profile data only** —
+no real-user smoke or mutation is authorized unless the owner explicitly approves a specific run.
+
 #### Context
 Rico's current architecture is valid but not mature. It works as a stable production stack
 (Vercel frontend → `/proxy` → Render FastAPI → Rico chat/NLU/safety/job logic → Neon), but
@@ -91,7 +111,9 @@ Rationale for ordering: Rico's biggest current product risk is **losing operatio
 persistence and application lifecycle come before API consolidation. Each phase has measurable
 completion criteria; a phase is not "done" until its criteria are met and regression tests pass.
 
-1. **Persist job context + apply links** (PR A) — top-priority reliability fix.
+1. **Persist job context + apply links** (PR A — **verify-first**) — top-priority reliability fix.
+   Persistence already exists on `main`; this phase proves Audit Phase 2 gaps (synthetic data only)
+   and fixes only what is proven — it does not rebuild persistence.
    - [ ] Job search results persisted in Neon (not memory / Render disk).
    - [ ] Apply links survive a backend restart.
    - [ ] "Open apply link" uses the persisted context, not in-memory state.

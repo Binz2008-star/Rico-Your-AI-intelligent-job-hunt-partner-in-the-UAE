@@ -70,17 +70,29 @@ found, what the user opened, what was applied, and what needs follow-up) **befor
 migration or UI redesign.
 
 #### Context
-- Relevant docs: `AI_WORKSPACE/ARCHITECTURE.md` (Target architecture section), DEC-20260707-001.
+- Relevant docs: `AI_WORKSPACE/ARCHITECTURE.md` (Target architecture section), DEC-20260707-001,
+  and the near-term execution gate `AI_WORKSPACE/AUDITS/2026-07-08-production-hardening-audit.md`
+  (+ Codex follow-up). Read the audit before starting any feature/redesign/worker/infra work.
 - Existing behavior: FastAPI on Render mixes request handling, temporary chat memory, and the
   job-search script; apply links / job context historically unreliable on Render's ephemeral disk.
+- PR A persistence already exists on `main` (`user_job_context_repo.py`, migrations 018–022,
+  `rico_chat_api.py` write/read paths, lifecycle routers) — so PR A is verify-first, not rebuild.
 
 #### Constraints
+- DEC-20260707-001 is the architecture-level roadmap; the 2026-07-08 production hardening audit is
+  the near-term execution gate that controls immediate stabilization work.
 - Smallest-safe-first; one phase per PR from current `main`.
-- Do not start the UI redesign or the Render→Railway move until phases 1–4 land.
+- Do not start the UI redesign or the Render→Railway move until phases 1–4 land; Render stays the
+  current production backend.
+- Verify-first: fix only gaps proven via the audit's checks. No second implementation of job
+  persistence.
+- Verification/fixes use synthetic users and synthetic profile data only; no real-user smoke or
+  mutation unless the owner explicitly approves a specific smoke run.
 - Fixes must be global and user-agnostic (Product Generalization Rule), not per-account.
 
 #### Phase order (each becomes its own scoped task; per-phase success criteria in DEC-20260707-001)
-- [ ] Phase 1 (PR A) — Persist job context + apply links (top-priority reliability fix)
+- [ ] Phase 1 (PR A, verify-first) — Persist job context + apply links (top-priority reliability fix;
+      prove Audit Phase 2 gaps with synthetic data, fix only proven gaps, do not rebuild)
 - [ ] Phase 2 (PR B) — Application lifecycle cleanup
 - [ ] Phase 3 (PR C) — API / client consolidation
 - [ ] Phase 4 (PR D) — Worker / cron separation

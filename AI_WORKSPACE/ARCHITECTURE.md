@@ -113,6 +113,14 @@ historically relied on Render's ephemeral disk for state that must be durable. S
 > "Current live stack" at the top of this file). Railway, the separate worker service, and
 > Redis/Queue do **not** yet exist in production. Render remains production until Railway passes
 > full production smoke testing.
+>
+> Near-term execution gate: read `AI_WORKSPACE/AUDITS/2026-07-08-production-hardening-audit.md`
+> **before** starting any feature, redesign, worker, notification, or infrastructure work. That
+> production hardening audit — centered on operational memory — is the immediate stabilization
+> authority; this target architecture is the higher-level roadmap it feeds into. Phase 1 below
+> ("persist job context + apply links") is **verify-first**: the persistence layer already exists
+> on `main`, so prove the audit's Phase 2 gaps with synthetic data and fix only proven gaps — do
+> not rebuild persistence. No real-user smoke or mutation without explicit owner approval.
 
 Target end-state (reached in ordered phases, not a big-bang migration):
 
