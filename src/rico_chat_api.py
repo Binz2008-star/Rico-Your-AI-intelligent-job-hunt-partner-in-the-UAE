@@ -216,27 +216,50 @@ _MANUAL_TRACK_TRIGGER_RE = re.compile(
     r"|\u062a\u062a\u0628\u0639\u0647\u0627|\u062a\u062a\u0628\u0639\u0647|\u062a\u062a\u0628\u0639\s+\u0647\u0630\u0627",
     re.IGNORECASE,
 )
-# A negated instruction ("don't track it") must never fire the intercept.
+# A negated instruction ("don't track it" / "\u0644\u0627 \u0623\u0631\u064a\u062f \u062a\u062a\u0628\u0639\u0647\u0627" / "\u0645\u0634 \u0628\u062f\u064a" /
+# "\u0628\u062f\u0648\u0646 \u062a\u062a\u0628\u0639") must never fire the intercept.
 _MANUAL_TRACK_NEGATION_RE = re.compile(
     r"\b(?:do\s*n[o']?t|never|stop|without)\b[^.\n]{0,30}\b(?:track|sav\w*|add)\b"
-    r"|\u0644\u0627\s+\u062a\u062a\u0628\u0639",
+    r"|\u0644\u0627\s+(?:\u062a\u062a\u0628\u0639|\u062a\u062d\u0641\u0638|\u062a\u0633\u062c\u0644)"
+    r"|\u0644\u0627\s+[\u0623\u0627]\u0631\u064a\u062f[^.\n]{0,40}(?:\u062a\u062a\u0628\u0639|\u062d\u0641\u0638|\u062a\u0633\u062c\u064a\u0644)"
+    r"|\u0645\u0634\s+\u0628\u062f\u064a[^.\n]{0,40}(?:\u062a\u062a\u0628\u0639|\u062d\u0641\u0638|\u062a\u0633\u062c\u064a\u0644)"
+    r"|\u0628\u062f\u0648\u0646\s+(?:\u062a\u062a\u0628\u0639|\u062d\u0641\u0638|\u062a\u0633\u062c\u064a\u0644)",
     re.IGNORECASE,
 )
-# Field captures are lazy and stop at sentence punctuation, the next field
-# label, or a trailing track/save instruction — so unpunctuated single-line
-# text like "Position: X Company: Y Track it" still yields clean fields.
+# Captures allow internal punctuation ("Sr. HSE Officer", "Senior Manager, HSE",
+# "Acme, Inc.", "QHSE Manager - Oil & Gas") and terminate only at a newline, the
+# next field label, a trailing track/save instruction, or end of message.
 _MANUAL_TRACK_TITLE_RE = re.compile(
     r"(?:job\s+title|position|role|title|\u0627\u0644\u0645\u0633\u0645\u0649 \u0627\u0644\u0648\u0638\u064a\u0641\u064a|\u0627\u0644\u0648\u0638\u064a\u0641\u0629|\u0627\u0644\u0645\u0646\u0635\u0628)\s*[:\-]\s*"
-    r"([^\n.,;\u060c]{3,80}?)"
-    r"(?=[\n.,;\u060c]|\s+(?:company|employer|organization|\u0627\u0644\u0634\u0631\u0643\u0629|\u062c\u0647\u0629 \u0627\u0644\u0639\u0645\u0644)\s*[:\-]|\s+(?:track|save|add)\b|\s+\u062a\u062a\u0628\u0639|$)",
+    r"([^\n]{3,80}?)"
+    r"(?=\n|[.,;\u060c]?\s*(?:company|employer|organization|\u0627\u0644\u0634\u0631\u0643\u0629|\u062c\u0647\u0629 \u0627\u0644\u0639\u0645\u0644)\s*[:\-]|[.,;\u060c]?\s+(?:track|save|add)\b|[.,;\u060c]?\s*\u062a\u062a\u0628\u0639|[.,;\u060c]?\s*$)",
     re.IGNORECASE,
 )
 _MANUAL_TRACK_COMPANY_RE = re.compile(
     r"(?:company|employer|organization|\u0627\u0644\u0634\u0631\u0643\u0629|\u062c\u0647\u0629 \u0627\u0644\u0639\u0645\u0644)\s*[:\-]\s*"
-    r"([^\n.,;\u060c]{2,60}?)"
-    r"(?=[\n.,;\u060c]|\s+(?:track|save|add)\b|\s+\u062a\u062a\u0628\u0639|$)",
+    r"([^\n]{2,60}?)"
+    r"(?=\n|[.,;\u060c]?\s+(?:track|save|add)\b|[.,;\u060c]?\s*\u062a\u062a\u0628\u0639|[.,;\u060c]?\s*$)",
     re.IGNORECASE,
 )
+
+# Abbreviations conventionally written with a trailing dot: when a captured
+# field ends with one of these and the message has a "." right after the
+# capture, the dot belongs to the name ("Acme, Inc."), not the sentence.
+_MANUAL_TRACK_ABBREV_DOT_RE = re.compile(
+    r"\b(?:inc|ltd|co|corp|jr|sr|st)$", re.IGNORECASE
+)
+
+
+def _manual_track_field(match: "re.Match[str]", message: str) -> str:
+    value = match.group(1).strip()
+    end = match.end(1)
+    if (
+        end < len(message)
+        and message[end] == "."
+        and _MANUAL_TRACK_ABBREV_DOT_RE.search(value)
+    ):
+        value += "."
+    return value
 
 # BUG-19: application-confirmation evidence — the "Track this application" button
 # from document_classifier._SUGGESTED_ACTIONS["application_confirmation"] plus close
@@ -6172,6 +6195,19 @@ class RicoChatAPI:
         if _doc_action is not None:
             return _doc_action
 
+        # ── Structured plain-text tracking (TC-7) — pre-onboarding ──────────────
+        # A structured track instruction must not be swallowed by the onboarding
+        # welcome or the minimum-profile gate on a fresh account's first turn.
+        # Route it straight to the active handler, which enforces the auth gate
+        # and honest persistence.
+        if (
+            _MANUAL_TRACK_TRIGGER_RE.search(message)
+            and not _MANUAL_TRACK_NEGATION_RE.search(message)
+            and _MANUAL_TRACK_TITLE_RE.search(message)
+            and _MANUAL_TRACK_COMPANY_RE.search(message)
+        ):
+            return self._handle_active_user(user_id, message)
+
         completed = is_onboarding_complete(user_id)
 
         if completed:
@@ -6464,8 +6500,8 @@ class RicoChatAPI:
                 return self._finalize(
                     self._handle_manual_application_track(
                         user_id,
-                        _mt_title.group(1).strip(),
-                        _mt_company.group(1).strip(),
+                        _manual_track_field(_mt_title, message),
+                        _manual_track_field(_mt_company, message),
                         arabic=self._is_arabic_text(message),
                     ),
                     self.SOURCE_KEYWORD,
