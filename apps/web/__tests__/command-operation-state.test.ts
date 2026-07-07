@@ -97,6 +97,8 @@ describe("isRetryableJobSearchIntent — decoupled timeout/retry guard (TC-11 it
     "roles similar to my current role in Dubai", // Codex P2 — comparison basis
     "positions like my current position",
     "find jobs with relocation package", // Codex P2 — subscription word in a search
+    "find Applied Scientist jobs in Dubai", // Codex "A" — "Applied" is a title, not lifecycle
+    "Applied AI roles in UAE", // Codex "A" — title adjective, real search
     "ابحث عن وظائف", // Arabic: "search for jobs"
   ])("retries as a job search: %s", (msg) => {
     expect(isRetryableJobSearchIntent(msg)).toBe(true);

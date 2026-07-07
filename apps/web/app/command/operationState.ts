@@ -77,8 +77,12 @@ export function pickOperationState(
 // avoids inheriting its branch ordering (subscription-first, jobs?-plural,
 // self-reference) — the root cause of the Codex P2 regressions.
 const JOB_SEARCH_SIGNAL_RE = /\b(jobs?|find|search|vacanc|opening|hiring|recruit|roles?|positions?)\b/;
-// Applied/saved/opened lifecycle lists — a pipeline view, not a job search.
-const LIFECYCLE_LIST_RE = /\b(applied|saved|opened|bookmark(?:ed)?|shortlist(?:ed)?|archiv)\b/;
+// Applied/saved/opened lifecycle *lists* — a pipeline view, not a job search.
+// Matches ownership/list phrasing ("my applied", "saved jobs", "jobs I opened")
+// rather than a bare keyword, so a title adjective like "Applied Scientist" /
+// "Applied AI" in a real search is not suppressed (Codex "A").
+const LIFECYCLE_LIST_RE =
+  /\b(?:my|the)\s+(?:applied|saved|opened|archived|bookmarked|shortlisted)\b|\b(?:applied|saved|opened|archived|bookmarked|shortlisted)\s+jobs?\b|\bjobs?\s+i\s+(?:applied|opened|saved|bookmarked)\b/;
 // The user's OWN role/position/profile as the subject of the message.
 const PROFILE_SELF_RE = /\bmy\b[^?.!\n]{0,20}\b(roles?|positions?|profile|title|cv|resume|experience|skills|background|seniority)\b/;
 // Signals that a "my role/position" phrase is a search basis, not a self-question
