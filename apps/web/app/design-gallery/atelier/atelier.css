@@ -13,55 +13,11 @@
  * TanStack prototype's styles.css.
  * ========================================================================== */
 
-.atelier {
-    /* ── Atelier palette — light (default) ─────────────────────────────────── */
-    --paper: #f2ece0;
-    --paper-2: #e8dfcd;
-    --ink: #14110d;
-    --ink-soft: #3a342c;
-    --ink-mute: #6b6355;
-    --rule: #d3c9b4;
-    --sun: #cf3d17;
-    --sun-soft: #ea8a4e;
-    --destructive: #b23a1a;
-
-    --atl-radius: 14px;
-    --atl-radius-sm: 9px;
-
-    /* Fonts. EN body/mono inherit the global next/font variables already on
-     * <body> (--font-body = Inter, --font-mono = IBM Plex Mono). Display + the
-     * Arabic families come from the route-scoped next/font vars set in page.tsx. */
-    --atl-font-display: var(--font-atl-display), Georgia, "Times New Roman", serif;
-    --atl-font-body: var(--font-body), system-ui, -apple-system, sans-serif;
-    --atl-font-mono: var(--font-mono), ui-monospace, "SFMono-Regular", monospace;
-    --atl-font-display-ar: var(--font-atl-display-ar), "Amiri", serif;
-    --atl-font-body-ar: var(--font-atl-body-ar), system-ui, sans-serif;
-
-    background: var(--paper);
-    color: var(--ink);
-    font-family: var(--atl-font-body);
-    min-height: 100vh;
-    -webkit-font-smoothing: antialiased;
-}
-
-/* ── Atelier palette — dark ("Atelier at night") ───────────────────────────── */
-.atelier[data-atl-theme="dark"] {
-    --paper: #16130e;
-    --paper-2: #1f1a12;
-    --ink: #f2ece0;
-    --ink-soft: #d7cebc;
-    --ink-mute: #9a907d;
-    --rule: #35302a;
-    --sun: #ee6a3a;
-    --sun-soft: #f0a170;
-    --destructive: #d6552e;
-    color-scheme: dark;
-}
-
-/* Arabic mode swaps the body + display families to the AR companions. */
-.atelier[dir="rtl"] {
-    font-family: var(--atl-font-body-ar);
-}
+/* The `.atelier` token layer (light + dark palettes, font variables, RTL body
+ * font) now lives in the shared, scoped app/_atelier/atelier-tokens.css so the
+ * specimen and the /terms island share ONE token source. Only specimen-specific
+ * component styles remain below. Import must precede the rules that use it. */
+@import "../../_atelier/atelier-tokens.css";
 
 /* ── Layout scaffold ───────────────────────────────────────────────────────── */
 .atelier .atl-wrap {

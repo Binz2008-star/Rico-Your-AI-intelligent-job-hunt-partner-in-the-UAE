@@ -1,0 +1,329 @@
+/* ============================================================================
+ * Atelier V2 — SHARED scoped token layer.
+ *
+ * Single source of truth for the Atelier design tokens. Imported by every
+ * Atelier "island" (the /design-gallery/atelier specimen and the /terms pilot).
+ *
+ * HARD SAFETY RULES:
+ *  - Every selector is scoped under `.atelier`. There are NO html / body / :root
+ *    / global selectors here and NO global color or token overrides.
+ *  - Nothing in production carries the `.atelier` class except components that
+ *    explicitly opt in, so this file cannot affect the global Nocturne theme,
+ *    the default (dark) app, or any unconverted page.
+ *  - It does not touch ThemeContext, LanguageContext, globals.css, or layout.tsx.
+ *
+ * Token values are the approved Atelier palette (DESIGN-HANDOFF.md §2),
+ * re-authored for Next.js — NOT copied from the TanStack/Lovable prototype.
+ * ========================================================================== */
+
+.atelier {
+    /* ── Atelier palette — light (default) ─────────────────────────────────── */
+    --paper: #f2ece0;
+    --paper-2: #e8dfcd;
+    --ink: #14110d;
+    --ink-soft: #3a342c;
+    --ink-mute: #6b6355;
+    --rule: #d3c9b4;
+    --sun: #cf3d17;
+    --sun-soft: #ea8a4e;
+    --destructive: #b23a1a;
+
+    --atl-radius: 14px;
+    --atl-radius-sm: 9px;
+
+    /* Fonts. EN body/mono inherit the global next/font variables already on
+     * <body> (--font-body = Inter, --font-mono = IBM Plex Mono). The display
+     * serif + Arabic families come from a route-scoped next/font var when the
+     * island's route provides one (e.g. the gallery specimen sets
+     * --font-atl-display); otherwise they gracefully fall back to a serif /
+     * system-Arabic stack. */
+    --atl-font-display: var(--font-atl-display), Georgia, "Times New Roman", serif;
+    --atl-font-body: var(--font-body), system-ui, -apple-system, sans-serif;
+    --atl-font-mono: var(--font-mono), ui-monospace, "SFMono-Regular", monospace;
+    --atl-font-display-ar: var(--font-atl-display-ar), "Amiri", serif;
+    --atl-font-body-ar: var(--font-atl-body-ar), system-ui, sans-serif;
+
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--atl-font-body);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ── Atelier palette — dark ("Atelier at night") ───────────────────────────── */
+.atelier[data-atl-theme="dark"] {
+    --paper: #16130e;
+    --paper-2: #1f1a12;
+    --ink: #f2ece0;
+    --ink-soft: #d7cebc;
+    --ink-mute: #9a907d;
+    --rule: #35302a;
+    --sun: #ee6a3a;
+    --sun-soft: #f0a170;
+    --destructive: #d6552e;
+    color-scheme: dark;
+}
+
+/* Arabic mode swaps the body family to the AR companion. */
+.atelier[dir="rtl"] {
+    font-family: var(--atl-font-body-ar);
+}
+
+/* ============================================================================
+ * Reusable "document island" primitives — for legal / static content pages
+ * rendered as a light-first Atelier island (e.g. /terms). All scoped to
+ * `.atelier`; unconverted pages never see these.
+ * ========================================================================== */
+.atelier.atl-doc {
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+}
+
+/* ── Header ────────────────────────────────────────────────────────────────── */
+.atelier .atl-doc-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 16px 20px;
+    background: color-mix(in srgb, var(--paper) 90%, transparent);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--rule);
+}
+
+.atelier .atl-doc-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--atl-font-display);
+    font-size: 19px;
+    font-weight: 500;
+    color: var(--ink);
+    text-decoration: none;
+    letter-spacing: -0.01em;
+}
+
+.atelier[dir="rtl"] .atl-doc-brand {
+    font-family: var(--atl-font-display-ar);
+}
+
+.atelier .atl-doc-brand-mark {
+    display: inline-grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: var(--atl-radius-sm);
+    background: var(--sun);
+    color: var(--paper);
+    font-family: var(--atl-font-mono);
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.atelier .atl-doc-brand-accent {
+    color: var(--sun);
+}
+
+.atelier .atl-doc-nav {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.atelier .atl-doc-navlink {
+    font-size: 14px;
+    color: var(--ink-soft);
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.atelier .atl-doc-navlink:hover {
+    color: var(--sun);
+}
+
+.atelier .atl-doc-toggle {
+    font-family: var(--atl-font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 5px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    color: var(--ink-soft);
+    background: transparent;
+    border: 1px solid var(--rule);
+    transition: all 0.15s ease;
+}
+
+.atelier .atl-doc-toggle:hover {
+    border-color: var(--sun);
+    color: var(--sun);
+}
+
+/* ── Main / content panel ──────────────────────────────────────────────────── */
+.atelier .atl-doc-main {
+    flex: 1;
+    width: 100%;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 56px 20px 72px;
+}
+
+.atelier .atl-doc-panel {
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    border-radius: var(--atl-radius);
+    padding: 40px 32px;
+}
+
+.atelier .atl-doc-title {
+    font-family: var(--atl-font-display);
+    font-weight: 400;
+    font-size: clamp(30px, 4vw, 42px);
+    line-height: 1.12;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    margin: 0 0 8px;
+}
+
+.atelier[dir="rtl"] .atl-doc-title,
+.atelier[dir="rtl"] .atl-doc-body h2 {
+    font-family: var(--atl-font-display-ar);
+}
+
+.atelier .atl-doc-sub {
+    font-family: var(--atl-font-mono);
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    color: var(--ink-mute);
+    margin: 0 0 32px;
+}
+
+/* ── Prose body ────────────────────────────────────────────────────────────── */
+.atelier .atl-doc-body {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+.atelier .atl-doc-body h2 {
+    font-family: var(--atl-font-display);
+    font-weight: 500;
+    font-size: 20px;
+    line-height: 1.3;
+    color: var(--ink);
+    margin: 0 0 12px;
+}
+
+.atelier .atl-doc-body p {
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--ink-soft);
+    margin: 0 0 12px;
+}
+
+.atelier .atl-doc-body p:last-child {
+    margin-bottom: 0;
+}
+
+.atelier .atl-doc-body ul {
+    margin: 0;
+    padding-inline-start: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    list-style: disc;
+}
+
+.atelier .atl-doc-body ul.atl-doc-plain {
+    list-style: none;
+    padding-inline-start: 0;
+}
+
+.atelier .atl-doc-body li {
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--ink-soft);
+}
+
+.atelier .atl-doc-body strong {
+    color: var(--ink);
+    font-weight: 600;
+}
+
+.atelier .atl-doc-body a {
+    color: var(--sun);
+    text-decoration: none;
+    border-bottom: 1px solid color-mix(in srgb, var(--sun) 35%, transparent);
+    transition: border-color 0.15s ease;
+}
+
+.atelier .atl-doc-body a:hover {
+    border-bottom-color: var(--sun);
+}
+
+/* ── Footer ────────────────────────────────────────────────────────────────── */
+.atelier .atl-doc-footer {
+    border-top: 1px solid var(--rule);
+    padding: 32px 20px;
+    text-align: center;
+    background: color-mix(in srgb, var(--paper-2) 70%, var(--paper));
+}
+
+.atelier .atl-doc-footer-brand {
+    font-family: var(--atl-font-display);
+    font-size: 15px;
+    color: var(--ink);
+    margin: 0 0 4px;
+}
+
+.atelier .atl-doc-footer p {
+    font-size: 12px;
+    color: var(--ink-mute);
+    margin: 0 0 4px;
+}
+
+.atelier .atl-doc-footer-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    margin: 12px 0;
+}
+
+.atelier .atl-doc-footer-links a {
+    font-size: 12px;
+    color: var(--ink-mute);
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.atelier .atl-doc-footer-links a:hover {
+    color: var(--sun);
+}
+
+.atelier .atl-doc-footer-links .atl-doc-current {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.atelier .atl-doc-footer a {
+    color: var(--sun);
+    text-decoration: none;
+}
+
+/* Reduced-motion respect (mirrors production globals policy). */
+@media (prefers-reduced-motion: reduce) {
+    .atelier *,
+    .atelier *::before,
+    .atelier *::after {
+        transition-duration: 0.01ms !important;
+    }
+}
