@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { isJobSearchIntent, pickOperationState } from "@/app/command/operationState";
+import { isRetryableJobSearchIntent, pickOperationState } from "@/app/command/operationState";
 
 describe("pickOperationState (TC-11)", () => {
   it.each([
@@ -64,21 +64,29 @@ describe("pickOperationState (TC-11)", () => {
   });
 });
 
-describe("isJobSearchIntent — timeout/retry guard (TC-11 item 7)", () => {
-  // Profile/career self-queries must NOT be retried as a search ("Retrying search…").
+describe("isRetryableJobSearchIntent — decoupled timeout/retry guard (TC-11 item 7 + Codex P2s)", () => {
+  // Must NOT be retried as a search — profile/self-reference (item 7) and
+  // applied/saved/opened lifecycle lists (Codex P2s).
   it.each([
     "what is my current role?",
     "what is my profile?",
     "what is my position?",
+    "what's my role?",
     "review my profile",
+    "improve my cv",
     "my position at the company",
     "show me my target roles",
-  ])("does NOT treat a profile/career self-query as a job search: %s", (msg) => {
-    expect(isJobSearchIntent(msg)).toBe(false);
+    "show my applied jobs", // Codex P2 — applied lifecycle
+    "status of my applied jobs",
+    "show my saved jobs", // Codex P2 — saved lifecycle
+    "my saved jobs",
+    "jobs I opened without applying",
+  ])("does NOT retry as a job search: %s", (msg) => {
+    expect(isRetryableJobSearchIntent(msg)).toBe(false);
   });
 
-  // Explicit job hunts (English + Arabic) must still retry as a search — including
-  // CV-based and career-role phrasing (Codex P2 regression fix).
+  // Must retry as a search — real job hunts, including CV-based, career-role,
+  // comparison-to-current-role, and subscription-word phrasing (Codex P2s), plus Arabic.
   it.each([
     "find me HSE Officer roles in Dubai",
     "search for developer jobs",
@@ -86,8 +94,11 @@ describe("isJobSearchIntent — timeout/retry guard (TC-11 item 7)", () => {
     "sales manager position in Dubai based on my CV",
     "cybersecurity career role in Dubai",
     "finance career roles in Abu Dhabi",
+    "roles similar to my current role in Dubai", // Codex P2 — comparison basis
+    "positions like my current position",
+    "find jobs with relocation package", // Codex P2 — subscription word in a search
     "ابحث عن وظائف", // Arabic: "search for jobs"
-  ])("treats an explicit job hunt as a job search: %s", (msg) => {
-    expect(isJobSearchIntent(msg)).toBe(true);
+  ])("retries as a job search: %s", (msg) => {
+    expect(isRetryableJobSearchIntent(msg)).toBe(true);
   });
 });

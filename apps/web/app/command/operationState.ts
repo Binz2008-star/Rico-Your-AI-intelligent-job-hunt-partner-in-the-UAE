@@ -68,18 +68,41 @@ export function pickOperationState(
   return null;
 }
 
+// --- Timeout/retry guard -----------------------------------------------------
+// Deliberately independent of pickOperationState (the optimistic chip). The
+// retry is cheap cold-start insurance, so this errs toward retrying real
+// job/role/position searches, while excluding the two things that must NOT be
+// retried as a search: pure self-referential profile questions (TC-11 item 7)
+// and applied/saved/opened lifecycle list requests. Not delegating to the chip
+// avoids inheriting its branch ordering (subscription-first, jobs?-plural,
+// self-reference) — the root cause of the Codex P2 regressions.
+const JOB_SEARCH_SIGNAL_RE = /\b(jobs?|find|search|vacanc|opening|hiring|recruit|roles?|positions?)\b/;
+// Applied/saved/opened lifecycle lists — a pipeline view, not a job search.
+const LIFECYCLE_LIST_RE = /\b(applied|saved|opened|bookmark(?:ed)?|shortlist(?:ed)?|archiv)\b/;
+// The user's OWN role/position/profile as the subject of the message.
+const PROFILE_SELF_RE = /\bmy\b[^?.!\n]{0,20}\b(roles?|positions?|profile|title|cv|resume|experience|skills|background|seniority)\b/;
+// Signals that a "my role/position" phrase is a search basis, not a self-question
+// ("roles similar to my current role in Dubai", "…based on my CV").
+const SEARCH_CONTEXT_RE = /\b(find|search|jobs?|vacanc|opening|hiring|recruit|similar to|like|based on|matching|dubai|abu dhabi|sharjah|ajman|ras al khaimah|fujairah|umm al quwain|uae|emirates|remote|on-?site|hybrid|relocat|salary)\b/;
+const ARABIC_SEARCH_RE = /ابحث|وظيف|بحث/;
+
 /**
- * Whether a message should be treated as a job-search intent by the
- * timeout/retry path (which shows "Retrying search…" and retries once with a
- * longer timeout). Routed through the same classifier as the pre-send chip so a
- * profile/career question ("what is my current role?") is never retried as a
- * search (TC-11), while a real role/position search — including CV-based and
- * career-role phrasing — still gets the retry. Keeps the Arabic search tokens
- * the English classifier does not cover.
+ * Whether a timed-out request should be retried once as a job search (and show
+ * "Retrying search…"). Broad job-search detection that still excludes pure
+ * profile/self-reference questions ("what is my current role?" — TC-11 item 7)
+ * and applied/saved/opened lifecycle lists ("show my saved jobs"). CV-based,
+ * career-role, comparison-to-current-role, and subscription-word job searches
+ * ("find jobs with relocation package") are all still retried. Preserves the
+ * Arabic search tokens.
  */
-export function isJobSearchIntent(text: string): boolean {
-  return (
-    pickOperationState(text.toLowerCase())?.state === "searching"
-    || /ابحث|وظيف|بحث/.test(text)
-  );
+export function isRetryableJobSearchIntent(text: string): boolean {
+  if (ARABIC_SEARCH_RE.test(text)) return true;
+  const lc = text.toLowerCase();
+  if (!JOB_SEARCH_SIGNAL_RE.test(lc)) return false;
+  if (LIFECYCLE_LIST_RE.test(lc)) return false;
+  // A pure self-referential profile question is not a search — but the same
+  // "my role/position" wording *with* search context (a location, "similar to",
+  // "based on", an explicit search verb) is a real search.
+  if (PROFILE_SELF_RE.test(lc) && !SEARCH_CONTEXT_RE.test(lc)) return false;
+  return true;
 }
