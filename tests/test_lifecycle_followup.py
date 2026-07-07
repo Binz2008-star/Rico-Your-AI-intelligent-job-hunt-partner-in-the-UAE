@@ -188,17 +188,17 @@ class TestListFollowupFlow:
 from src.rico_chat_api import (  # noqa: E402
     _DELETE_SAVED_JOBS_RE,
     _PROFILE_READBACK_RE,
-    _SAVED_JOBS_DESTRUCTIVE_RE,
     _SAVED_JOBS_LIST_RE,
+    _SAVED_JOBS_LIST_VETO_RE,
     _UNSUPPORTED_DELETE_RE,
 )
 
 
 def _saved_jobs_list_route(message: str) -> bool:
-    """Mirror the dispatch guard: list only when not destructive."""
+    """Mirror the dispatch guard: list only when not destructive/action."""
     return bool(
         _SAVED_JOBS_LIST_RE.search(message)
-        and not _SAVED_JOBS_DESTRUCTIVE_RE.search(message)
+        and not _SAVED_JOBS_LIST_VETO_RE.search(message)
     )
 
 
@@ -213,6 +213,8 @@ class TestSavedJobsListRouting:
         "display my saved jobs",
         "my saved jobs",
         "jobs i saved",
+        "show jobs i've saved",
+        "show jobs i have saved",
         "show my stored jobs",
         # Arabic
         "اعرض الوظائف المحفوظة",
@@ -234,6 +236,8 @@ class TestSavedJobsListRouting:
         "delete all saved jobs",         # destructive — handled by delete guard
         "delete the jobs i saved",       # destructive — handled by delete guard
         "remove jobs i saved",           # destructive — handled by delete guard
+        "apply to my saved jobs",        # apply action, not a list read
+        "open apply links for my saved jobs",  # link action, not a list read
         "show my profile data",          # profile readback
     ])
     def test_non_saved_jobs_phrases_do_not_route_to_list(self, phrase):
@@ -250,6 +254,23 @@ class TestSavedJobsListRouting:
             f"{phrase!r} should be intercepted by a delete guard"
         )
         assert not _saved_jobs_list_route(phrase)
+
+    @pytest.mark.parametrize("phrase", [
+        "delete the job i saved",
+        "remove the job i saved",
+    ])
+    def test_singular_saved_job_delete_not_treated_as_bulk(self, phrase):
+        assert not _DELETE_SAVED_JOBS_RE.search(phrase)
+        assert not _saved_jobs_list_route(phrase)
+
+    @pytest.mark.parametrize("phrase", [
+        "show my saved jobs",
+        "show my stored jobs",
+        "jobs i saved",
+        "اعرض الوظائف المحفوظة",
+    ])
+    def test_saved_jobs_reads_bypass_minimum_profile_gate(self, phrase):
+        assert not RicoChatAPI._message_requires_job_profile(phrase)
 
     @pytest.mark.parametrize("phrase", [
         "show my saved jobs",

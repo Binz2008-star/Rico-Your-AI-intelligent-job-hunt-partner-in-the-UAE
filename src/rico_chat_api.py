@@ -564,24 +564,27 @@ _APPLICATIONS_LIST_RE = re.compile(
 # Routes to _handle_lifecycle_query(lifecycle_show_saved).
 # Deliberately does NOT match saved-search/alert settings ("saved job searches",
 # "saved job alerts", "saved searches") or profile nouns (saved experience/skills).
-# Destructive phrasings ("delete the jobs I saved") are vetoed at dispatch by
-# _SAVED_JOBS_DESTRUCTIVE_RE so they reach the delete guard, never the list.
+# Destructive or action phrasings ("delete the jobs I saved", "apply to my saved
+# jobs") are vetoed at dispatch by _SAVED_JOBS_LIST_VETO_RE so they reach the
+# delete guard / apply-action paths, never the list.
 _SAVED_JOBS_LIST_RE = re.compile(
     r"\b(?:show|list|view|display|see|get)\b.{0,20}\b(?:saved|stored)\s+jobs?\b(?!\s*(?:search(?:es)?|alerts?)\b)"
     r"|\bmy\s+(?:saved|stored)\s+jobs?\b(?!\s*(?:search(?:es)?|alerts?)\b)"
-    r"|\b(?:jobs?|وظائف)\s+(?:i|that\s+i)\s+saved\b"
+    r"|\b(?:jobs?|وظائف)\s+(?:that\s+)?i(?:'ve|\s+have)?\s+saved\b"
     r"|(?:اعرض|أعرض|اظهر|أظهر|ورجيني|وريني|شوفني)\s+(?:لي\s+)?الوظائف\s+(?:المحفوظة|المحفوظه)"
     r"|الوظائف\s+(?:اللي|التي)\s+(?:حفظتها|حفظتهم|قمت\s+بحفظها)"
     r"|وظائفي\s+(?:المحفوظة|المحفوظه)",
     re.IGNORECASE,
 )
 
-# Destructive-verb veto for the saved-jobs list dispatch: wordings like
-# "delete the jobs I saved" / "remove jobs I saved" must fall through to the
-# delete guards (confirmation/blocking), never be answered with a job list.
-_SAVED_JOBS_DESTRUCTIVE_RE = re.compile(
-    r"\b(?:delete|remove|erase|wipe|purge|clear|archive|drop|cancel|unsave)\b"
-    r"|\b(?:امسح|احذف|امحِ|أزل|ازل)\b",
+# Veto for the saved-jobs list dispatch: destructive wordings ("delete the jobs
+# I saved") must fall through to the delete guards, and action wordings
+# ("apply to my saved jobs", "open apply links for my saved jobs") must reach
+# the apply/link action paths — never be answered with a job list.
+_SAVED_JOBS_LIST_VETO_RE = re.compile(
+    r"\b(?:delete|remove|erase|wipe|purge|clear|archive|drop|cancel|unsave"
+    r"|apply(?:ing)?|open(?:ing)?|submit(?:ting)?|send(?:ing)?)\b"
+    r"|\b(?:امسح|احذف|امحِ|أزل|ازل|قدم|افتح)\b",
     re.IGNORECASE,
 )
 
@@ -632,7 +635,7 @@ _DELETE_SAVED_JOBS_RE = re.compile(
     (?:
         # English: destructive verb targeting the saved-jobs list only
           \b(?:delete|erase|wipe|purge|remove|clear)\b.{0,60}?\b(?:saved\s+jobs?|all\s+(?:my\s+)?(?:saved\s+)?jobs?|my\s+(?:saved\s+jobs?|job\s+list|pipeline))\b
-        | \b(?:delete|erase|wipe|purge|remove|clear)\b.{0,60}?\b(?:the\s+)?jobs?\s+(?:i|that\s+i)\s+saved\b
+        | \b(?:delete|erase|wipe|purge|remove|clear)\b.{0,60}?\b(?:the\s+)?jobs\s+(?:that\s+)?i(?:'ve|\s+have)?\s+saved\b
         |
         # Arabic: احذف/امسح + saved-jobs noun only (not applications)
         \b(?:امسح|احذف|امحِ|أزل)\b[^.!?،؟]{0,80}(?:الوظائف(?:\s+المحفوظة)?|وظائف(?:\s+المحفوظة)?|المحفوظات|قائمة\s+الوظائف)
@@ -669,7 +672,7 @@ _UNSUPPORTED_DELETE_RE = re.compile(
         | \bremove\b.{0,50}?\bmy\s+applications?\b
         | \bremove\b.{0,50}?\ball\s+applications?\b
         | \bclear\b.{0,50}?\b(?:saved\s+jobs?|all\s+(?:my\s+)?jobs?|my\s+pipeline|my\s+applications?|all\s+applications?)\b
-        | \b(?:delete|erase|wipe|purge|remove|clear)\b.{0,60}?\b(?:the\s+)?jobs?\s+(?:i|that\s+i)\s+saved\b
+        | \b(?:delete|erase|wipe|purge|remove|clear)\b.{0,60}?\b(?:the\s+)?jobs\s+(?:that\s+)?i(?:'ve|\s+have)?\s+saved\b
         |
         # Arabic: احذف/امسح + saved-jobs or applications noun
         \b(?:امسح|احذف|امحِ|أزل)\b[^.!?،؟]{0,80}(?:الوظائف(?:\s+المحفوظة)?|جميع\s+(?:الوظائف|الطلبات)|وظائف(?:\s+المحفوظة)?|الطلبات|طلباتي|المحفوظات|قائمة\s+الوظائف)
@@ -2919,6 +2922,12 @@ class RicoChatAPI:
         if not msg:
             return False
         msg_lower = msg.lower()
+
+        # Saved-jobs lifecycle reads ("show my saved jobs", "اعرض الوظائف
+        # المحفوظة") ask about already-saved records — they never need a
+        # complete job profile, so they must not trip the minimum-profile gate.
+        if _SAVED_JOBS_LIST_RE.search(msg) and not _SAVED_JOBS_LIST_VETO_RE.search(msg):
+            return False
 
         # Known job-search help-option phrases
         if msg_lower in RicoChatAPI._JOB_SEARCH_HELP_PHRASES:
@@ -7181,7 +7190,7 @@ class RicoChatAPI:
         # "show my saved jobs" / "اعرض الوظائف المحفوظة" → enumerate the saved-jobs
         # funnel from user_job_context. Must run before profile readback so
         # "saved jobs" phrases are never answered with a profile summary.
-        if _SAVED_JOBS_LIST_RE.search(message) and not _SAVED_JOBS_DESTRUCTIVE_RE.search(message):
+        if _SAVED_JOBS_LIST_RE.search(message) and not _SAVED_JOBS_LIST_VETO_RE.search(message):
             return self._finalize(
                 self._handle_lifecycle_query(user_id, "lifecycle_show_saved", message=message),
                 self.SOURCE_KEYWORD,
