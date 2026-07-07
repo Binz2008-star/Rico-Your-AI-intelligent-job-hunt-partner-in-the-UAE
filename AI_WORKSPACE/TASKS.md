@@ -79,14 +79,14 @@ migration or UI redesign.
 - Do not start the UI redesign or the Render→Railway move until phases 1–4 land.
 - Fixes must be global and user-agnostic (Product Generalization Rule), not per-account.
 
-#### Phase order (each becomes its own scoped task)
-- [ ] Phase 1 — API / client consolidation
-- [ ] Phase 2 — Persist job context + apply links (top-priority reliability fix)
-- [ ] Phase 3 — Application lifecycle cleanup
-- [ ] Phase 4 — Worker / cron separation
-- [ ] Phase 5 — Move backend from Render to Railway
-- [ ] Phase 6 — Add monitoring / logging
-- [ ] Phase 7 — UI redesign (only after 1–6)
+#### Phase order (each becomes its own scoped task; per-phase success criteria in DEC-20260707-001)
+- [ ] Phase 1 (PR A) — Persist job context + apply links (top-priority reliability fix)
+- [ ] Phase 2 (PR B) — Application lifecycle cleanup
+- [ ] Phase 3 (PR C) — API / client consolidation
+- [ ] Phase 4 (PR D) — Worker / cron separation
+- [ ] Phase 5 (PR E) — Move backend from Render to Railway (Render stays production until Railway passes full smoke)
+- [ ] Phase 6 (PR F) — Add monitoring / logging
+- [ ] Phase 7 (PR G) — UI redesign (only after 1–6)
 
 #### Required verification
 - [ ] Per phase: focused unit tests + `apps/web` build where frontend changes; deploy smoke when

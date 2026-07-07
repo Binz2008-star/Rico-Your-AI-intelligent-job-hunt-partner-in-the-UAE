@@ -30,7 +30,10 @@ Related task: TASK-YYYYMMDD-001
 
 ### DEC-20260707-001 — Split Rico's architecture maturation into phases; persist state before any migration or redesign
 
-Status: accepted
+Status: accepted (Approved roadmap)
+Implementation: Not started — this is a roadmap only. No phase has been built. Railway, the
+worker service, and Redis/Queue do **not** yet exist in production; Render remains the production
+backend. Do not read this decision as describing shipped infrastructure.
 Date: 2026-07-07
 Owner: Roben / Claude
 Related task: TASK-20260707-001 (phased architecture roadmap)
@@ -83,14 +86,41 @@ Guiding principles:
    API consolidation, job-lifecycle persistence, application-lifecycle cleanup, and worker/cron
    structure — not theme switching or a big UI replacement.
 
-Recommended PR / phase order (each an independently reviewable slice):
-1. API / client consolidation
-2. Persist job context + apply links
-3. Application lifecycle cleanup
-4. Worker / cron separation
-5. Move backend from Render to Railway
-6. Add monitoring / logging
-7. UI redesign (only after 1–6 land)
+Recommended PR / phase order (each an independently reviewable slice from current `main`).
+Rationale for ordering: Rico's biggest current product risk is **losing operational state**, so
+persistence and application lifecycle come before API consolidation. Each phase has measurable
+completion criteria; a phase is not "done" until its criteria are met and regression tests pass.
+
+1. **Persist job context + apply links** (PR A) — top-priority reliability fix.
+   - [ ] Job search results persisted in Neon (not memory / Render disk).
+   - [ ] Apply links survive a backend restart.
+   - [ ] "Open apply link" uses the persisted context, not in-memory state.
+   - [ ] Regression tests pass.
+2. **Application lifecycle cleanup** (PR B).
+   - [ ] Application states defined and reconciled across router + agent runtime writes.
+   - [ ] Application state persisted and survives restart.
+   - [ ] No lifecycle path bypasses the audit / approval layer.
+   - [ ] Regression tests pass.
+3. **API / client consolidation** (PR C).
+   - [ ] Duplicate/legacy client paths (`apps/web/services/*` vs `apps/web/lib/api.ts`) consolidated.
+   - [ ] No behavior change to auth/chat/CV/profile/onboarding flows (verified by build + smoke).
+   - [ ] Regression tests pass.
+4. **Worker / cron separation** (PR D).
+   - [ ] Job scans, follow-up checks, alerts, and link verification run outside the request path.
+   - [ ] FastAPI serves requests only; scheduled work has its own service boundary.
+   - [ ] Regression tests pass.
+5. **Move backend from Render to Railway** (PR E).
+   - [ ] Railway backend passes full production smoke (auth, chat, jobs, applications, webhooks).
+   - **Rollback / safety:** Render remains the production backend until Railway passes full
+     production smoke testing. Do not cut DNS/proxy traffic to Railway before that gate.
+6. **Add monitoring / logging** (PR F).
+   - [ ] Error, deploy, and provider-health signals observable; alerts route per the Telegram
+     audience rules (admin/dev channel only for technical alerts).
+7. **UI redesign** (PR G) — only after phases 1–6 land.
+
+Note: the letters PR A–G above map to the merge sequence recommended by the reviewer; earlier
+drafts of this decision listed API consolidation first — it has been demoted below persistence
+and application lifecycle because state reliability is the higher current risk.
 
 #### Consequences
 - Positive: reliability-first ordering — Rico stops forgetting what it found, what the user
@@ -101,13 +131,14 @@ Recommended PR / phase order (each an independently reviewable slice):
   reduce reliance on process-local state.
 
 #### Follow-up
-- [ ] Phase 1: audit API/client surface for duplicate/legacy paths (see `apps/web/services/*`
+- [ ] Phase 1 (PR A): confirm job-context + apply-link persistence to Neon end-to-end (top-priority
+      reliability fix; ties into DEC-20260703-001 recommendation-table work).
+- [ ] Phase 2 (PR B): define the application lifecycle states and reconcile router/runtime writes.
+- [ ] Phase 3 (PR C): audit API/client surface for duplicate/legacy paths (`apps/web/services/*`
       vs `apps/web/lib/api.ts`) and consolidate.
-- [ ] Phase 2: confirm job-context + apply-link persistence to Neon end-to-end (this is the
-      top-priority reliability fix; ties into DEC-20260703-001 recommendation-table work).
-- [ ] Phase 3: define the application lifecycle states and reconcile router/runtime writes.
-- [ ] Phase 4: scope the worker/cron service boundary (job scans, follow-ups, link verify).
-- [ ] Phases 5–7 (Railway move, monitoring, UI redesign) stay proposed until 1–4 land.
+- [ ] Phase 4 (PR D): scope the worker/cron service boundary (job scans, follow-ups, link verify).
+- [ ] Phases 5–7 (Railway move, monitoring, UI redesign) stay proposed until 1–4 land; Render
+      stays the production backend until Railway passes full production smoke.
 
 ### DEC-20260703-001 — Keep partial-unique as ON CONFLICT arbiter; codify full-unique for read coverage
 

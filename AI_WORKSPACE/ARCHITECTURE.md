@@ -108,7 +108,13 @@ mixes request handling, temporary chat memory, and the job-search script in one 
 historically relied on Render's ephemeral disk for state that must be durable. See
 `DECISIONS.md` → DEC-20260707-001 for the full decision and rationale.
 
-End-state (reached in ordered phases, not a big-bang migration):
+> Status: **approved roadmap, implementation not started.** The end-state below is the target,
+> not what is deployed today. The production backend is still FastAPI on **Render** (see
+> "Current live stack" at the top of this file). Railway, the separate worker service, and
+> Redis/Queue do **not** yet exist in production. Render remains production until Railway passes
+> full production smoke testing.
+
+Target end-state (reached in ordered phases, not a big-bang migration):
 
 ```text
 Vercel            Next.js frontend
@@ -127,15 +133,17 @@ Principles:
 - Keep the Vercel frontend; move the backend to Railway first (Cloud Run later if scale grows).
 - Do not redesign the UI while operational state is unstable.
 
-Phase / PR order (each an independently reviewable slice from current `main`):
+Phase / PR order (each an independently reviewable slice from current `main`). State reliability
+is the highest current risk, so persistence and application lifecycle precede API consolidation.
+See `DECISIONS.md` → DEC-20260707-001 for per-phase success criteria.
 
-1. API / client consolidation
-2. Persist job context + apply links (top-priority reliability fix)
-3. Application lifecycle cleanup
-4. Worker / cron separation
-5. Move backend from Render to Railway
-6. Add monitoring / logging
-7. UI redesign (only after 1–6 land)
+1. Persist job context + apply links (PR A) — top-priority reliability fix
+2. Application lifecycle cleanup (PR B)
+3. API / client consolidation (PR C)
+4. Worker / cron separation (PR D)
+5. Move backend from Render to Railway (PR E) — Render stays production until Railway passes full smoke
+6. Add monitoring / logging (PR F)
+7. UI redesign (PR G) — only after 1–6 land
 
 ## Architecture rules
 
