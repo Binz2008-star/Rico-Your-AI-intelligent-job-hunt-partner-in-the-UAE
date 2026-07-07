@@ -15,12 +15,13 @@
  * Stack: framer-motion@12.40.0 + Tailwind/CSS + Nocturne tokens. Zero new packages.
  */
 
+import React from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 
-type Scene = "thinking" | "cards" | "safety" | "thread";
+type Scene = "thinking" | "cards" | "safety" | "thread" | "stats";
 type Lang = "en" | "ar";
 
 /* ─── Shared helpers ─────────────────────────────────────────────────────── */
@@ -100,7 +101,11 @@ const PHRASES = {
 };
 
 const stateColor: Record<string, string> = { done: aura, active: gold, pending: "rgba(255,255,255,0.18)" };
-const stateIcon: Record<string, string> = { done: "✓", active: "◉", pending: "○" };
+const stateIconEl: Record<string, React.ReactNode> = {
+  done: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>,
+  active: <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4" fill="currentColor"/><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>,
+  pending: <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>,
+};
 
 function ThinkingScene({ lang, reduce }: { lang: Lang; reduce: boolean }) {
   const [pi, setPi] = useState(0);
@@ -140,12 +145,8 @@ function ThinkingScene({ lang, reduce }: { lang: Lang; reduce: boolean }) {
           {[80, 60, 90, 45].map((w, i) => (
             <motion.div key={i} initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }}
               transition={{ delay: i * 0.08 }}
-              style={{
-                height: 10, borderRadius: 6, width: `${w}%`,
-                background: "linear-gradient(90deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0.04) 100%)",
-                backgroundSize: "200% 100%",
-                animation: reduce ? "none" : "shimmer 1.8s ease-in-out infinite"
-              }} />
+              className={reduce ? undefined : "rico-chat-shimmer"}
+              style={{ height: 9, borderRadius: 6, width: `${w}%` }} />
           ))}
         </div>
       </GlassCard>
@@ -169,10 +170,10 @@ function ThinkingScene({ lang, reduce }: { lang: Lang; reduce: boolean }) {
                 borderBottom: i < TOOL_STEPS.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none"
               }}>
               <motion.span
-                animate={step.state === "active" && !reduce ? { scale: [1, 1.25, 1] } : {}}
-                transition={{ repeat: Infinity, duration: 1.5 }}
-                style={{ color: stateColor[step.state], fontSize: 13, lineHeight: 1, marginTop: 1, flexShrink: 0, fontWeight: 600 }}>
-                {stateIcon[step.state]}
+                animate={step.state === "active" && !reduce ? { scale: [1, 1.2, 1] } : {}}
+                transition={{ repeat: Infinity, duration: 1.6 }}
+                style={{ color: stateColor[step.state], lineHeight: 1, marginTop: 1, flexShrink: 0, display: "flex" }}>
+                {stateIconEl[step.state]}
               </motion.span>
               <span style={{ fontSize: 12, color: step.state === "pending" ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.80)", lineHeight: 1.4 }}>
                 {step.label[lang]}
@@ -221,16 +222,17 @@ const RING_C = 2 * Math.PI * RING_R;
 function ScoreRing({ score, color, reduce }: { score: number; color: string; reduce: boolean }) {
   const off = RING_C * (1 - score / 100);
   return (
-    <svg width="66" height="66" viewBox="0 0 66 66" aria-label={`${score}% match`} role="img">
-      <circle cx="33" cy="33" r={RING_R} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="4" />
-      <motion.circle cx="33" cy="33" r={RING_R} fill="none" stroke={color} strokeWidth="4"
+    <svg width="70" height="70" viewBox="0 0 70 70" aria-label={`${score}% match`} role="img">
+      <circle cx="35" cy="35" r={RING_R} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="5" />
+      <motion.circle cx="35" cy="35" r={RING_R} fill="none" stroke={color} strokeWidth="5"
         strokeLinecap="round" strokeDasharray={RING_C}
         initial={{ strokeDashoffset: RING_C }}
         animate={{ strokeDashoffset: off }}
-        transition={reduce ? { duration: 0 } : { duration: 1.0, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
-        transform="rotate(-90 33 33)" />
-      <text x="33" y="33" textAnchor="middle" dominantBaseline="central"
+        transition={reduce ? { duration: 0 } : { duration: 1.1, ease: [0.16, 1, 0.3, 1], delay: 0.12 }}
+        transform="rotate(-90 35 35)" />
+      <text x="35" y="33" textAnchor="middle" dominantBaseline="central"
         fill={color} fontSize="13" fontWeight="700">{score}</text>
+      <text x="35" y="44" textAnchor="middle" fill="rgba(255,255,255,0.30)" fontSize="8">%</text>
     </svg>
   );
 }
@@ -267,18 +269,24 @@ function JobCard({ job, lang, reduce }: { job: typeof JOBS[0]; lang: Lang; reduc
                 {lang === "ar" ? job.tierAr : job.tier}
               </span>
             </div>
-            <p style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", marginTop: 6, fontFamily: "monospace" }}>{job.salary}</p>
+            <p style={{ fontSize: 10, color: "rgba(255,255,255,0.32)", marginTop: 6, fontFamily: "monospace", letterSpacing: "0.03em" }}>
+              <span style={{ color: "rgba(255,255,255,0.18)", marginRight: 4 }}>＄</span>{job.salary}
+            </p>
           </div>
         </div>
         <button onClick={() => setOpen(o => !o)}
           style={{
             width: "100%", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between",
-            borderTop: "1px solid rgba(255,255,255,0.07)", border: "none", background: "transparent", cursor: "pointer",
-            fontSize: 11, color: "rgba(255,255,255,0.35)"
+            borderTop: "1px solid rgba(255,255,255,0.07)", border: "none",
+            background: open ? "rgba(255,255,255,0.03)" : "transparent",
+            cursor: "pointer", fontSize: 11, color: "rgba(255,255,255,0.42)",
+            transition: "background 0.15s"
           }}
           aria-expanded={open}>
           <span>{lang === "ar" ? "لماذا هذا التطابق؟" : "Why this match?"}</span>
-          <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.18 }}>↓</motion.span>
+          <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.18 }} style={{ display: "flex" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
+          </motion.span>
         </button>
         <AnimatePresence>
           {open && (
@@ -389,30 +397,53 @@ function SafetyScene({ lang, reduce }: { lang: Lang; reduce: boolean }) {
               style={{ padding: "14px 20px", display: "flex", gap: 10 }}>
               <button onClick={() => setGate("approved")}
                 style={{
-                  flex: 1, padding: "10px 0", borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                  background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.35)", color: "rgb(16,185,129)"
-                }}>
+                  flex: 1, padding: "11px 0", borderRadius: 12, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  background: "rgba(16,185,129,0.16)", border: "1px solid rgba(16,185,129,0.38)", color: "rgb(16,185,129)",
+                  boxShadow: "0 0 18px rgba(16,185,129,0.12)", transition: "box-shadow 0.15s, background 0.15s"
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(16,185,129,0.24)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 0 24px rgba(16,185,129,0.22)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(16,185,129,0.16)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 0 18px rgba(16,185,129,0.12)"; }}>
                 {lang === "ar" ? "نعم، وافق" : "Yes, approve"}
               </button>
               <button onClick={() => setGate("declined")}
                 style={{
-                  flex: 1, padding: "10px 0", borderRadius: 999, fontSize: 12, cursor: "pointer",
-                  background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.45)"
-                }}>
+                  flex: 1, padding: "11px 0", borderRadius: 12, fontSize: 12, cursor: "pointer",
+                  background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.50)",
+                  transition: "background 0.15s"
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.08)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.04)"; }}>
                 {lang === "ar" ? "لا، أوقف" : "No, cancel"}
               </button>
             </motion.div>
           ) : (
             <motion.div key="result" initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
               style={{ padding: "14px 20px" }}>
-              <p style={{ fontSize: 12, color: "rgba(255,255,255,0.50)", lineHeight: 1.6 }}>
-                {gate === "approved"
-                  ? (lang === "ar" ? "تمت الموافقة. سأعلمك بالتقدم." : "Approved. I will keep you updated on progress.")
-                  : (lang === "ar" ? "تم الإلغاء. لا إجراء اتُّخذ." : "Cancelled. No action taken.")}
-              </p>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                <motion.div
+                  initial={reduce ? false : { scale: 0.5, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", stiffness: 280, damping: 22 }}
+                  style={{
+                    width: 28, height: 28, borderRadius: 999, flexShrink: 0,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    background: gate === "approved" ? "rgba(16,185,129,0.20)" : "rgba(255,255,255,0.06)",
+                    border: gate === "approved" ? "1px solid rgba(16,185,129,0.40)" : "1px solid rgba(255,255,255,0.12)",
+                    color: gate === "approved" ? "rgb(16,185,129)" : "rgba(255,255,255,0.40)"
+                  }}>
+                  {gate === "approved"
+                    ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+                    : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>}
+                </motion.div>
+                <p style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", lineHeight: 1.6, paddingTop: 4 }}>
+                  {gate === "approved"
+                    ? (lang === "ar" ? "تمت الموافقة. سأعلمك بالتقدم." : "Approved. I will keep you updated on progress.")
+                    : (lang === "ar" ? "تم الإلغاء. لا إجراء اتُّخذ." : "Cancelled. No action taken.")}
+                </p>
+              </div>
               <button onClick={() => setGate("pending")}
                 style={{
-                  marginTop: 8, fontSize: 11, color: "rgba(255,255,255,0.25)", background: "none", border: "none",
+                  marginTop: 10, fontSize: 11, color: "rgba(255,255,255,0.22)", background: "none", border: "none",
                   cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 2, padding: 0
                 }}>
                 {lang === "ar" ? "إعادة تشغيل العرض" : "Reset demo"}
@@ -491,9 +522,17 @@ function ChatScene({ lang, reduce }: { lang: Lang; reduce: boolean }) {
                   </span>
                 )}
                 <div style={{
-                  padding: "10px 14px", borderRadius: 14, fontSize: 12, lineHeight: 1.6,
-                  background: msg.role === "user" ? "rgba(255,255,255,0.07)" : "rgba(23,28,58,0.90)",
-                  border: "1px solid rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.82)"
+                  padding: "10px 14px", lineHeight: 1.65,
+                  borderRadius: msg.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+                  fontSize: 12,
+                  background: msg.role === "user"
+                    ? "rgba(255,255,255,0.07)"
+                    : "linear-gradient(160deg, rgba(23,28,58,0.92) 0%, rgba(17,22,48,0.88) 100%)",
+                  border: msg.role === "rico"
+                    ? "1px solid rgba(240,169,74,0.14)"
+                    : "1px solid rgba(255,255,255,0.09)",
+                  color: "rgba(255,255,255,0.84)",
+                  boxShadow: msg.role === "rico" ? "0 4px 16px rgba(5,6,18,0.20)" : "none"
                 }}>
                   {msg[lang]}
                 </div>
@@ -511,7 +550,15 @@ function ChatScene({ lang, reduce }: { lang: Lang; reduce: boolean }) {
                   padding: "10px 14px", borderRadius: 14, fontSize: 12, color: "rgba(255,255,255,0.40)",
                   background: "rgba(23,28,58,0.90)", border: "1px solid rgba(255,255,255,0.09)"
                 }}>
-                  {lang === "ar" ? "يفكر" : "Thinking"}{Array.from({ length: dots }).map((_, i) => <span key={i}>.</span>)}
+                  {lang === "ar" ? "يفكر" : "Thinking"}&nbsp;
+                {[0, 1, 2].map(i => (
+                  <motion.span key={i}
+                    animate={reduce ? {} : { opacity: [0.2, 1, 0.2], y: [0, -3, 0] }}
+                    transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.18 }}
+                    style={{ display: "inline-block", fontWeight: 700, color: gold }}>
+                    •
+                  </motion.span>
+                ))}
                 </div>
               </motion.div>
             )}
@@ -520,20 +567,116 @@ function ChatScene({ lang, reduce }: { lang: Lang; reduce: boolean }) {
         {/* Input — never animated, mobile-safe */}
         <div style={{
           borderTop: "1px solid rgba(255,255,255,0.07)", padding: "10px 16px",
-          display: "flex", gap: 10, alignItems: "center"
+          display: "flex", gap: 10, alignItems: "center",
+          background: "rgba(255,255,255,0.015)"
         }}>
           <input readOnly type="text"
             placeholder={lang === "ar" ? "اكتب رسالتك… (عرض تجريبي)" : "Type your message… (demo)"}
             dir={lang === "ar" ? "rtl" : "ltr"}
             style={{
               flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 12,
-              color: "rgba(255,255,255,0.50)", fontFamily: "inherit"
+              color: "rgba(255,255,255,0.46)", fontFamily: "inherit", caretColor: gold
             }} />
-          <button style={{
-            width: 30, height: 30, borderRadius: 999, border: "1px solid rgba(240,169,74,0.35)",
-            background: "rgba(240,169,74,0.12)", color: gold, cursor: "pointer", fontSize: 14
-          }}>↑</button>
+          <motion.button
+            whileHover={{ scale: 1.08, boxShadow: "0 0 18px rgba(240,169,74,0.35)" }}
+            whileTap={{ scale: 0.94 }}
+            style={{
+              width: 32, height: 32, borderRadius: 999, border: "1px solid rgba(240,169,74,0.40)",
+              background: "rgba(240,169,74,0.14)", color: gold, cursor: "pointer", fontSize: 13,
+              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
+            }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          </motion.button>
         </div>
+      </GlassCard>
+    </div>
+  );
+}
+
+/* ─── Scene: Dashboard Stats ────────────────────────────────────────────── */
+
+const STATS = [
+  { en: "Applications sent",    ar: "الطلبات المرسلة",     value: 24,  suffix: "",   color: aura,   icon: "✉" },
+  { en: "Interviews landed",    ar: "المقابلات المحصودة",  value: 6,   suffix: "",   color: gold,   icon: "🎤" },
+  { en: "Avg match score",      ar: "متوسط نسبة التطابق",  value: 82,  suffix: "%",  color: indigo, icon: "◎" },
+  { en: "CV views this week",   ar: "مشاهدات السيرة الذاتية", value: 41, suffix: "",  color: "rgb(248,113,113)", icon: "👁" },
+];
+
+function AnimatedNumber({ to, reduce }: { to: number; reduce: boolean }) {
+  const [val, setVal] = React.useState(0);
+  React.useEffect(() => {
+    if (reduce) { setVal(to); return; }
+    let start = 0;
+    const step = Math.ceil(to / 28);
+    const iv = setInterval(() => {
+      start = Math.min(start + step, to);
+      setVal(start);
+      if (start >= to) clearInterval(iv);
+    }, 36);
+    return () => clearInterval(iv);
+  }, [to, reduce]);
+  return <span>{val}</span>;
+}
+
+function StatsScene({ lang, reduce }: { lang: Lang; reduce: boolean }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", fontFamily: "monospace", textTransform: "uppercase", letterSpacing: "0.14em" }}>
+          {lang === "ar" ? "لمحة إحصائية" : "Dashboard at a glance"}
+        </span>
+        <SimBadge />
+      </div>
+      {/* KPI grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        {STATS.map((stat, i) => (
+          <motion.div key={i}
+            initial={reduce ? false : { opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.09, duration: 0.38, ease: [0.22, 0.61, 0.36, 1] }}>
+            <GlassCard style={{ padding: "18px 20px", position: "relative", overflow: "hidden" }}>
+              {/* ambient tint */}
+              <div style={{
+                position: "absolute", inset: 0,
+                background: `radial-gradient(ellipse at 80% 20%, ${stat.color.replace("rgb(", "rgba(").replace(")", ",0.07)")} 0%, transparent 65%)`,
+                pointerEvents: "none"
+              }} />
+              <div style={{ fontSize: 18, marginBottom: 10 }}>{stat.icon}</div>
+              <p style={{ fontSize: 28, fontWeight: 700, lineHeight: 1, color: stat.color, fontFamily: "monospace" }}>
+                <AnimatedNumber to={stat.value} reduce={reduce} />{stat.suffix}
+              </p>
+              <p style={{ fontSize: 11, color: "rgba(255,255,255,0.38)", marginTop: 6 }}>
+                {lang === "ar" ? stat.ar : stat.en}
+              </p>
+            </GlassCard>
+          </motion.div>
+        ))}
+      </div>
+      {/* Mini pipeline bar */}
+      <GlassCard style={{ padding: "16px 20px" }}>
+        <p style={{ fontSize: 10, color: "rgba(255,255,255,0.28)", fontFamily: "monospace", textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 12 }}>
+          {lang === "ar" ? "مسار الطلبات" : "Application pipeline"}
+        </p>
+        {[
+          { en: "Applied", ar: "مرسل", v: 24, color: aura },
+          { en: "Screening", ar: "فرز", v: 11, color: gold },
+          { en: "Interview", ar: "مقابلة", v: 6, color: indigo },
+          { en: "Offer", ar: "عرض", v: 2, color: "rgb(248,113,113)" },
+        ].map((row, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", width: 62, flexShrink: 0 }}>
+              {lang === "ar" ? row.ar : row.en}
+            </span>
+            <div style={{ flex: 1, height: 6, borderRadius: 999, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${(row.v / 24) * 100}%` }}
+                transition={reduce ? { duration: 0 } : { duration: 0.7, delay: 0.2 + i * 0.1, ease: [0.16, 1, 0.3, 1] }}
+                style={{ height: "100%", borderRadius: 999, background: row.color }} />
+            </div>
+            <span style={{ fontSize: 10, fontFamily: "monospace", color: row.color, width: 18, textAlign: "right", flexShrink: 0 }}>{row.v}</span>
+          </div>
+        ))}
       </GlassCard>
     </div>
   );
@@ -546,6 +689,7 @@ const SCENES: { key: Scene; en: string; ar: string }[] = [
   { key: "cards", en: "Job Intelligence", ar: "ذكاء الوظائف" },
   { key: "safety", en: "Safety Gate", ar: "نقطة الأمان" },
   { key: "thread", en: "Chat Thread", ar: "المحادثة" },
+  { key: "stats", en: "Dashboard Stats", ar: "إحصائيات" },
 ];
 
 export default function RicoAlivePrototype() {
@@ -553,35 +697,71 @@ export default function RicoAlivePrototype() {
   const [lang, setLang] = useState<Lang>("en");
   const reduce = useReducedMotion() ?? false;
 
+  /* Inject keyframes once */
+  if (typeof document !== "undefined" && !document.getElementById("rico-alive-kf")) {
+    const st = document.createElement("style");
+    st.id = "rico-alive-kf";
+    st.textContent = `
+      @keyframes shimmer { 0%,100%{background-position:200% 0} 50%{background-position:0% 0} }
+      @keyframes rico-pulse { 0%,100%{opacity:.65;transform:scale(1)} 50%{opacity:1;transform:scale(1.035)} }
+      @keyframes rico-float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+      .rico-orb-ring { animation: rico-pulse 2.4s ease-in-out infinite; }
+      .rico-chat-shimmer { background: linear-gradient(90deg,rgba(255,255,255,0.04) 0%,rgba(255,255,255,0.10) 50%,rgba(255,255,255,0.04) 100%); background-size:200% 100%; animation: shimmer 1.7s ease-in-out infinite; }
+    `;
+    document.head.appendChild(st);
+  }
+
   return (
     <div style={{ minHeight: "100vh", background: navy, color: "rgba(255,255,255,0.88)", fontFamily: "var(--font-body, system-ui, sans-serif)", position: "relative", overflowX: "hidden" }}>
       {/* Ambient glows */}
       <div aria-hidden style={{ pointerEvents: "none", position: "fixed", inset: 0, overflow: "hidden" }}>
+        {/* Top-left ember */}
         <div style={{
-          position: "absolute", top: -160, left: -160, width: 600, height: 600, borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(240,169,74,0.06) 0%, transparent 70%)", filter: "blur(80px)"
+          position: "absolute", top: -200, left: -200, width: 700, height: 700, borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(240,169,74,0.07) 0%, transparent 65%)", filter: "blur(90px)"
         }} />
+        {/* Bottom-right indigo */}
         <div style={{
-          position: "absolute", bottom: -160, right: -160, width: 500, height: 500, borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(129,140,248,0.05) 0%, transparent 70%)", filter: "blur(100px)"
+          position: "absolute", bottom: -200, right: -200, width: 600, height: 600, borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(129,140,248,0.06) 0%, transparent 65%)", filter: "blur(110px)"
+        }} />
+        {/* Center-screen aura whisper */}
+        <div style={{
+          position: "absolute", top: "40%", left: "50%", transform: "translate(-50%,-50%)",
+          width: 400, height: 400, borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(111,233,208,0.03) 0%, transparent 70%)", filter: "blur(70px)"
         }} />
       </div>
 
       {/* Header */}
       <div style={{
-        position: "sticky", top: 0, zIndex: 40, backdropFilter: "blur(24px)",
-        background: "rgba(11,13,28,0.88)", borderBottom: "1px solid rgba(255,255,255,0.07)",
+        position: "sticky", top: 0, zIndex: 40, backdropFilter: "blur(28px)",
+        background: "rgba(11,13,28,0.92)",
+        borderBottom: "1px solid rgba(255,255,255,0.08)",
+        boxShadow: "0 1px 0 rgba(240,169,74,0.08)",
         padding: "10px 24px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap"
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: 999, background: gold,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 11, fontWeight: 700, color: "#0a0a0f"
-          }}>R</div>
-          <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em" }}>
-            {lang === "ar" ? "ريكو — مفهوم تصميمي" : "Rico Command — Concept Prototype"}
-          </span>
+          {/* Orb with glow */}
+          <div style={{ position: "relative", flexShrink: 0 }}>
+            <div style={{
+              width: 30, height: 30, borderRadius: 999,
+              background: "radial-gradient(circle at 38% 34%, rgb(255 196 110), rgb(240 169 74))",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 11, fontWeight: 700, color: "#0a0a0f",
+              boxShadow: "0 0 16px rgba(240,169,74,0.40), inset 0 1px 0 rgba(255,255,255,0.22)"
+            }}>R</div>
+          </div>
+          <div>
+            <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: "-0.015em", color: "rgba(255,255,255,0.92)" }}>
+              {lang === "ar" ? "ريكو — مفهوم تصميمي" : "Rico Command"}
+            </span>
+            <span style={{
+              marginLeft: 8, fontSize: 9, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: "0.14em",
+              padding: "1px 7px", borderRadius: 999, background: "rgba(240,169,74,0.10)",
+              border: "1px solid rgba(240,169,74,0.22)", color: "rgba(240,169,74,0.8)", verticalAlign: "middle"
+            }}>Concept</span>
+          </div>
         </div>
         <div style={{ flex: 1 }} />
         {/* Scene tabs */}
@@ -589,10 +769,13 @@ export default function RicoAlivePrototype() {
           {SCENES.map(s => (
             <button key={s.key} onClick={() => setScene(s.key)}
               style={{
-                fontSize: 11, padding: "4px 12px", borderRadius: 999, cursor: "pointer", transition: "all 0.14s",
-                border: scene === s.key ? "1px solid rgba(240,169,74,0.38)" : "1px solid rgba(255,255,255,0.10)",
-                background: scene === s.key ? "rgba(240,169,74,0.12)" : "transparent",
-                color: scene === s.key ? gold : "rgba(255,255,255,0.42)", fontWeight: scene === s.key ? 600 : 400
+                fontSize: 11, padding: "4px 14px", borderRadius: 999, cursor: "pointer",
+                transition: "background 0.14s, color 0.14s, border-color 0.14s, box-shadow 0.14s",
+                border: scene === s.key ? "1px solid rgba(240,169,74,0.40)" : "1px solid rgba(255,255,255,0.09)",
+                background: scene === s.key ? "rgba(240,169,74,0.13)" : "transparent",
+                color: scene === s.key ? gold : "rgba(255,255,255,0.38)",
+                fontWeight: scene === s.key ? 600 : 400,
+                boxShadow: scene === s.key ? "0 0 12px rgba(240,169,74,0.15)" : "none"
               }}>
               {s[lang]}
             </button>
@@ -609,7 +792,7 @@ export default function RicoAlivePrototype() {
       </div>
 
       {/* Stage */}
-      <div style={{ padding: "24px", maxWidth: 900, margin: "0 auto" }} dir={lang === "ar" ? "rtl" : "ltr"}>
+      <div style={{ padding: "28px 24px 40px", maxWidth: 900, margin: "0 auto" }} dir={lang === "ar" ? "rtl" : "ltr"}>
         <AnimatePresence mode="wait">
           <motion.div key={scene}
             initial={reduce ? false : { opacity: 0, y: 14 }}
@@ -620,6 +803,7 @@ export default function RicoAlivePrototype() {
             {scene === "cards" && <CardsScene lang={lang} reduce={reduce} />}
             {scene === "safety" && <SafetyScene lang={lang} reduce={reduce} />}
             {scene === "thread" && <ChatScene lang={lang} reduce={reduce} />}
+            {scene === "stats" && <StatsScene lang={lang} reduce={reduce} />}
           </motion.div>
         </AnimatePresence>
       </div>
