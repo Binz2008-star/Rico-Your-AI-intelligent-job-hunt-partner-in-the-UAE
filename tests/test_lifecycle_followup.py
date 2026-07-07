@@ -181,3 +181,118 @@ class TestListFollowupFlow:
 
         lc = stored.get(("user@test.com", "lifecycle_query_context"))
         assert lc == {"last_query_type": "lifecycle_show_saved"}
+
+
+# ── saved-jobs routing vs profile readback ────────────────────────────────────
+
+from src.rico_chat_api import (  # noqa: E402
+    _DELETE_SAVED_JOBS_RE,
+    _PROFILE_READBACK_RE,
+    _SAVED_JOBS_LIST_RE,
+    _SAVED_JOBS_LIST_VETO_RE,
+    _UNSUPPORTED_DELETE_RE,
+)
+
+
+def _saved_jobs_list_route(message: str) -> bool:
+    """Mirror the dispatch guard: list only when not destructive/action."""
+    return bool(
+        _SAVED_JOBS_LIST_RE.search(message)
+        and not _SAVED_JOBS_LIST_VETO_RE.search(message)
+    )
+
+
+class TestSavedJobsListRouting:
+    """Saved-jobs list phrases must route to the lifecycle handler, never to
+    profile readback, job search, or applied-jobs handling."""
+
+    @pytest.mark.parametrize("phrase", [
+        "show my saved jobs",
+        "show saved jobs",
+        "list saved jobs",
+        "display my saved jobs",
+        "my saved jobs",
+        "jobs i saved",
+        "show jobs i've saved",
+        "show jobs i have saved",
+        "show my stored jobs",
+        # Arabic
+        "اعرض الوظائف المحفوظة",
+        "اعرض الوظائف المحفوظه",
+        "ورجيني الوظائف اللي حفظتها",
+        "وظائفي المحفوظة",
+    ])
+    def test_saved_jobs_phrases_route_to_list(self, phrase):
+        assert _saved_jobs_list_route(phrase), f"{phrase!r} should route to saved-jobs list"
+
+    @pytest.mark.parametrize("phrase", [
+        "show my applied jobs",          # applied lifecycle, not saved
+        "show my saved searches",        # saved searches are not saved jobs
+        "show my saved job searches",    # saved-search settings, not saved jobs
+        "show saved job alerts",         # alert settings, not saved jobs
+        "what is saved in my profile",   # profile readback
+        "show my saved experience",      # profile readback
+        "find me hse officer jobs in dubai",  # job search
+        "delete all saved jobs",         # destructive — handled by delete guard
+        "delete the jobs i saved",       # destructive — handled by delete guard
+        "remove jobs i saved",           # destructive — handled by delete guard
+        "apply to my saved jobs",        # apply action, not a list read
+        "open apply links for my saved jobs",  # link action, not a list read
+        "show my profile data",          # profile readback
+    ])
+    def test_non_saved_jobs_phrases_do_not_route_to_list(self, phrase):
+        assert not _saved_jobs_list_route(phrase)
+
+    @pytest.mark.parametrize("phrase", [
+        "delete the jobs i saved",
+        "remove jobs i saved",
+        "delete all saved jobs",
+        "clear my saved jobs",
+    ])
+    def test_destructive_phrases_reach_delete_guards(self, phrase):
+        assert _DELETE_SAVED_JOBS_RE.search(phrase) or _UNSUPPORTED_DELETE_RE.search(phrase), (
+            f"{phrase!r} should be intercepted by a delete guard"
+        )
+        assert not _saved_jobs_list_route(phrase)
+
+    @pytest.mark.parametrize("phrase", [
+        "delete the job i saved",
+        "remove the job i saved",
+    ])
+    def test_singular_saved_job_delete_not_treated_as_bulk(self, phrase):
+        assert not _DELETE_SAVED_JOBS_RE.search(phrase)
+        assert not _saved_jobs_list_route(phrase)
+
+    @pytest.mark.parametrize("phrase", [
+        "show my saved jobs",
+        "show my stored jobs",
+        "jobs i saved",
+        "اعرض الوظائف المحفوظة",
+    ])
+    def test_saved_jobs_reads_bypass_minimum_profile_gate(self, phrase):
+        assert not RicoChatAPI._message_requires_job_profile(phrase)
+
+    @pytest.mark.parametrize("phrase", [
+        "show my saved jobs",
+        "show my saved job",
+        "display my saved jobs",
+        "list my saved jobs",
+    ])
+    def test_profile_readback_no_longer_swallows_saved_jobs(self, phrase):
+        assert not _PROFILE_READBACK_RE.search(phrase)
+
+    @pytest.mark.parametrize("phrase", [
+        "what is saved in my profile",
+        "show my saved experience",
+        "show my profile data",
+        "what do you know about me",
+        "what is stored on file",
+    ])
+    def test_profile_readback_still_matches_profile_phrases(self, phrase):
+        assert _PROFILE_READBACK_RE.search(phrase)
+
+    def test_classifier_routes_saved_and_applied_separately(self):
+        from src.agent.intelligence.intent_classifier import classify_intent
+
+        assert classify_intent("show my saved jobs").intent == "lifecycle_show_saved"
+        assert classify_intent("show my applied jobs").intent == "lifecycle_show_applied"
