@@ -22,6 +22,7 @@ import { buildAuthHref } from "@/lib/redirect";
 import { getJobFallbackActions, buildCopyText } from "@/lib/job-fallback";
 import { formatTrajectory, looksLikeTrajectoryAnalysis } from "@/lib/trajectoryHelpers";
 import { translations, useTranslation, type TranslationKey } from "@/lib/translations";
+import { pickOperationState } from "./operationState";
 import { APPLICATION_STATUSES } from "@/lib/applicationStatus";
 import type { ApplicationStatus } from "@/types";
 import Link from "next/link";
@@ -974,18 +975,9 @@ export default function CommandPage() {
         setMessages((prev) => [...prev, { id: nextId(), role: "user", text: displayText?.trim() ?? trimmed }]);
         setThinking(true);
         const lc = trimmed.toLowerCase();
-        if (lc.match(/\b(subscri|plan|pricing|package|upgrade)\b/)) {
-            setOperationState({ state: "checking", message: t("cmdWorkingPlans") });
-        } else if (lc.match(/\b(job|find|search|vacanc|opening|role|position|hiring)\b/)) {
-            setOperationState({ state: "searching", message: t("cmdWorkingJobs") });
-        } else if (lc.match(/\b(appli|track|application|status|applied|offer)\b/)) {
-            setOperationState({ state: "reviewing", message: t("cmdWorkingApplications") });
-        } else if (lc.match(/\b(cv|resume|profile|experience|skills)\b/)) {
-            setOperationState({ state: "reading", message: t("cmdWorkingProfile") });
-        } else if (lc.match(/\b(career|next move|recommend|suggest|direction|trajectory|what should)\b/)) {
-            setOperationState({ state: "extracting", message: t("cmdWorkingRecommendations") });
-        } else if (lc.match(/\b(interview|prep|prepare|question)\b/)) {
-            setOperationState({ state: "extracting", message: t("cmdWorkingInterview") });
+        const opGuess = pickOperationState(lc);
+        if (opGuess) {
+            setOperationState({ state: opGuess.state, message: t(opGuess.messageKey) });
         }
         scrollBottom();
 
