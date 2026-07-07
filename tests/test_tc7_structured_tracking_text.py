@@ -62,6 +62,25 @@ class TestManualTrackTriggerRegex(unittest.TestCase):
         self._no_match("I have a strong track record in safety")
 
 
+class TestManualTrackNegationRegex(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.RE = _mod()._MANUAL_TRACK_NEGATION_RE
+
+    def test_dont_track_it(self):
+        self.assertIsNotNone(self.RE.search("Position: X. Company: Y. Don't track it."))
+
+    def test_do_not_track(self):
+        self.assertIsNotNone(self.RE.search("please do not track this one"))
+
+    def test_arabic_negation(self):
+        self.assertIsNotNone(self.RE.search("لا تتبعها"))
+
+    def test_plain_track_it_not_negated(self):
+        self.assertIsNone(self.RE.search("Position: X. Company: Y. Track it."))
+
+
 # ---------------------------------------------------------------------------
 # Field extraction
 # ---------------------------------------------------------------------------
@@ -97,6 +116,11 @@ class TestManualTrackFieldExtraction(unittest.TestCase):
 
     def test_missing_title_returns_none(self):
         self.assertIsNone(self.TITLE_RE.search("Company: Acme. Track it."))
+
+    def test_unpunctuated_single_line_stops_at_next_label(self):
+        msg = "Position: HSE Officer Company: Acme LLC Track it"
+        self.assertEqual(self.TITLE_RE.search(msg).group(1).strip(), "HSE Officer")
+        self.assertEqual(self.COMPANY_RE.search(msg).group(1).strip(), "Acme LLC")
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +198,30 @@ class TestManualApplicationTrackHandler(unittest.TestCase):
         with patch("src.repositories.applications_repo.create_manual", return_value=True):
             self.api._handle_manual_application_track("u1", "HSE Officer", "Acme LLC")
         self.api._append_chat.assert_called_once()
+
+    def test_saved_jobs_limit_402_returns_upgrade_cta(self):
+        from fastapi import HTTPException
+
+        with patch(
+            "src.repositories.applications_repo.create_manual",
+            side_effect=HTTPException(status_code=402, detail="limit"),
+        ):
+            result = self.api._handle_manual_application_track("u1", "HSE Officer", "Acme LLC")
+        self.assertEqual(result["type"], "track_job_limit_reached")
+        self.assertEqual(result["target_route"], "/subscription")
+        self.assertNotIn("Tracked", result["message"])
+        self.assertNotIn("try again shortly", result["message"])
+
+    def test_non_402_http_exception_is_honest_failure(self):
+        from fastapi import HTTPException
+
+        with patch(
+            "src.repositories.applications_repo.create_manual",
+            side_effect=HTTPException(status_code=503, detail="db down"),
+        ):
+            result = self.api._handle_manual_application_track("u1", "HSE Officer", "Acme LLC")
+        self.assertEqual(result["type"], "track_job_failed")
+        self.assertNotIn("Tracked", result["message"])
 
 
 if __name__ == "__main__":

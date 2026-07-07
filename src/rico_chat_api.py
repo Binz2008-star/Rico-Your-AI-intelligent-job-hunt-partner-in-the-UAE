@@ -216,12 +216,25 @@ _MANUAL_TRACK_TRIGGER_RE = re.compile(
     r"|\u062a\u062a\u0628\u0639\u0647\u0627|\u062a\u062a\u0628\u0639\u0647|\u062a\u062a\u0628\u0639\s+\u0647\u0630\u0627",
     re.IGNORECASE,
 )
+# A negated instruction ("don't track it") must never fire the intercept.
+_MANUAL_TRACK_NEGATION_RE = re.compile(
+    r"\b(?:do\s*n[o']?t|never|stop|without)\b[^.\n]{0,30}\b(?:track|sav\w*|add)\b"
+    r"|\u0644\u0627\s+\u062a\u062a\u0628\u0639",
+    re.IGNORECASE,
+)
+# Field captures are lazy and stop at sentence punctuation, the next field
+# label, or a trailing track/save instruction — so unpunctuated single-line
+# text like "Position: X Company: Y Track it" still yields clean fields.
 _MANUAL_TRACK_TITLE_RE = re.compile(
-    r"(?:job\s+title|position|role|title|\u0627\u0644\u0645\u0633\u0645\u0649 \u0627\u0644\u0648\u0638\u064a\u0641\u064a|\u0627\u0644\u0648\u0638\u064a\u0641\u0629|\u0627\u0644\u0645\u0646\u0635\u0628)\s*[:\-]\s*([^\n.,;\u060c]{3,80})",
+    r"(?:job\s+title|position|role|title|\u0627\u0644\u0645\u0633\u0645\u0649 \u0627\u0644\u0648\u0638\u064a\u0641\u064a|\u0627\u0644\u0648\u0638\u064a\u0641\u0629|\u0627\u0644\u0645\u0646\u0635\u0628)\s*[:\-]\s*"
+    r"([^\n.,;\u060c]{3,80}?)"
+    r"(?=[\n.,;\u060c]|\s+(?:company|employer|organization|\u0627\u0644\u0634\u0631\u0643\u0629|\u062c\u0647\u0629 \u0627\u0644\u0639\u0645\u0644)\s*[:\-]|\s+(?:track|save|add)\b|\s+\u062a\u062a\u0628\u0639|$)",
     re.IGNORECASE,
 )
 _MANUAL_TRACK_COMPANY_RE = re.compile(
-    r"(?:company|employer|organization|\u0627\u0644\u0634\u0631\u0643\u0629|\u062c\u0647\u0629 \u0627\u0644\u0639\u0645\u0644)\s*[:\-]\s*([^\n.,;\u060c]{2,60})",
+    r"(?:company|employer|organization|\u0627\u0644\u0634\u0631\u0643\u0629|\u062c\u0647\u0629 \u0627\u0644\u0639\u0645\u0644)\s*[:\-]\s*"
+    r"([^\n.,;\u060c]{2,60}?)"
+    r"(?=[\n.,;\u060c]|\s+(?:track|save|add)\b|\s+\u062a\u062a\u0628\u0639|$)",
     re.IGNORECASE,
 )
 
@@ -6419,10 +6432,35 @@ class RicoChatAPI:
         # "Position: X. Company: Y. Track it." must save to the pipeline without
         # a UI button. Requires BOTH structured fields plus an explicit track
         # instruction, so a pasted posting or a search phrase never triggers it.
-        if _MANUAL_TRACK_TRIGGER_RE.search(message):
+        if _MANUAL_TRACK_TRIGGER_RE.search(message) and not _MANUAL_TRACK_NEGATION_RE.search(message):
             _mt_title = _MANUAL_TRACK_TITLE_RE.search(message)
             _mt_company = _MANUAL_TRACK_COMPANY_RE.search(message)
             if _mt_title and _mt_company:
+                # Authenticated (JWT) sessions only — this is a DB write path.
+                # Same verified-capability rule as the bulk-archive guard: never
+                # inferred from the shape of user_id (public chat can supply an
+                # arbitrary email-shaped string).
+                if not self._can_mutate_applications:
+                    if self._is_arabic_text(message):
+                        _mt_msg = (
+                            "\u062a\u062a\u0628\u0639 \u0627\u0644\u0637\u0644\u0628\u0627\u062a \u0645\u062a\u0627\u062d \u0628\u0639\u062f \u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062f\u062e\u0648\u0644. "
+                            "\u0633\u062c\u0651\u0644 \u0627\u0644\u062f\u062e\u0648\u0644 \u0644\u062d\u0641\u0638 \u0647\u0630\u0647 \u0627\u0644\u0648\u0638\u064a\u0641\u0629 \u0641\u064a \u0645\u062a\u0627\u0628\u0639\u0629 \u0637\u0644\u0628\u0627\u062a\u0643."
+                        )
+                    else:
+                        _mt_msg = (
+                            "Application tracking is available once you're signed in. "
+                            "Log in to save this job to your pipeline."
+                        )
+                    self._append_chat(user_id, "assistant", _mt_msg)
+                    return self._finalize(
+                        {
+                            "type": "track_job_requires_auth",
+                            "intent": "track_job",
+                            "message": _mt_msg,
+                        },
+                        self.SOURCE_KEYWORD,
+                        profile=profile,
+                    )
                 return self._finalize(
                     self._handle_manual_application_track(
                         user_id,
@@ -11649,11 +11687,41 @@ class RicoChatAPI:
         chat, /applications, and /flow stay consistent. Never claims success
         unless the DB write returns True.
         """
+        from fastapi import HTTPException as _HTTPException
+
         from src.repositories.applications_repo import create_manual as _create_manual_app
 
         saved = False
         try:
             saved = _create_manual_app(title=title, company=company, status="saved", user_id=user_id)
+        except _HTTPException as exc:
+            if exc.status_code == 402:
+                # Saved-jobs quota reached — not transient, so tell the user to
+                # upgrade or free a slot instead of asking them to retry.
+                if arabic:
+                    msg = (
+                        f"لقد وصلت إلى حد الوظائف المحفوظة في خطتك، لذا لم أتمكن من حفظ **{title}** في **{company}**. "
+                        "قم بترقية اشتراكك أو أزل وظيفة محفوظة من صفحة الطلبات (/applications) ثم حاول مجددًا."
+                    )
+                else:
+                    msg = (
+                        f"You've reached your plan's saved-jobs limit, so I couldn't save **{title}** at **{company}**. "
+                        "Upgrade your plan or remove a saved job from Applications (/applications), then try again."
+                    )
+                self._append_chat(user_id, "assistant", msg)
+                return {
+                    "type": "track_job_limit_reached",
+                    "intent": "track_job",
+                    "message": msg,
+                    "job_title": title,
+                    "job_company": company,
+                    "job_status": None,
+                    "target_route": "/subscription",
+                    "next_action": "upgrade_subscription",
+                }
+            logger.exception(
+                "manual_track save failed user=%s title=%r company=%r", user_id, title, company
+            )
         except Exception:
             logger.exception(
                 "manual_track save failed user=%s title=%r company=%r", user_id, title, company
