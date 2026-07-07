@@ -137,6 +137,25 @@ export default function DesignGalleryClient() {
           Internal preview only — not production navigation
         </span>
 
+        {/* Link to the Atelier V2 design-system specimen (PR A1). Isolated,
+            noindex sub-route; does not alter these landing variants. */}
+        <a
+          href="/design-gallery/atelier"
+          style={{
+            fontSize: 11,
+            fontFamily: "monospace",
+            padding: "5px 14px",
+            borderRadius: 999,
+            border: "1px solid rgba(207,61,23,0.40)",
+            background: "rgba(207,61,23,0.12)",
+            color: "rgba(238,106,58,0.95)",
+            textDecoration: "none",
+            whiteSpace: "nowrap",
+          }}
+        >
+          Atelier V2 ✦ design system
+        </a>
+
         <div style={{ flex: 1 }} />
 
         {/* Variant selector */}
