@@ -50,7 +50,7 @@ const stateIcons: Record<StepState, string> = {
   pending: "○",
 };
 
-function ToolStep({ step, index, reduce }: { step: ToolStep; index: number; reduce: boolean }) {
+function ToolStep({ step, index, reduce, lang }: { step: ToolStep; index: number; reduce: boolean; lang: "en" | "ar" }) {
   return (
     <motion.div
       initial={reduce ? false : { opacity: 0, x: -12 }}
@@ -103,7 +103,7 @@ function ToolStep({ step, index, reduce }: { step: ToolStep; index: number; redu
             border: "1px solid rgb(var(--aura)/0.25)"
           }}
         >
-          Done
+          {lang === "ar" ? "تم" : "Done"}
         </motion.span>
       )}
     </motion.div>
@@ -161,9 +161,9 @@ export function ThinkingState({ lang }: { lang: "en" | "ar" }) {
                 transition={{ repeat: Infinity, duration: 2.4, ease: "easeInOut" }}
                 className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-base"
                 style={{
-                  background: "radial-gradient(circle at 38% 32%, rgb(255 196 110), rgb(240 169 74))",
-                  color: "#0a0a0f",
-                  boxShadow: "0 0 24px rgb(240 169 74 / 0.32), inset 0 1px 0 rgba(255,255,255,0.22)"
+                  background: "radial-gradient(circle at 38% 32%, rgb(var(--gold-hover)), rgb(var(--gold)))",
+                  color: "var(--rico-on-primary)",
+                  boxShadow: "0 0 24px rgb(var(--gold) / 0.32), inset 0 1px 0 rgb(var(--overlay) / 0.22)"
                 }}
               >
                 R
@@ -174,7 +174,7 @@ export function ThinkingState({ lang }: { lang: "en" | "ar" }) {
                   animate={{ scale: [1, 1.7], opacity: [0.5, 0] }}
                   transition={{ repeat: Infinity, duration: 2, ease: "easeOut" }}
                   className="absolute inset-0 rounded-full pointer-events-none"
-                  style={{ border: "1.5px solid rgb(240 169 74 / 0.4)" }}
+                  style={{ border: "1.5px solid rgb(var(--gold) / 0.4)" }}
                 />
               )}
             </div>
@@ -199,7 +199,7 @@ export function ThinkingState({ lang }: { lang: "en" | "ar" }) {
           </div>
 
           {/* Skeleton response preview */}
-          <div className="space-y-2" aria-label="Loading response preview">
+          <div className="space-y-2" aria-label={lang === "ar" ? "جارٍ تحميل معاينة الرد" : "Loading response preview"}>
             {[80, 60, 90, 45].map((w, i) => (
               <motion.div
                 key={i}
@@ -226,7 +226,7 @@ export function ThinkingState({ lang }: { lang: "en" | "ar" }) {
           </div>
           <div className="divide-y divide-[rgb(var(--overlay)/0.05)]">
             {steps.map((step, i) => (
-              <ToolStep key={step.id} step={step} index={i} reduce={reduce} />
+              <ToolStep key={step.id} step={step} index={i} reduce={reduce} lang={lang} />
             ))}
           </div>
         </div>
