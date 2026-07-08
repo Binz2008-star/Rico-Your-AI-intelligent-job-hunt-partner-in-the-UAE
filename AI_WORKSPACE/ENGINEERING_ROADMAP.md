@@ -33,11 +33,11 @@ starting any feature, redesign, worker, notification, or infrastructure work.
 
 | Question | Answer |
 | --- | --- |
-| **Where is Rico?** | Phase 2 — Hardening. Operational Memory foundation is merged and live. |
-| **Where is it going?** | Phase 3 — Chat Integration (wire persisted lifecycle into chat), then Lifecycle Intelligence. |
+| **Where is Rico?** | Phase 3 — Chat Integration underway. Operational Memory foundation + first Hardening fix live. |
+| **Where is it going?** | Continue Phase 3 (wire remaining persisted lifecycle into chat), then Lifecycle Intelligence. |
 | **What is blocked?** | Nothing is blocked. UI facelift, notifications, and infra (Railway) are deferred by design, not blocked. |
-| **What is completed?** | Phases 0 and 1 (Architecture & Governance, Operational Memory Foundation). First Hardening PR live. |
-| **What comes next?** | Continue Phase 2 hardening as gaps are proven; begin Phase 3 chat wiring (verify-first, synthetic data only). |
+| **What is completed?** | Phases 0 and 1 (Architecture & Governance, Operational Memory Foundation). First Hardening PR live. Phase 3 first slice merged (#891). |
+| **What comes next?** | Continue Phase 3 chat slices as needed; continue Phase 2 hardening as gaps are proven (verify-first, synthetic data only). |
 
 Production is stable: Render backend healthy (`/health` ok, providers configured),
 Vercel frontend up. The batch-row-isolation hardening fix (#887) is live.
@@ -93,11 +93,15 @@ fix only proven gaps (synthetic data only).
   no longer drops the whole apply-link batch); proven against real Postgres.
 - Next candidates: any gap surfaced by continued Audit Phase 2–9 verification.
 
-### Phase 3 — Chat Integration ⬜ (next)
-After the lifecycle is stable, wire chat to what is already persisted — almost
-no new logic, just connection. Enables:
-- "Show jobs I applied to" · "What should I follow up?" · "Show my last
-  applications" · "What did I open yesterday?"
+### Phase 3 — Chat Integration 🔵 (current)
+Wire chat to what is already persisted — almost no new logic, just connection.
+- Delivered: #891 — "what should I follow up?" / "which jobs are due for
+  follow-up?" (EN + AR) → reuses the merged readiness logic
+  (`get_by_status("applied")` → `select_revisit_candidates`).
+- Already in chat before this phase: "show my applications", "show saved jobs",
+  "what did I open but not apply to?", follow-up timing advice.
+- Next candidates: a combined job-search status digest; any other lifecycle view
+  not yet reachable from chat.
 - Constraint: reuse existing lifecycle reads; verify-first; synthetic data only.
 
 ### Phase 4 — Lifecycle Intelligence ⬜
@@ -147,6 +151,10 @@ before feature/redesign/worker/notification/infra work.
 | Date | Commit | What went live |
 | --- | --- | --- |
 | 2026-07-08 | `7d167dd` | #887 — batch-row-isolation hardening (apply-link batch resilience) |
+
+_Merged to `main` (`80e246b`), deploy verification pending: #885 (follow-ups
+endpoint) and #891 (chat follow-up readiness). Promote each to a release row once
+`/version.commit` on Render reads `80e246b…` and `/health` is ok._
 
 _Add a row when a runtime change is deployed and verified (`/version.commit`
 matches `main`, `/health` ok). Docs-only merges are not releases._
