@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
 UTC = timezone.utc
 DEFAULT_REVISIT_DAYS = 7
+_READY_STATUSES = {"applied", "follow_up_due"}
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,14 @@ def as_utc_datetime(value: Any) -> datetime | None:
     return parsed.astimezone(UTC)
 
 
+def application_time(row: dict[str, Any]) -> datetime | None:
+    for key in ("applied_at", "date_applied", "date_updated"):
+        parsed = as_utc_datetime(row.get(key))
+        if parsed is not None:
+            return parsed
+    return None
+
+
 def build_revisit_candidate(
     row: dict[str, Any],
     *,
@@ -58,18 +67,19 @@ def build_revisit_candidate(
     current = (now or datetime.now(UTC)).astimezone(UTC)
     minimum_days = max(0, int(min_days_since_applied))
 
-    if normalize_status(row.get("status")) != "applied":
+    if normalize_status(row.get("status")) not in _READY_STATUSES:
         return None
     if row.get("interview_at") or row.get("closed_at"):
         return None
 
-    applied_at = as_utc_datetime(row.get("applied_at"))
+    applied_at = application_time(row)
     if applied_at is None:
         return None
 
-    days_since = (current.date() - applied_at.date()).days
-    if days_since < minimum_days:
+    elapsed = current - applied_at
+    if elapsed < timedelta(days=minimum_days):
         return None
+    days_since = max(0, elapsed.days)
 
     title = clean_text(row.get("title"))
     company = clean_text(row.get("company"))
@@ -81,7 +91,7 @@ def build_revisit_candidate(
         company=company,
         applied_at=applied_at,
         days_since_applied=days_since,
-        apply_url=clean_text(row.get("apply_url")),
+        apply_url=clean_text(row.get("apply_url") or row.get("link")),
         source_url=clean_text(row.get("source_url")),
     )
 

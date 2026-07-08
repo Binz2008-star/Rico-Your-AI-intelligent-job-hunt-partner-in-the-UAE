@@ -36,6 +36,15 @@ class LifecycleJob(BaseModel):
     applied_at: Optional[str] = None
 
 
+class FollowupJob(BaseModel):
+    title: str
+    company: str
+    apply_url: str = ""
+    source_url: str = ""
+    applied_at: str
+    days_since_applied: int
+
+
 class LifecycleUpdateResponse(BaseModel):
     ok: bool
     status: str
@@ -46,3 +55,9 @@ class LifecycleListResponse(BaseModel):
     ok: bool
     count: int
     jobs: List[LifecycleJob]
+
+
+class FollowupListResponse(BaseModel):
+    ok: bool
+    count: int
+    jobs: List[FollowupJob]
