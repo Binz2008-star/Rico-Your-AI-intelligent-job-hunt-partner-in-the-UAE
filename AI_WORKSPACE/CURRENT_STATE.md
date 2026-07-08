@@ -1,5 +1,35 @@
 # Current State
 
+> **Reconciliation header — 2026-07-08.** The dated sections in this file are a
+> **historical log**; the newest detailed narrative below stops at **2026-07-03**
+> (`main` `b021273`). Since then the operational-memory / governance / Atelier
+> train has merged and `main` has advanced. For the authoritative "where is Rico
+> right now," read **`AI_WORKSPACE/ENGINEERING_ROADMAP.md`** (phase status +
+> Releases table) and the latest handoff
+> **`AI_WORKSPACE/HANDOFFS/2026-07-09-board-clean-governance-complete.md`**.
+> If this log and the roadmap disagree, the roadmap + latest handoff + live
+> GitHub `main` win (per `OPERATING_RULES.md`).
+>
+> **Actual `main` HEAD:** `49d14c1` (`docs(workspace): point START_HERE to the
+> 2026-07-09 handoff`). **Merged since the 2026-07-03 log below** (see the roadmap
+> and handoffs for detail — do not re-derive from this log):
+>
+> - **Operational Memory / Hardening (Roadmap Phases 0–2):** #881 phased
+>   architecture decision + audit gate reconciliation, #883 revisit-readiness
+>   helper, #885 lifecycle follow-ups endpoint, #887 batch-row-isolation
+>   persistence hardening (live, `7d167dd`), #888 Engineering Roadmap master map.
+> - **Chat Integration (Phase 3):** #891 "what should I follow up?" readiness
+>   (`80e246b`; deploy verification pending per the roadmap Releases note).
+> - **Trust:** #892 `MutationConfirmationGuard` — canonical closure of #764
+>   (`bd887d7`; supersedes the older QA-cycle #764 note further down this file).
+> - **Design / marketing surfaces:** #879/#880 C1 Atelier `/terms` pilot, #895 C2
+>   Atelier `/privacy` + `/refund-policy`, #889 command-concept-sandbox approved as
+>   design reference, #894 Lovable streaming-chat quarantine (DEC-20260708-004).
+> - **Governance / tooling:** #890 agent operating model
+>   (`AI_WORKSPACE/AGENT_OPERATING_MODEL.md`), #897 technical status handoff, #898
+>   Docker local-dev (local-only). Board is clean — only #872 / #873 design
+>   prototypes held. No C3/C4/C8 started.
+
 ## 2026-07-03 — Neon index-cleanup train (034 + 035) live; drift resolved
 
 _`main` HEAD `b021273`. Backend verified live on `b021273` via deploy-rico
@@ -316,7 +346,7 @@ No provider keys are hardcoded, committed, or logged.
 
 ## Attachment / Document Intelligence routing — 2026-06-23
 
-- **Audit:** `AI_WORKSPACE/audits/attachment-document-routing-post-674-677.md` (Findings 1–5). #677 shipped native-image classification on `/command`; the audit found the residual gaps.
+- **Audit:** `AI_WORKSPACE/AUDITS/attachment-document-routing-post-674-677.md` (Findings 1–5). #677 shipped native-image classification on `/command`; the audit found the residual gaps.
 - **#737 (Finding 1, merged):** a screenshot/scan exported as a PDF (image-only PDF, no text layer) used to fall through `unknown@0.0` into CV extraction → misleading "poor quality" CV preview. The classifier now tags a *substantial* (`>= _MIN_DOC_BYTES`, 1 KB) text-bearing file with near-empty text (`< _MIN_TEXT_CHARS`, 25) as `no_text`; `/upload-cv` returns a clear needs-text response (`status="classified"`, `document_type="no_text"`) before the CV pipeline. Tiny stub PDFs still flow normally; native images unchanged; real text CVs unchanged. Tests: `tests/test_no_text_pdf_routing.py`.
 - **#738 (upload size, merged):** documents 25 MB / images 10 MB, per-kind cap enforced from magic-byte format **before** parsing; friendly type-aware oversize message (413) replacing "exceeds 10 MB"; `/command` + `/onboarding` map 413 → localized `cmdCvTooLarge` (AR/EN); `files.py` doc cap also 25 MB. Tests: `tests/test_upload_size_limits.py`, `apps/web/__tests__/cv-upload-size-message.test.ts`.
 - **Open findings (NEXT work):** **Finding 3** — no application-evidence destination (read screenshot → "Save as target job" / "Score against my CV" not wired end-to-end; this is the owner's "link A↔B without buttons" ask). **Finding 4** — `onboarding`/`upload` surfaces still don't honor `status="classified"` for non-CV docs/images (#738 only added 413 size handling). **Finding 5** — dead `CV_THRESHOLD`; stale `CLAUDE.md` `/chat` reference (trivial cleanup).

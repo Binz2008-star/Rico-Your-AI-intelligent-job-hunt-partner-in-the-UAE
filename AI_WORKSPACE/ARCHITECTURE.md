@@ -63,6 +63,12 @@ Neon PostgreSQL + Telegram + dashboard/report output
    - `/settings`
    - `/onboarding`
 
+> The list above is the historical product-surface map, not the live routing
+> contract. `/chat` redirects to `/command` (the primary chat surface), and
+> several routes above are redirect-only or pending a product decision. For the
+> authoritative per-route state see the **Route architecture** table in
+> `AI_WORKSPACE/CURRENT_STATE.md` and the **No Dead UI Rule** (DEC-20260628-001).
+
 ## Key backend files
 
 - `src/api/app.py` — main FastAPI app used by Render
@@ -94,7 +100,7 @@ Neon PostgreSQL + Telegram + dashboard/report output
 
 ## Key frontend files
 
-- `apps/web/app/chat/page.tsx` — public chat UI
+- `apps/web/app/command/page.tsx` — public chat UI (primary chat surface; `/chat` redirects here)
 - `apps/web/app/signup/page.tsx` — self-signup UI
 - `apps/web/app/login/page.tsx` — login UI
 - `apps/web/app/onboarding/page.tsx` — guided onboarding / CV-first flow

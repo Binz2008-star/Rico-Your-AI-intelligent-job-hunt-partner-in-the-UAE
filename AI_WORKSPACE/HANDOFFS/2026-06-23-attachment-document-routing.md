@@ -10,7 +10,7 @@ HF vision extension (#736, not merged).
 
 - Repository: Binz2008-star/Rico-Your-AI-intelligent-job-hunt-partner-in-the-UAE
 - Production main HEAD: `e214178` (#737), deploy-verified.
-- Audit: `AI_WORKSPACE/audits/attachment-document-routing-post-674-677.md` (Findings 1–5).
+- Audit: `AI_WORKSPACE/AUDITS/attachment-document-routing-post-674-677.md` (Findings 1–5).
 - Origin: issue #674 (CAREER-OS-06 Universal Document Intelligence) + #677 (classify half shipped).
 - Relevant files: `src/services/document_classifier.py`, `src/api/routers/rico_chat.py`
   (`/upload-cv`), `src/services/image_extractor.py` (#736 only).
