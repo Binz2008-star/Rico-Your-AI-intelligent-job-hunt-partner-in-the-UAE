@@ -205,7 +205,8 @@ class TestRicoProfileUpdateRouteExists:
             "target_roles": [" HSE Manager "],
         }
 
-        with patch("src.api.routers.rico_chat.upsert_profile", side_effect=spy_upsert):
+        with patch("src.api.routers.rico_chat.upsert_profile", side_effect=spy_upsert), \
+             patch("src.api.routers.rico_chat._profile_updates_visible", return_value=True):
             r = auth_client.patch("/api/v1/rico/profile", json=payload)
 
         assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
@@ -231,7 +232,8 @@ class TestRicoProfileUpdateRouteExists:
             captured["updates"] = updates
             return {"ok": True}
 
-        with patch("src.api.routers.rico_chat.upsert_profile", side_effect=spy_upsert):
+        with patch("src.api.routers.rico_chat.upsert_profile", side_effect=spy_upsert), \
+             patch("src.api.routers.rico_chat._profile_updates_visible", return_value=True):
             r = auth_client.patch("/api/v1/rico/profile", json={"name": "  Roben Nihad  "})
 
         assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
@@ -1334,7 +1336,8 @@ class TestJobsRoutes:
                 "link": "https://example.com/job/ep-001",
             }
         }
-        with patch("src.api.routers.jobs.save_job", return_value=True):
+        with patch("src.api.routers.jobs.save_job", return_value=True), \
+             patch("src.repositories.applications_repo.find_by_job_id", return_value={"status": "saved"}):
             r = auth_client.post("/api/v1/jobs/job-1/save", json=payload)
         assert r.status_code == 200
         body = r.json()

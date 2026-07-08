@@ -63,6 +63,41 @@ from src.services.operation_state import (
     mark_failed,
     start_job_search_operation,
 )
+from src.mutation_guard import MutationConfirmationGuard, MutationResult
+
+_MUTATION_CONFIRMATION_GUARD = MutationConfirmationGuard()
+
+
+def _profile_updates_visible(user_id: str, updates: dict[str, Any]) -> bool:
+    """Confirm profile writes through the same profile read path used by the UI."""
+    profile = get_profile(user_id)
+    if profile is None:
+        return False
+    for key, expected in updates.items():
+        actual = getattr(profile, key, None)
+        if isinstance(expected, list):
+            if list(actual or []) != expected:
+                return False
+        elif actual != expected:
+            return False
+    return True
+
+
+def _application_status_visible(user_id: str, job_key: str, expected_status: str) -> bool:
+    """Confirm application status through the applications repo read path."""
+    from src.repositories import applications_repo
+    app = applications_repo.find_by_job_id(job_key, user_id=user_id)
+    if not app:
+        return False
+    return app.get("status") == expected_status
+
+
+def _no_saved_jobs_visible(user_id: str) -> bool:
+    """Confirm no saved jobs remain after delete."""
+    from src.repositories import applications_repo
+    stats = applications_repo.get_stats(user_id=user_id)
+    return stats.get("saved", 0) == 0
+
 
 logger = logging.getLogger(__name__)
 
@@ -1921,6 +1956,9 @@ class RicoChatAPI:
         # jotform-derived sessions with an email-shaped user_id.
         self._can_mutate_applications = can_mutate_applications
         self._current_operation_id: str | None = None
+        # Assign module-level verifier functions as instance attributes for use in lambdas
+        self._application_status_visible = _application_status_visible
+        self._no_saved_jobs_visible = _no_saved_jobs_visible
 
     @staticmethod
     def _is_broad_manager_role(role_text: str) -> bool:
@@ -9275,6 +9313,17 @@ class RicoChatAPI:
 
             try:
                 saved = _create_manual_app(title=title, company=company, status="applied", user_id=user_id)
+                _job_key = self._derive_lifecycle_job_key(title, company)
+                _confirmed = _MUTATION_CONFIRMATION_GUARD.confirm(
+                    MutationResult(success=bool(saved)),
+                    verifier=lambda: self._application_status_visible(user_id, _job_key, "applied"),
+                    success_en="confirmed",
+                    success_ar="confirmed",
+                    failure_en="failed",
+                    failure_ar="failed",
+                ) == "confirmed"
+                if not _confirmed:
+                    saved = False
                 if not saved:
                     raise RuntimeError("application create_manual returned false")
                 msg = (
@@ -10481,6 +10530,16 @@ class RicoChatAPI:
                     user_id=user_id,
                 )
             )
+            _confirmed = _MUTATION_CONFIRMATION_GUARD.confirm(
+                MutationResult(success=persisted),
+                verifier=lambda: self._application_status_visible(user_id, decision.save_key, "saved"),
+                success_en="confirmed",
+                success_ar="confirmed",
+                failure_en="failed",
+                failure_ar="failed",
+            ) == "confirmed"
+            if not _confirmed:
+                persisted = False
         except Exception as exc:
             # Subscription gate / DB unavailable / any failure → user-safe message,
             # never a raw error or stack trace.
@@ -10510,7 +10569,16 @@ class RicoChatAPI:
         except Exception:
             logger.debug("rico_chat: ordinal save side-effects failed", exc_info=True)
 
-        if persisted:
+        confirmed = _MUTATION_CONFIRMATION_GUARD.confirm(
+            MutationResult(success=persisted),
+            verifier=lambda: self._application_status_visible(user_id, decision.save_key, "saved"),
+            success_en="confirmed",
+            success_ar="confirmed",
+            failure_en="failed",
+            failure_ar="failed",
+        ) == "confirmed"
+
+        if confirmed:
             if decision.verified:
                 msg = f"Saved {_label} to your pipeline. [View your pipeline →](/flow)"
             else:
@@ -12734,7 +12802,15 @@ class RicoChatAPI:
                 db = _RicoDB()
                 deleted = db.delete_saved_jobs(user_id)
                 logger.info("rico_chat: delete_saved_jobs executed user=%s deleted=%d", user_id, deleted)
-                if deleted > 0:
+                _confirmed = _MUTATION_CONFIRMATION_GUARD.confirm(
+                    MutationResult(success=deleted > 0),
+                    verifier=lambda: self._no_saved_jobs_visible(user_id),
+                    success_en="confirmed",
+                    success_ar="confirmed",
+                    failure_en="failed",
+                    failure_ar="failed",
+                ) == "confirmed"
+                if _confirmed and deleted > 0:
                     if arabic:
                         msg = f"تم حذف **{deleted}** وظيفة محفوظة بنجاح."
                     else:

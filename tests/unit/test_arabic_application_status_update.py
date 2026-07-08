@@ -15,7 +15,14 @@ def _make_api() -> RicoChatAPI:
     api = RicoChatAPI.__new__(RicoChatAPI)
     api._persist = False
     api._current_operation_id = None
-    api._memory = {}
+    # Mock memory object with get_chat_messages method
+    mock_memory = MagicMock()
+    mock_memory.get_chat_messages.return_value = []
+    api.memory = mock_memory
+    # Assign verifier functions as instance attributes (since __init__ is not called)
+    from src.rico_chat_api import _application_status_visible, _no_saved_jobs_visible
+    api._application_status_visible = _application_status_visible
+    api._no_saved_jobs_visible = _no_saved_jobs_visible
     api.system = MagicMock()
     api.system.run_for_profile.side_effect = AssertionError("job search must not run")
     return api
@@ -98,6 +105,7 @@ def test_arabic_that_job_resolves_recent_context_and_marks_applied() -> None:
         patch.object(api, "_store_recent_context", side_effect=lambda uid, ctx: stored_contexts.append(ctx)),
         patch.object(api, "_classified_role_search", side_effect=AssertionError("job search must not run")),
         patch.object(api, "_target_role_search_response", side_effect=AssertionError("job search must not run")),
+        patch("src.rico_chat_api._application_status_visible", return_value=True),
         patch("src.repositories.applications_repo.find_by_job_id", return_value=None),
         patch("src.repositories.applications_repo.create", side_effect=fake_create),
         patch("src.repositories.user_job_context_repo.set_lifecycle_status", side_effect=fake_lifecycle),
@@ -205,38 +213,40 @@ def test_mark_applied_card_write_failure_does_not_claim_applied() -> None:
 
 def test_mark_applied_card_success_points_to_applications_not_queue() -> None:
     api = _make_api()
-    intent = IntentResult(
-        intent="job_action.mark_applied",
-        confidence=1.0,
-        source="exact",
-        extracted_title="Environmental Manager - Railway Construction Project",
-        extracted_company="Confidential Jobs",
-    )
-
-    with (
-        patch("src.rico_chat_api.is_onboarding_complete", return_value=True),
-        patch.object(api, "_resolve_profile", return_value=_make_profile()),
-        patch.object(api, "_append_chat"),
-        patch.object(api, "_get_openai_agent", return_value=_agent()),
-        patch.object(
-            api,
-            "_get_recent_context",
-            return_value={
-                "recent_application": {
-                    "title": "Environmental Manager - Railway Construction Project",
-                    "company": "Confidential Jobs",
-                    "link": "https://example.com/apply",
-                }
-            },
-        ),
-        patch.object(api, "_store_recent_context"),
-        patch("src.rico_chat_api.classify_intent", return_value=intent),
-        patch("src.repositories.applications_repo.create_manual", return_value=True),
-    ):
-        result = api.process_message(
-            USER,
-            "Mark as applied — Environmental Manager - Railway Construction Project at Confidential Jobs",
+    # Patch the underlying database read that _application_status_visible calls
+    with patch("src.repositories.applications_repo.find_by_job_id", return_value={"status": "applied"}):
+        intent = IntentResult(
+            intent="job_action.mark_applied",
+            confidence=1.0,
+            source="exact",
+            extracted_title="Environmental Manager - Railway Construction Project",
+            extracted_company="Confidential Jobs",
         )
+
+        with (
+            patch("src.rico_chat_api.is_onboarding_complete", return_value=True),
+            patch.object(api, "_resolve_profile", return_value=_make_profile()),
+            patch.object(api, "_append_chat"),
+            patch.object(api, "_get_openai_agent", return_value=_agent()),
+            patch.object(
+                api,
+                "_get_recent_context",
+                return_value={
+                    "recent_application": {
+                        "title": "Environmental Manager - Railway Construction Project",
+                        "company": "Confidential Jobs",
+                        "link": "https://example.com/apply",
+                    }
+                },
+            ),
+            patch.object(api, "_store_recent_context"),
+            patch("src.rico_chat_api.classify_intent", return_value=intent),
+            patch("src.repositories.applications_repo.create_manual", return_value=True),
+        ):
+            result = api.process_message(
+                USER,
+                "Mark as applied — Environmental Manager - Railway Construction Project at Confidential Jobs",
+            )
 
     assert result["type"] == "mark_applied"
     assert result["job_status"] == "applied"
@@ -281,28 +291,30 @@ def test_pending_mark_applied_confirmation_write_failure_does_not_claim_applied(
 
 def test_pending_mark_applied_confirmation_success_points_to_applications_not_queue() -> None:
     api = _make_api()
-    intent = IntentResult(intent="follow_up_confirmation", confidence=1.0, source="exact")
+    # Patch the underlying database read that _application_status_visible calls
+    with patch("src.repositories.applications_repo.find_by_job_id", return_value={"status": "applied"}):
+        intent = IntentResult(intent="follow_up_confirmation", confidence=1.0, source="exact")
 
-    with (
-        patch("src.rico_chat_api.is_onboarding_complete", return_value=True),
-        patch.object(api, "_resolve_profile", return_value=_make_profile()),
-        patch.object(api, "_append_chat"),
-        patch.object(api, "_get_openai_agent", return_value=_agent()),
-        patch.object(
-            api,
-            "_get_recent_context",
-            return_value={
-                "_pending_confirm_apply": {
-                    "title": "Environmental Manager - Railway Construction Project",
-                    "company": "Confidential Jobs",
-                }
-            },
-        ),
-        patch.object(api, "_store_recent_context"),
-        patch("src.rico_chat_api.classify_intent", return_value=intent),
-        patch("src.repositories.applications_repo.create_manual", return_value=True),
-    ):
-        result = api.process_message(USER, "yes")
+        with (
+            patch("src.rico_chat_api.is_onboarding_complete", return_value=True),
+            patch.object(api, "_resolve_profile", return_value=_make_profile()),
+            patch.object(api, "_append_chat"),
+            patch.object(api, "_get_openai_agent", return_value=_agent()),
+            patch.object(
+                api,
+                "_get_recent_context",
+                return_value={
+                    "_pending_confirm_apply": {
+                        "title": "Environmental Manager - Railway Construction Project",
+                        "company": "Confidential Jobs",
+                    }
+                },
+            ),
+            patch.object(api, "_store_recent_context"),
+            patch("src.rico_chat_api.classify_intent", return_value=intent),
+            patch("src.repositories.applications_repo.create_manual", return_value=True),
+        ):
+            result = api.process_message(USER, "yes")
 
     assert result["type"] == "mark_applied"
     assert result["job_status"] == "applied"
