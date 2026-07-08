@@ -16,35 +16,35 @@
 
 ## Core — Active (source of truth)
 
-| Document | Purpose | Status | Updated |
-| --- | --- | --- | --- |
-| `PROJECT_STATUS.md` | One-page current snapshot; read first | Active | 2026-07-08 |
-| `MASTER_INDEX.md` | This index | Active | 2026-07-08 |
-| `START_HERE.md` | Session entrypoint + read order | Active | 2026-07-09 |
-| `ENGINEERING_ROADMAP.md` | Vision→…→releases; phase status (canonical "now") | Active | 2026-07-08 |
-| `CURRENT_STATE.md` | Dated state log (newest at top; see reconciliation header) | Active (log) | 2026-07-08 |
-| `TASKS.md` | Task ledger | Active | 2026-07-08 |
-| `DECISIONS.md` | Decision log (ADRs — see ADR index below) | Active | 2026-07-08 |
+| Document | Purpose | Status | Owner | Depends on | Updated |
+| --- | --- | --- | --- | --- | --- |
+| `PROJECT_STATUS.md` | One-page dashboard; read first | Active | Release/last-merger | ROADMAP, CURRENT_STATE | 2026-07-08 |
+| `MASTER_INDEX.md` | This index | Active | Whoever adds/retires a doc | all workspace docs | 2026-07-08 |
+| `START_HERE.md` | Session entrypoint + read order | Active | Core | PROJECT_STATUS, MASTER_INDEX, ROADMAP | 2026-07-09 |
+| `ENGINEERING_ROADMAP.md` | Vision→…→releases; phase status (canonical "now") | Active | Owner/Architect | DECISIONS, AUDIT gate | 2026-07-08 |
+| `CURRENT_STATE.md` | Dated state log (newest at top; see reconciliation header) | Active (log) | Release/last-merger | ROADMAP, handoffs | 2026-07-08 |
+| `TASKS.md` | Task ledger | Active | Assignee per task | DECISIONS, EVALS | 2026-07-08 |
+| `DECISIONS.md` | Decision log (ADRs — see ADR index below) | Active | Owner/Architect | — (source) | 2026-07-08 |
 
 ## Governance & process — Active
 
-| Document | Purpose | Status | Updated |
-| --- | --- | --- | --- |
-| `OPERATING_RULES.md` | GitHub/Render/Vercel/Neon/test/verify guardrails | Active | 2026-07-06 |
-| `AGENT_OPERATING_MODEL.md` | Owner/architect/Claude/Codex/Lovable/release roles | Active | 2026-07-09 |
-| `PROMPT_CONTRACT.md` | Required task-brief inputs + output format | Active | 2026-07-06 |
-| `PR_CHECKLIST.md` | Checklist to paste into PRs | Active | 2026-07-06 |
-| `PR_QUALITY_GATE_RULES.md` | Agent-side PR quality gate | Active | 2026-07-06 |
-| `RICO_EXECUTION_PRINCIPLES.md` | Product constitution (v2.0) | Active | 2026-07-06 |
-| `HANDOFFS/README_PR_QUALITY_GATE.md` | Pointer to the quality-gate rules | Active | 2026-07-06 |
+| Document | Purpose | Status | Owner | Depends on | Updated |
+| --- | --- | --- | --- | --- | --- |
+| `OPERATING_RULES.md` | GitHub/Render/Vercel/Neon/test/verify guardrails | Active | Owner/Architect | — (source) | 2026-07-06 |
+| `AGENT_OPERATING_MODEL.md` | Owner/architect/Claude/Codex/Lovable/release roles | Active | Owner | — (source) | 2026-07-09 |
+| `PROMPT_CONTRACT.md` | Required task-brief inputs + output format | Active | Owner/Architect | OPERATING_RULES | 2026-07-06 |
+| `PR_CHECKLIST.md` | Checklist to paste into PRs | Active | Core | PR_QUALITY_GATE_RULES | 2026-07-06 |
+| `PR_QUALITY_GATE_RULES.md` | Agent-side PR quality gate | Active | Owner/Architect | OPERATING_RULES | 2026-07-06 |
+| `RICO_EXECUTION_PRINCIPLES.md` | Product constitution (v2.0) | Active | Owner | — (source) | 2026-07-06 |
+| `HANDOFFS/README_PR_QUALITY_GATE.md` | Pointer to the quality-gate rules | Active | Core | PR_QUALITY_GATE_RULES | 2026-07-06 |
 
 ## Vision & architecture — Active
 
-| Document | Purpose | Status | Updated |
-| --- | --- | --- | --- |
-| `PROJECT_BRIEF.md` | Product + owner + shared-source-of-truth rule | Active | 2026-07-06 |
-| `CAREER_OS_VISION.md` | 10-layer Career OS vision (live-vs-vision table) | Active | 2026-07-06 |
-| `ARCHITECTURE.md` | Live stack, system diagram, target (phased) architecture | Active | 2026-07-08 |
+| Document | Purpose | Status | Owner | Depends on | Updated |
+| --- | --- | --- | --- | --- | --- |
+| `PROJECT_BRIEF.md` | Product + owner + shared-source-of-truth rule | Active | Owner | — (source) | 2026-07-06 |
+| `CAREER_OS_VISION.md` | 10-layer Career OS vision (live-vs-vision table) | Active | Owner | RICO_EXECUTION_PRINCIPLES | 2026-07-06 |
+| `ARCHITECTURE.md` | Live stack, system diagram, target (phased) architecture | Active | Owner/Architect | DECISIONS (DEC-20260707-001) | 2026-07-08 |
 
 ## Audit gate — Active / Historical
 

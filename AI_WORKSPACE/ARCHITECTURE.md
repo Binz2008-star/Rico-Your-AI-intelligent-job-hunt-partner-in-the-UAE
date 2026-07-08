@@ -55,7 +55,15 @@ flowchart TD
     PIPE -->|cascade| JOBS[Job providers<br/>cache → internal → Jooble → Adzuna → JSearch]
     RT --> TG[Telegram<br/>user + admin/dev channels]
     API --> JF[Jotform intake webhook]
+
+    PIPE -. "planned split (Phase 7)" .-> WK[Worker service · PLANNED<br/>job scans · follow-ups · alerts · link verify]
+    WK -.-> DB
+    WK -.-> RQ[(Redis / Queue · PLANNED<br/>background tasks · retries)]
 ```
+
+The **legacy job pipeline** currently runs in-process (daily bot / `run_daily.py`).
+The dashed **Worker service** + **Redis/Queue** are the planned Phase-7 separation
+(DEC-20260707-001 PRs D/E) — not deployed. Render stays production until then.
 
 Notes:
 - `/chat` and `/orchestrate` redirect to `/command` (see `CURRENT_STATE.md` route
