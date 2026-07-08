@@ -28,6 +28,47 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260708-004 — Quarantine the Lovable streaming-chat experiment; command chat must be reimplemented in the production repo
+
+Status: accepted
+Date: 2026-07-08
+Owner: Roben Edwan (owner); recorded by Claude (GitHub session)
+Related task: C-series Atelier migration (C8 = `/command`)
+
+#### Context
+A streaming command-chat foundation ("PR-1") was built in the Lovable / TanStack
+prototype repo (`Binz2008-star/rico-hunt-ai`): a new `src/routes/api/chat.ts`
+route wired to the Lovable AI Gateway (`google/gemini-2.5-flash`), a server-only
+`LOVABLE_API_KEY`, a rewrite of `src/routes/app.command.tsx`, and added `ai` /
+`@ai-sdk/react` / `@ai-sdk/openai-compatible` deps; 13/13 headless smoke passed
+under Bun. That repo is under a standing freeze (reference-only): no publish, no
+`main` changes, no backend/auth/DB/billing/DNS, and production code must not
+depend on Lovable code. The experiment adds a live backend integration and
+rewrites the prototype's command surface — outside the freeze. Consistent with
+DEC-20260708-001 (prototype sandboxes are design reference requiring production
+adaptation, not portable code).
+
+#### Decision
+Quarantine the experiment. It must NOT be merged, published, or used as
+production code — it is reference research only. The Lovable prototype stays
+frozen. Any streaming command chat must be re-implemented in the production Rico
+repo (Next.js, `apps/web`) under the approved phased Atelier migration plan,
+where `/command` is phase **C8** (last, most sensitive) and is not to be touched
+until explicitly reprioritized. The TanStack implementation is not to be ported.
+
+#### Consequences
+- Positive: production stays stable and single-sourced in the real repo; the
+  Lovable freeze stays intact; no premature or backend-coupled command changes;
+  a clear provenance boundary (prototype = reference, real repo = build target).
+- Negative/trade-off: the prototype streaming-chat effort is not directly
+  reusable; a future C8 re-implements it natively in Next.js rather than porting.
+
+#### Follow-up
+- [ ] When C8 is reprioritized, design streaming `/command` in `apps/web`
+  (Next.js) from scratch — not a port of the TanStack prototype.
+- [ ] Keep the Lovable prototype reference-only; revisit the freeze only on an
+  explicit owner decision.
+
 ### DEC-20260708-003 — Design-system boundary: Atelier for marketing, Nocturne for the workspace
 
 Status: accepted
