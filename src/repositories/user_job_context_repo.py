@@ -54,6 +54,7 @@ def upsert_matches(user_id: str, matches: list[dict]) -> None:
         logger.debug("user_job_context_repo: DB unavailable, skipping upsert user=%s", user_id)
         return
     try:
+        persisted = 0
         with conn.cursor() as cur:
             for m in matches:
                 t = (m.get("title") or "").strip()
@@ -70,43 +71,61 @@ def upsert_matches(user_id: str, matches: list[dict]) -> None:
                     au = ""
                 alt = (m.get("alt_link") or m.get("alt_url") or "").strip()
                 vs = m.get("verification_status") or "lead_needs_verification"
-                cur.execute(
-                    """
-                    INSERT INTO user_job_context
-                        (user_id, title, company, location, apply_url, source_url,
-                         alt_url, verification_status, searched_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                    ON CONFLICT (user_id, lower(title), lower(company))
-                    DO UPDATE SET
-                        apply_url           = CASE
-                                                WHEN EXCLUDED.apply_url <> ''
-                                                THEN EXCLUDED.apply_url
-                                                ELSE user_job_context.apply_url
-                                              END,
-                        source_url          = COALESCE(
-                                                NULLIF(EXCLUDED.source_url, ''),
-                                                user_job_context.source_url
-                                              ),
-                        alt_url             = COALESCE(
-                                                NULLIF(EXCLUDED.alt_url, ''),
-                                                user_job_context.alt_url
-                                              ),
-                        verification_status = EXCLUDED.verification_status,
-                        searched_at         = NOW()
-                    """,
-                    (
-                        user_id,
-                        t,
-                        c,
-                        (m.get("location") or "").strip() or None,
-                        au,
-                        su,
-                        alt,
-                        vs,
-                    ),
-                )
+                # Isolate each row in its own SAVEPOINT so a single malformed match
+                # (e.g. a value the driver rejects) is skipped and logged without
+                # aborting the whole transaction and dropping the apply/source links
+                # already staged for the rest of the batch.
+                cur.execute("SAVEPOINT ujc_row")
+                try:
+                    cur.execute(
+                        """
+                        INSERT INTO user_job_context
+                            (user_id, title, company, location, apply_url, source_url,
+                             alt_url, verification_status, searched_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                        ON CONFLICT (user_id, lower(title), lower(company))
+                        DO UPDATE SET
+                            apply_url           = CASE
+                                                    WHEN EXCLUDED.apply_url <> ''
+                                                    THEN EXCLUDED.apply_url
+                                                    ELSE user_job_context.apply_url
+                                                  END,
+                            source_url          = COALESCE(
+                                                    NULLIF(EXCLUDED.source_url, ''),
+                                                    user_job_context.source_url
+                                                  ),
+                            alt_url             = COALESCE(
+                                                    NULLIF(EXCLUDED.alt_url, ''),
+                                                    user_job_context.alt_url
+                                                  ),
+                            verification_status = EXCLUDED.verification_status,
+                            searched_at         = NOW()
+                        """,
+                        (
+                            user_id,
+                            t,
+                            c,
+                            (m.get("location") or "").strip() or None,
+                            au,
+                            su,
+                            alt,
+                            vs,
+                        ),
+                    )
+                except Exception:
+                    cur.execute("ROLLBACK TO SAVEPOINT ujc_row")
+                    logger.exception(
+                        "user_job_context_repo_upsert_row_skipped user=%s title=%r company=%r",
+                        user_id, t, c,
+                    )
+                else:
+                    cur.execute("RELEASE SAVEPOINT ujc_row")
+                    persisted += 1
         conn.commit()
-        logger.debug("user_job_context_repo: upserted %d matches user=%s", len(matches), user_id)
+        logger.debug(
+            "user_job_context_repo: upserted %d/%d matches user=%s",
+            persisted, len(matches), user_id,
+        )
     except Exception:
         logger.exception("user_job_context_repo_upsert_failed user=%s", user_id)
         try:

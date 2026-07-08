@@ -68,6 +68,15 @@ class _FakeConn:
         self.closed = True
 
 
+def _insert_call(cursor):
+    """Return (sql, params) of the row INSERT, skipping SAVEPOINT control
+    statements now emitted by upsert_matches' per-row isolation."""
+    for sql, params in cursor.executed:
+        if "INSERT INTO user_job_context" in sql:
+            return sql, params
+    raise AssertionError("no INSERT INTO user_job_context was executed")
+
+
 # ── 1. set_lifecycle_status stamps last_discussed_at ──────────────────────────
 
 class TestSetLifecycleStatusLastDiscussed:
@@ -144,7 +153,7 @@ class TestUpsertMatchesWritesToContext:
         with patch("src.db.get_db_connection", return_value=conn):
             repo.upsert_matches("u1", matches)
         assert conn.committed is True
-        sql, params = conn.cursor_obj.executed[0]
+        sql, params = _insert_call(conn.cursor_obj)
         assert "INSERT INTO user_job_context" in sql
         assert params[1] == "Backend Engineer"
         assert params[2] == "Noon"
@@ -162,7 +171,7 @@ class TestUpsertMatchesWritesToContext:
         matches = [{"title": "Dev", "company": "X", "apply_url": url, "source_url": url}]
         with patch("src.db.get_db_connection", return_value=conn):
             repo.upsert_matches("u1", matches)
-        _, params = conn.cursor_obj.executed[0]
+        _, params = _insert_call(conn.cursor_obj)
         # apply_url should be cleared when equal to source_url
         assert params[4] == ""   # apply_url cleared
         assert params[5] == url  # source_url retained

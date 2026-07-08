@@ -398,8 +398,11 @@ def test_user_job_context_upsert_skips_missing_title_or_company_and_source_only_
         def __init__(self) -> None:
             self.params: list[tuple] = []
 
-        def execute(self, _sql: str, params: tuple) -> None:
-            self.params.append(params)
+        def execute(self, sql: str, params: tuple | None = None) -> None:
+            # Only record row INSERTs; ignore the per-row SAVEPOINT/RELEASE/
+            # ROLLBACK control statements emitted by upsert_matches.
+            if "INSERT INTO user_job_context" in sql:
+                self.params.append(params)
 
         def __enter__(self):
             return self
