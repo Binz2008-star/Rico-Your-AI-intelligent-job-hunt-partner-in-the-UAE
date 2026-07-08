@@ -12,13 +12,14 @@ Rico mode. Start from AI_WORKSPACE/START_HERE.md.
 
 Before starting new Rico work, read the latest rollout handoff:
 
-1. `AI_WORKSPACE/HANDOFFS/2026-07-08-technical-status.md` (latest — #892 #764 trust guard merged, #894 Lovable quarantine merged, #895 C2 legal pages live, #896 duplicate closed, #898 Docker local-dev merged (SHA `7fb41bc`); #886/#867 closed as stale/superseded; #897/#890 draft; #872/#873 held; no C3/C4/C8 started)
-2. `AI_WORKSPACE/HANDOFFS/2026-06-22-job-flow-stabilization-complete.md` (PRs #727/#724/#723/#728/#729/#730 merged + deployed; only PR C remains for Tests 1–9)
-3. `AI_WORKSPACE/HANDOFFS/2026-06-22-job-flow-stabilization.md` (earlier stabilization handoff — superseded by the complete handoff above)
-4. `AI_WORKSPACE/HANDOFFS/2026-06-21-system-quality-audit.md` (codebase audit — bugs fixed, tech debt documented)
-5. `AI_WORKSPACE/HANDOFFS/2026-06-21-career-os-roadmap-status.md` (which Career OS milestones are actually built)
-6. `AI_WORKSPACE/HANDOFFS/2026-06-21-action-audit-rollout-complete.md`
-7. Then continue with the read order below.
+1. `AI_WORKSPACE/HANDOFFS/2026-07-09-board-clean-governance-complete.md` (latest — #890 agent operating model merged at `ac0cd99`; #897 technical handoff merged at `bb9555e`; #898 Docker local-dev merged at `7fb41bc`; board clean with only #872/#873 held; no C3/C4/C8 started)
+2. `AI_WORKSPACE/HANDOFFS/2026-07-08-technical-status.md` (#892 #764 trust guard merged, #894 Lovable quarantine merged, #895 C2 legal pages live, #896 duplicate closed, #898 Docker local-dev merged; #886/#867 closed as stale/superseded; #872/#873 held)
+3. `AI_WORKSPACE/HANDOFFS/2026-06-22-job-flow-stabilization-complete.md` (PRs #727/#724/#723/#728/#729/#730 merged + deployed; only PR C remains for Tests 1–9)
+4. `AI_WORKSPACE/HANDOFFS/2026-06-22-job-flow-stabilization.md` (earlier stabilization handoff — superseded by the complete handoff above)
+5. `AI_WORKSPACE/HANDOFFS/2026-06-21-system-quality-audit.md` (codebase audit — bugs fixed, tech debt documented)
+6. `AI_WORKSPACE/HANDOFFS/2026-06-21-career-os-roadmap-status.md` (which Career OS milestones are actually built)
+7. `AI_WORKSPACE/HANDOFFS/2026-06-21-action-audit-rollout-complete.md`
+8. Then continue with the read order below.
 
 ## Project map (read first)
 
