@@ -817,6 +817,32 @@ _FOLLOWUP_TIMING_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Follow-up readiness listing: "what should I follow up?", "which jobs are due
+# for follow-up?", "what jobs need a follow-up?", "show my follow-ups", and Arabic
+# equivalents. Answers WHICH applied jobs are old enough to revisit — routed to
+# the merged operational-memory readiness logic (same reads as
+# GET /api/v1/jobs/lifecycle/follow-ups). Deliberately narrow: it matches
+# "what/which jobs ... follow up" and follow-up-noun forms only, so genuine
+# timing questions ("when should I follow up?", "is it too early to follow up?")
+# do NOT match here and still reach _FOLLOWUP_TIMING_RE.
+_FOLLOWUP_READINESS_RE = re.compile(
+    r"\bwhat\s+(?:should\s+I|do\s+I\s+need\s+to)\s+follow\s+up(?:\s+on)?\b"
+    r"|\b(?:which|what)\s+(?:jobs?|applications?|companies|roles?|positions?)\s+"
+    r"(?:should\s+I|do\s+I\s+need\s+to|to)\s+follow\s+up(?:\s+on)?\b"
+    r"|\b(?:which|what)\s+(?:jobs?|applications?)\s+(?:are\s+)?"
+    r"(?:due\s+for|need(?:s)?(?:\s+a)?)\s+(?:a\s+)?follow[- ]?up\b"
+    r"|\b(?:jobs?|applications?)\s+(?:to\s+follow\s+up(?:\s+on)?|due\s+for\s+(?:a\s+)?follow[- ]?up)\b"
+    r"|\b(?:show|list|see|view)\s+(?:me\s+)?(?:my\s+)?follow[- ]?ups?\b"
+    r"|\bfollow[- ]?ups?\s+due\b"
+    r"|\bwhat\s+are\s+my\s+follow[- ]?ups?\b"
+    # Arabic: "ما الوظائف التي يجب أن أتابعها", "أي وظائف يجب أن أتابعها",
+    #         "وظائف تحتاج متابعة", "ما الذي يجب أن أتابعه"
+    r"|(?:ما|أي|اي)\s+(?:ال)?وظائف[^\n]{0,25}(?:أتابعها|أتابعه|أتابع|متابعتها)"
+    r"|(?:ال)?وظائف\s+(?:تحتاج|بحاجة\s+ل?)\s+(?:إلى\s+)?متابعة"
+    r"|ما\s+الذي\s+(?:يجب|عليّ?)\s+(?:أن\s+)?أتابع",
+    re.IGNORECASE,
+)
+
 # Industry-based job search: "find jobs in oil and gas", "construction sector jobs in Dubai",
 # "finance industry positions", "IT sector vacancies in Abu Dhabi".
 # Distinguished from role search by the presence of a sector/industry keyword.
@@ -7292,6 +7318,21 @@ class RicoChatAPI:
         if _EMPLOYMENT_TYPE_RE.search(message):
             return self._finalize(
                 self._handle_employment_type_search(user_id, profile, message),
+                self.SOURCE_KEYWORD,
+                profile=profile,
+            )
+
+        # ── Follow-up readiness listing ───────────────────────────────────────
+        # "what should I follow up?", "which jobs are due for follow-up?" →
+        # list the applied jobs old enough to revisit, reusing the merged
+        # readiness logic. MUST precede _FOLLOWUP_TIMING_RE: "what should I
+        # follow up on?" also matches the timing pattern, but here the user
+        # wants the list, not timing advice. Genuine timing questions ("when
+        # should I follow up?") do not match _FOLLOWUP_READINESS_RE and fall
+        # through to the timing handler below.
+        if _FOLLOWUP_READINESS_RE.search(message):
+            return self._finalize(
+                self._handle_followup_readiness(user_id, message),
                 self.SOURCE_KEYWORD,
                 profile=profile,
             )
@@ -19128,6 +19169,81 @@ class RicoChatAPI:
             "message": "\n".join(lines),
             "jobs": rows[:20],
             "count": len(rows),
+        }
+
+    def _handle_followup_readiness(self, user_id: str, message: str = "") -> dict[str, Any]:
+        """List applied jobs old enough to revisit / follow up.
+
+        Reuses the merged operational-memory readiness logic — the same reads
+        behind GET /api/v1/jobs/lifecycle/follow-ups: applied rows from
+        user_job_context, filtered by select_revisit_candidates. Read-only; adds
+        no new lifecycle logic and does not mutate state.
+        """
+        from src.repositories.user_job_context_repo import get_by_status
+        from src.services.operational_memory_readiness import (
+            DEFAULT_REVISIT_DAYS,
+            select_revisit_candidates,
+        )
+
+        arabic = self._is_arabic_text(message)
+        rows = get_by_status(user_id, "applied", limit=100)
+        candidates = select_revisit_candidates(
+            rows,
+            min_days_since_applied=DEFAULT_REVISIT_DAYS,
+            limit=25,
+        )
+
+        if not candidates:
+            msg = (
+                "لا توجد وظائف جاهزة للمتابعة بعد. عندما يمرّ وقتٌ كافٍ على تقديمك "
+                "لوظيفة، ستظهر هنا لتتابعها."
+                if arabic else
+                "Nothing is due for follow-up yet. Once enough time has passed since "
+                "you applied to a job, it'll show up here to follow up on."
+            )
+            return {
+                "type": "lifecycle_query",
+                "intent": "lifecycle_show_followup_due",
+                "message": msg,
+                "jobs": [],
+                "count": 0,
+            }
+
+        header = (
+            f"لديك {len(candidates)} وظيفة/وظائف جاهزة للمتابعة:\n"
+            if arabic else
+            f"You have **{len(candidates)}** job(s) ready to follow up on:\n"
+        )
+        lines = [header]
+        jobs: list[dict[str, Any]] = []
+        for c in candidates:
+            url = c.apply_url or c.source_url or ""
+            link_part = f" — [Apply]({url})" if url else ""
+            if arabic:
+                lines.append(
+                    f"• **{c.title}** لدى {c.company} — مضى {c.days_since_applied} "
+                    f"يومًا على التقديم{link_part}"
+                )
+            else:
+                lines.append(
+                    f"• **{c.title}** at {c.company} — applied "
+                    f"{c.days_since_applied} day(s) ago{link_part}"
+                )
+            jobs.append({
+                "title": c.title,
+                "company": c.company,
+                "apply_url": c.apply_url,
+                "source_url": c.source_url,
+                "applied_at": c.applied_at.isoformat(),
+                "days_since_applied": c.days_since_applied,
+            })
+
+        return {
+            "type": "lifecycle_query",
+            "intent": "lifecycle_show_followup_due",
+            "message": "\n".join(lines),
+            "jobs": jobs,
+            "count": len(jobs),
         }
 
     def _handle_profile_role_suggestions(self, profile: Any, message: str = "") -> dict[str, Any]:

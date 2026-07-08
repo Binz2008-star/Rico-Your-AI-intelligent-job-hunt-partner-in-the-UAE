@@ -56,6 +56,34 @@ Issue/PR: <link or number>
 
 ## Active tasks
 
+### TASK-20260708-001 — Phase 3 chat integration: follow-up readiness query (first slice)
+
+Status: review (draft PR on `feat/chat-followup-readiness`)
+Owner: Roben / Claude
+Branch: feat/chat-followup-readiness
+Issue/PR: Engineering Roadmap Phase 3 (Chat Integration)
+
+#### Objective
+Let chat answer "what should I follow up?" / "which jobs are due for follow-up?" (EN + AR) by
+reusing the merged #885 readiness logic (`get_by_status("applied")` → `select_revisit_candidates`,
+the same reads behind `GET /api/v1/jobs/lifecycle/follow-ups`). No new lifecycle logic.
+
+#### Scope
+- Add `_FOLLOWUP_READINESS_RE` + `_handle_followup_readiness` in `src/rico_chat_api.py`; dispatch
+  before `_FOLLOWUP_TIMING_RE` so timing questions are untouched.
+- Out of scope: unifying `applications_repo` vs `user_job_context`; notifications; scheduler;
+  migrations; UI; changes to "show my applications" / "opened but not applied" / timing advice.
+
+#### Acceptance criteria
+- [x] Follow-up readiness query routes to lifecycle readiness, not job_search or timing.
+- [x] Empty state is safe (no fake success), EN + AR.
+- [x] Existing lifecycle/timing/applications routes unchanged (regex non-hijack tests + 1264-test regression green).
+- [x] `tests/unit/test_chat_followup_readiness.py` passes.
+
+#### Follow-up
+- [ ] Phase 4 / DEC-PR-B: reconcile the two application stores (`applications_repo` vs
+      `user_job_context`) — deliberately out of this slice.
+
 ### TASK-20260707-001 — Phased architecture maturation roadmap (state-first, then migration/redesign)
 
 Status: scoped (roadmap; each phase becomes its own scoped task + PR)
