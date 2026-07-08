@@ -28,6 +28,43 @@ Rico conversational layer + agent runtime + legacy job pipeline
 Neon PostgreSQL + Telegram + dashboard/report output
 ```
 
+## System diagram (live stack + data flow)
+
+Text-based (Mermaid) so it diffs in Git and cannot silently rot. This is the
+**current** production topology; the worker/queue split below in "Target
+architecture" is a planned end-state, not deployed.
+
+```mermaid
+flowchart TD
+    U[User · browser] --> FE[Vercel · Next.js apps/web<br/>/command · /login · /flow · marketing]
+    FE -->|/proxy rewrite| API[Render · FastAPI src/api<br/>auth · routers · rate limit]
+
+    API --> SVC[Services + Rico chat controller<br/>rico_chat_api.py · chat_service.py]
+    API --> AUTH[auth.py · deps.py<br/>JWT-cookie identity]
+
+    SVC --> SAFE[rico_safety.py<br/>guardrails + approval gate]
+    SVC --> RT[agent/runtime.py<br/>action dispatch · idempotency · audit]
+    SVC --> PIPE[Legacy job pipeline<br/>fetch · filter · score · track]
+
+    RT --> DB[(Neon PostgreSQL<br/>users · profiles · user_job_context<br/>applications · audit · memory)]
+    PIPE --> DB
+    AUTH --> DB
+    SVC --> DB
+
+    SVC -->|fallback chain| AI[AI providers<br/>DeepSeek → HuggingFace → keyword]
+    PIPE -->|cascade| JOBS[Job providers<br/>cache → internal → Jooble → Adzuna → JSearch]
+    RT --> TG[Telegram<br/>user + admin/dev channels]
+    API --> JF[Jotform intake webhook]
+```
+
+Notes:
+- `/chat` and `/orchestrate` redirect to `/command` (see `CURRENT_STATE.md` route
+  table + No Dead UI Rule, DEC-20260628-001).
+- The active AI provider is env-controlled (`RICO_AI_PROVIDER`, currently
+  `deepseek`); see CLAUDE.md → "AI Provider Routing".
+- Neon is the single source of truth for durable state; nothing user-critical
+  lives only in process memory or on Render disk.
+
 ## Repository layers
 
 1. Legacy job automation pipeline

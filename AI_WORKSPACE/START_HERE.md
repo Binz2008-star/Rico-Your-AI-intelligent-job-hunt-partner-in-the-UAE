@@ -23,9 +23,12 @@ Before starting new Rico work, read the latest rollout handoff:
 
 ## Project map (read first)
 
-For a one-minute orientation on where Rico is, where it is going, what is
-blocked, and what comes next, read the master map:
+Fastest orientation, in order:
 
+- `AI_WORKSPACE/PROJECT_STATUS.md` — **30-second snapshot**: where Rico is, last
+  merge, what works, what's next, risks, active PR. Read this first.
+- `AI_WORKSPACE/MASTER_INDEX.md` — the living index of every workspace document
+  (Active / Historical / Proposed) + the ADR index into `DECISIONS.md`.
 - `AI_WORKSPACE/ENGINEERING_ROADMAP.md` — Vision → Architecture → Roadmap →
   Epics → Milestones → PRs → Releases, with the status of every phase (0–7).
 - `AI_WORKSPACE/AGENT_OPERATING_MODEL.md` — agent roles, boundaries, and
