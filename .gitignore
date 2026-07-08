@@ -1,5 +1,10 @@
 # Environment variables with sensitive data
 .env
+.env.local
+.env.*.local
+
+# Docker Compose overrides for local development
+docker-compose.override.yml
 
 # Duplicate workspace folder
 job-automation-system-1-main/
