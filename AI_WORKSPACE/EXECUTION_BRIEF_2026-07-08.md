@@ -71,6 +71,55 @@ Expected scope:
 - `tests/unit/test_operational_memory_readiness.py`
 - `tests/unit/test_job_lifecycle_followups_endpoint.py`
 
+### P3 — CI/CD cost-control task
+
+Planned task:
+
+```text
+OPS-CI-001 — Optimize CI/CD Build Efficiency
+Classification: Infrastructure / Operational Optimization / Cost Control
+Priority: P3, after operational memory stabilization
+Status: planned
+Suggested branch: chore/ci-build-efficiency
+Suggested commit: chore(ci): optimize build pipeline efficiency and deployment triggers
+```
+
+Why:
+
+Render warned that the project has used more than 70% of the 500 free monthly build pipeline minutes. Rico is generating many PRs and deploy/build events. This needs cost-control planning, but it must not interrupt P0/P1 stabilization.
+
+Goals:
+
+- Prevent unnecessary Render deployments.
+- Reduce build pipeline minute consumption.
+- Keep CI quality unchanged.
+- Maintain deterministic deployment behavior.
+
+Allowed scope when this task starts:
+
+- CI workflows.
+- Deployment triggers.
+- Render deployment conditions.
+- Build caching.
+- Pipeline optimization.
+
+Forbidden scope:
+
+- Backend business logic.
+- Frontend product features.
+- Database changes.
+- Auth or billing logic.
+- AI routing.
+- Operational memory logic.
+
+Acceptance criteria:
+
+- Fewer Render builds for documentation-only or non-backend changes.
+- No production behavior changes.
+- No reduction in test coverage.
+- Lower monthly Render build-minute consumption.
+- Deployment process remains deterministic and auditable.
+
 ---
 
 ## Required fixes for #885
@@ -196,6 +245,7 @@ chore/archive-design-references
 test/lifecycle-followup-regression
 hotfix/landing-v2-restore
 ci/playwright-browser-install-stability
+chore/ci-build-efficiency
 ```
 
 Avoid:
@@ -231,6 +281,7 @@ test(lifecycle): cover follow-up candidate selection
 chore(refs): archive design reference artifacts
 hotfix(landing): restore LandingPageV2 homepage
 ci(playwright): stabilize chromium browser install
+chore(ci): optimize build pipeline efficiency and deployment triggers
 ```
 
 Commit rules:
