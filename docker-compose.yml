@@ -1,0 +1,90 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: rico-postgres
+    environment:
+      POSTGRES_USER: rico
+      POSTGRES_PASSWORD: rico
+      POSTGRES_DB: rico
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U rico" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: rico-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: rico-backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://rico:rico@postgres:5432/rico
+      REDIS_URL: redis://redis:6379/0
+      RICO_ENV: local
+      APP_ENV: local
+      CORS_ORIGINS: http://localhost:3000
+      COOKIE_SECURE: false
+      # LOCAL DEV ONLY — enables env-based admin login fallback.
+      # Never set this in a deployed/staging/production environment.
+      ALLOW_ENV_AUTH_FALLBACK: true
+      # Local placeholder admin login for local dev only — NOT a real account.
+      # Change these before use; do not point this compose at a real database.
+      ADMIN_EMAIL: admin@localhost
+      ADMIN_PASSWORD: local-dev-only-change-me
+      # Disable production-only features for local dev
+      RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS: false
+      RICO_ENABLE_AUTO_APPLY: false
+      RICO_TELEGRAM_PUBLIC_ALERTS: false
+      RICO_ENABLE_EMAIL_ALERTS: false
+      # Optional: Add your API keys here for full functionality
+      # OPENAI_API_KEY: your_key_here
+      # DEEPSEEK_API_KEY: your_key_here
+      # HF_TOKEN: your_token_here
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - /app/.pytest_cache
+      - /app/__pycache__
+      - /app/learning_cache
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: rico-web
+    ports:
+      - "3000:3000"
+    environment:
+      BACKEND_API_BASE_URL: http://backend:8000
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    depends_on:
+      - backend
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+      - /app/.next
+
+volumes:
+  postgres_data:
