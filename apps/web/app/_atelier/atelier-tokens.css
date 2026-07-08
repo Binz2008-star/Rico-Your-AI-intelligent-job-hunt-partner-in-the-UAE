@@ -253,6 +253,39 @@
     padding-inline-start: 0;
 }
 
+/* Callout box for a highlighted block inside a doc island
+   (e.g. the Privacy "Data Controller" panel). */
+.atelier .atl-doc-callout {
+    margin: 0 0 32px;
+    padding: 20px;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: var(--atl-radius-sm);
+}
+
+.atelier .atl-doc-callout-label {
+    font-family: var(--atl-font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--sun);
+    margin: 0 0 6px;
+}
+
+.atelier .atl-doc-callout-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink);
+    margin: 0;
+}
+
+.atelier .atl-doc-callout p {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    margin: 4px 0 0;
+}
+
 .atelier .atl-doc-body li {
     font-size: 15px;
     line-height: 1.7;
