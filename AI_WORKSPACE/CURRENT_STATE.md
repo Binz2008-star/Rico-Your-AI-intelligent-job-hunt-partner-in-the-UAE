@@ -210,6 +210,8 @@ pipeline match, owner architecture note).
 
 Regression suite: **104/104 PASS**. 45 pre-existing environment failures (cryptography version, mock log-format, webhook secrets) — none caused by any BUG or P0 change.
 
+> **Reconciled (2026-07-08):** earlier #764 status referenced a prior QA-cycle fix. Canonical closure is PR #892 / `bd887d7f3793b789b2553bf7ae005f0eb629c756`, which added `MutationConfirmationGuard` and verified no-false-success behavior across the guarded mutation paths. Scope: save job route, chat job save by ordinal, mark applied / manual application status update, delete saved jobs, profile update — 5 mutation paths wired. Production health green post-merge; rollback not needed.
+
 ## PR #780 + #781 — Chat-OS agentic UI + smoke-test fixes (2026-06-30)
 
 ### PR #780 — action cards for `application_status` and `prepare_application`
