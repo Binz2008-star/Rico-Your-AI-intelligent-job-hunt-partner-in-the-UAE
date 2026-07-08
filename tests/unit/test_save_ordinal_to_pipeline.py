@@ -84,10 +84,8 @@ def _run(api, msg):
 
 def test_save_second_job_persists_and_confirms(api, monkeypatch):
     captured = {}
-
-    # Persistence now goes to the user-scoped, counted recommendations store so the
-    # save actually increments the pipeline count. agent_runtime is a best-effort
-    # side-effect (audit/learning) only.
+    # Patch the underlying database read that _application_status_visible calls
+    monkeypatch.setattr("src.repositories.applications_repo.find_by_job_id", lambda job_id, user_id: {"status": "saved"})
     monkeypatch.setattr(
         "src.repositories.applications_repo.create",
         lambda **kw: captured.update(kw) or True,
@@ -110,6 +108,8 @@ def test_save_second_job_persists_and_confirms(api, monkeypatch):
 
 def test_save_first_job_arabic(api, monkeypatch):
     captured = {}
+    # Patch the underlying database read that _application_status_visible calls
+    monkeypatch.setattr("src.repositories.applications_repo.find_by_job_id", lambda job_id, user_id: {"status": "saved"})
     monkeypatch.setattr(
         "src.repositories.applications_repo.create",
         lambda **kw: captured.update(kw) or True,
@@ -122,6 +122,8 @@ def test_save_first_job_arabic(api, monkeypatch):
 
 def test_save_failure_does_not_claim_success(api, monkeypatch):
     # Counted persistence reports no write → never claim success.
+    # This is a NEGATIVE test - verify guard catches write failure
+    # For negative tests, do NOT patch the database read to return successful status
     monkeypatch.setattr("src.repositories.applications_repo.create", lambda **kw: False)
     monkeypatch.setattr("src.rico_chat_api.agent_runtime.handle_action", lambda **kw: _Result(ok=True))
     r = _run(api, "Save the second job to my pipeline")
@@ -204,22 +206,24 @@ def test_stats_reflect_saved_item(monkeypatch):
     store = _StatsStore()
     match = {"title": "Product Owner", "company": "Globex", "source_job_id": "JS-99"}
 
-    with (
-        patch.object(_api, "_recent_search_matches", return_value=[match]),
-        patch("src.services.job_link.resolve_job_link",
-              return_value={"apply_url": "", "source_url": "", "alt_link": "", "verification_status": "unverified"}),
-        patch("src.repositories.applications_repo.create", side_effect=store.create),
-        patch("src.repositories.applications_repo.get_stats", side_effect=store.get_stats),
-        patch("src.rico_chat_api.agent_runtime.handle_action", return_value=None),
-        patch.object(_api, "_append_chat", lambda *a, **k: None),
-        patch.object(_api, "_finalize", lambda resp, *a, **k: resp),
-    ):
-        res = _api._save_job_by_ordinal("u@test", 1, profile=None)
-        assert res["type"] == "save_job"
+    # Patch the underlying database read that _application_status_visible calls
+    with patch("src.repositories.applications_repo.find_by_job_id", return_value={"status": "saved"}):
+        with (
+            patch.object(_api, "_recent_search_matches", return_value=[match]),
+            patch("src.services.job_link.resolve_job_link",
+                  return_value={"apply_url": "", "source_url": "", "alt_link": "", "verification_status": "unverified"}),
+            patch("src.repositories.applications_repo.create", side_effect=store.create),
+            patch("src.repositories.applications_repo.get_stats", side_effect=store.get_stats),
+            patch("src.rico_chat_api.agent_runtime.handle_action", return_value=None),
+            patch.object(_api, "_append_chat", lambda *a, **k: None),
+            patch.object(_api, "_finalize", lambda resp, *a, **k: resp),
+        ):
+            res = _api._save_job_by_ordinal("u@test", 1, profile=None)
+            assert res["type"] == "save_job"
 
-        from src.repositories import applications_repo
-        stats = applications_repo.get_stats(user_id="u@test")
-        assert stats["saved"] >= 1, f"expected saved >= 1, got {stats}"
+            from src.repositories import applications_repo
+            stats = applications_repo.get_stats(user_id="u@test")
+            assert stats["saved"] >= 1, f"expected saved >= 1, got {stats}"
 
 
 def test_repeated_save_does_not_double_count(monkeypatch):
@@ -232,6 +236,7 @@ def test_repeated_save_does_not_double_count(monkeypatch):
 
     def _do_save():
         with (
+            patch("src.repositories.applications_repo.find_by_job_id", return_value={"status": "saved"}),
             patch.object(_api, "_recent_search_matches", return_value=[match]),
             patch("src.services.job_link.resolve_job_link",
                   return_value={"apply_url": "", "source_url": "", "alt_link": "", "verification_status": "unverified"}),

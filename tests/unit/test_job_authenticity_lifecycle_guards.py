@@ -32,7 +32,14 @@ def _make_api() -> RicoChatAPI:
     api = RicoChatAPI.__new__(RicoChatAPI)
     api._persist = False
     api._current_operation_id = None
-    api._memory = {}  # in-memory chat history stub
+    # Mock memory object with get_chat_messages method
+    mock_memory = MagicMock()
+    mock_memory.get_chat_messages.return_value = []
+    api.memory = mock_memory
+    # Assign verifier functions as instance attributes (since __init__ is not called)
+    from src.rico_chat_api import _application_status_visible, _no_saved_jobs_visible
+    api._application_status_visible = _application_status_visible
+    api._no_saved_jobs_visible = _no_saved_jobs_visible
     return api
 
 
@@ -251,7 +258,15 @@ class TestHasApplyEvidence:
 class TestMarkAppliedGuard:
 
     def setup_method(self):
+        # Create API instance first
         self.api = _make_api()
+        # Patch the underlying database read that _application_status_visible calls
+        self.patcher = patch("src.repositories.applications_repo.find_by_job_id", return_value={"status": "applied"})
+        self.patcher.start()
+
+    def teardown_method(self):
+        # Stop the patcher
+        self.patcher.stop()
 
     def _send_mark_applied(self, title: str, company: str, context: dict | None = None) -> dict:
         intent = _make_intent("job_action.mark_applied", title=title, company=company)
@@ -287,6 +302,7 @@ class TestMarkAppliedGuard:
             patch.object(self.api, "_get_recent_context", return_value={}),
             patch.object(self.api, "_store_recent_context", side_effect=lambda uid, ctx: stored.append(ctx)),
             patch("src.rico_chat_api.classify_intent", return_value=intent),
+            patch("src.rico_chat_api._application_status_visible", return_value=True),
             patch("src.repositories.applications_repo.create_manual", return_value=True),
         ):
             result = self.api.process_message(USER, "Mark as applied — HSE Officer at Acme Corp")

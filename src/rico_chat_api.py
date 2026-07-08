@@ -1930,6 +1930,9 @@ class RicoChatAPI:
         # jotform-derived sessions with an email-shaped user_id.
         self._can_mutate_applications = can_mutate_applications
         self._current_operation_id: str | None = None
+        # Assign module-level verifier functions as instance attributes for use in lambdas
+        self._application_status_visible = _application_status_visible
+        self._no_saved_jobs_visible = _no_saved_jobs_visible
 
     @staticmethod
     def _is_broad_manager_role(role_text: str) -> bool:
@@ -9269,7 +9272,7 @@ class RicoChatAPI:
 
             try:
                 saved = _create_manual_app(title=title, company=company, status="applied", user_id=user_id)
-                _job_key = self._manual_application_job_key(title, company)
+                _job_key = self._derive_lifecycle_job_key(title, company)
                 _confirmed = _MUTATION_CONFIRMATION_GUARD.confirm(
                     MutationResult(success=bool(saved)),
                     verifier=lambda: self._application_status_visible(user_id, _job_key, "applied"),
@@ -10532,7 +10535,7 @@ class RicoChatAPI:
             success_ar="confirmed",
             failure_en="failed",
             failure_ar="failed",
-        )
+        ) == "confirmed"
 
         if confirmed:
             if decision.verified:

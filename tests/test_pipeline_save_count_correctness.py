@@ -101,6 +101,7 @@ def _run_ordinal_save(api, store, match, *, user_id="u@test", create_side_effect
         patch.object(api, "_recent_search_matches", return_value=[match]),
         patch("src.services.job_link.resolve_job_link", return_value=dict(_LINK)),
         patch("src.repositories.applications_repo.create", side_effect=create),
+        patch.object(api, "_application_status_visible", return_value=True),
         patch("src.rico_chat_api.agent_runtime.handle_action", return_value=None),
         patch.object(api, "_append_chat", lambda *a, **k: None),
         patch.object(api, "_finalize", lambda resp, *a, **k: resp),
