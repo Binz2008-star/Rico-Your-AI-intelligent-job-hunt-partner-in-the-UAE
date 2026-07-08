@@ -26,6 +26,8 @@ blocked, and what comes next, read the master map:
 
 - `AI_WORKSPACE/ENGINEERING_ROADMAP.md` — Vision → Architecture → Roadmap →
   Epics → Milestones → PRs → Releases, with the status of every phase (0–7).
+- `AI_WORKSPACE/AGENT_OPERATING_MODEL.md` — agent roles, boundaries, and
+  response logic for owner, architecture, Claude, Codex, Lovable, and release work.
 
 ## Read order
 
@@ -34,12 +36,13 @@ Start with the current repository state, then read:
 1. `CLAUDE.md`
 2. `AI_WORKSPACE/PROJECT_BRIEF.md`
 3. `AI_WORKSPACE/ENGINEERING_ROADMAP.md`
-4. `AI_WORKSPACE/ARCHITECTURE.md`
-5. `AI_WORKSPACE/CURRENT_STATE.md`
-6. `AI_WORKSPACE/TASKS.md`
-7. `AI_WORKSPACE/OPERATING_RULES.md`
-8. `AI_WORKSPACE/DECISIONS.md`
-9. `AI_WORKSPACE/PROMPT_CONTRACT.md`
+4. `AI_WORKSPACE/AGENT_OPERATING_MODEL.md`
+5. `AI_WORKSPACE/ARCHITECTURE.md`
+6. `AI_WORKSPACE/CURRENT_STATE.md`
+7. `AI_WORKSPACE/TASKS.md`
+8. `AI_WORKSPACE/OPERATING_RULES.md`
+9. `AI_WORKSPACE/DECISIONS.md`
+10. `AI_WORKSPACE/PROMPT_CONTRACT.md`
 
 Optional context bundle:
 
