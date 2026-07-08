@@ -1,6 +1,6 @@
 # 2026-07-08 Technical Status Update
 
-This handoff records the technical state after the 2026-07-08 merge train and concurrent local Docker setup work. It is factual status only: no runtime code, no Docker config, no product implementation, and no Lovable prototype changes.
+This handoff records the technical state after the 2026-07-08 merge train, the local Docker setup work, and the follow-up PR board cleanup. It is factual status only: no runtime code, no product implementation, and no Lovable prototype changes.
 
 ## Executive summary
 
@@ -8,7 +8,8 @@ This handoff records the technical state after the 2026-07-08 merge train and co
 - **C2 legal-page visual migration is complete and live** via PR #895: `/privacy` and `/refund-policy` now match the `/terms` Atelier V2 light-first island.
 - **Lovable/TanStack streaming-chat experiment is quarantined** via PR #894 / DEC-20260708-004. Lovable remains frozen/reference-only.
 - **#896 was closed without merging** as a duplicate/superseded C2 PR.
-- **Docker local-dev work is in progress only** on a separate branch. Postgres and Redis were verified healthy; backend health was not yet validated from the provided logs.
+- **Docker local-dev setup is merged** via PR #898 (squash SHA `7fb41bc4c5662a1dbd0ca99574096dea2deb9935`). Local-dev only; no production runtime code changed.
+- **PR board cleanup done:** #886 (stale execution brief) and #867 (superseded design-gallery route) were closed without merging. #897 (this handoff) and #890 (agent operating model) remain draft. #872 / #873 design prototypes remain held.
 - **C3 is not started. C4 is not started. C8 remains deferred.**
 
 ## Completed / merged
@@ -104,6 +105,44 @@ Production verification reported after merge:
 - Backend `/health` → 200
 - Rollback not needed
 
+### PR #898 — Docker local-dev setup
+
+- PR: #898 — `chore(docker): add local dev compose setup`
+- Status: merged (squash)
+- Squash SHA: `7fb41bc4c5662a1dbd0ca99574096dea2deb9935`
+- Base at merge: `main` @ `3ebd9ce`
+
+Changed files (all new, local-dev/build tooling + docs only):
+
+- `.dockerignore`
+- `Dockerfile.backend`
+- `apps/web/.dockerignore`
+- `apps/web/Dockerfile`
+- `docker-compose.yml`
+- `docs/local-docker.md`
+
+Scope and safety:
+
+- No production runtime code changed (`src/`, `apps/web` app pages untouched).
+- No auth/billing/AI/model changes.
+- `.dockerignore` files exclude `.env`, `.env.*` (keeping `.env.example`), and `*.pem` / `*.key` / `*.crt`.
+- No real secrets or token-shaped examples committed; AI-key env slots are commented placeholders only.
+
+Cosmetic safety hardening applied before merge (commit `89e633b`):
+
+- `ADMIN_EMAIL` changed from the production-domain value to `admin@localhost`.
+- `ADMIN_PASSWORD` changed to a clearly local-only placeholder (`local-dev-only-change-me`).
+- `ALLOW_ENV_AUTH_FALLBACK: true` retained but annotated as local-dev only — never to be enabled in a deployed/production environment.
+
+Verification:
+
+- Vercel preview on the final PR head (`89e633b`) completed successfully before merge.
+- Local session logs previously confirmed Docker Engine/Compose valid and Postgres/Redis healthy; the merged PR body records backend `/health` → 200 and the frontend responding locally.
+
+Known local-dev note:
+
+Fresh local Postgres may show migration/table warnings on first run; backend health still returns ok. Any persistent local migration failure is a local-dev polish follow-up, not a production issue.
+
 ## Closed duplicate / superseded
 
 ### PR #896 — duplicate C2 PR
@@ -114,55 +153,19 @@ Production verification reported after merge:
 
 Do not reopen #896. Do not create another C2 PR. Treat #895 as the canonical C2 implementation.
 
+## PR board cleanup (post-merge)
+
+Board cleanup performed after the #898 merge:
+
+- **#886 — execution brief:** closed, not merged. Stale — it referenced #885 (`feat/rico-memory-list`) as the active priority, but #885 had already merged; the branch was behind `main` and had conflicts. Superseded by this handoff. Docs-only, no runtime impact.
+- **#867 — old `/design-gallery` route:** closed, not merged. Superseded — a `/design-gallery` route already exists on `main` via later merged design-gallery work; the PR was draft, conflicted, based on an old `main`, and its own body said "do not merge." Internal `noindex` preview route only, no runtime impact.
+- **#897 — this handoff:** draft (being finalized as the canonical status document).
+- **#890 — agent operating model:** still open/draft; docs-only.
+- **#872 (Nocturne) / #873 (Rico Alive):** held as visual/design-gallery prototype work; not for production rollout during cleanup.
+
+No product code, backend, auth, billing, AI logic, or C3/C4/C8 work was touched during the cleanup.
+
 ## In progress / not merged
-
-### Docker local-dev setup
-
-This work is separate from product/C-series work and must stay on its own branch.
-
-Known branch context from the local session:
-
-- `chore/local-docker-dev` existed and had a stray local docs commit from the shared working tree incident.
-- A clean follow-up branch from `origin/main` was recommended before committing Docker files.
-
-Files associated with the Docker local-dev work:
-
-- `.dockerignore`
-- `Dockerfile.backend`
-- `apps/web/.dockerignore`
-- `apps/web/Dockerfile`
-- `docker-compose.yml`
-- `docs/local-docker.md`
-
-Verified from provided local logs:
-
-- Docker Engine was working locally (`docker info`, Docker 29.6.1).
-- Docker Compose was working locally (`docker compose version`, v5.3.0).
-- `docker compose config` produced valid compose output.
-- `docker compose up -d postgres redis` started both services.
-- `rico-postgres` was healthy.
-- `rico-redis` was healthy.
-
-Not yet verified from the provided logs:
-
-- `rico-backend` was not yet running when `docker compose logs backend --tail=200` was executed.
-- Backend local health at `http://localhost:8000/health` was not yet confirmed.
-- Web container was not yet validated.
-
-Required before a Docker PR:
-
-- Work from a clean branch based on current `origin/main`.
-- Verify root `.dockerignore` excludes `.env`, `.env.*`, `*.pem`, `*.key`, and `*.crt`, while allowing `.env.example` if needed.
-- Verify `apps/web/.dockerignore` excludes `.env`, `.env.*`, `*.pem`, `*.key`, `*.crt`, `node_modules`, `.next`, and `.git`.
-- Include a generic Docker PAT security note in `docs/local-docker.md`.
-- Do not include any real token or token-shaped example.
-- Validate backend with `docker compose up --build backend`.
-- Confirm `http://localhost:8000/health` locally.
-- Ensure no secrets or `.env` files are committed.
-
-Security note:
-
-A Docker Personal Access Token was exposed during local setup. It must be revoked and recreated outside the repo. Never record the token value in repository docs, logs, commits, screenshots, or future handoffs.
 
 ### PR #890 — agent operating model
 
@@ -178,6 +181,7 @@ A Docker Personal Access Token was exposed during local setup. It must be revoke
 - C3: not started
 - C4: not started
 - C8: deferred
+- Docker local-dev: merged via #898 (local-dev only)
 - Lovable: frozen/reference-only via DEC-20260708-004
 
 ## Approved next phase, not started
@@ -237,4 +241,7 @@ Acceptance for C3 when started:
 - #895 — C2 `/privacy` + `/refund-policy` Atelier migration
 - `277260c9f666e30b54d6e4967990f6353f2cc526` — #895 squash SHA
 - #896 — duplicate C2 PR closed without merge
-- Local Docker logs — Docker Engine/Compose/Postgres/Redis verified; backend not yet validated
+- #898 — Docker local-dev setup merged
+- `7fb41bc4c5662a1dbd0ca99574096dea2deb9935` — #898 squash SHA
+- #886 — stale execution brief closed without merge
+- #867 — superseded design-gallery route closed without merge
