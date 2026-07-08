@@ -28,6 +28,140 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260707-001 — Split Rico's architecture maturation into phases; persist state before any migration or redesign
+
+Status: accepted (Approved roadmap)
+Implementation: Not started — this is a roadmap only. No phase has been built. Railway, the
+worker service, and Redis/Queue do **not** yet exist in production; Render remains the production
+backend. Do not read this decision as describing shipped infrastructure.
+Date: 2026-07-07
+Owner: Roben / Claude
+Related task: TASK-20260707-001 (phased architecture roadmap)
+
+#### Relationship to the production hardening audit gate (2026-07-08)
+This decision is the **architecture-level roadmap**. The **near-term execution authority is the
+production hardening audit gate**: `AI_WORKSPACE/AUDITS/2026-07-08-production-hardening-audit.md`
+(+ Codex follow-up `AI_WORKSPACE/AUDITS/2026-07-08-audit-gate-codex-followup.md`). Agents must
+read that audit before starting any feature, redesign, worker, notification, or infrastructure
+work; it controls immediate stabilization, and its Phase 2 (job context & apply-link lifecycle)
+governs the near-term work this decision calls "PR A".
+
+The two do not compete: DEC-20260707-001 keeps the higher-level sequence (including the deferred
+Railway/worker/UI phases the audit explicitly does **not** authorize yet); the audit gate is how
+the near-term operational-memory phases actually get proven and shipped. Render stays the current
+production backend; no infrastructure migration work starts from either document now.
+
+**PR A is verify-first, not rebuild-first.** The persistence layer already exists on `main`
+(`user_job_context_repo.py`, migrations 018–022, the `rico_chat_api.py` write/read paths, and the
+lifecycle routers). PR A therefore means: prove the specific gap first (Audit Phase 2 checks),
+then ship the smallest safe fix for a **proven** gap only. Do not build a second implementation of
+job persistence. Verification and any fix use **synthetic users and synthetic profile data only** —
+no real-user smoke or mutation is authorized unless the owner explicitly approves a specific run.
+
+#### Context
+Rico's current architecture is valid but not mature. It works as a stable production stack
+(Vercel frontend → `/proxy` → Render FastAPI → Rico chat/NLU/safety/job logic → Neon), but
+several backend responsibilities are still mixed: request handling, temporary chat memory, and
+the job-search script share the same process, and some important state (job search results,
+apply links, follow-up state) has historically been unreliable on Render's ephemeral disk.
+
+Rico is evolving from a job board into an **AI career operator**. The product direction is
+strong; the weak point is **operational state**. The clearest warning is the apply-link problem:
+Rico can find a job but lose the apply URL because job context was not reliably persisted to Neon.
+
+Concrete risks:
+| Area | Risk |
+| --- | --- |
+| Render | ephemeral disk, weaker worker/cron story |
+| Memory | job context previously unreliable on Render |
+| Frontend | proxy/env mismatch can break auth state |
+| Product logic | chat, job search, applications, and memory overlap |
+| AI | too much depends on intent-routing correctness |
+| UI | redesign branches can break stable production |
+
+#### Decision
+Mature the architecture in **ordered phases**, smallest-safe first, and do not redesign the UI
+or migrate the whole platform while operational state is still unstable.
+
+Target architecture (end state, not a big-bang migration):
+
+```text
+Vercel            Next.js frontend
+API service       FastAPI (requests only): Rico chat controller, auth/session, job/application API
+Worker service    job scans, follow-up checks, alerts, link verification, scheduled tasks
+Neon              users, profiles, job_context, applications, memory, billing/subscription
+Redis / Queue     background tasks, retries, rate guards
+Telegram / Email  notifications only
+```
+
+Guiding principles:
+1. **Separate API from worker logic.** FastAPI handles requests only; workers own job scans,
+   email alerts, follow-ups, link verification, and scheduled tasks.
+2. **Neon is the single source of truth.** No important state lives only in memory or on Render
+   disk. Must persist: job search results, apply links, application state, target role,
+   chat-derived preferences, follow-up state.
+3. **Keep the Vercel frontend; move the backend later.** Migration target is Railway first,
+   Google Cloud Run later if scale grows. Do not migrate everything at once.
+4. **Do not redesign while the architecture is unstable.** Safe near-term work is shell cleanup,
+   API consolidation, job-lifecycle persistence, application-lifecycle cleanup, and worker/cron
+   structure — not theme switching or a big UI replacement.
+
+Recommended PR / phase order (each an independently reviewable slice from current `main`).
+Rationale for ordering: Rico's biggest current product risk is **losing operational state**, so
+persistence and application lifecycle come before API consolidation. Each phase has measurable
+completion criteria; a phase is not "done" until its criteria are met and regression tests pass.
+
+1. **Persist job context + apply links** (PR A — **verify-first**) — top-priority reliability fix.
+   Persistence already exists on `main`; this phase proves Audit Phase 2 gaps (synthetic data only)
+   and fixes only what is proven — it does not rebuild persistence.
+   - [ ] Job search results persisted in Neon (not memory / Render disk).
+   - [ ] Apply links survive a backend restart.
+   - [ ] "Open apply link" uses the persisted context, not in-memory state.
+   - [ ] Regression tests pass.
+2. **Application lifecycle cleanup** (PR B).
+   - [ ] Application states defined and reconciled across router + agent runtime writes.
+   - [ ] Application state persisted and survives restart.
+   - [ ] No lifecycle path bypasses the audit / approval layer.
+   - [ ] Regression tests pass.
+3. **API / client consolidation** (PR C).
+   - [ ] Duplicate/legacy client paths (`apps/web/services/*` vs `apps/web/lib/api.ts`) consolidated.
+   - [ ] No behavior change to auth/chat/CV/profile/onboarding flows (verified by build + smoke).
+   - [ ] Regression tests pass.
+4. **Worker / cron separation** (PR D).
+   - [ ] Job scans, follow-up checks, alerts, and link verification run outside the request path.
+   - [ ] FastAPI serves requests only; scheduled work has its own service boundary.
+   - [ ] Regression tests pass.
+5. **Move backend from Render to Railway** (PR E).
+   - [ ] Railway backend passes full production smoke (auth, chat, jobs, applications, webhooks).
+   - **Rollback / safety:** Render remains the production backend until Railway passes full
+     production smoke testing. Do not cut DNS/proxy traffic to Railway before that gate.
+6. **Add monitoring / logging** (PR F).
+   - [ ] Error, deploy, and provider-health signals observable; alerts route per the Telegram
+     audience rules (admin/dev channel only for technical alerts).
+7. **UI redesign** (PR G) — only after phases 1–6 land.
+
+Note: the letters PR A–G above map to the merge sequence recommended by the reviewer; earlier
+drafts of this decision listed API consolidation first — it has been demoted below persistence
+and application lifecycle because state reliability is the higher current risk.
+
+#### Consequences
+- Positive: reliability-first ordering — Rico stops forgetting what it found, what the user
+  opened, what was applied, and what needs follow-up, before any risky migration or redesign.
+- Positive: each phase is a small, reviewable PR from current `main`; production stays stable.
+- Negative/trade-off: the desired UI redesign is deliberately deferred behind operational work;
+  the Render→Railway move is sequenced late, so ephemeral-disk risk persists until phases 2–4
+  reduce reliance on process-local state.
+
+#### Follow-up
+- [ ] Phase 1 (PR A): confirm job-context + apply-link persistence to Neon end-to-end (top-priority
+      reliability fix; ties into DEC-20260703-001 recommendation-table work).
+- [ ] Phase 2 (PR B): define the application lifecycle states and reconcile router/runtime writes.
+- [ ] Phase 3 (PR C): audit API/client surface for duplicate/legacy paths (`apps/web/services/*`
+      vs `apps/web/lib/api.ts`) and consolidate.
+- [ ] Phase 4 (PR D): scope the worker/cron service boundary (job scans, follow-ups, link verify).
+- [ ] Phases 5–7 (Railway move, monitoring, UI redesign) stay proposed until 1–4 land; Render
+      stays the production backend until Railway passes full production smoke.
+
 ### DEC-20260703-001 — Keep partial-unique as ON CONFLICT arbiter; codify full-unique for read coverage
 
 Status: accepted

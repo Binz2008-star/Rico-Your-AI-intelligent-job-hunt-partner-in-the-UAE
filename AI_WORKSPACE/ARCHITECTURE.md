@@ -101,6 +101,58 @@ Neon PostgreSQL + Telegram + dashboard/report output
 - `apps/web/lib/api.ts` — canonical frontend API helper
 - `apps/web/services/*` — older service wrappers
 
+## Target architecture (phased maturation)
+
+Rico is maturing from a job board into an **AI career operator**. The current stack is valid but
+mixes request handling, temporary chat memory, and the job-search script in one process, and has
+historically relied on Render's ephemeral disk for state that must be durable. See
+`DECISIONS.md` → DEC-20260707-001 for the full decision and rationale.
+
+> Status: **approved roadmap, implementation not started.** The end-state below is the target,
+> not what is deployed today. The production backend is still FastAPI on **Render** (see
+> "Current live stack" at the top of this file). Railway, the separate worker service, and
+> Redis/Queue do **not** yet exist in production. Render remains production until Railway passes
+> full production smoke testing.
+>
+> Near-term execution gate: read `AI_WORKSPACE/AUDITS/2026-07-08-production-hardening-audit.md`
+> **before** starting any feature, redesign, worker, notification, or infrastructure work. That
+> production hardening audit — centered on operational memory — is the immediate stabilization
+> authority; this target architecture is the higher-level roadmap it feeds into. Phase 1 below
+> ("persist job context + apply links") is **verify-first**: the persistence layer already exists
+> on `main`, so prove the audit's Phase 2 gaps with synthetic data and fix only proven gaps — do
+> not rebuild persistence. No real-user smoke or mutation without explicit owner approval.
+
+Target end-state (reached in ordered phases, not a big-bang migration):
+
+```text
+Vercel            Next.js frontend
+API service       FastAPI (requests only): Rico chat controller, auth/session, job/application API
+Worker service    job scans, follow-up checks, alerts, link verification, scheduled tasks
+Neon              users, profiles, job_context, applications, memory, billing/subscription
+Redis / Queue     background tasks, retries, rate guards
+Telegram / Email  notifications only
+```
+
+Principles:
+- Separate API from worker logic (FastAPI serves requests only; workers own background/scheduled work).
+- Neon is the single source of truth — persist job search results, apply links, application state,
+  target role, chat-derived preferences, and follow-up state. No important state lives only in
+  memory or on Render disk.
+- Keep the Vercel frontend; move the backend to Railway first (Cloud Run later if scale grows).
+- Do not redesign the UI while operational state is unstable.
+
+Phase / PR order (each an independently reviewable slice from current `main`). State reliability
+is the highest current risk, so persistence and application lifecycle precede API consolidation.
+See `DECISIONS.md` → DEC-20260707-001 for per-phase success criteria.
+
+1. Persist job context + apply links (PR A) — top-priority reliability fix
+2. Application lifecycle cleanup (PR B)
+3. API / client consolidation (PR C)
+4. Worker / cron separation (PR D)
+5. Move backend from Render to Railway (PR E) — Render stays production until Railway passes full smoke
+6. Add monitoring / logging (PR F)
+7. UI redesign (PR G) — only after 1–6 land
+
 ## Architecture rules
 
 - Preserve the existing Rico architecture unless the task explicitly approves changing it.
