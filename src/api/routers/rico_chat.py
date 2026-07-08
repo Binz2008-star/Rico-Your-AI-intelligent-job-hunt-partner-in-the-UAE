@@ -65,9 +65,11 @@ from src.rico_openai_runtime import call_openai_minimal
 from src.schemas.actions import ActionRequest, ActionResponse, ExecutePermissionActionRequest
 from src.schemas.chat import RicoChatResponse, RicoSessionContext
 from src.services import chat_service
+from src.mutation_guard import MutationConfirmationGuard, MutationResult
 
 logger = logging.getLogger(__name__)
 _UTC = timezone.utc
+_MUTATION_CONFIRMATION_GUARD = MutationConfirmationGuard()
 
 # Constants
 _UNSAFE_CHARS_RE = re.compile("[<>\"';\\x00-\\x1f\\x7f\\u202a-\\u202e\\u2066-\\u2069]")
@@ -1158,6 +1160,21 @@ class ProfileUpdateRequest(BaseModel):
     industries: Optional[list[str]] = Field(None, max_length=50)
 
 
+def _profile_updates_visible(user_id: str, updates: dict[str, Any]) -> bool:
+    """Confirm profile writes through the same profile read path used by the UI."""
+    profile = profile_repo.get_profile(user_id)
+    if profile is None:
+        return False
+    for key, expected in updates.items():
+        actual = getattr(profile, key, None)
+        if isinstance(expected, list):
+            if list(actual or []) != expected:
+                return False
+        elif actual != expected:
+            return False
+    return True
+
+
 @router.patch("/profile")
 @limiter.limit(LIMIT_PROFILE)
 def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, Any]:
@@ -1221,6 +1238,19 @@ def update_profile(request: Request, body: ProfileUpdateRequest) -> dict[str, An
     profile_for_warnings = None
     if updates:
         profile_for_warnings = upsert_profile(user_id, updates)
+        confirmed = _MUTATION_CONFIRMATION_GUARD.confirm(
+            MutationResult(success=True),
+            verifier=lambda: _profile_updates_visible(user_id, updates),
+            success_en="confirmed",
+            success_ar="confirmed",
+            failure_en="failed",
+            failure_ar="failed",
+        ) == "confirmed"
+        if not confirmed:
+            raise HTTPException(
+                status_code=500,
+                detail="Profile update could not be confirmed. Please try again.",
+            )
         logger.info("profile_update user=%s fields=%s", user_id, list(updates.keys()))
     else:
         logger.warning("profile_update no fields user=%s", user_id)

@@ -19,6 +19,9 @@ from src.services.jobs_service import (
     skip_job,
 )
 from src.services.subscription_gating import enforce_saved_job_allowed
+from src.mutation_guard import MutationConfirmationGuard, MutationResult
+
+_MUTATION_CONFIRMATION_GUARD = MutationConfirmationGuard()
 
 router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
 
@@ -149,6 +152,23 @@ def save_job_route(
     job = _resolve_action_job(job_id, req)
     saved = save_job(job, user_id=user_id)
     if saved:
+        from src.applications import get_job_id
+        from src.repositories import applications_repo
+
+        job_key = get_job_id(job)
+        confirmed = _MUTATION_CONFIRMATION_GUARD.confirm(
+            MutationResult(success=True),
+            verifier=lambda: (
+                (applications_repo.find_by_job_id(job_key, user_id=user_id) or {}).get("status")
+                == "saved"
+            ),
+            success_en="confirmed",
+            success_ar="confirmed",
+            failure_en="failed",
+            failure_ar="failed",
+        ) == "confirmed"
+        if not confirmed:
+            raise HTTPException(status_code=500, detail="Job save could not be confirmed. Please try again.")
         return JobActionResponse(status="saved", message="Job saved and persisted")
     return JobActionResponse(status="already_tracked", message="Job was already tracked")
 
