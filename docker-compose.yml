@@ -41,10 +41,13 @@ services:
       APP_ENV: local
       CORS_ORIGINS: http://localhost:3000
       COOKIE_SECURE: false
+      # LOCAL DEV ONLY — enables env-based admin login fallback.
+      # Never set this in a deployed/staging/production environment.
       ALLOW_ENV_AUTH_FALLBACK: true
-      # Required for admin login fallback in local dev
-      ADMIN_EMAIL: admin@ricohunt.com
-      ADMIN_PASSWORD: admin
+      # Local placeholder admin login for local dev only — NOT a real account.
+      # Change these before use; do not point this compose at a real database.
+      ADMIN_EMAIL: admin@localhost
+      ADMIN_PASSWORD: local-dev-only-change-me
       # Disable production-only features for local dev
       RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS: false
       RICO_ENABLE_AUTO_APPLY: false
