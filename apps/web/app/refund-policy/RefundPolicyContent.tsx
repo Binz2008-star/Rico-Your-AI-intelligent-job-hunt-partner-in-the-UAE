@@ -115,7 +115,7 @@ export function RefundPolicyContent() {
               <h2>{isAr ? "٤. كيفية طلب استرداد" : "4. How to Request a Refund"}</h2>
               <p>
                 {isAr
-                  ? "لطلب استرداد, أرسل بريداً إلكترونياً إلى"
+                  ? "لطلب استرداد، أرسل بريداً إلكترونياً إلى"
                   : "To request a refund, email"}{" "}
                 <a href="mailto:info@ricohunt.com">info@ricohunt.com</a>{" "}
                 {isAr ? "مع:" : "with:"}
