@@ -10,13 +10,13 @@
 | Field | Value |
 | --- | --- |
 | **Current Version** | Pre-1.0 (production, unversioned; `/version.commit` tracks deploys) |
-| **Current Main SHA** | `49d14c1` (`origin/main`); PR #900 is ahead by 2 docs commits |
+| **Current Main SHA** | `e5dd9091` (`origin/main`); PR #900 is ahead by 3 docs commits |
 | **Current Phase** | Phases 0–1 complete · **2 Hardening + 3 Chat Integration active** · 4–7 planned |
 | **Production Status** | 🟢 Render backend healthy · Vercel up · Neon = source of truth |
 | **Open Critical Risks** | `005 pipeline_runs` migration drift (#712); `#885`/`#891` deploy verification unconfirmed from agent sessions |
 | **Active PR** | **#900** — documentation audit + single-source-of-truth hardening (draft) |
 | **Next Milestone** | Continue Phase 3 chat slices; **C3** Atelier `/about` `/contact` `/faq` (approved, owner-gated, not started) |
-| **Last Updated** | 2026-07-08 |
+| **Last Updated** | 2026-07-09 |
 
 _Refresh the dashboard row(s) in the same PR as any merge that moves `main` HEAD,
 changes production status, or resolves/opens a critical risk._

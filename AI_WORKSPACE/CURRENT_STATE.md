@@ -1,6 +1,6 @@
 # Current State
 
-> **Reconciliation header — 2026-07-08.** The dated sections in this file are a
+> **Reconciliation header — 2026-07-09.** The dated sections in this file are a
 > **historical log**; the newest detailed narrative below stops at **2026-07-03**
 > (`main` `b021273`). Since then the operational-memory / governance / Atelier
 > train has merged and `main` has advanced. For the authoritative "where is Rico
@@ -10,8 +10,7 @@
 > If this log and the roadmap disagree, the roadmap + latest handoff + live
 > GitHub `main` win (per `OPERATING_RULES.md`).
 >
-> **Actual `main` HEAD:** `49d14c1` (`docs(workspace): point START_HERE to the
-> 2026-07-09 handoff`). **Merged since the 2026-07-03 log below** (see the roadmap
+> **Actual `main` HEAD:** `e5dd9091` (`docs: add Docker Neon dev/staging guidance`). **Merged since the 2026-07-03 log below** (see the roadmap
 > and handoffs for detail — do not re-derive from this log):
 >
 > - **Operational Memory / Hardening (Roadmap Phases 0–2):** #881 phased
@@ -27,7 +26,8 @@
 >   design reference, #894 Lovable streaming-chat quarantine (DEC-20260708-004).
 > - **Governance / tooling:** #890 agent operating model
 >   (`AI_WORKSPACE/AGENT_OPERATING_MODEL.md`), #897 technical status handoff, #898
->   Docker local-dev (local-only). Board is clean — only #872 / #873 design
+>   Docker local-dev (local-only), #901 Docker Neon dev/staging guidance (docs-only,
+>   .gitignore protection). Board is clean — only #872 / #873 design
 >   prototypes held. No C3/C4/C8 started.
 
 ## 2026-07-03 — Neon index-cleanup train (034 + 035) live; drift resolved
@@ -70,6 +70,7 @@ live DB behind the GitHub `DATABASE_URL` secret has every migration signature
 object incl. 035's constraint, 011's unique index, and 005 `pipeline_runs`.
 
 ### #712 (005/011 drift) — 011 half resolved
+
 The 011 unique index is confirmed present in production (owner `pg_indexes` query +
 green drift check). The `pipeline_runs` signature for 005 is also present. #712's
 broader 005 scope (keyword tables, `latest_pipeline_run` view, `pipeline_status`
@@ -95,6 +96,7 @@ Merged today (GitHub session, deploy verified via `deploy-render.yml`):
 - **#816** — CLOSED, absorbed into #813 (duplicate BUG #15 fix; #813 is canonical).
 
 ### #813 pre-merge fixes (branch was red on 3 tests)
+
 1. `runtime._build_message` mapped ALL failure errors (incl. free-text) to a
    generic message, breaking the pre-existing `test_607` contract. Now: KNOWN
    internal codes → user-safe string; unknown/free-text → `Action failed: <error>`
@@ -106,6 +108,7 @@ Merged today (GitHub session, deploy verified via `deploy-render.yml`):
    explicit-search and structured commands reach their own handlers.
 
 ### BUG-14 (pipeline save idempotency) — migration 011 APPLIED; #784 remaining
+
 **Update 2026-07-03:** owner verified `idx_rico_recommendations_user_job_unique` **exists in
 production Neon** (`SELECT indexname FROM pg_indexes …` returned one row). Migration 011 is
 **applied** — this corrects the earlier "#711 drift: 011 not applied" note (011 is now closed;
@@ -126,7 +129,7 @@ Tracked as **TASK-20260703-036**.
 
 _Last updated: 2026-07-02 — `main` HEAD `a2a53b4`, deploy-verified on Render
 (`/version.commit` match + `/health` ok). Merged today: #805 (email alerts, gated/inert),
-#806 (BUG-19 — confirmation screenshots = application evidence), #807 (applied-from-screenshot
+# 806 (BUG-19 — confirmation screenshots = application evidence), #807 (applied-from-screenshot
 OCR fallback — 2026-07-02 smoke failure), #808 (email-alerts docs sync). See the
 "Screenshot → application evidence" section below for #806/#807 detail and smoke status.
 Earlier merge train #800–#804: T1/PR C search-first (#801, closes TASK-20260622-031),
@@ -198,6 +201,7 @@ unchanged. Tests: `test_applied_screenshot_ocr_fallback.py` 16/16 (includes the 
 transcript + phrase).
 
 **Production smoke status (2026-07-02):**
+
 - ✅ Live-verified on the public surface (anonymous session, generated screenshots):
   confirmation upload → `application_confirmation@0.9` + "Application Confirmation" label +
   Track/View/Remind actions + `application_evidence` purpose; listings upload → OCR transcript
@@ -245,6 +249,7 @@ Regression suite: **104/104 PASS**. 45 pre-existing environment failures (crypto
 ## PR #780 + #781 — Chat-OS agentic UI + smoke-test fixes (2026-06-30)
 
 ### PR #780 — action cards for `application_status` and `prepare_application`
+
 Merged at `6863409`. Added `_application_status_actions()` and `_prepare_application_actions()` factories to `agentic_ui_composer.py` and registered them in `_RESPONSE_TYPE_ACTIONS`. Tests: 6 new unit tests in `test_agentic_ui_composer.py`.
 
 | Response type | Action cards |
@@ -253,6 +258,7 @@ Merged at `6863409`. Added `_application_status_actions()` and `_prepare_applica
 | `prepare_application` | View Application Flow (navigate /flow) · Find similar jobs (chat_continue) |
 
 ### PR #781 — question-form routing + sidebar nav/count/plan fixes
+
 Merged at `e4979eb`. Squash commit on `main`.
 
 | Fix | What | Files |
@@ -347,7 +353,7 @@ No provider keys are hardcoded, committed, or logged.
 ## Attachment / Document Intelligence routing — 2026-06-23
 
 - **Audit:** `AI_WORKSPACE/AUDITS/attachment-document-routing-post-674-677.md` (Findings 1–5). #677 shipped native-image classification on `/command`; the audit found the residual gaps.
-- **#737 (Finding 1, merged):** a screenshot/scan exported as a PDF (image-only PDF, no text layer) used to fall through `unknown@0.0` into CV extraction → misleading "poor quality" CV preview. The classifier now tags a *substantial* (`>= _MIN_DOC_BYTES`, 1 KB) text-bearing file with near-empty text (`< _MIN_TEXT_CHARS`, 25) as `no_text`; `/upload-cv` returns a clear needs-text response (`status="classified"`, `document_type="no_text"`) before the CV pipeline. Tiny stub PDFs still flow normally; native images unchanged; real text CVs unchanged. Tests: `tests/test_no_text_pdf_routing.py`.
+- **#737 (Finding 1, merged):** a screenshot/scan exported as a PDF (image-only PDF, no text layer) used to fall through `unknown@0.0` into CV extraction → misleading "poor quality" CV preview. The classifier now tags a _substantial_ (`>= _MIN_DOC_BYTES`, 1 KB) text-bearing file with near-empty text (`< _MIN_TEXT_CHARS`, 25) as `no_text`; `/upload-cv` returns a clear needs-text response (`status="classified"`, `document_type="no_text"`) before the CV pipeline. Tiny stub PDFs still flow normally; native images unchanged; real text CVs unchanged. Tests: `tests/test_no_text_pdf_routing.py`.
 - **#738 (upload size, merged):** documents 25 MB / images 10 MB, per-kind cap enforced from magic-byte format **before** parsing; friendly type-aware oversize message (413) replacing "exceeds 10 MB"; `/command` + `/onboarding` map 413 → localized `cmdCvTooLarge` (AR/EN); `files.py` doc cap also 25 MB. Tests: `tests/test_upload_size_limits.py`, `apps/web/__tests__/cv-upload-size-message.test.ts`.
 - **Open findings (NEXT work):** **Finding 3** — no application-evidence destination (read screenshot → "Save as target job" / "Score against my CV" not wired end-to-end; this is the owner's "link A↔B without buttons" ask). **Finding 4** — `onboarding`/`upload` surfaces still don't honor `status="classified"` for non-CV docs/images (#738 only added 413 size handling). **Finding 5** — dead `CV_THRESHOLD`; stale `CLAUDE.md` `/chat` reference (trivial cleanup).
 
