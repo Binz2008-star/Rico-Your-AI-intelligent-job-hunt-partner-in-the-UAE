@@ -31,6 +31,14 @@ def _make_api() -> RicoChatAPI:
     api._db = MagicMock()
     api._append_chat = MagicMock()
     api._is_arabic_text = MagicMock(return_value=False)
+    # __new__ skips __init__, so the mutation-guard verifier attributes
+    # (Issue #764) are never bound. Wire the real module-level functions
+    # here the same way __init__ does, so tests exercise the actual
+    # read-after-write check rather than silently AttributeError-ing into
+    # the guard's failure branch.
+    from src.rico_chat_api import _application_status_visible, _no_saved_jobs_visible
+    api._application_status_visible = _application_status_visible
+    api._no_saved_jobs_visible = _no_saved_jobs_visible
     return api
 
 
@@ -131,9 +139,12 @@ class TestDeleteSavedJobsExecution(unittest.TestCase):
     def setUp(self):
         self.api = _make_api()
 
-    def _run_confirm(self, message: str, deleted: int = 5, raise_exc=None):
+    def _run_confirm(self, message: str, deleted: int = 5, raise_exc=None, saved_remaining: int = 0):
         _set_pending(self.api, "u1")
-        with patch("src.rico_db.RicoDB") as MockDB:
+        with patch("src.rico_db.RicoDB") as MockDB, patch(
+            "src.repositories.applications_repo.get_stats",
+            return_value={"saved": saved_remaining},
+        ):
             if raise_exc:
                 MockDB.return_value.delete_saved_jobs.side_effect = raise_exc
             else:
@@ -147,7 +158,9 @@ class TestDeleteSavedJobsExecution(unittest.TestCase):
 
     def test_confirm_arabic_executes_deletion(self):
         _set_pending(self.api, "u1")
-        with patch("src.rico_db.RicoDB") as MockDB:
+        with patch("src.rico_db.RicoDB") as MockDB, patch(
+            "src.repositories.applications_repo.get_stats", return_value={"saved": 0}
+        ):
             MockDB.return_value.delete_saved_jobs.return_value = 3
             result = self.api._handle_pending_delete_saved_jobs("u1", "نعم")
         self.assertEqual(result["type"], "delete_saved_jobs_done")
@@ -159,8 +172,16 @@ class TestDeleteSavedJobsExecution(unittest.TestCase):
         self.assertEqual(result["deleted_count"], 0)
 
     def test_success_message_contains_count(self):
-        result, _ = self._run_confirm("yes", deleted=7)
+        result, _ = self._run_confirm("yes", deleted=7, saved_remaining=0)
         self.assertIn("7", result["message"])
+
+    def test_readback_still_shows_saved_jobs_does_not_claim_success(self):
+        # DB reports rows deleted, but the read-after-write check still sees
+        # saved jobs — the guard must not let success copy through (Issue #764).
+        result, _ = self._run_confirm("yes", deleted=7, saved_remaining=3)
+        self.assertNotIn("7", result["message"])
+        for phrase in ("deleted.", "تم حذف"):
+            self.assertNotIn(phrase, result["message"])
 
     def test_db_failure_returns_failed_type(self):
         result, _ = self._run_confirm("yes", raise_exc=Exception("DB error"))
@@ -178,7 +199,9 @@ class TestDeleteSavedJobsExecution(unittest.TestCase):
                 original_set(uid, key, val)
 
         self.api.memory.set_context.side_effect = _track_set
-        with patch("src.rico_db.RicoDB") as MockDB:
+        with patch("src.rico_db.RicoDB") as MockDB, patch(
+            "src.repositories.applications_repo.get_stats", return_value={"saved": 0}
+        ):
             MockDB.return_value.delete_saved_jobs.return_value = 2
             self.api._handle_pending_delete_saved_jobs("u1", "yes")
         self.assertIn("u1", cleared)
