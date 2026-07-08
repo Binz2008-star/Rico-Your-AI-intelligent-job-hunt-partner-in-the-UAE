@@ -58,10 +58,10 @@ Issue/PR: <link or number>
 
 ### TASK-20260708-001 — Phase 3 chat integration: follow-up readiness query (first slice)
 
-Status: review (draft PR on `feat/chat-followup-readiness`)
+Status: done (merged #891 → `80e246b`; deploy verification pending — Render egress blocked from the working session)
 Owner: Roben / Claude
-Branch: feat/chat-followup-readiness
-Issue/PR: Engineering Roadmap Phase 3 (Chat Integration)
+Branch: feat/chat-followup-readiness (merged, squash `80e246b`)
+Issue/PR: #891 — Engineering Roadmap Phase 3 (Chat Integration)
 
 #### Objective
 Let chat answer "what should I follow up?" / "which jobs are due for follow-up?" (EN + AR) by
