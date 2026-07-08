@@ -132,6 +132,92 @@ Default credentials:
 - Password: `rico`
 - Database: `rico`
 
+## Optional Neon Dev/Staging Usage
+
+**IMPORTANT**: The default docker-compose.yml uses local PostgreSQL. This is the safest and recommended configuration for local development.
+
+### When to use Neon with Docker
+
+Only connect Docker to Neon if you need to:
+- Test against a specific dev/staging Neon branch
+- Reproduce an issue that only occurs on Neon
+- Share a database state with another developer
+
+**Never connect to production Neon from local Docker.**
+
+### Using a Neon Dev/Staging Branch
+
+To use a Neon dev/staging branch instead of local PostgreSQL:
+
+1. Create a `docker-compose.override.yml` file (gitignored):
+
+```yaml
+services:
+  backend:
+    environment:
+      # Replace with your Neon dev/staging branch URL only
+      # NEVER use production Neon URL here
+      DATABASE_URL: postgresql://user:password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
+    depends_on:
+      # Remove postgres dependency when using Neon
+      postgres: null
+```
+
+2. Or use a local `.env` file (gitignored):
+
+```bash
+# .env (gitignored - never commit this)
+DATABASE_URL=postgresql://user:password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
+```
+
+Then update docker-compose.yml to read from .env:
+
+```yaml
+services:
+  backend:
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+```
+
+### Switching Back to Local PostgreSQL
+
+To revert to local PostgreSQL:
+
+1. Delete `docker-compose.override.yml` if you created it
+2. Delete `.env` if you created it
+3. Ensure docker-compose.yml has the original local DATABASE_URL:
+
+```yaml
+DATABASE_URL: postgresql://rico:rico@postgres:5432/rico
+```
+
+4. Restart services:
+
+```powershell
+docker compose down
+docker compose up --build
+```
+
+### Safety Rules
+
+- **NEVER** use production Neon URL in local Docker
+- **NEVER** commit real Neon URLs to version control
+- **NEVER** run migrations against production Neon from local Docker
+- Only use dev/staging Neon branches
+- Always use `.gitignore` to protect Neon credentials
+- Test Neon changes in a separate branch first
+
+### Verification
+
+After switching to Neon, verify you're not using production:
+
+```powershell
+# Check the DATABASE_URL in the running container
+docker compose exec backend printenv DATABASE_URL
+```
+
+The URL should contain a dev/staging branch identifier, not production.
+
 ## Troubleshooting
 
 ### Port conflicts
