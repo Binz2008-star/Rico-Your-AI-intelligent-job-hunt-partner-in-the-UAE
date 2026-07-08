@@ -3,6 +3,32 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
+/* ─── C3: hero slogan polish ──────────────────────────────────────────────────
+ * Rotating "tail" of the hero slogan + a hand-drawn sun-red underline. The full
+ * canonical slogan ("Your AI career assistant for UAE jobs") is preserved as the
+ * h1 aria-label; the first phrase matches the original copy so the SSR/first
+ * frame is unchanged. Honors prefers-reduced-motion (no cycling; underline shown
+ * fully drawn). Visual only — no data, no routing. */
+const C3_TAIL_PHRASES = ["for UAE jobs", "in English & العربية", "on Telegram"];
+
+function RotatingSloganTail() {
+    const [i, setI] = useState(0);
+    useEffect(() => {
+        if (typeof window !== "undefined" &&
+            window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+        const id = setInterval(() => setI((v) => (v + 1) % C3_TAIL_PHRASES.length), 2800);
+        return () => clearInterval(id);
+    }, []);
+    return (
+        <span className="c3-tail" aria-hidden="true">
+            <span key={i} className="c3-tail-text">{C3_TAIL_PHRASES[i]}</span>
+            <svg className="c3-underline" viewBox="0 0 300 12" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M4 8 C 58 3 118 11 176 6 S 262 3 296 7" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" />
+            </svg>
+        </span>
+    );
+}
+
 /* ─── Canvas ribbon animation ─────────────────────────────────────────────── */
 function useRibbonCanvas(canvasRef: React.RefObject<HTMLCanvasElement | null>) {
     useEffect(() => {
@@ -603,6 +629,27 @@ export default function LandingPageV2() {
                     .fx-card:hover .fx-media__glow { transform: scale(1.04); }
                     .fx-card:hover .fx-media__streak { animation: none; }
                 }
+
+                /* ── C3: hero slogan tail + hand-drawn underline + ambient wash ── */
+                .c3-tail { position: relative; display: inline-block; color: #fff; white-space: nowrap; }
+                .c3-tail-text { display: inline-block; animation: c3-fade 520ms cubic-bezier(0.16,1,0.3,1); }
+                @keyframes c3-fade { from { opacity: 0; transform: translateY(0.16em); } to { opacity: 1; transform: none; } }
+                .c3-underline { position: absolute; left: -1.5%; bottom: -0.18em; width: 103%; height: 0.36em; color: #ee6a3a; overflow: visible; }
+                .c3-underline path { stroke-dasharray: 340; stroke-dashoffset: 340; animation: c3-draw 900ms cubic-bezier(0.16,1,0.3,1) 200ms forwards; }
+                @keyframes c3-draw { to { stroke-dashoffset: 0; } }
+                .c3-wash { position: absolute; inset: 0; pointer-events: none;
+                    background:
+                        radial-gradient(58% 42% at 50% 30%, rgba(238,106,58,0.10), transparent 70%),
+                        radial-gradient(46% 36% at 72% 70%, rgba(0,218,243,0.06), transparent 72%);
+                    animation: c3-wash-drift 22s ease-in-out infinite alternate; }
+                @keyframes c3-wash-drift {
+                    from { transform: translate3d(-1.5%, -1%, 0) scale(1.02); }
+                    to   { transform: translate3d(2%, 1.5%, 0) scale(1.06); } }
+                @media (prefers-reduced-motion: reduce) {
+                    .c3-tail-text { animation: none; }
+                    .c3-underline path { animation: none; stroke-dashoffset: 0; }
+                    .c3-wash { animation: none; }
+                }
             `}</style>
 
             {/* ── Canvas ribbons ── */}
@@ -673,7 +720,10 @@ export default function LandingPageV2() {
             <main className="relative z-10">
 
                 {/* ── Hero ── */}
-                <section className="relative min-h-[100svh] flex flex-col items-center justify-center px-4 pt-28 pb-20 text-center">
+                <section className="relative flex min-h-[100svh] px-4 pt-28 pb-20 overflow-hidden">
+                    {/* C3: ambient wash (behind content, reduced-motion aware) */}
+                    <div className="c3-wash" aria-hidden="true" />
+                    <div className="relative z-[1] flex flex-1 flex-col items-center justify-center text-center">
                     {/* Eyebrow — minimal dot + label (mock style) */}
                     <div className="inline-flex items-center gap-2.5 mb-8">
                         <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
@@ -682,8 +732,12 @@ export default function LandingPageV2() {
                         </span>
                     </div>
 
-                    <h1 className="max-w-4xl text-[2.6rem] leading-[1.05] sm:text-6xl sm:leading-[1.04] md:text-7xl lg:text-[5.25rem] lg:leading-[1.02] font-extralight text-white/90 tracking-tight mb-7">
-                        Your AI career assistant for UAE jobs
+                    <h1
+                        aria-label="Your AI career assistant for UAE jobs"
+                        className="max-w-4xl text-[2.6rem] leading-[1.05] sm:text-6xl sm:leading-[1.04] md:text-7xl lg:text-[5.25rem] lg:leading-[1.02] font-extralight text-white/90 tracking-tight mb-7"
+                    >
+                        <span aria-hidden="true">Your AI career assistant</span>{" "}
+                        <RotatingSloganTail />
                     </h1>
 
                     <p className="max-w-xl text-base sm:text-lg text-white/45 leading-relaxed mb-9 font-light">
@@ -742,6 +796,7 @@ export default function LandingPageV2() {
                             <span className="text-white/30">AED 28,000 – 35,000 / mo</span>
                             <span className="text-[10px] font-mono uppercase tracking-widest text-white/25">Sample match</span>
                         </div>
+                    </div>
                     </div>
                 </section>
 
