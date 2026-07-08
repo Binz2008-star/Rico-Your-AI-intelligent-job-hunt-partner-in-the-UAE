@@ -133,7 +133,7 @@ function MessageRow({ msg, lang, reduce }: { msg: Message; role?: Role; lang: "e
       {/* Avatar */}
       {!isUser && (
         <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 mt-1"
-          style={{ background: "radial-gradient(circle, rgb(255 196 110), rgb(240 169 74))", color: "#0a0a0f" }}>
+          style={{ background: "radial-gradient(circle, rgb(var(--gold-hover)), rgb(var(--gold)))", color: "var(--rico-on-primary)" }}>
           R
         </div>
       )}
@@ -185,7 +185,7 @@ function ThinkingRow({ lang, reduce }: { lang: "en" | "ar"; reduce: boolean }) {
         animate={reduce ? {} : { scale: [1, 1.06, 1] }}
         transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
         className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0"
-        style={{ background: "radial-gradient(circle, rgb(255 196 110), rgb(240 169 74))", color: "#0a0a0f" }}
+        style={{ background: "radial-gradient(circle, rgb(var(--gold-hover)), rgb(var(--gold)))", color: "var(--rico-on-primary)" }}
       >
         R
       </motion.div>

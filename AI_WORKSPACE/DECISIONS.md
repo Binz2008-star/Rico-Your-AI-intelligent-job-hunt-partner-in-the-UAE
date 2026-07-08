@@ -28,6 +28,104 @@ Related task: TASK-YYYYMMDD-001
 
 ## Accepted decisions
 
+### DEC-20260708-003 — Design-system boundary: Atelier for marketing, Nocturne for the workspace
+
+Status: accepted
+Date: 2026-07-08
+Owner: Roben
+Related task: design-handoffs review (command-concept-sandbox)
+
+#### Context
+Rico now has two live design directions: Atelier V2 (light-first "paper/ink/sun",
+piloted on `/terms`) and Nocturne (dark navy/gold/aura, used by `/command` and the
+authenticated app). Without an explicit boundary, future work risks trying to merge
+them into a single system and eroding both.
+
+#### Decision
+Split the two systems by surface, and do not merge them:
+
+- Public marketing surfaces → **Atelier**.
+- Authenticated Career Workspace → **Nocturne**.
+
+Each system stays scoped to its surface class. Do not attempt to unify Atelier and
+Nocturne into one design system.
+
+#### Consequences
+- Positive: clear identity per surface class; no cross-contamination of tokens;
+  reviewers can reject "merge the two" proposals on sight.
+- Negative/trade-off: some shared primitives may be authored twice, once per system.
+
+#### Follow-up
+- [ ] Tag future design handoffs with their target system (Atelier vs Nocturne).
+
+### DEC-20260708-002 — Action routing contract for agentic UI (no frontend-only actions)
+
+Status: accepted
+Date: 2026-07-08
+Owner: Roben
+Related task: design-handoffs review (command-concept-sandbox)
+
+#### Context
+The reviewed prototype demonstrated a Safety Approval Surface and job Apply/Save
+CTAs using frontend-only approval state and `alert()` calls. That pattern pretends
+persistence and bypasses Rico's backend safety layer.
+
+#### Decision
+Any interactive action promoted from a design reference into production MUST route
+through the full pipeline:
+
+```text
+Intent → Safety Policy → Agent Runtime → Persistence → Confirmation
+```
+
+Concretely: `rico_safety.py` guardrails + `RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS`
++ `agent_runtime.handle_action()` + `POST /api/v1/actions/{action}` (idempotent,
+audit-logged), with confirmation surfaced back to the user. Hard rules:
+
+- No frontend-only approval logic.
+- No `alert()` actions.
+- No local state pretending persistence.
+
+#### Consequences
+- Positive: prototypes cannot smuggle unsafe action paths into production; safety
+  stays backend-owned and auditable.
+- Negative/trade-off: promoting a UI concept always requires backend wiring work,
+  never a copy-paste of the prototype interactions.
+
+#### Follow-up
+- [ ] Apply this contract to any future promotion of the command-concept scenes.
+
+### DEC-20260708-001 — Classify `command-concept-sandbox` as Approved Design Reference (requires production adaptation)
+
+Status: accepted
+Date: 2026-07-08
+Owner: Roben
+Related task: design-handoffs review (command-concept-sandbox)
+
+#### Context
+The `command-concept-sandbox` handoff (Tool Activity Timeline, Explainable Match
+Card, Safety Approval Surface, Thinking State) is on-identity (Nocturne),
+dependency-safe (`framer-motion` only), and built on real theme tokens, but its
+interactions were mock-only (frontend approval, `alert()`, fake persistence).
+
+#### Decision
+Classify it as **Approved as Design Reference (requires production adaptation)** —
+not rejected, not promoted to production or `/design-gallery`. Move it to
+`design-handoffs/reviewed/` only after cleanup: hardcoded RGB → design tokens,
+English leaks localized, and the frontend approval simulation removed (buttons made
+non-functional; required production routing documented). Any production use is a
+separate, safety-reviewed effort governed by DEC-20260708-002.
+
+#### Consequences
+- Positive: the four concepts are preserved as a clean, tokenized, honest reference
+  without any unsafe interaction path or production risk.
+- Negative/trade-off: the reference is intentionally non-functional; real behavior
+  must be rebuilt on the production architecture later.
+
+#### Follow-up
+- [ ] If prioritized, scope a gallery-only or workspace implementation PR that wires
+  actions through the DEC-20260708-002 pipeline.
+
 ### DEC-20260707-001 — Split Rico's architecture maturation into phases; persist state before any migration or redesign
 
 Status: accepted (Approved roadmap)

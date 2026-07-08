@@ -45,15 +45,15 @@ export default function CommandConceptSandbox() {
       {/* Ambient glow blobs — CSS only, reduced-motion safe */}
       <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full animate-pulse-gold opacity-40"
-          style={{ background: "radial-gradient(circle, rgb(240 169 74 / 0.07) 0%, transparent 70%)", filter: "blur(80px)" }} />
+          style={{ background: "radial-gradient(circle, rgb(var(--gold) / 0.07) 0%, transparent 70%)", filter: "blur(80px)" }} />
         <div className="absolute -bottom-40 -right-40 w-[500px] h-[500px] rounded-full animate-pulse-magenta opacity-30"
-          style={{ background: "radial-gradient(circle, rgb(129 140 248 / 0.06) 0%, transparent 70%)", filter: "blur(100px)" }} />
+          style={{ background: "radial-gradient(circle, rgb(var(--magenta) / 0.06) 0%, transparent 70%)", filter: "blur(100px)" }} />
       </div>
 
       {/* Nav bar */}
       <header className="sticky top-0 z-40 glass-island px-4 md:px-8 h-14 flex items-center justify-between max-w-[1400px] mx-auto w-full">
         <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded-full bg-[rgb(var(--gold))] flex items-center justify-center text-[11px] font-bold text-[#0a0a0f] select-none">R</div>
+          <div className="w-7 h-7 rounded-full bg-[rgb(var(--gold))] flex items-center justify-center text-[11px] font-bold text-[var(--rico-on-primary)] select-none">R</div>
           <span className="text-sm font-semibold text-[rgb(var(--text-primary))] tracking-tight">
             {lang === "ar" ? "ريكو — مفهوم تصميمي" : "Rico Command — Concept"}
           </span>

@@ -2,14 +2,21 @@
 
 /**
  * SANDBOX PROTOTYPE COMPONENT — SafetyCheckpoint
- * Demonstrates Rico's safety-gate UI before taking a high-impact action.
- * The action is DEMO only — no real application or backend call is made.
+ *
+ * DESIGN REFERENCE ONLY. This surface shows the LAYOUT of Rico's high-impact
+ * action safety gate. It intentionally performs NO approval and persists NO
+ * state:
+ *   - The Approve / Cancel buttons are non-functional (disabled).
+ *   - There is no frontend approval logic and no local state pretending an
+ *     action was taken or saved.
+ *
+ * In production, a real high-impact action MUST route through:
+ *   Intent -> Safety Policy -> Agent Runtime -> Persistence -> Confirmation
+ * (see rico_safety.py, RICO_REQUIRE_APPROVAL_FOR_APPLICATIONS,
+ *  agent_runtime.handle_action, POST /api/v1/actions/{action}).
  */
 
-import { useState } from "react";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-
-type GateState = "pending" | "approved" | "rejected";
+import { motion, useReducedMotion } from "framer-motion";
 
 interface ActionSummaryItem {
   labelEn: string;
@@ -46,29 +53,15 @@ const EXPLAINER_EN =
 const EXPLAINER_AR =
   "قبل أن أتخذ هذا الإجراء نيابةً عنك، أحتاج إلى موافقتك الصريحة. هذا إجراء في العالم الحقيقي ولا يمكن التراجع عنه تلقائياً.";
 
-function GateIcon({ state }: { state: GateState }) {
-  if (state === "approved") return (
-    <motion.span
-      key="approved"
-      initial={{ scale: 0 }}
-      animate={{ scale: 1 }}
-      transition={{ type: "spring", stiffness: 320, damping: 20 }}
-      style={{ color: "rgb(var(--success))", fontSize: 20 }}
-    >✓</motion.span>
-  );
-  if (state === "rejected") return (
-    <motion.span
-      key="rejected"
-      initial={{ scale: 0 }}
-      animate={{ scale: 1 }}
-      transition={{ type: "spring", stiffness: 320, damping: 20 }}
-      style={{ color: "rgb(var(--text-muted))", fontSize: 20 }}
-    >✕</motion.span>
-  );
+// The production routing contract this surface must be wired to before it can
+// take any real action. Rendered as a reference below the gate card.
+const ROUTING_STEPS_EN = ["Intent", "Safety Policy", "Agent Runtime", "Persistence", "Confirmation"];
+const ROUTING_STEPS_AR = ["النية", "سياسة الأمان", "منفّذ الوكيل", "الحفظ", "التأكيد"];
+
+function GateIcon({ reduce }: { reduce: boolean }) {
   return (
     <motion.span
-      key="shield"
-      animate={{ scale: [1, 1.08, 1] }}
+      animate={reduce ? {} : { scale: [1, 1.08, 1] }}
       transition={{ repeat: Infinity, duration: 2.2, ease: "easeInOut" }}
       style={{ fontSize: 20 }}
     >
@@ -79,24 +72,24 @@ function GateIcon({ state }: { state: GateState }) {
 
 export function SafetyCheckpoint({ lang }: { lang: "en" | "ar" }) {
   const reduce = useReducedMotion() ?? false;
-  const [gate, setGate] = useState<GateState>("pending");
   const risks = lang === "ar" ? RISKS_AR : RISKS_EN;
+  const routing = lang === "ar" ? ROUTING_STEPS_AR : ROUTING_STEPS_EN;
   const dir = lang === "ar" ? "rtl" : "ltr";
 
   return (
     <div className="py-8 space-y-6" dir={dir}>
       <div className="flex items-center justify-between flex-wrap gap-3">
         <p className="text-xs text-[rgb(var(--text-muted))] uppercase tracking-widest font-mono">
-          {lang === "ar" ? "نقطة التحقق الأمنية — تجريبي" : "Safety Checkpoint — Demo"}
+          {lang === "ar" ? "نقطة التحقق الأمنية — مرجع تصميمي" : "Safety Checkpoint — Design reference"}
         </p>
         <span className="text-[10px] px-2 py-0.5 rounded-full font-mono"
           style={{ background: "rgb(var(--gold)/0.10)", color: "rgb(var(--gold))", border: "1px solid rgb(var(--gold)/0.20)" }}>
-          DEMO — no real action
+          {lang === "ar" ? "مرجع — بلا إجراء" : "REFERENCE — no action"}
         </span>
       </div>
 
       <div className="max-w-2xl mx-auto space-y-4">
-        {/* Gate card */}
+        {/* Gate card — rendered at rest (pending). No state machine. */}
         <motion.div
           initial={reduce ? false : { opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -107,29 +100,18 @@ export function SafetyCheckpoint({ lang }: { lang: "en" | "ar" }) {
           <div className="flex items-center gap-3 px-5 py-4 border-b border-[rgb(var(--overlay)/0.07)]">
             <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
               style={{
-                background: gate === "approved"
-                  ? "rgb(var(--success)/0.15)"
-                  : gate === "rejected"
-                  ? "rgb(var(--overlay)/0.08)"
-                  : "rgb(var(--gold)/0.12)",
-                border: `1px solid ${gate === "approved" ? "rgb(var(--success)/0.3)" : gate === "rejected" ? "rgb(var(--overlay)/0.12)" : "rgb(var(--gold)/0.3)"}`,
+                background: "rgb(var(--gold)/0.12)",
+                border: "1px solid rgb(var(--gold)/0.3)",
               }}
             >
-              <GateIcon state={gate} />
+              <GateIcon reduce={reduce} />
             </div>
             <div>
               <p className="text-sm font-semibold text-[rgb(var(--text-primary))] leading-none">
-                {gate === "approved"
-                  ? (lang === "ar" ? "تمت الموافقة — سيتم تنفيذ الإجراء" : "Approved - Action will proceed")
-                  : gate === "rejected"
-                  ? (lang === "ar" ? "تم الرفض — لم يُتخذ أي إجراء" : "Declined - No action taken")
-                  : (lang === "ar" ? "يلزم تأكيدك قبل المتابعة" : "Your confirmation required before proceeding")
-                }
+                {lang === "ar" ? "يلزم تأكيدك قبل المتابعة" : "Your confirmation required before proceeding"}
               </p>
               <p className="text-xs text-[rgb(var(--text-muted))] mt-0.5">
-                {gate === "pending" && (lang === "ar" ? "إجراء عالي التأثير" : "High-impact action")}
-                {gate === "approved" && (lang === "ar" ? "تمت معالجة الطلب بنجاح" : "Request processed successfully")}
-                {gate === "rejected" && (lang === "ar" ? "جلستك آمنة" : "Your session is safe")}
+                {lang === "ar" ? "إجراء عالي التأثير" : "High-impact action"}
               </p>
             </div>
           </div>
@@ -137,7 +119,7 @@ export function SafetyCheckpoint({ lang }: { lang: "en" | "ar" }) {
           {/* Rico explainer */}
           <div className="px-5 py-4 flex gap-3 border-b border-[rgb(var(--overlay)/0.07)]">
             <div className="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5"
-              style={{ background: "radial-gradient(circle, rgb(255 196 110), rgb(240 169 74))", color: "#0a0a0f" }}>
+              style={{ background: "radial-gradient(circle, rgb(var(--gold-hover)), rgb(var(--gold)))", color: "var(--rico-on-primary)" }}>
               R
             </div>
             <p className="text-sm text-[rgb(var(--text-secondary))] leading-relaxed">
@@ -183,62 +165,65 @@ export function SafetyCheckpoint({ lang }: { lang: "en" | "ar" }) {
             </ul>
           </div>
 
-          {/* Buttons */}
-          <AnimatePresence mode="wait">
-            {gate === "pending" && (
-              <motion.div
-                key="buttons"
-                initial={reduce ? false : { opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={reduce ? {} : { opacity: 0 }}
-                className="px-5 py-4 border-t border-[rgb(var(--overlay)/0.07)] flex gap-3 flex-wrap"
-              >
-                <button
-                  onClick={() => setGate("approved")}
-                  className="flex-1 text-sm px-5 py-2.5 rounded-full font-medium transition-all active:scale-[0.97]"
-                  style={{
-                    background: "rgb(var(--success)/0.15)",
-                    border: "1px solid rgb(var(--success)/0.35)",
-                    color: "rgb(var(--success))",
-                  }}
-                >
-                  {lang === "ar" ? "نعم، وافق على الإرسال" : "Yes, approve submission"}
-                </button>
-                <button
-                  onClick={() => setGate("rejected")}
-                  className="flex-1 text-sm px-5 py-2.5 rounded-full font-medium transition-all active:scale-[0.97] text-[rgb(var(--text-tertiary))] border border-[rgb(var(--overlay)/0.12)] hover:border-[rgb(var(--overlay)/0.2)] hover:text-[rgb(var(--text-secondary))]"
-                >
-                  {lang === "ar" ? "لا، أوقف الإجراء" : "No, cancel"}
-                </button>
-              </motion.div>
-            )}
-
-            {gate !== "pending" && (
-              <motion.div
-                key="result"
-                initial={reduce ? false : { opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="px-5 py-4 border-t border-[rgb(var(--overlay)/0.07)]"
-              >
-                <p className="text-sm text-[rgb(var(--text-secondary))] leading-relaxed">
-                  {gate === "approved"
-                    ? (lang === "ar"
-                      ? "تمت الموافقة. سأعلمك بالتقدم في صندوق الوارد ومتابعات التطبيق."
-                      : "Approved. I will keep you updated on progress in your inbox and application tracker.")
-                    : (lang === "ar"
-                      ? "لا بأس. تم إلغاء الإجراء. بإمكانك الرجوع إليه في أي وقت من صفحة نتائج الوظائف."
-                      : "No problem. Action cancelled. You can revisit this any time from your job results.")}
-                </p>
-                <button
-                  onClick={() => setGate("pending")}
-                  className="mt-3 text-xs text-[rgb(var(--text-muted))] underline underline-offset-2 hover:text-[rgb(var(--text-secondary))] transition-colors"
-                >
-                  {lang === "ar" ? "إعادة تشغيل العرض التجريبي" : "Reset demo"}
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* Buttons — NON-FUNCTIONAL design reference. No approval logic, no
+              state change, no persistence. Real wiring is backend-owned. */}
+          <div className="px-5 py-4 border-t border-[rgb(var(--overlay)/0.07)] flex gap-3 flex-wrap">
+            <button
+              type="button"
+              disabled
+              aria-disabled="true"
+              title={lang === "ar" ? "غير فعّال — مرجع تصميمي" : "Non-functional — design reference"}
+              className="flex-1 text-sm px-5 py-2.5 rounded-full font-medium cursor-not-allowed opacity-70"
+              style={{
+                background: "rgb(var(--success)/0.15)",
+                border: "1px solid rgb(var(--success)/0.35)",
+                color: "rgb(var(--success))",
+              }}
+            >
+              {lang === "ar" ? "نعم، وافق على الإرسال" : "Yes, approve submission"}
+            </button>
+            <button
+              type="button"
+              disabled
+              aria-disabled="true"
+              title={lang === "ar" ? "غير فعّال — مرجع تصميمي" : "Non-functional — design reference"}
+              className="flex-1 text-sm px-5 py-2.5 rounded-full font-medium cursor-not-allowed opacity-70 text-[rgb(var(--text-tertiary))] border border-[rgb(var(--overlay)/0.12)]"
+            >
+              {lang === "ar" ? "لا، أوقف الإجراء" : "No, cancel"}
+            </button>
+          </div>
         </motion.div>
+
+        {/* Required production routing — makes the adaptation contract explicit. */}
+        <div className="glass-island rounded-[16px] p-4 space-y-3">
+          <p className="text-[10px] uppercase tracking-widest font-mono text-[rgb(var(--aura)/0.7)]">
+            {lang === "ar" ? "مسار الإنتاج المطلوب" : "Required production routing"}
+          </p>
+          <div className="flex flex-wrap items-center gap-2" dir={dir}>
+            {routing.map((step, i) => (
+              <span key={step} className="flex items-center gap-2">
+                <span className="text-xs px-3 py-1 rounded-full font-mono"
+                  style={{
+                    background: "rgb(var(--overlay)/0.06)",
+                    border: "1px solid rgb(var(--overlay)/0.12)",
+                    color: "rgb(var(--text-secondary))",
+                  }}>
+                  {step}
+                </span>
+                {i < routing.length - 1 && (
+                  <span className="text-[rgb(var(--text-muted))]" aria-hidden>
+                    {dir === "rtl" ? "←" : "→"}
+                  </span>
+                )}
+              </span>
+            ))}
+          </div>
+          <p className="text-xs text-[rgb(var(--text-muted))] leading-relaxed">
+            {lang === "ar"
+              ? "مرجع تصميمي فقط. لا تتم أي موافقة على الواجهة الأمامية ولا يُحفظ أي شيء. في الإنتاج، يجب أن يمر كل إجراء عبر المسار أعلاه."
+              : "Design reference only. No approval happens in the frontend and nothing is persisted. In production, every action must flow through the pipeline above."}
+          </p>
+        </div>
       </div>
     </div>
   );

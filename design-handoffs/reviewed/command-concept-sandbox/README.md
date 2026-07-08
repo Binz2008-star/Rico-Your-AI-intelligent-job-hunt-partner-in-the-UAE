@@ -6,7 +6,11 @@
 
 ## Status
 
-Prototype only. Not production code. Pending review before any move to `/design-gallery`.
+**Reviewed — Approved as Design Reference (requires production adaptation).** See
+`REVIEW.md` for the full decision and the adaptation contract. Not production
+code; not promoted to `/design-gallery`. Every interactive action must be
+rebuilt on Rico's production architecture (Intent → Safety Policy → Agent
+Runtime → Persistence → Confirmation) before any production use.
 
 ## What it contains
 
@@ -23,13 +27,12 @@ Prototype only. Not production code. Pending review before any move to `/design-
 - **No backend/auth/billing/database:** The prototype does not call any API, backend, or real service.
 - **Dependencies:** Uses only `framer-motion`, which is already a project dependency.
 
-## Review goal
+## Review outcome
 
-Decide whether any of these concepts should be:
-- Rejected
-- Kept as inspiration
-- Cleaned up and added to `/design-gallery`
-- Eventually promoted to `/command` production (requires separate approval)
+Decided: **Approved as Design Reference (requires production adaptation).** Kept as
+a Nocturne (authenticated workspace) reference. Not rejected; not added to
+`/design-gallery`; not promoted to `/command`. Any future production use requires
+a separate, safety-reviewed implementation. See `REVIEW.md`.
 
 ## Nocturne identity check
 

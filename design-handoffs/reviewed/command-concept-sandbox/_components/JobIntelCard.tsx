@@ -117,10 +117,10 @@ const tagColorMap = {
 const RING_R = 28;
 const RING_CIRC = 2 * Math.PI * RING_R;
 
-function ScoreRing({ score, color, reduce }: { score: number; color: string; reduce: boolean }) {
+function ScoreRing({ score, color, reduce, lang }: { score: number; color: string; reduce: boolean; lang: "en" | "ar" }) {
   const offset = RING_CIRC * (1 - score / 100);
   return (
-    <svg width="72" height="72" viewBox="0 0 72 72" aria-label={`Match score ${score}%`} role="img">
+    <svg width="72" height="72" viewBox="0 0 72 72" aria-label={lang === "ar" ? `نسبة التطابق ${score}%` : `Match score ${score}%`} role="img">
       <circle cx="36" cy="36" r={RING_R} fill="none" stroke="rgb(var(--overlay)/0.08)" strokeWidth="4" />
       <motion.circle
         cx="36" cy="36" r={RING_R}
@@ -165,6 +165,7 @@ function Card({ job, lang, reduce }: { job: DemoJob; lang: "en" | "ar"; reduce: 
             score={job.score}
             color={tag.text}
             reduce={reduce}
+            lang={lang}
           />
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2 flex-wrap">
@@ -254,25 +255,36 @@ function Card({ job, lang, reduce }: { job: DemoJob; lang: "en" | "ar"; reduce: 
                   </div>
                 )}
 
-                {/* CTA */}
-                <div className="flex gap-2 pt-1 flex-wrap">
+                {/* CTA — NON-FUNCTIONAL design reference. Real apply/save must
+                    route through POST /api/v1/actions/{action} via the agent
+                    runtime; no client-side action here. */}
+                <div className="flex gap-2 pt-1 flex-wrap items-center">
                   <button
-                    className="text-xs px-4 py-2 rounded-full font-medium transition-all active:scale-[0.97]"
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    title={lang === "ar" ? "غير فعّال — مرجع تصميمي" : "Non-functional — design reference"}
+                    className="text-xs px-4 py-2 rounded-full font-medium cursor-not-allowed opacity-70"
                     style={{
                       background: "rgb(var(--gold)/0.15)",
                       border: "1px solid rgb(var(--gold)/0.35)",
                       color: "rgb(var(--gold))",
                     }}
-                    onClick={() => alert("Demo: apply action")}
                   >
                     {lang === "ar" ? "تقدم الآن" : "Apply now"}
                   </button>
                   <button
-                    className="text-xs px-4 py-2 rounded-full font-medium transition-all active:scale-[0.97] text-[rgb(var(--text-tertiary))] border border-[rgb(var(--overlay)/0.10)] hover:border-[rgb(var(--overlay)/0.18)] hover:text-[rgb(var(--text-secondary))]"
-                    onClick={() => alert("Demo: save action")}
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    title={lang === "ar" ? "غير فعّال — مرجع تصميمي" : "Non-functional — design reference"}
+                    className="text-xs px-4 py-2 rounded-full font-medium cursor-not-allowed opacity-70 text-[rgb(var(--text-tertiary))] border border-[rgb(var(--overlay)/0.10)]"
                   >
                     {lang === "ar" ? "احفظ لاحقاً" : "Save for later"}
                   </button>
+                  <span className="text-[10px] text-[rgb(var(--text-disabled))] font-mono">
+                    {lang === "ar" ? "مرجع — بلا إجراء" : "reference — no action"}
+                  </span>
                 </div>
               </div>
             </motion.div>
@@ -319,7 +331,7 @@ export function JobIntelCard({ lang }: { lang: "en" | "ar" }) {
         className="glass-island rounded-[16px] p-4 flex items-start gap-3"
       >
         <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] shrink-0"
-          style={{ background: "radial-gradient(circle, rgb(255 196 110), rgb(240 169 74))", color: "#0a0a0f" }}>
+          style={{ background: "radial-gradient(circle, rgb(var(--gold-hover)), rgb(var(--gold)))", color: "var(--rico-on-primary)" }}>
           R
         </div>
         <p className="text-sm text-[rgb(var(--text-secondary))] leading-relaxed" dir={lang === "ar" ? "rtl" : "ltr"}>
