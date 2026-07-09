@@ -10,12 +10,12 @@
 | Field | Value |
 | --- | --- |
 | **Current Version** | Pre-1.0 (production, unversioned; `/version.commit` tracks deploys) |
-| **Current Main SHA** | `d2bd860` (`origin/main`) — #900, #902, and #903 merged and live (board-health scan persisted). Supersedes the earlier `f6996b4`/`e5dd9091` rows further below in history — those references are now stale. |
+| **Current Main SHA** | `b9563a7` (`origin/main`) — #900, #902, #903, #904 merged and live. Supersedes the earlier `d2bd860`/`f6996b4`/`e5dd9091` rows further below in history — those references are now stale. |
 | **Current Phase** | Phases 0–1 complete · **2 Hardening + 3 Chat Integration active** · 4–7 planned |
-| **Production Status** | 🟢 Render backend healthy · Vercel up (production deploy confirmed READY for `d2bd860`, alias `ricohunt.com`) · Neon = source of truth |
-| **Open Critical Risks** | `005 pipeline_runs` migration drift (#712); **confirmed via 2026-07-09 read-only deep dive: `profile_repo.py` leaks a DB connection on 5 call sites (`with db.connect() as conn:` never closes) — Medium severity, real reliability risk, not yet fixed.** #263 still flagged needs-deep-dive (deferred). #446 data-integrity cleanup (root cause fixed, cleanup owner-gated, read-only precheck next). `#885`/`#891` deploy verification unconfirmed from agent sessions. **No live SQL-injection, credential-leak, or public-identity security issue found** — #127/#198's named P0 security claims are fixed; see `HANDOFFS/2026-07-09-security-data-risk-deep-dive.md`. |
-| **Active PR** | none — #900, #902, #903 all merged; see `HANDOFFS/2026-07-09-security-data-risk-deep-dive.md` for current board state |
-| **Next Milestone** | #446 read-only Neon precheck (count/identify affected rows, confirm #445 root-cause fix still holds, prepare transaction + rollback SQL) → #446 cleanup only with explicit owner approval → fix `profile_repo.py` connection leak → #758 → #812; Continue Phase 3 chat slices; **C3** Atelier `/about` `/contact` `/faq` (approved, owner-gated, not started) |
+| **Production Status** | 🟢 Render backend healthy · Vercel up (production deploy confirmed READY for `b9563a7`, alias `ricohunt.com`) · Neon = source of truth |
+| **Open Critical Risks** | `005 pipeline_runs` migration drift (#712); `profile_repo.py` DB connection leak on 5 call sites — Medium severity, confirmed still unfixed (2026-07-09 deep dive). **#446 Stage 1 (16 `public:web-*` rows) executed and validated 2026-07-09** — `email` nulled on the 16-row manifest, primary row untouched, 0 orphaned `rico_chat_history`; **Stage 2 (5 non-public rows, incl. the primary) is deferred, not started — #446 stays open until Stage 2 is decided.** #263 still flagged needs-deep-dive (deferred). `#885`/`#891` deploy verification unconfirmed from agent sessions. No live SQL-injection, credential-leak, or public-identity security issue found (#127/#198); see `HANDOFFS/2026-07-09-security-data-risk-deep-dive.md`. |
+| **Active PR** | none — #900, #902, #903, #904 all merged; see `HANDOFFS/2026-07-09-446-stage1-cleanup.md` for current board state |
+| **Next Milestone** | Document #446 Stage 1 (this PR) → review #446 Stage 2 (5 non-public rows) separately, no mutation without a fresh decision → fix `profile_repo.py` connection leak → #758 → #812; Continue Phase 3 chat slices; **C3** Atelier `/about` `/contact` `/faq` (approved, owner-gated, not started) |
 | **Last Updated** | 2026-07-09 |
 
 _Refresh the dashboard row(s) in the same PR as any merge that moves `main` HEAD,
@@ -51,9 +51,10 @@ changes production status, or resolves/opens a critical risk._
 
 ## Next (ordered)
 
-1. **#446 read-only precheck** — count/identify affected duplicate rows, confirm the #445
-   root-cause fix still holds, prepare transaction + rollback SQL. Read-only Neon queries only.
-2. **#446 cleanup** — execute only with explicit owner approval.
+1. **Document #446 Stage 1** — this PR: exact before/after counts, 16-row rollback manifest,
+   Stage 2 deferral, recorded in `HANDOFFS/2026-07-09-446-stage1-cleanup.md`.
+2. **#446 Stage 2** — separately review the 5 non-public rows (incl. the primary) before any
+   further mutation; no cleanup SQL until a fresh decision is made on that set.
 3. **Fix `profile_repo.py` connection leak** — `with db.connect() as conn:` at lines 541, 583,
    615, 651, 742 never closes the connection; confirmed still present by the 2026-07-09 deep dive.
 4. **#758** — unify job-key scheme (duplicate DB rows from save-path key mismatch).
@@ -62,4 +63,5 @@ changes production status, or resolves/opens a critical risk._
 7. **C3** — Atelier migration of `/about`, `/contact`, `/faq` (owner-gated, not started).
 8. **Phase 2 Hardening** — fix gaps only as the audit proves them.
 
-See `HANDOFFS/2026-07-09-security-data-risk-deep-dive.md` for the full #127/#198 verdict.
+See `HANDOFFS/2026-07-09-security-data-risk-deep-dive.md` for the #127/#198 verdict and
+`HANDOFFS/2026-07-09-446-stage1-cleanup.md` for the #446 Stage 1 cleanup record.

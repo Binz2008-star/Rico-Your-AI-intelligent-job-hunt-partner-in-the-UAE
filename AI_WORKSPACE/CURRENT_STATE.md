@@ -1,7 +1,29 @@
 # Current State
 
-> **Reconciliation header — 2026-07-09 (latest; supersedes both headers below).**
-> `main` has advanced to `d2bd86093a155b91522c4cb02e9cd6db23b498d2` (#903, board-health
+> **Reconciliation header — 2026-07-09 (latest; supersedes all headers below).** `main` has
+> advanced to `b9563a78154743d0270586ce23326bc372be6192` (#904, security/data-risk deep-dive
+> verdict persisted).
+>
+> **#446 Stage 1 cleanup executed and validated (2026-07-09).** Run by a session with live Neon
+> connector access (project `old-frog-88141983`, branch `br-restless-cherry-amq6wj7o`, database
+> `neondb`) — **not** this Claude Code session, which has no `DATABASE_URL`/DB access. Read-only
+> queries confirmed 21 total `rico_users` rows with `email = 'robenedwan@gmail.com'`; 16 matched
+> `external_user_id LIKE 'public:web-%'` and were the Stage 1 target (primary row confirmed NOT
+> in that set). Stage 1 `UPDATE` nulled `email` on exactly those 16 explicit IDs (manifest in
+> `HANDOFFS/2026-07-09-446-stage1-cleanup.md`). Post-cleanup validation: `remaining_with_email = 5`
+> (matches expectation — the 5 non-public rows, including the primary, untouched), all 16 target
+> IDs confirmed `email IS NULL`, primary row confirmed still `email = 'robenedwan@gmail.com'`,
+> `0` orphaned `rico_chat_history` rows. No schema change, no deletes, no inserts, no Stage 2.
+> **#446 stays open** — the 5 non-public rows (Stage 2) still need separate review before any
+> further mutation; do not close #446 until Stage 2 is decided or the issue is updated with
+> partial-completion status.
+>
+> **Updated priority:** document Stage 1 (this header + the dated handoff) → review #446 Stage 2
+> separately → fix `profile_repo.py` connection leak → #758 → #812. No runtime code changed by
+> any of the board-health scan, the security/data-risk deep dive, or this cleanup.
+>
+> **Reconciliation header — 2026-07-09 (earlier same day; now itself superseded by the header
+> above).** `main` had advanced to `d2bd86093a155b91522c4cb02e9cd6db23b498d2` (#903, board-health
 > scan persisted). A read-only security/data-risk deep dive on #127 and #198 (per owner
 > decision after the board-health scan) found **no live SQL-injection, hardcoded-credential,
 > public-identity, or recommendation-TOCTOU security issue** — all those named claims are
