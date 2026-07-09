@@ -54,7 +54,9 @@ Issue/PR: <link or number>
 - Base branch: <branch, e.g. main>
 - Last safe commit SHA: <sha the task can be safely resumed/rolled back to>
 - Current head SHA: <sha>
+- Uncommitted changes present: <yes/no — if yes, summarize what's staged/unstaged>
 - Status: proposed | scoped | in_progress | blocked | review | verified | done
+- Files inspected: <path list — read but not necessarily changed>
 - Files changed: <path — reason>
 - Files intentionally not touched: <path — reason, or "none">
 - What is complete: <bullet list>
@@ -62,10 +64,17 @@ Issue/PR: <link or number>
 - Known blockers: <bullet list, or "none">
 - Validation already run: <command → result>
 - Validation still required: <command or check, not yet run>
+- Deployment/CI/Neon/Vercel state to check next: <what, if anything, or "none">
 - Next exact action: <single next step, concrete enough to resume cold>
 - Stop condition: <what state means "stop and ask the owner" vs. "safe to keep going">
 - Rollback plan: <exact revert path>
 ```
+
+A session that notices it may run out of token/context/tool/usage/time budget
+before the task is complete must fill in this exact block (updating the
+existing entry if one already exists for the task, never duplicating it)
+before continuing further — see "Session continuity / limit-approach
+handoff" in `AGENT_OPERATING_MODEL.md`.
 
 ## Active tasks
 
