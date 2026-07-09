@@ -67,3 +67,27 @@ This prototype is a **Nocturne** (authenticated workspace) reference.
 - No `/command` change.
 
 See `AI_WORKSPACE/DECISIONS.md` for the recorded architectural decisions.
+
+---
+
+## Gallery promotion note (2026-07-09)
+
+**State transition:** `reviewed/` → `approved-for-gallery/` → staged as an
+isolated `/design-gallery` entry (draft PR).
+
+Per the `design-handoffs/README.md` workflow, this package is promoted to
+`approved-for-gallery/` and added to `/design-gallery` as its own variant tab,
+under `apps/web/components/design-gallery/command-concept-sandbox/`. This is
+a **gallery-only** move:
+
+- No production route (`/`, `/command`, `/rico`, `/applications`, `/profile`,
+  `/settings`, auth) is touched.
+- No backend, auth, Neon, or schema change.
+- No real action wiring — `search_jobs`, apply, save, CV upload, and profile
+  save remain unimplemented; all buttons stay disabled/reference-only exactly
+  as cleaned up above, and all data stays sample/demo.
+- The Adaptation contract above is unchanged and still required in full
+  before any of this reaches `/command` or another real surface.
+
+This does **not** re-open or revise the original review decision — it only
+executes the "add to gallery" outcome the decision already allowed.

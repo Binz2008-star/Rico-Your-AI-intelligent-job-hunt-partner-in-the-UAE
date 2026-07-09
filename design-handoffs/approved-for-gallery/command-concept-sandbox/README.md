@@ -2,15 +2,19 @@
 
 **Source path:** `apps/web/app/sandbox/command-concept/`
 
-**Current location:** `design-handoffs/incoming/command-concept-sandbox/`
+**Current location:** `design-handoffs/approved-for-gallery/command-concept-sandbox/`
+(promoted from `design-handoffs/reviewed/command-concept-sandbox/`)
 
 ## Status
 
-**Reviewed — Approved as Design Reference (requires production adaptation).** See
-`REVIEW.md` for the full decision and the adaptation contract. Not production
-code; not promoted to `/design-gallery`. Every interactive action must be
-rebuilt on Rico's production architecture (Intent → Safety Policy → Agent
-Runtime → Persistence → Confirmation) before any production use.
+**Approved for gallery — staged as an isolated `/design-gallery` entry.** See
+`REVIEW.md` for the full decision, the adaptation contract, and the gallery
+promotion note appended at the end of that file. Still not production code —
+the gallery entry renders the same reference-only components reviewed below
+(disabled buttons, sample/demo data, no real actions). Every interactive
+action must still be rebuilt on Rico's production architecture (Intent →
+Safety Policy → Agent Runtime → Persistence → Confirmation) before any
+production use.
 
 ## What it contains
 
@@ -30,9 +34,10 @@ Runtime → Persistence → Confirmation) before any production use.
 ## Review outcome
 
 Decided: **Approved as Design Reference (requires production adaptation).** Kept as
-a Nocturne (authenticated workspace) reference. Not rejected; not added to
-`/design-gallery`; not promoted to `/command`. Any future production use requires
-a separate, safety-reviewed implementation. See `REVIEW.md`.
+a Nocturne (authenticated workspace) reference. Not rejected; promoted to an
+isolated `/design-gallery` entry (see gallery promotion note in `REVIEW.md`);
+not promoted to `/command`. Any future production use requires a separate,
+safety-reviewed implementation. See `REVIEW.md`.
 
 ## Nocturne identity check
 

@@ -42,6 +42,11 @@ const RicoAlivePrototype = dynamic(
   { ssr: false, loading: () => <LoadingShell /> }
 );
 
+const CommandConceptSandbox = dynamic(
+  () => import("@/components/design-gallery/command-concept-sandbox"),
+  { ssr: false, loading: () => <LoadingShell /> }
+);
+
 function LoadingShell() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0b0d1c]">
@@ -50,7 +55,7 @@ function LoadingShell() {
   );
 }
 
-type VariantKey = "v2" | "classic" | "nocturne" | "rico-alive";
+type VariantKey = "v2" | "classic" | "nocturne" | "rico-alive" | "command-concept";
 
 interface Variant {
   key: VariantKey;
@@ -92,6 +97,16 @@ const VARIANTS: Variant[] = [
     riskLevel: "prototype-only",
     productionSafeNotes: "Zero production routes, backend, auth, or billing touched. Isolated standalone component.",
     prototypeOnlyNotes: "All data is simulated. No real AI calls. No provider names exposed. Uses framer-motion + Tailwind only — no new packages.",
+  },
+  {
+    key: "command-concept",
+    label: "Command Concept ✦ Reference",
+    description: "CommandConceptSandbox — Tool Activity Timeline, Explainable Match Card, Safety Approval Surface, Chat Thread. Bilingual EN/AR. All data is SAMPLE/DEMO.",
+    status: "prototype",
+    category: "command-concept",
+    riskLevel: "prototype-only",
+    productionSafeNotes: "Zero production routes, backend, auth, or billing touched. Isolated standalone component, promoted from design-handoffs/approved-for-gallery/command-concept-sandbox/ after owner review (2026-07-08).",
+    prototypeOnlyNotes: "Approved as Design Reference — requires production adaptation. All actions (apply, save, approve, send) are disabled/reference-only; nothing is wired to /command or any real action.",
   },
 ];
 
@@ -261,6 +276,8 @@ export default function DesignGalleryClient() {
         )}
 
         {active === "rico-alive" && <RicoAlivePrototype />}
+
+        {active === "command-concept" && <CommandConceptSandbox />}
       </div>
     </div>
   );
