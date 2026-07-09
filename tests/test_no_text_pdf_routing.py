@@ -1,7 +1,7 @@
 """
 Routing-safety regression — no-text / image-only PDFs must NOT enter the CV pipeline.
 
-Residual #674 bug (audit: AI_WORKSPACE/audits/attachment-document-routing-post-674-677.md):
+Residual #674 bug (audit: AI_WORKSPACE/AUDITS/attachment-document-routing-post-674-677.md):
 a screenshot or scan exported as a PDF has no text layer, so the classifier scored it
 ``unknown@0.0`` and the router routed ``unknown`` into CV extraction → a misleading
 "poor quality" CV preview.
