@@ -35,6 +35,33 @@ def test_is_document_action_message_matches_buttons():
     assert not RicoChatAPI.is_document_action_message("")
 
 
+def test_is_document_action_message_matches_908_natural_phrasing():
+    """#908: the exact production message and close natural variants ("was"/
+    "did" tenses, "attachment" as the noun) must match — they previously fell
+    through to the generic AI-fallback path, which injected unrelated
+    profile/job-search content instead of answering from the transcript."""
+    assert RicoChatAPI.is_document_action_message(
+        "What was in my attachment that I just shared with u"
+    )
+    assert RicoChatAPI.is_document_action_message("What did the attachment say")
+    assert RicoChatAPI.is_document_action_message("What was in the file")
+    assert RicoChatAPI.is_document_action_message("What does the document say")
+    assert RicoChatAPI.is_document_action_message("What did the document say")
+    assert RicoChatAPI.is_document_action_message("describe this attachment")
+    assert RicoChatAPI.is_document_action_message("summarize this attachment")
+    assert RicoChatAPI.is_document_action_message("read the attachment")
+
+
+def test_is_document_action_message_does_not_over_match_unrelated_messages():
+    """Negative cases: widening the tense/noun coverage must not start matching
+    ordinary job-search or profile chat that merely contains "what was"."""
+    assert not RicoChatAPI.is_document_action_message("what was the salary for that job")
+    assert not RicoChatAPI.is_document_action_message("find operations manager jobs in ajman")
+    assert not RicoChatAPI.is_document_action_message("search for HSE Manager jobs in Dubai")
+    assert not RicoChatAPI.is_document_action_message("what was the interview like")
+    assert not RicoChatAPI.is_document_action_message("apply to this job")
+
+
 def test_handle_document_action_none_without_fresh_doc():
     """No fresh transcript on record → None, so normal routing proceeds."""
     api = _api()
@@ -135,3 +162,59 @@ def test_non_document_message_falls_through_to_router():
     would short-circuit)."""
     result, router_called = _send_with_doc_handler("hello there, how are you?", None)
     assert router_called is True
+
+
+def test_908_production_message_routes_to_document_path_not_ai_router():
+    """The exact #908 regression message must be intercepted before the
+    intent router — previously it fell through to the generic AI/job-search
+    path because the old regex didn't recognize "was" or "attachment"."""
+    doc_reply = {
+        "type": "document_context",
+        "message": (
+            "The attachment is a screenshot of a Mashreq Talent Acquisition email. "
+            "It is a rejection notification for the Credit Relationship Manager role."
+        ),
+        "success": True,
+    }
+    result, router_called = _send_with_doc_handler(
+        "What was in my attachment that I just shared with u", doc_reply
+    )
+    assert result["message"] == doc_reply["message"]
+    assert router_called is False
+
+
+# ── #908 RC1: real _handle_uploaded_document_followup grounding ──────────────
+
+def test_908_real_message_grounds_ai_reply_in_transcript_only():
+    """Uses the real _handle_uploaded_document_followup (not the mocked
+    fake_api above) to confirm the widened regex actually reaches the
+    transcript-grounded prompt, which explicitly forbids inventing details or
+    producing an unrelated CV/job-search reply."""
+    api = _api()
+    durable = {
+        "extracted_text": (
+            "Mashreq Talent Acquisition: Thank you for applying for the Credit "
+            "Relationship Manager, COE Pak - CIBG role. We will not be moving "
+            "forward with your application at this time."
+        ),
+        "display_label": "Application Confirmation",
+        "filename": "IMG_0115.png",
+    }
+    captured = {}
+
+    def _fake_ai(uid, msg, profile, *, save_user_message, language=None, prompt_override=None):
+        captured["override"] = prompt_override
+        return {"type": "ai", "message": "This is a rejection from Mashreq.", "success": True}
+
+    with (
+        patch.object(api, "_get_last_uploaded_document", return_value=durable),
+        patch.object(api, "_resolve_profile", return_value=None),
+        patch.object(api, "_answer_with_ai_fallback", side_effect=_fake_ai),
+        patch.object(api, "_append_chat", lambda *a, **k: None),
+    ):
+        res = api.handle_document_action(
+            "u@test", "What was in my attachment that I just shared with u"
+        )
+    assert res is not None
+    assert "Mashreq" in captured["override"]
+    assert "ONLY the transcribed text" in captured["override"]

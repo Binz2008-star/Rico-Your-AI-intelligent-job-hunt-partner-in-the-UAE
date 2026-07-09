@@ -184,12 +184,22 @@ _CV_IMPROVE_FOLLOWUP_RE = re.compile(
 # variants. Handled deterministically from the stored transcript BEFORE the
 # onboarding / CV-builder routing so an image action can never be hijacked into a
 # CV draft. Only fires when a recent uploaded document is in session context.
+#
+# #908: the "what" branch originally only recognized "what's/what is/what does"
+# (present tense) and never "attachment" as a noun, so natural past-tense
+# phrasing ("What was in my attachment that I just shared with u" — the exact
+# production message from #908) fell through to the generic AI-fallback path
+# instead of this deterministic, transcript-grounded handler. Widened to cover
+# was/were/did tenses, "attachment" everywhere the other nouns appear, and the
+# natural "what does/did X say" word order (connector after the noun, not
+# before it — "document say" rather than "say ... document").
 _DOC_FOLLOWUP_RE = re.compile(
-    r"\bdescribe\b.{0,30}\b(image|picture|photo|screenshot|document|file|it)\b"
-    r"|\bwhat(?:'?s| is| does)\b.{0,30}\b(in|on|say|says|contain)\b.{0,24}\b(image|picture|photo|screenshot|document|file|it)\b"
+    r"\bdescribe\b.{0,30}\b(image|picture|photo|screenshot|document|file|attachment|it)\b"
+    r"|\bwhat(?:'?s| is| was| were| does| did)\b.{0,30}\b(in|on|say|says|said|contain|contained)\b.{0,24}\b(image|picture|photo|screenshot|document|file|attachment|it)\b"
+    r"|\bwhat\s+(?:does|did)\b.{0,30}\b(image|picture|photo|screenshot|document|file|attachment|it)\b.{0,20}\b(say|says|said|contain|contained)\b"
     r"|\bextract\b.{0,40}\b(text|information|info|details)\b"
-    r"|\bsummari[sz]e\b.{0,30}\b(this|the|image|document|file|content|key|it)\b"
-    r"|\b(read|ocr)\b.{0,30}\b(image|picture|photo|screenshot|document|file|text|it)\b",
+    r"|\bsummari[sz]e\b.{0,30}\b(this|the|image|document|file|attachment|content|key|it)\b"
+    r"|\b(read|ocr)\b.{0,30}\b(image|picture|photo|screenshot|document|file|attachment|text|it)\b",
     re.IGNORECASE,
 )
 
