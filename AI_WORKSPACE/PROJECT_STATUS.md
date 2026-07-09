@@ -10,12 +10,12 @@
 | Field | Value |
 | --- | --- |
 | **Current Version** | Pre-1.0 (production, unversioned; `/version.commit` tracks deploys) |
-| **Current Main SHA** | `b9563a7` (`origin/main`) — #900, #902, #903, #904 merged and live. Supersedes the earlier `d2bd860`/`f6996b4`/`e5dd9091` rows further below in history — those references are now stale. |
+| **Current Main SHA** | `ec06ef5` (`origin/main`) — #906 (`profile_repo.py` connection-leak fix) and #907 (#758 job-key unification) merged and live; Vercel production confirmed READY for both. Supersedes the earlier `b9563a7`/`d2bd860`/`f6996b4`/`e5dd9091` rows further below in history — those references are now stale. |
 | **Current Phase** | Phases 0–1 complete · **2 Hardening + 3 Chat Integration active** · 4–7 planned |
-| **Production Status** | 🟢 Render backend healthy · Vercel up (production deploy confirmed READY for `b9563a7`, alias `ricohunt.com`) · Neon = source of truth |
-| **Open Critical Risks** | `005 pipeline_runs` migration drift (#712); `profile_repo.py` DB connection leak on 5 call sites — Medium severity, confirmed still unfixed (2026-07-09 deep dive). **#446 Stage 1 (16 `public:web-*` rows) executed and validated 2026-07-09** — `email` nulled on the 16-row manifest, primary row untouched, 0 orphaned `rico_chat_history`; **Stage 2 (5 non-public rows, incl. the primary) is deferred, not started — #446 stays open until Stage 2 is decided.** #263 still flagged needs-deep-dive (deferred). `#885`/`#891` deploy verification unconfirmed from agent sessions. No live SQL-injection, credential-leak, or public-identity security issue found (#127/#198); see `HANDOFFS/2026-07-09-security-data-risk-deep-dive.md`. |
-| **Active PR** | none — #900, #902, #903, #904 all merged; see `HANDOFFS/2026-07-09-446-stage1-cleanup.md` for current board state |
-| **Next Milestone** | Document #446 Stage 1 (this PR) → review #446 Stage 2 (5 non-public rows) separately, no mutation without a fresh decision → fix `profile_repo.py` connection leak → #758 → #812; Continue Phase 3 chat slices; **C3** Atelier `/about` `/contact` `/faq` (approved, owner-gated, not started) |
+| **Production Status** | 🟢 Render backend healthy · Vercel up (production deploy confirmed READY for `ec06ef5`, alias `ricohunt.com`) · Neon = source of truth |
+| **Open Critical Risks** | `005 pipeline_runs` migration drift (#712). ~~`profile_repo.py` DB connection leak~~ — **fixed via #906** (8 sites, not the originally-estimated 5). ~~#758 duplicate DB rows from job-key mismatch~~ — **fixed via #907**. **NEW #908** — attachment-first reasoning bypassed; owner reframes as a conversation-orchestration/intent-routing root cause, not a quick patch — needs a scoped deep-dive before any fix, owner sign-off pending. **NEW #909** — governance-doc request that duplicates existing Active docs (`RICO_EXECUTION_PRINCIPLES.md`, `AGENT_OPERATING_MODEL.md`, `PR_QUALITY_GATE_RULES.md`, `DECISIONS.md` as ADR log); this repo already rejected a parallel `GOVERNANCE/` folder once (PR #901) — owner decision needed before any doc is written. **#446 Stage 1 (16 `public:web-*` rows) executed and validated 2026-07-09**; **Stage 2 (5 non-public rows, incl. the primary) is deferred, not started — #446 stays open until Stage 2 is decided.** #263 still flagged needs-deep-dive (deferred). `#885`/`#891` deploy verification unconfirmed from agent sessions. No live SQL-injection, credential-leak, or public-identity security issue found (#127/#198); see `HANDOFFS/2026-07-09-security-data-risk-deep-dive.md`. |
+| **Active PR** | none merged-pending — #812 (compound-title role splitting) starting next per owner approval; see `HANDOFFS/2026-07-09-906-907-sync-and-908-909-triage.md` for current board state |
+| **Next Milestone** | **#812** (compound-title role splitting) — in progress; #908 orchestration deep-dive and #909 governance-doc conflict both await owner direction; Continue Phase 3 chat slices; **C3** Atelier `/about` `/contact` `/faq` (approved, owner-gated, not started) |
 | **Last Updated** | 2026-07-09 |
 
 _Refresh the dashboard row(s) in the same PR as any merge that moves `main` HEAD,
@@ -51,17 +51,23 @@ changes production status, or resolves/opens a critical risk._
 
 ## Next (ordered)
 
-1. **Document #446 Stage 1** — this PR: exact before/after counts, 16-row rollback manifest,
-   Stage 2 deferral, recorded in `HANDOFFS/2026-07-09-446-stage1-cleanup.md`.
+1. **#812** — fix compound-title role splitting (in progress).
 2. **#446 Stage 2** — separately review the 5 non-public rows (incl. the primary) before any
    further mutation; no cleanup SQL until a fresh decision is made on that set.
-3. **Fix `profile_repo.py` connection leak** — `with db.connect() as conn:` at lines 541, 583,
-   615, 651, 742 never closes the connection; confirmed still present by the 2026-07-09 deep dive.
-4. **#758** — unify job-key scheme (duplicate DB rows from save-path key mismatch).
-5. **#812** — fix compound-title role splitting.
-6. Continue **Phase 3 Chat Integration** slices (verify-first, synthetic data only).
-7. **C3** — Atelier migration of `/about`, `/contact`, `/faq` (owner-gated, not started).
-8. **Phase 2 Hardening** — fix gaps only as the audit proves them.
+3. **#908** — attachment-first orchestration/intent-routing bug; owner has explicitly reframed
+   this as a root-cause investigation (conversation orchestrator, intent-routing precedence,
+   tool-selection policy, active-CV selection), not a symptom-by-symptom patch. Needs owner
+   sign-off on deep-dive scope/cost before starting (`CLAUDE.md` cost-optimization rule).
+4. **#909** — governance-doc request; conflicts with existing Active docs
+   (`RICO_EXECUTION_PRINCIPLES.md`, `AGENT_OPERATING_MODEL.md`, `PR_QUALITY_GATE_RULES.md`,
+   `DECISIONS.md`) and a prior rejection of a parallel `GOVERNANCE/` folder (PR #901). Needs an
+   owner decision (reuse existing docs vs. a dedicated `GOVERNANCE/` namespace) before any file
+   is written.
+5. Continue **Phase 3 Chat Integration** slices (verify-first, synthetic data only).
+6. **C3** — Atelier migration of `/about`, `/contact`, `/faq` (owner-gated, not started).
+7. **Phase 2 Hardening** — fix gaps only as the audit proves them.
 
-See `HANDOFFS/2026-07-09-security-data-risk-deep-dive.md` for the #127/#198 verdict and
-`HANDOFFS/2026-07-09-446-stage1-cleanup.md` for the #446 Stage 1 cleanup record.
+See `HANDOFFS/2026-07-09-security-data-risk-deep-dive.md` for the #127/#198 verdict,
+`HANDOFFS/2026-07-09-446-stage1-cleanup.md` for the #446 Stage 1 cleanup record, and
+`HANDOFFS/2026-07-09-906-907-sync-and-908-909-triage.md` for the #906/#907 merge sync and
+#908/#909 triage.
